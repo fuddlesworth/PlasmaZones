@@ -13,8 +13,7 @@
 
 namespace PhosphorTiles {
 
-// Use shared JSON keys from constants.h
-using namespace AutotileJsonKeys;
+// Bounds for the script-state sanitizer and the master-count / split-ratio clamps.
 using namespace AutotileDefaults;
 
 namespace {
@@ -99,7 +98,7 @@ QJsonObject TilingState::sanitizeScriptState(const QJsonObject& state)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Clamping Helpers (DRY: shared by setters and fromJson)
+// Clamping Helpers (DRY: shared by the setters and the script-state sanitizer)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 int TilingState::clampMasterCount(int value)
@@ -110,119 +109,6 @@ int TilingState::clampMasterCount(int value)
 qreal TilingState::clampSplitRatio(qreal value)
 {
     return std::clamp(value, MinSplitRatio, MaxSplitRatio);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Serialization
-// ═══════════════════════════════════════════════════════════════════════════════
-
-QJsonObject TilingState::toJson() const
-{
-    QJsonObject json;
-    json[ScreenName] = m_screenId;
-    json[WindowOrder] = QJsonArray::fromStringList(m_windowOrder);
-    json[FloatingWindows] = QJsonArray::fromStringList(floatingWindows());
-    json[FocusedWindow] = m_focusedWindow;
-    json[MasterCount] = m_masterCount;
-    json[SplitRatio] = m_splitRatio;
-
-    if (m_splitTree && !m_splitTree->isEmpty()) {
-        json[AutotileJsonKeys::SplitTreeKey] = m_splitTree->toJson();
-    }
-
-    // Opaque scripted-algorithm bag — only written when non-empty so old
-    // sessions and non-scripted states don't carry a dead key.
-    if (!m_scriptState.isEmpty()) {
-        json[AutotileJsonKeys::ScriptStateKey] = m_scriptState;
-    }
-
-    return json;
-}
-
-// Ownership: caller takes ownership (Qt parent set if provided)
-TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
-{
-    const QString screenId = json[ScreenName].toString();
-    if (screenId.isEmpty()) {
-        return nullptr;
-    }
-
-    auto* state = new TilingState(screenId, parent);
-
-    // Window order (deduplicate to guard against corrupt JSON)
-    const QJsonArray orderArray = json[WindowOrder].toArray();
-    QSet<QString> seenIds;
-    seenIds.reserve(orderArray.size());
-    for (const QJsonValue& val : orderArray) {
-        const QString id = val.toString();
-        if (!id.isEmpty() && !seenIds.contains(id)) {
-            state->m_windowOrder.append(id);
-            seenIds.insert(id);
-        }
-    }
-
-    // Floating windows (validate they exist in window order)
-    const QJsonArray floatingArray = json[FloatingWindows].toArray();
-    for (const QJsonValue& val : floatingArray) {
-        const QString id = val.toString();
-        if (!id.isEmpty() && state->m_windowOrder.contains(id)) {
-            state->m_floatingWindows.insert(id);
-        }
-    }
-
-    // Focused window (validate it exists in window order)
-    const QString focusedId = json[FocusedWindow].toString();
-    if (state->m_windowOrder.contains(focusedId)) {
-        state->m_focusedWindow = focusedId;
-    }
-    // else: leave empty (invalid focused window in JSON)
-
-    // Master count — clamp to absolute limits only (not against current window count).
-    // Algorithms clamp operationally when they calculate zones.
-    state->m_masterCount = clampMasterCount(json[MasterCount].toInt(DefaultMasterCount));
-
-    qreal loadedRatio = json[SplitRatio].toDouble(DefaultSplitRatio);
-    state->m_splitRatio = clampSplitRatio(loadedRatio);
-
-    if (json.contains(AutotileJsonKeys::SplitTreeKey)) {
-        state->m_splitTree = SplitTree::fromJson(json[AutotileJsonKeys::SplitTreeKey].toObject());
-        if (state->m_splitTree) {
-            // Single-pass leaf validation — checks count, membership, and duplicates together.
-            // The split tree only contains tiled windows — floating windows are
-            // removed from the tree — so we must compare against tiledWindowCount().
-            const QStringList leafIds = state->m_splitTree->leafOrder();
-            if (leafIds.size() != state->tiledWindowCount()) {
-                qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree leaf count mismatch, discarding tree";
-                state->m_splitTree.reset();
-            } else {
-                const QStringList tiledWins = state->tiledWindows();
-                const QSet<QString> windowSet(tiledWins.begin(), tiledWins.end());
-                QSet<QString> seen;
-                seen.reserve(leafIds.size());
-                bool valid = true;
-                for (const QString& id : leafIds) {
-                    if (!windowSet.contains(id) || seen.contains(id)) {
-                        valid = false;
-                        break;
-                    }
-                    seen.insert(id);
-                }
-                if (!valid) {
-                    qCWarning(PhosphorTiles::lcTilesLib)
-                        << "SplitTree leaf IDs invalid (missing or duplicate), discarding tree";
-                    state->m_splitTree.reset();
-                }
-            }
-        }
-    }
-
-    // Scripted-algorithm bag — sanitize on load so a hand-edited or corrupt
-    // config can't feed an oversized/garbage object back into a script.
-    if (json.contains(AutotileJsonKeys::ScriptStateKey)) {
-        state->m_scriptState = sanitizeScriptState(json[AutotileJsonKeys::ScriptStateKey].toObject());
-    }
-
-    return state;
 }
 
 void TilingState::clear()
@@ -303,7 +189,8 @@ QJsonObject TilingState::scriptState() const
 
 void TilingState::setScriptState(const QJsonObject& state)
 {
-    // No NOTIFY / notifyStateChanged: persistence only. Emitting a change here
+    // No NOTIFY / notifyStateChanged: internal state, not a UI-observable
+    // property. Emitting a change here
     // could trigger a retile, and the scripted write-back path runs from inside
     // a resize retile — re-entering would risk a resize→retile→resize loop.
     m_scriptState = state;
@@ -312,6 +199,11 @@ void TilingState::setScriptState(const QJsonObject& state)
 void TilingState::clearSplitTree()
 {
     m_splitTree.reset();
+}
+
+std::unique_ptr<SplitTree> TilingState::takeSplitTree()
+{
+    return std::move(m_splitTree);
 }
 
 void TilingState::rebuildSplitTree()

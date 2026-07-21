@@ -5,6 +5,7 @@
 
 #include <QHashFunctions>
 #include <QLatin1StringView>
+#include <functional>
 #include <QList>
 #include <QRect>
 #include <QString>
@@ -33,6 +34,22 @@ inline size_t qHash(const PlacementStateKey& key, size_t seed = 0)
 {
     return qHashMulti(seed, key.screenId, key.desktop, key.activity);
 }
+
+} // namespace PhosphorEngine
+
+/// std::hash alongside qHash, so the key works in a std:: container too. Needed
+/// where a value is move-only: Qt's containers are implicitly shared and require
+/// copyable values, so anything owning a unique_ptr cannot live in a QHash.
+template<>
+struct std::hash<PhosphorEngine::PlacementStateKey>
+{
+    size_t operator()(const PhosphorEngine::PlacementStateKey& key) const noexcept
+    {
+        return qHash(key);
+    }
+};
+
+namespace PhosphorEngine {
 
 /// Backwards-compatible spelling for autotile's existing sources. The autotile
 /// engine predates the shared base primitives and refers to this triple as

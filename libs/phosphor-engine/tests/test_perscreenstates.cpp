@@ -50,11 +50,6 @@ public:
     {
         return {};
     }
-    QJsonObject toJson() const override
-    {
-        return {};
-    }
-
     QStringList m_windows;
 
 private:

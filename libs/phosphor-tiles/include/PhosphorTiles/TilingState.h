@@ -316,25 +316,6 @@ public:
      */
     int focusedTiledIndex() const;
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Serialization
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Serialize state to JSON
-     */
-    QJsonObject toJson() const override;
-
-    /**
-     * @brief Deserialize state from JSON
-     * @param json Serialized state
-     * @param parent Parent QObject
-     * @return New TilingState or nullptr on error
-     *
-     * Ownership: caller takes ownership (Qt parent set if provided)
-     */
-    static TilingState* fromJson(const QJsonObject& json, QObject* parent = nullptr);
-
     /**
      * @brief Clear all state (remove all windows, reset to defaults)
      */
@@ -384,6 +365,15 @@ public:
     void clearSplitTree();
 
     /**
+     * @brief Hand the split tree to the caller, leaving this state without one.
+     *
+     * For rescuing a tree out of a state that is about to be destroyed. Returns
+     * null when there is no tree. Unlike @c splitTree() this transfers ownership,
+     * so the tree outlives the state rather than being serialized to survive it.
+     */
+    std::unique_ptr<SplitTree> takeSplitTree();
+
+    /**
      * @brief Rebuild the split tree from the current tiled window order
      *
      * Used after operations that reorder windows (move, promote, rotate)
@@ -411,9 +401,9 @@ public:
      * @brief Replace the script-state bag wholesale.
      *
      * Callers must pass already-sanitized JSON (see @c sanitizeScriptState in
-     * tilingstateserialization.cpp). No NOTIFY signal: this is internal
-     * persistence, not a UI-observable property, and writing it must never
-     * schedule a retile (that would risk a resize→retile→resize loop).
+     * tilingstatedata.cpp). No NOTIFY signal: this is internal state,
+     * not a UI-observable property, and writing it must never schedule a retile
+     * (that would risk a resize→retile→resize loop).
      */
     void setScriptState(const QJsonObject& state);
 
@@ -423,8 +413,9 @@ public:
      * Enforces the AutotileDefaults::ScriptState* limits (compact-JSON byte
      * cap, nesting depth, total key count) and strips non-finite numbers.
      * Returns the sanitized object, or an empty object if the bag exceeds the
-     * byte cap and can't be safely stored. Shared by @c fromJson (load path)
-     * and the scripted-algorithm write-back path so both apply identical rules.
+     * byte cap and can't be safely stored. Applied on the scripted-algorithm
+     * write-back path, which is the only place an UNTRUSTED bag originates. The
+     * engine's stash hands back a bag that went through here on its way in.
      */
     static QJsonObject sanitizeScriptState(const QJsonObject& state);
 
@@ -490,7 +481,7 @@ private:
      */
     void forEachTiledWindow(const std::function<bool(const QString& windowId, int tiledIndex)>& func) const;
 
-    // ── Clamping helpers (DRY: shared by setters and fromJson) ──
+    // ── Clamping helpers (DRY: shared by the setters and the script-state sanitizer) ──
     static int clampMasterCount(int value);
     static qreal clampSplitRatio(qreal value);
 

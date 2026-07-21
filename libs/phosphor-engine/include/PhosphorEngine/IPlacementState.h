@@ -4,8 +4,6 @@
 #pragma once
 
 #include <phosphorengine_export.h>
-#include <QJsonObject>
-#include <QRect>
 #include <QString>
 #include <QStringList>
 
@@ -14,10 +12,14 @@ namespace PhosphorEngine {
 /// Per-screen placement state contract.
 ///
 /// Both snap-mode (zone assignments) and autotile-mode (tiling order)
-/// implement this so the daemon's persistence layer, D-Bus adaptor, and
-/// compositor plugins can read state uniformly without branching on mode.
+/// implement this so the daemon's D-Bus adaptor and compositor plugins can read
+/// state uniformly without branching on mode.
 ///
-/// The interface is deliberately read-only + serialization. Mutation goes
+/// Deliberately NOT a persistence interface: neither state is written to disk.
+/// What survives a restart is per-window (WindowPlacementStore), so a placement
+/// state is rebuilt from those records rather than restored wholesale.
+///
+/// The interface is deliberately read-only. Mutation goes
 /// through engine-specific APIs (SnapState::assignWindowToZone,
 /// TilingState::addWindow, etc.) because the semantics diverge — the
 /// daemon routes mutations through IPlacementEngine which delegates to
@@ -61,9 +63,6 @@ public:
     {
         return 1;
     }
-
-    /// Serialize to JSON for session persistence.
-    virtual QJsonObject toJson() const = 0;
 };
 
 } // namespace PhosphorEngine

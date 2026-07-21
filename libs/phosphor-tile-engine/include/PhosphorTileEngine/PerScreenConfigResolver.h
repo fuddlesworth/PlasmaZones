@@ -86,15 +86,65 @@ public:
     void updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value);
 
     /**
-     * @brief Remove all overrides for a screen (used during screen removal)
+     * @brief Drop a screen's in-memory overrides while REMEMBERING the algorithm
+     *        they resolved to (autotile toggle-off).
      *
      * Unlike clearPerScreenConfig() this restores nothing on the TilingState and
-     * schedules no retile — the caller is tearing the screen down. It does still
-     * wipe per-algorithm state bags when dropping an Algorithm override changes
-     * the screen's effective algorithm, because the caller's teardown may leave
-     * other (desktop, activity) states of the screen alive.
+     * schedules no retile — the caller is tearing the screen down. It also does
+     * NOT wipe state bags, and that is the point: dropping the in-memory map is
+     * not a configuration change. The persisted per-screen settings survive and
+     * re-derive the same algorithm on re-enable, so a wipe here would destroy the
+     * bags of every (desktop, activity) state the teardown left alive, on a
+     * comparison that only reads as a change because this call is what caused it.
+     *
+     * The resolved id is recorded instead, so the next genuine change compares
+     * against what the screen's states were actually built under. Use
+     * forgetScreen() for an id that is never coming back.
      */
     void removeOverridesForScreen(const QString& screenId);
+
+    /**
+     * @brief Drop remembered algorithms for screens that are no longer connected.
+     *
+     * The mirror of the engine's stash purge, run on the same event: these ids
+     * describe bags that have just been discarded, so keeping them would leave a
+     * stale "old" side for a screen that is never coming back. Keyed on
+     * connectedness, NOT autotile membership — a screen merely toggled out of
+     * autotile keeps its memory, which is what marks it as pinned rather than
+     * following the global algorithm.
+     */
+    void forgetRememberedAlgorithmsForUnknownScreens();
+
+    /**
+     * @brief Drop a screen's overrides AND the remembered algorithm, for an id
+     *        that will never be reused (an orphaned virtual screen).
+     *
+     * No wipe: the caller is destroying every state of the id, so there is
+     * nothing left to protect from crossing algorithms.
+     */
+    void forgetScreen(const QString& screenId);
+
+    /**
+     * @brief Apply a GLOBAL algorithm switch to every screen that follows it.
+     *
+     * Called by AutotileEngine::setAlgorithm with the outgoing and incoming
+     * global ids. A screen follows the global one unless it is pinned by a
+     * per-screen Algorithm override, and the pinning must be read from what the
+     * screen's states were BUILT UNDER rather than from the live override map:
+     * a toggle-off has already dropped that map, so a screen pinned by persisted
+     * settings reads there as a follower. Acting on that reading wiped the bags
+     * of screens whose effective algorithm never moved.
+     *
+     * Only screens holding at least one live state are visited. A screen with no
+     * state anywhere keeps both its remembered id and its stashed bags, so a
+     * switch away and back hands them over intact.
+     *
+     * This is the single entry point for "the effective algorithm moved" on a
+     * global switch; per-screen changes reach the same wipe through
+     * applyPerScreenConfig. Keeping one implementation is deliberate — two of
+     * them disagreeing about the gate is what produced the bug above.
+     */
+    void applyGlobalAlgorithmChange(const QString& previousGlobalId, const QString& newGlobalId);
 
     /**
      * @brief Inject a per-context (window-rule) gap-override provider.
@@ -145,6 +195,24 @@ private:
     void wipeStateBagsOnEffectiveAlgorithmChange(const QString& screenId, const QString& oldEffectiveId,
                                                  const QString& newEffectiveId);
 
+    /// Whether @p screenId followed the global algorithm that is being replaced,
+    /// and so should take the wipe a global switch runs. A live Algorithm
+    /// override always pins the screen; failing that the remembered "built
+    /// under" id decides, because a teardown may have dropped the map. See the
+    /// implementation for why the precedence is fixed rather than per caller.
+    bool screenFollowsGlobalAlgorithm(const QString& screenId, const QString& previousGlobalId) const;
+
+    /// The Algorithm id stored in @p map, or @p fallback when the key is absent
+    /// OR stores an empty string. The empty case matters: effectiveAlgorithmId
+    /// treats an empty stored id as "no override", so every other reader has to
+    /// agree or the wipe fires on a change nobody else can see.
+    static QString algorithmIdFromMap(const QVariantMap& map, const QString& fallback);
+
+    /// What @p screenId's live states were last built under: the remembered id
+    /// when the screen has been through a toggle-off, else derived from
+    /// @p previousOverrides the way every caller used to derive it.
+    QString rememberedAlgorithmId(const QString& screenId, const QVariantMap& previousOverrides) const;
+
     /// The per-context (window-rule) gap map for @p screenId, or an empty map
     /// when no provider is wired. Resolving it runs a full
     /// LayoutRegistry::resolveContextGaps on the daemon side, so callers that
@@ -169,6 +237,12 @@ private:
 
     AutotileEngine* m_engine = nullptr;
     QHash<QString, QVariantMap> m_perScreenOverrides;
+    /// screenId -> the effective algorithm its states were last built under.
+    /// Written whenever a genuine change is resolved, and by the toggle-off
+    /// teardown that drops the override map. Read as the "old" side of the next
+    /// change, so a teardown that only the resolver forgot about is not mistaken
+    /// for the user reconfiguring the screen.
+    QHash<QString, QString> m_rememberedAlgorithmId;
     ContextGapProvider m_contextGapProvider{};
 };
 
