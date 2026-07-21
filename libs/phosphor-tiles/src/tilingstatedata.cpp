@@ -189,7 +189,8 @@ QJsonObject TilingState::scriptState() const
 
 void TilingState::setScriptState(const QJsonObject& state)
 {
-    // No NOTIFY / notifyStateChanged: persistence only. Emitting a change here
+    // No NOTIFY / notifyStateChanged: internal state, not a UI-observable
+    // property. Emitting a change here
     // could trigger a retile, and the scripted write-back path runs from inside
     // a resize retile — re-entering would risk a resize→retile→resize loop.
     m_scriptState = state;

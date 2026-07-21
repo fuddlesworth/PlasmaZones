@@ -128,14 +128,14 @@ constexpr bool isNumericMetaType(int typeId)
 } // namespace AutotileDefaults
 
 /**
- * @brief JSON keys for autotile state serialization
+ * @brief JSON keys for autotile CONFIG serialization.
+ *
+ * Placement state itself is never serialized, so there are no TilingState keys
+ * here. The layout values below are per-algorithm config defaults, not a
+ * snapshot of a live state.
  */
 namespace AutotileJsonKeys {
-// TilingState keys
-inline constexpr QLatin1String ScreenName{"screenName"};
-inline constexpr QLatin1String WindowOrder{"windowOrder"};
-inline constexpr QLatin1String FloatingWindows{"floatingWindows"};
-inline constexpr QLatin1String FocusedWindow{"focusedWindow"};
+// Per-algorithm layout keys
 inline constexpr QLatin1String MasterCount{"masterCount"};
 inline constexpr QLatin1String SplitRatio{"splitRatio"};
 inline constexpr QLatin1String SplitRatioStep{"splitRatioStep"};
