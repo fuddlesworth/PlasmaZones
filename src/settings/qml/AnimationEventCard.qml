@@ -268,7 +268,18 @@ Item {
         // the warning banner below depends on it. Cheap (O(N) over
         // overriddenPaths). Only meaningful for parent-node cards but
         // we always refresh so the binding stays consistent.
-        root._shadowingChildrenCount = settingsController.animationsPage.shaderOverrideDescendantCount(root.eventPath);
+        //
+        // Counted across every write path, matching
+        // _clearShaderOverrideDescendantsOnAll: the banner's "Clear shadowing
+        // children" action clears descendants of the mirrors too, so counting
+        // the primary alone would under-report what the button is about to
+        // remove. Degenerates to the single-path count when there are no
+        // mirrors, which is every card in the tree today.
+        const countPaths = root._writePaths;
+        var shadowing = 0;
+        for (var i = 0; i < countPaths.length; ++i)
+            shadowing += settingsController.animationsPage.shaderOverrideDescendantCount(countPaths[i]);
+        root._shadowingChildrenCount = shadowing;
     }
 
     function refreshFromTree() {
