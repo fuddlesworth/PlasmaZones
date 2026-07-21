@@ -18,7 +18,6 @@
 
 #include "../core/logging.h"
 
-#include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
@@ -169,6 +168,40 @@ private:
 };
 
 } // namespace
+
+// Defers dirtyPagesChanged for the enclosing scope so a delegated
+// Reset/Discard that walks several backing pages emits one NOTIFY instead of
+// one per page. Nestable: only the outermost scope fires, and only if
+// something actually flipped.
+class SettingsController::DirtyEmitScope
+{
+public:
+    explicit DirtyEmitScope(SettingsController& c)
+        : m_c(c)
+    {
+        ++m_c.m_dirtyEmitDepth;
+    }
+    ~DirtyEmitScope()
+    {
+        if (--m_c.m_dirtyEmitDepth == 0 && m_c.m_dirtyEmitPending) {
+            m_c.m_dirtyEmitPending = false;
+            Q_EMIT m_c.dirtyPagesChanged();
+        }
+    }
+    Q_DISABLE_COPY_MOVE(DirtyEmitScope)
+
+private:
+    SettingsController& m_c;
+};
+
+void SettingsController::emitDirtyPagesChanged()
+{
+    if (m_dirtyEmitDepth > 0) {
+        m_dirtyEmitPending = true;
+        return;
+    }
+    Q_EMIT dirtyPagesChanged();
+}
 
 void SettingsController::navigateTo(const QString& address)
 {
@@ -604,7 +637,7 @@ void SettingsController::reconcilePagesDirty(const QSet<QString>& pages)
         }
     }
     if (changed) {
-        Q_EMIT dirtyPagesChanged();
+        emitDirtyPagesChanged();
     }
 }
 
@@ -634,7 +667,7 @@ void SettingsController::reconcilePageDirty(const QString& page)
             sync(it.key());
     }
     if (changed) {
-        Q_EMIT dirtyPagesChanged();
+        emitDirtyPagesChanged();
     }
 }
 
@@ -696,6 +729,7 @@ void SettingsController::resetPage(const QString& page)
         const auto& backing = simplePageBackingPages();
         const auto backingIt = backing.constFind(page);
         if (backingIt != backing.constEnd()) {
+            const DirtyEmitScope batch(*this);
             for (const QString& backingPage : *backingIt)
                 resetPage(backingPage);
             return;
@@ -882,6 +916,7 @@ void SettingsController::discardPage(const QString& page)
         const auto& backing = simplePageBackingPages();
         const auto backingIt = backing.constFind(page);
         if (backingIt != backing.constEnd()) {
+            const DirtyEmitScope batch(*this);
             for (const QString& backingPage : *backingIt)
                 discardPage(backingPage);
             return;

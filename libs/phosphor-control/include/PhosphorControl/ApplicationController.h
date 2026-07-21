@@ -80,15 +80,24 @@ public:
      *  Both return the page id landed on, or an empty string when there
      *  was nowhere to go. Stale entries are skipped and dropped: pages
      *  unregistered after being visited, and pages the current
-     *  simple/advanced tier hides (landing on one would let the app's mode
-     *  gate redirect us back out, which re-records the entry and corrupts
-     *  both stacks). History depth is capped at kMaxHistoryEntries; the
-     *  oldest entry falls off first. */
+     *  simple/advanced tier hides (landing on one lets the app's mode gate
+     *  bounce the user to a different page, so the returned id would not
+     *  match where they ended up). The cap of kMaxHistoryEntries applies
+     *  when RECORDING ordinary navigation — the oldest entry falls off
+     *  first; a history move only transfers an entry between the two
+     *  stacks, so it conserves total depth. */
     bool canGoBack() const;
     bool canGoForward() const;
     Q_INVOKABLE QString goBack();
     Q_INVOKABLE QString goForward();
 
+private:
+    /// One step along the recorded trail: pop from @p from, push the page
+    /// being left onto @p to, navigate. goBack/goForward differ only in
+    /// which stack is which.
+    QString stepHistory(QStringList& from, QStringList& to);
+
+public:
     /** Deep-link reveal latch (generic — every settings app built on this
      *  shell gets deep-link-to-anchor for free).
      *

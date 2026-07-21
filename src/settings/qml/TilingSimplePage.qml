@@ -159,7 +159,16 @@ SettingsFlickable {
                                 algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
                                 windowCount: maxWindowsSlider.slider.value
                                 splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : (root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
-                                masterCount: root.algoSettings.masterCount !== undefined ? root.algoSettings.masterCount : appSettings.autotileMasterCount
+                                // appSettingsObj, NOT the bare `appSettings`:
+                                // AlgorithmPreview declares its own
+                                // `appSettings` (fed settingsController above),
+                                // which shadows the context property here — the
+                                // same trap documented for LayoutComboBox. The
+                                // controller has no autotileMasterCount, so the
+                                // bare form silently reads undefined and lands
+                                // as 0, which is AlgorithmPreview's
+                                // "unsupported" sentinel.
+                                masterCount: root.algoSettings.masterCount !== undefined ? root.algoSettings.masterCount : root.appSettingsObj.autotileMasterCount
                                 customParams: root.previewCustomParams
                                 zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
                             }

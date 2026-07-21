@@ -91,6 +91,10 @@ void ApplicationController::setPendingAnchor(const QString& pageId, const QStrin
     }
     m_pendingAnchorPage = pageId;
     m_pendingAnchor = anchor;
+    // Unconditional emit, deliberately against the emit-on-change rule:
+    // this is a consume-once latch, not a value. Re-arming the SAME deep
+    // link must re-fire PageHost's reveal, which a changed-guard would
+    // swallow.
     Q_EMIT pendingAnchorChanged();
 }
 
@@ -355,33 +359,43 @@ bool ApplicationController::canGoForward() const
     return !m_forwardHistory.isEmpty();
 }
 
-QString ApplicationController::goBack()
+// One step along the recorded trail: pop the newest entry from @p from,
+// push the page being left onto @p to, and navigate. Shared by goBack and
+// goForward, which differ only in which stack is which — pass 2 had to add
+// the same three-clause skip predicate to both copies, so the duplication
+// had already cost a maintenance edit.
+QString ApplicationController::stepHistory(QStringList& from, QStringList& to)
 {
     const bool couldGoBack = canGoBack();
     const bool couldGoForward = canGoForward();
     QString landed;
-    while (!m_backHistory.isEmpty()) {
-        const QString target = m_backHistory.takeLast();
+    while (!from.isEmpty()) {
+        const QString target = from.takeLast();
         // Drop stale entries: the page was unregistered after being
         // visited, the entry duplicates the current page (defensive —
         // setCurrentPageId's same-id early-return means recording never
         // produces one, but a subclass override could), or the entry is
-        // hidden by the current simple/advanced tier. The tier check is
-        // load-bearing, not cosmetic: landing on a hidden page lets the
-        // app's mode gate redirect us, and that redirect arrives back
-        // through setCurrentPageId OUTSIDE the m_navigatingHistory window,
-        // so it re-records the entry we just popped and wipes the forward
-        // trail — the stacks never advance and Back becomes a no-op loop.
+        // hidden by the current simple/advanced tier.
+        //
+        // The tier check is about landing somewhere honest, NOT about
+        // stack integrity: an app mode gate reacting to
+        // currentPageIdChanged runs NESTED inside the setCurrentPageId
+        // below, i.e. still inside the m_navigatingHistory window, so its
+        // redirect is correctly suppressed from re-recording. What breaks
+        // without this clause is the user-visible contract — the step would
+        // return the hidden id it "went to" while the gate silently bounced
+        // the user to a third page, so the button appears to teleport and
+        // the returned id no longer matches currentPageId.
         if (target == m_currentPageId || !m_registry->hasPage(target)
             || !m_registry->pageAllowedInCurrentMode(target)) {
             continue;
         }
         if (!m_currentPageId.isEmpty()) {
-            m_forwardHistory.append(m_currentPageId);
+            to.append(m_currentPageId);
         }
         // m_navigatingHistory suppresses the recording branch in
-        // setCurrentPageId — a history move must not push onto the back
-        // stack again or clear the forward trail it just extended.
+        // setCurrentPageId — a history move must not push onto the origin
+        // stack again or clear the trail it just extended.
         m_navigatingHistory = true;
         setCurrentPageId(target);
         m_navigatingHistory = false;
@@ -394,31 +408,14 @@ QString ApplicationController::goBack()
     return landed;
 }
 
+QString ApplicationController::goBack()
+{
+    return stepHistory(m_backHistory, m_forwardHistory);
+}
+
 QString ApplicationController::goForward()
 {
-    const bool couldGoBack = canGoBack();
-    const bool couldGoForward = canGoForward();
-    QString landed;
-    while (!m_forwardHistory.isEmpty()) {
-        const QString target = m_forwardHistory.takeLast();
-        // Same stale-entry policy as goBack, tier check included.
-        if (target == m_currentPageId || !m_registry->hasPage(target)
-            || !m_registry->pageAllowedInCurrentMode(target)) {
-            continue;
-        }
-        if (!m_currentPageId.isEmpty()) {
-            m_backHistory.append(m_currentPageId);
-        }
-        m_navigatingHistory = true;
-        setCurrentPageId(target);
-        m_navigatingHistory = false;
-        landed = target;
-        break;
-    }
-    if (canGoBack() != couldGoBack || canGoForward() != couldGoForward) {
-        Q_EMIT historyChanged();
-    }
-    return landed;
+    return stepHistory(m_forwardHistory, m_backHistory);
 }
 
 QStringList ApplicationController::parentChainFor(const QString& id) const

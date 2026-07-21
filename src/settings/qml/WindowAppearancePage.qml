@@ -180,8 +180,6 @@ SettingsFlickable {
                     description: i18n("Which windows get a border")
 
                     WideComboBox {
-                        id: borderScopeCombo
-
                         Accessible.name: i18n("Apply borders to")
                         textRole: "text"
                         model: root.scopeOptions
@@ -370,8 +368,6 @@ SettingsFlickable {
                     description: i18n("Which windows are faded and tinted")
 
                     WideComboBox {
-                        id: opacityTintScopeCombo
-
                         Accessible.name: i18n("Apply opacity and tint to")
                         textRole: "text"
                         model: root.scopeOptions
@@ -512,8 +508,6 @@ SettingsFlickable {
                     description: i18n("Which windows lose their title bar")
 
                     WideComboBox {
-                        id: titleBarScopeCombo
-
                         Accessible.name: i18n("Hide title bars on")
                         textRole: "text"
                         model: root.scopeOptions

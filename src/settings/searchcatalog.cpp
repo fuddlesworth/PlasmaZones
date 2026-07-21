@@ -565,6 +565,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("simpleMaxWindows"),
                PhosphorI18n::tr("Max windows"), {PhosphorI18n::tr("limit"), PhosphorI18n::tr("count")});
 
+    // The simple animations page hosts the SHARED GlobalTimingDefaultsCard,
+    // which registers the same "globalAnimationDefaults" anchor the advanced
+    // General page does — so the anchor needs a row against BOTH page ids or
+    // the simple-mode user is routed to a page their mode filters out.
+    addSection(search, QStringLiteral("animations-simple"), QStringLiteral("globalAnimationDefaults"),
+               PhosphorI18n::tr("Animations"));
     addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("simpleExcludeNotificationsAndOsds"),
                PhosphorI18n::tr("Exclude notifications and OSDs"),
                {PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("volume"), PhosphorI18n::tr("brightness")});

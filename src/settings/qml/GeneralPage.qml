@@ -119,6 +119,7 @@ SettingsFlickable {
                     description: i18n("Target refresh rate for shader animations")
 
                     SettingsSlider {
+                        accessibleName: i18n("Frame rate")
                         from: root.effectsBridge.shaderFrameRateMin
                         to: root.effectsBridge.shaderFrameRateMax
                         value: appSettings.shaderFrameRate
@@ -195,6 +196,7 @@ SettingsFlickable {
                         description: i18n("Number of frequency bands in the audio visualization")
 
                         SettingsSlider {
+                            accessibleName: i18n("Spectrum bars")
                             from: root.effectsBridge.audioSpectrumBarCountMin
                             to: root.effectsBridge.audioSpectrumBarCountMax
                             stepSize: 2
@@ -224,6 +226,7 @@ SettingsFlickable {
                         description: i18n("How smoothly the bars respond. Higher values are slower and calmer while lower values are fast and twitchy.")
 
                         SettingsSlider {
+                            accessibleName: i18n("Noise reduction")
                             from: root.effectsBridge.audioNoiseReductionMin
                             to: root.effectsBridge.audioNoiseReductionMax
                             value: appSettings.audioNoiseReduction
@@ -241,6 +244,7 @@ SettingsFlickable {
                         description: i18n("Additional smoothing applied on top of noise reduction")
 
                         SettingsSlider {
+                            accessibleName: i18n("Extra smoothing")
                             from: root.effectsBridge.audioExtraSmoothingMin
                             to: root.effectsBridge.audioExtraSmoothingMax
                             value: appSettings.audioExtraSmoothing
@@ -276,6 +280,7 @@ SettingsFlickable {
                         description: audioAutosensSwitch.checked ? i18n("Starting gain that automatic gain adapts from") : i18n("Fixed gain applied to the audio signal")
 
                         SettingsSlider {
+                            accessibleName: i18n("Sensitivity")
                             from: root.effectsBridge.audioSensitivityMin
                             to: root.effectsBridge.audioSensitivityMax
                             value: appSettings.audioSensitivity
@@ -295,6 +300,7 @@ SettingsFlickable {
                         description: i18n("Sounds below this frequency are ignored")
 
                         SettingsSlider {
+                            accessibleName: i18n("Lowest frequency")
                             from: root.effectsBridge.audioLowerCutoffHzMin
                             to: root.effectsBridge.audioLowerCutoffHzMax
                             value: appSettings.audioLowerCutoffHz
@@ -312,6 +318,7 @@ SettingsFlickable {
                         description: i18n("Sounds above this frequency are ignored")
 
                         SettingsSlider {
+                            accessibleName: i18n("Highest frequency")
                             from: root.effectsBridge.audioHigherCutoffHzMin
                             to: root.effectsBridge.audioHigherCutoffHzMax
                             value: appSettings.audioHigherCutoffHz

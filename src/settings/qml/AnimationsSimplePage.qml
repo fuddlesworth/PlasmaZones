@@ -72,59 +72,9 @@ AnimationEventCardList {
             // The same animation window filter the advanced General page
             // hosts (animation-specific config group, distinct from the
             // snapping/tiling and decoration filters).
-            WindowFilterCard {
-                Layout.fillWidth: true
-
-                excludeTransient: simplePage.globalSettings.animationExcludeTransientWindows
-                transientDescription: i18n("Skip animations for dialogs, popups, tooltips, and dropdown menus")
-                transientAccessibleName: i18n("Exclude transient windows from animations")
-                onExcludeTransientToggled: value => {
-                    simplePage.globalSettings.animationExcludeTransientWindows = value;
-                }
-
-                // Animations-only extra row: exclude notifications / OSDs.
-                insertAfterTransient: Component {
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Kirigami.Units.smallSpacing
-
-                        SettingsSeparator {}
-
-                        SettingsRow {
-                            title: i18n("Exclude notifications and OSDs")
-                            searchAnchor: "simpleExcludeNotificationsAndOsds"
-                            description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
-
-                            SettingsSwitch {
-                                checked: simplePage.globalSettings.animationExcludeNotificationsAndOsd
-                                accessibleName: i18n("Exclude notifications and on-screen displays from animations")
-                                onToggled: function (newValue) {
-                                    simplePage.globalSettings.animationExcludeNotificationsAndOsd = newValue;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                minWidth: simplePage.globalSettings.animationMinimumWindowWidth
-                minWidthFrom: settingsController.generalPage.animationMinimumWindowWidthMin
-                minWidthTo: settingsController.generalPage.animationMinimumWindowWidthMax
-                minWidthDescription: i18n("Windows narrower than this will not animate")
-                minWidthDisabledDescription: i18n("Disabled. No width threshold.")
-                minWidthAccessibleName: i18n("Minimum window width for animations")
-                onMinWidthModified: value => {
-                    simplePage.globalSettings.animationMinimumWindowWidth = value;
-                }
-
-                minHeight: simplePage.globalSettings.animationMinimumWindowHeight
-                minHeightFrom: settingsController.generalPage.animationMinimumWindowHeightMin
-                minHeightTo: settingsController.generalPage.animationMinimumWindowHeightMax
-                minHeightDescription: i18n("Windows shorter than this will not animate")
-                minHeightDisabledDescription: i18n("Disabled. No height threshold.")
-                minHeightAccessibleName: i18n("Minimum window height for animations")
-                onMinHeightModified: value => {
-                    simplePage.globalSettings.animationMinimumWindowHeight = value;
-                }
+            AnimationWindowFilterCard {
+                cardSettings: simplePage.globalSettings
+                anchorPrefix: "simple"
             }
         }
     }

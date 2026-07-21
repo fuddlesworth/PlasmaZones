@@ -70,8 +70,6 @@ SettingsFlickable {
                     description: activeDescription
 
                     ModifierAndMouseCheckBoxes {
-                        id: dragActivationInput
-
                         width: root.sliderPreferredWidth
                         allowMultiple: true
                         acceptMode: acceptModeAll

@@ -1271,6 +1271,23 @@ add_executable(test_decoration_page_scope
     settings/test_decoration_page_scope.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/decorationpagescope.cpp
 )
+
+# Animation page→event-root scoping — the same split, same rationale (pure
+# QString + ShaderProfileTree, no controller construction). Pins the one
+# include/exclude carve-out in the taxonomy (Window Motion vs Dragging).
+add_executable(test_animation_page_scope
+    settings/test_animation_page_scope.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationpagescope.cpp
+)
+target_include_directories(test_animation_page_scope PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_animation_page_scope
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+)
+add_test(NAME test_animation_page_scope COMMAND test_animation_page_scope)
 target_include_directories(test_decoration_page_scope PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_decoration_page_scope
     PRIVATE

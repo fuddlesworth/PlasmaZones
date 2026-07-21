@@ -55,29 +55,37 @@ private:
 // (counterpart pair), and a virtual category whose only leaf is
 // AdvancedOnly — the fixture for the tier filter, the empty-category
 // auto-hide, pageAllowedInCurrentMode, and firstVisibleLeafId.
-void buildTieredRegistry(PageRegistry& reg)
+// Returns false at the first rejected registration so callers can
+// QVERIFY it: QTEST_FAIL_ACTION is a bare `return`, which would only exit
+// this helper and let the caller keep asserting against a half-built
+// registry.
+bool buildTieredRegistry(PageRegistry& reg)
 {
     using PV = PageRegistry::PageVisibility;
     auto* always = new StubPage(QStringLiteral("home"), &reg);
-    QVERIFY(reg.registerPage(
-        {QStringLiteral("home"), {}, QStringLiteral("Home"), {}, QUrl(QStringLiteral("qrc:/Home.qml")), always}));
+    if (!reg.registerPage(
+            {QStringLiteral("home"), {}, QStringLiteral("Home"), {}, QUrl(QStringLiteral("qrc:/Home.qml")), always}))
+        return false;
 
     auto* simple = new StubPage(QStringLiteral("easy"), &reg);
     PageRegistry::Entry simpleEntry{
         QStringLiteral("easy"), {}, QStringLiteral("Easy"), {}, QUrl(QStringLiteral("qrc:/Easy.qml")), simple};
     simpleEntry.visibility = PV::SimpleOnly;
     simpleEntry.counterpartId = QStringLiteral("full");
-    QVERIFY(reg.registerPage(std::move(simpleEntry)));
+    if (!reg.registerPage(std::move(simpleEntry)))
+        return false;
 
     auto* full = new StubPage(QStringLiteral("full"), &reg);
     PageRegistry::Entry fullEntry{
         QStringLiteral("full"), {}, QStringLiteral("Full"), {}, QUrl(QStringLiteral("qrc:/Full.qml")), full};
     fullEntry.visibility = PV::AdvancedOnly;
     fullEntry.counterpartId = QStringLiteral("easy");
-    QVERIFY(reg.registerPage(std::move(fullEntry)));
+    if (!reg.registerPage(std::move(fullEntry)))
+        return false;
 
     auto* cat = new StubPage(QStringLiteral("cat"), &reg);
-    QVERIFY(reg.registerPage({QStringLiteral("cat"), {}, QStringLiteral("Category"), {}, QUrl(), cat}));
+    if (!reg.registerPage({QStringLiteral("cat"), {}, QStringLiteral("Category"), {}, QUrl(), cat}))
+        return false;
     auto* deep = new StubPage(QStringLiteral("cat.deep"), &reg);
     PageRegistry::Entry deepEntry{QStringLiteral("cat.deep"),
                                   QStringLiteral("cat"),
@@ -86,7 +94,9 @@ void buildTieredRegistry(PageRegistry& reg)
                                   QUrl(QStringLiteral("qrc:/Deep.qml")),
                                   deep};
     deepEntry.visibility = PV::AdvancedOnly;
-    QVERIFY(reg.registerPage(std::move(deepEntry)));
+    if (!reg.registerPage(std::move(deepEntry)))
+        return false;
+    return true;
 }
 } // namespace
 
@@ -305,7 +315,7 @@ private Q_SLOTS:
     void tierFilterFollowsShowAdvanced()
     {
         PageRegistry reg;
-        buildTieredRegistry(reg);
+        QVERIFY(buildTieredRegistry(reg));
 
         // Registry default is show-everything-advanced: SimpleOnly hidden.
         QVERIFY(reg.showAdvanced());
@@ -338,7 +348,7 @@ private Q_SLOTS:
     void pageAllowedInCurrentModeIsATierFilterOnly()
     {
         PageRegistry reg;
-        buildTieredRegistry(reg);
+        QVERIFY(buildTieredRegistry(reg));
 
         reg.setShowAdvanced(false);
         QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("home")));
@@ -355,7 +365,7 @@ private Q_SLOTS:
     void firstVisibleLeafFollowsMode()
     {
         PageRegistry reg;
-        buildTieredRegistry(reg);
+        QVERIFY(buildTieredRegistry(reg));
 
         // Root search skips whatever the mode hides, in registration order.
         reg.setShowAdvanced(true);
@@ -371,7 +381,7 @@ private Q_SLOTS:
     void counterpartIdIsStoredVerbatim()
     {
         PageRegistry reg;
-        buildTieredRegistry(reg);
+        QVERIFY(buildTieredRegistry(reg));
         QCOMPARE(reg.entry(QStringLiteral("easy")).counterpartId, QStringLiteral("full"));
         QCOMPARE(reg.entry(QStringLiteral("full")).counterpartId, QStringLiteral("easy"));
         // Assert the page EXISTS before asserting its counterpart is empty:
@@ -386,7 +396,7 @@ private Q_SLOTS:
         // Registration-time declaration is the canonical path; this pins the
         // late-reclassification escape hatch the API keeps for dynamic apps.
         PageRegistry reg;
-        buildTieredRegistry(reg);
+        QVERIFY(buildTieredRegistry(reg));
         reg.setShowAdvanced(false);
         QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("full")));
         reg.setPageVisibility(QStringLiteral("full"), PageRegistry::PageVisibility::Always);

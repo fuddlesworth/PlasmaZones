@@ -119,7 +119,10 @@ public:
         /// AdvancedOnly page it condenses point at each other. Empty
         /// means "no counterpart; use the app fallback". The registry
         /// stores the mapping; it does not act on it.
-        QString counterpartId;
+        /// Braced default like every other member here, so aggregate-init
+        /// sites that omit the trailing field don't trip
+        /// -Wmissing-field-initializers.
+        QString counterpartId{};
     };
 
     explicit PageRegistry(QObject* parent = nullptr);

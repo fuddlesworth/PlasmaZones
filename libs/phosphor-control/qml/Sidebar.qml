@@ -117,30 +117,33 @@ ColumnLayout {
 
     onFlattenTreeChanged: {
         if (root.flattenTree) {
-            // The whole list is being replaced — suppress per-row
-            // Transitions across BOTH the synchronous refresh the
-            // currentParentId reset triggers and the deferred one below,
-            // so the tree→flat swap lands in one frame instead of
-            // accordioning every row. Released by the same timer the
-            // initial fill uses.
-            root._suppressAccordion = true;
-            // Cancel an in-flight drill cross-fade too: its ScriptAction
-            // would otherwise re-apply pendingParentId AFTER this reset,
-            // and the stale scope resurfaces on the flip back to the tree
-            // rail. The animation drives listColumn.opacity and nothing
-            // re-asserts it (no declarative binding), so stopping
-            // mid-fade would strand the rail translucent — restore it
-            // here. The restore lives at this call site rather than in
-            // onStopped because restart() stops internally, and snapping
-            // to 1 there would flash on every rapid re-drill.
+            // Cancel an in-flight drill cross-fade: its ScriptAction would
+            // otherwise re-apply pendingParentId AFTER the reset below, and
+            // the stale scope resurfaces on the flip back to the tree rail.
+            // The animation drives listColumn.opacity and nothing re-asserts
+            // it (no declarative binding), so stopping mid-fade would strand
+            // the rail translucent — restore it here. The restore lives at
+            // this call site rather than in onStopped because restart()
+            // stops internally, and snapping to 1 there would flash on every
+            // rapid re-drill.
             if (drillAnimation.running) {
                 drillAnimation.stop();
                 drillAnimation.pendingParentId = "";
                 listColumn.opacity = 1;
             }
             root.currentParentId = "";
-            suppressAccordionTimer.restart();
         }
+        // Suppress per-row Transitions across BOTH the synchronous refresh
+        // the currentParentId reset triggers and the deferred one below, so
+        // a mode swap lands in one frame instead of accordioning every row.
+        // Set AFTER the drill cancel above: stop() emits stopped()
+        // synchronously, and that handler clears this flag — setting it
+        // first would leave the swap unsuppressed. Applies in BOTH
+        // directions; the flat→tree flip rebuilds the whole tree and
+        // accordions harder than the flat direction. Released by the same
+        // timer the initial fill uses.
+        root._suppressAccordion = true;
+        suppressAccordionTimer.restart();
         // Deferred: the initial binding assignment can fire during
         // component creation, before the list model object exists.
         Qt.callLater(root._refreshModel);
@@ -155,6 +158,12 @@ ColumnLayout {
     readonly property real navRowHeight: Kirigami.Units.gridUnit * 2.5
 
     function drillInto(parentId) {
+        // Flat mode has no scopes: _visibleItems ignores currentParentId
+        // there, so a consumer-driven drill would run the cross-fade and
+        // raise the Back button above an unchanged flat list.
+        if (root.flattenTree)
+            return;
+
         // Short-circuit on either the already-displayed scope OR a
         // drill already in flight targeting the same parent — without
         // the second check, a double-click on a drill row would
@@ -171,6 +180,10 @@ ColumnLayout {
     }
 
     function drillOut() {
+        // Symmetric with drillInto: nothing to drill out of in flat mode.
+        if (root.flattenTree)
+            return;
+
         if (root.currentParentId === "")
             return;
 

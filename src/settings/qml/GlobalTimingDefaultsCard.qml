@@ -167,6 +167,10 @@ SettingsCard {
 
             Layout.fillWidth: true
             spacing: Kirigami.Units.largeSpacing
+            // An empty slot still costs the parent's largeSpacing gap, so a
+            // consumer that appends nothing (the simple page) would get
+            // stray bottom padding the General page's card does not have.
+            visible: extraColumn.children.length > 0
         }
     }
 }

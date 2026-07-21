@@ -165,6 +165,12 @@ QVector<SearchEntry> SearchController::buildIndex() const
         if (e.qmlSource.isEmpty()) {
             continue;
         }
+        // Nor is a page the current simple/advanced tier hides: activating
+        // such a result sends the app's mode gate somewhere else entirely,
+        // so the user lands on an unrelated page with no reveal.
+        if (!m_app->registry()->pageAllowedInCurrentMode(e.id)) {
+            continue;
+        }
 
         SearchEntry se;
         se.kind = SearchEntry::Kind::Page;
@@ -184,6 +190,16 @@ QVector<SearchEntry> SearchController::buildIndex() const
     // are commands, not page-resident targets, so a page breadcrumb would
     // mislabel them (their pageId is empty anyway).
     for (SearchEntry e : m_staticEntries) {
+        // Same tier gate as the page loop above: a setting/section entry
+        // whose host page the current mode hides is not reachable, and the
+        // condensed simple pages deliberately register rows that duplicate
+        // their advanced twins — without this filter BOTH show up in either
+        // mode and one of them navigates nowhere useful. Actions carry no
+        // pageId and are always kept.
+        if (e.kind != SearchEntry::Kind::Action && !e.pageId.isEmpty()
+            && !m_app->registry()->pageAllowedInCurrentMode(e.pageId)) {
+            continue;
+        }
         if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page && e.kind != SearchEntry::Kind::Action) {
             e.subtitle = breadcrumbFor(e.pageId, true);
         }

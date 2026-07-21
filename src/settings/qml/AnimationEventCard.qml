@@ -211,6 +211,14 @@ Item {
             settingsController.animationsPage.clearOverride(paths[i]);
     }
 
+    function _clearShaderOverrideDescendantsOnAll() {
+        const paths = root._writePaths;
+        var cleared = 0;
+        for (var i = 0; i < paths.length; ++i)
+            cleared += settingsController.animationsPage.clearShaderOverrideDescendants(paths[i]);
+        return cleared;
+    }
+
     /// True iff every write path already carries @p effectId as its DIRECT
     /// shader override (the empty string being the engaged-empty sentinel,
     /// which is distinct from "no override at all").
@@ -503,7 +511,7 @@ Item {
                         text: i18n("Clear shadowing children")
                         icon.name: "edit-clear-all"
                         onTriggered: {
-                            settingsController.animationsPage.clearShaderOverrideDescendants(root.eventPath);
+                            root._clearShaderOverrideDescendantsOnAll();
                         }
                     }
                 ]

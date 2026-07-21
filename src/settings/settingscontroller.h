@@ -758,8 +758,20 @@ private:
     // (isPageDirty) after a per-page Reset/Discard, emitting dirtyPagesChanged
     // when it flips so the footer's global needsSave stays consistent. Used for
     // any page whose isPageDirty is value-based — manifest, ordering, shortcuts,
-    // and animation pages.
+    // animation and decoration pages.
+    //
+    // ALSO cascades to any condensed simple page backed by @p page (see
+    // simplePageBackingPages): reverting a backing page must clear the stale
+    // entry on the simple leaf the edit was attributed to while the user was
+    // in simple mode. Both syncs share one dirtyPagesChanged emit.
     void reconcilePageDirty(const QString& page);
+    /// RAII batch window for the above — see the definition in
+    /// settingscontroller_pagestate.cpp.
+    class DirtyEmitScope;
+    friend class DirtyEmitScope;
+    /// Emit dirtyPagesChanged, or record it as pending when a DirtyEmitScope
+    /// is open.
+    void emitDirtyPagesChanged();
     // Batched variant for shared-domain groups (animation / decoration leaves):
     // reconciles every listed page but emits dirtyPagesChanged at most once,
     // matching the discard paths' single-emit discipline.
@@ -865,6 +877,13 @@ private:
     bool m_advancedMode = false;
     QString m_activePage = QStringLiteral("overview");
     QSet<QString> m_dirtyPages;
+    /// Depth counter for deferred dirtyPagesChanged emission. While > 0 the
+    /// reconcile helpers mutate m_dirtyPages but record the NOTIFY in
+    /// m_dirtyEmitPending instead of firing it, so a delegated Reset/Discard
+    /// that walks several backing pages still emits once — the same
+    /// single-emit discipline reconcilePagesDirty gives shared-domain groups.
+    int m_dirtyEmitDepth = 0;
+    bool m_dirtyEmitPending = false;
     /// Stack of external-edit page ids — `setNeedsSave(true)` targets
     /// `top()` instead of `m_activePage`. Nesting-aware so an inner
     /// begin/end pair restores the outer target on pop rather than

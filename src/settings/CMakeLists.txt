@@ -286,6 +286,7 @@ qt_add_qml_module(plasmazones-settings
         qml/TilingSimplePage.qml
         qml/SnappingSimplePage.qml
         qml/GlobalTimingDefaultsCard.qml
+        qml/AnimationWindowFilterCard.qml
         qml/SnappingWindowHandlingCard.qml
         qml/SnappingFocusCard.qml
         qml/SnappingZoneSpanCard.qml
