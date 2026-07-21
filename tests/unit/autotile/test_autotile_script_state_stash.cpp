@@ -24,7 +24,7 @@ using namespace PhosphorTileEngine;
 // whose whole subject is what is inside a bag.
 namespace QTest {
 template<>
-char* toString(const QJsonObject& bag)
+inline char* toString(const QJsonObject& bag)
 {
     return QTest::toString(QJsonDocument(bag).toJson(QJsonDocument::Compact).constData());
 }
@@ -53,9 +53,9 @@ private:
     static QJsonObject sampleBag(double first = 0.7)
     {
         QJsonObject bag;
-        bag[QStringLiteral("cols")] = 2;
-        bag[QStringLiteral("rows")] = 2;
-        bag[QStringLiteral("colFractions")] = QJsonArray{first, 1.0 - first};
+        bag[QLatin1String("cols")] = 2;
+        bag[QLatin1String("rows")] = 2;
+        bag[QLatin1String("colFractions")] = QJsonArray{first, 1.0 - first};
         return bag;
     }
 
@@ -132,6 +132,33 @@ private Q_SLOTS:
         QCOMPARE(bagOn(engine, screen), sampleBag());
     }
 
+    /// The state can be created BEFORE the per-screen override is reinstated.
+    /// Daemon::updateAutotileScreens seeds window order for every added screen
+    /// (autotile.cpp, "Must happen before setActiveScreens()") and that seeding
+    /// creates the TilingState, all before the applyPerScreenConfig loop. At that
+    /// instant the resolver has no override for the screen, so its effective
+    /// algorithm reads as the global one and the tag cannot be adjudicated yet.
+    /// A restore attempt in that window must leave the entry alone rather than
+    /// treat the mismatch as final.
+    void testScriptStateSurvivesStateCreatedBeforeOverrideReinstated()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("bsp")));
+        QVERIFY(seedBag(engine, screen, sampleBag()));
+
+        engine.setAutotileScreens({});
+        // Stands in for seedAutotileOrderForScreen: materialises the state while
+        // the resolver still resolves this screen to the global algorithm.
+        engine.tilingStateForScreen(screen);
+        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("bsp")));
+        engine.setAutotileScreens({screen});
+
+        QCOMPARE(bagOn(engine, screen), sampleBag());
+    }
+
     /// The stash must not route around the "bags never cross algorithms"
     /// invariant: a switch while the state is torn down invalidates the bag.
     void testScriptStateDroppedWhenAlgorithmChangesWhileOff()
@@ -145,6 +172,22 @@ private Q_SLOTS:
         engine.setAutotileScreens({});
         engine.setAlgorithm(QLatin1String("bsp"));
         engine.setAutotileScreens({screen});
+
+        QVERIFY(bagOn(engine, screen).isEmpty());
+    }
+
+    /// A global algorithm switch wipes the LIVE bag of a screen that follows the
+    /// global algorithm, with no toggle involved. This is the wipe the stash
+    /// tests lean on elsewhere, pinned directly so it cannot rot unnoticed.
+    void testGlobalSwitchWipesLiveBag()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        QVERIFY(seedBag(engine, screen, sampleBag()));
+
+        engine.setAlgorithm(QLatin1String("bsp"));
 
         QVERIFY(bagOn(engine, screen).isEmpty());
     }
@@ -184,8 +227,12 @@ private Q_SLOTS:
     }
 
     /// A screen pinned to its own algorithm does not follow a GLOBAL switch, so
-    /// its stashed bag must survive one. This is the true leg of setAlgorithm's
-    /// hasAlgoOverride gate.
+    /// its stashed bag must survive one. What this pins is that setAlgorithm
+    /// does not drop stash entries by screen: the toggle-off has already dropped
+    /// the screen's in-memory override, so a hasAlgoOverride gate there reads
+    /// FALSE for a screen whose pinning survives in persisted settings, and
+    /// dropping on that reading would discard a bag whose algorithm never moved.
+    /// The per-key tag adjudicates it correctly instead.
     void testStashSurvivesGlobalSwitchWhenScreenIsPinned()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());

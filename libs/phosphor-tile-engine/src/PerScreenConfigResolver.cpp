@@ -303,20 +303,26 @@ void PerScreenConfigResolver::wipeStateBagsOnEffectiveAlgorithmChange(const QStr
         it.value()->setScriptState({});
     }
     // Stashed bags are deliberately NOT dropped here. Each carries its own
-    // algorithm tag and AutotileEngine::restoreStashedScriptState re-checks it
-    // per key, which is strictly more precise than a screen-wide drop: this
-    // helper's old/new pair describes the screen as a whole, while the stash
-    // holds one entry per (desktop, activity) context, including contexts this
-    // wipe never walked because their state was already torn down.
+    // algorithm tag, and AutotileEngine::restoreStashedScriptState checks it at
+    // the moment a state actually takes the bag. The gain is TIMING rather than
+    // precision — the tag is resolved per screen too — and timing is the whole
+    // problem here: this helper's old/new pair is not trustworthy at the moment
+    // it runs on the teardown path.
     //
-    // A screen-wide drop here also broke the toggle-off rescue outright. That
-    // path harvests the bag and THEN calls removeOverridesForScreen, whose
-    // in-memory override teardown reaches this helper as override -> global.
-    // The ids differ, so the drop erased the bag one step after it was rescued,
-    // on exactly the screens pinned to their own algorithm. The persisted
-    // per-screen settings survive that teardown and re-derive the same
-    // algorithm on re-enable, so the tag matches and the bag is handed back —
-    // which is the correct outcome and the one the drop prevented.
+    // A drop here broke the toggle-off rescue outright. That path harvests the
+    // bag and THEN calls removeOverridesForScreen, whose in-memory override
+    // teardown reaches this helper as override -> global. The ids differ, so the
+    // drop erased the bag one step after it was rescued, on exactly the screens
+    // pinned to their own algorithm. Nothing about the screen's configuration
+    // actually changed: the persisted per-screen settings survive that teardown
+    // and re-derive the same algorithm on re-enable, so a check deferred to
+    // restore time sees them agree and hands the bag back.
+    //
+    // The live-state wipe above fires on that same untrustworthy comparison, so
+    // it clears the bags of the screen's OTHER contexts on every toggle-off.
+    // That predates the stash and is left alone here; fixing it means giving the
+    // resolver a memory of the algorithm a torn-down screen was last on, which
+    // is a change to this helper's contract rather than to the stash.
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

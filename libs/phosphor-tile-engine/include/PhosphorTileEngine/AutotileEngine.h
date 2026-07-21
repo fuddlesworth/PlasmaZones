@@ -1500,19 +1500,23 @@ private:
     // to the user as their adjustments being thrown away.
     //
     // Tagged with the EFFECTIVE algorithm id at harvest time, and handed back
-    // only when that still matches on re-creation, because TilingStateKey does
-    // not include the algorithm. That tag is what preserves the invariant the
-    // wipe sites enforce for live states: bags never cross algorithms. The wipe
-    // sites deliberately do NOT drop stash entries themselves — they reason
-    // about a screen as a whole, while the stash holds one entry per
-    // (desktop, activity) context, so a screen-wide drop there erased bags the
-    // wipe had never examined and broke the toggle-off rescue outright on
-    // screens pinned to their own algorithm. A tag mismatch discards rather
-    // than migrates; script state has no cross-algorithm meaning.
+    // only when that still matches, because TilingStateKey does not include the
+    // algorithm. That tag is what preserves the invariant the wipe sites enforce
+    // for live states: bags never cross algorithms. A tag mismatch refuses
+    // rather than migrates; script state has no cross-algorithm meaning.
     //
-    // The other half of the invariant is that an EMPTY bag erases the entry
-    // (see stashScriptState), so a bag a live wipe cleared cannot be shadowed
-    // by a stale entry and handed back later.
+    // No site drops entries by screen id. The wipe sites reason about a screen
+    // as a whole and, worse, run at moments when the resolver is not
+    // authoritative — a toggle-off drops the screen's in-memory override, so a
+    // screen pinned to its own algorithm reads there as following the global
+    // one. Dropping on that reading erased bags the wipe had never examined and
+    // broke the rescue outright on exactly those screens. Adjudicating lazily,
+    // per key, at the moment a state actually takes the bag is what makes the
+    // reading trustworthy.
+    //
+    // Entries are reclaimed by a harvest that finds an EMPTY bag, which erases
+    // rather than inserts (see stashScriptState). That is also what stops a bag
+    // a live wipe cleared from being shadowed by a stale entry and handed back.
     //
     // Within-session only: nothing writes it to disk, so a daemon restart still
     // starts from a clean layout.
@@ -1531,18 +1535,15 @@ private:
     /// shadowed by something stashed earlier.
     void stashScriptState(const PhosphorEngine::TilingStateKey& key, const PhosphorTiles::TilingState* state);
 
-    /// Hand a stashed bag back to a freshly created @p state for @p key, if one
-    /// is held and its algorithm tag still matches. A mismatched entry is erased
-    /// (nothing can make it valid again); a matching one is left in place, so a
-    /// transient state that is created and then discarded cannot consume it.
+    /// Hand a stashed bag to @p state for @p key, if one is held and its
+    /// algorithm tag matches what the screen currently resolves to. Purely
+    /// read-only: the entry is left in the stash either way. Callers pass either
+    /// a freshly created state (the two state factories) or, on the autotile
+    /// re-enable path, an existing state whose bag applyPerScreenConfig has just
+    /// wiped — in that case the stashed bag overwrites what the state holds,
+    /// which is the point. A mismatch is NOT proof the bag is dead, only that
+    /// the resolver may not be authoritative yet, so it must not erase.
     void restoreStashedScriptState(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state);
-
-    /// Drop every stashed bag for @p screenId, across all desktops and
-    /// activities. For screen ids that are going away for good (an orphaned
-    /// virtual screen) or moving wholesale to another algorithm (a global
-    /// switch). The per-screen wipe sites do NOT use this — see the note on
-    /// m_scriptStateStash for why the per-key tag covers them instead.
-    void dropStashedScriptStates(const QString& screenId);
 
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
 
