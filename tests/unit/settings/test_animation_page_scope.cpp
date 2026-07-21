@@ -56,13 +56,44 @@ private Q_SLOTS:
 
     void libraryLeavesAreWholeTree()
     {
-        // Presets / motion sets / shaders act on the entire editable tree,
-        // as does the condensed simple page (it spans several roots plus the
-        // General keys, so no single subtree fits).
-        for (const auto* page : {"animations-presets", "animations-motionsets", "animations-shaders",
-                                 "animations-simple", "not-an-animation-page"}) {
+        // Presets / motion sets / shaders act on the entire editable tree, and
+        // an unknown page falls back to the same. The condensed simple page is
+        // deliberately NOT here — see simplePageScopesToItsOwnCards.
+        for (const auto* page :
+             {"animations-presets", "animations-motionsets", "animations-shaders", "not-an-animation-page"}) {
+            // QVERIFY2 over QCOMPARE: a bare compare in this loop names neither
+            // the failing page nor the rows it never reached.
             const AnimationPageScope scope = animationPageScope(QLatin1String(page));
-            QCOMPARE(scope.kind, AnimationPageScope::WholeTree);
+            QVERIFY2(scope.kind == AnimationPageScope::WholeTree, page);
+        }
+    }
+
+    void simplePageScopesToItsOwnCards()
+    {
+        // The condensed page shows five event cards plus the global timing and
+        // window-filter cards. Falling back to WholeTree here would make its
+        // Reset clear every override on surfaces it does not even display
+        // (osd / popup / panel / widget / editor), which is silent data loss.
+        const AnimationPageScope simple = animationPageScope(QStringLiteral("animations-simple"));
+        QCOMPARE(simple.kind, AnimationPageScope::EventSubtree);
+        QVERIFY(simple.includeGeneralKeys);
+        QVERIFY(simple.exclude.isEmpty());
+
+        // Every card the page binds is in scope, including the movement parent
+        // and the .move leaf it shows alongside it (no carve-out here).
+        // window.movement.maximize rides the parent card, as intended.
+        for (const auto* path :
+             {"window.appearance.open", "window.appearance.close", "window.appearance.minimize", "window.movement",
+              "window.movement.move", "window.movement.maximize", "desktop.switch"}) {
+            QVERIFY2(animationPathInScope(QLatin1String(path), simple), path);
+        }
+
+        // Surfaces the page does not show stay untouched by its Reset. All real
+        // taxonomy paths (ProfilePaths) — a typo here would assert nothing,
+        // since any unknown string is trivially out of scope.
+        for (const auto* path : {"osd.show", "popup.snapAssist.show", "panel.slideIn", "widget.fadeIn", "editor.snapIn",
+                                 "desktop.peek", "window.appearance.focus"}) {
+            QVERIFY2(!animationPathInScope(QLatin1String(path), simple), path);
         }
     }
 

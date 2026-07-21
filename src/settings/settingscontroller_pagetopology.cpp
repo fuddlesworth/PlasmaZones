@@ -7,6 +7,8 @@
 //   * pageOwnedConfigKeys()  — leaf id → (group, key) manifest (per-page
 //     Reset / Discard).
 //   * validPageNames()       — the set of navigable leaf page ids.
+//   * simplePageBackingPages() — condensed simple page id → the advanced leaf
+//     ids whose settings it re-hosts (dirty/reset delegation).
 //
 // Virtual-parent → leaf resolution and the simple/advanced tiering both
 // derive from the live PageRegistry now (resolveToLeaf in the sibling

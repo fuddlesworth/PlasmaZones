@@ -32,6 +32,11 @@ struct AnimationPageScope
     /// one carve-out.
     QStringList include;
     QStringList exclude;
+    /// For EventSubtree: also act on the General config keys, for a page that
+    /// hosts the global timing and window-filter cards alongside its event
+    /// cards (the condensed simple page). Ignored by ConfigOnly, which is
+    /// already keys-only, and by WholeTree, which already covers every key.
+    bool includeGeneralKeys = false;
 };
 
 /// Scope for @p page. Unknown / library leaves fall back to WholeTree.

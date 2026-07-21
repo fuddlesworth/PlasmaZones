@@ -337,7 +337,7 @@ PhosphorUi.SettingsAppWindow {
     // startup, so "what mode does a brand-new user get" is defined in ONE
     // place: SettingsController::m_advancedMode. The stored value is pushed
     // into the controller at startup (Component.onCompleted below) and the
-    // header toggle writes user flips back here.
+    // sidebar footer toggle writes user flips back here.
     Settings {
         id: uiModeSettings
         category: "UiMode"

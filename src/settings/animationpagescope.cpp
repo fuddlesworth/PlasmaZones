@@ -32,11 +32,26 @@ AnimationPageScope animationPageScope(const QString& page)
     };
     const auto it = kEventRoots.constFind(page);
     if (it != kEventRoots.cend())
-        return {AnimationPageScope::EventSubtree, it->first, it->second};
-    // animations-presets / animations-motionsets / animations-shaders, and
-    // the condensed animations-simple page (it spans several roots plus the
-    // General keys, so no single subtree fits).
-    return {AnimationPageScope::WholeTree, {}, {}};
+        return {AnimationPageScope::EventSubtree, it->first, it->second, false};
+    // The condensed simple page spans several roots AND hosts the global
+    // timing / window-filter cards, so it scopes to the union of the event
+    // roots its cards bind plus the General keys. It must NOT fall through to
+    // WholeTree: that would make a Reset here clear every override across
+    // osd/popup/panel/widget/editor as well, none of which this page shows.
+    // Keep the roots in lockstep with AnimationsSimplePage.qml's eventModel.
+    // window.movement covers window.movement.move as a descendant, and the
+    // page shows both, so there is no carve-out here.
+    if (page == QLatin1String("animations-simple")) {
+        return {AnimationPageScope::EventSubtree,
+                {QStringLiteral("window.appearance.open"), QStringLiteral("window.appearance.close"),
+                 QStringLiteral("window.appearance.minimize"), QStringLiteral("window.movement"),
+                 QStringLiteral("desktop.switch")},
+                {},
+                /*includeGeneralKeys=*/true};
+    }
+    // animations-presets / animations-motionsets / animations-shaders: library
+    // leaves that genuinely act on the whole editable tree.
+    return {AnimationPageScope::WholeTree, {}, {}, false};
 }
 
 bool animationPathUnderAny(const QString& path, const QStringList& roots)

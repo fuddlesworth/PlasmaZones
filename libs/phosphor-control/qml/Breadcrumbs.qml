@@ -20,8 +20,6 @@ import org.phosphor.control
  * independent.
  */
 RowLayout {
-    //* Ordered ancestors → current. Each entry is a page-data dict.
-
     id: root
 
     required property ApplicationController controller
@@ -54,6 +52,7 @@ RowLayout {
     // binding only re-evaluates when `currentPageId` changes and a
     // post-registration ancestor title update would never reach QML.
     property int _registryTick: 0
+    //* Ordered ancestors → current. Each entry is a page-data dict.
     readonly property var segments: {
         // Touch _registryTick so the binding declares its dependency on
         // post-registration updates. The value isn't read meaningfully
@@ -116,7 +115,22 @@ RowLayout {
             required property int index
             required property var modelData
             readonly property bool isLast: index === root.segments.length - 1
-            readonly property bool clickable: !isLast
+            // Where this crumb actually navigates. An ancestor crumb is
+            // frequently a virtual category with no page of its own (registered
+            // with an empty qmlSource); assigning its id to currentPageId
+            // passes the registry's hasPage() check and then renders an empty
+            // body, so route those to the category's first visible leaf
+            // instead. Empty when the segment is the current page, or when a
+            // category has no visible leaf under it in the current mode — those
+            // stay inert rather than navigating into a blank viewport.
+            readonly property string targetId: {
+                if (isLast)
+                    return "";
+                if (modelData.hasQmlSource)
+                    return modelData.id;
+                return root.controller.registry.firstVisibleLeafId(modelData.id);
+            }
+            readonly property bool clickable: targetId.length > 0
 
             spacing: Kirigami.Units.smallSpacing
 
@@ -137,7 +151,7 @@ RowLayout {
                 // blocks and any future change had to be made thrice.
                 function _activate() {
                     if (segmentRow.clickable)
-                        root.controller.currentPageId = segmentRow.modelData.id;
+                        root.controller.currentPageId = segmentRow.targetId;
                 }
 
                 // Long localised crumbs (e.g. "Mostrar configuración
@@ -193,7 +207,7 @@ RowLayout {
                     hoverEnabled: segmentRow.clickable
                     enabled: segmentRow.clickable
                     cursorShape: segmentRow.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: root.controller.currentPageId = segmentRow.modelData.id
+                    onClicked: root.controller.currentPageId = segmentRow.targetId
                 }
             }
 

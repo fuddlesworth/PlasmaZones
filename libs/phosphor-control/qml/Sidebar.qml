@@ -98,6 +98,13 @@ ColumnLayout {
      *  stays visible in the icon-only rail and receives the live value;
      *  one that does not is hidden there. */
     property Component headerContent: null
+
+    /** Prefix stamped onto the synthetic pageId of a divider row. Shared by
+     *  both producers (the flat and tree walkers) and the navigation guard
+     *  that refuses to route such a row into the controller — a rename that
+     *  reached only the producers would send a divider straight to
+     *  `currentPageId`, so all three read it from here. */
+    readonly property string _dividerPrefix: "__divider__"
     /** When true the sidebar renders the visible page tree as ONE flat
      *  list: every visible navigable page at depth 0 in registration
      *  order, no category headers, no indentation, no drill-downs.
@@ -311,8 +318,10 @@ ColumnLayout {
             const out = [];
             const seen = new Set([""]);
             const emitLeaves = function emitLeaves(parentId, depth) {
-                if (depth > root._maxWalkDepth)
+                if (depth > root._maxWalkDepth) {
+                    console.warn("Sidebar.flat: page tree nested deeper than", root._maxWalkDepth, "levels under id", parentId, "— rows below this point are omitted from the rail");
                     return;
+                }
                 const kids = root._scopeChildren(parentId);
                 for (let i = 0; i < kids.length; ++i) {
                     const child = kids[i];
@@ -349,7 +358,7 @@ ColumnLayout {
                     const lastIsDivider = out.length > 0 && out[out.length - 1]._isDivider === true;
                     if (depth === 0 && child.hasDividerAfter === true && emittedAny && !lastIsDivider) {
                         out.push({
-                            "pageId": "__divider__flat/" + child.id,
+                            "pageId": root._dividerPrefix + "flat/" + child.id,
                             "title": "",
                             "iconSource": "",
                             "hasQmlSource": false,
@@ -378,8 +387,10 @@ ColumnLayout {
             // starts with its own seen-marker for itself only.
             const seen = new Set();
             const walk = function walk(parentId, depth, kids) {
-                if (depth > root._maxWalkDepth)
+                if (depth > root._maxWalkDepth) {
+                    console.warn("Sidebar.tree: page tree nested deeper than", root._maxWalkDepth, "levels under id", parentId, "— rows below this point are omitted from the rail");
                     return;
+                }
                 for (let i = 0; i < kids.length; ++i) {
                     const child = kids[i];
                     // Skip duplicate child ids — a malformed registry
@@ -444,7 +455,7 @@ ColumnLayout {
                     // labels under different parents.
                     if (child.hasDividerAfter === true)
                         out.push({
-                            "pageId": "__divider__" + parentId + "/" + child.id,
+                            "pageId": root._dividerPrefix + parentId + "/" + child.id,
                             "title": "",
                             "iconSource": "",
                             "hasQmlSource": false,
@@ -488,8 +499,10 @@ ColumnLayout {
             return null;
         };
         const collect = function collect(parentId, breadcrumb, depth) {
-            if (depth > root._maxWalkDepth)
+            if (depth > root._maxWalkDepth) {
+                console.warn("Sidebar.search: page tree nested deeper than", root._maxWalkDepth, "levels under id", parentId, "— matches below this point are omitted from the results");
                 return;
+            }
             const kids = root._scopeChildren(parentId);
             for (let i = 0; i < kids.length; ++i) {
                 const child = kids[i];
@@ -927,7 +940,7 @@ ColumnLayout {
                         // already guards via `_isDivider`, but the signal
                         // itself stays open to programmatic invocation;
                         // defending here keeps the contract honest.
-                        if (!pid.startsWith("__divider__"))
+                        if (!pid.startsWith(root._dividerPrefix))
                             root.controller.currentPageId = pid;
                     }
                     onCategoryToggleRequested: pid => root.toggleCategory(pid)

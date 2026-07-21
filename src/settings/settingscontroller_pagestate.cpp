@@ -505,6 +505,14 @@ bool SettingsController::isPageDirty(const QString& page) const
             if (m_animationsPage != nullptr
                 && m_animationsPage->hasScopedPendingFiles(animationScopedBuiltInPaths(scope)))
                 return true;
+            // A page hosting the global timing / filter cards is also dirty
+            // when those keys diverge (the condensed simple page).
+            if (scope.includeGeneralKeys) {
+                for (const auto& gk : animationGeneralConfigKeys()) {
+                    if (m_settings.isKeyModified(gk.first, gk.second))
+                        return true;
+                }
+            }
             return shaderTreeScopeDiffers(m_settings.shaderProfileTree(), m_settings.committedShaderProfileTree(),
                                           scope);
         }
@@ -568,10 +576,13 @@ bool SettingsController::isPageDirty(const QString& page) const
     // Recurse through
     // isPageDirty (not a bare m_dirtyPages lookup) so a manifest-backed child
     // contributes its value-based dirty state to the collapsed parent badge.
-    // Condensed simple pages are skipped: their dirty state is by
-    // definition the union of backing pages that are siblings in this same
-    // set, so visiting them re-walks those pages' key lists for no new
-    // information (this is a hot path — see pageGroupChildren's note).
+    // Condensed simple pages that DECLARE backing pages are skipped: their
+    // dirty state is by definition the union of backing pages that are
+    // siblings in this same set, so visiting them re-walks those pages' key
+    // lists for no new information (this is a hot path — see
+    // pageGroupChildren's note). animations-simple is deliberately not in the
+    // backing map — it scopes its own event roots rather than delegating — so
+    // it is visited like any other leaf.
     const auto& groups = pageGroupChildren();
     const auto it = groups.constFind(page);
     if (it != groups.constEnd()) {
@@ -772,6 +783,12 @@ void SettingsController::resetPage(const QString& page)
                 }
                 if (changed)
                     m_settings.setShaderProfileTree(tree);
+                // A page hosting the global timing / filter cards resets those
+                // keys too (the condensed simple page). Deliberately the
+                // General key list, NOT animationConfigKeys: the shader-tree
+                // key is per-event state already handled per scope above.
+                if (scope.includeGeneralKeys)
+                    m_settings.resetKeys(animationGeneralConfigKeys());
             } else {
                 // WholeTree library leaf: files + every animation key.
                 if (m_animationsPage != nullptr && m_animationsPage->clearAllOverrides() < 0) {
@@ -1011,6 +1028,10 @@ void SettingsController::discardPage(const QString& page)
             }
             if (changed)
                 m_settings.setShaderProfileTree(current);
+            // A page hosting the global timing / filter cards discards those
+            // keys too (the condensed simple page), mirroring its reset scope.
+            if (scope.includeGeneralKeys)
+                m_settings.discardKeys(animationGeneralConfigKeys());
         } else {
             // WholeTree library leaf.
             if (m_animationsPage != nullptr)
