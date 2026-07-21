@@ -5,6 +5,13 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.7] - 2026-07-21
+
+### Fixed
+
+- **Rapid desktop peek toggles no longer show an empty screen**: toggling desktop peek faster than its animation could run cancelled the first pass, and the second one then drew nothing. The animation now reuses the earlier capture, so the second toggle plays through ([#823](https://github.com/fuddlesworth/PlasmaZones/pull/823)).
+- **Manual autotile adjustments survive an autotile toggle**: resizing the columns or rows of an autotiled layout and then toggling autotile off and back on reset the layout to a uniform split. Your adjustments are now kept across the toggle ([#824](https://github.com/fuddlesworth/PlasmaZones/pull/824)).
+
 ## [3.2.6] - 2026-07-20
 
 ### Added

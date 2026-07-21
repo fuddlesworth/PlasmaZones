@@ -1,6 +1,14 @@
 {
     "releases": [
         {
+            "version": "3.2.7",
+            "date": "2026-07-21",
+            "highlights": [
+                "Fixed: toggling desktop peek faster than its animation could run cancelled the first pass, so the second toggle drew nothing. The second toggle now plays through (#823)",
+                "Fixed: resizing the columns or rows of an autotiled layout and then toggling autotile off and back on reset it to a uniform split. Your manual adjustments are now kept across the toggle (#824)"
+            ]
+        },
+        {
             "version": "3.2.6",
             "date": "2026-07-20",
             "highlights": [
