@@ -5,8 +5,9 @@
 
 #include "phosphorcontrol_export.h"
 
-// Full definition, not a forward declaration: build()/resolveDrillScope return
-// QList<PageRegistry::Entry> rows by value, which needs the nested type.
+// Full definition, not a forward declaration: the QPointer<PageRegistry>
+// member and the QML-registered Q_PROPERTY over PageRegistry* both need the
+// complete type, not just a forward declaration.
 #include "PageRegistry.h"
 
 #include <QObject>
