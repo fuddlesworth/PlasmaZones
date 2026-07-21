@@ -975,10 +975,14 @@ PhosphorUi.SettingsAppWindow {
                     // Enabling is safe — it doesn't discard anything — so
                     // we only gate the disable path.
                     //
-                    // The guard queries `dirtyScopeId`, the same mode id the
-                    // confirm hands to discardPage() below, so it cannot see a
-                    // narrower slice of the subtree than the commit it guards.
-                    if (!newValue && settingsController.isPageDirty(trailingRow.dirtyScopeId)) {
+                    // The guard queries `sectionId`, the exact id the confirm
+                    // hands to discardPage() / beginExternalEdit() below, so
+                    // guard, prompt and commit are uniformly bounded to the one
+                    // feature the toggle disables. (For these rows it equals
+                    // dirtyScopeId, which the badge uses; keeping them separate
+                    // holds even if a topology change ever let dirtyScopeId
+                    // hoist above the section.)
+                    if (!newValue && settingsController.isPageDirty(trailingRow.sectionId)) {
                         confirmDialogs.sectionToggle.pendingSection = trailingRow.sectionId;
                         confirmDialogs.sectionToggle.pendingValue = newValue;
                         confirmDialogs.sectionToggle.open();

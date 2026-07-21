@@ -101,6 +101,12 @@ private:
     /// rather than per pageId because one bad id is typically shared by a whole
     /// card's worth of anchors, and naming only the first leaves the rest
     /// silent once it is fixed.
+    ///
+    /// Bounded by the count of distinct offending entries. For the static
+    /// catalogue that is a fixed authoring set. A dynamic provider that keeps
+    /// re-emitting entries with new titles against one persistently-bad pageId
+    /// could grow it unboundedly over a very long session, which is a
+    /// misbehaving-provider case, not a runtime path any in-tree provider hits.
     QSet<QString> m_warnedEntryKeys;
 
     bool m_indexDirty = true;

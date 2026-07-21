@@ -284,7 +284,10 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
                         // would be a Back button), exactly one means the drill
                         // step is pure friction and the row should navigate
                         // straight there, keeping the category's title/icon.
-                        const QList<PageRegistry::Entry> found = firstTwoNavigableDescendants(child.id);
+                        // Reuse childKids rather than firstTwoNavigableDescendants,
+                        // whose wrapper would re-fetch the identical child list
+                        // (a subtree-descending visibility walk) a second time.
+                        const QList<PageRegistry::Entry> found = firstTwoNavigableUnder(m_registry, childKids);
 
                         if (found.isEmpty()) {
                             continue;

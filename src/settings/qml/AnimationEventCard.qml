@@ -262,44 +262,13 @@ Item {
     /// mirrors and only one of them diverged.
     property int _divergentPathCount: 0
 
-    /// Unpacks a "spring:omega,zeta" wire string into `{ omega, zeta }`.
-    ///
-    /// A hand-edited "spring:12,abc" still RESOLVES as a spring rather than
-    /// falling back to easing, and Spring::fromString salvages nothing from a
-    /// failed parse: `if (!okOmega || !okZeta) return spring;` returns its
-    /// default-constructed Spring wholesale, so even the half the user got
-    /// right is discarded and "spring:12,abc" plays as (12.0, 0.8). Falling
-    /// back to the engine's own defaults here is what makes this file agree
-    /// with what the engine will actually play.
-    ///
-    /// Shared by _applyEffective (which seeds the controls) and
-    /// inheritSummaryText (which describes them). They read the same wire
-    /// string, so two parsers meant a malformed spring could be seeded as
-    /// (12.0, 0.8) while the "Current:" line beside it described something
-    /// else. One helper makes that disagreement unrepresentable.
-    function _springFromCurve(curve) {
-        const parts = curve.substring(7).split(",");
-        const w = parseFloat(parts[0]);
-        const z = parseFloat(parts[1]);
-        if (isFinite(w) && isFinite(z))
-            return ({
-                    "omega": w,
-                    "zeta": z
-                });
-
-        return ({
-                "omega": CurvePresets.defaultSpringOmega,
-                "zeta": CurvePresets.defaultSpringZeta
-            });
-    }
-
     // ── Inheritance summary (italic "Current: …" line when override off) ─
     function inheritSummaryText() {
         var r = root._inheritResolved;
         var curve = r.curve || CurvePresets.defaultEasingCurve;
         var dur = r.duration !== undefined ? r.duration : CurvePresets.defaultDurationMs;
         if (typeof curve === "string" && curve.indexOf("spring:") === 0) {
-            const s = root._springFromCurve(curve);
+            const s = CurvePresets.parseSpring(curve);
             return i18n("Spring · ω=%1 · ζ=%2", s.omega.toFixed(1), s.zeta.toFixed(2));
         }
         return i18n("%1 · %2 ms", CurvePresets.curveDisplayName(curve), Math.round(dur));
@@ -637,12 +606,12 @@ Item {
             // Spring mode is set for a malformed wire string too, since the
             // engine still resolves one. Without it the mode kept its previous
             // value (Easing on first seed) and drew a Duration slider the
-            // resolved spring ignores. _springFromCurve supplies the values the
-            // engine will actually play, so the controls, the thumbnail and the
-            // "Current:" line all describe the same spring, and flipping
-            // Override on commits that spring rather than a fabricated
-            // "spring:<stale>,<stale>".
-            const s = root._springFromCurve(curve);
+            // resolved spring ignores. CurvePresets.parseSpring supplies the
+            // values the engine will actually play, so the controls, the
+            // thumbnail and the "Current:" line all describe the same spring,
+            // and flipping Override on commits that spring rather than a
+            // fabricated "spring:<stale>,<stale>".
+            const s = CurvePresets.parseSpring(curve);
             root.currentTimingMode = CurvePresets.timingModeSpring;
             root.currentSpringOmega = s.omega;
             root.currentSpringZeta = s.zeta;

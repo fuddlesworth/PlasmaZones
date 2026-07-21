@@ -60,16 +60,6 @@ SettingsCard {
         return typeof curveStr === "string" && curveStr.indexOf(card._springPrefix) === 0;
     }
 
-    function _parseSpring(curveStr) {
-        const parts = curveStr.substring(card._springPrefix.length).split(",");
-        const w = parseFloat(parts[0]);
-        const z = parseFloat(parts[1]);
-        return {
-            "omega": isFinite(w) ? w : CurvePresets.defaultSpringOmega,
-            "zeta": isFinite(z) ? z : CurvePresets.defaultSpringZeta
-        };
-    }
-
     // Refresh the cached easing/spring values from whichever axis the
     // current curve string describes.
     function _syncCachedValues() {
@@ -77,7 +67,12 @@ SettingsCard {
         if (typeof c !== "string")
             return;
         if (card._isSpringCurve(c)) {
-            const s = card._parseSpring(c);
+            // CurvePresets.parseSpring is all-or-nothing (matches the engine's
+            // Spring::fromString): a hand-edited "spring:14,abc" seeds the
+            // cache with the engine defaults (12, 0.8), the same values a
+            // per-event card resolves for the inherited curve, so the two
+            // never describe the same spring differently.
+            const s = CurvePresets.parseSpring(c);
             card._lastSpringOmega = s.omega;
             card._lastSpringZeta = s.zeta;
         } else if (c.length > 0) {

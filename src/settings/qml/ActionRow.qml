@@ -1007,22 +1007,12 @@ ColumnLayout {
             readonly property var _param: parent.modelData
             readonly property string _stored: row.action[_param.key] !== undefined ? String(row.action[_param.key]) : ""
             readonly property bool _isSpring: _stored.indexOf("spring:") === 0
-            readonly property real _springOmega: {
-                if (!_isSpring)
-                    return CurvePresets.defaultSpringOmega;
-
-                var parts = _stored.substring(7).split(",");
-                var w = parseFloat(parts[0]);
-                return isFinite(w) ? w : CurvePresets.defaultSpringOmega;
-            }
-            readonly property real _springZeta: {
-                if (!_isSpring)
-                    return CurvePresets.defaultSpringZeta;
-
-                var parts = _stored.substring(7).split(",");
-                var z = parseFloat(parts[1]);
-                return isFinite(z) ? z : CurvePresets.defaultSpringZeta;
-            }
+            // All-or-nothing decode via the shared parser; a non-spring
+            // `_stored` yields the engine spring defaults, matching the
+            // old per-property guards without a second hand-rolled parse.
+            readonly property var _spring: CurvePresets.parseSpring(_stored)
+            readonly property real _springOmega: _spring.omega
+            readonly property real _springZeta: _spring.zeta
             readonly property string _easingCurve: _isSpring ? CurvePresets.defaultEasingCurve : (_stored || CurvePresets.defaultEasingCurve)
             // Shared naming with the rule-list summary — CurvePresets.curveLabel
             // formats the spring case and defers easing to curveDisplayName.

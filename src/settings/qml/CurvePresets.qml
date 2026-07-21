@@ -302,6 +302,41 @@ QtObject {
         return i18n("Custom");
     }
 
+    /// Decode a `spring:omega,zeta` wire string into `{ omega, zeta }`.
+    /// Single source of truth for every QML site that reads a spring wire
+    /// value, so none can disagree about a malformed one.
+    ///
+    /// All-or-nothing, mirroring `PhosphorAnimation::Spring::fromString`
+    /// (libs/phosphor-animation/src/spring.cpp): on ANY parse failure it
+    /// returns a default-constructed `Spring(defaultSpringOmega,
+    /// defaultSpringZeta)` wholesale rather than salvaging the half that
+    /// parsed. Per-component salvage (`isFinite(w) ? w : default`) is wrong
+    /// here: for a hand-edited "spring:14,abc" it would report omega=14 while
+    /// the engine actually plays omega=12, so one card would describe an
+    /// inherited spring differently from another and from what animates. A
+    /// non-spring or unparseable string yields the engine defaults too.
+    function parseSpring(curve) {
+        if (typeof curve !== "string" || curve.indexOf("spring:") !== 0)
+            return ({
+                    "omega": defaultSpringOmega,
+                    "zeta": defaultSpringZeta
+                });
+
+        var parts = curve.substring(7).split(",");
+        var omega = parseFloat(parts[0]);
+        var zeta = parseFloat(parts[1]);
+        if (isFinite(omega) && isFinite(zeta))
+            return ({
+                    "omega": omega,
+                    "zeta": zeta
+                });
+
+        return ({
+                "omega": defaultSpringOmega,
+                "zeta": defaultSpringZeta
+            });
+    }
+
     /// Friendly label for ANY stored curve wire value, including the
     /// `spring:omega,zeta` form. Single source of truth for the name shown
     /// both in the rule editor's curve button (ActionRow) and the rule-list
@@ -309,16 +344,8 @@ QtObject {
     /// values defer to curveDisplayName; springs format as "Spring (ω, ζ)".
     function curveLabel(curve) {
         if (curve && curve.indexOf("spring:") === 0) {
-            var parts = curve.substring(7).split(",");
-            var omega = parseFloat(parts[0]);
-            var zeta = parseFloat(parts[1]);
-            if (!isFinite(omega))
-                omega = defaultSpringOmega;
-
-            if (!isFinite(zeta))
-                zeta = defaultSpringZeta;
-
-            return i18n("Spring (%1, %2)", omega.toFixed(2), zeta.toFixed(2));
+            var s = parseSpring(curve);
+            return i18n("Spring (%1, %2)", s.omega.toFixed(2), s.zeta.toFixed(2));
         }
         return curveDisplayName(curve);
     }

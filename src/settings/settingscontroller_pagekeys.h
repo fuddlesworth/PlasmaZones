@@ -35,11 +35,11 @@ namespace PlasmaZones {
 /// setActivePage. Both wrap a body that synchronously runs arbitrary QML page
 /// construction, which is exactly why the restore has to be unconditional.
 ///
-/// DEFINED HERE, not in a .cpp: it is constructed from both
-/// settingscontroller_pagestate.cpp and settingscontroller_pagereset.cpp, and a
-/// TU-local copy in one of them only ever linked because CMAKE_UNITY_BUILD
-/// merged the two files into one batch. Same rationale as
-/// SettingsController::DirtyEmitScope.
+/// DEFINED HERE, not in a .cpp: it is constructed from three TUs
+/// (settingscontroller_pagestate.cpp, settingscontroller_pagereset.cpp and
+/// settingscontroller_session.cpp), and a TU-local copy in one of them only
+/// ever linked because CMAKE_UNITY_BUILD merged the files into one batch. Same
+/// rationale as SettingsController::DirtyEmitScope.
 class ScopedFlag
 {
 public:

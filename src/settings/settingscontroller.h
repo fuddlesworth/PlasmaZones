@@ -242,33 +242,16 @@ public:
     /// for. Kept as a separate query so the kebab can show the two items
     /// independently.
     Q_INVOKABLE bool pageSupportsDiscard(const QString& page) const;
-    /// The id whose dirty state @p pageId REPRESENTS, which is not always the
-    /// id it renders. Simple mode condenses whole subtrees down to a single
-    /// visible row, and that row's own dirty state covers only what it hosts,
-    /// so edits staged on the subtree's hidden advanced leaves survive the
-    /// mode flip and would otherwise badge nowhere and be unreachable by that
-    /// row's Discard.
-    ///
-    /// Only a CONDENSED page hoists — one registered `SimpleOnly`, which
-    /// exists precisely because it stands in for a subtree. A page shown in
-    /// both modes always speaks for itself, even when it happens to be the
-    /// only visible row under its parent: `layouts` is alone under `display`
-    /// in simple mode (virtualscreens is AdvancedOnly), and hoisting it would
-    /// badge Layouts for staged virtual-screen edits it cannot show or clear.
-    ///
-    /// From a condensed page it walks up while that page is the SOLE visible
-    /// representative of its group, which self-terminates: in simple mode
-    /// `placement` and `appearance` each still show two rows, so the walk
-    /// stops below them. Returns @p pageId unchanged when no hop applies.
+    /// The id whose dirty state @p pageId REPRESENTS, which for a condensed
+    /// `SimpleOnly` page is the group it stands in for, so a badge covers the
+    /// subtree's hidden leaves and its Discard can reach them. A page shown in
+    /// both modes returns itself. Full walk and the `layouts`/`display` case
+    /// that gates it: dirtyScopeFor in settingscontroller_pagetopology.cpp.
     Q_INVOKABLE QString dirtyScopeFor(const QString& pageId) const;
-    /// `dirtyScopeFor(activePage)` as a NOTIFYing property.
-    ///
-    /// QML must bind this, not call `dirtyScopeFor(activePage)` directly: that
-    /// is a Q_INVOKABLE, so its result does not re-evaluate when the visible
-    /// set changes. A mode flip that leaves `activePage` alone (any page shown
-    /// in both modes) would otherwise strand every such binding on the
-    /// pre-flip scope, which is how the page kebab came to offer a Discard
-    /// that cleared less than the badge beside it reported.
+    /// `dirtyScopeFor(activePage)` as a NOTIFYing property. QML must bind this,
+    /// not call the invokable directly: the invokable does not re-evaluate on a
+    /// mode flip that leaves `activePage` in place, which stranded the page
+    /// kebab's Discard scope on the pre-flip value.
     QString activeDirtyScope() const;
 
     /// Reset every config key owned by @p page to its schema default, staged
@@ -840,8 +823,8 @@ private:
     /// pages emits one NOTIFY instead of one per page. Nestable — only the
     /// outermost scope fires, and only if something actually flipped.
     ///
-    /// DEFINED HERE, not in a .cpp. It is constructed from BOTH
-    /// settingscontroller_pagestate.cpp and settingscontroller_pagereset.cpp,
+    /// DEFINED HERE, not in a .cpp. It is constructed from
+    /// settingscontroller_pagereset.cpp,
     /// so an out-of-line definition made the latter a non-compiling
     /// translation unit that only linked because CMAKE_UNITY_BUILD happened to
     /// merge the two files into one batch. Adding sources ahead of them in the
