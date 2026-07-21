@@ -15,11 +15,12 @@
 using namespace PlasmaZones;
 
 /**
- * @brief Unit tests for PhosphorTiles::TilingState focus tracking, serialization, clear, and utility methods.
+ * @brief Unit tests for PhosphorTiles::TilingState focus tracking, script-state
+ *        sanitizing, clear, and utility methods.
  *
  * Tests cover:
  * - Focus tracking (default, set/get, untracked, clear, signals, focusedTiledIndex)
- * - Serialization roundtrip (toJson / fromJson)
+ * - sanitizeScriptState, the script trust boundary (non-finite, byte/depth/key/array caps)
  * - clear() method (reset, signals, no-op when default, preserves screenName)
  * - calculatedZones (set/get, default)
  * - windowIndex / containsWindow / windowPosition
@@ -141,131 +142,6 @@ private Q_SLOTS:
         // Tiled windows: [A, C], C is at tiled index 1
         state.setFocusedWindow(QStringLiteral("C"));
         QCOMPARE(state.focusedTiledIndex(), 1);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Serialization roundtrip
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void testSerialization_roundtrip()
-    {
-        PhosphorTiles::TilingState state(QStringLiteral("monitor1"));
-        state.addWindow(QStringLiteral("A"));
-        state.addWindow(QStringLiteral("B"));
-        state.addWindow(QStringLiteral("C"));
-        state.setFloating(QStringLiteral("B"), true);
-        state.setFocusedWindow(QStringLiteral("A"));
-        state.setMasterCount(2);
-        state.setSplitRatio(0.7);
-
-        QJsonObject json = state.toJson();
-
-        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
-        QVERIFY(!restored.isNull());
-
-        QCOMPARE(restored->screenId(), QStringLiteral("monitor1"));
-        QCOMPARE(restored->windowCount(), 3);
-        QCOMPARE(restored->windowOrder(), QStringList({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")}));
-        QVERIFY(restored->isFloating(QStringLiteral("B")));
-        QVERIFY(!restored->isFloating(QStringLiteral("A")));
-        QCOMPARE(restored->focusedWindow(), QStringLiteral("A"));
-        QCOMPARE(restored->masterCount(), 2);
-        QVERIFY(qFuzzyCompare(restored->splitRatio(), 0.7));
-    }
-
-    void testSerialization_emptyState()
-    {
-        PhosphorTiles::TilingState state(QStringLiteral("empty"));
-        QJsonObject json = state.toJson();
-
-        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
-        QVERIFY(!restored.isNull());
-        QCOMPARE(restored->screenId(), QStringLiteral("empty"));
-        QCOMPARE(restored->windowCount(), 0);
-        QCOMPARE(restored->masterCount(), ConfigDefaults::autotileMasterCount());
-        QVERIFY(qFuzzyCompare(restored->splitRatio(), ConfigDefaults::autotileSplitRatio()));
-    }
-
-    void testSerialization_invalidJson()
-    {
-        // Missing screenName should return nullptr
-        QJsonObject invalidJson;
-        QScopedPointer<PhosphorTiles::TilingState> result(PhosphorTiles::TilingState::fromJson(invalidJson));
-        QVERIFY(result.isNull());
-    }
-
-    void testSerialization_clampsBadValues()
-    {
-        QJsonObject json;
-        json[QStringLiteral("screenName")] = QStringLiteral("test");
-        json[QStringLiteral("windowOrder")] = QJsonArray({QStringLiteral("A"), QStringLiteral("B")});
-        json[QStringLiteral("floatingWindows")] = QJsonArray();
-        json[QStringLiteral("focusedWindow")] = QString();
-        json[QStringLiteral("masterCount")] = 99; // Way too high
-        json[QStringLiteral("splitRatio")] = 5.0; // Way too high
-
-        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
-        QVERIFY(!restored.isNull());
-
-        // masterCount should be clamped to MaxMasterCount (absolute limit, not window count)
-        QCOMPARE(restored->masterCount(), PhosphorTiles::AutotileDefaults::MaxMasterCount);
-        // splitRatio should be clamped to MaxSplitRatio (0.9)
-        QVERIFY(qFuzzyCompare(restored->splitRatio(), PhosphorTiles::AutotileDefaults::MaxSplitRatio));
-    }
-
-    void testSerialization_invalidFloatingIgnored()
-    {
-        QJsonObject json;
-        json[QStringLiteral("screenName")] = QStringLiteral("test");
-        json[QStringLiteral("windowOrder")] = QJsonArray({QStringLiteral("A")});
-        // Reference a window not in windowOrder
-        json[QStringLiteral("floatingWindows")] = QJsonArray({QStringLiteral("nonexistent")});
-        json[QStringLiteral("focusedWindow")] = QStringLiteral("alsoNonexistent");
-        json[QStringLiteral("masterCount")] = 1;
-        json[QStringLiteral("splitRatio")] = 0.5;
-
-        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
-        QVERIFY(!restored.isNull());
-
-        // Invalid floating window should be ignored
-        QCOMPARE(restored->floatingWindows().size(), 0);
-        // Invalid focused window should be ignored
-        QVERIFY(restored->focusedWindow().isEmpty());
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // scriptState (opaque per-screen bag for scripted algorithms)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // A sanitized bag survives a toJson → fromJson round-trip unchanged.
-    void testScriptState_roundtrip()
-    {
-        PhosphorTiles::TilingState state(QStringLiteral("s"));
-        state.addWindow(QStringLiteral("A"));
-        QJsonObject bag;
-        bag[QStringLiteral("cols")] = 3;
-        bag[QStringLiteral("colFractions")] = QJsonArray({0.5, 0.25, 0.25});
-        bag[QStringLiteral("nested")] = QJsonObject{{QStringLiteral("k"), 1.5}};
-        state.setScriptState(bag); // already-sanitized per the setScriptState contract
-
-        const QJsonObject json = state.toJson();
-        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
-        QVERIFY(!restored.isNull());
-        QCOMPARE(restored->scriptState(), bag);
-    }
-
-    // An empty bag is omitted from the serialized JSON (not written as an empty
-    // object) and round-trips back to empty.
-    void testScriptState_emptyOmitted()
-    {
-        PhosphorTiles::TilingState state(QStringLiteral("s"));
-        state.addWindow(QStringLiteral("A"));
-        const QJsonObject json = state.toJson();
-        QVERIFY(!json.contains(QStringLiteral("scriptState")));
-
-        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
-        QVERIFY(!restored.isNull());
-        QVERIFY(restored->scriptState().isEmpty());
     }
 
     // sanitizeScriptState drops non-finite (NaN/±Inf) numeric leaves while keeping

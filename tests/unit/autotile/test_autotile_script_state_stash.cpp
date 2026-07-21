@@ -10,11 +10,14 @@
 
 #include "../helpers/AutotileTestHelpers.h"
 #include "../helpers/ScriptedAlgoTestSetup.h"
+#include "FakeScreenProvider.h"
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorTiles/SplitTree.h>
 #include <PhosphorTiles/TilingState.h>
 
 using namespace PlasmaZones;
@@ -92,11 +95,79 @@ private:
         return state->scriptState();
     }
 
+    /// The split ratio of @p screen's tree root, or -1 when there is no tree.
+    /// A memory algorithm's tree carries the user's manual resizes in its per-node
+    /// ratios; a tree rebuilt from window order carries only uniform defaults, so
+    /// the root ratio is what distinguishes "kept" from "regenerated".
+    static qreal rootRatioOn(AutotileEngine& engine, const QString& screen)
+    {
+        PhosphorTiles::TilingState* const state = engine.tilingStateForScreen(screen);
+        if (!state) {
+            QTest::qFail("no TilingState for screen", __FILE__, __LINE__);
+            return -1;
+        }
+        PhosphorTiles::SplitTree* const tree = state->splitTree();
+        return tree && tree->root() ? tree->root()->splitRatio : -1;
+    }
+
 private Q_SLOTS:
 
     void initTestCase()
     {
         QVERIFY(m_scriptSetup.init(QStringLiteral(P_SOURCE_DIR)));
+    }
+
+    /// A memory algorithm's split tree is the same class of per-context state as
+    /// the script bag: it holds the user's manual resizes, in its per-node split
+    /// ratios. A toggle-off destroys the TilingState, and the stash rescues only
+    /// the bag, so the tree dies and prepareTilingState rebuilds a fresh one with
+    /// UNIFORM ratios — the adjustments are gone exactly as they were for the bag.
+    void testSplitTreeSurvivesToggleOff()
+    {
+        // A real screen provider, so recalculateLayout resolves geometry and the
+        // retile actually runs — the restore hangs off that path, not off state
+        // creation, so a geometry-less fixture would never reach it.
+        const QString screen = QStringLiteral("eDP-1");
+        PhosphorScreens::FakeScreenProvider provider;
+        provider.addScreen(screen, QRect(0, 0, 1920, 1080));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        screenMgr.start();
+
+        AutotileEngine engine(nullptr, nullptr, &screenMgr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("dwindle-memory"));
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        state->addWindow(QStringLiteral("A"));
+        state->addWindow(QStringLiteral("B"));
+        engine.retile(screen);
+        QVERIFY(state->splitTree());
+        QVERIFY(state->splitTree()->root());
+        // A manual resize: move the root split well off the uniform default.
+        state->splitTree()->root()->splitRatio = 0.75;
+        QCOMPARE(rootRatioOn(engine, screen), 0.75);
+
+        engine.setAutotileScreens({});
+        engine.setAutotileScreens({screen});
+
+        PhosphorTiles::TilingState* restored = engine.tilingStateForScreen(screen);
+        QVERIFY(restored);
+        restored->addWindow(QStringLiteral("A"));
+        restored->addWindow(QStringLiteral("B"));
+        engine.retile(screen);
+
+        QCOMPARE(rootRatioOn(engine, screen), 0.75);
+
+        // The restore is one-shot. It runs on EVERY retile, so an entry left in
+        // the stash would be re-applied over whatever the user does next —
+        // pinning their layout to the rescued tree forever. A fresh adjustment
+        // must survive the next retile.
+        restored->splitTree()->root()->splitRatio = 0.6;
+        engine.retile(screen);
+        QCOMPARE(rootRatioOn(engine, screen), 0.6);
     }
 
     /// The regression: off/on must not reset a manually adjusted layout.

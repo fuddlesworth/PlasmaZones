@@ -27,8 +27,9 @@ namespace PhosphorSnapEngine {
 /// PhosphorTiles::TilingState for automatic tiling.
 ///
 /// Both SnapState and TilingState implement PhosphorEngine::IPlacementState
-/// so the daemon's persistence layer and D-Bus adaptor can serialize state
-/// uniformly without branching on mode.
+/// so the daemon's D-Bus adaptor can read state uniformly without branching on
+/// mode. The state itself is within-session; what persists is per-window, in
+/// the WindowPlacementStore.
 class PHOSPHORSNAPENGINE_EXPORT SnapState : public QObject, public PhosphorEngine::IPlacementState
 {
     Q_OBJECT
@@ -64,7 +65,6 @@ public:
     bool isFloating(const QString& windowId) const override;
     QStringList floatingWindows() const override;
     QString placementIdForWindow(const QString& windowId) const override;
-    QJsonObject toJson() const override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Zone Assignment CRUD
@@ -278,12 +278,6 @@ public:
 
     /// Remove zone/screen/desktop assignments for windows not in the alive set.
     int pruneStaleAssignments(const QSet<QString>& aliveWindowIds);
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Deserialization
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    static SnapState* fromJson(const QJsonObject& json, QObject* parent = nullptr);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // State Access (for persistence layer)

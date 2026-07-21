@@ -1525,9 +1525,23 @@ private:
     //
     // Within-session only: nothing writes it to disk, so a daemon restart still
     // starts from a clean layout.
+    // The split tree rides along because it is the same kind of thing: per-context
+    // state holding the user's manual resizes, in its per-node ratios rather than
+    // in an opaque bag. Losing it on a toggle rebuilt a uniform layout, which is
+    // the same complaint the bag's loss produced.
+    //
+    // Held as JSON rather than a live tree so the entry stays copyable, and so a
+    // restore runs SplitTree::fromJson's clamping and structural validation
+    // instead of trusting a pointer parked across a teardown.
+    //
+    // The tree is NOT governed by the algorithm tag. Bags never cross algorithms,
+    // but trees deliberately do carry between two MEMORY algorithms — that is the
+    // live rule (wipeStateBagsOnEffectiveAlgorithmChange clears a tree only when
+    // the incoming algorithm lacks memory), and a stashed tree follows it.
     struct StashedScriptState
     {
         QJsonObject scriptState;
+        QJsonObject splitTree;
         QString algorithmId;
     };
     QHash<PhosphorEngine::TilingStateKey, StashedScriptState> m_scriptStateStash;
@@ -1549,6 +1563,23 @@ private:
     /// which is the point. A mismatch is NOT proof the bag is dead, only that
     /// the resolver may not be authoritative yet, so it must not erase.
     void restoreStashedScriptState(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state);
+
+    /// Hand @p state back its stashed split tree, if one is held and it still
+    /// describes @p state's tiled windows exactly.
+    ///
+    /// Deliberately NOT called from the state factory like the bag is. A bag is
+    /// window-agnostic, so it can be handed to an empty state; a tree's leaves ARE
+    /// window ids, and syncTreeInsert is not idempotent, so installing one before
+    /// the windows are re-added would duplicate every leaf as they arrive. This
+    /// runs at retile time instead, once the window set is whole again.
+    ///
+    /// The leaf-set check is the guard for everything that happened while the
+    /// state was gone: a window closed, or a new one opened, leaves the tree
+    /// describing a layout that no longer exists, and it is dropped rather than
+    /// reconciled. Rebuilding it from window order would restore the topology
+    /// while silently resetting the ratios the tree exists to carry.
+    void restoreStashedSplitTree(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state,
+                                 const PhosphorTiles::TilingAlgorithm* algo);
 
     /// Drop @p screenId's stashed bags that were written under an algorithm other
     /// than @p newAlgorithmId, because the screen has genuinely moved to it.

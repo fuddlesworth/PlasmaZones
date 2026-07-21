@@ -77,9 +77,10 @@ constexpr int UnlimitedMaxWindowsSentinel = std::numeric_limits<int>::max() / 2;
 constexpr int MaxZones = 256;
 constexpr int MaxRuntimeTreeDepth = 50; ///< Maximum recursion depth for split tree operations
 // Bounds for the opaque per-algorithm script-state bag (TilingState::scriptState).
-// Enforced by TilingState::sanitizeScriptState at every script write-back and on
-// load, so a buggy or hostile algorithm can't bloat the persisted state or stall
-// serialization. A whole bag exceeding the byte cap is dropped (reset to empty).
+// Enforced by TilingState::sanitizeScriptState at every script write-back, so a
+// buggy or hostile algorithm can't bloat the bag or stall the code that walks it.
+// A whole bag exceeding the byte cap is dropped (reset to empty). The bag is
+// within-session only — nothing writes it to disk — so this is the sole boundary.
 constexpr int ScriptStateMaxBytes = 64 * 1024; ///< Max compact-JSON size of the bag
 constexpr int ScriptStateMaxDepth = 16; ///< Max object/array nesting depth
 constexpr int ScriptStateMaxKeys = 4096; ///< Max total object keys across the bag
@@ -163,8 +164,6 @@ inline constexpr QLatin1String InsertPosition{"insertPosition"};
 inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
 inline constexpr QLatin1String MaxWindows{"maxWindows"};
 inline constexpr QLatin1String OverflowBehavior{"overflowBehavior"};
-inline constexpr QLatin1String SplitTreeKey{"splitTree"};
-inline constexpr QLatin1String ScriptStateKey{"scriptState"};
 } // namespace AutotileJsonKeys
 
 /**

@@ -316,25 +316,6 @@ public:
      */
     int focusedTiledIndex() const;
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Serialization
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Serialize state to JSON
-     */
-    QJsonObject toJson() const override;
-
-    /**
-     * @brief Deserialize state from JSON
-     * @param json Serialized state
-     * @param parent Parent QObject
-     * @return New TilingState or nullptr on error
-     *
-     * Ownership: caller takes ownership (Qt parent set if provided)
-     */
-    static TilingState* fromJson(const QJsonObject& json, QObject* parent = nullptr);
-
     /**
      * @brief Clear all state (remove all windows, reset to defaults)
      */
@@ -411,9 +392,9 @@ public:
      * @brief Replace the script-state bag wholesale.
      *
      * Callers must pass already-sanitized JSON (see @c sanitizeScriptState in
-     * tilingstateserialization.cpp). No NOTIFY signal: this is internal
-     * persistence, not a UI-observable property, and writing it must never
-     * schedule a retile (that would risk a resize→retile→resize loop).
+     * tilingstateserialization.cpp). No NOTIFY signal: this is internal state,
+     * not a UI-observable property, and writing it must never schedule a retile
+     * (that would risk a resize→retile→resize loop).
      */
     void setScriptState(const QJsonObject& state);
 
