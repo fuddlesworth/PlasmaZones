@@ -47,6 +47,10 @@ SearchController::SearchController(ApplicationController* app, QObject* parent)
     // itself lives in this library.
     if (m_app != nullptr && m_app->registry() != nullptr) {
         connect(m_app->registry(), &PageRegistry::showAdvancedChanged, this, &SearchController::invalidate);
+        // The index also derives its Page entries from the catalogue, which
+        // GROWS at runtime (post-startup registerPage is a supported path),
+        // so a late-registered page must reach the cache too.
+        connect(m_app->registry(), &PageRegistry::pageRegistered, this, &SearchController::invalidate);
     }
 }
 

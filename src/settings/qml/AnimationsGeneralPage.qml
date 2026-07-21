@@ -43,6 +43,8 @@ SettingsFlickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
+            // Kirigami.InlineMessage defaults to hidden; opt in explicitly.
+            visible: true
             text: i18n("These defaults apply to every animation event unless a sub-page (Window, Zone, OSD, etc.) defines its own override.")
         }
 
@@ -152,6 +154,8 @@ SettingsFlickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
+            // Kirigami.InlineMessage defaults to hidden; opt in explicitly.
+            visible: true
             text: i18n("Filtered windows are not animated. Use a Rule to keep a specific application animated even when a filter would exclude it.")
         }
 

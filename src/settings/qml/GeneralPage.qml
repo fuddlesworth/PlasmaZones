@@ -187,6 +187,10 @@ SettingsFlickable {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
                     enabled: audioVizSwitch.checked && root.effectsBridge.cavaAvailable
+                    // Hide as well as disable: the rows collapse themselves
+                    // via `visible: enabled`, but a visible zero-height
+                    // container still costs the parent a spacing slot.
+                    visible: audioVizSwitch.checked && root.effectsBridge.cavaAvailable
 
                     SettingsSeparator {}
 
@@ -216,7 +220,9 @@ SettingsFlickable {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
                     enabled: audioVizSwitch.checked && root.effectsBridge.cavaAvailable
-                    visible: settingsController.advancedMode
+                    // Same zero-height spacing-slot collapse as the stack
+                    // above, ANDed with the advanced-mode gate.
+                    visible: settingsController.advancedMode && audioVizSwitch.checked && root.effectsBridge.cavaAvailable
 
                     SettingsSeparator {}
 

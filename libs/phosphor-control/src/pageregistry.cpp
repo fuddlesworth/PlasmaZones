@@ -68,7 +68,16 @@ void PageRegistry::setPageVisibility(const QString& id, PageVisibility visibilit
         qWarning() << "PageRegistry::setPageVisibility: unknown page id" << id << "— ignoring";
         return;
     }
+    if (m_pages[it.value()].visibility == visibility) {
+        return;
+    }
     m_pages[it.value()].visibility = visibility;
+    // Announce the restamp: consumers that FILTER on the tier (the sidebar's
+    // tree accessors, SearchController's cached index) have no other way to
+    // learn an entry changed tier. Reuses showAdvancedChanged rather than
+    // adding a second signal — every consumer of one wants the other, and
+    // the semantics are identical: "the visible set may have changed".
+    Q_EMIT showAdvancedChanged();
 }
 
 bool PageRegistry::showAdvanced() const

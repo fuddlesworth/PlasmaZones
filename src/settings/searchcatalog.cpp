@@ -583,7 +583,20 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // General page does — so the anchor needs a row against BOTH page ids or
     // the simple-mode user is routed to a page their mode filters out.
     addSection(search, QStringLiteral("animations-simple"), QStringLiteral("globalAnimationDefaults"),
-               PhosphorI18n::tr("Animations"));
+               PhosphorI18n::tr("Global animation defaults"));
+    // The simple page's event cards register their eventPath as the anchor
+    // (see AnimationEventCardList), so each grouped card needs its own row —
+    // the advanced pages that otherwise carry these ids are tier-filtered out
+    // in simple mode. The window.movement parent node is not searchable.
+    addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("window.appearance.open"),
+               PhosphorI18n::tr("Window opened & closed"),
+               {PhosphorI18n::tr("open"), PhosphorI18n::tr("close"), PhosphorI18n::tr("effect")});
+    addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("window.appearance.minimize"),
+               PhosphorI18n::tr("Window minimized"), {PhosphorI18n::tr("minimize"), PhosphorI18n::tr("effect")});
+    addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("window.movement.move"),
+               PhosphorI18n::tr("Window moved"), {PhosphorI18n::tr("drag"), PhosphorI18n::tr("move")});
+    addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("desktop.switch"),
+               PhosphorI18n::tr("Desktop switched"), {PhosphorI18n::tr("desktop"), PhosphorI18n::tr("switch")});
     addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("simpleExcludeNotificationsAndOsds"),
                PhosphorI18n::tr("Exclude notifications and OSDs"),
                {PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("volume"), PhosphorI18n::tr("brightness")});

@@ -176,6 +176,10 @@ RowLayout {
                     id: segmentLabel
 
                     anchors.fill: parent
+                    // The wrapper Item supplies Accessible.name/role for the
+                    // crumb; leaving this Label in the tree makes a screen
+                    // reader announce each crumb twice.
+                    Accessible.ignored: true
                     text: segmentRow.modelData.title
                     elide: Text.ElideMiddle
                     opacity: segmentRow.clickable && (segmentMouse.containsMouse || segmentItem.activeFocus) ? 0.8 : 0.5
@@ -201,6 +205,9 @@ RowLayout {
                 // freedesktop icon theme.
                 text: "›"
                 opacity: 0.5
+                // Decorative: a screen reader should read the crumbs, not
+                // the glyph between them.
+                Accessible.ignored: true
             }
         }
     }

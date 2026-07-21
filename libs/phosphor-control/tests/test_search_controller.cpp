@@ -447,6 +447,68 @@ private Q_SLOTS:
         // And back again.
         app.registry()->setShowAdvanced(true);
         QCOMPARE(sc.resultCount(), 2);
+        // Assert WHICH entries survive, not just how many — a future entry
+        // matching "advanced" would otherwise keep the count assertion
+        // passing for the wrong reason.
+        QVERIFY(resultPageIds(sc).contains(QStringLiteral("advanced")));
+
+        // The flip must re-emit so QML's resultCount/results bindings
+        // refresh; a rebuild without the signal leaves the UI stale.
+        QSignalSpy spy(&sc, &SearchController::resultsChanged);
+        app.registry()->setShowAdvanced(false);
+        QVERIFY(spy.count() > 0);
+    }
+
+    void hidesProviderEntriesForHiddenPagesToo()
+    {
+        // The provider loop applies the same tier gate as the static loop.
+        // Pinned separately because a regression reverting only the provider
+        // call site would otherwise ship green — and providers are the
+        // highest-volume entry source in the real app.
+        ApplicationController app;
+        app.registerPage(new StubPage(QStringLiteral("hidden")), {}, QStringLiteral("Hidden"),
+                         QUrl(QStringLiteral("qrc:/hidden.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+
+        class HiddenPageProvider : public ISearchProvider
+        {
+        public:
+            QVector<SearchEntry> searchEntries() const override
+            {
+                SearchEntry e;
+                e.kind = SearchEntry::Kind::Entity;
+                e.pageId = QStringLiteral("hidden");
+                e.title = QStringLiteral("Zebra");
+                return {e};
+            }
+        };
+        HiddenPageProvider provider;
+
+        SearchController sc(&app);
+        sc.registerProvider(&provider);
+
+        sc.setQuery(QStringLiteral("zebra"));
+        QCOMPARE(sc.resultCount(), 1);
+
+        app.registry()->setShowAdvanced(false);
+        QCOMPARE(sc.resultCount(), 0);
+    }
+
+    void reclassifyingAPageRefreshesTheIndex()
+    {
+        // setPageVisibility is the late-reclassification path; the cached
+        // index must learn about it.
+        ApplicationController app;
+        app.registerPage(new StubPage(QStringLiteral("later")), {}, QStringLiteral("Later"),
+                         QUrl(QStringLiteral("qrc:/later.qml")));
+
+        SearchController sc(&app);
+        sc.setQuery(QStringLiteral("later"));
+        QCOMPARE(sc.resultCount(), 1);
+
+        app.registry()->setShowAdvanced(false);
+        app.registry()->setPageVisibility(QStringLiteral("later"), PageRegistry::PageVisibility::AdvancedOnly);
+        QCOMPARE(sc.resultCount(), 0);
     }
 
 private:

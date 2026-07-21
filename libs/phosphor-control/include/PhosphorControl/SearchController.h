@@ -8,6 +8,7 @@
 
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -83,7 +84,7 @@ private:
     void recompute();
     QVector<SearchEntry> buildIndex() const;
 
-    ApplicationController* m_app = nullptr;
+    QPointer<ApplicationController> m_app = nullptr;
     QString m_query;
     int m_limit = 24;
 

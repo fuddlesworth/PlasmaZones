@@ -256,7 +256,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Max windows")
                     searchAnchor: "simpleMaxWindows"
-                    description: i18n("Maximum number of windows to tile on this screen")
+                    description: i18n("Maximum number of windows to tile")
 
                     SettingsSlider {
                         id: maxWindowsSlider

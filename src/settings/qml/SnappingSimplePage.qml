@@ -121,10 +121,11 @@ SettingsFlickable {
         }
 
         // The three cards below are the same components the advanced
-        // Snapping pages host, so those rows cannot drift. The snap-assist
-        // rows in the card ABOVE are this page's own, worded for the simple
-        // surface — they intentionally differ from the advanced page's
-        // master-toggle card.
+        // Snapping pages host, so those rows cannot drift. Every row in the
+        // card ABOVE is this page's own, worded for the simple surface:
+        // they bind the same settings as the advanced Triggers and Snap
+        // Assist cards but deliberately use plainer titles and drop the
+        // advanced pages' extra qualifiers.
         SnappingZoneSpanCard {
             Layout.fillWidth: true
             settingsBridge: root.settingsBridge

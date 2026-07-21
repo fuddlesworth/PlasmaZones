@@ -101,8 +101,10 @@ ColumnLayout {
     /** When true the sidebar renders the visible page tree as ONE flat
      *  list: every visible navigable page at depth 0 in registration
      *  order, no category headers, no indentation, no drill-downs.
-     *  Section dividers still honour `hasDividerAfter` (an entry's flag
-     *  fires after its subtree's last emitted row). Intended for a
+     *  Section dividers still honour `hasDividerAfter`, but only on
+     *  TOP-LEVEL entries — a top-level flag fires after the last row its
+     *  subtree emitted; leaf-level flags are ignored, since they are tuned
+     *  for the tree rail's within-category rhythm. Intended for a
      *  pared-down mode (e.g. an app's simple mode) where the filtered
      *  tree is small enough that hierarchy is pure friction; the full
      *  tree UI returns when the flag goes false. Drill state resets on
@@ -300,9 +302,10 @@ ColumnLayout {
         if (root.flattenTree && root.searchText.length === 0) {
             // Flat mode: one list of every visible navigable page, walked
             // from the ROOT (drill scope is meaningless here), depth 0
-            // throughout, honouring registration order. An entry's
+            // throughout, honouring registration order. A TOP-LEVEL entry's
             // hasDividerAfter fires after the last row its subtree emitted,
-            // so the tree's section seams survive flattening; consecutive
+            // so the tree's section seams survive flattening (leaf-level
+            // flags are ignored — see the depth gate below); consecutive
             // and trailing dividers are collapsed since intervening rows
             // may have been filtered out.
             const out = [];
@@ -621,6 +624,15 @@ ColumnLayout {
     onCurrentParentIdChanged: _refreshModel()
     onExpandedCategoriesChanged: _refreshModel()
     onSearchTextChanged: _refreshModel()
+    // The rail's rows are built imperatively, so every input to
+    // _visibleItems needs its own refresh hook. Without this one a new
+    // override map (e.g. the app re-evaluating its i18n() titles on a
+    // language change) would re-title the breadcrumb, which reads the same
+    // map through a declarative binding, while the rail kept the old text.
+    onFlatTitleOverridesChanged: {
+        if (root.flattenTree)
+            _refreshModel();
+    }
     Component.onCompleted: {
         // Suppress per-row add Transitions for the initial fill so the
         // sidebar doesn't visibly accordion-expand every top-level row
