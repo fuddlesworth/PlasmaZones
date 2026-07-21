@@ -54,9 +54,6 @@ bool isShortcutsPage(const QString& page)
     return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts");
 }
 
-// Quick-layout slots are numbered 1..9 (see SettingsController::getQuickLayoutSlot).
-constexpr int kQuickLayoutSlotCount = 9;
-
 // Raises the loading flag for the enclosing scope and restores the PREVIOUS
 // value on exit (not a hard clear), so nesting is safe. Suppresses
 // onSettingsPropertyChanged so a reset/discard's own writes do not mark the

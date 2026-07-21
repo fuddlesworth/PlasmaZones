@@ -45,6 +45,17 @@ public:
     /// within `maxDistance` (default scales with query length). Intended for
     /// the zero-results case only.
     static QString closestTitle(const QString& query, const QVector<SearchEntry>& entries, int maxDistance = -1);
+
+    /** Normalise a string for search comparison: decompose, drop combining
+     *  marks, then full case-fold. So "Café" matches "cafe" and "Größe"
+     *  matches "grosse".
+     *
+     *  Exposed rather than kept file-local because the sidebar rail
+     *  (SidebarRows) matches its own breadcrumbs while this class matches the
+     *  global index. Both must fold identically or the same query returns
+     *  different results in the two surfaces, which reads as a bug in
+     *  whichever one the user tried second. */
+    static QString foldForSearch(const QString& s);
 };
 
 } // namespace PhosphorControl

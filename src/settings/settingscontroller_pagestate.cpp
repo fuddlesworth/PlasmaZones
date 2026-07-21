@@ -3,7 +3,10 @@
 
 // Active-page navigation + per-page dirty tracking + external-edit envelope
 // for SettingsController:
-//   * setActivePage   — switch the viewed page (with parent→leaf redirect)
+//   * setActivePage / resolveToLeaf — switch the viewed page, resolving a
+//     parent category to a leaf and applying the simple/advanced mode gate
+//   * navigateTo      — setActivePage plus an optional "#anchor" reveal
+//   * setAdvancedMode — flip the mode, re-filter the rail, re-gate the page
 //   * onSettings/ExternalSettingsChanged — NOTIFY → dirty / reload hooks
 //   * setNeedsSave / dirtyPages / isPageDirty — dirty-state surface for QML
 //   * begin/endExternalEdit — stack envelope so sidebar/global widgets mark

@@ -4,6 +4,7 @@
 #include "PhosphorControl/SidebarRows.h"
 
 #include "PhosphorControl/PageRegistry.h"
+#include "PhosphorControl/SearchRanker.h"
 
 #include <QDebug>
 #include <QSet>
@@ -252,7 +253,7 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
     // ── SEARCH ──────────────────────────────────────────────────────────
     // A flat match list from every scope. Dividers are suppressed: they carry
     // no match metadata and would break the result list's reading order.
-    const QString needle = searchText.toLower();
+    const QString needle = SearchRanker::foldForSearch(searchText);
     QSet<QString> seen;
     // Destinations already offered. A child's breadcrumb carries its ancestors'
     // titles, so a needle matching a CATEGORY title also matches every
@@ -326,7 +327,9 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
                     collect(child.id, grandKids, childBreadcrumb, depth + 1);
                 }
 
-                const bool matchesNeedle = childBreadcrumb.toLower().contains(needle);
+                // Folded on both sides via the SAME helper the global index uses, so
+                // the rail and global search agree on what "matches".
+                const bool matchesNeedle = SearchRanker::foldForSearch(childBreadcrumb).contains(needle);
                 if (!child.qmlSource.isEmpty()) {
                     if (matchesNeedle) {
                         out.append(

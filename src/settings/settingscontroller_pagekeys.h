@@ -20,6 +20,12 @@
 
 namespace PlasmaZones {
 
+/// Quick-layout slots are numbered 1..kQuickLayoutSlotCount. Shared by the
+/// slot accessors' bounds checks (settingscontroller_session.cpp) and the
+/// Quick Shortcuts reset loop (settingscontroller_pagereset.cpp), so the bound
+/// and the loop that walks it cannot drift apart.
+constexpr int kQuickLayoutSlotCount = 9;
+
 /// Every animation leaf shares one staging domain and one ShaderProfileTree
 /// key, but Reset/Discard/dirty are scoped per leaf — see animationPageScope.
 bool isAnimationPage(const QString& page);

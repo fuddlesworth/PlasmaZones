@@ -77,6 +77,10 @@ QStringList animationScopedBuiltInPaths(const AnimationPageScope& scope)
     // (itself a function-local static), and a scope's include/exclude roots
     // are fixed per page id by animationPageScope. Keyed on the roots rather
     // than the page id so callers that build a scope by hand still hit it.
+    //
+    // GUI-THREAD ONLY. Static initialisation is thread-safe but the QHash
+    // insert below is not, and every caller today is on the GUI thread. Anyone
+    // calling this off-thread must add a lock rather than assume it is safe.
     static QHash<QString, QStringList> cache;
     const QString key =
         scope.include.join(QLatin1Char('\x1f')) + QLatin1Char('\x1e') + scope.exclude.join(QLatin1Char('\x1f'));

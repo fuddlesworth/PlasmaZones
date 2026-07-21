@@ -11,6 +11,7 @@
 #include "PhosphorControl/SearchController.h"
 #include "PhosphorControl/PageRegistry.h"
 #include "PhosphorControl/SearchEntry.h"
+#include "PhosphorControl/SearchRanker.h"
 
 using PhosphorControl::ApplicationController;
 using PhosphorControl::ISearchProvider;
@@ -466,6 +467,37 @@ private Q_SLOTS:
         sc.setQuery(QStringLiteral("appearence")); // misspelled, no match
         QCOMPARE(sc.resultCount(), 0);
         QCOMPARE(sc.suggestion(), QStringLiteral("Appearance"));
+    }
+
+    void searchFoldsAccentsAndFullCase()
+    {
+        // Plain toLower() leaves "Café" unmatched by "cafe". foldForSearch
+        // decomposes, drops combining marks and case-folds, with ß mapped
+        // explicitly (Qt's toCaseFolded is a SIMPLE fold and leaves it alone).
+        // Both the global index and the sidebar rail route through it, so the
+        // two surfaces cannot disagree about what matches.
+        QCOMPARE(PhosphorControl::SearchRanker::foldForSearch(QStringLiteral("Café")), QStringLiteral("cafe"));
+        QCOMPARE(PhosphorControl::SearchRanker::foldForSearch(QStringLiteral("Größe")), QStringLiteral("grosse"));
+        // Already-folded input is a fixed point.
+        QCOMPARE(PhosphorControl::SearchRanker::foldForSearch(QStringLiteral("cafe")), QStringLiteral("cafe"));
+
+        // End to end through the controller.
+        SearchController sc(m_app);
+        SearchEntry accented;
+        accented.kind = SearchEntry::Kind::Setting;
+        accented.pageId = QStringLiteral("general");
+        accented.anchor = QStringLiteral("cafeSetting");
+        accented.title = QStringLiteral("Café Mode");
+        sc.addEntry(accented);
+
+        sc.setQuery(QStringLiteral("cafe"));
+        bool found = false;
+        for (const QVariant& v : sc.results()) {
+            if (v.toMap().value(QStringLiteral("title")).toString() == QStringLiteral("Café Mode")) {
+                found = true;
+            }
+        }
+        QVERIFY(found);
     }
 
     void resultsChangedEmitted()

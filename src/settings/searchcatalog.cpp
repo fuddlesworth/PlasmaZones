@@ -889,11 +889,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.zoneHighlight"),
                PhosphorI18n::tr("Zone Highlight"));
     addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.zoneHighlight.pop"),
-               PhosphorI18n::tr("Zone Highlight: Pop"));
+               PhosphorI18n::tr("Zone Highlight Pop"));
     addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.zoneHighlight.border"),
-               PhosphorI18n::tr("Zone Highlight: Border"));
+               PhosphorI18n::tr("Zone Highlight Border"));
     addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.zoneOverlayFlash"),
-               PhosphorI18n::tr("Zone Overlay: Layout-Switch Flash"));
+               PhosphorI18n::tr("Zone Overlay Layout-Switch Flash"));
     addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("cursor.hover"),
                PhosphorI18n::tr("Cursor Hover"));
     addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("cursor.click"),

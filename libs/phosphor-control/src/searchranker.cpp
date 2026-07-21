@@ -5,9 +5,35 @@
 
 #include <QStringView>
 
+#include <QChar>
+#include <QLatin1String>
+
 #include <algorithm>
 
 namespace PhosphorControl {
+
+QString SearchRanker::foldForSearch(const QString& s)
+{
+    // Decompose so an accent becomes a separate combining mark, drop those
+    // marks, then case-fold. Without this "cafe" misses "Café", which a user
+    // reads as the search being broken rather than as a folding rule.
+    //
+    // ß is handled explicitly: Qt's toCaseFolded() is a SIMPLE fold and leaves
+    // ß alone, so "grosse" would miss "Größe". Deliberately the only
+    // special-case — a full Unicode special-casing table is not warranted for
+    // a settings search, and every other mapping this could grow is rarer than
+    // the false-confidence of a half-built one.
+    const QString decomposed =
+        QString(s).replace(QChar(0x00DF), QLatin1String("ss")).normalized(QString::NormalizationForm_D);
+    QString stripped;
+    stripped.reserve(decomposed.size());
+    for (const QChar c : decomposed) {
+        if (c.category() != QChar::Mark_NonSpacing) {
+            stripped.append(c);
+        }
+    }
+    return stripped.toCaseFolded();
+}
 
 namespace {
 
@@ -59,7 +85,7 @@ int fieldScore(const QString& field, const QString& needle)
     if (field.isEmpty() || needle.isEmpty()) {
         return 0;
     }
-    const QString f = field.toLower();
+    const QString f = SearchRanker::foldForSearch(field);
     if (f == needle) {
         return 1000;
     }
@@ -86,7 +112,7 @@ int fieldScore(const QString& field, const QString& needle)
 
 int SearchRanker::score(const QString& query, const SearchEntry& entry)
 {
-    const QString needle = query.trimmed().toLower();
+    const QString needle = SearchRanker::foldForSearch(query.trimmed());
     if (needle.isEmpty()) {
         return 0;
     }
@@ -137,8 +163,8 @@ QVector<SearchEntry> SearchRanker::rank(const QString& query, const QVector<Sear
 
 int SearchRanker::editDistance(const QString& a, const QString& b)
 {
-    const QString s = a.toLower();
-    const QString t = b.toLower();
+    const QString s = SearchRanker::foldForSearch(a);
+    const QString t = SearchRanker::foldForSearch(b);
     const int n = s.size();
     const int m = t.size();
     if (n == 0) {

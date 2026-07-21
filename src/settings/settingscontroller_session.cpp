@@ -31,6 +31,7 @@
 #include "../core/utils.h"
 #include "../phosphor_i18n.h"
 #include "dbusutils.h"
+#include "settingscontroller_pagekeys.h"
 #include "kzonesimporter.h"
 #include "virtualscreenutils.h"
 
@@ -123,7 +124,7 @@ QString SettingsController::urlToLocalFile(const QUrl& url) const
 
 QString SettingsController::getQuickLayoutSlot(int slotNumber) const
 {
-    if (slotNumber < 1 || slotNumber > 9)
+    if (slotNumber < 1 || slotNumber > kQuickLayoutSlotCount)
         return {};
     QString staged;
     if (m_staging.stagedSnappingQuickSlot(slotNumber, staged))
@@ -138,7 +139,7 @@ QString SettingsController::getQuickLayoutSlot(int slotNumber) const
 
 void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
 {
-    if (slotNumber < 1 || slotNumber > 9)
+    if (slotNumber < 1 || slotNumber > kQuickLayoutSlotCount)
         return;
     m_staging.stageSnappingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);
@@ -146,7 +147,7 @@ void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layou
 
 QString SettingsController::getQuickLayoutShortcut(int slotNumber) const
 {
-    if (slotNumber < 1 || slotNumber > 9)
+    if (slotNumber < 1 || slotNumber > kQuickLayoutSlotCount)
         return {};
     // Return the default shortcut string -- the standalone cannot query KGlobalAccel
     // since it doesn't link KF6::GlobalAccel. The shortcut is Meta+Alt+N.
@@ -155,7 +156,7 @@ QString SettingsController::getQuickLayoutShortcut(int slotNumber) const
 
 QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
 {
-    if (slotNumber < 1 || slotNumber > 9)
+    if (slotNumber < 1 || slotNumber > kQuickLayoutSlotCount)
         return {};
     QString staged;
     if (m_staging.stagedTilingQuickSlot(slotNumber, staged))
@@ -171,7 +172,7 @@ QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
 
 void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
 {
-    if (slotNumber < 1 || slotNumber > 9)
+    if (slotNumber < 1 || slotNumber > kQuickLayoutSlotCount)
         return;
     m_staging.stageTilingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);

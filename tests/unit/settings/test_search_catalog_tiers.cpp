@@ -295,6 +295,50 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("%1 catalogue entries flagged in error").arg(spurious.size())));
     }
 
+    /// Every pageId the catalogue registers must be a page the app registers.
+    /// SearchController::tierAllows now DROPS entries whose pageId is unknown
+    /// to the registry (they produced results that navigated nowhere), so a
+    /// stale id here is no longer a dead link — it is a setting that silently
+    /// cannot be found at all, with only a runtime warning as evidence. The
+    /// static allowlist that used to bound this set was deleted with the
+    /// simple/advanced rework and nothing replaced it.
+    void everyCataloguePageIdIsRegistered()
+    {
+        const QString catalogSrc = stripLineComments(readAll(m_catalog));
+        const QString registration =
+            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/settingscontroller_pageregistration.cpp"));
+        const QString topology =
+            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/settingscontroller_pagetopology.cpp"));
+        QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
+        QVERIFY2(!topology.isEmpty(), "settingscontroller_pagetopology.cpp unreadable");
+
+        // validPageNames() is the app's own list of navigable leaves, so a
+        // catalogue id present there is registered by construction. Match the
+        // ids out of it rather than re-deriving the registry.
+        QSet<QString> known;
+        static const QRegularExpression kValid(QStringLiteral("QStringLiteral\\(\"([a-z0-9-]+)\"\\)"));
+        auto vit = kValid.globalMatch(topology);
+        while (vit.hasNext()) {
+            known.insert(vit.next().captured(1));
+        }
+
+        static const QRegularExpression kCall(
+            QStringLiteral("\\badd(?:Setting|Section)\\(\\s*search\\s*,\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
+        QSet<QString> unregistered;
+        auto it = kCall.globalMatch(catalogSrc);
+        while (it.hasNext()) {
+            const QString pageId = it.next().captured(1);
+            if (!pageId.isEmpty() && !known.contains(pageId)) {
+                unregistered.insert(pageId);
+            }
+        }
+
+        QVERIFY2(
+            unregistered.isEmpty(),
+            qPrintable(QStringLiteral("catalogue registers entries for unregistered page id(s): %1")
+                           .arg(QStringList(unregistered.cbegin(), unregistered.cend()).join(QLatin1String(", ")))));
+    }
+
 private:
     QString m_qmlDir;
     QString m_catalog;

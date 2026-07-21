@@ -27,7 +27,6 @@ import org.kde.kirigami as Kirigami
  *
  * Optional properties:
  *   - isParentNode: bool — flips the inheritance banner copy
- *   - alwaysEnabled: bool — hides the override toggle (the global root)
  *   - collapsible: bool — header click collapses the body
  *   - simpleTiming: bool — hides the timing-mode combo and the curve editor,
  *     and keeps a duration-only edit from pinning the inherited curve
@@ -46,7 +45,6 @@ Item {
     required property string eventPath
     required property string eventLabel
     property bool isParentNode: false
-    property bool alwaysEnabled: false
     property bool collapsible: false
     /// Simple-mode trim, forwarded to the embedded AnimationProfileEditor:
     /// hides the timing-mode machinery, keeping duration + shader + params.
@@ -546,8 +544,8 @@ Item {
 
         anchors.fill: parent
         headerText: root.eventLabel
-        showToggle: !root.alwaysEnabled
-        toggleChecked: root.alwaysEnabled || root.overrideEnabled
+        showToggle: true
+        toggleChecked: root.overrideEnabled
         collapsible: root.collapsible
         onToggleClicked: function (checked) {
             if (checked) {
@@ -578,7 +576,7 @@ Item {
                 Layout.leftMargin: Kirigami.Units.largeSpacing
                 Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Information
-                visible: !root.alwaysEnabled && (root.isParentNode ? root.overrideEnabled : !root.overrideEnabled)
+                visible: root.isParentNode ? root.overrideEnabled : !root.overrideEnabled
                 text: {
                     if (root.isParentNode)
                         return i18n("Settings here apply to all child events unless individually overridden.");
@@ -640,7 +638,7 @@ Item {
                 // hugging the left edge.
                 Layout.leftMargin: Kirigami.Units.largeSpacing
                 Layout.rightMargin: Kirigami.Units.largeSpacing
-                visible: !root.alwaysEnabled && !root.overrideEnabled
+                visible: !root.overrideEnabled
                 text: i18n("Current: %1", root.inheritSummaryText())
                 font.italic: true
                 color: Kirigami.Theme.disabledTextColor
@@ -659,7 +657,7 @@ Item {
                 Layout.fillWidth: true
                 eventLabel: root.eventLabel
                 shaderLegSupported: root._shaderLegSupported
-                showTimingSection: root.alwaysEnabled || root.overrideEnabled
+                showTimingSection: root.overrideEnabled
                 simpleTiming: root.simpleTiming
                 registryRevision: root._shaderRegistryRev
                 enableLocking: true
@@ -671,7 +669,7 @@ Item {
                 // merged Profile JSON exactly the way the inline
                 // version did.
                 onValueChanged: {
-                    if (root.alwaysEnabled || root.overrideEnabled)
+                    if (root.overrideEnabled)
                         root.commitOverride();
                 }
                 // Picker model fed via the registry-tick dependency
