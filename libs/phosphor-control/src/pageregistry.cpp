@@ -290,6 +290,17 @@ QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) con
     return out;
 }
 
+QList<PageRegistry::Entry> PageRegistry::visibleChildPages(const QString& parentId) const
+{
+    QList<Entry> out;
+    for (const Entry& e : m_pages) {
+        if (e.parentId == parentId && isEntryVisible(e)) {
+            out.append(e);
+        }
+    }
+    return out;
+}
+
 QList<PageRegistry::Entry> PageRegistry::allPages() const
 {
     return m_pages;

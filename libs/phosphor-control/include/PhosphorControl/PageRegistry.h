@@ -201,6 +201,12 @@ public:
 
     QList<Entry> topLevelPages() const;
     QList<Entry> childPages(const QString& parentId) const;
+    /** Children of @p parentId that survive the current mode's filter,
+     *  including the empty-category rule (a virtual node with no surviving
+     *  descendant drops out). The Entry-returning twin of childPagesData();
+     *  childPages() above is deliberately UNFILTERED, so anything building a
+     *  navigable view wants this one. */
+    QList<Entry> visibleChildPages(const QString& parentId) const;
     QList<Entry> allPages() const;
 
     // QML-facing accessors. Return dicts whose canonical key set lives in

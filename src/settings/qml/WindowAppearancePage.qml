@@ -73,6 +73,14 @@ SettingsFlickable {
         return ("#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b)).toUpperCase();
     }
 
+    // The tint colour is always stored opaque. The opacity-tint shader scales
+    // the wash by the colour's own alpha AND by the tint strength slider, so a
+    // translucent stored colour would apply alpha twice and give the user two
+    // controls for one effect. Tint strength is the sole alpha control.
+    function colorToOpaqueHex(c) {
+        return "#FF" + root.colorToHex(c).slice(3);
+    }
+
     // Scope-aware gap values for the Gaps card. gapValue() reads C++ state (the
     // per-monitor config override, falling back to the global value) that QML
     // can't bind to reactively, so these are refreshed imperatively by
@@ -726,8 +734,9 @@ SettingsFlickable {
     ColorDialog {
         id: tintColorDialog
 
-        options: ColorDialog.ShowAlphaChannel
+        // No alpha channel here. Tint strength already controls how strongly
+        // the wash lands, and the shader multiplies the two together.
         title: i18n("Choose Tint Color")
-        onAccepted: root.ctl.windowTintColor = root.colorToHex(selectedColor)
+        onAccepted: root.ctl.windowTintColor = root.colorToOpaqueHex(selectedColor)
     }
 }
