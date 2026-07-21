@@ -1505,18 +1505,31 @@ private:
     // for live states: bags never cross algorithms. A tag mismatch refuses
     // rather than migrates; script state has no cross-algorithm meaning.
     //
-    // No site drops entries by screen id. The wipe sites reason about a screen
+    // No ALGORITHM-CHANGE site drops entries. Those sites reason about a screen
     // as a whole and, worse, run at moments when the resolver is not
     // authoritative — a toggle-off drops the screen's in-memory override, so a
     // screen pinned to its own algorithm reads there as following the global
     // one. Dropping on that reading erased bags the wipe had never examined and
     // broke the rescue outright on exactly those screens. Adjudicating lazily,
     // per key, at the moment a state actually takes the bag is what makes the
-    // reading trustworthy.
+    // reading trustworthy. (One screen-id-scoped drop does exist, for orphaned
+    // virtual screens in setAutotileScreens, but it keys on ids retired for good
+    // rather than on any algorithm comparison.)
     //
     // Entries are reclaimed by a harvest that finds an EMPTY bag, which erases
     // rather than inserts (see stashScriptState). That is also what stops a bag
     // a live wipe cleared from being shadowed by a stale entry and handed back.
+    //
+    // Two gaps are known and accepted, both matching pre-stash behaviour rather
+    // than regressing it. A key whose screen never returns (a monitor unplugged
+    // for good, its connector id not reused) is never harvested again, so its
+    // entry lives for the session; it is one bag per permanent disconnect. And
+    // an entry only dies on a switch away from its algorithm if some teardown
+    // happens to harvest the emptied state while the other algorithm is live —
+    // with no teardown, the entry outlives the switch. Closing either properly
+    // needs the resolver to remember the algorithm a torn-down screen was last
+    // on, which is a change to wipeStateBagsOnEffectiveAlgorithmChange's
+    // contract for every caller.
     //
     // Within-session only: nothing writes it to disk, so a daemon restart still
     // starts from a clean layout.

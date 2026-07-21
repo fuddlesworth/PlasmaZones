@@ -78,10 +78,17 @@ private:
         return true;
     }
 
+    /// The bag on @p screen's current state. Fails rather than returning an empty
+    /// object when there is no state, so an "is empty" assertion cannot pass
+    /// because state creation silently fell over.
     static QJsonObject bagOn(AutotileEngine& engine, const QString& screen)
     {
         PhosphorTiles::TilingState* const state = engine.tilingStateForScreen(screen);
-        return state ? state->scriptState() : QJsonObject();
+        if (!state) {
+            QTest::qFail("no TilingState for screen", __FILE__, __LINE__);
+            return QJsonObject();
+        }
+        return state->scriptState();
     }
 
 private Q_SLOTS:
@@ -157,6 +164,39 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
 
         QCOMPARE(bagOn(engine, screen), sampleBag());
+    }
+
+    /// A stashed bag must never overwrite a NEWER live one. Restore does not
+    /// consume, so an entry outlives the re-enable that used it, and the
+    /// re-enable path restores into whatever state it finds rather than a fresh
+    /// one. A toggle-off on another desktop leaves this desktop's state alive
+    /// (only the current context is torn down), so coming back to it must not
+    /// hand the state its own older bag.
+    void testRestoreDoesNotClobberNewerLiveBag()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        QVERIFY(seedBag(engine, screen, sampleBag(0.7)));
+
+        // Round trip on desktop 2, so an entry for {screen, 2} is left behind.
+        engine.setAutotileScreens({});
+        engine.setAutotileScreens({screen});
+        QCOMPARE(bagOn(engine, screen), sampleBag(0.7));
+
+        // The user adjusts the layout again. The stash still holds the old bag.
+        QVERIFY(seedBag(engine, screen, sampleBag(0.4)));
+
+        // Toggle off from desktop 1: only that context is torn down, so
+        // desktop 2's state survives holding the newer bag.
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({});
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({screen});
+
+        QCOMPARE(bagOn(engine, screen), sampleBag(0.4));
     }
 
     /// The stash must not route around the "bags never cross algorithms"
@@ -239,16 +279,65 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.setAlgorithm(QLatin1String("master-stack"));
-        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("bsp")));
+        // Pinned to a THIRD id, distinct from both the old and the new global
+        // algorithm, so every resolution in this test has to consult the override
+        // to get the right answer. Pinning to the incoming global id would make
+        // the test pass even if per-screen overrides were ignored entirely.
+        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("spiral")));
         QVERIFY(seedBag(engine, screen, sampleBag()));
 
         engine.setAutotileScreens({});
         // The global algorithm moves while the screen is off. The screen is
-        // pinned to bsp, so its effective algorithm never changed.
+        // pinned to spiral, so its effective algorithm never changed.
         engine.setAlgorithm(QLatin1String("bsp"));
-        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("bsp")));
+        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("spiral")));
         engine.setAutotileScreens({screen});
 
+        QCOMPARE(bagOn(engine, screen), sampleBag());
+    }
+
+    /// The refusal must be READ-ONLY, pinned without depending on the daemon's
+    /// seed ordering. A refused restore leaves the entry alone, so putting the
+    /// algorithm back makes the bag available again. Under an erase-on-mismatch
+    /// restore the entry dies at the refused lookup and never comes back.
+    void testRefusedRestoreLeavesTheEntryIntact()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        QVERIFY(seedBag(engine, screen, sampleBag()));
+
+        engine.setAutotileScreens({});
+        engine.setAlgorithm(QLatin1String("bsp"));
+        // A lookup under the wrong algorithm must refuse without consuming.
+        QVERIFY(bagOn(engine, screen).isEmpty());
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        engine.setAutotileScreens({screen});
+
+        QCOMPARE(bagOn(engine, screen), sampleBag());
+    }
+
+    /// The stash key carries the desktop, not just the screen. A bag stashed on
+    /// one desktop must not surface on another, and must still be there on
+    /// return. Without the desktop in the key both assertions invert.
+    void testStashIsPerDesktop()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        QVERIFY(seedBag(engine, screen, sampleBag()));
+
+        engine.setAutotileScreens({});
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({screen});
+        QVERIFY(bagOn(engine, screen).isEmpty());
+
+        engine.setAutotileScreens({});
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen});
         QCOMPARE(bagOn(engine, screen), sampleBag());
     }
 

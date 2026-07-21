@@ -633,11 +633,12 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
                         }
                         // A bag stashed under oldKey belongs to the layout that is
                         // moving, so it moves too, on the same terms as the tuned
-                        // flags above. Leaving it behind would strand it: restore
-                        // never consumes an entry, and no teardown runs at oldKey
-                        // again to clear it, so it would sit there until the user
-                        // re-pinned that desktop and then be handed to a state that
-                        // should have started clean.
+                        // flags above. Leaving it behind would mean the layout and
+                        // its script state part ways: restore never consumes an
+                        // entry, so oldKey would keep a bag describing windows that
+                        // now live at newKey, ready to be handed to whatever state
+                        // is built there next. Safe to move because the tag is
+                        // resolved per screen and both keys share a screenId.
                         if (m_scriptStateStash.contains(oldKey)) {
                             m_scriptStateStash.insert(newKey, m_scriptStateStash.take(oldKey));
                         } else {
@@ -724,8 +725,19 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // no longer remembers this screen's algorithm — the toggle-off dropped the
         // in-memory override — so it reads global -> override and clears a bag it
         // should not have. Re-applying here, after that wipe, is what makes the
-        // round trip survive. Idempotent: a matching entry is left in the stash.
-        restoreStashedScriptState(currentKeyForScreen(screenId), addedState);
+        // round trip survive.
+        //
+        // ONLY into an empty bag, because unlike the factories this can be handed
+        // a state that was never torn down. Toggling off while another desktop is
+        // current tears down only that context, so this screen's state here may
+        // still be live and holding adjustments made AFTER the stashed entry was
+        // written — restore does not consume, so that entry outlives its own
+        // re-enable. Writing over a live bag would revert the user's newer layout
+        // to an older copy of itself. An empty bag means either a fresh state or
+        // the wipe described above, which are exactly the cases this is for.
+        if (addedState && addedState->scriptState().isEmpty()) {
+            restoreStashedScriptState(currentKeyForScreen(screenId), addedState);
+        }
         // Skip retile if windows are expected to arrive shortly (pending initial
         // order from seedAutotileOrderForScreen). The KWin effect sends windowOpened
         // D-Bus calls after receiving autotileScreensChanged, and each insertWindow
@@ -1213,13 +1225,13 @@ void AutotileEngine::restoreStashedScriptState(const TilingStateKey& key, Phosph
         // may only mean the resolver is not authoritative yet.
         //
         // Concretely: this runs from a find-or-CREATE factory with many callers,
-        // and Daemon::updateAutotileScreens seeds window order for every added
-        // screen (which materialises the state) BEFORE its applyPerScreenConfig
-        // loop reinstates per-screen overrides. In that window a screen pinned to
-        // its own algorithm resolves to the GLOBAL one, so the tag mismatches for
-        // a bag that is about to become valid again a few statements later.
-        // Erasing on that reading destroyed the rescued bag on exactly the
-        // screens the stash exists for.
+        // and Daemon::updateAutotileScreens seeds window order for added screens
+        // BEFORE its applyPerScreenConfig loop reinstates per-screen overrides.
+        // Seeding materialises the state whenever it resolves a non-empty order.
+        // In that window a screen pinned to its own algorithm resolves to the
+        // GLOBAL one, so the tag mismatches for a bag that is about to become
+        // valid again a few statements later. Erasing on that reading destroyed
+        // the rescued bag on exactly the screens the stash exists for.
         //
         // Nothing accumulates as a result: a genuinely dead entry is cleared by
         // the next teardown of its key, whose harvest sees the state's empty bag
