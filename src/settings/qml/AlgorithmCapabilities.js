@@ -11,8 +11,9 @@
 // That is domain knowledge about specific algorithms living in QML, duplicated,
 // and it drifts the moment a new centre-layout algorithm ships. The C++
 // catalog already carries every capability flag (see algorithmservice.cpp,
-// which sets centerLayout unconditionally from the algorithm), so the
-// fallback was also unreachable.
+// which sets centerLayout unconditionally from the algorithm), so the id-based
+// fallback only ever fired in the window before availableAlgorithms populates,
+// where a stale guess is worse than false.
 
 /// The catalog entry for `algoId`, or null. `algos` is the cached
 /// availableAlgorithms list the page already holds.
@@ -47,4 +48,17 @@ function supportsCustomParams(caps) {
 /// the catalog — never inferred from the algorithm id.
 function centerLayout(caps) {
     return caps ? caps.centerLayout === true : false;
+}
+
+/// The ratio a preview should draw when the algorithm exposes no ratio control
+/// of its own. Catalog-supplied, so a new algorithm gets its own default
+/// without either page learning about it.
+function defaultSplitRatio(caps) {
+    return caps && caps.defaultSplitRatio !== undefined ? caps.defaultSplitRatio : 0.6;
+}
+
+/// Which zone numbers the preview labels. "all" when the catalog is silent,
+/// matching the preview's own default.
+function zoneNumberDisplay(caps) {
+    return (caps && caps.zoneNumberDisplay) || "all";
 }

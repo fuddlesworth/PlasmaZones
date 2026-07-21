@@ -45,12 +45,15 @@ RowLayout {
     //  (or two pages mutually parenting each other) would otherwise
     //  freeze the UI thread on first render.
     readonly property int _maxParentChainHops: 32
-    // Bumped whenever the registry emits pageRegistered — gives the
+    // Bumped whenever the registry emits pageRegistered or visibleSetChanged
+    // — gives the
     // `segments` binding below a dependency to track so a late-registered
     // page whose id matches `currentPageId` (or any ancestor on the
-    // chain) refreshes the rendered crumb trail. Without this, the
-    // binding only re-evaluates when `currentPageId` changes and a
-    // post-registration ancestor title update would never reach QML.
+    // chain) refreshes the rendered crumb trail, and so a per-entry
+    // setPageVisibility restamp reaches the `targetId` binding, which walks
+    // the tier-filtered tree. Without this, the bindings only re-evaluate
+    // when `currentPageId` changes and a post-registration ancestor title
+    // update would never reach QML.
     property int _registryTick: 0
 
     // Flat-title resolution shared with the rail. Holds no state of its own —

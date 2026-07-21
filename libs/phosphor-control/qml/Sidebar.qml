@@ -133,22 +133,28 @@ ColumnLayout {
      *  everything outside it. */
     property int _registryTick: 0
 
+    /// Cancel an in-flight drill cross-fade. Its ScriptAction would otherwise
+    /// re-apply pendingParentId AFTER a reset, and the stale scope resurfaces.
+    /// The animation drives listColumn.opacity and nothing re-asserts it (no
+    /// declarative binding), so stopping mid-fade would strand the rail
+    /// translucent — restore it here. The restore lives at the call site
+    /// rather than in onStopped because restart() stops internally, and
+    /// snapping to 1 there would flash on every rapid re-drill.
+    function _bumpRegistryTick() {
+        root._registryTick = root._registryTick + 1;
+    }
+
+    function _cancelDrill() {
+        if (!drillAnimation.running)
+            return;
+        drillAnimation.stop();
+        drillAnimation.pendingParentId = "";
+        listColumn.opacity = 1;
+    }
+
     onFlattenTreeChanged: {
         if (root.flattenTree) {
-            // Cancel an in-flight drill cross-fade: its ScriptAction would
-            // otherwise re-apply pendingParentId AFTER the reset below, and
-            // the stale scope resurfaces on the flip back to the tree rail.
-            // The animation drives listColumn.opacity and nothing re-asserts
-            // it (no declarative binding), so stopping mid-fade would strand
-            // the rail translucent — restore it here. The restore lives at
-            // this call site rather than in onStopped because restart()
-            // stops internally, and snapping to 1 there would flash on every
-            // rapid re-drill.
-            if (drillAnimation.running) {
-                drillAnimation.stop();
-                drillAnimation.pendingParentId = "";
-                listColumn.opacity = 1;
-            }
+            root._cancelDrill();
             root.currentParentId = "";
         }
         // Suppress per-row Transitions across BOTH the synchronous refresh
@@ -386,11 +392,18 @@ ColumnLayout {
     // repeat calls to the same function within one event-loop pass into a
     // single invocation, so a registration batch costs one rebuild. Also covers
     // async catalog warm-up (plugin loading, dynamic registration).
-    // The initial fill runs at Component.onCompleted, which can precede the
-    // consumer's registry being assigned — SidebarRows::build returns an empty
-    // list for a null registry, and nothing else would ever re-fill. The C++
-    // side deliberately tolerates a null/destroyed registry (see the QPointer
-    // note on SidebarRows), so the QML needs matching tolerance.
+    // Covers a consumer assigning or rebinding `Sidebar.controller` after
+    // this component is built, which re-evaluates the `registry` binding and
+    // re-fills a rail that SidebarRows::build had returned empty for.
+    //
+    // It does NOT cover a controller present from the start:
+    // ApplicationController::registry is CONSTANT, so that binding emits its
+    // one registryChanged during the creation pass, before Connections
+    // attaches at componentComplete. The synchronous fill in
+    // Component.onCompleted covers that case, and it runs after creation so
+    // the registry is already there. The C++ side deliberately tolerates a
+    // null/destroyed registry (see the QPointer note on SidebarRows), so the
+    // QML needs matching tolerance either way.
     Connections {
         function onRegistryChanged() {
             Qt.callLater(root._refreshModel);
@@ -400,8 +413,13 @@ ColumnLayout {
     }
 
     Connections {
+        // Both halves coalesced: startup fires one registerPage per page
+        // (~55), and a synchronous bump re-evaluates every binding that reads
+        // the registry through a Q_INVOKABLE once per registration. Matches
+        // Breadcrumbs, which defers the identical bump for the identical
+        // signal.
         function onPageRegistered() {
-            root._registryTick = root._registryTick + 1;
+            Qt.callLater(root._bumpRegistryTick);
             Qt.callLater(root._refreshModel);
         }
 
@@ -414,18 +432,34 @@ ColumnLayout {
         // already rebuilt.
         function onVisibleSetChanged() {
             root._registryTick = root._registryTick + 1;
-            // A restamp can hide the very parent we are drilled into.
-            // visibleChildPages filters only the CHILDREN, so the rail would
-            // keep rendering a scope the mode has abolished (or collapse to a
-            // lone Back button over an empty list). onFlattenTreeChanged
-            // already resets drill state for exactly this reason on a mode
-            // flip; this is the same hazard reached through a per-entry
-            // restamp. Assigning currentParentId refreshes via its own
-            // handler, so only the else-branch needs an explicit refresh.
-            if (root.currentParentId !== "" && !root.controller.registry.pageAllowedInCurrentMode(root.currentParentId))
+            // A restamp can hide the very parent we are drilled into, or hide
+            // every navigable page UNDER it while leaving the parent itself
+            // visible. visibleChildPages filters only the children, so the
+            // rail would keep rendering a scope the mode has abolished, or
+            // collapse to a lone Back button over an empty list.
+            // onFlattenTreeChanged already resets drill state for exactly this
+            // reason on a mode flip; this is the same hazard reached through a
+            // per-entry restamp. rowBuilder decides which of those applies —
+            // it is the same walk build() uses to decide whether to OFFER the
+            // category at all, so the rail cannot disagree with its own rows.
+            //
+            // The scope under evaluation is the animation's TARGET while a
+            // drill cross-fade is in flight: currentParentId still holds the
+            // old scope until the sequence's ScriptAction lands.
+            const scope = drillAnimation.running ? drillAnimation.pendingParentId : root.currentParentId;
+            if (scope !== "" && rowBuilder.resolveDrillScope(scope) === "") {
+                // An involuntary reset rebuilds the whole rail (every child
+                // row out, every top-level row in), so suppress the per-row
+                // Transitions the same way the mode flip does. Without it a
+                // restamp accordions every row for a change the user did not
+                // make.
+                root._cancelDrill();
+                root._suppressAccordion = true;
+                suppressAccordionTimer.restart();
                 root.currentParentId = "";
-            else
+            } else {
                 root._refreshModel();
+            }
         }
 
         target: root.controller.registry

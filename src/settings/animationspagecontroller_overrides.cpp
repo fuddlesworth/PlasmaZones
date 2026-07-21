@@ -128,19 +128,20 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
         cur = ProfilePaths::parentPath(cur);
     }
 
-    // Seed the ROOT of the chain from the user's Global animation settings,
-    // mirroring what the daemon publishes via kSettingsDrivenProfilePaths
-    // (daemon.cpp). The walk above only sees user-authored profile JSON, so
-    // without this the settings app resolves inheritance against library
-    // defaults and every card reports the built-in 200 ms while the user's
-    // Global card shows their real value — the two disagree on one screen.
-    // Lowest precedence: mergeMissingFields only fills fields no ancestor
-    // supplied, so a real override at any level still wins.
+    // Seed the ROOT of the chain from the user's Global animation settings.
+    // The daemon fills the same fields the same way at
+    // kSettingsDrivenProfilePaths (daemon.cpp), including on the branch where
+    // a user Global.json owns the path. It additionally carries presetName,
+    // which ISettings exposes no accessor for and which is decorative. The walk above only sees user-authored profile
+    // JSON, so without this the settings app resolves inheritance against library defaults and every card reports the
+    // built-in 200 ms while the user's Global card shows their real value — the two disagree on one screen. Lowest
+    // precedence: mergeMissingFields only fills fields no ancestor supplied, so a real override at any level still
+    // wins.
     if (m_settings != nullptr) {
-        // Every Global field ISettings exposes, not just duration+curve. The
-        // daemon registers the whole Profile at Global, and minDistance /
-        // sequenceMode / staggerInterval are all user-editable on the Global
-        // card. Seeding two of them left the other three resolving to library
+        // Every Global field ISettings exposes; presetName is daemon-side only
+        // and has no ISettings accessor. minDistance / sequenceMode /
+        // staggerInterval are all user-editable on the Global card, and seeding
+        // only duration+curve left the other three resolving to library
         // defaults here while the daemon animated with the user's value — the
         // same "the two disagree on one screen" bug this seed exists to close,
         // left half-closed.

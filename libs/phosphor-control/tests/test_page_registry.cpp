@@ -401,7 +401,7 @@ private Q_SLOTS:
         QVERIFY(reg.validateCounterparts());
     }
 
-    void validateCounterpartsRejectsTheFourBrokenShapes()
+    void validateCounterpartsRejectsTheSixBrokenShapes()
     {
         using PV = PageRegistry::PageVisibility;
 
@@ -472,6 +472,67 @@ private Q_SLOTS:
 
             QVERIFY(!reg.validateCounterparts());
         }
+    }
+
+    void validateCounterpartsRejectsANonNavigableCounterpart()
+    {
+        // A counterpart with no QML of its own is a CATEGORY. The mode gate
+        // would redirect onto a page with no body — the same silent
+        // degradation the validator exists to catch, one level down.
+        using PV = PageRegistry::PageVisibility;
+        PageRegistry reg;
+        auto* p1 = new StubPage(QStringLiteral("a"), &reg);
+        PageRegistry::Entry e1{
+            QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p1};
+        e1.visibility = PV::SimpleOnly;
+        e1.counterpartId = QStringLiteral("cat");
+        QVERIFY(reg.registerPage(std::move(e1)));
+
+        auto* p2 = new StubPage(QStringLiteral("cat"), &reg);
+        // No qmlSource — a virtual category.
+        PageRegistry::Entry e2{QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}, QUrl(), p2};
+        e2.visibility = PV::AdvancedOnly;
+        e2.counterpartId = QStringLiteral("a");
+        QVERIFY(reg.registerPage(std::move(e2)));
+
+        QVERIFY(!reg.validateCounterparts());
+    }
+
+    void validateCounterpartsRejectsACounterpartHiddenByItsAncestor()
+    {
+        // Opposite tiers are necessary but NOT sufficient: a counterpart whose
+        // own tier is right but whose ANCESTOR the mode filters out is still
+        // unreachable, so the redirect falls back anyway. This is the branch
+        // that distinguishes the reachability walk from a plain tier compare.
+        using PV = PageRegistry::PageVisibility;
+        PageRegistry reg;
+        auto* p1 = new StubPage(QStringLiteral("a"), &reg);
+        PageRegistry::Entry e1{
+            QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p1};
+        e1.visibility = PV::SimpleOnly;
+        e1.counterpartId = QStringLiteral("cat.leaf");
+        QVERIFY(reg.registerPage(std::move(e1)));
+
+        // Category hidden in the mode that hides `a` (advanced).
+        auto* pc = new StubPage(QStringLiteral("cat"), &reg);
+        PageRegistry::Entry cat{QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}, QUrl(), pc};
+        cat.visibility = PV::SimpleOnly;
+        QVERIFY(reg.registerPage(std::move(cat)));
+
+        auto* p2 = new StubPage(QStringLiteral("cat.leaf"), &reg);
+        PageRegistry::Entry e2{QStringLiteral("cat.leaf"),
+                               QStringLiteral("cat"),
+                               QStringLiteral("Leaf"),
+                               {},
+                               QUrl(QStringLiteral("qrc:/L.qml")),
+                               p2};
+        e2.visibility = PV::AdvancedOnly; // own tier is right...
+        e2.counterpartId = QStringLiteral("a");
+        QVERIFY(reg.registerPage(std::move(e2)));
+
+        // ...but its SimpleOnly parent hides it in advanced mode, which is the
+        // mode `a` disappears in.
+        QVERIFY(!reg.validateCounterparts());
     }
 
     void reachabilityFailsClosedOnAnUnresolvableAncestorChain()

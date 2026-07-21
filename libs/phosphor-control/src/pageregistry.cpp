@@ -238,6 +238,12 @@ bool PageRegistry::validateCounterparts() const
             qWarning() << "PageRegistry: page" << e.id << "and its counterpart" << e.counterpartId
                        << "share a visibility tier — the counterpart cannot be the other mode's face of this page";
             ok = false;
+            // Stop here. Every remaining check is downstream of a tier
+            // relationship already known broken, and the reachability block
+            // below would re-derive the same fact and report it as an ANCESTOR
+            // filtering the counterpart out — sending a maintainer hunting for
+            // a filtered category that need not exist.
+            continue;
         }
         // A counterpart with no QML of its own is a category: the mode gate
         // would redirect onto a page with no body, the same silent degradation
@@ -341,9 +347,10 @@ QList<PageRegistry::Entry> PageRegistry::topLevelPages() const
 QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) const
 {
     QList<Entry> out;
-    // Worst-case sizing: every registered page is a child of parentId.
-    // Same upper-bound rationale as topLevelPages above.
-    out.reserve(m_pages.size());
+    // No worst-case reserve: firstLeafAnyMode (settingscontroller_pagestate.cpp)
+    // calls this per node as it recurses, so reserving the whole catalogue per
+    // call allocates room for every page to hold a handful of children, over
+    // and over. Same reasoning as visibleChildPages below.
     for (const Entry& e : m_pages) {
         if (e.parentId == parentId) {
             out.append(e);
@@ -355,11 +362,12 @@ QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) con
 QList<PageRegistry::Entry> PageRegistry::visibleChildPages(const QString& parentId) const
 {
     QList<Entry> out;
-    // Deliberately NOT reserving m_pages.size() the way topLevelPages and
-    // childPages do. Those are called once each; this one is called dozens of
-    // times per sidebar rebuild (SidebarRows walks it per node) and typically
-    // returns 1-5 entries, so a worst-case reserve allocates room for the whole
-    // catalogue repeatedly to hold a handful of results.
+    // Deliberately NOT reserving m_pages.size() the way topLevelPages does.
+    // That one is a whole-catalogue one-shot; this is called dozens of times
+    // per sidebar rebuild (SidebarRows walks it per node) and typically returns
+    // 1-5 entries, so a worst-case reserve allocates room for the entire
+    // catalogue repeatedly to hold a handful of results. childPages has the
+    // same per-node recursive caller and the same treatment.
     for (const Entry& e : m_pages) {
         if (e.parentId == parentId && isEntryVisible(e)) {
             out.append(e);

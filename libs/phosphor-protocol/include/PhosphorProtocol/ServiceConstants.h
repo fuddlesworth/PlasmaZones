@@ -16,6 +16,12 @@ namespace PhosphorProtocol::Service {
 inline constexpr QLatin1String Name("org.plasmazones");
 inline constexpr QLatin1String ObjectPath("/PlasmaZones");
 
+/// Quick-layout slots are numbered 1..QuickLayoutSlotCount. Protocol-level
+/// because the daemon validates the bound on the D-Bus boundary while the
+/// settings app walks it in its Quick Shortcuts reset loop, and the two live
+/// in different trees. Kept here so the validation and the loop cannot drift.
+inline constexpr int QuickLayoutSlotCount = 9;
+
 namespace Interface {
 inline constexpr QLatin1String Settings("org.plasmazones.Settings");
 inline constexpr QLatin1String WindowDrag("org.plasmazones.WindowDrag");

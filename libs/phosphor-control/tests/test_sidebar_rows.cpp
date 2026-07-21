@@ -270,6 +270,59 @@ private Q_SLOTS:
         QCOMPARE(idsOf(rows.build(false, QString(), QString(), {}, {})), QStringList({QStringLiteral("home")}));
     }
 
+    void resolveDrillScopeRejectsAScopeTheModeAbolished()
+    {
+        // The rail is drilled into a category the tier filter then hides. The
+        // parent itself is gone, so the rail must fall back to the top level
+        // rather than keep rendering a scope the mode no longer has.
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        QVERIFY(reg(r, QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}, false, false, PV::AdvancedOnly));
+        QVERIFY(reg(r, QStringLiteral("cat.leaf"), QStringLiteral("cat"), QStringLiteral("Leaf"),
+                    QStringLiteral("qrc:/L.qml")));
+
+        QCOMPARE(rows.resolveDrillScope(QStringLiteral("cat")), QStringLiteral("cat"));
+        r.setShowAdvanced(false);
+        QCOMPARE(rows.resolveDrillScope(QStringLiteral("cat")), QString());
+    }
+
+    void resolveDrillScopeRejectsAScopeWithNothingLeftUnderIt()
+    {
+        // The DISTINCT second failure: the parent survives the filter but
+        // every navigable page beneath it is hidden, so the rail collapses to
+        // a lone Back button over an empty list. build() already refuses to
+        // OFFER such a category (see treeSkipsADrillCategoryThatLeadsNowhere),
+        // so a rail that stays inside one disagrees with its own rows.
+        // Deleting the descendant walk leaves this the only failing case.
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        QVERIFY(reg(r, QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}));
+        QVERIFY(reg(r, QStringLiteral("cat.sub"), QStringLiteral("cat"), QStringLiteral("Sub"), {}));
+        QVERIFY(reg(r, QStringLiteral("cat.sub.adv"), QStringLiteral("cat.sub"), QStringLiteral("Adv"),
+                    QStringLiteral("qrc:/A.qml"), false, false, PV::AdvancedOnly));
+
+        // Reachable while the leaf shows, including through the intermediate
+        // non-navigable category.
+        QCOMPARE(rows.resolveDrillScope(QStringLiteral("cat")), QStringLiteral("cat"));
+        r.setShowAdvanced(false);
+        QCOMPARE(rows.resolveDrillScope(QStringLiteral("cat")), QString());
+    }
+
+    void resolveDrillScopePassesThroughTheTopLevel()
+    {
+        // Empty in, empty out: the top level is not a drill scope and must
+        // never be "corrected" to something else.
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        QVERIFY(reg(r, QStringLiteral("home"), {}, QStringLiteral("Home"), QStringLiteral("qrc:/H.qml")));
+        QCOMPARE(rows.resolveDrillScope(QString()), QString());
+        // An unknown id has no visible descendant either, so it also resets.
+        QCOMPARE(rows.resolveDrillScope(QStringLiteral("ghost")), QString());
+    }
+
     void treeScopesToTheDrillParent()
     {
         PageRegistry r;
@@ -511,6 +564,31 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
         rows.setRegistry(nullptr);
         QCOMPARE(spy.count(), 2);
+    }
+
+    void survivesARegistryDestroyedWhileStillAssigned()
+    {
+        // The ONLY thing that justifies QPointer over a raw pointer: the
+        // registry is owned by the ApplicationController, not by SidebarRows,
+        // so it can be torn down first. A raw pointer would leave the existing
+        // `m_registry == nullptr` guards reading as non-null and every accessor
+        // dereferencing freed memory. Explicit setRegistry(nullptr) does NOT
+        // cover this — that path nulls the member itself.
+        SidebarRows rows;
+        auto* reg = new PageRegistry;
+        rows.setRegistry(reg);
+        auto* page = new StubPage(QStringLiteral("a"), reg);
+        QVERIFY(reg->registerPage(
+            {QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), page}));
+        QVERIFY(!rows.build(false, QString(), QString(), {}, {}).isEmpty());
+
+        delete reg;
+
+        QCOMPARE(rows.registry(), nullptr);
+        QVERIFY(rows.build(false, QString(), QString(), {}, {}).isEmpty());
+        QVERIFY(rows.build(true, QString(), QString(), {}, {}).isEmpty());
+        QVERIFY(rows.flatPageData(QStringLiteral("a"), {}).isEmpty());
+        QCOMPARE(rows.resolveDrillScope(QStringLiteral("a")), QString());
     }
 };
 

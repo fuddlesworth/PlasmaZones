@@ -190,8 +190,12 @@ public:
     bool pageAllowedInCurrentMode(const QString& id) const;
     /** Log a warning for every entry whose `counterpartId` names a page that
      *  does not exist, is itself, sits in the SAME tier (so a mode flip would
-     *  redirect to something equally hidden), or does not name this entry back
-     *  (a one-way declaration dead-ends the RETURN flip on the app fallback).
+     *  redirect to something equally hidden), does not name this entry back
+     *  (a one-way declaration dead-ends the RETURN flip on the app fallback),
+     *  is not navigable (a category with no QML of its own — the redirect would
+     *  land on an empty page body), or is itself unreachable in the mode that
+     *  hides this entry (an ancestor category filters it out, so the redirect
+     *  falls back anyway).
      *  Counterparts are stored unvalidated at registration because the target
      *  may be registered later, and nothing else ever checks them: a typo
      *  silently degrades every affected mode flip and deep link to the

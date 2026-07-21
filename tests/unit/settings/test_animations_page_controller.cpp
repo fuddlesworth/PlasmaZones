@@ -406,6 +406,32 @@ private Q_SLOTS:
 
     // ─── Effective resolution ─────────────────────────────────────────────
 
+    void resolvedProfileSeedsTheRootFromGlobalSettings()
+    {
+        // The Global settings seed sits at the ROOT of the inheritance chain,
+        // below every user-authored profile. Every other resolvedProfile test
+        // constructs the controller with no ISettings, so the seed is skipped
+        // entirely and the suite stayed green through the whole of it.
+        IsolatedConfigGuard guard;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        Settings s;
+        s.setAnimationMinDistance(123);
+        AnimationsPageController c(nullptr, &s);
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // No override anywhere on the chain: the settings value reaches the
+        // leaf instead of the library default.
+        const QVariantMap seeded = c.resolvedProfile(QStringLiteral("editor.snapIn"));
+        QCOMPARE(seeded.value(QStringLiteral("minDistance")).toInt(), 123);
+
+        // A real override at the leaf still wins: the seed is LOWEST
+        // precedence, so mergeMissingFields must never overwrite it.
+        c.setOverride(QStringLiteral("editor.snapIn"), QVariantMap{{QStringLiteral("minDistance"), 7}});
+        const QVariantMap overridden = c.resolvedProfile(QStringLiteral("editor.snapIn"));
+        QCOMPARE(overridden.value(QStringLiteral("minDistance")).toInt(), 7);
+    }
+
     void resolvedProfile_unsetReturnsLibraryDefaults()
     {
         QTemporaryDir tmp;

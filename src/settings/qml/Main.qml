@@ -121,6 +121,17 @@ PhosphorUi.SettingsAppWindow {
         whatsNewDialog.open();
     }
 
+    Connections {
+        // resetPage stages nothing when it refuses, so the page simply stays
+        // as it was. Without a word from here the user reads that as "Reset
+        // did nothing because there was nothing to reset".
+        function onPageResetFailed(page) {
+            window.showToast(i18n("Could not reach the PlasmaZones service, so this page was left unchanged."));
+        }
+
+        target: settingsController
+    }
+
     function showToast(msg) {
         toast.show(msg);
     }

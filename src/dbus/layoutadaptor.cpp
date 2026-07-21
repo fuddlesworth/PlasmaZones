@@ -11,6 +11,7 @@
 #include <PhosphorZones/LayoutUtils.h>
 #include "../common/layoutpreviewserialize.h"
 #include "../core/unifiedlayoutlist.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
@@ -652,8 +653,9 @@ QString LayoutAdaptor::duplicateLayout(const QString& id)
 
 QString LayoutAdaptor::getQuickLayoutSlot(int mode, int slotNumber)
 {
-    if (slotNumber < 1 || slotNumber > 9) {
-        qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber << "(must be 1-9)";
+    if (slotNumber < 1 || slotNumber > PhosphorProtocol::Service::QuickLayoutSlotCount) {
+        qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber << "(must be 1-"
+                                << PhosphorProtocol::Service::QuickLayoutSlotCount << ")";
         return QString();
     }
 
@@ -664,8 +666,9 @@ QString LayoutAdaptor::getQuickLayoutSlot(int mode, int slotNumber)
 
 void LayoutAdaptor::setQuickLayoutSlot(int mode, int slotNumber, const QString& layoutId)
 {
-    if (slotNumber < 1 || slotNumber > 9) {
-        qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber << "(must be 1-9)";
+    if (slotNumber < 1 || slotNumber > PhosphorProtocol::Service::QuickLayoutSlotCount) {
+        qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber << "(must be 1-"
+                                << PhosphorProtocol::Service::QuickLayoutSlotCount << ")";
         return;
     }
 
@@ -689,7 +692,7 @@ void LayoutAdaptor::setAllQuickLayoutSlots(int mode, const QVariantMap& slots)
     for (auto it = slots.begin(); it != slots.end(); ++it) {
         bool ok;
         int slotNumber = it.key().toInt(&ok);
-        if (!ok || slotNumber < 1 || slotNumber > 9) {
+        if (!ok || slotNumber < 1 || slotNumber > PhosphorProtocol::Service::QuickLayoutSlotCount) {
             qCWarning(lcDbusLayout) << "Invalid slot key:" << it.key();
             continue;
         }

@@ -360,14 +360,16 @@ bool SettingsController::isPageDirty(const QString& page) const
 
     // Ordering pages: dirty iff a custom order is staged that differs from the
     // saved order (a staged value equal to the saved order is not a change).
-    // Gated on the SHARED classifier so adding a third ordering page cannot
-    // update Reset/Discard while silently missing the dirty check — the bodies
-    // differ per page, the classification does not.
-    if (isOrderingPage(page)) {
-        if (page == QLatin1String("snapping-ordering")) {
-            return m_stagedSnappingOrder.has_value() && *m_stagedSnappingOrder != m_settings.snappingLayoutOrder();
-        }
+    // Dispatched on the SHARED classifier so adding a third ordering page is a
+    // new enumerator this switch (and Reset, and Discard) must answer for,
+    // rather than a page that quietly falls into the tiling branch.
+    switch (orderingPageKind(page)) {
+    case OrderingPageKind::Snapping:
+        return m_stagedSnappingOrder.has_value() && *m_stagedSnappingOrder != m_settings.snappingLayoutOrder();
+    case OrderingPageKind::Tiling:
         return m_stagedTilingOrder.has_value() && *m_stagedTilingOrder != m_settings.tilingAlgorithmOrder();
+    case OrderingPageKind::None:
+        break;
     }
 
     // Quick Shortcuts pages: dirty iff a quick-slot edit is staged for the
@@ -414,7 +416,7 @@ bool SettingsController::isPageDirty(const QString& page) const
             return shaderTreeScopeDiffers(m_settings.shaderProfileTree(), m_settings.committedShaderProfileTree(),
                                           scope);
         }
-        // WholeTree library leaves (sets / shaders).
+        // WholeTree library leaves (presets / sets / shaders).
         if (m_animationsPage != nullptr && m_animationsPage->hasPendingChanges())
             return true;
         for (const auto& gk : animationConfigKeys()) {

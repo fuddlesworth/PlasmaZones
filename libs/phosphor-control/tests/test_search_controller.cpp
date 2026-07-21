@@ -479,6 +479,11 @@ private Q_SLOTS:
         // two surfaces cannot disagree about what matches.
         QCOMPARE(PhosphorControl::SearchRanker::foldForSearch(QStringLiteral("Café")), QStringLiteral("cafe"));
         QCOMPARE(PhosphorControl::SearchRanker::foldForSearch(QStringLiteral("Größe")), QStringLiteral("grosse"));
+        // The CAPITAL sharp s is the case the replace-AFTER-fold ordering
+        // exists for: Qt's toCaseFolded() is a simple fold, so it maps ẞ down
+        // to ß and never to "ss". Replacing before the fold would leave this
+        // as "große", which the "grosse" query would miss.
+        QCOMPARE(PhosphorControl::SearchRanker::foldForSearch(QStringLiteral("GRÖẞE")), QStringLiteral("grosse"));
         // Already-folded input is a fixed point.
         QCOMPARE(PhosphorControl::SearchRanker::foldForSearch(QStringLiteral("cafe")), QStringLiteral("cafe"));
 

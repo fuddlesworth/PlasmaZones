@@ -28,6 +28,11 @@ import org.kde.kirigami as Kirigami
  * Optional properties:
  *   - isParentNode: bool — flips the inheritance banner copy
  *   - collapsible: bool — header click collapses the body
+ * Internal state (`overrideEnabled`, the `current*` and `locked*` aliases) is
+ * public only so the aliases resolve, and must not be assigned by consumers:
+ * the card seeds it from the profile tree and commits it back, so an outside
+ * write is either overwritten on the next refresh or persisted as a user edit.
+ *
  *   - simpleTiming: bool — hides the timing-mode combo and the curve editor,
  *     and keeps a duration-only edit from pinning the inherited curve
  *   - mirrorPaths: list<string> — extra event paths every write is echoed to,
@@ -65,12 +70,18 @@ Item {
     property var mirrorPaths: []
 
     /// Raw stored profile per write path, refreshed by refreshFromTree.
-    /// _setOverridePerPath is reached from the duration slider's valueChanged,
-    /// i.e. every tick of a drag — reading these from disk there meant one
-    /// synchronous file open per path per tick, which is exactly what the
-    /// advanced-mode short-circuit was added to avoid and simple mode is the
-    /// only mode this path runs in.
+    /// _setOverrideMerged reads it to merge over each path's own stored
+    /// fields. The cache is what makes the write loop see a CONSISTENT
+    /// pre-loop snapshot: setOverride emits overrideChanged on a direct
+    /// connection, so a refresh would otherwise re-enter partway through the
+    /// loop and later paths would merge over state the earlier writes already
+    /// moved. _committing suppresses that re-entry, and this holds the values
+    /// the loop started from.
     property var _pathCurves: ({})
+
+    /// True while _setOverrideMerged is writing, so the overrideChanged each
+    /// write emits does not re-enter refreshFromTree mid-loop.
+    property bool _committing: false
 
     /// Every path this card writes: its own, then the mirrors.
     readonly property var _writePaths: [root.eventPath].concat(root.mirrorPaths)
@@ -129,14 +140,32 @@ Item {
         // _inheritResolved, which the bump alone invalidates. A card that owns
         // an override shows its own values and does not care.
         function onAnimationDurationChanged() {
-            root._inheritRev = root._inheritRev + 1;
+            root._reseedFromInherited();
         }
         function onAnimationEasingCurveChanged() {
-            root._inheritRev = root._inheritRev + 1;
+            root._reseedFromInherited();
         }
 
         target: settingsController.settings
     }
+    /// Invalidate the cached inheritance walk, and re-seed the working
+    /// controls from it when this card owns no override. Without the re-seed,
+    /// an override-OFF card keeps the pre-change Global values in
+    /// currentDuration / currentEasingCurve, and the moment the user flips
+    /// Override on, commitOverride persists those stale values while the
+    /// italic "Current:" line beside them reads the new ones.
+    ///
+    /// Costs one cached chain walk and no file reads, so the N-round-trip
+    /// storm the bump-only handler was guarding against stays prevented: a
+    /// card that owns an override short-circuits before the walk.
+    function _reseedFromInherited() {
+        root._inheritRev = root._inheritRev + 1;
+        if (root.overrideEnabled)
+            return;
+        const r = root._inheritResolved;
+        root._applyEffective(r, r.curve);
+    }
+
     readonly property var _inheritResolved: {
         _inheritRev;
         // Coerce to {} when the Q_INVOKABLE returns undefined / null
@@ -241,34 +270,41 @@ Item {
             settingsController.animationsPage.setShaderOverride(paths[i], effectId, params);
     }
 
-    function _setOverrideOnAll(profile) {
+    /// Writes `profile` to every path this card controls, merged over each
+    /// path's OWN stored profile so fields this card does not edit
+    /// (minDistance, sequenceMode, staggerInterval, presetName) survive
+    /// instead of being truncated. A motion set can write those to a leaf
+    /// (see motionsetdomain.cpp), and a card that overwrote the whole map
+    /// would silently drop them the moment the user nudged Duration.
+    ///
+    /// `curveFromCommit` is the curve the user can actually see and edit, so
+    /// it travels to every path. Pass `undefined` when the card shows no
+    /// curve control: each path then keeps its OWN curve, so a path that owns
+    /// one has it preserved and a path that inherits stays inheriting. The
+    /// card must not decide a curve on the user's behalf.
+    function _setOverrideMerged(profile, curveFromCommit) {
         const paths = root._writePaths;
-        for (var i = 0; i < paths.length; ++i)
-            settingsController.animationsPage.setOverride(paths[i], profile);
-    }
-
-    /// Like _setOverrideOnAll, but each path keeps its OWN curve: a path that
-    /// already owns one has it preserved, a path that inherits stays
-    /// inheriting. Used by simple-mode commits, where the card cannot show or
-    /// edit a curve and so must not decide one on the user's behalf.
-    function _setOverridePerPath(profile) {
-        const paths = root._writePaths;
+        // Suppress the per-write refresh: setOverride emits overrideChanged
+        // synchronously, so without this the card re-reads every path's
+        // profile from disk once per path per tick of a duration drag. One
+        // refresh after the loop sees the same end state for a fraction of
+        // the cost.
+        root._committing = true;
         for (var i = 0; i < paths.length; ++i) {
-            // Start from the path's OWN stored profile so fields this card
-            // does not edit (minDistance, sequenceMode, staggerInterval,
-            // presetName) survive the write instead of being truncated, then
-            // overlay what the card is committing. The cached curve is
-            // reapplied last: the commit map never carries one in simple mode,
-            // and a path that owns a curve must keep its own.
             var raw = root._pathCurves[paths[i]] || ({});
             var perPath = Object.assign({}, raw);
             Object.assign(perPath, profile);
-            if (typeof raw.curve === "string" && raw.curve.length > 0)
+            if (curveFromCommit !== undefined)
+                perPath.curve = curveFromCommit;
+            else if (typeof raw.curve === "string" && raw.curve.length > 0)
                 perPath.curve = raw.curve;
             else
                 delete perPath.curve;
             settingsController.animationsPage.setOverride(paths[i], perPath);
         }
+        root._committing = false;
+        root._inheritRev++;
+        root.refreshFromTree();
     }
 
     function _clearOverrideOnAll() {
@@ -317,18 +353,20 @@ Item {
     function _storedStateKey(path) {
         const profile = settingsController.animationsPage.rawProfile(path) || ({});
         const shader = settingsController.animationsPage.rawShaderProfile(path) || ({});
-        // The CURVE is excluded on purpose. In simple mode this card writes
-        // per-path curves precisely so a path that owns one keeps it, so a
-        // curve difference is intended state, not divergence — counting it
-        // latched the banner ON permanently with no control able to clear it,
-        // while the banner promised the next edit would converge the group.
-        // Divergence is measured on what this card actually writes to every
-        // path: duration and the shader leg.
+        // Divergence is measured on exactly what this card WRITES to every
+        // path, which is duration and the shader leg. Everything else a leaf
+        // can carry is per-path by design: the curve, because simple mode
+        // writes per-path curves so a path that owns one keeps it, and the
+        // motion-set fields (minDistance, sequenceMode, staggerInterval,
+        // presetName), because the merged writer preserves each path's own.
+        // Counting any of those latched the banner ON permanently with no
+        // control able to clear it, while the banner promised the next edit
+        // would converge the group. An allowlist rather than an exclusion
+        // list, so a field added to the stored profile later cannot latch it
+        // again without also being added to what the card writes.
         const compared = {};
-        for (var k in profile) {
-            if (k !== "curve" && k !== "name")
-                compared[k] = profile[k];
-        }
+        if (profile.duration !== undefined)
+            compared.duration = profile.duration;
         return JSON.stringify([compared, shader]);
     }
 
@@ -390,9 +428,34 @@ Item {
         root._refreshMirrorDivergence();
     }
 
+    /// Seeds the working controls (timing mode, curve, duration) from an
+    /// already-resolved profile. Imperative rather than a binding because the
+    /// user edits these directly, so a binding would be severed on first edit
+    /// and stop tracking afterwards.
+    function _applyEffective(effective, resolvedCurve) {
+        var curve = (typeof effective.curve === "string" && effective.curve.length > 0) ? effective.curve : resolvedCurve;
+        if (typeof curve === "string" && curve.indexOf("spring:") === 0) {
+            var parts = curve.substring(7).split(",");
+            var w = parseFloat(parts[0]);
+            var z = parseFloat(parts[1]);
+            if (isFinite(w) && isFinite(z)) {
+                root.currentTimingMode = CurvePresets.timingModeSpring;
+                root.currentSpringOmega = w;
+                root.currentSpringZeta = z;
+            }
+        } else {
+            root.currentTimingMode = CurvePresets.timingModeEasing;
+            if (typeof curve === "string" && curve.length > 0)
+                root.currentEasingCurve = curve;
+        }
+        root.currentDuration = effective.duration !== undefined ? effective.duration : CurvePresets.defaultDurationMs;
+    }
+
     function refreshFromTree() {
         var raw = settingsController.animationsPage.rawProfile(root.eventPath);
-        var resolved = settingsController.animationsPage.resolvedProfile(root.eventPath);
+        // _inheritRev is bumped BEFORE every refreshFromTree call, so the
+        // cached walk is current and a second C++ chain walk is redundant.
+        var resolved = root._inheritResolved;
         var hasRaw = raw && Object.keys(raw).length > 0;
         // The card's "Override" toggle reflects ANY direct override at
         // this path — timing curve OR shader assignment. Without the
@@ -436,23 +499,8 @@ Item {
         // Easing and draw a Duration slider that a resolved spring ignores,
         // while suppressing the hint that explains why. Duration still comes
         // from `effective` below — only the mode falls back.
-        var curve = (typeof effective.curve === "string" && effective.curve.length > 0) ? effective.curve : resolved.curve;
-        if (typeof curve === "string" && curve.indexOf("spring:") === 0) {
-            var parts = curve.substring(7).split(",");
-            var w = parseFloat(parts[0]);
-            var z = parseFloat(parts[1]);
-            if (isFinite(w) && isFinite(z)) {
-                root.currentTimingMode = CurvePresets.timingModeSpring;
-                root.currentSpringOmega = w;
-                root.currentSpringZeta = z;
-            }
-        } else {
-            root.currentTimingMode = CurvePresets.timingModeEasing;
-            if (typeof curve === "string" && curve.length > 0)
-                root.currentEasingCurve = curve;
-        }
-        root.currentDuration = effective.duration !== undefined ? effective.duration : CurvePresets.defaultDurationMs;
-        // Cache each write path's stored profile for _setOverridePerPath. This
+        root._applyEffective(effective, resolved.curve);
+        // Cache each write path's stored profile for _setOverrideMerged. This
         // runs on every overrideChanged, which is exactly when a path's stored
         // state can have moved.
         var cache = {};
@@ -479,11 +527,7 @@ Item {
         // card already owns one, or when the user can actually see and edit it.
         if (!root.simpleTiming) {
             // Advanced mode edits the curve directly, so it always travels.
-            // Short-circuited before the per-path reads below, which are
-            // synchronous file opens and would otherwise run on every tick of
-            // a duration drag for no effect.
-            profile.curve = root.currentCurveString;
-            root._setOverrideOnAll(profile);
+            root._setOverrideMerged(profile, root.currentCurveString);
             return;
         }
         // Simple mode: the curve is not editable here and currentCurveString
@@ -493,7 +537,7 @@ Item {
         // and a path that inherits keeps inheriting. Deciding once for the
         // group (either direction) writes one path's answer onto the other and
         // splits a group the card presents as one.
-        root._setOverridePerPath(profile);
+        root._setOverrideMerged(profile, undefined);
     }
 
     // Current emitters that pass empty-path: `shaderProfileChanged`
@@ -542,15 +586,16 @@ Item {
             // reloaded" broadcast and returns true unconditionally, so
             // a single check covers both per-path filtering and the
             // global-broadcast carve-out.
-            if (!root._pathAffectsThisCard(path))
+            if (root._committing || !root._pathAffectsThisCard(path))
                 return;
 
-            root.refreshFromTree();
             // The signal is per-path but the resolved profile depends on
             // the entire ancestor chain, so any change at-or-above this
             // path can shift the inheritance banner. Bump the revision
-            // tick to invalidate _inheritResolved.
+            // tick FIRST so _inheritResolved is already current when
+            // refreshFromTree reads it.
             root._inheritRev++;
+            root.refreshFromTree();
         }
 
         function onShaderProfileChanged(path) {
@@ -716,7 +761,7 @@ Item {
                 Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Warning
                 visible: root._mirrorsDiverged
-                text: i18n("Another event this card controls is set differently right now, and this card shows only one of them. The next change you make here replaces the other event's settings.")
+                text: i18n("Another event this card controls is set differently right now, and this card shows only one of them. The next change you make here applies this card's duration and shader effect to both.")
             }
 
             Label {

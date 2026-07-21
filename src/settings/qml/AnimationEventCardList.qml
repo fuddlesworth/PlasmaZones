@@ -28,6 +28,8 @@ import "SearchAnchorHelpers.js" as SearchAnchors
  *       Accessible.name: i18n("Window animation events")
  *       headerText: i18n("…optional orientation banner…")
  *       eventModel: [ { eventPath, eventLabel, isParentNode }, ... ]
+ *       simpleTiming: true                       // optional, see below
+ *       headerComponent: Component { ... }       // optional, replaces headerText
  *   }
  */
 SettingsFlickable {
@@ -185,7 +187,7 @@ SettingsFlickable {
 
                         var pg = SearchAnchors.pageFor(cardLoader);
                         if (pg)
-                            pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader, null);
+                            pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader);
                     });
                 }
                 Component.onDestruction: {
@@ -207,7 +209,7 @@ SettingsFlickable {
                     var pg = SearchAnchors.pageFor(cardLoader);
                     var built = cardLoader.item as AnimationEventCard;
                     if (pg && built)
-                        pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader, built.settingsCard);
+                        pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader);
                 }
 
                 Connections {

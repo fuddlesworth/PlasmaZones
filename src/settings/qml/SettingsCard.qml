@@ -175,7 +175,7 @@ Item {
     function _registerSearchAnchor() {
         var pg = SearchAnchors.pageFor(root);
         if (pg)
-            pg.registerSearchAnchor(root.searchAnchor, root, root);
+            pg.registerSearchAnchor(root.searchAnchor, root);
     }
     function _unregisterSearchAnchor() {
         var pg = SearchAnchors.pageFor(root);
@@ -449,6 +449,11 @@ Item {
                 // are all hidden (every row advancedOnly in simple mode, or
                 // gated off by a master toggle) would otherwise reserve a dead
                 // strip under its header.
+                //
+                // A contentItem must therefore derive its OWN implicitHeight.
+                // One that sizes from its parent instead (anchors.fill,
+                // height: parent.height) reports 0 here, and the whole body
+                // silently renders at zero height with no error to explain it.
                 implicitHeight: root.contentItem && root.contentItem.implicitHeight > 0 ? root.contentItem.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
             }
 

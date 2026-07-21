@@ -291,6 +291,11 @@ void SearchController::recompute()
 {
     if (m_indexDirty) {
         m_index = buildIndex();
+        // Fold every entry's matched fields once here rather than once per
+        // entry per keystroke inside the ranker.
+        for (SearchEntry& e : m_index) {
+            SearchRanker::prefold(e);
+        }
         m_indexDirty = false;
     }
 

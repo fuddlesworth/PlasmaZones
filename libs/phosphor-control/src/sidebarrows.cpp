@@ -377,6 +377,40 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
     return out;
 }
 
+QString SidebarRows::resolveDrillScope(const QString& currentParentId) const
+{
+    if (currentParentId.isEmpty() || !m_registry) {
+        return QString();
+    }
+    if (!m_registry->pageAllowedInCurrentMode(currentParentId)) {
+        return QString();
+    }
+
+    // Any navigable descendant is enough: the scope renders SOMETHING the user
+    // can reach. Depth-capped like every other walk here, and the cap is a
+    // fail-CLOSED bound — a tree deep enough to hit it falls back to the top
+    // level rather than stranding the rail in a scope we could not verify.
+    bool found = false;
+    const std::function<void(const QString&, int)> gather = [&](const QString& pid, int d) {
+        if (found || d > kMaxWalkDepth) {
+            return;
+        }
+        const QList<PageRegistry::Entry> kids = m_registry->visibleChildPages(pid);
+        for (const PageRegistry::Entry& child : kids) {
+            if (!child.qmlSource.isEmpty()) {
+                found = true;
+                return;
+            }
+            gather(child.id, d + 1);
+            if (found) {
+                return;
+            }
+        }
+    };
+    gather(currentParentId, 0);
+    return found ? currentParentId : QString();
+}
+
 QVariantMap SidebarRows::flatPageData(const QString& pageId, const QVariantMap& flatTitleOverrides) const
 {
     if (m_registry == nullptr) {

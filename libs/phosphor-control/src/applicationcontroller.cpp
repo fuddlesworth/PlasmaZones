@@ -73,8 +73,12 @@ void ApplicationController::setCurrentPageId(const QString& id)
     // driven by goBack/goForward manage the stacks themselves and set
     // m_navigatingHistory to skip this. The startup transition (empty →
     // first page) records nothing — there is no page to go back to.
-    const bool couldGoBack = canGoBack();
-    const bool couldGoForward = canGoForward();
+    // Computed only when they will be read. Each is an any_of over up to
+    // kMaxHistoryEntries entries with an ancestor-chain resolve apiece, and
+    // during a history step the diff below is suppressed, so computing them
+    // there was two full scans thrown away per step.
+    const bool couldGoBack = m_navigatingHistory ? false : canGoBack();
+    const bool couldGoForward = m_navigatingHistory ? false : canGoForward();
     if (!m_navigatingHistory) {
         if (!m_currentPageId.isEmpty()) {
             m_backHistory.append(m_currentPageId);
@@ -451,9 +455,17 @@ QString ApplicationController::stepHistory(QStringList& from, QStringList& to)
         // m_navigatingHistory suppresses the recording branch in
         // setCurrentPageId — a history move must not push onto the origin
         // stack again or clear the trail it just extended.
+        // Scope-guarded: setCurrentPageId synchronously emits
+        // currentPageIdChanged into app code that may redirect (see the notes
+        // above). If that throws, a bare reset would never run and the flag
+        // would latch true for this object's lifetime — every later navigation
+        // silently stops recording, leaving a permanently dead Back button with
+        // no diagnostic. recomputeDirty in this TU guards the same hazard.
         m_navigatingHistory = true;
+        auto navGuard = qScopeGuard([this]() {
+            m_navigatingHistory = false;
+        });
         setCurrentPageId(target);
-        m_navigatingHistory = false;
         // Read back rather than assuming `target`: setCurrentPageId can be
         // re-entered during its own emit and redirected by the app's mode gate.
         landed = m_currentPageId;

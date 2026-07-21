@@ -180,7 +180,9 @@ QSet<QString> advancedAnchorsIn(const QString& qmlPath)
 }
 
 /// Map a QML file to the page id whose entries the catalogue registers for it.
-/// Only the pages that host advanced-gated anchors need an entry.
+/// Only the pages that host advanced-gated anchors need an entry, and
+/// everyAdvancedGatedPageIsInTheMap asserts the converse so a third page
+/// growing a gate cannot escape catalogueTiersMatchTheQml silently.
 const QHash<QString, QString>& qmlFileToPageId()
 {
     static const QHash<QString, QString> kMap{
@@ -229,6 +231,29 @@ private Q_SLOTS:
                                                "advancedOnly usage changed")
                                     .arg(it.key())));
         }
+    }
+
+    void everyAdvancedGatedPageIsInTheMap()
+    {
+        // qmlFileToPageId is hand-maintained, and catalogueTiersMatchTheQml
+        // only compares the files IN it. A third page growing an advanced gate
+        // would therefore be skipped entirely, in the "missing" direction,
+        // silently. Glob the page files and assert the converse of the map's
+        // own comment, so the invariant is checked rather than described.
+        const QStringList pages = QDir(m_qmlDir).entryList({QStringLiteral("*Page.qml")}, QDir::Files);
+        QVERIFY(!pages.isEmpty());
+        QStringList missing;
+        for (const QString& file : pages) {
+            if (qmlFileToPageId().contains(file)) {
+                continue;
+            }
+            if (!advancedAnchorsIn(m_qmlDir + QLatin1Char('/') + file).isEmpty()) {
+                missing << file;
+            }
+        }
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("pages with advanced gates but no qmlFileToPageId entry: %1")
+                                .arg(missing.join(QStringLiteral(", ")))));
     }
 
     void catalogueTiersMatchTheQml()

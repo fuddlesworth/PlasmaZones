@@ -91,22 +91,30 @@ Flickable {
     // rooted on SettingsFlickable inherits the whole reveal contract.
     property var _searchAnchors: ({})
     // Item awaiting reveal once its containing card finishes expanding.
-    property var _revealPendingItem: null
+    property Item _revealPendingItem: null
     // Cards reveal speculatively expanded, so a reveal that turns out invisible
     // anyway can put them back instead of leaving them open.
+    // Deliberately `var` (a JS array), not `list<Item>`: both consumers read
+    // the list into a local and THEN clear the property before iterating. A JS
+    // array local is a detached reference and survives that; a QML list is not.
     property var _revealPendingCards: []
     // A revealAnchor() for an id that isn't registered yet — children register
     // via Qt.callLater after the page builds, so a deep link can arrive first.
     // Retained here and retried from registerSearchAnchor (consume-once).
     property string _pendingRevealAnchor: ""
+    // Incremented by _cancelPendingReveal. _scrollToReveal captures it, so the
+    // Qt.callLater it queues can tell that a later reveal superseded it. The
+    // settle timer alone was not enough: the direct branch queues a callLater
+    // with no timer involved, and that closure would still scroll and pulse
+    // the previous target.
+    property int _revealToken: 0
 
-    function registerSearchAnchor(anchorId, item, card) {
+    function registerSearchAnchor(anchorId, item) {
         if (!anchorId || anchorId.length === 0 || !item)
             return;
 
         settingsFlickable._searchAnchors[anchorId] = {
-            "item": item,
-            "card": card || null
+            "item": item
         };
 
         // Satisfy a deep link that arrived before this anchor registered.
@@ -206,16 +214,28 @@ Flickable {
     /// revealAnchor so a superseded reveal can never fire against the old
     /// target, whichever branch the new one takes.
     function _cancelPendingReveal() {
+        // Put back the cards this reveal opened speculatively. A superseded
+        // reveal by definition no longer needs them open, and dropping the
+        // list without reverting leaks the expansion permanently — the exact
+        // side effect the settle timer's revert path exists to prevent,
+        // reached through the cancel path instead.
+        const pendingCards = settingsFlickable._revealPendingCards;
+        for (var ri = 0; ri < pendingCards.length; ++ri) {
+            if (pendingCards[ri])
+                pendingCards[ri].collapsed = true;
+        }
         settingsFlickable._revealPendingItem = null;
         settingsFlickable._revealPendingCards = [];
+        settingsFlickable._revealToken = settingsFlickable._revealToken + 1;
         revealSettleTimer.stop();
     }
 
     function _scrollToReveal(item) {
         // Defer one tick so a freshly-built / just-expanded layout settles
         // before we measure the target's mapped position.
+        const token = settingsFlickable._revealToken;
         Qt.callLater(function () {
-            if (!item)
+            if (!item || token !== settingsFlickable._revealToken)
                 return;
 
             var pt = item.mapToItem(settingsFlickable.contentItem, 0, 0);
@@ -272,6 +292,19 @@ Flickable {
             }
             settingsFlickable._scrollToReveal(pending);
         }
+    }
+
+    // A deliberate scroll supersedes a stale deep link, the same way a new
+    // reveal does. Without this the expiry fallback yanks the page to the top
+    // 600 ms later while the user is reading somewhere else, with nothing on
+    // screen to explain it.
+    Connections {
+        function onMovementStarted() {
+            pendingRevealExpiry.stop();
+            settingsFlickable._pendingRevealAnchor = "";
+        }
+
+        target: settingsFlickable
     }
 
     // Drops a deep link whose anchor never registered. The window only has to

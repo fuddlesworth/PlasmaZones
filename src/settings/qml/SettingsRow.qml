@@ -79,7 +79,7 @@ Item {
     function _registerSearchAnchor() {
         var pg = SearchAnchors.pageFor(root);
         if (pg)
-            pg.registerSearchAnchor(root.searchAnchor, root, SearchAnchors.cardFor(root));
+            pg.registerSearchAnchor(root.searchAnchor, root);
     }
     function _unregisterSearchAnchor() {
         var pg = SearchAnchors.pageFor(root);

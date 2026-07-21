@@ -69,8 +69,13 @@ public:
      * Build the visible row list.
      *
      * @param flattenTree   Render one flat depth-0 list instead of the tree.
-     *                      Ignored while @p searchText is non-empty.
-     * @param searchText    Filter needle. Empty disables filtering.
+     *                      Still honoured while searching: a flat-mode search
+     *                      returns flat rows with their overridden titles.
+     * @param searchText    Filter needle. Filtering is disabled when it is
+     *                      empty AFTER trimming and search-folding, so a query
+     *                      of only whitespace or only combining marks falls
+     *                      back to the normal rail rather than matching
+     *                      nothing.
      * @param currentParentId  Drill scope for TREE mode; empty is top level.
      * @param expandedCategories  id → expanded. An ABSENT id counts as
      *                      expanded, matching the rail's open-by-default
@@ -93,6 +98,23 @@ public:
      *  divergence between them would ship green. QVariantMap has no prototype,
      *  so the guard the JS needed is structurally unnecessary here. */
     Q_INVOKABLE QVariantMap flatPageData(const QString& pageId, const QVariantMap& flatTitleOverrides) const;
+
+    /** The drill scope the rail should actually be in, given @p currentParentId.
+     *
+     *  Returns @p currentParentId when the rail can still render it, and an
+     *  empty string when it must fall back to the top level. A scope stops
+     *  being renderable in two ways, and the rail is wrong in a different way
+     *  for each: if the tier filter hides the parent itself, the rail keeps
+     *  rendering a scope the mode has abolished; if the filter hides every
+     *  navigable descendant instead, the parent survives and the rail collapses
+     *  to a lone Back button over an empty list. build() already refuses to
+     *  OFFER a category that leads nowhere, so a rail that stays inside one is
+     *  inconsistent with the rows it draws.
+     *
+     *  Lives here rather than in QML because it is the same rule build() walks,
+     *  and the lib has no QML test harness, so a second copy in JS would ship
+     *  green when it diverged. */
+    Q_INVOKABLE QString resolveDrillScope(const QString& currentParentId) const;
 
 Q_SIGNALS:
     void registryChanged();

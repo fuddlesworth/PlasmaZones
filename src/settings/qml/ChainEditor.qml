@@ -305,7 +305,6 @@ ColumnLayout {
     // empty and the button always shows its placeholder.
     SettingsRow {
         id: addPackRow
-        Layout.fillWidth: true
         visible: root.showAddRow
         title: i18n("Add decoration pack")
         // Hoisted: the add-pack candidate list is scanned once per change of

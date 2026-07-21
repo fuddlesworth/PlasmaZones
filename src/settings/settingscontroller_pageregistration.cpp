@@ -79,11 +79,12 @@ void SettingsController::buildApplicationController()
     // Top-level entries. The rail reads top → bottom as three blocks split by
     // two dividers: (1) top/global — Overview (status dashboard), Profiles
     // (which frames everything below it) + General (global settings);
-    // (2) per-feature configuration — Display, Placement, Animations, Rules;
+    // (2) per-feature configuration — Display, Placement, Appearance
+    // (which parents Decorations and Animations), Rules;
     // (3) tools & meta — Editor, About.
     // `divider` flags mark only those two seams (after General, after Window
     // Rules) plus one inside the feature block (after Placement, to set the
-    // placement categories apart from Animations/Rules).
+    // placement categories apart from Appearance/Rules).
 
     // ── Block 1: top / global ──
     regVirtual(QStringLiteral("overview"), QString(), PhosphorI18n::tr("Overview"),

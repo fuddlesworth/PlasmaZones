@@ -33,9 +33,10 @@ namespace PlasmaZones {
 namespace {
 
 // Reset/Discard-only helpers: nothing outside this TU uses them, so internal
-// linkage is the right default. (isOrderingPage / isShortcutsPage started here
-// too, but isPageDirty open-codes the same classification, so they moved to
-// the shared header where both can read one definition.)
+// linkage is the right default. (isOrderingPage / isShortcutsPage are NOT here:
+// they were an anonymous namespace in _pagestate.cpp and moved to
+// settingscontroller_pagekeys.h when this file was split out of it, so the
+// dirty check and the reset read one definition.)
 
 // Raises the loading flag for the enclosing scope and restores the PREVIOUS
 // value on exit (not a hard clear), so nesting is safe. Suppresses
@@ -82,9 +83,9 @@ bool SettingsController::pageSupportsReset(const QString& page) const
     // and custom script params. "Reset this page" in simple mode therefore
     // means "reset this whole feature area", which is the honest reading of a
     // page that IS the feature area in that mode.
-    return pageOwnedConfigKeys().contains(page) || simplePageBackingPages().contains(page) || isOrderingPage(page)
-        || isShortcutsPage(page) || page == QLatin1String("virtualscreens") || isAnimationPage(page)
-        || isDecorationPage(page);
+    return pageOwnedConfigKeys().contains(page) || simplePageBackingPages().contains(page)
+        || orderingPageKind(page) != OrderingPageKind::None || isShortcutsPage(page)
+        || page == QLatin1String("virtualscreens") || isAnimationPage(page) || isDecorationPage(page);
 }
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
@@ -244,13 +245,15 @@ void SettingsController::resetPage(const QString& page)
     // Ordering pages: "reset to defaults" means dropping the custom order.
     // resetSnappingOrder/resetTilingOrder stage the empty (default) order and
     // mark the active page dirty themselves.
-    if (page == QLatin1String("snapping-ordering")) {
+    switch (orderingPageKind(page)) {
+    case OrderingPageKind::Snapping:
         resetSnappingOrder();
         return;
-    }
-    if (page == QLatin1String("tiling-ordering")) {
+    case OrderingPageKind::Tiling:
         resetTilingOrder();
         return;
+    case OrderingPageKind::None:
+        break;
     }
 
     // Quick Shortcuts: "reset to defaults" unassigns every slot (the default is
@@ -270,10 +273,15 @@ void SettingsController::resetPage(const QString& page)
         if (slotsReply.type() != QDBusMessage::ReplyMessage) {
             // Every per-slot accessor this replaced guards the reply type. An
             // error map is indistinguishable from "all slots already
-            // unassigned", so without this a failed Reset stages nothing and
-            // looks like it succeeded.
+            // unassigned", so falling through would stage nothing, reconcile
+            // the page CLEAN, and look exactly like a successful reset of a
+            // page that had no assignments. Refuse instead, and say so: this
+            // is the same contract clearAllOverrides() uses for a daemon it
+            // cannot reach.
             qCWarning(PlasmaZones::lcCore)
                 << "resetPage: could not read quick layout slots from the daemon:" << slotsReply.errorMessage();
+            Q_EMIT pageResetFailed(page);
+            return;
         }
         const QVariantMap allSlots = slotsReply.arguments().value(0).toMap();
         bool staged = false;
@@ -374,17 +382,23 @@ void SettingsController::discardPage(const QString& page)
 
     // Ordering pages: drop the staged custom order so the effective order falls
     // back to the saved value.
-    if (isOrderingPage(page)) {
-        auto& staged = (page == QLatin1String("snapping-ordering")) ? m_stagedSnappingOrder : m_stagedTilingOrder;
-        if (staged.has_value()) {
-            staged.reset();
-            if (page == QLatin1String("snapping-ordering"))
-                Q_EMIT stagedSnappingOrderChanged();
-            else
-                Q_EMIT stagedTilingOrderChanged();
+    switch (orderingPageKind(page)) {
+    case OrderingPageKind::Snapping:
+        if (m_stagedSnappingOrder.has_value()) {
+            m_stagedSnappingOrder.reset();
+            Q_EMIT stagedSnappingOrderChanged();
         }
         reconcilePageDirty(page);
         return;
+    case OrderingPageKind::Tiling:
+        if (m_stagedTilingOrder.has_value()) {
+            m_stagedTilingOrder.reset();
+            Q_EMIT stagedTilingOrderChanged();
+        }
+        reconcilePageDirty(page);
+        return;
+    case OrderingPageKind::None:
+        break;
     }
 
     // Quick Shortcuts: drop the mode's staged quick-slot edits so the getters
@@ -426,56 +440,63 @@ void SettingsController::discardPage(const QString& page)
     // controller observes to refresh the cards.
     if (isAnimationPage(page)) {
         const AnimationPageScope scope = animationPageScope(page);
-        if (scope.kind == AnimationPageScope::ConfigOnly) {
+        // ONE scope over the whole chain, matching resetPage. Every branch
+        // needs it for the same reason (the revert provokes settings NOTIFYs,
+        // and without suppression they reach onSettingsPropertyChanged and
+        // re-dirty the active page in the middle of the discard that is
+        // clearing it), and the two functions are written to be diffed against
+        // each other — three separate scopes made a reader prove the forms
+        // equivalent instead of see it.
+        //
+        // The explicit block is load-bearing: the scope MUST close before the
+        // reconcile below, which reads the dirty state the discard just
+        // produced. Letting it run to the end of the `if` would leave
+        // suppression up across the reconcile.
+        {
             const LoadingScope loadingScope(m_loading);
-            m_settings.discardKeys(animationGeneralConfigKeys());
-        } else if (scope.kind == AnimationPageScope::EventSubtree) {
-            // LoadingScope opened BEFORE the file revert, matching resetPage.
-            // The revert provokes settings NOTIFYs, and without suppression
-            // they reach onSettingsPropertyChanged and can re-dirty the active
-            // page in the middle of the discard that is clearing it.
-            const LoadingScope loadingScope(m_loading);
-            if (m_animationsPage != nullptr)
-                m_animationsPage->revertPendingUnder(animationScopedBuiltInPaths(scope));
-            // Shader tree: restore only this scope's paths to their baseline value
-            // (re-add / change / remove), leaving the other surfaces' staged
-            // edits. Covered by the scope opened above, which now brackets the
-            // file revert as well.
-            PhosphorAnimationShaders::ShaderProfileTree current = m_settings.shaderProfileTree();
-            const PhosphorAnimationShaders::ShaderProfileTree baseline = m_settings.committedShaderProfileTree();
-            QSet<QString> paths;
-            for (const QString& p : current.overriddenPaths())
-                if (animationPathInScope(p, scope))
-                    paths.insert(p);
-            for (const QString& p : baseline.overriddenPaths())
-                if (animationPathInScope(p, scope))
-                    paths.insert(p);
-            bool changed = false;
-            for (const QString& path : paths) {
-                if (baseline.hasOverride(path)) {
-                    const auto committed = baseline.directOverride(path);
-                    if (!current.hasOverride(path) || current.directOverride(path) != committed) {
-                        current.setOverride(path, committed);
+            if (scope.kind == AnimationPageScope::ConfigOnly) {
+                m_settings.discardKeys(animationGeneralConfigKeys());
+            } else if (scope.kind == AnimationPageScope::EventSubtree) {
+                if (m_animationsPage != nullptr)
+                    m_animationsPage->revertPendingUnder(animationScopedBuiltInPaths(scope));
+                // Shader tree: restore only this scope's paths to their baseline value
+                // (re-add / change / remove), leaving the other surfaces' staged
+                // edits. Covered by the scope opened above.
+                PhosphorAnimationShaders::ShaderProfileTree current = m_settings.shaderProfileTree();
+                const PhosphorAnimationShaders::ShaderProfileTree baseline = m_settings.committedShaderProfileTree();
+                QSet<QString> paths;
+                for (const QString& p : current.overriddenPaths())
+                    if (animationPathInScope(p, scope))
+                        paths.insert(p);
+                for (const QString& p : baseline.overriddenPaths())
+                    if (animationPathInScope(p, scope))
+                        paths.insert(p);
+                bool changed = false;
+                for (const QString& path : paths) {
+                    if (baseline.hasOverride(path)) {
+                        const auto committed = baseline.directOverride(path);
+                        if (!current.hasOverride(path) || current.directOverride(path) != committed) {
+                            current.setOverride(path, committed);
+                            changed = true;
+                        }
+                    } else if (current.clearOverride(path)) {
                         changed = true;
                     }
-                } else if (current.clearOverride(path)) {
-                    changed = true;
                 }
+                if (changed)
+                    m_settings.setShaderProfileTree(current);
+                // A page hosting the global timing / filter cards discards those
+                // keys too (the condensed simple page), mirroring its reset scope.
+                if (scope.includeGeneralKeys)
+                    m_settings.discardKeys(animationGeneralConfigKeys());
+            } else {
+                // WholeTree library leaf.
+                if (m_animationsPage != nullptr)
+                    m_animationsPage->revertPending();
+                m_settings.discardKeys(animationConfigKeys());
             }
-            if (changed)
-                m_settings.setShaderProfileTree(current);
-            // A page hosting the global timing / filter cards discards those
-            // keys too (the condensed simple page), mirroring its reset scope.
-            if (scope.includeGeneralKeys)
-                m_settings.discardKeys(animationGeneralConfigKeys());
-        } else {
-            // WholeTree library leaf. Scope opened before the revert for the
-            // same reason as the subtree branch above.
-            const LoadingScope loadingScope(m_loading);
-            if (m_animationsPage != nullptr)
-                m_animationsPage->revertPending();
-            m_settings.discardKeys(animationConfigKeys());
         }
+
         // Reconcile every animation leaf against the value-based truth (this
         // surface clean post-discard; siblings unchanged). Value-based on purpose:
         // revertPendingUnder can refuse mid-async or retain a failed restore.

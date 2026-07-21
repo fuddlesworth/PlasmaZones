@@ -72,7 +72,7 @@ Item {
             return;
         var pg = SearchAnchors.pageFor(root);
         if (pg)
-            pg.registerSearchAnchor("layout:" + root.modelData.id, root, SearchAnchors.cardFor(root));
+            pg.registerSearchAnchor("layout:" + root.modelData.id, root);
     })
     Component.onDestruction: {
         var pg = SearchAnchors.pageFor(root);

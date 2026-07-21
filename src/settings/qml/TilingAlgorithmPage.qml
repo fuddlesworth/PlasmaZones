@@ -188,11 +188,11 @@ SettingsFlickable {
                     currentAlgorithmId: root.effectiveAlgorithm
                     captionText: i18np("Max %n window", "Max %n windows", previewWindowSlider.slider.value)
                     windowCount: previewWindowSlider.slider.value
-                    splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : (root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
+                    splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : AlgoCaps.defaultSplitRatio(root.algoCapabilities)
                     supportsMasterCount: root.algoSupportsMasterCount
                     masterCount: masterCountSlider.slider.value
                     customParams: root.liveCustomParams
-                    zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
+                    zoneNumberDisplay: AlgoCaps.zoneNumberDisplay(root.algoCapabilities)
                     onAlgorithmActivated: selectedId => {
                         // An empty id means the combo's model rebuilt under the
                         // selection — fall back to the persisted global default.
@@ -367,7 +367,6 @@ SettingsFlickable {
                         SettingsSeparator {}
 
                         SettingsRow {
-                            Layout.fillWidth: true
                             title: paramLabel
                             description: paramDescription
 

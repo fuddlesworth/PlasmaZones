@@ -20,12 +20,18 @@
 
 namespace PlasmaZones {
 
-// The two drag-to-reorder pages. Their state is the staged order optional, not
+// The drag-to-reorder pages. Their state is the staged order optional, not
 // config-manifest keys, so per-page Reset/Discard dispatches to the ordering
 // helpers rather than resetKeys/discardKeys.
-bool isOrderingPage(const QString& page)
+OrderingPageKind orderingPageKind(const QString& page)
 {
-    return page == QLatin1String("snapping-ordering") || page == QLatin1String("tiling-ordering");
+    if (page == QLatin1String("snapping-ordering")) {
+        return OrderingPageKind::Snapping;
+    }
+    if (page == QLatin1String("tiling-ordering")) {
+        return OrderingPageKind::Tiling;
+    }
+    return OrderingPageKind::None;
 }
 
 // The two Quick Shortcuts pages. Their editable state is the per-mode staged
@@ -38,9 +44,10 @@ bool isShortcutsPage(const QString& page)
 // Every animation leaf shares the single AnimationsPageController staging domain
 // AND the single ShaderProfileTree key, but Reset/Discard/dirty are NOT
 // whole-tree: each surface leaf (windows/osds/overlays/desktops/motion/dragging/
-// panels/widgets/editor) owns one event-path subtree (see animationPageScope),
-// the general leaf owns only the config keys, and the sets/shaders library leaves
-// act on the whole editable tree. Scoping keeps a Reset on one surface from
+// panels/widgets/editor, plus the condensed animations-simple page, which takes
+// the same branch across several roots) owns one event-path subtree (see
+// animationPageScope), the general leaf owns only the config keys, and the
+// presets/sets/shaders library leaves act on the whole editable tree. Scoping keeps a Reset on one surface from
 // wiping the others (mirrors the decoration domain below).
 bool isAnimationPage(const QString& page)
 {

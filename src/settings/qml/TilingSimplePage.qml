@@ -78,6 +78,14 @@ SettingsFlickable {
     // resulting store NOTIFY does not re-seed mid-drag and fight the live
     // handle (same pattern as the animation defaults editor's committing
     // guard).
+    //
+    // Raised and lowered around the setter call in ONE statement block, which
+    // is only correct because TilingAlgorithmController's setters emit
+    // changed() synchronously (tilingalgorithmcontroller.cpp: the Q_EMIT sits
+    // directly after the write, same thread, direct connection). If a setter
+    // ever grows a save timer or a queued emit, the flag would already be down
+    // when the signal lands and _seedFromAlgorithm would fight the drag —
+    // lower it from Qt.callLater at that point, not before.
     property bool _committingSlot: false
 
     onSelectedAlgorithmChanged: _seedFromAlgorithm()
@@ -156,11 +164,11 @@ SettingsFlickable {
                     description: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
                     currentAlgorithmId: root.appSettingsObj.defaultAutotileAlgorithm
                     windowCount: maxWindowsSlider.slider.value
-                    splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : (root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
-                    supportsMasterCount: root.algoCapabilities ? (root.algoCapabilities.supportsMasterCount === true) : false
+                    splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : AlgoCaps.defaultSplitRatio(root.algoCapabilities)
+                    supportsMasterCount: AlgoCaps.supportsMasterCount(root.algoCapabilities)
                     masterCount: root.algoSettings.masterCount !== undefined ? root.algoSettings.masterCount : root.appSettingsObj.autotileMasterCount
                     customParams: root.previewCustomParams
-                    zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
+                    zoneNumberDisplay: AlgoCaps.zoneNumberDisplay(root.algoCapabilities)
                     onAlgorithmActivated: selectedId => {
                         // An empty id means the combo's model rebuilt under the
                         // selection — fall back to the persisted default.

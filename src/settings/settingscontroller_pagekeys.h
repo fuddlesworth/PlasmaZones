@@ -18,15 +18,24 @@
 
 #include "../config/settings.h"
 
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include <QString>
 
 namespace PlasmaZones {
 
-/// The two drag-to-reorder pages. Shared so the dirty check and Reset/Discard
-/// classify a page the same way — isPageDirty used to open-code these string
-/// comparisons, which meant adding a third ordering page updated one site and
-/// silently missed the other.
-bool isOrderingPage(const QString& page);
+/// Which drag-to-reorder page this is, or None. Returns the KIND rather than a
+/// bool so the three consumers (dirty check, Reset, Discard) each dispatch on
+/// an enumerator instead of testing one page and letting the else-branch stand
+/// for "the other one". Under a bool, a third ordering page satisfied the test
+/// and then silently read and reset the tiling order; here it is a new
+/// enumerator every switch has to answer for.
+enum class OrderingPageKind {
+    None,
+    Snapping,
+    Tiling,
+};
+OrderingPageKind orderingPageKind(const QString& page);
 
 /// The two Quick Shortcuts pages. Same shared-classification rationale.
 bool isShortcutsPage(const QString& page);
@@ -34,8 +43,10 @@ bool isShortcutsPage(const QString& page);
 /// Quick-layout slots are numbered 1..kQuickLayoutSlotCount. Shared by the
 /// slot accessors' bounds checks (settingscontroller_session.cpp) and the
 /// Quick Shortcuts reset loop (settingscontroller_pagereset.cpp), so the bound
-/// and the loop that walks it cannot drift apart.
-constexpr int kQuickLayoutSlotCount = 9;
+/// and the loop that walks it cannot drift apart. Aliases the protocol-level
+/// constant the daemon validates against (layoutadaptor.cpp), so the two trees
+/// cannot disagree about how many slots exist either.
+constexpr int kQuickLayoutSlotCount = PhosphorProtocol::Service::QuickLayoutSlotCount;
 
 /// Every animation leaf shares one staging domain and one ShaderProfileTree
 /// key, but Reset/Discard/dirty are scoped per leaf — see animationPageScope.

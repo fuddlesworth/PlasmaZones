@@ -71,7 +71,7 @@ ColumnLayout {
     function _registerSearchAnchor() {
         var pg = SearchAnchors.pageFor(card);
         if (pg)
-            pg.registerSearchAnchor(card.searchAnchor, card, SearchAnchors.cardFor(card));
+            pg.registerSearchAnchor(card.searchAnchor, card);
     }
     function _unregisterSearchAnchor() {
         var pg = SearchAnchors.pageFor(card);

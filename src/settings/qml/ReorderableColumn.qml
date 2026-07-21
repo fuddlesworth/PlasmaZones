@@ -191,7 +191,7 @@ Item {
                     Qt.callLater(function () {
                         var pg = SearchAnchors.pageFor(delegateRoot);
                         if (pg)
-                            pg.registerSearchAnchor(root.anchorPrefix + delegateRoot._itemId, delegateRoot, SearchAnchors.cardFor(delegateRoot));
+                            pg.registerSearchAnchor(root.anchorPrefix + delegateRoot._itemId, delegateRoot);
                     });
                 }
             }

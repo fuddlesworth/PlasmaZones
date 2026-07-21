@@ -659,6 +659,15 @@ Q_SIGNALS:
     /// replaces whatever is in flight, so a `true` there would let the caller's
     /// success toast overwrite the reason emitted a moment earlier.
     void settingsTransferFailed(const QString& reason);
+    /// Emitted when `resetPage` cannot complete because a value it must read
+    /// first is unavailable (currently: the daemon's quick-layout slot map).
+    /// resetPage returns void and stages nothing on that path, so without this
+    /// the page reconciles CLEAN and the refusal is indistinguishable from a
+    /// page that was already at its defaults.
+    ///
+    /// Carries no reason string: the wording is user-facing, and this tree
+    /// wires i18n in QML rather than C++, so the shell supplies the words.
+    void pageResetFailed(const QString& page);
     /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
     /// fails at the daemon — QML can surface the reason in a toast so the
     /// user knows the change wasn't saved.

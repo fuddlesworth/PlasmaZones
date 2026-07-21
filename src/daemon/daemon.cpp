@@ -534,6 +534,36 @@ void Daemon::publishActiveAnimationProfile()
     const Profile settingsProfile = m_settings->animationProfile();
     for (const QString* path : kSettingsDrivenProfilePaths) {
         if (m_profileLoader && m_profileLoader->hasPath(*path)) {
+            // A user JSON at this path OWNS it, but its unset fields must
+            // still fall back to the user's settings rather than to library
+            // defaults. Skipping wholesale meant a Global.json setting only
+            // `duration` left minDistance / sequenceMode / staggerInterval /
+            // curve animating at built-in defaults here while the settings app
+            // resolved them from ISettings and displayed the user's values.
+            // Per-field merge is what ProfileTree inheritance does everywhere
+            // else, so both sides now answer the same way.
+            //
+            // Re-registered under the JSON's own owner tag so the loader's
+            // next reloadFromOwner still replaces it (which re-enters here via
+            // profilesChanged and re-merges).
+            const auto owned = reg.resolve(*path);
+            if (!owned.has_value()) {
+                continue;
+            }
+            Profile mergedProfile = *owned;
+            if (!mergedProfile.duration.has_value())
+                mergedProfile.duration = settingsProfile.duration;
+            if (!mergedProfile.curve)
+                mergedProfile.curve = settingsProfile.curve;
+            if (!mergedProfile.minDistance.has_value())
+                mergedProfile.minDistance = settingsProfile.minDistance;
+            if (!mergedProfile.sequenceMode.has_value())
+                mergedProfile.sequenceMode = settingsProfile.sequenceMode;
+            if (!mergedProfile.staggerInterval.has_value())
+                mergedProfile.staggerInterval = settingsProfile.staggerInterval;
+            if (mergedProfile != *owned) {
+                reg.registerProfile(*path, mergedProfile, reg.ownerOf(*path));
+            }
             continue;
         }
         reg.registerProfile(*path, settingsProfile);

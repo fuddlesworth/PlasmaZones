@@ -19,19 +19,6 @@ function pageFor(item) {
     return null;
 }
 
-// The hosting SettingsCard (carries isSettingsCard === true), so a contained
-// row can ask the card to expand on reveal. Returns null if none is found.
-function cardFor(item) {
-    var p = item ? item.parent : null;
-    while (p) {
-        if (p.isSettingsCard === true)
-            return p;
-
-        p = p.parent;
-    }
-    return null;
-}
-
 // Every SettingsCard ancestor, nearest first. A reveal must expand ALL of them:
 // expanding only the nearest leaves the row invisible when an outer card is
 // also collapsed, and the reveal then falls back to the top of the page for a

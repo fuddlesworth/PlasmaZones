@@ -31,6 +31,11 @@ class PHOSPHORCONTROL_EXPORT SearchRanker
 {
 public:
     /// Score `entry` against `query` (case-insensitive). 0 = no match.
+    ///
+    /// Folds `query` on EVERY call, so it is a single-entry probe, not a loop
+    /// body. `rank()` is the loop-safe entry point: it folds the query once
+    /// and matches against each entry's pre-folded fields. Adopting this in a
+    /// loop would reintroduce the per-entry folding cost rank() avoids.
     static int score(const QString& query, const SearchEntry& entry);
 
     /// Return entries with score > 0, sorted by score desc (stable: input
@@ -47,9 +52,19 @@ public:
     /// the zero-results case only.
     static QString closestTitle(const QString& query, const QVector<SearchEntry>& entries, int maxDistance = -1);
 
+    /** Fill @p entry's folded* fields from its display strings. Call once per
+     *  entry when the index is built: rank() then matches against the folded
+     *  copies instead of folding every field of every entry on every
+     *  keystroke. Idempotent. */
+    static void prefold(SearchEntry& entry);
+
     /** Normalise a string for search comparison: decompose, drop combining
-     *  marks, then full case-fold. So "Café" matches "cafe" and "Größe"
-     *  matches "grosse".
+     *  marks, then simple case-fold, with ß and ẞ mapped to "ss" explicitly
+     *  afterwards. So "Café" matches "cafe" and "Größe" matches "grosse".
+     *
+     *  The explicit mapping is NOT redundant: Qt's toCaseFolded() is a SIMPLE
+     *  fold, so it maps ẞ (U+1E9E) down to ß and never to "ss". Deleting the
+     *  special case would silently break exactly the strings it names.
      *
      *  LOSSY BY DESIGN where a combining mark carries meaning: Vietnamese tone
      *  marks collapse, so má / mà / mả all fold to "ma" and such a query
@@ -67,6 +82,11 @@ public:
      *  different results in the two surfaces, which reads as a bug in
      *  whichever one the user tried second. */
     static QString foldForSearch(const QString& s);
+
+private:
+    /// editDistance over inputs the caller has ALREADY folded. Exists so
+    /// closestTitle folds each side once rather than once per comparison.
+    static int editDistanceFolded(const QString& folded, const QString& otherFolded);
 };
 
 } // namespace PhosphorControl

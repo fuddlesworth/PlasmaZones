@@ -59,7 +59,7 @@ ExpandableRowDelegate {
     Component.onCompleted: Qt.callLater(function () {
         const page = SearchAnchors.pageFor(row);
         if (page)
-            page.registerSearchAnchor("profile:" + row.profileId, row, SearchAnchors.cardFor(row));
+            page.registerSearchAnchor("profile:" + row.profileId, row);
     })
 
     Component.onDestruction: {
