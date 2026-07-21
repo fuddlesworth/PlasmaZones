@@ -260,7 +260,8 @@ private Q_SLOTS:
 
         // Round-trip through both the C++ Entry accessor and the
         // QML-facing QVariantMap. Both must surface the flag —
-        // Sidebar.qml reads via pageData() / childPagesData().
+        // The QML serialization contract, exercised here because no in-tree
+        // consumer calls these two any more (see the header).
         QVERIFY(reg.entry(QStringLiteral("p1")).hasDividerAfter);
         QCOMPARE(reg.pageData(QStringLiteral("p1")).value(QStringLiteral("hasDividerAfter")).toBool(), true);
     }
@@ -401,14 +402,17 @@ private Q_SLOTS:
         QVERIFY(reg.validateCounterparts());
     }
 
-    // Each block below trips ONE branch of validateCounterparts. The function
+    // Four of the six broken shapes; the other two have their own tests below
+    // (they need multi-entry fixtures that do not fit this block form).
+    //
+    // Each block trips ONE branch of validateCounterparts. The function
     // returns a single bool for all six, so a QVERIFY(!ok) alone cannot tell
     // which branch fired — a fixture usually trips several as collateral, and
     // pass-6 mutation testing found two branches whose deletion left this
     // green. QTest::ignoreMessage binds the assertion to the specific warning:
     // it FAILS the test if the named message is not emitted, which is exactly
     // the per-branch isolation the bool cannot give.
-    void validateCounterpartsRejectsTheSixBrokenShapes()
+    void validateCounterpartsRejectsFourBrokenShapes()
     {
         using PV = PageRegistry::PageVisibility;
 

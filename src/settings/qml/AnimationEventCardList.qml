@@ -196,20 +196,29 @@ SettingsFlickable {
 
                     var pg = SearchAnchors.pageFor(cardLoader);
                     if (pg)
-                        pg.unregisterSearchAnchor(cardLoader.searchAnchor);
+                        pg.unregisterSearchAnchor(cardLoader.searchAnchor, cardLoader.item ? cardLoader.item.settingsCard : cardLoader);
                 }
-                // Once the card is built, re-register the anchor WITH its
-                // SettingsCard so revealAnchor can expand a collapsed card
-                // before scrolling (the initial registration passes a null
-                // card because the card doesn't exist until it scrolls in).
+                // Once the card is built, re-register the anchor against the
+                // card ITSELF rather than this Loader. revealAnchor expands a
+                // collapsed card by walking UP from the registered item
+                // (SearchAnchorHelpers.cardChainFor), and the SettingsCard is a
+                // DESCENDANT of the Loader, so a Loader-registered anchor has
+                // no card anywhere on its chain: a deep link scrolled to and
+                // pulsed a card that stayed collapsed. Registering the card
+                // makes it the head of its own chain, which the reveal seeds
+                // explicitly for card-level anchors.
+                //
+                // The pre-build registration below still uses the Loader,
+                // because until the card exists the Loader is the only thing
+                // with a position to scroll to.
                 onLoaded: {
                     if (!cardLoader.searchable)
                         return;
 
                     var pg = SearchAnchors.pageFor(cardLoader);
                     var built = cardLoader.item as AnimationEventCard;
-                    if (pg && built)
-                        pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader);
+                    if (pg && built && built.settingsCard)
+                        pg.registerSearchAnchor(cardLoader.searchAnchor, built.settingsCard);
                 }
 
                 Connections {

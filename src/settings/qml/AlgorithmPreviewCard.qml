@@ -76,7 +76,7 @@ ColumnLayout {
     function _unregisterSearchAnchor() {
         var pg = SearchAnchors.pageFor(card);
         if (pg)
-            pg.unregisterSearchAnchor(card.searchAnchor);
+            pg.unregisterSearchAnchor(card.searchAnchor, card);
     }
 
     // Live preview, centered at top.

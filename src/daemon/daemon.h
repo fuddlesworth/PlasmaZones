@@ -719,19 +719,22 @@ private:
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
     // ─── End of layout-source declaration block ─────────────────────────
     std::unique_ptr<PhosphorZones::LayoutComputeService> m_layoutComputeService;
+
+    /// Raw Global-path profile as the loader registered it, snapshot once per
+    /// loader reload and cleared on profilesChanged. The settings-driven
+    /// publish merges its fallbacks over THIS rather than over the registry's
+    /// current entry, which is the merged result of the previous tick and
+    /// would freeze the fallbacks at their first observed value. Keyed by path
+    /// even though kSettingsDrivenProfilePaths holds a single entry today, so
+    /// adding a second path needs no new plumbing. Borrows nothing, so it sits
+    /// outside the declaration-order block below.
+    QHash<QString, PhosphorAnimation::Profile> m_rawJsonProfiles;
     /// Per-daemon curve registry. Replaces the prior per-process
     /// `CurveRegistry::instance()` singleton — composition roots own
     /// their own.
     ///
     /// DECLARATION ORDER INVARIANT: must be declared BEFORE `m_settings`
     /// (which takes a borrowed pointer to it in its constructor) and
-    /// Raw parsed Global-path profiles as the loader registered them, snapshot
-    /// once per loader reload and cleared on profilesChanged. The settings-driven
-    /// publish merges its fallbacks over THESE rather than over the registry's
-    /// current entry, which is the merged result of the previous tick and would
-    /// freeze the fallbacks at their first observed value.
-    QHash<QString, PhosphorAnimation::Profile> m_rawJsonProfiles;
-
     /// BEFORE `m_curveLoader` / `m_profileLoader` (which also borrow).
     /// Reverse-order destruction then tears every consumer down before
     /// the registry itself, guaranteeing no UAF on the Settings /

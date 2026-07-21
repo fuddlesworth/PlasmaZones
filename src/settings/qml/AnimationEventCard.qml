@@ -85,6 +85,9 @@ Item {
     /// write emits does not re-enter refreshFromTree mid-loop.
     property bool _committing: false
 
+    /// The shader-axis counterpart, for _setShaderOverrideOnAll.
+    property bool _committingShader: false
+
     /// Every path this card writes: its own, then the mirrors.
     readonly property var _writePaths: [root.eventPath].concat(root.mirrorPaths)
     /// The card's hosting SettingsCard. The virtualized card list re-registers
@@ -269,10 +272,26 @@ Item {
     // Every controller write this card performs goes through one of
     // these so `mirrorPaths` cannot be silently bypassed by a future
     // call site.
+    /// Suppressed the same way the timing writer is: each setShaderOverride
+    /// relays a path-agnostic shaderProfileChanged(QString()) broadcast, so an
+    /// N-path write costs N full refreshes here (and every OTHER card on the
+    /// page refreshes N times too — that part is inherent to the broadcast and
+    /// out of this card's hands). Reached from the param sliders, so this runs
+    /// at drag rate.
     function _setShaderOverrideOnAll(effectId, params) {
-        const paths = root._writePaths;
-        for (var i = 0; i < paths.length; ++i)
-            settingsController.animationsPage.setShaderOverride(paths[i], effectId, params);
+        root._committingShader = true;
+        try {
+            const paths = root._writePaths;
+            for (var i = 0; i < paths.length; ++i)
+                settingsController.animationsPage.setShaderOverride(paths[i], effectId, params);
+        } finally {
+            // Same try/finally reasoning as _setOverrideMerged: QML has no
+            // RAII, and a latched flag here would stop the card tracking
+            // external shader edits for the rest of the session.
+            root._committingShader = false;
+            root.refreshShaderFromTree();
+            root.refreshFromTree();
+        }
     }
 
     /// Writes `profile` to every path this card controls, merged over each
@@ -288,7 +307,6 @@ Item {
     /// one has it preserved and a path that inherits stays inheriting. The
     /// card must not decide a curve on the user's behalf.
     function _setOverrideMerged(profile, curveFromCommit) {
-        const paths = root._writePaths;
         // Suppress the per-write refresh: setOverride emits overrideChanged
         // synchronously, so without this an N-path card pays N refreshes per
         // tick of a duration drag, each re-reading every path. One refresh
@@ -309,10 +327,17 @@ Item {
         try {
             root._setOverrideMergedLoop(profile, curveFromCommit);
         } finally {
+            // Both the flag AND the refresh are in the finally. Every
+            // overrideChanged the loop emitted was deliberately swallowed on
+            // the promise that one refresh follows it, so a throw that skipped
+            // the refresh would break exactly the invariant the flag exists to
+            // defend: the writes that DID land would never reach the card, and
+            // _pathProfiles / overrideEnabled / the divergence banner would
+            // stay stale until some unrelated signal arrived.
             root._committing = false;
+            root._inheritRev++;
+            root.refreshFromTree();
         }
-        root._inheritRev++;
-        root.refreshFromTree();
     }
 
     /// The write loop itself. Split out so _setOverrideMerged's try/finally
@@ -393,6 +418,13 @@ Item {
         const compared = {};
         if (profile.duration !== undefined)
             compared.duration = profile.duration;
+        // The curve exclusion above is conditional on the SIMPLE-mode leg,
+        // which writes per-path curves. The advanced leg passes
+        // currentCurveString to _setOverrideMerged, so it writes ONE curve to
+        // every path — a divergent mirror curve there IS clobbered by the next
+        // edit, and the banner has to say so.
+        if (!root.simpleTiming && profile.curve !== undefined)
+            compared.curve = profile.curve;
         return JSON.stringify([compared, shader]);
     }
 
@@ -639,7 +671,7 @@ Item {
             // treats "" as the broadcast sentinel and returns true so
             // every card refreshes for it; per-path emits still get
             // the prefix filter.
-            if (!root._pathAffectsThisCard(path))
+            if (root._committingShader || !root._pathAffectsThisCard(path))
                 return;
 
             root.refreshShaderFromTree();
@@ -792,7 +824,12 @@ Item {
                 Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Warning
                 visible: root._mirrorsDiverged
-                text: i18np("Another event this card controls is set differently right now, and this card shows only one of them. The next change you make here applies this card's duration and shader effect to both.", "Other events this card controls are set differently right now, and this card shows only one of them. The next change you make here applies this card's duration and shader effect to all %n of them.", root.mirrorPaths.length)
+                // Scoped to what a duration edit ACTUALLY converges. The shader leg
+                // moves only when the user touches the shader picker, so
+                // promising it here left the banner lit after the most likely
+                // next action. Count is the number of events the card controls
+                // (itself plus its mirrors), not the mirror count.
+                text: i18np("Another event this card controls is set differently right now, and this card shows only one of them. The next change you make to the timing here applies to both.", "This card controls %n events that are set differently right now, and it shows only one of them. The next change you make to the timing here applies to all of them.", 1 + root.mirrorPaths.length)
             }
 
             Label {

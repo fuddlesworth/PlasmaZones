@@ -322,7 +322,10 @@ ColumnLayout {
             // the same 45% of the row that SettingsRow caps its control slot
             // at: the Row neither clips nor shrinks its children, so a fixed
             // 16 grid units overhangs the right margin on a narrow window.
-            width: Math.min(Kirigami.Units.gridUnit * 16, addPackRow.width * 0.45)
+            // The cap is relative to SettingsRow's INNER layout, which is
+            // inset by largeSpacing on each side — measuring the outer width
+            // would still overhang by 0.45 * 2 * largeSpacing.
+            width: Math.min(Kirigami.Units.gridUnit * 16, (addPackRow.width - Kirigami.Units.largeSpacing * 2) * 0.45)
             enabled: addPackRow._addable.length > 0
             items: addPackRow._addable
             currentId: ""

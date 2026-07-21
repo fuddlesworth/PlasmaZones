@@ -386,6 +386,21 @@ QString SidebarRows::resolveDrillScope(const QString& currentParentId) const
         return QString();
     }
 
+    // build() applies the descendant count ONLY under `isDrill && !rowHasQml`,
+    // so match its entry conditions before matching its walk, or this function
+    // answers a different question than the one it exists to agree with.
+    const PageRegistry::Entry scope = m_registry->entry(currentParentId);
+    if (!scope.qmlSource.isEmpty()) {
+        // A category with a page of its own is offered as a drill target
+        // unconditionally, whatever its descendant count.
+        return currentParentId;
+    }
+    if (scope.isCollapsible) {
+        // Collapsible categories render as accordion headers and are never
+        // drill targets, so the rail cannot be inside one to begin with.
+        return QString();
+    }
+
     // Mirror build()'s drill rule EXACTLY, which counts to two:
     //   0 navigable descendants -> the category is not offered at all,
     //   1                       -> the row is flattened to that descendant and

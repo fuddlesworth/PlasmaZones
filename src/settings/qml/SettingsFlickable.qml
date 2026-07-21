@@ -108,14 +108,22 @@ Flickable {
     // with no timer involved, and that closure would still scroll and pulse
     // the previous target.
     property int _revealToken: 0
+    /// contentY at the moment a deep link was armed. The stale-link guard
+    /// compares against THIS rather than firing on any change, because
+    /// contentY also moves for layout reasons (content growing as Loaders
+    /// complete, a clamp when content shrinks). Those are not the user
+    /// scrolling away, and cancelling on them would silently kill the reveal.
+    property real _armedContentY: 0
+    /// Longest expand among the cards the pending reveal opened, read from the
+    /// cards themselves rather than assumed. Falls back to the raw Kirigami
+    /// duration when no card is expanding.
+    property int _pendingExpandDurationMs: Kirigami.Units.shortDuration
 
     function registerSearchAnchor(anchorId, item) {
         if (!anchorId || anchorId.length === 0 || !item)
             return;
 
-        settingsFlickable._searchAnchors[anchorId] = {
-            "item": item
-        };
+        settingsFlickable._searchAnchors[anchorId] = item;
 
         // Satisfy a deep link that arrived before this anchor registered.
         if (settingsFlickable._pendingRevealAnchor === anchorId) {
@@ -125,8 +133,16 @@ Flickable {
         }
     }
 
-    function unregisterSearchAnchor(anchorId) {
-        if (anchorId && settingsFlickable._searchAnchors[anchorId])
+    /// `item` is required so a delegate can only unregister ITS OWN entry.
+    /// During a Repeater rebuild the new delegate's deferred registration can
+    /// run before the old delegate's Component.onDestruction, and an
+    /// id-only erase would then delete the NEW row's entry. Nothing
+    /// re-registers afterwards, so the anchor stays unreachable for the page's
+    /// lifetime and a search result silently dead-ends.
+    function unregisterSearchAnchor(anchorId, item) {
+        if (!anchorId)
+            return;
+        if (settingsFlickable._searchAnchors[anchorId] === item)
             delete settingsFlickable._searchAnchors[anchorId];
     }
 
@@ -138,11 +154,12 @@ Flickable {
         // anchor registers and scrolls somewhere else.
         settingsFlickable._cancelPendingReveal();
 
-        var entry = settingsFlickable._searchAnchors[anchorId];
-        if (!entry || !entry.item) {
+        var target = settingsFlickable._searchAnchors[anchorId];
+        if (!target) {
             // Not registered yet — retain and retry once it registers, so the
             // reveal isn't lost to the page-build / deferred-registration race.
             settingsFlickable._pendingRevealAnchor = anchorId;
+            settingsFlickable._armedContentY = settingsFlickable.contentY;
             // Expire it: without this a bogus or wrong-page anchor stays armed
             // for the page's lifetime, and a Repeater that later rebuilds and
             // registers that id fires an unexplained scroll and highlight long
@@ -173,9 +190,9 @@ Flickable {
         // its own section anchor with item === card, and cardChainFor starts at
         // item.parent — so without this, a deep link to a section scrolled to
         // the shut header and pulsed it while the content stayed hidden.
-        var chain = SearchAnchors.cardChainFor(entry.item);
-        if (entry.item.isSettingsCard === true)
-            chain.unshift(entry.item);
+        var chain = SearchAnchors.cardChainFor(target);
+        if (target.isSettingsCard === true)
+            chain.unshift(target);
         var collapsedChain = chain.filter(function (c) {
             return c.collapsible === true && c.collapsed === true;
         });
@@ -184,16 +201,22 @@ Flickable {
             // timer (≈ the expand duration) rather than an expand-finished signal —
             // a signal would leak / never fire if the card is re-collapsed
             // mid-animation. _scrollToReveal still defers a frame for final layout.
-            settingsFlickable._revealPendingItem = entry.item;
+            settingsFlickable._revealPendingItem = target;
             // Remember everything we opened, so a reveal that turns out
             // invisible anyway can put them back rather than leaving cards the
             // user deliberately shut yanked open with the page scrolled
             // somewhere unrelated.
             settingsFlickable._revealPendingCards = collapsedChain;
+            var longest = Kirigami.Units.shortDuration;
+            for (var di = 0; di < collapsedChain.length; ++di) {
+                if (collapsedChain[di] && collapsedChain[di].expandDurationMs > longest)
+                    longest = collapsedChain[di].expandDurationMs;
+            }
+            settingsFlickable._pendingExpandDurationMs = longest;
             for (var ci = 0; ci < collapsedChain.length; ++ci)
                 collapsedChain[ci].collapsed = false;
             revealSettleTimer.restart();
-        } else if (!entry.item.visible) {
+        } else if (!target.visible) {
             // Genuinely invisible with no collapsed card to blame: the row is
             // hidden by its own condition, most likely an advanced-only row
             // reached in simple mode. It has no usable geometry, so scrolling
@@ -203,10 +226,11 @@ Flickable {
             // the row disagreed — fall back to the top of the page, which is at
             // least a real destination. Tests effective `visible` rather than
             // the advancedOnly flag so every hiding condition is covered.
+            settingsFlickable._cancelRevealHighlight();
             revealScrollAnim.to = 0;
             revealScrollAnim.restart();
         } else {
-            settingsFlickable._scrollToReveal(entry.item);
+            settingsFlickable._scrollToReveal(target);
         }
     }
 
@@ -219,6 +243,16 @@ Flickable {
     /// bought nothing. Per-element guard: a card destroyed between the expand
     /// and the exit leaves a null here, and an unguarded write would throw
     /// before the remaining cards were put back.
+    /// Kill a highlight left over from a superseded or failed reveal. The
+    /// pulse outlives both the settle window and the expiry, so without this
+    /// the PREVIOUS target keeps a border painted at its old coordinates while
+    /// the page scrolls somewhere else, and two reveals in quick succession
+    /// teleport the single shared highlight mid-pulse.
+    function _cancelRevealHighlight() {
+        revealPulse.stop();
+        revealHighlight.opacity = 0;
+    }
+
     function _revertRevealCards(cards) {
         for (var ri = 0; ri < cards.length; ++ri) {
             if (cards[ri])
@@ -228,9 +262,15 @@ Flickable {
 
     function _cancelPendingReveal() {
         // A superseded reveal by definition no longer needs its cards open.
-        settingsFlickable._revertRevealCards(settingsFlickable._revealPendingCards);
+        // Read into a local and clear the property FIRST, so the revert can
+        // never see a list this call is also mutating — the same discipline
+        // the settle timer uses, and what makes the `var` (detached JS array)
+        // choice on _revealPendingCards correct for every consumer.
+        const cards = settingsFlickable._revealPendingCards;
         settingsFlickable._revealPendingItem = null;
         settingsFlickable._revealPendingCards = [];
+        settingsFlickable._revertRevealCards(cards);
+        settingsFlickable._cancelRevealHighlight();
         settingsFlickable._revealToken = settingsFlickable._revealToken + 1;
         revealSettleTimer.stop();
     }
@@ -263,7 +303,14 @@ Flickable {
     Timer {
         id: revealSettleTimer
 
-        interval: Kirigami.Units.shortDuration + Kirigami.Units.veryShortDuration
+        // Sized from the card's expand animation plus a frame of slack. The
+        // card drives that expand through PhosphorMotionAnimation, which can
+        // apply a global speed multiplier, so a settle hardcoded to raw
+        // Kirigami units can fire while _expandProgress is still below 1 and
+        // the reveal then measures a partly-open card. _scrollToReveal's
+        // single Qt.callLater is one frame, not a slower animation, so it
+        // cannot cover that gap on its own.
+        interval: settingsFlickable._pendingExpandDurationMs + Kirigami.Units.veryShortDuration
         onTriggered: {
             var pending = settingsFlickable._revealPendingItem;
             var pendingCards = settingsFlickable._revealPendingCards;
@@ -290,6 +337,7 @@ Flickable {
                 // speculatively, it bought nothing, and leaving it open is a
                 // visible side effect of a reveal that failed.
                 settingsFlickable._revertRevealCards(pendingCards);
+                settingsFlickable._cancelRevealHighlight();
                 revealScrollAnim.to = 0;
                 revealScrollAnim.restart();
                 return;
@@ -317,6 +365,12 @@ Flickable {
         function onContentYChanged() {
             if (revealScrollAnim.running || settingsFlickable._pendingRevealAnchor === "")
                 return;
+            // Only a MEANINGFUL move counts. A layout-driven nudge (or a clamp
+            // when content shrinks under a scrolled page) is not the user
+            // choosing to go elsewhere, and treating it as one would drop the
+            // deep link for a reason nothing on screen explains.
+            if (Math.abs(settingsFlickable.contentY - settingsFlickable._armedContentY) < Kirigami.Units.gridUnit)
+                return;
             pendingRevealExpiry.stop();
             settingsFlickable._pendingRevealAnchor = "";
         }
@@ -336,6 +390,7 @@ Flickable {
             // Fall back to the top of the page, matching every other dead end
             // in revealAnchor. Dropping the anchor silently left a search
             // result doing nothing at all with no indication why.
+            settingsFlickable._cancelRevealHighlight();
             revealScrollAnim.to = 0;
             revealScrollAnim.restart();
         }

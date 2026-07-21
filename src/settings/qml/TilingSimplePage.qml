@@ -82,7 +82,7 @@ SettingsFlickable {
     // Raised and lowered around the setter call in ONE statement block, which
     // is only correct because the signal it guards against,
     // autotilePerAlgorithmSettingsChanged, is emitted SYNCHRONOUSLY by
-    // Settings::setAutotilePerAlgorithmSettings (settings.cpp, the Q_EMIT sits
+    // Settings::setAutotilePerAlgorithmSettings (src/config/settings.cpp, the Q_EMIT sits
     // directly after the store write, same thread, direct connection). If that
     // setter ever grows a save timer or a queued emit, the flag would already
     // be down when the signal lands and _seedFromAlgorithm would fight the

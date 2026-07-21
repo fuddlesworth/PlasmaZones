@@ -64,7 +64,6 @@ bool PageRegistry::registerPage(Entry entry)
                        << entry.id;
             return false;
         }
-        m_controllerSet.remove(ctrl);
     }
 
     const QString id = entry.id;
@@ -276,8 +275,7 @@ bool PageRegistry::validateCounterparts() const
             // right but which sits under a filtered category still dead-ends on
             // the app fallback — exactly the silent degradation this exists to
             // catch. Check reachability in the mode that hides `e`: a
-            // SimpleOnly page is hidden when advanced, and vice versa. Skipped
-            // for Always, which is never hidden and so never redirects.
+            // SimpleOnly page is hidden when advanced, and vice versa.
             // Which mode hides `e`. For a tiered entry that is its own tier;
             // for an Always entry (never hidden by its OWN tier, but hideable
             // by a filtered ancestor) fall back to the counterpart's tier,

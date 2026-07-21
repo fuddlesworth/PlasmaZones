@@ -38,13 +38,15 @@ RowLayout {
     /** Flat-mode display-title overrides, page id → title (see
      *  Sidebar.flatTitleOverrides). Consulted only while flattenTree. */
     property var flatTitleOverrides: ({})
-    //  Cycle guard EXTENDS ApplicationController::parentChainFor's
-    //  kMaxParentChainHops with a seen-set: the C++ guard catches an
-    //  N-hop cycle after 32 hops + warns; the QML guard breaks on
-    //  first repeat. A misregistered page with `parentId == own id`
+    //  Cycle guard EXTENDS PageRegistry::MaxParentChainHops (which
+    //  ApplicationController::parentChainFor walks against) with a seen-set:
+    //  the C++ guard catches an N-hop cycle after that many hops + warns; the
+    //  QML guard breaks on first repeat. A misregistered page with `parentId == own id`
     //  (or two pages mutually parenting each other) would otherwise
     //  freeze the UI thread on first render.
-    readonly property int _maxParentChainHops: 32
+    //  Bound to the C++ constant rather than re-typing 32 here, so a change to
+    //  the cap cannot leave this walk truncating chains the C++ side accepts.
+    readonly property int _maxParentChainHops: root.controller.registry.maxParentChainHops
     // Bumped whenever the registry emits pageRegistered or visibleSetChanged
     // — gives the
     // `segments` binding below a dependency to track so a late-registered
@@ -235,7 +237,7 @@ RowLayout {
                     hoverEnabled: segmentRow.clickable
                     enabled: segmentRow.clickable
                     cursorShape: segmentRow.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: root.controller.currentPageId = segmentRow.targetId
+                    onClicked: segmentItem._activate()
                 }
             }
 

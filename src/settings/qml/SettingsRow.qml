@@ -84,7 +84,7 @@ Item {
     function _unregisterSearchAnchor() {
         var pg = SearchAnchors.pageFor(root);
         if (pg)
-            pg.unregisterSearchAnchor(root.searchAnchor);
+            pg.unregisterSearchAnchor(root.searchAnchor, root);
     }
 
     RowLayout {

@@ -65,7 +65,7 @@ ExpandableRowDelegate {
     Component.onDestruction: {
         const page = SearchAnchors.pageFor(row);
         if (page)
-            page.unregisterSearchAnchor("profile:" + row.profileId);
+            page.unregisterSearchAnchor("profile:" + row.profileId, row);
     }
 
     // Depth indent: a leading guide so nesting reads at a glance.

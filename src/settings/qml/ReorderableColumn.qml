@@ -199,7 +199,7 @@ Item {
                 if (root.anchorPrefix.length > 0) {
                     var pg = SearchAnchors.pageFor(delegateRoot);
                     if (pg)
-                        pg.unregisterSearchAnchor(root.anchorPrefix + delegateRoot._itemId);
+                        pg.unregisterSearchAnchor(root.anchorPrefix + delegateRoot._itemId, delegateRoot);
                 }
             }
 

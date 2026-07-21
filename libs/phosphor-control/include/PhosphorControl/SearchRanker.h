@@ -19,7 +19,7 @@ namespace PhosphorControl {
  * weighted title > keywords > subtitle:
  *
  *   exact (1000) > prefix (800) > word-start prefix (600) > substring (400)
- *     > subsequence (120–360, denser = higher)
+ *     > subsequence (120–330, denser = higher)
  *
  * A score of 0 means "no match" (filtered out). Edit distance is offered
  * separately as `closestTitle()` for a "did you mean …" fallback that callers
@@ -32,7 +32,9 @@ class PHOSPHORCONTROL_EXPORT SearchRanker
 public:
     /// Score `entry` against `query` (case-insensitive). 0 = no match.
     ///
-    /// Folds `query` on EVERY call, so it is a single-entry probe, not a loop
+    /// Retained as exported API and as the tested reference implementation of
+    /// the tiering; it has no in-tree production caller (rank() is what the
+    /// controller uses). Folds `query` on EVERY call, so it is a single-entry probe, not a loop
     /// body. `rank()` is the loop-safe entry point: it folds the query once
     /// and matches against each entry's pre-folded fields. Adopting this in a
     /// loop would reintroduce the per-entry folding cost rank() avoids.
@@ -44,6 +46,8 @@ public:
 
     /// Classic Levenshtein edit distance over foldForSearch-normalised
     /// inputs, so it is case-, accent- and ß-insensitive.
+    /// Retained as exported API; no in-tree production caller (closestTitle
+    /// uses the pre-folded variant so it folds each side once).
     static int editDistance(const QString& a, const QString& b);
 
     /// Title of the entry whose title is the closest edit-distance match to
@@ -68,9 +72,14 @@ public:
      *
      *  LOSSY BY DESIGN where a combining mark carries meaning: Vietnamese tone
      *  marks collapse, so má / mà / mả all fold to "ma" and such a query
-     *  matches more titles than it names. The error direction is deliberate —
-     *  both sides fold identically, so this only ever WIDENS the result set
-     *  rather than hiding a match, and the user still reads the real titles.
+     *  matches more titles than it names. Both sides fold identically, so that
+     *  case only ever WIDENS the result set rather than hiding a match.
+     *
+     *  It does NOT fold characters with no canonical decomposition: ø, ł, đ
+     *  and ı survive, so "Størrelse" is not reachable by typing "storrelse".
+     *  That direction NARROWS, unlike the combining-mark case above. ß is
+     *  special-cased because it is the one such character common enough in
+     *  settings text to matter.
      *
      *  Returns an EMPTY string for input that is entirely combining marks.
      *  Callers matching with contains() must guard that case: contains("") is

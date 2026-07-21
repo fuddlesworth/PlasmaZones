@@ -96,6 +96,13 @@ Item {
     /// Stable type marker so a contained SettingsRow can identify its hosting
     /// card by walking up the parent chain (used to expand the card on reveal).
     readonly property bool isSettingsCard: true
+
+    /// How long this card's expand actually takes, resolved rather than
+    /// assumed. PhosphorMotionAnimation can apply a global speed multiplier on
+    /// top of durationOverride, so a consumer that waits a hardcoded Kirigami
+    /// duration before measuring the card can measure it half-open. The reveal
+    /// path in SettingsFlickable sizes its settle timer from this.
+    readonly property int expandDurationMs: expandMotion.duration
     /// Opacity applied to the card body when the master toggle is off. Kept
     /// high enough that muted content stays legible — the disabled palette
     /// already greys the text, so a low opacity on top compounds into an
@@ -180,7 +187,7 @@ Item {
     function _unregisterSearchAnchor() {
         var pg = SearchAnchors.pageFor(root);
         if (pg)
-            pg.unregisterSearchAnchor(root.searchAnchor);
+            pg.unregisterSearchAnchor(root.searchAnchor, root);
     }
     Layout.fillWidth: true
     implicitHeight: cardBg.height
@@ -482,6 +489,8 @@ Item {
                 id: expandAnim
 
                 PhosphorMotionAnimation {
+                    id: expandMotion
+
                     target: root
                     properties: "_expandProgress"
                     to: 1

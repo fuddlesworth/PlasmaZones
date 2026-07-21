@@ -77,7 +77,7 @@ Item {
     Component.onDestruction: {
         var pg = SearchAnchors.pageFor(root);
         if (pg)
-            pg.unregisterSearchAnchor("layout:" + root.modelData.id);
+            pg.unregisterSearchAnchor("layout:" + root.modelData.id, root);
     }
 
     Accessible.name: modelData.displayName || i18n("Unnamed Layout")

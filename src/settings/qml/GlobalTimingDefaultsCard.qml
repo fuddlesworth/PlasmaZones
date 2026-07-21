@@ -117,14 +117,23 @@ SettingsCard {
 
     // Commit the editor's working state back to the Global profile.
     function _commitEditor() {
+        // try/finally, not a straight-line set/clear pair: QML has no RAII, and
+        // a throw between them (cardSettings resolving undefined during a page
+        // teardown, a property write rejecting) would latch the flag TRUE. That
+        // is permanent, not transient — both change handlers would stop
+        // re-seeding the editor for the rest of the session. Same hazard and
+        // same shape as AnimationEventCard._committing.
         card._committingEditor = true;
-        if (editor.timingMode === CurvePresets.timingModeSpring)
-            card._writeSpring(editor.springOmega, editor.springZeta);
-        else
-            card._writeEasing(editor.easingCurve);
-        if (card.cardSettings.animationDuration !== editor.duration)
-            card.cardSettings.animationDuration = editor.duration;
-        card._committingEditor = false;
+        try {
+            if (editor.timingMode === CurvePresets.timingModeSpring)
+                card._writeSpring(editor.springOmega, editor.springZeta);
+            else
+                card._writeEasing(editor.easingCurve);
+            if (card.cardSettings.animationDuration !== editor.duration)
+                card.cardSettings.animationDuration = editor.duration;
+        } finally {
+            card._committingEditor = false;
+        }
     }
 
     Component.onCompleted: {

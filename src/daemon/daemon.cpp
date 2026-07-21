@@ -558,38 +558,54 @@ void Daemon::publishActiveAnimationProfile()
             auto rawIt = m_rawJsonProfiles.constFind(*path);
             if (rawIt == m_rawJsonProfiles.constEnd()) {
                 const auto owned = reg.resolve(*path);
-                if (!owned.has_value()) {
+                if (owned.has_value()) {
+                    rawIt = m_rawJsonProfiles.insert(*path, *owned);
+                } else {
                     // The loader claims this path but the registry has no
                     // entry for it. That is an invariant violation, not a
                     // normal state, and silently continuing would leave the
                     // path with no profile at all.
+                    //
+                    // Fall through to the untagged publish at the bottom of
+                    // the loop, and cache NOTHING. Registering an untagged
+                    // profile from inside this branch would be self-poisoning
+                    // twice over: the loader's "direct owner always wins" rule
+                    // makes it skip the path forever, while hasPath() stays
+                    // true, so every later tick would re-enter here, snapshot
+                    // the all-engaged settings profile AS the raw base, then
+                    // compare equal and drop every subsequent user edit —
+                    // unrecoverable short of a daemon restart. Falling through
+                    // re-evaluates settingsProfile fresh on every tick instead.
                     qCWarning(lcCore) << "animation profile publish: loader owns" << *path
                                       << "but the registry has no entry — publishing settings defaults instead";
-                    reg.registerProfile(*path, settingsProfile);
-                    continue;
                 }
-                rawIt = m_rawJsonProfiles.insert(*path, *owned);
             }
 
-            Profile mergedProfile = rawIt.value();
-            if (!mergedProfile.duration.has_value())
-                mergedProfile.duration = settingsProfile.duration;
-            if (!mergedProfile.curve)
-                mergedProfile.curve = settingsProfile.curve;
-            if (!mergedProfile.minDistance.has_value())
-                mergedProfile.minDistance = settingsProfile.minDistance;
-            if (!mergedProfile.sequenceMode.has_value())
-                mergedProfile.sequenceMode = settingsProfile.sequenceMode;
-            if (!mergedProfile.staggerInterval.has_value())
-                mergedProfile.staggerInterval = settingsProfile.staggerInterval;
-            if (!mergedProfile.presetName.has_value())
-                mergedProfile.presetName = settingsProfile.presetName;
-            // Re-registered under the JSON's own owner tag so the loader's
-            // next reloadFromOwner still replaces it.
-            if (!reg.resolve(*path).has_value() || *reg.resolve(*path) != mergedProfile) {
+            if (rawIt != m_rawJsonProfiles.constEnd()) {
+                Profile mergedProfile = rawIt.value();
+                if (!mergedProfile.duration.has_value())
+                    mergedProfile.duration = settingsProfile.duration;
+                if (!mergedProfile.curve)
+                    mergedProfile.curve = settingsProfile.curve;
+                if (!mergedProfile.minDistance.has_value())
+                    mergedProfile.minDistance = settingsProfile.minDistance;
+                if (!mergedProfile.sequenceMode.has_value())
+                    mergedProfile.sequenceMode = settingsProfile.sequenceMode;
+                if (!mergedProfile.staggerInterval.has_value())
+                    mergedProfile.staggerInterval = settingsProfile.staggerInterval;
+                if (!mergedProfile.presetName.has_value())
+                    mergedProfile.presetName = settingsProfile.presetName;
+                // Re-registered under the JSON's own owner tag so the loader's
+                // next reloadFromOwner still replaces it.
+                //
+                // No pre-check: registerProfile already compares BOTH value and
+                // owner before inserting or emitting, so a guard here would be
+                // dead, would cost two extra locked resolve() calls on a ~30 Hz
+                // path, and — comparing value only — would miss an owner-only
+                // difference that registerProfile does correct.
                 reg.registerProfile(*path, mergedProfile, reg.ownerOf(*path));
+                continue;
             }
-            continue;
         }
         reg.registerProfile(*path, settingsProfile);
     }

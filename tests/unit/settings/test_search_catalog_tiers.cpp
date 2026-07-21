@@ -72,8 +72,31 @@ QString stripLineComments(const QString& src)
     QString out;
     const QStringList lines = src.split(QLatin1Char('\n'));
     for (const QString& line : lines) {
-        const int idx = line.indexOf(QStringLiteral("//"));
-        out += (idx >= 0 ? line.left(idx) : line);
+        // String-aware: a naive indexOf("//") truncates at the "//" inside a
+        // URL literal. AboutPage.qml has `u.startsWith("https://") ... ) {`,
+        // where that would delete the line's opening brace and leave the
+        // caller's brace stack off by one for the entire rest of the file.
+        // Escapes are honoured so a literal \" cannot end the span early.
+        int cut = -1;
+        QChar quote;
+        for (int i = 0; i < line.size(); ++i) {
+            const QChar c = line.at(i);
+            if (!quote.isNull()) {
+                if (c == QLatin1Char('\\')) {
+                    ++i;
+                } else if (c == quote) {
+                    quote = QChar();
+                }
+                continue;
+            }
+            if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
+                quote = c;
+            } else if (c == QLatin1Char('/') && i + 1 < line.size() && line.at(i + 1) == QLatin1Char('/')) {
+                cut = i;
+                break;
+            }
+        }
+        out += (cut >= 0 ? line.left(cut) : line);
         out += QLatin1Char('\n');
     }
     return out;
@@ -104,7 +127,7 @@ struct Block
 /// LIMITATION: braces are counted lexically, including any inside string
 /// literals and JS expression bodies. One unbalanced brace in a QML string
 /// would shift every block boundary after it and silently mis-attribute
-/// anchors in either direction. No parsed file contains one today, and
+/// anchors in either direction. No parsed file contains one today (verified across all src/settings/qml/*Page.qml), and
 /// theParserFindsAdvancedAnchors' per-file assertions would fail loudly if a
 /// shift ever collapsed a file's parse. Teach this to skip quoted spans before
 /// pointing it at a third file.
@@ -280,7 +303,7 @@ private Q_SLOTS:
                 ++i;
             }
             const QString body = catalogSrc.mid(m.capturedEnd(), i - m.capturedEnd());
-            if (body.contains(QStringLiteral("advancedOnly=*/true"))) {
+            if (body.contains(QLatin1String("advancedOnly=*/true"))) {
                 flagged.insert(m.captured(1) + QLatin1Char('/') + m.captured(2));
             }
         }

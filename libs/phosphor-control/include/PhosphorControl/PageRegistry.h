@@ -51,6 +51,7 @@ class PHOSPHORCONTROL_EXPORT PageRegistry : public QObject
     /// behaviour. The value is app UI state — the app drives it (persisted
     /// however the app likes); the registry only consumes it for filtering.
     Q_PROPERTY(bool showAdvanced READ showAdvanced WRITE setShowAdvanced NOTIFY showAdvancedChanged)
+    Q_PROPERTY(int maxParentChainHops READ maxParentChainHops CONSTANT)
 
 public:
     /// Per-entry visibility tier for the simple/advanced split. `Always`
@@ -76,6 +77,15 @@ public:
     /// translation unit: the two walks have to agree, and a comment asking a
     /// human to keep two constants in step is not a mechanism.
     static constexpr int MaxParentChainHops = 32;
+
+    /// The same bound, readable from QML. Breadcrumbs runs its own upward walk
+    /// with a seen-set cycle guard and needs the identical cap: a QML copy of
+    /// the literal is exactly the "two constants a human must keep in step"
+    /// the comment above rejects, one language further out.
+    int maxParentChainHops() const
+    {
+        return MaxParentChainHops;
+    }
 
     /**
      * Public-by-value view of a registry entry. Consumers receive copies
@@ -188,14 +198,23 @@ public:
      *  "hidden, or unverifiable" rather than strictly "hidden by tier" — the
      *  safe direction for every consumer, all of which treat false as skip. */
     bool pageAllowedInCurrentMode(const QString& id) const;
-    /** Log a warning for every entry whose `counterpartId` names a page that
-     *  does not exist, is itself, sits in the SAME tier (so a mode flip would
-     *  redirect to something equally hidden), does not name this entry back
-     *  (a one-way declaration dead-ends the RETURN flip on the app fallback),
-     *  is not navigable (a category with no QML of its own — the redirect would
-     *  land on an empty page body), or is itself unreachable in the mode that
-     *  hides this entry (an ancestor category filters it out, so the redirect
-     *  falls back anyway).
+    /** Log a warning for every entry whose `counterpartId` is broken. Listed
+     *  in the order the warnings are emitted, which the tests assert:
+     *  the counterpart is this entry ITSELF; it names a page that does not
+     *  exist; it does not name this entry back (a one-way declaration
+     *  dead-ends the RETURN flip on the app fallback); it sits in the SAME
+     *  tier (so a mode flip would redirect to something equally hidden); it is
+     *  not navigable (a category with no QML of its own, so the redirect would
+     *  land on an empty page body); or it is itself unreachable in the mode
+     *  that hides this entry (an ancestor category filters it out, so the
+     *  redirect falls back anyway).
+     *
+     *  Reciprocity is checked BEFORE the tier fault and does not share its
+     *  skip, because the two are independent: a pair that is both same-tier
+     *  and one-way has two faults and must report both.
+     *
+     *  NOT exhaustive for the runtime gate: the app additionally requires the
+     *  counterpart to be in its own valid-page set, which this cannot see.
      *  Counterparts are stored unvalidated at registration because the target
      *  may be registered later, and nothing else ever checks them: a typo
      *  silently degrades every affected mode flip and deep link to the
@@ -231,12 +250,17 @@ public:
 
     // QML-facing accessors. Return dicts whose canonical key set lives in
     // entryToVariant() (pageregistry.cpp): id, parentId, title, iconSource,
-    // qmlSource, isCollapsible, hasDividerAfter, hasQmlSource. Used by
-    // Sidebar.qml + Breadcrumbs.qml to drive their Repeaters without
-    // needing a custom QAbstractListModel. `visibility` and `counterpartId`
-    // are deliberately C++-only: tier filtering is applied here, inside the
-    // tree accessors, so QML never needs to re-derive it, and the
-    // counterpart is navigation policy the app owns.
+    // qmlSource, isCollapsible, hasDividerAfter, hasQmlSource. `visibility`
+    // and `counterpartId` are deliberately C++-only: tier filtering is applied
+    // here, inside the tree accessors, so QML never needs to re-derive it, and
+    // the counterpart is navigation policy the app owns.
+    //
+    // topLevelPagesData / childPagesData have NO in-tree consumer: the rail
+    // moved to SidebarRows and Breadcrumbs uses pageData / firstVisibleLeafId.
+    // Retained as exported API for out-of-tree consumers, and covered by tests
+    // so the serialization contract cannot rot. Same standing as
+    // setPageVisibility. pageData / allPagesData ARE live (PageHost.qml,
+    // SettingsAppWindow.qml).
     Q_INVOKABLE QVariantList topLevelPagesData() const;
     Q_INVOKABLE QVariantList childPagesData(const QString& parentId) const;
     Q_INVOKABLE QVariantMap pageData(const QString& id) const;

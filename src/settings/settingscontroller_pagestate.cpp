@@ -416,7 +416,7 @@ bool SettingsController::isPageDirty(const QString& page) const
             return shaderTreeScopeDiffers(m_settings.shaderProfileTree(), m_settings.committedShaderProfileTree(),
                                           scope);
         }
-        // WholeTree library leaves (presets / sets / shaders).
+        // WholeTree library leaves (presets / motion sets / shaders).
         if (m_animationsPage != nullptr && m_animationsPage->hasPendingChanges())
             return true;
         for (const auto& gk : animationConfigKeys()) {

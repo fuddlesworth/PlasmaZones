@@ -89,7 +89,11 @@ int subsequenceScore(const QString& hay, const QString& n)
         prevMatch = hi;
         ++hi;
     }
-    return std::max(120, 360 - std::min(gaps, 8) * 30);
+    // Floor is structural: gaps is clamped to 8, so 360 - 8*30 == 120 already.
+    // No std::max needed, and the reachable TOP is 330 rather than 360 —
+    // fieldScore only reaches here after contains() has failed, so a
+    // zero-gap (contiguous) match cannot arrive.
+    return 360 - std::min(gaps, 8) * 30;
 }
 
 // Best tier score for a single ALREADY-FOLDED field against an already-folded
