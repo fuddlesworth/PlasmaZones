@@ -685,9 +685,14 @@ ColumnLayout {
             root._refreshModel();
         }
 
-        // Flipping the simple/advanced master toggle re-filters which pages
-        // the registry's tree accessors emit, so the rail must rebuild.
-        function onShowAdvancedChanged() {
+        // The rail is built from the registry's tier-filtered tree accessors,
+        // so it rebuilds whenever the visible set changes. That covers both a
+        // simple/advanced master flip and a per-entry setPageVisibility
+        // restamp — visibleSetChanged rather than showAdvancedChanged, which
+        // fires only for the former and would leave a restamped entry stale
+        // in the rail while search (the other tier-filtering consumer) had
+        // already rebuilt.
+        function onVisibleSetChanged() {
             root._refreshModel();
         }
 
