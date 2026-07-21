@@ -101,10 +101,6 @@ ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.smallSpacing
                     appSettings: settingsController
-                    // showLabel is hard-off here, so AlgorithmPreview.algorithmName
-                    // could never render — the card deliberately titles itself
-                    // instead. No algorithmName is forwarded for that reason.
-                    showLabel: false
                     algorithmId: card.algorithmId
                     windowCount: card.windowCount
                     splitRatio: card.splitRatio

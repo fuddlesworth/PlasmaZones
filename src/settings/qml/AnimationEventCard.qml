@@ -363,7 +363,15 @@ Item {
         // the resolved profile from the parent chain. When on, the
         // raw fields decide.
         var effective = hasRaw ? raw : resolved;
-        var curve = effective.curve;
+        // Timing MODE follows the curve that actually applies, which is not
+        // always the one on this card's own override. A simple-mode edit
+        // commits duration WITHOUT a curve (see commitOverride) precisely so
+        // the curve keeps inheriting, so `effective.curve` is absent while an
+        // inherited spring still governs. Reading only `effective` would force
+        // Easing and draw a Duration slider that a resolved spring ignores,
+        // while suppressing the hint that explains why. Duration still comes
+        // from `effective` below — only the mode falls back.
+        var curve = (typeof effective.curve === "string" && effective.curve.length > 0) ? effective.curve : resolved.curve;
         if (typeof curve === "string" && curve.indexOf("spring:") === 0) {
             var parts = curve.substring(7).split(",");
             var w = parseFloat(parts[0]);
@@ -397,8 +405,17 @@ Item {
         // curve changes, and simple mode shows no control hinting that a curve
         // override exists or how to clear it. Carry the curve only when the
         // card already owns one, or when the user can actually see and edit it.
-        var raw = settingsController.animationsPage.rawProfile(root.eventPath) || ({});
-        var ownsCurve = typeof raw.curve === "string" && raw.curve.length > 0;
+        // Ask EVERY write path, not just the primary. `_setOverrideOnAll`
+        // writes this one object to the primary and every mirror, and the
+        // controller truncates each profile file wholesale, so deciding from
+        // the primary alone would drop a curve a mirror owns (or pin the
+        // primary's onto a mirror that inherits) — splitting a group the card
+        // presents as one. OR-ing normalises toward KEEPING an existing curve,
+        // which is the non-destructive direction.
+        var ownsCurve = root._writePaths.some(function (p) {
+            var r = settingsController.animationsPage.rawProfile(p) || ({});
+            return typeof r.curve === "string" && r.curve.length > 0;
+        });
         if (!root.simpleTiming || ownsCurve)
             profile.curve = root.currentCurveString;
         root._setOverrideOnAll(profile);
@@ -676,6 +693,9 @@ Item {
                     void (root._shaderRegistryRev);
                     return editor.shaderEffectId.length > 0 ? settingsController.animationsPage.shaderParameters(editor.shaderEffectId) : [];
                 }
+                // Lock state is deliberately not handled here: it is working
+                // state only, and AnimationProfileEditor does not re-emit it
+                // (see its ShaderParamsEditor handler). Nothing to connect.
                 onShaderEffectActivated: function (id) {
                     var sid = id || "";
                     // The no-op guards below test EVERY write path, not

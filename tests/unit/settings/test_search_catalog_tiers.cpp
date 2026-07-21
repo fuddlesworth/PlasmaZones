@@ -209,11 +209,6 @@ private Q_SLOTS:
     /// silently stops matching turns the whole test into a vacuous pass.
     void theParserFindsAdvancedAnchors()
     {
-        // Per-file, not just a global total: a bare `total >= N` stays green
-        // when one file's parse collapses and another's grows, which is exactly
-        // the half-broken-regex case this test exists to catch. Every file in
-        // the map carries advanced anchors by construction — that is why it is
-        // in the map — so each must contribute at least one.
         // Per-file rather than a global floor. `total >= 20` stayed green when
         // one file's parse collapsed and another's grew — exactly the
         // half-broken-regex case this exists to catch. Every file in the map is

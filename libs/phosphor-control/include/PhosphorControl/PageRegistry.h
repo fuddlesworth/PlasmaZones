@@ -68,6 +68,15 @@ public:
     };
     Q_ENUM(PageVisibility)
 
+    /// Depth bound for upward parent walks, shared by this class and
+    /// ApplicationController::parentChainFor. registerPage rejects an entry
+    /// whose parent is not already registered, so the graph is a DAG and a
+    /// walk always terminates — this only bounds pathological nesting (real
+    /// sidebars nest 3-4 deep). Declared here rather than duplicated per
+    /// translation unit: the two walks have to agree, and a comment asking a
+    /// human to keep two constants in step is not a mechanism.
+    static constexpr int MaxParentChainHops = 32;
+
     /**
      * Public-by-value view of a registry entry. Consumers receive copies
      * via topLevelPages() / childPages() / allPages() / entry(); they
@@ -172,7 +181,12 @@ public:
      *  filter, not an existence check; validate with hasPage() first. It
      *  does NOT apply the empty-category descendant rule the tree accessors
      *  use — that asks "is this category worth drawing", not "may the user
-     *  navigate here". */
+     *  navigate here".
+     *
+     *  Reports FALSE for a page whose ancestry could not be resolved within
+     *  MaxParentChainHops, and logs why (once per id). So a false answer means
+     *  "hidden, or unverifiable" rather than strictly "hidden by tier" — the
+     *  safe direction for every consumer, all of which treat false as skip. */
     bool pageAllowedInCurrentMode(const QString& id) const;
     /** Log a warning for every entry whose `counterpartId` names a page that
      *  does not exist, is itself, sits in the SAME tier (so a mode flip would
@@ -227,6 +241,15 @@ public:
      *  toast that names every page still dirty after applyAll()). */
     Q_INVOKABLE QVariantList allPagesData() const;
 
+    /// Key under which the page-data dicts above carry the title. Exposed so
+    /// SidebarRows::flatPageData can override that field through the SAME
+    /// constant the registry writes it with, rather than its own independent
+    /// "title" literal — two spellings of one schema key means a rename here
+    /// would silently ADD a second key over there instead of overriding, and
+    /// the assertion on the literal would stay green while the UI read the
+    /// un-overridden value.
+    static QLatin1String titleKey();
+
 Q_SIGNALS:
     void pageRegistered(const QString& id);
     void showAdvancedChanged();
@@ -245,6 +268,14 @@ private:
     /// True iff `v` should be shown under the current `m_showAdvanced` mode
     /// (Always always; AdvancedOnly iff advanced; SimpleOnly iff simple).
     bool modeAllows(PageVisibility v) const;
+    /// modeAllows against an EXPLICIT mode rather than the current one, so
+    /// validateCounterparts can ask "would this be reachable in the mode that
+    /// hides its partner" without mutating m_showAdvanced.
+    static bool modeAllowsIn(PageVisibility v, bool advanced);
+    /// pageAllowedInCurrentMode against an explicit mode. Same ancestor walk,
+    /// same fail-closed behaviour; the public accessor binds `advanced` to
+    /// m_showAdvanced.
+    bool allowedInMode(const QString& id, bool advanced) const;
     /// Full visibility test for a sidebar tree accessor: the entry's own
     /// tier must match the mode AND, for a virtual node (no qmlSource), at
     /// least one descendant must itself be visible — so an emptied-out
@@ -267,6 +298,11 @@ private:
     // registrations. The set lookup keeps registration O(1) for
     // catalogues that grow to dozens of pages.
     QSet<PageController*> m_controllerSet;
+    /// Ids already warned about for an unresolvable ancestor chain. The check
+    /// runs per entry per search-index rebuild and per keyboard/history step,
+    /// so the diagnostic is once-per-id rather than once-per-call. Mutable
+    /// because the reachability query is const.
+    mutable QSet<QString> m_depthWarned;
 };
 
 } // namespace PhosphorControl

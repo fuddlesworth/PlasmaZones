@@ -10,12 +10,26 @@
 #include <QDebug>
 #include <QScopeGuard>
 
+#include <algorithm>
+
 namespace PhosphorControl {
 
 ApplicationController::ApplicationController(QObject* parent)
     : QObject(parent)
     , m_registry(new PageRegistry(this))
 {
+    // canGoBack/canGoForward are computed from the tier, not just from stack
+    // emptiness, so a mode flip (or a per-entry restamp) can change them
+    // without any navigation happening. Nothing else re-evaluates them, which
+    // would leave the chrome's Back/Forward `enabled` bindings frozen at their
+    // pre-flip value.
+    //
+    // Unconditional emit, matching this signal's documented "may have flipped"
+    // contract: it is the NOTIFY for two COMPUTED properties, so a redundant
+    // emit costs one binding re-evaluation rather than asserting a change that
+    // did not happen. The navigation paths that CAN cheaply diff before/after
+    // still do (setCurrentPageId, stepHistory).
+    connect(m_registry, &PageRegistry::visibleSetChanged, this, &ApplicationController::historyChanged);
 }
 
 ApplicationController::~ApplicationController() = default;
@@ -356,14 +370,42 @@ QString ApplicationController::gotoNextPage()
     return m_currentPageId;
 }
 
+bool ApplicationController::isUsableHistoryEntry(const QString& id) const
+{
+    // Deliberately NOT including stepHistory's `target == m_currentPageId`
+    // clause. That one is stack hygiene for the step (defensive only —
+    // setCurrentPageId's same-id early-return means recording never produces
+    // such an entry), whereas this answers a capability question: does the
+    // trail hold somewhere reachable? Folding the current page in would make
+    // canGoBack depend on m_currentPageId, so setCurrentPageId would emit
+    // historyChanged from inside stepHistory's own before/after diff and
+    // double-fire every history step.
+    return m_registry->hasPage(id) && m_registry->pageAllowedInCurrentMode(id);
+}
+
 bool ApplicationController::canGoBack() const
 {
-    return !m_backHistory.isEmpty();
+    // Answers "will goBack() actually move", not "is the stack non-empty".
+    // stepHistory skips entries that are unregistered or hidden by the current
+    // tier, so a bare emptiness check disagrees with it whenever EVERY entry is
+    // hidden — reachable by visiting only advanced pages, then entering simple
+    // mode. Two things break on that divergence, both in the chrome: the Back
+    // button renders enabled and does nothing when clicked, and
+    // Keys.onShortcutOverride claims Alt+Left on this flag, so the key is
+    // consumed out of the shortcut map and then swallowed by a goBack() that
+    // returns empty. That is precisely the "only claim a key when the direction
+    // has somewhere to go" contract the chrome documents.
+    return std::any_of(m_backHistory.cbegin(), m_backHistory.cend(), [this](const QString& id) {
+        return isUsableHistoryEntry(id);
+    });
 }
 
 bool ApplicationController::canGoForward() const
 {
-    return !m_forwardHistory.isEmpty();
+    // Symmetric with canGoBack — same predicate, same rationale.
+    return std::any_of(m_forwardHistory.cbegin(), m_forwardHistory.cend(), [this](const QString& id) {
+        return isUsableHistoryEntry(id);
+    });
 }
 
 // One step along the recorded trail: pop the newest entry from @p from,
@@ -393,8 +435,7 @@ QString ApplicationController::stepHistory(QStringList& from, QStringList& to)
         // return the hidden id it "went to" while the gate silently bounced
         // the user to a third page, so the button appears to teleport and
         // the returned id no longer matches currentPageId.
-        if (target == m_currentPageId || !m_registry->hasPage(target)
-            || !m_registry->pageAllowedInCurrentMode(target)) {
+        if (target == m_currentPageId || !isUsableHistoryEntry(target)) {
             continue;
         }
         if (!m_currentPageId.isEmpty()) {
@@ -429,12 +470,13 @@ QString ApplicationController::goForward()
 
 QStringList ApplicationController::parentChainFor(const QString& id) const
 {
-    // Nesting-depth cap. 32 hops is well above any realistic sidebar
-    // nesting (typical settings apps cap at 3-4 levels). PageRegistry::
-    // registerPage refuses an entry whose parentId isn't already
-    // registered, which makes registry-internal cycles structurally
-    // impossible — so this cap is purely a nesting-depth limit.
-    constexpr int kMaxParentChainHops = 32;
+    // Nesting-depth cap, shared with PageRegistry's reachability walk so the
+    // two cannot drift. 32 hops is well above any realistic sidebar nesting
+    // (typical settings apps cap at 3-4 levels). PageRegistry::registerPage
+    // refuses an entry whose parentId isn't already registered, which makes
+    // registry-internal cycles structurally impossible — so this cap is purely
+    // a nesting-depth limit.
+    constexpr int kMaxParentChainHops = PageRegistry::MaxParentChainHops;
 
     QStringList chain;
     QString cursor = id;

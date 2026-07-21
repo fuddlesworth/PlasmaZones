@@ -254,6 +254,15 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
     // no match metadata and would break the result list's reading order.
     const QString needle = searchText.toLower();
     QSet<QString> seen;
+    // Destinations already offered. A child's breadcrumb carries its ancestors'
+    // titles, so a needle matching a CATEGORY title also matches every
+    // descendant breadcrumb: the leaves emit their own rows, and then the
+    // category wants to emit a landing row aimed at findFirstNavigable() —
+    // which is one of those very leaves. Two rows, one destination, different
+    // titles. The leaf's own row wins because it names the destination exactly
+    // ("Snapping / Behavior"), where the category's names only the ancestor
+    // ("Snapping") and relies on the reader knowing where it lands.
+    QSet<QString> emitted;
 
     // Walk down until a navigable descendant appears, so a category-only
     // parent whose TITLE matches still routes the user somewhere useful.
@@ -275,57 +284,75 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
         return {};
     };
 
-    const std::function<void(const QString&, const QString&, int)> collect = [&](const QString& parentId,
-                                                                                 const QString& breadcrumb, int depth) {
-        if (depth > kMaxWalkDepth) {
-            qWarning() << "SidebarRows: page tree nested deeper than" << kMaxWalkDepth << "levels under id" << parentId
-                       << "— matches below this point are omitted from the results";
-            return;
-        }
-        const QList<PageRegistry::Entry> kids = m_registry->visibleChildPages(parentId);
-        for (const PageRegistry::Entry& child : kids) {
-            if (seen.contains(child.id)) {
-                continue;
+    // Takes `kids` by parameter rather than re-fetching, mirroring the tree
+    // walk above. visibleChildPages is a full scan of m_pages with an ancestor
+    // walk per entry, and the caller has already fetched this exact list to
+    // compute the has-children predicate — search runs on every keystroke, so
+    // fetching it twice per node made the walk quadratic in the catalogue for
+    // no new information.
+    const std::function<void(const QString&, const QList<PageRegistry::Entry>&, const QString&, int)> collect =
+        [&](const QString& parentId, const QList<PageRegistry::Entry>& kids, const QString& breadcrumb, int depth) {
+            if (depth > kMaxWalkDepth) {
+                qWarning() << "SidebarRows: page tree nested deeper than" << kMaxWalkDepth << "levels under id"
+                           << parentId << "— matches below this point are omitted from the results";
+                return;
             }
-            seen.insert(child.id);
-
-            const QList<PageRegistry::Entry> grandKids = m_registry->visibleChildPages(child.id);
-            const bool grand = !grandKids.isEmpty();
-
-            // A flat-mode OVERRIDDEN id must read the same as its rail row:
-            // take the override and DROP the ancestor breadcrumb, since the
-            // override exists precisely because the registered title reads
-            // wrong without its ancestors — which is what a breadcrumb would
-            // restore. Non-overridden rows keep their breadcrumb even though
-            // the flat rail shows none: search results span every scope, so
-            // ancestor context is the only thing telling same-named leaves
-            // apart.
-            const auto override_ = flatTitleOverrides.constFind(child.id);
-            const bool flatOverridden = flattenTree && override_ != flatTitleOverrides.constEnd();
-            const QString childBreadcrumb = flatOverridden
-                ? override_.value().toString()
-                : (breadcrumb.isEmpty() ? child.title : breadcrumb + QStringLiteral(" / ") + child.title);
-
-            // Always recurse so descendants can match.
-            if (grand) {
-                collect(child.id, childBreadcrumb, depth + 1);
-            }
-
-            const bool matchesNeedle = childBreadcrumb.toLower().contains(needle);
-            if (!child.qmlSource.isEmpty()) {
-                if (matchesNeedle) {
-                    out.append(
-                        makeRow(child.id, childBreadcrumb, child.iconSource, true, 0, false, false, false, false));
+            for (const PageRegistry::Entry& child : kids) {
+                if (seen.contains(child.id)) {
+                    continue;
                 }
-            } else if (matchesNeedle && grand) {
-                const PageRegistry::Entry landing = findFirstNavigable(child.id, depth + 1);
-                if (!landing.id.isEmpty()) {
-                    out.append(
-                        makeRow(landing.id, childBreadcrumb, landing.iconSource, true, 0, false, false, false, false));
+                seen.insert(child.id);
+
+                const QList<PageRegistry::Entry> grandKids = m_registry->visibleChildPages(child.id);
+                const bool grand = !grandKids.isEmpty();
+
+                // A flat-mode OVERRIDDEN id must read the same as its rail row:
+                // take the override and DROP the ancestor breadcrumb, since the
+                // override exists precisely because the registered title reads
+                // wrong without its ancestors — which is what a breadcrumb would
+                // restore. Non-overridden rows keep their breadcrumb even though
+                // the flat rail shows none: search results span every scope, so
+                // ancestor context is the only thing telling same-named leaves
+                // apart.
+                const auto override_ = flatTitleOverrides.constFind(child.id);
+                const bool flatOverridden = flattenTree && override_ != flatTitleOverrides.constEnd();
+                const QString childBreadcrumb = flatOverridden
+                    ? override_.value().toString()
+                    : (breadcrumb.isEmpty() ? child.title : breadcrumb + QStringLiteral(" / ") + child.title);
+
+                // Always recurse so descendants can match. grandKids is handed
+                // down rather than re-fetched inside.
+                if (grand) {
+                    collect(child.id, grandKids, childBreadcrumb, depth + 1);
+                }
+
+                const bool matchesNeedle = childBreadcrumb.toLower().contains(needle);
+                if (!child.qmlSource.isEmpty()) {
+                    if (matchesNeedle) {
+                        out.append(
+                            makeRow(child.id, childBreadcrumb, child.iconSource, true, 0, false, false, false, false));
+                        emitted.insert(child.id);
+                    }
+                } else if (matchesNeedle && grand) {
+                    const PageRegistry::Entry landing = findFirstNavigable(child.id, depth + 1);
+                    // Reached only in FLAT mode, and only for a category whose
+                    // descendants carry a flatTitleOverrides entry. In tree mode a
+                    // leaf's breadcrumb is `ancestor / leaf`, so any needle
+                    // matching this category also matches every descendant, each of
+                    // which emitted its own (more precise) row and populated
+                    // `emitted` during the recursion above — the guard below then
+                    // always fires. A flat override REPLACES the breadcrumb, so
+                    // there the descendant can fail to match while the category
+                    // matches, and this row is the only thing that would offer the
+                    // destination. Kept for that case; it is not dead.
+                    if (!landing.id.isEmpty() && !emitted.contains(landing.id)) {
+                        out.append(makeRow(landing.id, childBreadcrumb, landing.iconSource, true, 0, false, false,
+                                           false, false));
+                        emitted.insert(landing.id);
+                    }
                 }
             }
-        }
-    };
+        };
     // Walk from the ROOT, not from currentParentId: search spans every scope
     // regardless of how deep the user has drilled. Rooting it at the drill
     // parent silently narrows the results to the current category while the
@@ -334,7 +361,7 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
     // inside "Snapping" searching for a Rules page would get an empty list and
     // no reason why. It would also make the ancestor breadcrumb above
     // pointless: every result would share the same prefix.
-    collect(QString(), QString(), 0);
+    collect(QString(), m_registry->visibleChildPages(QString()), QString(), 0);
     return out;
 }
 
@@ -349,7 +376,10 @@ QVariantMap SidebarRows::flatPageData(const QString& pageId, const QVariantMap& 
         // an overridden title, so the caller's "no such page" check still works.
         return data;
     }
-    data.insert(kTitle, flatTitleOf(pageId, data.value(kTitle).toString(), flatTitleOverrides));
+    // PageRegistry's own key, not this file's row-role constant: this dict is
+    // registry page-data, a different schema from the sidebar row.
+    const QLatin1String titleKey = PageRegistry::titleKey();
+    data.insert(titleKey, flatTitleOf(pageId, data.value(titleKey).toString(), flatTitleOverrides));
     return data;
 }
 

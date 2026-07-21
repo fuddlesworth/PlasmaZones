@@ -317,7 +317,10 @@ ColumnLayout {
         description: _addable.length > 0 ? i18n("Stack another pack onto this surface's chain") : i18n("All installed packs are already in the chain")
 
         PZCommon.CategoryMenuButton {
-            Layout.fillWidth: true
+            // SettingsRow lays its default children out in a plain Row
+            // positioner, so Layout.* attached properties are inert here —
+            // size explicitly or the button sits at implicit width.
+            width: Kirigami.Units.gridUnit * 16
             enabled: addPackRow._addable.length > 0
             items: addPackRow._addable
             currentId: ""

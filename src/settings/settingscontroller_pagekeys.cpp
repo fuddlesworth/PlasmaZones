@@ -20,24 +20,6 @@
 
 namespace PlasmaZones {
 
-// The two drag-to-reorder pages. Their state is the staged order optional
-// (m_stagedSnappingOrder / m_stagedTilingOrder), not config-manifest keys, so
-// per-page Reset/Discard dispatches to the ordering helpers rather than
-// resetKeys/discardKeys.
-bool isOrderingPage(const QString& page)
-{
-    return page == QLatin1String("snapping-ordering") || page == QLatin1String("tiling-ordering");
-}
-
-// The two Quick Shortcuts pages. Their editable state is the per-mode staged
-// quick-slot layout assignments in StagingService (daemon-backed); the shortcut
-// keysequence is a read-only default in the standalone. Reset unassigns every
-// slot (the default), Discard drops the staged edits.
-bool isShortcutsPage(const QString& page)
-{
-    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts");
-}
-
 // Every animation leaf shares the single AnimationsPageController staging domain
 // AND the single ShaderProfileTree key, but Reset/Discard/dirty are NOT
 // whole-tree: each surface leaf (windows/osds/overlays/desktops/motion/dragging/

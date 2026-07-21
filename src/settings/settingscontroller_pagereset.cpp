@@ -20,7 +20,6 @@
 #include "decorationpagescope.h"
 #include "settingscontroller_pagekeys.h"
 
-#include "../config/configdefaults.h"
 #include "../core/logging.h"
 
 #include <PhosphorAnimation/ShaderProfileTree.h>
@@ -29,6 +28,61 @@
 #include <QDebug>
 
 namespace PlasmaZones {
+
+namespace {
+
+// Reset/Discard-only helpers. These live at file scope rather than in the
+// shared settingscontroller_pagekeys.h because nothing outside this TU uses
+// them — the dirty-tracking half never did, so no translation-unit boundary is
+// crossed and internal linkage is the right default.
+
+// The two drag-to-reorder pages. Their state is the staged order optional
+// (m_stagedSnappingOrder / m_stagedTilingOrder), not config-manifest keys, so
+// per-page Reset/Discard dispatches to the ordering helpers rather than
+// resetKeys/discardKeys.
+bool isOrderingPage(const QString& page)
+{
+    return page == QLatin1String("snapping-ordering") || page == QLatin1String("tiling-ordering");
+}
+
+// The two Quick Shortcuts pages. Their editable state is the per-mode staged
+// quick-slot layout assignments in StagingService (daemon-backed); the shortcut
+// keysequence is a read-only default in the standalone. Reset unassigns every
+// slot (the default), Discard drops the staged edits.
+bool isShortcutsPage(const QString& page)
+{
+    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts");
+}
+
+// Quick-layout slots are numbered 1..9 (see SettingsController::getQuickLayoutSlot).
+constexpr int kQuickLayoutSlotCount = 9;
+
+// Raises the loading flag for the enclosing scope and restores the PREVIOUS
+// value on exit (not a hard clear), so nesting is safe. Suppresses
+// onSettingsPropertyChanged so a reset/discard's own writes do not mark the
+// page dirty again. Every branch below shares this instead of hand-rolling the
+// save/set/qScopeGuard triple.
+class LoadingScope
+{
+public:
+    explicit LoadingScope(bool& flag)
+        : m_flag(flag)
+        , m_previous(flag)
+    {
+        flag = true;
+    }
+    ~LoadingScope()
+    {
+        m_flag = m_previous;
+    }
+    Q_DISABLE_COPY_MOVE(LoadingScope)
+
+private:
+    bool& m_flag;
+    bool m_previous;
+};
+
+} // namespace
 
 bool SettingsController::pageSupportsReset(const QString& page) const
 {

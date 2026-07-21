@@ -76,11 +76,6 @@ void SettingsController::navigateTo(const QString& address)
     const QString page = (hash < 0) ? address : address.left(hash);
     const QString anchor = (hash < 0) ? QString() : address.mid(hash + 1);
 
-    // Resolved once and reused below: neither the registry topology nor the
-    // mode can change across setActivePage, and resolveToLeaf walks the tree
-    // recursively for a category address.
-    const QString resolved = resolveToLeaf(page);
-
     setActivePage(page);
 
     // Key the anchor to the resolved leaf, and only when that leaf is what
@@ -89,6 +84,11 @@ void SettingsController::navigateTo(const QString& address)
     // content does not exist; stashing it there would leave a stale pending
     // reveal for the next visit. A bogus address is rejected the same way.
     if (!anchor.isEmpty() && app() != nullptr) {
+        // Resolved lazily, inside the guard: resolveToLeaf walks the page tree
+        // recursively for a category address, and an anchor-free navigateTo
+        // (every sidebar click, every --page, every D-Bus call) has no use for
+        // the result. setActivePage does its own resolve internally.
+        const QString resolved = resolveToLeaf(page);
         if (validPageNames().contains(resolved) && m_activePage == resolved) {
             app()->setPendingAnchor(resolved, anchor);
         }

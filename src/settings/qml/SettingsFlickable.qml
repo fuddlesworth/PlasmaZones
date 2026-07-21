@@ -129,23 +129,19 @@ Flickable {
         // This reveal wins over any anchor still awaiting registration.
         settingsFlickable._pendingRevealAnchor = "";
 
-        // An invisible target has no usable geometry: an advanced-only row in
-        // simple mode collapses to zero height, so scrolling to it lands on
-        // nothing and pulses the highlight over an empty strip. The search
-        // index filters these out by tier already (SearchEntry.advancedOnly),
-        // so reaching here means the two disagreed — fall back to the top of
-        // the page, which is at least a real destination. Checks `visible`
-        // (effective visibility) rather than the advancedOnly flag so any
-        // hiding condition is covered, not just the mode tier.
-        if (!entry.item.visible) {
-            settingsFlickable._revealPendingItem = null;
-            revealSettleTimer.stop();
-            revealScrollAnim.to = 0;
-            revealScrollAnim.restart();
-            return;
-        }
-
         var card = entry.card;
+
+        // Collapsed-card check FIRST, before any visibility bail. A row inside
+        // a collapsed SettingsCard is invisible by construction — the card
+        // drops `contentClip.enabled` when its body goes dead, `enabled`
+        // inherits down the item chain, and SettingsRow leads its `visible:`
+        // binding with `enabled`. So testing visibility first swallowed every
+        // collapsed-card target and scrolled to the top of the page instead,
+        // making the expand branch below unreachable for them. That is the
+        // common case (any card the user shut, plus cards built
+        // initiallyCollapsed), not the tier disagreement the guard was written
+        // for. Effective visibility is only meaningful once the card is open,
+        // so the bail moves after the expand.
         if (card && card.collapsible === true && card.collapsed === true) {
             // Expand, then settle: drive the post-expand scroll off a one-shot
             // timer (≈ the expand duration) rather than an expand-finished signal —
@@ -154,6 +150,20 @@ Flickable {
             settingsFlickable._revealPendingItem = entry.item;
             card.collapsed = false;
             revealSettleTimer.restart();
+        } else if (!entry.item.visible) {
+            // Genuinely invisible with no collapsed card to blame: the row is
+            // hidden by its own condition, most likely an advanced-only row
+            // reached in simple mode. It has no usable geometry, so scrolling
+            // to it would pulse the highlight over a zero-height strip. The
+            // search index filters these by tier already
+            // (SearchEntry.advancedOnly), so reaching here means the index and
+            // the row disagreed — fall back to the top of the page, which is at
+            // least a real destination. Tests effective `visible` rather than
+            // the advancedOnly flag so every hiding condition is covered.
+            settingsFlickable._revealPendingItem = null;
+            revealSettleTimer.stop();
+            revealScrollAnim.to = 0;
+            revealScrollAnim.restart();
         } else {
             // Cancel any in-flight expand-then-settle so this immediate reveal
             // wins (latest reveal target always takes precedence).
@@ -192,10 +202,22 @@ Flickable {
 
         interval: Kirigami.Units.shortDuration + Kirigami.Units.veryShortDuration
         onTriggered: {
-            if (settingsFlickable._revealPendingItem) {
-                settingsFlickable._scrollToReveal(settingsFlickable._revealPendingItem);
-                settingsFlickable._revealPendingItem = null;
+            var pending = settingsFlickable._revealPendingItem;
+            settingsFlickable._revealPendingItem = null;
+            if (!pending)
+                return;
+            // Effective visibility is only final now that the card has finished
+            // expanding — revealAnchor deliberately defers this check to here
+            // for the collapsed-card path. A row still hidden after the expand
+            // is hidden by its own condition (an advanced-only row in simple
+            // mode), so fall back to the top of the page rather than pulsing
+            // the highlight over a zero-height strip.
+            if (!pending.visible) {
+                revealScrollAnim.to = 0;
+                revealScrollAnim.restart();
+                return;
             }
+            settingsFlickable._scrollToReveal(pending);
         }
     }
 

@@ -12,11 +12,21 @@ import "SearchAnchorHelpers.js" as SearchAnchors
  *
  * The default children of this item become the right-side control widget.
  *
+ * SIZING: that control slot is a plain `Row` POSITIONER, not a `RowLayout`, so
+ * `Layout.*` attached properties on a default child are silently ignored — a
+ * `Layout.fillWidth` or `Layout.preferredWidth` here does nothing and the
+ * control renders at its implicit width. Give the child an explicit `width` in
+ * `Kirigami.Units.gridUnit` multiples instead. (Wrapping the child in your own
+ * `RowLayout` makes `Layout.*` work again for ITS children.)
+ *
  * Usage:
  *   SettingsRow {
  *       title: i18n("Resolution")
  *       description: i18n("Resolution and refresh rate")
- *       ComboBox { model: ["1080p", "1440p", "4K"] }
+ *       ComboBox {
+ *           width: Kirigami.Units.gridUnit * 12
+ *           model: ["1080p", "1440p", "4K"]
+ *       }
  *   }
  */
 Item {

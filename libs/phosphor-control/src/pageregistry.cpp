@@ -11,16 +11,6 @@
 
 namespace PhosphorControl {
 
-namespace {
-
-// Depth bound for upward parent walks. registerPage() rejects an entry whose
-// parent is not already registered, so the graph is a DAG and a walk always
-// terminates — this only bounds pathological nesting. Mirrors the cap in
-// ApplicationController::parentChainFor; keep the two in step.
-constexpr int kMaxParentChainHops = 32;
-
-} // namespace
-
 PageRegistry::PageRegistry(QObject* parent)
     : QObject(parent)
 {
@@ -122,17 +112,22 @@ void PageRegistry::setShowAdvanced(bool showAdvanced)
     Q_EMIT visibleSetChanged();
 }
 
-bool PageRegistry::modeAllows(PageVisibility v) const
+bool PageRegistry::modeAllowsIn(PageVisibility v, bool advanced)
 {
     switch (v) {
     case PageVisibility::Always:
         return true;
     case PageVisibility::AdvancedOnly:
-        return m_showAdvanced;
+        return advanced;
     case PageVisibility::SimpleOnly:
-        return !m_showAdvanced;
+        return !advanced;
     }
     return true;
+}
+
+bool PageRegistry::modeAllows(PageVisibility v) const
+{
+    return modeAllowsIn(v, m_showAdvanced);
 }
 
 bool PageRegistry::isEntryVisible(const Entry& entry) const
@@ -160,7 +155,7 @@ bool PageRegistry::hasPage(const QString& id) const
     return m_indexById.contains(id);
 }
 
-bool PageRegistry::pageAllowedInCurrentMode(const QString& id) const
+bool PageRegistry::allowedInMode(const QString& id, bool advanced) const
 {
     auto it = m_indexById.constFind(id);
     if (it == m_indexById.constEnd()) {
@@ -180,9 +175,9 @@ bool PageRegistry::pageAllowedInCurrentMode(const QString& id) const
     // so the parent graph is a DAG and this terminates; the hop cap is a
     // belt-and-braces guard matching parentChainFor's.
     int hops = 0;
-    while (it != m_indexById.constEnd() && hops < kMaxParentChainHops) {
+    while (it != m_indexById.constEnd() && hops < MaxParentChainHops) {
         const Entry& e = m_pages.at(it.value());
-        if (!modeAllows(e.visibility)) {
+        if (!modeAllowsIn(e.visibility, advanced)) {
             return false;
         }
         if (e.parentId.isEmpty()) {
@@ -196,10 +191,24 @@ bool PageRegistry::pageAllowedInCurrentMode(const QString& id) const
     // registerPage rejects an unknown parent). Fail CLOSED. Answering "visible"
     // for a page whose ancestry could not be verified is the same lie the
     // ancestor walk above exists to prevent: it would let search, keyboard
-    // next/prev and the mode gate offer a row the rail cannot draw.
-    qWarning() << "PageRegistry::pageAllowedInCurrentMode: could not resolve the ancestor chain for" << id << "within"
-               << kMaxParentChainHops << "hops — treating it as hidden";
+    // next/prev, the history skip predicate and the mode gate offer a row the
+    // rail cannot draw.
+    //
+    // Warn once per id: this is a startup-time structural error, but the method
+    // runs once per entry per search-index rebuild, once per entry per
+    // keyboard next/prev, and once per candidate per history step, so an
+    // unguarded warning would repeat for the life of the session.
+    if (!m_depthWarned.contains(id)) {
+        m_depthWarned.insert(id);
+        qWarning() << "PageRegistry: could not resolve the ancestor chain for" << id << "within" << MaxParentChainHops
+                   << "hops — treating it as hidden";
+    }
     return false;
+}
+
+bool PageRegistry::pageAllowedInCurrentMode(const QString& id) const
+{
+    return allowedInMode(id, m_showAdvanced);
 }
 
 bool PageRegistry::validateCounterparts() const
@@ -228,6 +237,22 @@ bool PageRegistry::validateCounterparts() const
             qWarning() << "PageRegistry: page" << e.id << "and its counterpart" << e.counterpartId
                        << "share a visibility tier — the counterpart cannot be the other mode's face of this page";
             ok = false;
+        } else if (e.visibility != PageVisibility::Always) {
+            // Opposite tiers are necessary but NOT sufficient. The gate this
+            // validator protects asks pageAllowedInCurrentMode(counterpart),
+            // which walks ANCESTORS too, so a counterpart whose own tier is
+            // right but which sits under a filtered category still dead-ends on
+            // the app fallback — exactly the silent degradation this exists to
+            // catch. Check reachability in the mode that hides `e`: a
+            // SimpleOnly page is hidden when advanced, and vice versa. Skipped
+            // for Always, which is never hidden and so never redirects.
+            const bool modeThatHidesThis = (e.visibility == PageVisibility::SimpleOnly);
+            if (!allowedInMode(e.counterpartId, modeThatHidesThis)) {
+                qWarning() << "PageRegistry: page" << e.id << "declares counterpart" << e.counterpartId
+                           << "which is itself unreachable in the mode that hides" << e.id
+                           << "— an ancestor category filters it out, so the redirect falls back anyway";
+                ok = false;
+            }
         }
         // Counterparts are the two modes' faces of ONE surface, so the mapping
         // has to hold in both directions. A one-way declaration redirects the
@@ -314,6 +339,9 @@ QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) con
 QList<PageRegistry::Entry> PageRegistry::visibleChildPages(const QString& parentId) const
 {
     QList<Entry> out;
+    // Same worst-case upper bound as topLevelPages / childPages above. This is
+    // the accessor SidebarRows calls most, including inside its walks.
+    out.reserve(m_pages.size());
     for (const Entry& e : m_pages) {
         if (e.parentId == parentId && isEntryVisible(e)) {
             out.append(e);
@@ -345,6 +373,15 @@ constexpr QLatin1String IsCollapsible{"isCollapsible"};
 constexpr QLatin1String HasDividerAfter{"hasDividerAfter"};
 constexpr QLatin1String HasQmlSource{"hasQmlSource"};
 } // namespace EntryKeys
+
+} // namespace
+
+QLatin1String PageRegistry::titleKey()
+{
+    return EntryKeys::Title;
+}
+
+namespace {
 
 QVariantMap entryToVariant(const PageRegistry::Entry& e)
 {

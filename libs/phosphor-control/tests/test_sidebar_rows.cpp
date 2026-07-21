@@ -388,17 +388,15 @@ private Q_SLOTS:
         QCOMPARE(rowAt(out, 0).value(QStringLiteral("title")).toString(), QStringLiteral("Snapping / Behavior"));
         QCOMPARE(rowAt(out, 0).value(QStringLiteral("_depth")).toInt(), 0);
 
-        // A needle matching the ANCESTOR's title produces TWO rows that land on
-        // the same page: the leaf matches through its own breadcrumb, and the
-        // category-only parent matches too and is routed to its first navigable
-        // descendant. Pinned as-is because it is long-standing behaviour, not
-        // because it is obviously right — two results for one destination is a
-        // wart, and de-duplicating them is a change to search semantics rather
-        // than something this refactor should decide.
+        // A needle matching the ANCESTOR's title matches the leaf too, through
+        // the breadcrumb prefix. Both used to emit, giving two rows for ONE
+        // destination under different titles; the duplicate is now dropped.
+        // The leaf's own row is the one kept because it names the destination
+        // exactly, where the category's row names only the ancestor and leaves
+        // the reader to guess where it lands.
         const QVariantList ancestor = rows.build(false, QStringLiteral("snapping"), QString(), {}, {});
-        QCOMPARE(idsOf(ancestor), QStringList({QStringLiteral("cat.a"), QStringLiteral("cat.a")}));
+        QCOMPARE(idsOf(ancestor), QStringList{QStringLiteral("cat.a")});
         QCOMPARE(rowAt(ancestor, 0).value(QStringLiteral("title")).toString(), QStringLiteral("Snapping / Behavior"));
-        QCOMPARE(rowAt(ancestor, 1).value(QStringLiteral("title")).toString(), QStringLiteral("Snapping"));
     }
 
     void searchRoutesACategoryOnlyMatchToItsFirstNavigableDescendant()
@@ -411,12 +409,24 @@ private Q_SLOTS:
         QVERIFY(reg(r, QStringLiteral("cat.sub.leaf"), QStringLiteral("cat.sub"), QStringLiteral("Leaf"),
                     QStringLiteral("qrc:/L.qml")));
 
-        // "widgets" matches only the category, which has no page of its own —
-        // the result must still land the user somewhere navigable.
-        const QVariantList out = rows.build(false, QStringLiteral("widgets"), QString(), {}, {});
+        // FLAT mode with an override on the leaf is the shape that actually
+        // exercises the category-landing branch. In tree mode the leaf's
+        // breadcrumb is "Widgets / Sub / Leaf", so "widgets" matches the LEAF
+        // too and the leaf's own row is what appears — the assertion would pass
+        // without the landing branch existing at all. The override replaces the
+        // breadcrumb with "Zzz", so only the category matches and the landing
+        // row is the sole thing offering the destination.
+        const QVariantMap overrides{{QStringLiteral("cat.sub.leaf"), QStringLiteral("Zzz")}};
+        const QVariantList out = rows.build(true, QStringLiteral("widgets"), QString(), {}, overrides);
         QVERIFY(!out.isEmpty());
         QCOMPARE(rowAt(out, 0).value(QStringLiteral("pageId")).toString(), QStringLiteral("cat.sub.leaf"));
         QVERIFY(rowAt(out, 0).value(QStringLiteral("hasQmlSource")).toBool());
+        // Exactly one row, and titled by the INNERMOST matching ancestor
+        // ("Widgets / Sub", not "Widgets"): the recursion reaches cat.sub
+        // first, so it claims the destination and the outer cat then dedups
+        // against it. Nearest context wins, which is the more useful label.
+        QCOMPARE(out.size(), 1);
+        QCOMPARE(rowAt(out, 0).value(QStringLiteral("title")).toString(), QStringLiteral("Widgets / Sub"));
     }
 
     void searchEmitsNoDividers()

@@ -196,7 +196,6 @@ Kirigami.Dialog {
                                 // may never open.
                                 algorithmId: (root.opened && templateDelegate.modelData.id !== "blank") ? templateDelegate.modelData.id : ""
                                 windowCount: 4
-                                showLabel: false
                                 appSettings: root.controller
                             }
 
@@ -250,7 +249,6 @@ Kirigami.Dialog {
                         algorithmId: (root.opened && root.baseTemplate !== "blank") ? root.baseTemplate : ""
                         appSettings: root.controller
                         windowCount: 6
-                        showLabel: false
                     }
 
                     ColumnLayout {

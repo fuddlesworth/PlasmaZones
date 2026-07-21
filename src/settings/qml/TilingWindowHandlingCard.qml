@@ -129,7 +129,7 @@ SettingsCard {
 
             WideComboBox {
                 Accessible.name: i18n("Autotile overflow behavior")
-                Accessible.description: i18n("Selects how windows beyond the max-windows cap are handled. Float floats the excess windows and Unlimited tiles every window regardless of count.")
+                Accessible.description: i18n("Selects how windows beyond the max-windows cap are handled. Float leaves the excess windows floating and Unlimited tiles every window regardless of count.")
                 textRole: "text"
                 valueRole: "value"
                 model: settingsController.valueOptions("Tiling.Behavior", "OverflowBehavior")

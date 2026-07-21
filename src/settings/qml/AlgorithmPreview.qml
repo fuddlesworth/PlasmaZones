@@ -66,12 +66,6 @@ Item {
         }
         return false;
     }
-    // Algorithm display name (avoids hardcoded switch statement)
-    property string algorithmName: ""
-    // Algorithm name label (hidden when used inside the Tiling tab's algorithm section
-    // where the name is already shown alongside the combo box)
-    property bool showLabel: true
-
     function recalcZones() {
         if (root.algorithmId !== "") {
             root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount, root.customParams);
@@ -124,15 +118,5 @@ Item {
         showMasterDot: root._currentAlgoSupportsMasterCount && root.algorithmId !== ""
         masterCount: root.masterCount
         animationDuration: 0
-    }
-
-    Label {
-        visible: root.showLabel
-        anchors.bottom: parent.bottom
-        anchors.right: parent.right
-        anchors.margins: Math.round(Kirigami.Units.smallSpacing / 2)
-        text: root.algorithmName || root.algorithmId
-        font: Kirigami.Theme.smallFont
-        opacity: 0.5
     }
 }

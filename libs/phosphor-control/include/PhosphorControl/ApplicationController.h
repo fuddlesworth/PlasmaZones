@@ -96,6 +96,12 @@ private:
     /// being left onto @p to, navigate. goBack/goForward differ only in
     /// which stack is which.
     QString stepHistory(QStringList& from, QStringList& to);
+    /// True iff a recorded history entry is still somewhere the user can be
+    /// sent: registered, not the current page, and not hidden by the current
+    /// simple/advanced tier. Shared by stepHistory's skip loop AND by
+    /// canGoBack/canGoForward, so the capability flags cannot promise a move
+    /// the step then declines to make.
+    bool isUsableHistoryEntry(const QString& id) const;
 
 public:
     /** Deep-link reveal latch (generic — every settings app built on this

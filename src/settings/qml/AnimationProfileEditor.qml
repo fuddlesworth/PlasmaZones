@@ -264,7 +264,12 @@ ColumnLayout {
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
             visible: root.simpleTiming && root.timingMode === CurvePresets.timingModeSpring
-            text: i18n("Timing follows the inherited spring curve.")
+            // Path-neutral wording. This editor is also hosted by
+            // GlobalTimingDefaultsCard, which is the ROOT of the inheritance
+            // tree and inherits from nothing, so "the inherited spring curve"
+            // was false there. It also has to say how to get out: in simple
+            // mode a stored spring makes duration genuinely unreachable.
+            text: i18n("A spring curve is set, so duration does not apply. Switch to Advanced in the sidebar to change it.")
             font.italic: true
             color: Kirigami.Theme.disabledTextColor
             wrapMode: Text.WordWrap
@@ -310,7 +315,10 @@ ColumnLayout {
                 return root.availableShaders;
             }
 
-            Layout.fillWidth: true
+            // SettingsRow lays its default children out in a plain Row
+            // positioner, so Layout.* attached properties are inert here —
+            // size explicitly or the button sits at implicit width.
+            width: Kirigami.Units.gridUnit * 16
             items: _effectModel
             currentId: root.shaderEffectId
             noneId: ""

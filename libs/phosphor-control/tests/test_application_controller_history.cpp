@@ -236,6 +236,38 @@ private Q_SLOTS:
         app.registry()->setShowAdvanced(true);
         QVERIFY(!app.canGoForward());
     }
+
+    void canGoBackIsFalseWhenEveryEntryIsHidden()
+    {
+        // canGoBack must answer "will goBack() move", not "is the stack
+        // non-empty". A trail of ONLY advanced pages, viewed in simple mode,
+        // is the case where those two answers differ — and the chrome acts on
+        // the flag: the Back button renders `enabled` from it, and
+        // Keys.onShortcutOverride CLAIMS Alt+Left on it, so a false positive
+        // both dead-ends the click and swallows the shortcut.
+        ApplicationController app;
+        registerAbc(app);
+        app.registerPage(new StubPage(QStringLiteral("adv1")), {}, QStringLiteral("ADV1"),
+                         QUrl(QStringLiteral("qrc:/adv1.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+        app.registerPage(new StubPage(QStringLiteral("adv2")), {}, QStringLiteral("ADV2"),
+                         QUrl(QStringLiteral("qrc:/adv2.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+
+        // Back trail is entirely advanced-only: [adv1], current adv2.
+        app.setCurrentPageId(QStringLiteral("adv1"));
+        app.setCurrentPageId(QStringLiteral("adv2"));
+        QVERIFY(app.canGoBack());
+
+        // Entering simple mode hides every recorded entry.
+        QSignalSpy spy(&app, &ApplicationController::historyChanged);
+        app.registry()->setShowAdvanced(false);
+        // The capability flips, so the chrome's bindings must be told.
+        QVERIFY(spy.count() >= 1);
+        QVERIFY(!app.canGoBack());
+        // And the flag agrees with what the step actually does.
+        QCOMPARE(app.goBack(), QString());
+    }
 };
 
 QTEST_MAIN(TestApplicationControllerHistory)
