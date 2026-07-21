@@ -18,7 +18,6 @@ SettingsCard {
     /// The snappingBehaviorPage controller (trigger lists live there).
     required property var settingsBridge
     property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
-    readonly property int thresholdMax: card.settingsBridge.adjacentThresholdMax
 
     headerText: i18n("Zone Span")
     searchAnchor: "zoneSpan"
@@ -78,7 +77,7 @@ SettingsCard {
 
                 accessibleName: i18n("Edge threshold")
                 from: card.settingsBridge.adjacentThresholdMin
-                to: card.thresholdMax
+                to: card.settingsBridge.adjacentThresholdMax
                 onValueModified: value => {
                     return appSettings.adjacentThreshold = value;
                 }

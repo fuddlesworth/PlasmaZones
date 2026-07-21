@@ -6,6 +6,7 @@ import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
+import "AlgorithmCapabilities.js" as AlgoCaps
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -41,53 +42,72 @@ Kirigami.Dialog {
     // and as a binding it keeps following it across screens rather than
     // sampling once on open.
     readonly property real screenAspectRatio: WizardUtils.clampedScreenAspectRatio(dialogContent.Screen.width, dialogContent.Screen.height)
-    readonly property var baseTemplates: [
+    // Which bundled algorithms the wizard offers as a starting point, and the
+    // wizard-facing name for each. This is a curated subset: data/algorithms
+    // ships far more than these, and putting all of them in a three-column grid
+    // would run a Luau tile pass per card on open. The curation and the naming
+    // are the wizard's own; the DESCRIPTION is not, and is read from the
+    // algorithm catalog below so the two cannot drift.
+    readonly property var _curatedTemplates: [
         {
             "name": i18n("Blank"),
-            "id": "blank",
-            "desc": i18n("Minimal skeleton to implement yourself")
+            "id": "blank"
         },
         {
             "name": i18n("Master + Stack"),
-            "id": "master-stack",
-            "desc": i18n("Large master area with stacked windows")
+            "id": "master-stack"
         },
         {
             "name": i18n("Grid"),
-            "id": "grid",
-            "desc": i18n("Equal-sized NxM grid layout")
+            "id": "grid"
         },
         {
             "name": i18n("Binary Split"),
-            "id": "bsp",
-            "desc": i18n("Balanced recursive BSP splitting")
+            "id": "bsp"
         },
         {
             "name": i18n("Aligned Grid"),
-            "id": "aligned-grid",
-            "desc": i18n("Resize-aware grid that moves whole rows and columns")
+            "id": "aligned-grid"
         },
         {
             "name": i18n("Dwindle (Memory)"),
-            "id": "dwindle-memory",
-            "desc": i18n("Remembers split positions when you resize a split")
+            "id": "dwindle-memory"
         },
         {
             "name": i18n("Cluster"),
-            "id": "cluster",
-            "desc": i18n("Groups windows by application, with custom parameters")
+            "id": "cluster"
         },
         {
             "name": i18n("Theater"),
-            "id": "theater",
-            "desc": i18n("Spotlight that follows focus, with windows on side rails")
+            "id": "theater"
         },
         {
             "name": i18n("Deck"),
-            "id": "deck",
-            "desc": i18n("Focused window on the left with the rest peeking from the right edge")
+            "id": "deck"
         }
     ]
+    // "blank" is synthetic — it has no catalog entry because it is not an
+    // algorithm, it is an empty skeleton the wizard writes itself, so it keeps
+    // its own description. Every other card takes the catalog's. Re-derives on
+    // availableAlgorithmsChanged, so editing a bundled .luau updates the wizard.
+    readonly property var baseTemplates: {
+        const algos = root.controller ? root.controller.availableAlgorithms : [];
+        return root._curatedTemplates.map(function (tpl) {
+            if (tpl.id === "blank") {
+                return {
+                    "name": tpl.name,
+                    "id": tpl.id,
+                    "desc": i18n("Minimal skeleton to implement yourself")
+                };
+            }
+            const caps = AlgoCaps.capabilitiesFor(algos, tpl.id);
+            return {
+                "name": tpl.name,
+                "id": tpl.id,
+                "desc": caps && caps.description ? caps.description : ""
+            };
+        });
+    }
     // Resolve selected template data for step 2
     readonly property var selectedTemplate: {
         for (let i = 0; i < baseTemplates.length; i++) {

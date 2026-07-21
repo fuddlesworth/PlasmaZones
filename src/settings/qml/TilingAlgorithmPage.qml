@@ -188,7 +188,18 @@ SettingsFlickable {
                     currentAlgorithmId: root.effectiveAlgorithm
                     captionText: i18np("Max %n window", "Max %n windows", previewWindowSlider.slider.value)
                     windowCount: previewWindowSlider.slider.value
-                    splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : AlgoCaps.defaultSplitRatio(root.algoCapabilities)
+                    // An algorithm with no ratio control of its own draws at the
+                    // ratio the catalog declares for it. An algorithm the
+                    // catalog does not describe at all yields undefined there,
+                    // which must not reach this `real` property, so fall back to
+                    // the user's configured global ratio rather than a literal.
+                    splitRatio: {
+                        if (root.algoSupportsSplitRatio)
+                            return masterRatioSlider.slider.value;
+
+                        const catalogRatio = AlgoCaps.defaultSplitRatio(root.algoCapabilities);
+                        return catalogRatio !== undefined ? catalogRatio : root.appSettingsObj.autotileSplitRatio;
+                    }
                     supportsMasterCount: root.algoSupportsMasterCount
                     masterCount: masterCountSlider.slider.value
                     customParams: root.liveCustomParams

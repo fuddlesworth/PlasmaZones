@@ -204,6 +204,11 @@ Flickable {
             // a signal would leak / never fire if the card is re-collapsed
             // mid-animation. _scrollToReveal still defers a frame for final layout.
             settingsFlickable._revealPendingItem = target;
+            // Baseline for the stale-link guard, armed the same way the
+            // not-yet-registered branch arms it. The settle window is ~150 ms
+            // of real time during which the user can wheel away, and without a
+            // baseline here the guard has nothing to compare against.
+            settingsFlickable._armedContentY = settingsFlickable.contentY;
             // Remember everything we opened, so a reveal that turns out
             // invisible anyway can put them back rather than leaving cards the
             // user deliberately shut yanked open with the page scrolled
@@ -360,21 +365,37 @@ Flickable {
         // is the dominant path on the very component that exists to install
         // WheelHandler.
         //
-        // Safe against the reveal's OWN scroll: _pendingRevealAnchor is armed
-        // only on the not-yet-registered branch, which does not start
-        // revealScrollAnim, and the expiry's own fallback scroll has already
-        // cleared the anchor by the time it runs.
+        // Armed for BOTH waits a reveal can sit in: an anchor that has not
+        // registered yet, and the expand-then-settle window after a collapsed
+        // card was opened. The second is the common one — a chain expand takes
+        // a real ~150 ms, and while it ran the guard used to be inert, so a
+        // user wheeling away was still yanked back and pulsed.
+        //
+        // Safe against the reveal's OWN scroll. Both waits are scroll-free by
+        // construction: the not-yet-registered branch never starts
+        // revealScrollAnim, and the settle window ends at the moment the
+        // scroll is queued. Every programmatic scroll this component performs
+        // runs through revealScrollAnim, so the running check covers the rest,
+        // and the expiry's fallback scroll has already cleared the anchor by
+        // the time it runs.
         function onContentYChanged() {
-            if (revealScrollAnim.running || settingsFlickable._pendingRevealAnchor === "")
+            if (revealScrollAnim.running)
                 return;
-            // Only a MEANINGFUL move counts. A layout-driven nudge (or a clamp
-            // when content shrinks under a scrolled page) is not the user
-            // choosing to go elsewhere, and treating it as one would drop the
-            // deep link for a reason nothing on screen explains.
+            if (settingsFlickable._pendingRevealAnchor === "" && settingsFlickable._revealPendingItem === null)
+                return;
+            // Only a MEANINGFUL move counts. A layout-driven nudge (content
+            // growing as the expanding card claims its height, or a clamp when
+            // content shrinks under a scrolled page) is not the user choosing
+            // to go elsewhere, and treating it as one would drop the deep link
+            // for a reason nothing on screen explains.
             if (Math.abs(settingsFlickable.contentY - settingsFlickable._armedContentY) < Kirigami.Units.gridUnit)
                 return;
             pendingRevealExpiry.stop();
             settingsFlickable._pendingRevealAnchor = "";
+            // Reverts any card the reveal speculatively expanded, kills the
+            // highlight, and bumps the token so a queued _scrollToReveal
+            // closure cannot fire against the abandoned target.
+            settingsFlickable._cancelPendingReveal();
         }
 
         target: settingsFlickable

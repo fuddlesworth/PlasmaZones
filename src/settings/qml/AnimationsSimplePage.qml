@@ -71,7 +71,6 @@ AnimationEventCardList {
             // included.
             AnimationWindowFilterCard {
                 cardSettings: simplePage.globalSettings
-                notificationsAnchor: "simpleExcludeNotificationsAndOsds"
             }
         }
     }

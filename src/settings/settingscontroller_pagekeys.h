@@ -3,9 +3,8 @@
 
 #pragma once
 
-// Page-class predicates and shared-domain config key lists, used by BOTH the
-// dirty-tracking surface (settingscontroller_pagestate.cpp) and the per-page
-// Reset/Discard machinery (settingscontroller_pagereset.cpp).
+// Page-class predicates, shared-domain config key lists, and the loading-flag
+// scope guard shared across the settings app's page translation units.
 //
 // Internal to the settings app: not installed, not part of any public API.
 // These were an anonymous namespace in _pagestate.cpp before that file was
@@ -21,8 +20,44 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <QString>
+#include <QtGlobal>
 
 namespace PlasmaZones {
+
+/// Raises a bool flag for the enclosing scope and restores the PREVIOUS value
+/// on exit (not a hard clear), so nesting is safe and an exception escaping the
+/// scope cannot strand the flag raised.
+///
+/// Two flags use it. Raising SettingsController::m_loading suppresses
+/// onSettingsPropertyChanged, so a reset/discard's own writes do not mark the
+/// page dirty again; raising m_settingActivePage refuses a reentrant
+/// setActivePage. Both wrap a body that synchronously runs arbitrary QML page
+/// construction, which is exactly why the restore has to be unconditional.
+///
+/// DEFINED HERE, not in a .cpp: it is constructed from both
+/// settingscontroller_pagestate.cpp and settingscontroller_pagereset.cpp, and a
+/// TU-local copy in one of them only ever linked because CMAKE_UNITY_BUILD
+/// merged the two files into one batch. Same rationale as
+/// SettingsController::DirtyEmitScope.
+class LoadingScope
+{
+public:
+    explicit LoadingScope(bool& flag)
+        : m_flag(flag)
+        , m_previous(flag)
+    {
+        flag = true;
+    }
+    ~LoadingScope()
+    {
+        m_flag = m_previous;
+    }
+    Q_DISABLE_COPY_MOVE(LoadingScope)
+
+private:
+    bool& m_flag;
+    bool m_previous;
+};
 
 /// Which drag-to-reorder page this is, or None. Returns the KIND rather than a
 /// bool so the three consumers (dirty check, Reset, Discard) each dispatch on
@@ -40,13 +75,13 @@ OrderingPageKind orderingPageKind(const QString& page);
 /// The two Quick Shortcuts pages. Same shared-classification rationale.
 bool isShortcutsPage(const QString& page);
 
-/// Quick-layout slots are numbered 1..kQuickLayoutSlotCount. Shared by the
+/// Quick-layout slots are numbered 1..QUICK_LAYOUT_SLOT_COUNT. Shared by the
 /// slot accessors' bounds checks (settingscontroller_session.cpp) and the
 /// Quick Shortcuts reset loop (settingscontroller_pagereset.cpp), so the bound
 /// and the loop that walks it cannot drift apart. Aliases the protocol-level
 /// constant the daemon validates against (layoutadaptor.cpp), so the two trees
 /// cannot disagree about how many slots exist either.
-constexpr int kQuickLayoutSlotCount = PhosphorProtocol::Service::QuickLayoutSlotCount;
+constexpr int QUICK_LAYOUT_SLOT_COUNT = PhosphorProtocol::Service::QuickLayoutSlotCount;
 
 /// Every animation leaf shares one staging domain and one ShaderProfileTree
 /// key, but Reset/Discard/dirty are scoped per leaf — see animationPageScope.

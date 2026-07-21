@@ -27,41 +27,75 @@
 #include <PhosphorSurface/DecorationProfileTree.h>
 
 #include <QDebug>
+#include <QSet>
+#include <QStringList>
+#include <QVariant>
 
 namespace PlasmaZones {
 
 namespace {
 
 // Reset/Discard-only helpers: nothing outside this TU uses them, so internal
-// linkage is the right default. (orderingPageKind / isShortcutsPage are NOT here:
-// they were an anonymous namespace in _pagestate.cpp and moved to
-// settingscontroller_pagekeys.h when this file was split out of it, so the
-// dirty check and the reset read one definition.)
+// linkage is the right default. (orderingPageKind / isShortcutsPage / LoadingScope
+// are NOT here: they live in settingscontroller_pagekeys.h so the dirty check,
+// the reset and the discard read one definition.)
 
-// Raises the loading flag for the enclosing scope and restores the PREVIOUS
-// value on exit (not a hard clear), so nesting is safe. Suppresses
-// onSettingsPropertyChanged so a reset/discard's own writes do not mark the
-// page dirty again. Every branch below shares this instead of hand-rolling the
-// save/set/qScopeGuard triple.
-class LoadingScope
+// The animation shader tree and the decoration profile tree are unrelated types
+// with the same override vocabulary (overriddenPaths / hasOverride /
+// directOverride / setOverride / clearOverride), and Reset and Discard walk both
+// the same way. The two walks are templates over the tree type plus an in-scope
+// predicate so a surface-scoping rule can never be right on one domain and wrong
+// on the other.
+
+// Reset: clear every override whose path is in scope. Returns whether anything
+// went, i.e. whether the caller must write the tree back.
+template<typename Tree, typename InScope>
+bool clearOverridesInScope(Tree& tree, InScope&& inScope)
 {
-public:
-    explicit LoadingScope(bool& flag)
-        : m_flag(flag)
-        , m_previous(flag)
-    {
-        flag = true;
+    // overriddenPaths() returns a copy, so clearing during the walk is safe.
+    bool changed = false;
+    const QStringList paths = tree.overriddenPaths();
+    for (const QString& path : paths) {
+        if (inScope(path) && tree.clearOverride(path)) {
+            changed = true;
+        }
     }
-    ~LoadingScope()
-    {
-        m_flag = m_previous;
-    }
-    Q_DISABLE_COPY_MOVE(LoadingScope)
+    return changed;
+}
 
-private:
-    bool& m_flag;
-    bool m_previous;
-};
+// Discard: restore every in-scope path of `current` to its baseline value —
+// re-added, changed, or cleared. Walks the UNION of both trees' overridden paths
+// so a path present in only one (a staged add, or a baseline override the user
+// cleared) is reconciled in the right direction. Out-of-scope paths keep their
+// staged edits. Returns whether anything changed.
+template<typename Tree, typename InScope>
+bool restoreScopeToBaseline(Tree& current, const Tree& baseline, InScope&& inScope)
+{
+    QSet<QString> paths;
+    for (const QString& p : current.overriddenPaths()) {
+        if (inScope(p)) {
+            paths.insert(p);
+        }
+    }
+    for (const QString& p : baseline.overriddenPaths()) {
+        if (inScope(p)) {
+            paths.insert(p);
+        }
+    }
+    bool changed = false;
+    for (const QString& path : paths) {
+        if (baseline.hasOverride(path)) {
+            const auto committed = baseline.directOverride(path);
+            if (!current.hasOverride(path) || current.directOverride(path) != committed) {
+                current.setOverride(path, committed);
+                changed = true;
+            }
+        } else if (current.clearOverride(path)) {
+            changed = true;
+        }
+    }
+    return changed;
+}
 
 } // namespace
 
@@ -90,10 +124,18 @@ bool SettingsController::pageSupportsReset(const QString& page) const
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
 {
-    // Every page that supports reset also supports discard (animation pages are
-    // already covered by pageSupportsReset). Kept as a distinct query so the two
-    // kebab items can diverge if a future page becomes discard-only.
-    return pageSupportsReset(page);
+    // Every resettable page is discardable, PLUS the parent categories: discardPage
+    // has a parent-category branch that walks the group's discardable leaves (the
+    // sidebar's section-disable confirm calls it with "snapping" / "tiling"), and
+    // Reset has no equivalent. This predicate has to describe what discardPage
+    // accepts or the two disagree about the same page.
+    //
+    // Widening is safe for the kebab: both QML consumers (Main.qml) pass
+    // activePage, which setActivePage always resolves to a concrete leaf, so no
+    // parent id ever reaches them. It is likewise safe for discardPage's own
+    // child walk below — every pageGroupChildren value holds leaf ids only, so a
+    // child can never re-match the group case.
+    return pageSupportsReset(page) || pageGroupChildren().contains(page);
 }
 
 void SettingsController::resetPage(const QString& page)
@@ -106,6 +148,12 @@ void SettingsController::resetPage(const QString& page)
     // whole DecorationProfileTree instead of the page's own keys, and since
     // isPageDirty and discardPage both route window-appearance through its
     // manifest, Reset must too or the three disagree.
+    //
+    // The WHOLE branch order below matches isPageDirty and discardPage, not just
+    // this first test: manifest, backing pages, ordering, shortcuts, virtual
+    // screens, animation, decoration. Any page matching two branches must reach
+    // the same one in all three, so the three are written to be diffed against
+    // each other. Add a branch to one, add it in the same position in the others.
     {
         const auto& manifest = pageOwnedConfigKeys();
         const auto ownedIt = manifest.constFind(page);
@@ -133,113 +181,6 @@ void SettingsController::resetPage(const QString& page)
                 resetPage(backingPage);
             return;
         }
-    }
-
-    // Animation pages: reset to defaults, scoped like the decoration domain
-    // below. A SURFACE leaf clears only its own event subtree — its per-event
-    // override FILES and its shader-tree overrides — leaving the other surfaces,
-    // General's config keys, and the library untouched. General resets only its
-    // config keys (enable / motion Profile / filtering). A library leaf resets
-    // the whole tree (every file + every animation key). All staged like ordinary
-    // edits: cleared files are snapshotted so Discard restores them, and Save
-    // commits. Suppress onSettingsPropertyChanged during the reset; reconcile the
-    // whole animation leaf set below (a scoped reset can flip a sibling's badge,
-    // and any stale m_dirtyPages entry must clear too).
-    if (isAnimationPage(page)) {
-        const AnimationPageScope scope = animationPageScope(page);
-        // Set when a file clear does not complete. The reconcile below runs
-        // AFTER the LoadingScope closes on every path, success or failure —
-        // reconciling while m_loading is still raised skips
-        // maybeDrainPendingExternalReload, so the two paths used to differ for
-        // no reason.
-        bool failed = false;
-        {
-            const LoadingScope loadingScope(m_loading);
-            if (scope.kind == AnimationPageScope::ConfigOnly) {
-                m_settings.resetKeys(animationGeneralConfigKeys());
-            } else if (scope.kind == AnimationPageScope::EventSubtree) {
-                // Files first. -1 means the clear did not complete (refused
-                // mid-discard, or a file could not be removed): leave the shader
-                // tree un-reset so the page stays visibly dirty for a retry rather
-                // than reporting a half-done reset as clean. The page toasts why.
-                if (m_animationsPage != nullptr
-                    && m_animationsPage->clearOverridesUnder(animationScopedBuiltInPaths(scope)) < 0) {
-                    failed = true;
-                }
-                // Shader tree: clear only this scope's overrides (default =
-                // none). Skipped on a failed file clear so a half-done reset
-                // stays visibly dirty for a retry rather than reporting clean.
-                PhosphorAnimationShaders::ShaderProfileTree tree =
-                    failed ? PhosphorAnimationShaders::ShaderProfileTree() : m_settings.shaderProfileTree();
-                bool changed = false;
-                const QStringList overridden = failed ? QStringList() : tree.overriddenPaths();
-                for (const QString& path : overridden) {
-                    if (animationPathInScope(path, scope) && tree.clearOverride(path))
-                        changed = true;
-                }
-                if (changed)
-                    m_settings.setShaderProfileTree(tree);
-                // A page hosting the global timing / filter cards resets those
-                // keys too (the condensed simple page). Deliberately the
-                // General key list, NOT animationConfigKeys: the shader-tree
-                // key is per-event state already handled per scope above.
-                if (!failed && scope.includeGeneralKeys)
-                    m_settings.resetKeys(animationGeneralConfigKeys());
-            } else {
-                // WholeTree library leaf: files + every animation key.
-                if (m_animationsPage != nullptr && m_animationsPage->clearAllOverrides() < 0) {
-                    failed = true;
-                } else {
-                    m_settings.resetKeys(animationConfigKeys());
-                }
-            }
-        }
-        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
-        return;
-    }
-
-    // Decoration pages: reset to the built-in defaults. The stored blob holds
-    // only user edits; the built-in card chrome for the OSD and popups is a
-    // read-side seed layer (Settings::decorationProfileTree overlays
-    // ConfigDefaults::decorationProfileTree at lowest precedence). So a SURFACE
-    // page clears only its own root subtree's overrides — the seeds show
-    // through again, restoring the default chrome for seeded surfaces and "no
-    // decoration" everywhere else — leaving the other two roots (and the
-    // global baseline) standing; a non-surface leaf (sets/shaders, empty root)
-    // resets the whole tree key.
-    // Staged like ordinary edits: Save commits, Discard restores the baseline.
-    // Same NOTIFY-storm suppression as the manifest path.
-    if (isDecorationPage(page)) {
-        {
-            const LoadingScope loadingScope(m_loading);
-            const QString root = decorationSurfaceRoot(page);
-            if (root.isEmpty()) {
-                m_settings.resetKeys(decorationConfigKeys());
-            } else {
-                PhosphorSurfaceShaders::DecorationProfileTree tree = m_settings.decorationProfileTree();
-                bool changed = false;
-                // overriddenPaths() returns a copy, so clearing during the walk
-                // is safe. Only this root's overrides go; the stored default
-                // for a surface subtree is "no user overrides", and the write
-                // path strips whatever seed-injected entries the merged read
-                // view carried, so the seeds re-surface on the next read.
-                const QStringList paths = tree.overriddenPaths();
-                for (const QString& path : paths) {
-                    if (decorationPathInRoot(path, root) && tree.clearOverride(path))
-                        changed = true;
-                }
-                if (changed)
-                    m_settings.setDecorationProfileTree(tree);
-            }
-        }
-        // isPageDirty(decoration) is value-based. Reconcile EVERY decoration
-        // leaf, not just the active page: a subtree reset can flip a sibling
-        // parent/child leaf's badge, and any stale m_dirtyPages entry left by an
-        // edit made while another leaf was active must clear too or needsSave()
-        // sticks true with no badge to explain it (mirrors the discardPage
-        // decoration branch). Batched so dirtyPagesChanged fires at most once.
-        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decorations")));
-        return;
     }
 
     // Ordering pages: "reset to defaults" means dropping the custom order.
@@ -288,7 +229,7 @@ void SettingsController::resetPage(const QString& page)
         }
         const QVariantMap allSlots = slotsReply.arguments().value(0).toMap();
         bool staged = false;
-        for (int slot = 1; slot <= kQuickLayoutSlotCount; ++slot) {
+        for (int slot = 1; slot <= QUICK_LAYOUT_SLOT_COUNT; ++slot) {
             // Staged value wins over the daemon's, matching the per-slot
             // accessors' precedence.
             QString current;
@@ -348,10 +289,120 @@ void SettingsController::resetPage(const QString& page)
         return;
     }
 
+    // Animation pages: reset to defaults, scoped like the decoration domain
+    // below. A SURFACE leaf clears only its own event subtree — its per-event
+    // override FILES and its shader-tree overrides — leaving the other surfaces,
+    // General's config keys, and the library untouched. General resets only its
+    // config keys (enable / motion Profile / filtering). A library leaf resets
+    // the whole tree (every file + every animation key). All staged like ordinary
+    // edits: cleared files are snapshotted so Discard restores them, and Save
+    // commits. Suppress onSettingsPropertyChanged during the reset; reconcile the
+    // whole animation leaf set below (a scoped reset can flip a sibling's badge,
+    // and any stale m_dirtyPages entry must clear too).
+    if (isAnimationPage(page)) {
+        const AnimationPageScope scope = animationPageScope(page);
+        // Set when a file clear does not complete. The reconcile and the
+        // pageResetFailed emit below both run AFTER the LoadingScope closes on
+        // every path, success or failure — reconciling while m_loading is still
+        // raised skips maybeDrainPendingExternalReload, so the two paths used to
+        // differ for no reason.
+        bool failed = false;
+        {
+            const LoadingScope loadingScope(m_loading);
+            if (scope.kind == AnimationPageScope::ConfigOnly) {
+                m_settings.resetKeys(animationGeneralConfigKeys());
+            } else if (scope.kind == AnimationPageScope::EventSubtree) {
+                // Files first. -1 means the clear did not complete (refused
+                // mid-discard, or a file could not be removed): leave the shader
+                // tree and the General keys un-reset so the page stays visibly
+                // dirty for a retry rather than reporting a half-done reset as
+                // clean, and tell the user why via pageResetFailed below.
+                if (m_animationsPage != nullptr
+                    && m_animationsPage->clearOverridesUnder(animationScopedBuiltInPaths(scope)) < 0) {
+                    failed = true;
+                }
+                if (!failed) {
+                    // Shader tree: clear only this scope's overrides (the stored
+                    // default for an event subtree is "no overrides").
+                    PhosphorAnimationShaders::ShaderProfileTree tree = m_settings.shaderProfileTree();
+                    if (clearOverridesInScope(tree, [&scope](const QString& path) {
+                            return animationPathInScope(path, scope);
+                        })) {
+                        m_settings.setShaderProfileTree(tree);
+                    }
+                    // A page hosting the global timing / filter cards resets those
+                    // keys too (the condensed simple page). Deliberately the
+                    // General key list, NOT animationConfigKeys: the shader-tree
+                    // key is per-event state already handled per scope above.
+                    if (scope.includeGeneralKeys) {
+                        m_settings.resetKeys(animationGeneralConfigKeys());
+                    }
+                }
+            } else {
+                // WholeTree library leaf: files + every animation key.
+                if (m_animationsPage != nullptr && m_animationsPage->clearAllOverrides() < 0) {
+                    failed = true;
+                } else {
+                    m_settings.resetKeys(animationConfigKeys());
+                }
+            }
+        }
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
+        if (failed) {
+            // Same contract as the Quick Shortcuts branch: a reset that changed
+            // nothing is indistinguishable from a successful reset of an
+            // already-default page, so it must say so. Without this the user
+            // presses Reset, the page stays dirty, and the only trace is a
+            // qCWarning inside AnimationsPageController.
+            Q_EMIT pageResetFailed(page);
+        }
+        return;
+    }
+
+    // Decoration pages: reset to the built-in defaults. The stored blob holds
+    // only user edits; the built-in card chrome for the OSD and popups is a
+    // read-side seed layer (Settings::decorationProfileTree overlays
+    // ConfigDefaults::decorationProfileTree at lowest precedence). So a SURFACE
+    // page clears only its own root subtree's overrides — the seeds show
+    // through again, restoring the default chrome for seeded surfaces and "no
+    // decoration" everywhere else — leaving the other two roots (and the
+    // global baseline) standing; a non-surface leaf (sets/shaders, empty root)
+    // resets the whole tree key.
+    // Staged like ordinary edits: Save commits, Discard restores the baseline.
+    // Same NOTIFY-storm suppression as the manifest path.
+    if (isDecorationPage(page)) {
+        {
+            const LoadingScope loadingScope(m_loading);
+            const QString root = decorationSurfaceRoot(page);
+            if (root.isEmpty()) {
+                m_settings.resetKeys(decorationConfigKeys());
+            } else {
+                // Only this root's overrides go; the stored default for a surface
+                // subtree is "no user overrides", and the write path strips
+                // whatever seed-injected entries the merged read view carried, so
+                // the seeds re-surface on the next read.
+                PhosphorSurfaceShaders::DecorationProfileTree tree = m_settings.decorationProfileTree();
+                if (clearOverridesInScope(tree, [&root](const QString& path) {
+                        return decorationPathInRoot(path, root);
+                    })) {
+                    m_settings.setDecorationProfileTree(tree);
+                }
+            }
+        }
+        // isPageDirty(decoration) is value-based. Reconcile EVERY decoration
+        // leaf, not just the active page: a subtree reset can flip a sibling
+        // parent/child leaf's badge, and any stale m_dirtyPages entry left by an
+        // edit made while another leaf was active must clear too or needsSave()
+        // sticks true with no badge to explain it (mirrors the discardPage
+        // decoration branch). Batched so dirtyPagesChanged fires at most once.
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decorations")));
+        return;
+    }
+
     // Manifest-owned pages and the condensed simple pages were handled at the
     // top of this function; anything reaching here matched no manifest entry,
-    // no backing-page delegation, and no shared-domain / ordering / shortcut /
-    // virtual-screen branch, so there is nothing to reset.
+    // no backing-page delegation, and no ordering / shortcut / virtual-screen /
+    // shared-domain branch, so there is nothing to reset.
     qCWarning(PlasmaZones::lcCore) << "resetPage: no config manifest for page" << page;
 }
 
@@ -467,27 +518,11 @@ void SettingsController::discardPage(const QString& page)
                 // edits. Covered by the scope opened above.
                 PhosphorAnimationShaders::ShaderProfileTree current = m_settings.shaderProfileTree();
                 const PhosphorAnimationShaders::ShaderProfileTree baseline = m_settings.committedShaderProfileTree();
-                QSet<QString> paths;
-                for (const QString& p : current.overriddenPaths())
-                    if (animationPathInScope(p, scope))
-                        paths.insert(p);
-                for (const QString& p : baseline.overriddenPaths())
-                    if (animationPathInScope(p, scope))
-                        paths.insert(p);
-                bool changed = false;
-                for (const QString& path : paths) {
-                    if (baseline.hasOverride(path)) {
-                        const auto committed = baseline.directOverride(path);
-                        if (!current.hasOverride(path) || current.directOverride(path) != committed) {
-                            current.setOverride(path, committed);
-                            changed = true;
-                        }
-                    } else if (current.clearOverride(path)) {
-                        changed = true;
-                    }
-                }
-                if (changed)
+                if (restoreScopeToBaseline(current, baseline, [&scope](const QString& path) {
+                        return animationPathInScope(path, scope);
+                    })) {
                     m_settings.setShaderProfileTree(current);
+                }
                 // A page hosting the global timing / filter cards discards those
                 // keys too (the condensed simple page), mirroring its reset scope.
                 if (scope.includeGeneralKeys)
@@ -526,30 +561,11 @@ void SettingsController::discardPage(const QString& page)
                 PhosphorSurfaceShaders::DecorationProfileTree current = m_settings.decorationProfileTree();
                 const PhosphorSurfaceShaders::DecorationProfileTree baseline =
                     m_settings.committedDecorationProfileTree();
-                // Union of this root's overridden paths across both trees so a
-                // path that only exists in one (a staged add, or a baseline
-                // override the user cleared) is reconciled in the right direction.
-                QSet<QString> paths;
-                for (const QString& p : current.overriddenPaths())
-                    if (decorationPathInRoot(p, root))
-                        paths.insert(p);
-                for (const QString& p : baseline.overriddenPaths())
-                    if (decorationPathInRoot(p, root))
-                        paths.insert(p);
-                bool changed = false;
-                for (const QString& path : paths) {
-                    if (baseline.hasOverride(path)) {
-                        const auto committed = baseline.directOverride(path);
-                        if (!current.hasOverride(path) || current.directOverride(path) != committed) {
-                            current.setOverride(path, committed);
-                            changed = true;
-                        }
-                    } else if (current.clearOverride(path)) {
-                        changed = true;
-                    }
-                }
-                if (changed)
+                if (restoreScopeToBaseline(current, baseline, [&root](const QString& path) {
+                        return decorationPathInRoot(path, root);
+                    })) {
                     m_settings.setDecorationProfileTree(current);
+                }
             }
         }
         // Reconcile every decoration leaf against the value-based truth (this

@@ -215,7 +215,13 @@ Item {
     // replacement or a return to null can detach it — the loader hosts
     // exactly one header at a time.
     property Item _customHeader: null
-    // Handle custom header reparenting
+    // Handle custom header reparenting. What the LOADER shows is not decided
+    // here: headerLoader.sourceComponent is bound to `root.header !== null`
+    // below, which already expresses both cases (a custom header empties the
+    // loader, a return to null restores the default heading). Assigning it
+    // imperatively from this handler would sever that binding on the first
+    // header change and leave the same intent expressed twice, only one of
+    // which is still live.
     onHeaderChanged: {
         if (_customHeader && _customHeader !== header) {
             // Detach the previous custom header. The caller created it, so
@@ -229,12 +235,7 @@ Item {
             header.width = Qt.binding(function () {
                 return headerLoader.width;
             });
-            headerLoader.sourceComponent = null;
             _customHeader = header;
-        } else {
-            // Header returned to null — restore the default headerText header
-            // the initial declarative binding provided before it was nulled.
-            headerLoader.sourceComponent = defaultHeaderComponent;
         }
     }
 

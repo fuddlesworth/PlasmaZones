@@ -14,6 +14,7 @@
 
 using PhosphorControl::ApplicationController;
 using PhosphorControl::PageController;
+using PhosphorControl::PageRegistry;
 using PhosphorControl::StagingDomain;
 
 // A named namespace (not anonymous) so these helpers have external
@@ -402,6 +403,68 @@ private Q_SLOTS:
         QCOMPARE(app.currentPageId(), QStringLiteral("b"));
         QCOMPARE(app.gotoNextPage(), QStringLiteral("c"));
         QCOMPARE(app.gotoNextPage(), QStringLiteral("a")); // wraps
+    }
+
+    void gotoNextSkipsModeHiddenPages()
+    {
+        // Keyboard next/prev honours the same simple/advanced filter as the
+        // sidebar. Without it the walk steps onto a page the rail hides, which
+        // the user cannot get back to by the same route they arrived.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* adv = new StubPage(QStringLiteral("adv"));
+        auto* b = new StubPage(QStringLiteral("b"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        app.registerPage(adv, {}, QStringLiteral("Adv"), QUrl(QStringLiteral("qrc:/Adv.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+        app.registerPage(b, {}, QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+
+        // Advanced mode (the registry default): the advanced page is a normal
+        // stop on the walk.
+        app.setCurrentPageId(QStringLiteral("a"));
+        QCOMPARE(app.gotoNextPage(), QStringLiteral("adv"));
+
+        // Simple mode: the same step jumps straight over it.
+        app.registry()->setShowAdvanced(false);
+        app.setCurrentPageId(QStringLiteral("a"));
+        QCOMPARE(app.gotoNextPage(), QStringLiteral("b"));
+    }
+
+    void gotoNextKeepsAModeHiddenCurrentPageInTheWalk()
+    {
+        // The current page is deliberately kept in the navigable list even
+        // when the active tier filters it (a transient state during a mode
+        // flip), so the cursor keeps its position instead of collapsing to
+        // "not found" and restarting the walk from the top.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* adv = new StubPage(QStringLiteral("adv"));
+        auto* b = new StubPage(QStringLiteral("b"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        app.registerPage(adv, {}, QStringLiteral("Adv"), QUrl(QStringLiteral("qrc:/Adv.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+        app.registerPage(b, {}, QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+
+        app.registry()->setShowAdvanced(false);
+        app.setCurrentPageId(QStringLiteral("adv"));
+        // Held its slot between "a" and "b": forward lands on "b", not back on
+        // "a" (which is where a lost cursor would restart).
+        QCOMPARE(app.gotoNextPage(), QStringLiteral("b"));
+
+        // Same from the other direction, on a fresh controller so this is not
+        // reading the state the step above left behind.
+        ApplicationController back;
+        auto* a2 = new StubPage(QStringLiteral("a"));
+        auto* adv2 = new StubPage(QStringLiteral("adv"));
+        auto* b2 = new StubPage(QStringLiteral("b"));
+        back.registerPage(a2, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        back.registerPage(adv2, {}, QStringLiteral("Adv"), QUrl(QStringLiteral("qrc:/Adv.qml")), QString(), false,
+                          false, PageRegistry::PageVisibility::AdvancedOnly);
+        back.registerPage(b2, {}, QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+
+        back.registry()->setShowAdvanced(false);
+        back.setCurrentPageId(QStringLiteral("adv"));
+        QCOMPARE(back.gotoPreviousPage(), QStringLiteral("a"));
     }
 
     void gotoPreviousWrapsBackward()

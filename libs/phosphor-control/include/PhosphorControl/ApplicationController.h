@@ -82,7 +82,7 @@ public:
      *  unregistered after being visited, and pages the current
      *  simple/advanced tier hides (landing on one lets the app's mode gate
      *  bounce the user to a different page, so the returned id would not
-     *  match where they ended up). The cap of kMaxHistoryEntries applies
+     *  match where they ended up). The cap of MaxHistoryEntries applies
      *  when RECORDING ordinary navigation — the oldest entry falls off
      *  first; a history move only transfers an entry between the two
      *  stacks, so it conserves total depth. */
@@ -268,7 +268,7 @@ private:
     bool m_navigatingHistory = false;
     /// History depth cap — plenty for a settings session while bounding
     /// worst-case memory for a long-lived window.
-    static constexpr int kMaxHistoryEntries = 64;
+    static constexpr int MaxHistoryEntries = 64;
     // Deep-link reveal latch (see setPendingAnchor). Transient; not page identity.
     QString m_pendingAnchor;
     QString m_pendingAnchorPage;
@@ -344,8 +344,8 @@ private:
     /// signals before synthesising a failure entry per still-pending
     /// domain. Default 60 seconds (see asyncBatchTimeoutMs() /
     /// setAsyncBatchTimeoutMs() for consumer-facing tuning).
-    static constexpr int kDefaultAsyncBatchTimeoutMs = 60'000;
-    int m_asyncBatchTimeoutMs = kDefaultAsyncBatchTimeoutMs;
+    static constexpr int DefaultAsyncBatchTimeoutMs = 60'000;
+    int m_asyncBatchTimeoutMs = DefaultAsyncBatchTimeoutMs;
 };
 
 } // namespace PhosphorControl

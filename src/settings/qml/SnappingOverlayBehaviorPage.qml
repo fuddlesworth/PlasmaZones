@@ -54,31 +54,16 @@ SettingsFlickable {
 
                 SettingsSeparator {}
 
-                // The activation trigger list and the Hold/Toggle controls
-                // serve dual purpose (#249): when "Activate on every drag"
-                // is on, the same triggers DEACTIVATE the overlay (hold to
-                // hide; toggle to flip off the implicitly-on overlay).
-                // resolveActivationActive in the runtime mirrors this with
-                // an inversion gated on alwaysActiveOnDrag.
-                SettingsRow {
-                    readonly property string activeTitle: alwaysActivateSwitch.checked ? i18n("Hold to deactivate") : i18n("Hold to activate")
-                    readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Hold a modifier or mouse button while dragging to hide the zone overlay. Esc still cancels the drag entirely.") : i18n("Hold a modifier or mouse button to show zones while dragging")
-
-                    title: activeTitle
+                // Shared row — also hosted on SnappingSimplePage. It owns the
+                // dual-purpose inversion (#249): when "Activate on every drag"
+                // is on, the same triggers DEACTIVATE the overlay. The Toggle
+                // mode row below inverts with it (tap to flip off the
+                // implicitly-on overlay).
+                SnappingDragTriggerRow {
                     searchAnchor: "holdToActivate"
-                    description: activeDescription
-
-                    ModifierAndMouseCheckBoxes {
-                        width: root.sliderPreferredWidth
-                        allowMultiple: true
-                        acceptMode: acceptModeAll
-                        triggers: root.settingsBridge.dragActivationTriggers
-                        defaultTriggers: root.settingsBridge.defaultDragActivationTriggers
-                        tooltipEnabled: false
-                        onTriggersModified: triggers => {
-                            root.settingsBridge.dragActivationTriggers = triggers;
-                        }
-                    }
+                    settingsBridge: root.settingsBridge
+                    alwaysActive: alwaysActivateSwitch.checked
+                    sliderPreferredWidth: root.sliderPreferredWidth
                 }
 
                 SettingsSeparator {}

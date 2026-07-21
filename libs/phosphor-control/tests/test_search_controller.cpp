@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 #include <QUrl>
@@ -8,8 +9,8 @@
 #include "PhosphorControl/ApplicationController.h"
 #include "PhosphorControl/ISearchProvider.h"
 #include "PhosphorControl/PageController.h"
-#include "PhosphorControl/SearchController.h"
 #include "PhosphorControl/PageRegistry.h"
+#include "PhosphorControl/SearchController.h"
 #include "PhosphorControl/SearchEntry.h"
 #include "PhosphorControl/SearchRanker.h"
 
@@ -301,6 +302,33 @@ private Q_SLOTS:
         sc.setQuery(QStringLiteral("ghost"));
         for (const QVariant& v : sc.results()) {
             QVERIFY(v.toMap().value(QStringLiteral("title")).toString() != QStringLiteral("Ghost setting"));
+        }
+    }
+
+    void entryOnRegisteredCategoryPageIsDropped()
+    {
+        // Registered is NOT enough. "snapping" is a real registered page but a
+        // CATEGORY (empty qmlSource): it has no page body, so a result
+        // addressed at it navigates into an empty viewport. The page loop
+        // already applies this rule when auto-deriving entries; this pins the
+        // same rule for static/provider entries, which is a separate branch of
+        // the gate — every other fixture entry targets either a navigable leaf
+        // or an unregistered id, so the registration half alone covers none of
+        // it.
+        SearchController sc(m_app);
+        SearchEntry onCategory;
+        onCategory.kind = SearchEntry::Kind::Setting;
+        onCategory.pageId = QStringLiteral("snapping"); // registered, but qmlSource is empty
+        onCategory.anchor = QStringLiteral("whatever");
+        onCategory.title = QStringLiteral("Phantom knob");
+        sc.addEntry(onCategory);
+
+        QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression(QStringLiteral("pageId .*snapping.* is not a registered, navigable page")));
+        sc.setQuery(QStringLiteral("phantom"));
+        for (const QVariant& v : sc.results()) {
+            QVERIFY(v.toMap().value(QStringLiteral("title")).toString() != QStringLiteral("Phantom knob"));
         }
     }
 

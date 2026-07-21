@@ -68,13 +68,19 @@ Item {
         // destroyed (model churn during fast filtering/reloads); the dying
         // context resolves ids to undefined/null. Bail before dereferencing
         // rather than throwing — same guard as LayoutComboBox._doRebuild.
-        if (typeof root === "undefined" || !root)
+        if (typeof root === "undefined" || !root || !root.modelData)
             return;
         var pg = SearchAnchors.pageFor(root);
         if (pg)
             pg.registerSearchAnchor("layout:" + root.modelData.id, root);
     })
     Component.onDestruction: {
+        // Same guard as onCompleted above. A TypeError here would abort the
+        // handler and leak the registration, leaving the page's anchor map
+        // pointing at a destroyed delegate so every later deep link to this
+        // layout dead-ends.
+        if (typeof root === "undefined" || !root || !root.modelData)
+            return;
         var pg = SearchAnchors.pageFor(root);
         if (pg)
             pg.unregisterSearchAnchor("layout:" + root.modelData.id, root);
@@ -338,7 +344,7 @@ Item {
                                 return i18n("Auto-assign is forced on for all layouts by the global setting (Snapping → Behavior → Window Handling). Turn that off to control this layout individually.");
 
                             if (perLayoutAuto)
-                                return i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.");
+                                return i18n("Auto-assign is on, so new windows fill empty zones. Click to disable.");
 
                             return i18n("Click to auto-assign new windows to empty zones");
                         }

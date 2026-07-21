@@ -20,7 +20,7 @@ namespace {
 // keystroke would spin forever through the ring. Deliberately larger than
 // ApplicationController's 32-hop parent-chain cap because these walks DESCEND
 // a tree (depth scales with nesting) while that one walks a single chain.
-constexpr int kMaxWalkDepth = 64;
+constexpr int MaxWalkDepth = 64;
 
 // The one place a flat-mode title override is applied. Both the flat rail walk
 // and the Q_INVOKABLE Breadcrumbs calls go through here, so the rail and the
@@ -33,29 +33,29 @@ QString flatTitleOf(const QString& pageId, const QString& registeredTitle, const
 
 // Role keys. Declared once so a typo cannot silently produce a row the
 // delegate reads as undefined.
-constexpr QLatin1String kPageId{"pageId"};
-constexpr QLatin1String kTitle{"title"};
-constexpr QLatin1String kIconSource{"iconSource"};
-constexpr QLatin1String kHasQmlSource{"hasQmlSource"};
-constexpr QLatin1String kDepth{"_depth"};
-constexpr QLatin1String kIsCollapsibleHeader{"_isCollapsibleHeader"};
-constexpr QLatin1String kIsDrillParent{"_isDrillParent"};
-constexpr QLatin1String kIsExpanded{"_isExpanded"};
-constexpr QLatin1String kIsDivider{"_isDivider"};
+constexpr QLatin1String PageIdKey{"pageId"};
+constexpr QLatin1String TitleKey{"title"};
+constexpr QLatin1String IconSourceKey{"iconSource"};
+constexpr QLatin1String HasQmlSourceKey{"hasQmlSource"};
+constexpr QLatin1String DepthKey{"_depth"};
+constexpr QLatin1String IsCollapsibleHeaderKey{"_isCollapsibleHeader"};
+constexpr QLatin1String IsDrillParentKey{"_isDrillParent"};
+constexpr QLatin1String IsExpandedKey{"_isExpanded"};
+constexpr QLatin1String IsDividerKey{"_isDivider"};
 
 QVariantMap makeRow(const QString& pageId, const QString& title, const QString& iconSource, bool hasQmlSource,
                     int depth, bool isCollapsibleHeader, bool isDrillParent, bool isExpanded, bool isDivider)
 {
     QVariantMap row;
-    row.insert(kPageId, pageId);
-    row.insert(kTitle, title);
-    row.insert(kIconSource, iconSource);
-    row.insert(kHasQmlSource, hasQmlSource);
-    row.insert(kDepth, depth);
-    row.insert(kIsCollapsibleHeader, isCollapsibleHeader);
-    row.insert(kIsDrillParent, isDrillParent);
-    row.insert(kIsExpanded, isExpanded);
-    row.insert(kIsDivider, isDivider);
+    row.insert(PageIdKey, pageId);
+    row.insert(TitleKey, title);
+    row.insert(IconSourceKey, iconSource);
+    row.insert(HasQmlSourceKey, hasQmlSource);
+    row.insert(DepthKey, depth);
+    row.insert(IsCollapsibleHeaderKey, isCollapsibleHeader);
+    row.insert(IsDrillParentKey, isDrillParent);
+    row.insert(IsExpandedKey, isExpanded);
+    row.insert(IsDividerKey, isDivider);
     return row;
 }
 
@@ -66,7 +66,7 @@ QVariantMap makeDivider(const QString& pageId, int depth)
 
 bool rowIsDivider(const QVariantMap& row)
 {
-    return row.value(kIsDivider).toBool();
+    return row.value(IsDividerKey).toBool();
 }
 
 // An absent id counts as EXPANDED: the rail starts open, so only an explicit
@@ -104,7 +104,16 @@ void SidebarRows::setRegistry(PageRegistry* registry)
     if (m_registry == registry) {
         return;
     }
+    disconnect(m_registryDestroyed);
     m_registry = registry;
+    if (registry != nullptr) {
+        // Relay the registry's death as a property change. m_registry is a
+        // QPointer, so it self-nulls when the owning ApplicationController is
+        // torn down, but silently: a QML binding on `registry` would keep the
+        // stale value while build() had already begun returning an empty list.
+        // Signal-to-signal, so the binding re-evaluates and reads null.
+        m_registryDestroyed = connect(registry, &QObject::destroyed, this, &SidebarRows::registryChanged);
+    }
     Q_EMIT registryChanged();
 }
 
@@ -129,7 +138,18 @@ QList<PageRegistry::Entry> SidebarRows::firstTwoNavigableDescendants(const QStri
         return found;
     }
     const std::function<void(const QString&, int)> gather = [&](const QString& pid, int d) {
-        if (d > kMaxWalkDepth || found.size() > 1) {
+        if (found.size() > 1) {
+            return;
+        }
+        // Warn like the other three walks in this file. A truncated count is
+        // not a cosmetic omission here: it flips a real drill target into "not
+        // enterable", so build() drops the row and resolveDrillScope evicts the
+        // rail out of the scope. Silence would leave nothing in the log
+        // explaining either.
+        if (d > MaxWalkDepth) {
+            qWarning() << "SidebarRows: page tree nested deeper than" << MaxWalkDepth << "levels under id" << pid
+                       << "— descendants below this point are not counted, so the category may not be offered as a "
+                          "drill target";
             return;
         }
         const QList<PageRegistry::Entry> sub = m_registry->visibleChildPages(pid);
@@ -180,8 +200,8 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
         seen.insert(QString());
 
         const std::function<void(const QString&, int)> emitLeaves = [&](const QString& parentId, int depth) {
-            if (depth > kMaxWalkDepth) {
-                qWarning() << "SidebarRows: page tree nested deeper than" << kMaxWalkDepth << "levels under id"
+            if (depth > MaxWalkDepth) {
+                qWarning() << "SidebarRows: page tree nested deeper than" << MaxWalkDepth << "levels under id"
                            << parentId << "— rows below this point are omitted from the rail";
                 return;
             }
@@ -223,8 +243,8 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
 
         const std::function<void(const QString&, int, const QList<PageRegistry::Entry>&)> walk =
             [&](const QString& parentId, int depth, const QList<PageRegistry::Entry>& kids) {
-                if (depth > kMaxWalkDepth) {
-                    qWarning() << "SidebarRows: page tree nested deeper than" << kMaxWalkDepth << "levels under id"
+                if (depth > MaxWalkDepth) {
+                    qWarning() << "SidebarRows: page tree nested deeper than" << MaxWalkDepth << "levels under id"
                                << parentId << "— rows below this point are omitted from the rail";
                     return;
                 }
@@ -299,14 +319,20 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
 
     // Walk down until a navigable descendant appears, so a category-only
     // parent whose TITLE matches still routes the user somewhere useful.
+    // Descendants already in `emitted` are skipped rather than returned: their
+    // own row already offers that destination, and returning one would make the
+    // caller's duplicate guard drop the category's landing row entirely even
+    // though a second, un-emitted navigable descendant could have served it.
+    // An emitted navigable child is still RECURSED INTO — the candidate may be
+    // below it.
     const std::function<PageRegistry::Entry(const QString&, int)> findFirstNavigable =
         [&](const QString& parentId, int depth) -> PageRegistry::Entry {
-        if (depth > kMaxWalkDepth) {
+        if (depth > MaxWalkDepth) {
             return {};
         }
         const QList<PageRegistry::Entry> kids = m_registry->visibleChildPages(parentId);
         for (const PageRegistry::Entry& child : kids) {
-            if (!child.qmlSource.isEmpty()) {
+            if (!child.qmlSource.isEmpty() && !emitted.contains(child.id)) {
                 return child;
             }
             const PageRegistry::Entry desc = findFirstNavigable(child.id, depth + 1);
@@ -318,15 +344,15 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
     };
 
     // Takes `kids` by parameter rather than re-fetching, mirroring the tree
-    // walk above. visibleChildPages is a full scan of m_pages with an ancestor
-    // walk per entry, and the caller has already fetched this exact list to
-    // compute the has-children predicate — search runs on every keystroke, so
-    // fetching it twice per node made the walk quadratic in the catalogue for
-    // no new information.
+    // walk above. visibleChildPages copies an Entry per child and runs the
+    // visibility test (which descends the subtree) on each, and the caller has
+    // already fetched this exact list to compute the has-children predicate —
+    // search runs on every keystroke, so fetching it twice per node doubled the
+    // walk for no new information.
     const std::function<void(const QString&, const QList<PageRegistry::Entry>&, const QString&, int)> collect =
         [&](const QString& parentId, const QList<PageRegistry::Entry>& kids, const QString& breadcrumb, int depth) {
-            if (depth > kMaxWalkDepth) {
-                qWarning() << "SidebarRows: page tree nested deeper than" << kMaxWalkDepth << "levels under id"
+            if (depth > MaxWalkDepth) {
+                qWarning() << "SidebarRows: page tree nested deeper than" << MaxWalkDepth << "levels under id"
                            << parentId << "— matches below this point are omitted from the results";
                 return;
             }
@@ -369,18 +395,18 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
                         emitted.insert(child.id);
                     }
                 } else if (matchesNeedle && grand) {
+                    // findFirstNavigable skips ids already in `emitted`, so this
+                    // is an un-offered destination or nothing at all. In tree
+                    // mode a leaf's breadcrumb is `ancestor / leaf`, so any
+                    // needle matching this category also matches every
+                    // descendant, each of which emitted its own (more precise)
+                    // row during the recursion above — the walk then usually
+                    // finds nothing and no landing row is added. A flat override
+                    // REPLACES the breadcrumb, so there a descendant can fail to
+                    // match while the category matches, and this row is the only
+                    // thing that would offer the destination.
                     const PageRegistry::Entry landing = findFirstNavigable(child.id, depth + 1);
-                    // Reached only in FLAT mode, and only for a category whose
-                    // descendants carry a flatTitleOverrides entry. In tree mode a
-                    // leaf's breadcrumb is `ancestor / leaf`, so any needle
-                    // matching this category also matches every descendant, each of
-                    // which emitted its own (more precise) row and populated
-                    // `emitted` during the recursion above — the guard below then
-                    // always fires. A flat override REPLACES the breadcrumb, so
-                    // there the descendant can fail to match while the category
-                    // matches, and this row is the only thing that would offer the
-                    // destination. Kept for that case; it is not dead.
-                    if (!landing.id.isEmpty() && !emitted.contains(landing.id)) {
+                    if (!landing.id.isEmpty()) {
                         out.append(makeRow(landing.id, childBreadcrumb, landing.iconSource, true, 0, false, false,
                                            false, false));
                         emitted.insert(landing.id);

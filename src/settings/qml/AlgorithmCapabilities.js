@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 .pragma library
 
-// Shared algorithm-capability lookup for the two tiling surfaces
-// (TilingAlgorithmPage and TilingSimplePage).
+// Shared algorithm-capability lookup for every surface that renders or
+// configures a tiling algorithm (TilingAlgorithmPage, TilingSimplePage and
+// AlgorithmPreview).
 //
 // Both pages need the same answers about the selected algorithm, and both used
 // to implement this scan independently — including a hardcoded
@@ -43,6 +44,12 @@ function supportsCustomParams(caps) {
     return caps ? caps.supportsCustomParams === true : false;
 }
 
+/// True when the algorithm's zones deliberately overlap, which turns off the
+/// preview's inter-zone gaps so the stack reads as intended.
+function producesOverlappingZones(caps) {
+    return caps ? caps.producesOverlappingZones === true : false;
+}
+
 /// True when the algorithm's primary area is a CENTRE column rather than a
 /// master area, which changes the ratio/count row labels. Read straight from
 /// the catalog — never inferred from the algorithm id.
@@ -52,9 +59,13 @@ function centerLayout(caps) {
 
 /// The ratio a preview should draw when the algorithm exposes no ratio control
 /// of its own. Catalog-supplied, so a new algorithm gets its own default
-/// without either page learning about it.
+/// without either page learning about it. Every catalog entry carries the
+/// field, so `undefined` means the algorithm is not in the catalog at all —
+/// the same "we know nothing" answer the flag readers give as false, rather
+/// than a QML-side guess at a C++ default. Call sites pick their own fallback
+/// for that case; none of them may bind this straight into a `real`.
 function defaultSplitRatio(caps) {
-    return caps && caps.defaultSplitRatio !== undefined ? caps.defaultSplitRatio : 0.6;
+    return caps ? caps.defaultSplitRatio : undefined;
 }
 
 /// Which zone numbers the preview labels. "all" when the catalog is silent,

@@ -26,12 +26,11 @@ import "AlgorithmCapabilities.js" as AlgoCaps
  * page's global path — never the flat global SplitRatio, which would
  * clobber sibling algorithms' slots).
  *
- * One consequence worth knowing: a per-monitor override authored in advanced
- * mode still WINS over anything edited here. A user who set a per-monitor Max
- * windows or Master ratio, then switched to simple, will see this page's
- * slider move while that monitor's effective value does not change, because
- * the override shadows the global slot this page writes. Simple mode shows no
- * scope chip, so nothing on screen says so.
+ * A per-monitor override authored in advanced mode still WINS over anything
+ * edited here, because the override shadows the global slot this page writes.
+ * Simple mode has no scope chip to express that, so the card leads with an
+ * inline message whenever any monitor carries an Algorithm-subdomain override,
+ * and the user is pointed at advanced mode to inspect or drop it.
  */
 SettingsFlickable {
     id: root
@@ -62,6 +61,33 @@ SettingsFlickable {
     // for the preview; the simple page never edits them.
     property var algoSettings: ({})
     property var previewCustomParams: ({})
+    // Bumped whenever the per-screen store changes, so the override probe
+    // below re-runs. hasPerScreenAutotileAlgorithmSettings is a Q_INVOKABLE
+    // with no NOTIFY of its own, and the screen list alone does not change
+    // when an override is added or cleared.
+    property int _perScreenRevision: 0
+    // True when ANY connected monitor carries an Algorithm-subdomain override.
+    // Those shadow every write this page makes, and simple mode shows no scope
+    // chip, so the card says so instead of moving a slider that changes
+    // nothing for that monitor.
+    readonly property bool hasPerMonitorAlgorithmOverride: {
+        // Named so the binding registers a dependency on it.
+        const revision = root._perScreenRevision;
+        const list = revision >= 0 ? (settingsController.screens || []) : [];
+        for (let i = 0; i < list.length; ++i) {
+            if (settingsController.hasPerScreenAutotileAlgorithmSettings(list[i].name) === true)
+                return true;
+        }
+        return false;
+    }
+
+    Connections {
+        function onPerScreenAutotileSettingsChanged() {
+            root._perScreenRevision++;
+        }
+
+        target: root.appSettingsObj
+    }
 
     function _seedFromAlgorithm() {
         root.algoSettings = root.settingsBridge.algorithmSettingsFor(root.selectedAlgorithm);
@@ -143,19 +169,22 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
+                Kirigami.InlineMessage {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    type: Kirigami.MessageType.Information
+                    visible: root.hasPerMonitorAlgorithmOverride
+                    text: i18n("At least one monitor has its own tiling settings, which take priority over the values below. Switch to advanced mode to see or remove them.")
+                }
+
                 // Preview, description and picker — the shared block, also
                 // hosted by TilingAlgorithmPage. Fed from the saved tuning
                 // instead of live slider handles, and with no window-count
                 // caption, since this page leads with the picker itself.
                 //
-                // masterCount reads root.appSettingsObj, NOT the bare
-                // `appSettings`: AlgorithmPreview declares its own
-                // `appSettings`, which shadows the context property inside the
-                // component — the same trap documented for LayoutComboBox. The
-                // controller has no autotileMasterCount, so the bare form reads
-                // undefined, coerces to 0, and is clamped to 1 downstream, and
-                // the preview would silently ignore the configured master
-                // count.
+                // masterCount reads root.appSettingsObj because the controller
+                // has no autotileMasterCount of its own.
                 AlgorithmPreviewCard {
                     Layout.fillWidth: true
                     previewWidth: root.algorithmPreviewWidth
@@ -165,7 +194,18 @@ SettingsFlickable {
                     description: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
                     currentAlgorithmId: root.appSettingsObj.defaultAutotileAlgorithm
                     windowCount: maxWindowsSlider.slider.value
-                    splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : AlgoCaps.defaultSplitRatio(root.algoCapabilities)
+                    // An algorithm with no ratio control of its own draws at the
+                    // ratio the catalog declares for it. An algorithm the
+                    // catalog does not describe at all yields undefined there,
+                    // which must not reach this `real` property, so fall back to
+                    // the user's configured global ratio rather than a literal.
+                    splitRatio: {
+                        if (root.algoSupportsSplitRatio)
+                            return masterRatioSlider.slider.value;
+
+                        const catalogRatio = AlgoCaps.defaultSplitRatio(root.algoCapabilities);
+                        return catalogRatio !== undefined ? catalogRatio : root.appSettingsObj.autotileSplitRatio;
+                    }
                     supportsMasterCount: AlgoCaps.supportsMasterCount(root.algoCapabilities)
                     masterCount: root.algoSettings.masterCount !== undefined ? root.algoSettings.masterCount : root.appSettingsObj.autotileMasterCount
                     customParams: root.previewCustomParams

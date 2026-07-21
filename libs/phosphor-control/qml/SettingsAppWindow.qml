@@ -68,7 +68,13 @@ Kirigami.ApplicationWindow {
     property bool closePromptShowsApply: false
     /** Alias to the close-confirmation dialog itself, for consumers
      *  that need to retitle / restyle it. Read-only — the property
-     *  the alias points to is `id: discardDialog` declared below. */
+     *  the alias points to is `id: discardDialog` declared below.
+     *
+     *  Deliberately exported with no in-tree reader: this is a
+     *  consumer-facing slot on a reusable library component, and the
+     *  applications shipped in this repo happen to accept the default
+     *  dialog as-is. Removing it would break out-of-tree consumers that
+     *  restyle the prompt, so it stays part of the contract. */
     property alias closeDialog: discardDialog
     /** Auto-collapses the sidebar to an icon-only rail when the window
      *  is too narrow to comfortably show labels. Threshold is 50

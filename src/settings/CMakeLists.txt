@@ -296,6 +296,7 @@ qt_add_qml_module(plasmazones-settings
         qml/SnappingWindowHandlingCard.qml
         qml/SnappingFocusCard.qml
         qml/SnappingZoneSpanCard.qml
+        qml/SnappingDragTriggerRow.qml
         qml/TilingWindowHandlingCard.qml
         qml/TilingFocusCard.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which

@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -30,8 +31,10 @@ class ISearchProvider;
  *     addEntry(); dynamic content (rules/shaders/…) via registerProvider().
  *
  * QML binds `query` (the search field) and `results` (a ListView). Each result
- * map carries `title`, `subtitle`, `icon`, `kind`, `pageId`, `anchor`, and
- * `address` — selecting one calls `SettingsController::navigateTo(address)`.
+ * map carries `title`, `subtitle`, `icon`, `kind`, `pageId`, `anchor`,
+ * `address` and `actionId` — selecting one calls
+ * `SettingsController::navigateTo(address)`, except for Kind::Action results,
+ * which are dispatched by `actionId` instead.
  * `suggestion` holds a "did you mean …" title, populated only when a non-empty
  * query yields zero results.
  *
@@ -91,6 +94,11 @@ private:
     QHash<QString, QStringList> m_pageKeywords;
     QVector<SearchEntry> m_staticEntries;
     QVector<ISearchProvider*> m_providers;
+
+    /// pageIds already reported as unregistered / non-navigable, so the drop
+    /// warning is emitted once per offending id rather than once per index
+    /// rebuild. Mutable because buildIndex() is const.
+    mutable QSet<QString> m_warnedPageIds;
 
     bool m_indexDirty = true;
     QVector<SearchEntry> m_index;

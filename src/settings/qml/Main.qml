@@ -20,11 +20,6 @@ import org.plasmazones.common as QFZCommon
 // Discard/Keep prompt), the toast, the shortcut overlay, and the
 // What's-New banner that pops on first launch after an update.
 PhosphorUi.SettingsAppWindow {
-    // Aspect-ratio labels consumed by the layout context menu's
-    // submenu — kept at window scope rather than inside the Menu so
-    // future consumers (Per-Screen Override picker, Layouts page) can
-    // bind to the same canonical i18n strings without duplicating them.
-
     id: window
 
     // ── Public API used by per-page QML files ───────────────────────
@@ -39,6 +34,11 @@ PhosphorUi.SettingsAppWindow {
     // throwing `ReferenceError: defaultsConfirmDialog is not defined`
     // at runtime and leaving the user with no path to reset defaults.
     readonly property alias defaultsConfirmDialog: defaultsConfirmDialog
+    // Aspect-ratio labels consumed by the layout context menu's submenu, kept
+    // at window scope rather than inside the Menu so future consumers
+    // (Per-Screen Override picker, Layouts page) can bind to the same
+    // canonical i18n strings without duplicating them.
+    //
     // Kept as an object literal for back-compat with any QML reader that
     // expects index-by-key access (a Repeater iterates the keys / a
     // delegate looks up by aspect-ratio key). Reading any value here
@@ -121,6 +121,10 @@ PhosphorUi.SettingsAppWindow {
         whatsNewDialog.open();
     }
 
+    function showToast(msg) {
+        toast.show(msg);
+    }
+
     Connections {
         // resetPage stages nothing when it refuses, so the page simply stays
         // as it was. Without a word from here the user reads that as "Reset
@@ -133,10 +137,6 @@ PhosphorUi.SettingsAppWindow {
         }
 
         target: settingsController
-    }
-
-    function showToast(msg) {
-        toast.show(msg);
     }
 
     // Page-controller toasts, wired once here rather than per page. A refusal can
@@ -208,7 +208,8 @@ PhosphorUi.SettingsAppWindow {
     navigationShortcutsEnabled: window._navShortcutsEnabled
 
     // Global search in the header toolbar (headerExtras slot). It supersedes the
-    // in-sidebar page-tree filter, which is disabled in Component.onCompleted.
+    // in-sidebar page-tree filter, which is switched off by the declarative
+    // `sidebar.searchEnabled: false` further down this file.
     headerExtras: Component {
         GlobalSearchField {
             // SettingsAppWindow paints the header band itself with the Header
@@ -304,9 +305,9 @@ PhosphorUi.SettingsAppWindow {
     // Per-page overflow (kebab) in the breadcrumb row: Reset this page to
     // defaults / Discard this page's unsaved changes. Shown on any page that
     // supports at least one action. The two items query pageSupportsReset /
-    // pageSupportsDiscard separately so a future discard-only page can show just
-    // Discard; today every resettable page is also discardable, so the two
-    // predicates match. Both route through a window-scoped confirm.
+    // pageSupportsDiscard separately, and the two sets are not the same:
+    // pageSupportsDiscard also accepts a parent category, which discardPage
+    // handles by walking the group. Both route through a window-scoped confirm.
     breadcrumbTrailing: Component {
         Row {
             spacing: 0
@@ -371,8 +372,6 @@ PhosphorUi.SettingsAppWindow {
         // property itself (compiled-module singletons have no root-context
         // chain), so inject it once here.
         QFZCommon.ZoneColorDefaults.settingsSource = appSettings;
-
-        // The header search supersedes the sidebar's page-tree search.
 
         var geo = settingsController.loadWindowGeometry();
         if (geo.width > 0 && geo.height > 0) {
@@ -547,9 +546,11 @@ PhosphorUi.SettingsAppWindow {
     // Guarded: page navigation must not fire while any of the inline
     // confirm dialogs (whatsNewDialog,
     // defaultsConfirmDialog, sectionToggleDiscardConfirm, daemonStopConfirm,
-    // resetPageConfirmDialog, discardPageConfirmDialog),
+    // resetPageConfirmDialog, discardPageConfirmDialog), either of the
+    // window-root menus (layoutContextMenu, pageActionsMenu),
     // the shortcut
-    // overlay, the active page's own modal stack (RulesPage's
+    // overlay, the global search dropdown, the sidebar profile switcher's
+    // dropdown, the active page's own modal stack (RulesPage's
     // forceSaveConfirm / addRuleWizard / ruleEditorSheet /
     // windowPickerDialog), OR a native child window (QtQuick FileDialog,
     // system color picker, etc.) is open. The `window.active` check
@@ -994,6 +995,17 @@ PhosphorUi.SettingsAppWindow {
             // simple mode, and the inline enable toggles must stay with them.
             readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
             readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
+            // The id whose dirty state this row REPRESENTS, which is not
+            // always the id it renders. Simple mode flattens each of the
+            // Snapping / Tiling subtrees into one leaf row, and
+            // isPageDirty("snapping-simple") aggregates only the two leaves
+            // backing that simple page — edits staged on the mode's other
+            // advanced leaves (shaders, ordering, shortcuts, ...) survive the
+            // flip and would go unseen. The mode id aggregates the whole
+            // subtree in both modes and is what the section toggle hands to
+            // discardPage() / beginExternalEdit(), so badge, guard and commit
+            // share one scope.
+            readonly property string dirtyScopeId: isSnapping ? "snapping" : (isTiling ? "tiling" : (entry ? entry.pageId : ""))
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0
@@ -1034,7 +1046,7 @@ PhosphorUi.SettingsAppWindow {
                         return false;
 
                     void trailingRow._dirtyTick; // deliberate dependency registration
-                    return settingsController.isPageDirty(trailingRow.entry.pageId);
+                    return settingsController.isPageDirty(trailingRow.dirtyScopeId);
                 }
 
                 SequentialAnimation on opacity {
@@ -1071,7 +1083,11 @@ PhosphorUi.SettingsAppWindow {
                     // state the page has staged). Prompt before clobbering.
                     // Enabling is safe — it doesn't discard anything — so
                     // we only gate the disable path.
-                    if (!newValue && trailingRow.entry && settingsController.isPageDirty(trailingRow.entry.pageId)) {
+                    //
+                    // The guard queries `dirtyScopeId`, the same mode id the
+                    // confirm hands to discardPage() below, so it cannot see a
+                    // narrower slice of the subtree than the commit it guards.
+                    if (!newValue && trailingRow.entry && settingsController.isPageDirty(trailingRow.dirtyScopeId)) {
                         sectionToggleDiscardConfirm.pendingSection = trailingRow.isSnapping ? "snapping" : "tiling";
                         sectionToggleDiscardConfirm.pendingValue = newValue;
                         sectionToggleDiscardConfirm.open();

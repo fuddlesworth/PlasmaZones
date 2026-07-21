@@ -36,7 +36,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // Single source of truth: parent name → set of leaf child page
     // names. Used by `isPageDirty` to propagate dirty state from a
     // leaf to any group it belongs to. Covers parents at every level:
-    // top-level categories (placement / display / animations) AND the
+    // top-level categories (placement / display / appearance) AND the
     // mid-level virtual parents nested beneath them (snapping / tiling
     // under placement; animations-transitions / animations-motion /
     // animations-library; the *-cat headers) whose children don't share

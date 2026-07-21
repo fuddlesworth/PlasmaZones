@@ -418,12 +418,13 @@ ColumnLayout {
         }
 
         // The rail is built from the registry's tier-filtered tree accessors,
-        // so it rebuilds whenever the visible set changes. That covers both a
-        // simple/advanced master flip and a per-entry setPageVisibility
-        // restamp — visibleSetChanged rather than showAdvancedChanged, which
-        // fires only for the former and would leave a restamped entry stale
-        // in the rail while search (the other tier-filtering consumer) had
-        // already rebuilt.
+        // so it rebuilds whenever the visible set changes. The live producer is
+        // the simple/advanced master flip (setShowAdvanced); a lib consumer
+        // driving visibility per entry through setPageVisibility reaches the
+        // same signal and is covered too. Bound to visibleSetChanged rather
+        // than showAdvancedChanged, which fires only for the master flip and
+        // would leave a restamped entry stale in the rail while search (the
+        // other tier-filtering consumer) had already rebuilt.
         function onVisibleSetChanged() {
             root._bumpRegistryTick();
             // A restamp can hide the very parent we are drilled into, or hide

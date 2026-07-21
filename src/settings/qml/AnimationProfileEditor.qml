@@ -77,14 +77,11 @@ ColumnLayout {
     /// the Duration slider alongside the shader picker + parameters. The
     /// stored profile keeps whatever curve/mode it already has.
     property bool simpleTiming: false
-    /// Bumped externally on `shaderEffectsChanged` so this editor's
-    /// consumer-fed picker / schema bindings re-evaluate when a pack is
-    /// dropped / removed mid-session.
-    property int registryRevision: 0
     /// Picker model — the consumer hands in
     /// `availableShaderEffects()` (or a registry-tick-bound
     /// equivalent) so the picker stays reactive without this editor
-    /// having to subscribe.
+    /// having to subscribe. Reactivity is entirely the consumer's:
+    /// re-assigning this property is what re-evaluates the picker.
     property var availableShaders: []
     /// Parameter schema for the currently-picked shader — the consumer
     /// hands in `shaderParameters(shaderEffectId)` (registry-tick-bound)
@@ -308,18 +305,14 @@ ColumnLayout {
         PZCommon.CategoryMenuButton {
             id: shaderPicker
 
-            // `availableShaders` is supplied by the consumer; bumping
-            // `registryRevision` is how reactivity is communicated.
-            readonly property var _effectModel: {
-                void (root.registryRevision);
-                return root.availableShaders;
-            }
-
             // SettingsRow lays its default children out in a plain Row
             // positioner, so Layout.* attached properties are inert here —
             // size explicitly or the button sits at implicit width.
             width: Kirigami.Units.gridUnit * 16
-            items: _effectModel
+            // Bound straight to the consumer's property. The consumer owns the
+            // registry-tick dependency and re-assigns this on every bump, so an
+            // extra tick read here would only double the invalidation.
+            items: root.availableShaders
             currentId: root.shaderEffectId
             noneId: ""
             includeNoneEntry: true

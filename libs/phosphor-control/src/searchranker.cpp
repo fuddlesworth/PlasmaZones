@@ -65,7 +65,8 @@ bool wordStartPrefix(const QString& hay, const QString& n)
 }
 
 // Subsequence score: 0 if `n` is not an in-order subsequence of `hay`;
-// otherwise 360 for a tight match down to 120 for a very gappy one. Only
+// otherwise up to 330 for the densest reachable match, down to 120 for a very
+// gappy one. Only
 // reached after exact/prefix/substring miss, so a match here always has gaps.
 int subsequenceScore(const QString& hay, const QString& n)
 {

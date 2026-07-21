@@ -65,25 +65,15 @@ SettingsFlickable {
 
                 SettingsSeparator {}
 
-                // Same dual-purpose triggers as the advanced Behavior page:
-                // with "Show zones on every drag" on, the held trigger HIDES
-                // the overlay instead of showing it.
-                SettingsRow {
-                    title: alwaysActivateSwitch.checked ? i18n("Hold to hide zones") : i18n("Hold to show zones")
+                // Shared row — the same component the advanced Behavior page
+                // hosts, so the dual-purpose inversion (with "Show zones on
+                // every drag" on, the held trigger HIDES the overlay) is
+                // stated once for both surfaces.
+                SnappingDragTriggerRow {
                     searchAnchor: "simpleHoldToActivate"
-                    description: alwaysActivateSwitch.checked ? i18n("Hold a modifier or mouse button while dragging to hide the zone overlay") : i18n("Hold a modifier or mouse button to show zones while dragging")
-
-                    ModifierAndMouseCheckBoxes {
-                        allowMultiple: true
-                        width: root.sliderPreferredWidth
-                        acceptMode: acceptModeAll
-                        triggers: root.settingsBridge.dragActivationTriggers
-                        defaultTriggers: root.settingsBridge.defaultDragActivationTriggers
-                        tooltipEnabled: false
-                        onTriggersModified: triggers => {
-                            root.settingsBridge.dragActivationTriggers = triggers;
-                        }
-                    }
+                    settingsBridge: root.settingsBridge
+                    alwaysActive: alwaysActivateSwitch.checked
+                    sliderPreferredWidth: root.sliderPreferredWidth
                 }
 
                 SettingsSeparator {}
@@ -126,11 +116,12 @@ SettingsFlickable {
         }
 
         // The three cards below are the same components the advanced
-        // Snapping pages host, so those rows cannot drift. Every row in the
-        // card ABOVE is this page's own, worded for the simple surface:
-        // they bind the same settings as the advanced Triggers and Snap
-        // Assist cards but deliberately use plainer titles and drop the
-        // advanced pages' extra qualifiers.
+        // Snapping pages host, so those rows cannot drift. In the card ABOVE,
+        // the hold-trigger row is likewise shared, because its meaning
+        // inverts with the switch and the runtime mirrors that inversion. The
+        // remaining rows there are this page's own, binding the same settings
+        // as the advanced Triggers and Snap Assist cards but with plainer
+        // titles and without the advanced pages' extra qualifiers.
         SnappingZoneSpanCard {
             Layout.fillWidth: true
             settingsBridge: root.settingsBridge

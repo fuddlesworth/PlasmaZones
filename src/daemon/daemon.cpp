@@ -554,7 +554,12 @@ void Daemon::publishActiveAnimationProfile()
         //
         // ownerOf() answers the question that actually matters: is this entry
         // the loader's parsed JSON? Only then is it a valid merge base.
-        const bool loaderOwnsPath = m_profileLoader && reg.ownerOf(*path) == m_profileLoader->ownerTag();
+        //
+        // Resolved ONCE per path: the tag is needed again at the re-register
+        // below, and this is a ~30 Hz path where each ownerOf() is a locked
+        // lookup.
+        const QString pathOwner = reg.ownerOf(*path);
+        const bool loaderOwnsPath = m_profileLoader && pathOwner == m_profileLoader->ownerTag();
         if (loaderOwnsPath) {
             // A user JSON owns this path, but its unset fields must still fall
             // back to the user's settings rather than to library defaults.
@@ -573,9 +578,17 @@ void Daemon::publishActiveAnimationProfile()
                 if (!owned.has_value()) {
                     // ownerOf() named the loader, so the entry exists by
                     // construction. Belt and braces.
+                    //
+                    // Republished under the LOADER's tag, not untagged. An
+                    // untagged entry is a direct-owner entry, and
+                    // reloadFromOwner's "direct owner always wins" rule then
+                    // makes the loader skip this path on every later rescan —
+                    // the user's JSON would be silently discarded for the rest
+                    // of the session, which is exactly what the ownership check
+                    // above exists to prevent.
                     qCWarning(lcCore) << "animation profile publish: registry reports loader ownership of" << *path
                                       << "but has no entry — publishing settings defaults instead";
-                    reg.registerProfile(*path, settingsProfile);
+                    reg.registerProfile(*path, settingsProfile, pathOwner);
                     continue;
                 }
                 rawIt = m_rawJsonProfiles.insert(*path, *owned);
@@ -599,10 +612,10 @@ void Daemon::publishActiveAnimationProfile()
             //
             // No pre-check: registerProfile already compares BOTH value and
             // owner before inserting or emitting, so a guard here would be
-            // dead, would cost two extra locked resolve() calls on a ~30 Hz
+            // dead, would cost an extra locked resolve() call on a ~30 Hz
             // path, and — comparing value only — would miss an owner-only
             // difference that registerProfile does correct.
-            reg.registerProfile(*path, mergedProfile, reg.ownerOf(*path));
+            reg.registerProfile(*path, mergedProfile, pathOwner);
             continue;
         }
         reg.registerProfile(*path, settingsProfile);

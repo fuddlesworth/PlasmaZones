@@ -89,7 +89,10 @@ Item {
     property bool _committingShader: false
 
     /// Every path this card writes: its own, then the mirrors.
-    readonly property var _writePaths: [root.eventPath].concat(root.mirrorPaths)
+    /// `|| []` for the same reason Component.onCompleted guards the property:
+    /// it is deliberately untyped `var`, so a consumer can leave it undefined,
+    /// and concat would then append that as ONE bogus write path.
+    readonly property var _writePaths: [root.eventPath].concat(root.mirrorPaths || [])
     /// The card's hosting SettingsCard. The virtualized card list re-registers
     /// its search anchor against this once the card builds, so a deep-link
     /// reveal can expand the card when it's collapsed.
@@ -137,13 +140,12 @@ Item {
     // Global until the page is rebuilt — visible on the simple page, where the
     // Global card and the cards inheriting from it share one screen.
     Connections {
-        // Bump the inheritance cache only. A full refreshFromTree here would
-        // re-create the very N-round-trip storm _inheritRev exists to prevent:
-        // dragging the Global duration fires this at slider rate, and every
-        // built card would pay six file opens plus two chain walks per tick.
-        // The breadcrumb and any override-OFF card read through
-        // _inheritResolved, which the bump alone invalidates. A card that owns
-        // an override shows its own values and does not care.
+        // Route through _reseedFromInherited (cache bump plus, for an
+        // override-OFF card only, the one chain walk the "Current:" label was
+        // going to trigger anyway) rather than a full refreshFromTree, which
+        // would re-create the very N-round-trip storm _inheritRev exists to
+        // prevent: this fires at slider rate while the Global duration is
+        // dragged, and every built card would pay six file opens per tick.
         function onAnimationDurationChanged() {
             root._reseedFromInherited();
         }
@@ -439,26 +441,23 @@ Item {
         const profile = cached || settingsController.animationsPage.rawProfile(path) || ({});
         const shader = settingsController.animationsPage.rawShaderProfile(path) || ({});
         // Divergence is measured on exactly what this card WRITES to every
-        // path, which is duration and the shader leg. Everything else a leaf
-        // can carry is per-path by design: the curve, because simple mode
-        // writes per-path curves so a path that owns one keeps it, and the
-        // motion-set fields (minDistance, sequenceMode, staggerInterval,
-        // presetName), because the merged writer preserves each path's own.
-        // Counting any of those latched the banner ON permanently with no
-        // control able to clear it, while the banner promised the next edit
-        // would converge the group. An allowlist rather than an exclusion
-        // list, so a field added to the stored profile later cannot latch it
-        // again without also being added to what the card writes.
+        // path: duration (commitOverride -> _setOverrideMerged) and the whole
+        // shader leg (_setShaderOverrideOnAll, reached from the picker, the
+        // param sliders, randomize and reset). Both group writers loop
+        // _writePaths, so a divergence on either axis really is converged by
+        // the next edit on that axis, which is what the banner promises.
+        //
+        // Everything else a leaf can carry is per-path by design and is left
+        // out: the curve, because the only mirrored card is the simple-mode one
+        // and its commitOverride passes `undefined` so each path keeps its own,
+        // and the motion-set fields (minDistance, sequenceMode,
+        // staggerInterval, presetName), because the merged writer preserves
+        // each path's own. Counting any of those latched the banner ON
+        // permanently with no control able to clear it. An allowlist, so a new
+        // stored-profile field cannot latch it again unless the card writes it.
         const compared = {};
         if (profile.duration !== undefined)
             compared.duration = profile.duration;
-        // The curve exclusion above is conditional on the SIMPLE-mode leg,
-        // which writes per-path curves. The advanced leg passes
-        // currentCurveString to _setOverrideMerged, so it writes ONE curve to
-        // every path — a divergent mirror curve there IS clobbered by the next
-        // edit, and the banner has to say so.
-        if (!root.simpleTiming && profile.curve !== undefined)
-            compared.curve = profile.curve;
         return JSON.stringify([compared, shader]);
     }
 
@@ -534,6 +533,16 @@ Item {
                 root.currentTimingMode = CurvePresets.timingModeSpring;
                 root.currentSpringOmega = w;
                 root.currentSpringZeta = z;
+            } else {
+                // A hand-edited "spring:abc,def" still RESOLVES as a spring —
+                // Spring::fromString clamps the unparseable halves to its own
+                // defaults rather than falling back to easing. Without this the
+                // mode kept its previous value (Easing on first seed) and drew
+                // a Duration slider the resolved spring ignores, while
+                // inheritSummaryText reported the same input as "Spring ·
+                // Custom". Cached omega / zeta stay put: there is nothing
+                // parsed to replace them with.
+                root.currentTimingMode = CurvePresets.timingModeSpring;
             }
         } else {
             root.currentTimingMode = CurvePresets.timingModeEasing;
@@ -876,12 +885,13 @@ Item {
                 Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Warning
                 visible: root._mirrorsDiverged
-                // Scoped to what a duration edit ACTUALLY converges. The shader leg
-                // moves only when the user touches the shader picker, so
-                // promising it here left the banner lit after the most likely
-                // next action. Count is the number of events the card controls
-                // (itself plus its mirrors), not the mirror count.
-                text: i18np("Another event this card controls is set differently right now, and this card shows only one of them. The next change you make to the timing here applies to both.", "This card controls %n events that are set differently right now, and it shows only one of them. The next change you make to the timing here applies to all of them.", 1 + root.mirrorPaths.length)
+                // Names both axes _storedStateKey compares, because both have a
+                // group writer. Naming only the timing left the banner lit with
+                // no explanation after a shader-only divergence. Count is the
+                // events the card controls, and the banner needs a mirror to be
+                // visible at all, so it is always two or more — a singular
+                // plural form here would never render.
+                text: i18n("This card controls %1 events that are set differently right now, and it shows only one of them. The next change you make to the timing or the shader here applies to all of them.", root._writePaths.length)
             }
 
             Label {
@@ -911,7 +921,6 @@ Item {
                 shaderLegSupported: root._shaderLegSupported
                 showTimingSection: root.overrideEnabled
                 simpleTiming: root.simpleTiming
-                registryRevision: root._shaderRegistryRev
                 enableLocking: true
                 enableRandomize: true
                 enableImage: false

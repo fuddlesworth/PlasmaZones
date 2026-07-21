@@ -74,15 +74,19 @@ void ApplicationController::setCurrentPageId(const QString& id)
     // m_navigatingHistory to skip this. The startup transition (empty →
     // first page) records nothing — there is no page to go back to.
     // Computed only when they will be read. Each is an any_of over up to
-    // kMaxHistoryEntries entries with an ancestor-chain resolve apiece, and
+    // MaxHistoryEntries entries with an ancestor-chain resolve apiece, and
     // during a history step the diff below is suppressed, so computing them
-    // there was two full scans thrown away per step.
-    const bool couldGoBack = m_navigatingHistory ? false : canGoBack();
-    const bool couldGoForward = m_navigatingHistory ? false : canGoForward();
+    // there would be two full scans thrown away per step. Captured BEFORE the
+    // stacks are mutated and before m_currentPageId moves, since canGoBack
+    // depends on both.
+    bool couldGoBack = false;
+    bool couldGoForward = false;
     if (!m_navigatingHistory) {
+        couldGoBack = canGoBack();
+        couldGoForward = canGoForward();
         if (!m_currentPageId.isEmpty()) {
             m_backHistory.append(m_currentPageId);
-            if (m_backHistory.size() > kMaxHistoryEntries) {
+            if (m_backHistory.size() > MaxHistoryEntries) {
                 m_backHistory.removeFirst();
             }
         }
@@ -108,6 +112,17 @@ void ApplicationController::setCurrentPageId(const QString& id)
 void ApplicationController::setPendingAnchor(const QString& pageId, const QString& anchor)
 {
     if (pageId.isEmpty() || anchor.isEmpty()) {
+        return;
+    }
+    // Arming the latch for a page that does not exist leaves a request no
+    // takePendingAnchor can ever match, and the resulting silence is
+    // indistinguishable from "the page had no such anchor". A deep link naming
+    // a page that was renamed or never registered is a caller bug; say so here
+    // rather than degrade quietly, matching setCurrentPageId's unknown-page
+    // warning.
+    if (m_registry == nullptr || !m_registry->hasPage(pageId)) {
+        qWarning() << "ApplicationController::setPendingAnchor: no registered page" << pageId
+                   << "— dropping deep-link anchor" << anchor;
         return;
     }
     m_pendingAnchorPage = pageId;
@@ -328,7 +343,9 @@ struct NavigableState
 NavigableState collectNavigable(const PageRegistry* registry, const QString& currentPageId)
 {
     NavigableState out;
-    for (const auto& e : registry->allPages()) {
+    // By reference: this runs on every gotoNextPage / gotoPreviousPage and only
+    // reads, so allPages()'s deep copy of the whole catalogue was pure waste.
+    for (const auto& e : registry->allPagesRef()) {
         if (e.qmlSource.isEmpty()) {
             continue;
         }
@@ -490,8 +507,13 @@ QString ApplicationController::goForward()
 QStringList ApplicationController::dirtyPageIds() const
 {
     QStringList ids;
-    for (const PageRegistry::Entry& entry : m_registry->allPages()) {
-        const PageController* ctrl = m_registry->controller(entry.id);
+    // By reference, and reading entry.controller directly: the entry already
+    // holds the QPointer, so controller(entry.id) was a second hash lookup for
+    // a pointer in hand. QPointer::data() is null exactly when controller()
+    // would have returned null (both go through the same guarded pointer), so
+    // the null check below is unchanged.
+    for (const PageRegistry::Entry& entry : m_registry->allPagesRef()) {
+        const PageController* ctrl = entry.controller.data();
         if (ctrl != nullptr && ctrl->isDirty()) {
             ids.append(entry.id);
         }
@@ -518,7 +540,10 @@ QStringList ApplicationController::parentChainFor(const QString& id) const
             // is reserved for actual depth-exceeded cases.
             return chain;
         }
-        const QString parent = m_registry->entry(cursor).parentId;
+        // parentIdOf, not entry(): the walk needs one field per hop, and
+        // entry() returns a full Entry copy (four QStrings, a QUrl and a
+        // QPointer) to be discarded immediately.
+        const QString parent = m_registry->parentIdOf(cursor);
         if (parent.isEmpty()) {
             return chain;
         }

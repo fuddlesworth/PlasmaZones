@@ -125,18 +125,24 @@ Q_SIGNALS:
     void registryChanged();
 
 private:
+    /// Up to two navigable descendants of @p parentId, depth-capped. Shared by
+    /// build()'s drill-row decision and resolveDrillScope so the two cannot
+    /// disagree about what counts as an enterable category.
+    QList<PageRegistry::Entry> firstTwoNavigableDescendants(const QString& parentId) const;
+
     /// QPointer, not a raw pointer: the registry is set from QML
     /// (`registry: root.controller.registry`) and is owned by the
     /// ApplicationController, not by this object. If that controller is torn
     /// down first, a raw pointer would leave build() dereferencing freed
     /// memory behind a null check that still reads as non-null. QPointer makes
     /// the existing `m_registry == nullptr` guard actually true in that case.
-    /// Up to two navigable descendants of @p parentId, depth-capped. Shared by
-    /// build()'s drill-row decision and resolveDrillScope so the two cannot
-    /// disagree about what counts as an enterable category.
-    QList<PageRegistry::Entry> firstTwoNavigableDescendants(const QString& parentId) const;
-
     QPointer<PageRegistry> m_registry;
+    /// Handle for the current registry's destroyed() → registryChanged relay.
+    /// The QPointer above self-nulls SILENTLY, so without this a QML binding on
+    /// `registry` would hold a stale non-null value while build() had already
+    /// started returning an empty list. Held so setRegistry can drop the old
+    /// registry's relay before wiring the new one.
+    QMetaObject::Connection m_registryDestroyed;
 };
 
 } // namespace PhosphorControl

@@ -29,9 +29,12 @@
 
 #include <QTest>
 
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
+#include <QList>
 #include <QRegularExpression>
 #include <QSet>
 #include <QString>
@@ -77,6 +80,9 @@ QString stripLineComments(const QString& src)
         // where that would delete the line's opening brace and leave the
         // caller's brace stack off by one for the entire rest of the file.
         // Escapes are honoured so a literal \" cannot end the span early.
+        // Backticks count as quotes too: JS template literals appear in ten of
+        // the parsed QML files, and a `//` inside one truncates the line the
+        // same way.
         int cut = -1;
         QChar quote;
         for (int i = 0; i < line.size(); ++i) {
@@ -89,7 +95,7 @@ QString stripLineComments(const QString& src)
                 }
                 continue;
             }
-            if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
+            if (c == QLatin1Char('"') || c == QLatin1Char('\'') || c == QLatin1Char('`')) {
                 quote = c;
             } else if (c == QLatin1Char('/') && i + 1 < line.size() && line.at(i + 1) == QLatin1Char('/')) {
                 cut = i;
@@ -127,10 +133,12 @@ struct Block
 /// LIMITATION: braces are counted lexically, including any inside string
 /// literals and JS expression bodies. One unbalanced brace in a QML string
 /// would shift every block boundary after it and silently mis-attribute
-/// anchors in either direction. No parsed file contains one today (verified across all src/settings/qml/*Page.qml), and
-/// theParserFindsAdvancedAnchors' per-file assertions would fail loudly if a
-/// shift ever collapsed a file's parse. Teach this to skip quoted spans before
-/// pointing it at a third file.
+/// anchors in either direction. everyAdvancedGatedPageIsInTheMap points this
+/// parser at every file in src/settings/qml, so the exposure is the whole
+/// directory, not a hand-picked pair. No file there contains an unbalanced
+/// brace in a literal today, and theParserFindsAdvancedAnchors' per-file
+/// assertions fail loudly if a shift ever collapses a mapped file's parse. The
+/// robust fix is to skip quoted spans here rather than to narrow the input.
 QList<Block> parseBlocks(const QString& src)
 {
     QList<Block> all;
@@ -169,7 +177,15 @@ QString ownBody(const QString& src, const Block& b)
 bool declaresAdvancedGate(const QString& body)
 {
     static const QRegularExpression kProp(QStringLiteral("\\badvancedOnly\\s*:\\s*true"));
-    static const QRegularExpression kBinding(QStringLiteral("\\bvisible\\s*:[^\\n]*\\badvancedMode\\b"));
+    // The reference to advancedMode must be POSITIVE. `visible:
+    // !settingsController.advancedMode` is a simple-mode-only row, the exact
+    // opposite tier, and a loose match would classify it as advanced and then
+    // demand the wrong catalogue flag. The lookbehinds reject a match whose
+    // dotted path starts right after `!` or `!(`, and force the match to begin
+    // at the head of that path so `!foo.advancedMode` cannot be re-matched from
+    // `advancedMode` alone.
+    static const QRegularExpression kBinding(
+        QStringLiteral("\\bvisible\\s*:[^\\n]*?(?<![.\\w])(?<!!)(?<!!\\()(?:\\w+\\.)*advancedMode\\b"));
     return body.contains(kProp) || body.contains(kBinding);
 }
 
@@ -261,22 +277,73 @@ private Q_SLOTS:
         // qmlFileToPageId is hand-maintained, and catalogueTiersMatchTheQml
         // only compares the files IN it. A third page growing an advanced gate
         // would therefore be skipped entirely, in the "missing" direction,
-        // silently. Glob the page files and assert the converse of the map's
-        // own comment, so the invariant is checked rather than described.
-        const QStringList pages = QDir(m_qmlDir).entryList({QStringLiteral("*Page.qml")}, QDir::Files);
-        QVERIFY(!pages.isEmpty());
+        // silently. Glob the QML and assert the converse of the map's own
+        // comment, so the invariant is checked rather than described.
+        //
+        // The glob is *.qml, not *Page.qml: sixteen non-page files in this
+        // directory declare `searchAnchor:`, and an `advancedOnly: true`
+        // written inline beside one of those anchors is a real gate that a
+        // page-only glob never sees.
+        const QStringList files = QDir(m_qmlDir).entryList({QStringLiteral("*.qml")}, QDir::Files);
+        QVERIFY2(files.size() > 100,
+                 qPrintable(QStringLiteral("only %1 QML files globbed from %2").arg(files.size()).arg(m_qmlDir)));
+        // A mapped file that was renamed away would otherwise leave both this
+        // test and catalogueTiersMatchTheQml parsing an empty string.
+        for (auto it = qmlFileToPageId().cbegin(); it != qmlFileToPageId().cend(); ++it) {
+            QVERIFY2(files.contains(it.key()),
+                     qPrintable(QStringLiteral("qmlFileToPageId names %1, which no longer exists").arg(it.key())));
+        }
+
         QStringList missing;
-        for (const QString& file : pages) {
+        // Shared components have no single host page, so their gated anchors
+        // cannot be attributed by this per-file parse at all. They are skipped
+        // by name and counted here rather than dropped, and the skip is only
+        // legal when crossFileAdvanced() already carries the anchor under a
+        // real page id. An unaccounted one fails below.
+        QStringList sharedSkipped;
+        QStringList unaccounted;
+        for (const QString& file : files) {
             if (qmlFileToPageId().contains(file)) {
                 continue;
             }
-            if (!advancedAnchorsIn(m_qmlDir + QLatin1Char('/') + file).isEmpty()) {
-                missing << file;
+            const QSet<QString> anchors = advancedAnchorsIn(m_qmlDir + QLatin1Char('/') + file);
+            if (anchors.isEmpty()) {
+                continue;
             }
+            if (file.endsWith(QLatin1String("Page.qml"))) {
+                missing << file;
+                continue;
+            }
+            bool covered = true;
+            for (const QString& a : anchors) {
+                const QString suffix = QLatin1Char('/') + a;
+                bool found = false;
+                for (const QString& pair : crossFileAdvanced()) {
+                    if (pair.endsWith(suffix)) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    covered = false;
+                    unaccounted << file + suffix;
+                }
+            }
+            if (covered) {
+                sharedSkipped << file;
+            }
+        }
+        if (!sharedSkipped.isEmpty()) {
+            qInfo() << "shared components skipped (tier attributed via crossFileAdvanced):" << sharedSkipped.size()
+                    << sharedSkipped;
         }
         QVERIFY2(missing.isEmpty(),
                  qPrintable(QStringLiteral("pages with advanced gates but no qmlFileToPageId entry: %1")
                                 .arg(missing.join(QStringLiteral(", ")))));
+        QVERIFY2(unaccounted.isEmpty(),
+                 qPrintable(QStringLiteral("shared components declaring an advanced gate that crossFileAdvanced() "
+                                           "does not account for: %1")
+                                .arg(unaccounted.join(QStringLiteral(", ")))));
     }
 
     void catalogueTiersMatchTheQml()
@@ -325,6 +392,17 @@ private Q_SLOTS:
             const auto m = rit.next();
             registered.insert(m.captured(1) + QLatin1Char('/') + m.captured(2));
         }
+        // Vacuity guard, same shape as the ones in
+        // everyCataloguePageIdIsRegistered. `registered` is the intersection
+        // basis, so if kCall stops matching (a catalogue reformat, or a page id
+        // hoisted into a constant) it comes back empty, the intersect empties
+        // `expected`, and both assertions below pass having compared nothing.
+        // The catalogue registers ~255 unique (page, anchor) pairs, so a floor
+        // well under that still catches a broken regex.
+        QVERIFY2(registered.size() > 150,
+                 qPrintable(QStringLiteral("catalogue parse yielded only %1 (page, anchor) pairs — kCall no longer "
+                                           "matches the catalogue's call shape")
+                                .arg(registered.size())));
         expected.intersect(registered);
 
         const QSet<QString> missing = expected - flagged;

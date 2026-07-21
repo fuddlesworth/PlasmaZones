@@ -38,7 +38,12 @@ AnimationPageScope animationPageScope(const QString& page)
     // roots its cards bind plus the General keys. It must NOT fall through to
     // WholeTree: that would make a Reset here clear every override across
     // osd/popup/panel/widget/editor as well, none of which this page shows.
-    // Keep the roots in lockstep with AnimationsSimplePage.qml's eventModel.
+    // These roots are held in lockstep with AnimationsSimplePage.qml's
+    // eventModel by test_animations_page_controller's
+    // simpleScopeCoversEverySimplePageCard, which parses that file's eventPath
+    // entries and asserts each one is in scope here, so a card added there
+    // without a root here fails the suite rather than falling silently outside
+    // the page's Reset / Discard / dirty walk.
     // window.movement covers window.movement.move as a descendant, and the
     // page shows both, so there is no carve-out here.
     if (page == QLatin1String("animations-simple")) {

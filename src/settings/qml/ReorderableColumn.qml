@@ -297,7 +297,13 @@ Item {
                             delegateRoot.y = Qt.binding(function () {
                                 return delegateRoot.baseY + delegateRoot.visualOffset;
                             });
-                            if (from >= 0 && to >= 0 && from !== to && to < root.items.length)
+                            // BOTH indices are range-checked against the model
+                            // as it stands now. The model can shrink mid-drag
+                            // (an async consumer refresh), which leaves the
+                            // index captured on press pointing past the end,
+                            // and the consumer would then act on an
+                            // out-of-range source.
+                            if (from >= 0 && to >= 0 && from !== to && from < root.items.length && to < root.items.length)
                                 root.moveRequested(from, to);
                         }
                         onPositionChanged: {

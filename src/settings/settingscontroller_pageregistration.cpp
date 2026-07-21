@@ -22,10 +22,6 @@
 #include "pageadapter.h"
 #include "settingsstagingdomain.h"
 
-#include <QFile>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QSettings>
 #include <QStringList>
 #include <QUrl>

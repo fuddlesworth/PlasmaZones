@@ -626,7 +626,11 @@ private Q_SLOTS:
         QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("full")));
         reg.setPageVisibility(QStringLiteral("full"), PageRegistry::PageVisibility::Always);
         QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("full")));
-        // Unknown id: warn-and-ignore, no crash.
+        // Unknown id: warn-and-ignore, no crash. The warning is the pinned
+        // half — ignoreMessage fails the test if it stops being emitted, so a
+        // silent swallow cannot pass here as "no crash".
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("setPageVisibility: unknown page id .*no-such-page")));
         reg.setPageVisibility(QStringLiteral("no-such-page"), PageRegistry::PageVisibility::SimpleOnly);
     }
 

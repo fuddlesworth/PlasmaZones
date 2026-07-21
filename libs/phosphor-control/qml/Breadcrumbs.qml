@@ -123,14 +123,33 @@ RowLayout {
         }
         // firstVisibleLeafId walks the TIER-FILTERED tree, so an ancestor
         // crumb's target changes when the visible set changes, not only when a
-        // page is registered. Without this a per-entry setPageVisibility
-        // restamp leaves targetId pointing at a leaf the mode now hides.
-        // Discrete event, not a batch — bumped synchronously.
+        // page is registered. The live producer is the simple/advanced master
+        // flip (setShowAdvanced); a per-entry setPageVisibility restamp reaches
+        // the same signal, so lib consumers driving visibility that way are
+        // covered too. Without this, targetId keeps pointing at a leaf the
+        // current mode hides. Discrete event, not a batch — bumped
+        // synchronously.
         function onVisibleSetChanged() {
             root._bumpRegistryTick();
         }
 
         target: root.controller.registry
+    }
+
+    // Covers a consumer assigning or rebinding `Breadcrumbs.controller` after
+    // this component is built, which swaps the registry underneath
+    // `titleResolver`. `_maxParentChainHops` is a property binding and
+    // re-evaluates on its own, but `segments` reads flatPageData(), a
+    // Q_INVOKABLE that registers no dependency, so without this bump the trail
+    // stays resolved against the old registry. Mirrors the same hook the rail
+    // carries in Sidebar.qml. Coalesced for the same reason the
+    // pageRegistered bump is.
+    Connections {
+        function onRegistryChanged() {
+            Qt.callLater(root._bumpRegistryTick);
+        }
+
+        target: titleResolver
     }
 
     Repeater {
@@ -184,11 +203,8 @@ RowLayout {
                         root.controller.currentPageId = segmentRow.targetId;
                 }
 
-                // Long localised crumbs (e.g. "Mostrar configuración
-                // avanzada de personalización") would otherwise overflow the
-                // breadcrumb bar — clamp to the consumer-controllable
-                // maxSegmentWidth budget and elide with a middle ellipsis so
-                // both ends (parent context + leaf name) stay readable.
+                // Clamped to the maxSegmentWidth budget, see its docstring on
+                // root for why.
                 Layout.preferredWidth: Math.min(segmentLabel.implicitWidth, root.maxSegmentWidth)
                 Layout.preferredHeight: segmentLabel.implicitHeight
                 activeFocusOnTab: segmentRow.clickable

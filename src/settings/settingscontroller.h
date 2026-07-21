@@ -235,10 +235,11 @@ public:
     /// condensed simple pages (delegate to their backing pages).
     Q_INVOKABLE bool pageSupportsReset(const QString& page) const;
 
-    /// True when @p page can discard its own unsaved edits. Currently every page
-    /// that supports reset also supports discard, so this mirrors
-    /// pageSupportsReset. Kept as a separate query so the kebab can show the two
-    /// items independently if the sets ever diverge.
+    /// True when @p page can discard its own unsaved edits: every page
+    /// pageSupportsReset accepts, plus the parent categories, which discardPage
+    /// handles by walking their discardable leaves and Reset has no equivalent
+    /// for. Kept as a separate query so the kebab can show the two items
+    /// independently.
     Q_INVOKABLE bool pageSupportsDiscard(const QString& page) const;
 
     /// Reset every config key owned by @p page to its schema default, staged
@@ -774,6 +775,12 @@ private:
     // entry on the simple leaf the edit was attributed to while the user was
     // in simple mode. Both syncs share one dirtyPagesChanged emit.
     void reconcilePageDirty(const QString& page);
+    /// Set @p page's m_dirtyPages membership to @p dirty, returning whether the
+    /// membership actually flipped. The one place that invariant is written: every
+    /// reconcile below composes its batched dirtyPagesChanged emit out of this,
+    /// so insert/remove and "did anything change" can never drift apart. Does not
+    /// emit — the caller owns the batching.
+    bool syncDirtyMembership(const QString& page, bool dirty);
     /// RAII batch window for the above: defers dirtyPagesChanged for the
     /// enclosing scope so a delegated Reset/Discard that walks several backing
     /// pages emits one NOTIFY instead of one per page. Nestable — only the

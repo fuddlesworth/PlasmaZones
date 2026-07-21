@@ -950,7 +950,13 @@ set(_animations_ctrl_SRCS
 # plasmazones-settings executable, not plasmazones_core).
 add_executable(test_animations_page_controller
     settings/test_animations_page_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationpagescope.cpp
     ${_animations_ctrl_SRCS}
+)
+# simpleScopeCoversEverySimplePageCard reads AnimationsSimplePage.qml from the
+# source tree to prove the C++ scope roots still cover every card the page hosts.
+target_compile_definitions(test_animations_page_controller
+    PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\""
 )
 target_link_libraries(test_animations_page_controller
     PRIVATE

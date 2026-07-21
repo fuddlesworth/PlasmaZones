@@ -629,9 +629,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Window moved"), {PhosphorI18n::tr("drag"), PhosphorI18n::tr("move")});
     addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("desktop.switch"),
                PhosphorI18n::tr("Desktop switched"), {PhosphorI18n::tr("desktop"), PhosphorI18n::tr("switch")});
-    addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("simpleExcludeNotificationsAndOsds"),
-               PhosphorI18n::tr("Exclude notifications and OSDs"),
-               {PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("volume"), PhosphorI18n::tr("brightness")});
 
     // The condensed simple pages host the SAME shared cards their advanced
     // twins do, so every anchor those cards register needs a row against the
@@ -697,6 +694,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("excludeTransient"),
                PhosphorI18n::tr("Exclude transient windows"),
                {PhosphorI18n::tr("dialogs"), PhosphorI18n::tr("popups"), PhosphorI18n::tr("tooltips")});
+    addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("excludeNotificationsAndOsds"),
+               PhosphorI18n::tr("Exclude notifications and OSDs"),
+               {PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("volume"), PhosphorI18n::tr("brightness")});
     addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("minimumWindowWidth"),
                PhosphorI18n::tr("Minimum window width"), {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("narrow")});
     addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("minimumWindowHeight"),

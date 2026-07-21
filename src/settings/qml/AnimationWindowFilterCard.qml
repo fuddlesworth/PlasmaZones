@@ -28,17 +28,6 @@ ColumnLayout {
 
     /// The ISettings object holding the animation* filter keys.
     required property QtObject cardSettings
-    /// Search anchor id for the notifications row. The global search
-    /// catalogue keys on (page, anchor), and the two hosts are different
-    /// pages, so a shared id would be unambiguous — this property is
-    /// redundant today and both hosts could use the same literal. It exists
-    /// only because searchcatalog.cpp already registers these two specific
-    /// ids and a contract test cross-checks the QML against it. Passed whole
-    /// rather than composed from a prefix: concatenating onto an identifier
-    /// silently changes its casing, which breaks the catalogue's exact-id
-    /// match.
-    property string notificationsAnchor: "excludeNotificationsAndOsds"
-
     Layout.fillWidth: true
     spacing: Kirigami.Units.largeSpacing
 
@@ -71,7 +60,11 @@ ColumnLayout {
 
                 SettingsRow {
                     title: i18n("Exclude notifications and OSDs")
-                    searchAnchor: card.notificationsAnchor
+                    // Search anchors are keyed on (page, anchor), and this card's
+                    // two hosts are different pages, so both can register the
+                    // same id. Matches the sibling filter rows, which are
+                    // likewise shared verbatim across the two hosts.
+                    searchAnchor: "excludeNotificationsAndOsds"
                     description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
 
                     SettingsSwitch {

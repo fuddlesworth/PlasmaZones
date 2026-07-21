@@ -67,8 +67,13 @@ bool PageRegistry::registerPage(Entry entry)
     }
 
     const QString id = entry.id;
-    m_indexById.insert(id, m_pages.size());
+    const QString parentId = entry.parentId;
+    const qsizetype index = m_pages.size();
+    m_indexById.insert(id, index);
     m_controllerSet.insert(ctrl);
+    // Registration order within a parent is the order the sidebar renders, so
+    // appending here preserves it for every accessor that reads the index.
+    m_childrenByParent[parentId].append(index);
     m_pages.append(std::move(entry));
     Q_EMIT pageRegistered(id);
     return true;
@@ -141,8 +146,12 @@ bool PageRegistry::isEntryVisible(const Entry& entry) const
     if (!entry.qmlSource.isEmpty()) {
         return true;
     }
-    for (const Entry& child : m_pages) {
-        if (child.parentId == entry.id && isEntryVisible(child)) {
+    const auto it = m_childrenByParent.constFind(entry.id);
+    if (it == m_childrenByParent.constEnd()) {
+        return false;
+    }
+    for (const qsizetype idx : it.value()) {
+        if (isEntryVisible(m_pages.at(idx))) {
             return true;
         }
     }
@@ -267,6 +276,13 @@ bool PageRegistry::validateCounterparts() const
             qWarning() << "PageRegistry: page" << e.id << "declares counterpart" << e.counterpartId
                        << "which is not navigable (no QML of its own) — a redirect would land on an empty page";
             ok = false;
+            // Same reason the same-tier branch stops: a category has no QML of
+            // its own, so if it is also unreachable in the flipped mode the
+            // block below would report a SECOND warning for the one declaration
+            // fault already named here, sending a maintainer looking for a
+            // filtering ancestor on top of a counterpart that cannot be a
+            // redirect target at all.
+            continue;
         }
         {
             // Opposite tiers are necessary but NOT sufficient. The gate this
@@ -296,8 +312,13 @@ bool PageRegistry::validateCounterparts() const
 
 QString PageRegistry::firstVisibleLeafId(const QString& parentId) const
 {
-    for (const Entry& e : m_pages) {
-        if (e.parentId != parentId || !isEntryVisible(e)) {
+    const auto it = m_childrenByParent.constFind(parentId);
+    if (it == m_childrenByParent.constEnd()) {
+        return {};
+    }
+    for (const qsizetype idx : it.value()) {
+        const Entry& e = m_pages.at(idx);
+        if (!isEntryVisible(e)) {
             continue;
         }
         if (!e.qmlSource.isEmpty()) {
@@ -331,6 +352,15 @@ PageRegistry::Entry PageRegistry::entry(const QString& id) const
     return m_pages.at(it.value());
 }
 
+QString PageRegistry::parentIdOf(const QString& id) const
+{
+    const auto it = m_indexById.constFind(id);
+    if (it == m_indexById.constEnd()) {
+        return {};
+    }
+    return m_pages.at(it.value()).parentId;
+}
+
 QList<PageRegistry::Entry> PageRegistry::topLevelPages() const
 {
     QList<Entry> out;
@@ -349,14 +379,17 @@ QList<PageRegistry::Entry> PageRegistry::topLevelPages() const
 QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) const
 {
     QList<Entry> out;
-    // No worst-case reserve: a recursive per-node caller in a consuming app
-    // calls this per node as it recurses, so reserving the whole catalogue per
-    // call allocates room for every page to hold a handful of children, over
-    // and over. Same reasoning as visibleChildPages below.
-    for (const Entry& e : m_pages) {
-        if (e.parentId == parentId) {
-            out.append(e);
-        }
+    const auto it = m_childrenByParent.constFind(parentId);
+    if (it == m_childrenByParent.constEnd()) {
+        return out;
+    }
+    // Exact reserve, not the worst-case one topLevelPages uses: the index knows
+    // the child count up front. That matters because a recursive per-node
+    // caller runs this once per node, and a whole-catalogue reserve there would
+    // allocate room for every page to hold a handful of children, over and over.
+    out.reserve(it.value().size());
+    for (const qsizetype idx : it.value()) {
+        out.append(m_pages.at(idx));
     }
     return out;
 }
@@ -364,14 +397,18 @@ QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) con
 QList<PageRegistry::Entry> PageRegistry::visibleChildPages(const QString& parentId) const
 {
     QList<Entry> out;
-    // Deliberately NOT reserving m_pages.size() the way topLevelPages does.
-    // That one is a whole-catalogue one-shot; this is called dozens of times
-    // per sidebar rebuild (SidebarRows walks it per node) and typically returns
-    // 1-5 entries, so a worst-case reserve allocates room for the entire
-    // catalogue repeatedly to hold a handful of results. childPages has the
-    // same per-node recursive caller and the same treatment.
-    for (const Entry& e : m_pages) {
-        if (e.parentId == parentId && isEntryVisible(e)) {
+    const auto it = m_childrenByParent.constFind(parentId);
+    if (it == m_childrenByParent.constEnd()) {
+        return out;
+    }
+    // Exact reserve for the same reason as childPages: this is called once per
+    // node per sidebar rebuild (SidebarRows walks it per node, on every search
+    // keystroke) and typically returns 1-5 entries. The visibility filter can
+    // only shrink the result, so the child count is a tight upper bound.
+    out.reserve(it.value().size());
+    for (const qsizetype idx : it.value()) {
+        const Entry& e = m_pages.at(idx);
+        if (isEntryVisible(e)) {
             out.append(e);
         }
     }
@@ -379,6 +416,11 @@ QList<PageRegistry::Entry> PageRegistry::visibleChildPages(const QString& parent
 }
 
 QList<PageRegistry::Entry> PageRegistry::allPages() const
+{
+    return m_pages;
+}
+
+const QList<PageRegistry::Entry>& PageRegistry::allPagesRef() const
 {
     return m_pages;
 }

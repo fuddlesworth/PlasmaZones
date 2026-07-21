@@ -159,7 +159,11 @@ ColumnLayout {
                 // Strip the "autotile:" prefix the combo's ids carry. An empty
                 // value passes straight through, so each page applies its own
                 // fallback for a model that rebuilt under the selection.
-                let selectedId = algorithmCombo.currentValue;
+                //
+                // currentValue is undefined (not "") while currentIndex is -1,
+                // which a model rebuild under the selection produces, so coerce
+                // before the prefix test rather than letting it throw.
+                let selectedId = String(algorithmCombo.currentValue || "");
                 if (selectedId.startsWith("autotile:"))
                     selectedId = selectedId.substring(9);
                 card.algorithmActivated(selectedId);

@@ -243,6 +243,12 @@ public:
      *  page" from "page exists with empty optional fields" should call
      *  hasPage() first. */
     Entry entry(const QString& id) const;
+    /** The parentId of @p id, or an empty string when the id is unknown or the
+     *  entry is top-level. Exists so an upward parent walk
+     *  (ApplicationController::parentChainFor) can read one field per hop
+     *  instead of copying a whole Entry (four QStrings, a QUrl and a QPointer)
+     *  to throw all but one of them away. */
+    QString parentIdOf(const QString& id) const;
 
     QList<Entry> topLevelPages() const;
     QList<Entry> childPages(const QString& parentId) const;
@@ -253,6 +259,13 @@ public:
      *  navigable view wants this one. */
     QList<Entry> visibleChildPages(const QString& parentId) const;
     QList<Entry> allPages() const;
+    /** The catalogue by reference, for whole-list walks that only READ.
+     *  allPages() deep-copies every Entry, which the hot walks
+     *  (ApplicationController's dirtyPageIds and its keyboard next/prev
+     *  navigable collection) paid on every invocation for a list they only
+     *  iterate. The reference stays valid until the next registerPage, which
+     *  may reallocate m_pages — do not hold it across a registration. */
+    const QList<Entry>& allPagesRef() const;
 
     // QML-facing accessors. Return dicts whose canonical key set lives in
     // entryToVariant() (pageregistry.cpp): id, parentId, title, iconSource,
@@ -317,6 +330,8 @@ private:
     /// category header disappears with its children. Recursion is bounded
     /// by the tree depth; the registry graph is acyclic by construction
     /// (registerPage rejects a parentId that isn't already registered).
+    /// Descends via m_childrenByParent, so the cost is the size of the
+    /// subtree below @p entry rather than a full m_pages rescan per level.
     bool isEntryVisible(const Entry& entry) const;
 
     QList<Entry> m_pages;
@@ -327,6 +342,15 @@ private:
     // when stricter build flags land. Settings registries are never
     // anywhere near 2^31 pages, but the narrowing is unnecessary.
     QHash<QString, qsizetype> m_indexById;
+    // Child indices grouped by parentId (the empty key holds the top-level
+    // entries), in registration order. Every tree accessor here descends
+    // through this rather than rescanning m_pages: isEntryVisible used to walk
+    // the whole catalogue per level to find one node's children, which made a
+    // single visibleChildPages call O(N²) and the sidebar's per-node search
+    // walk superlinear on the keystroke path. Built in registerPage and never
+    // invalidated — the catalogue only ever grows, and setPageVisibility
+    // restamps a tier without moving an entry.
+    QHash<QString, QList<qsizetype>> m_childrenByParent;
     // Controller-pointer dedup set — registerPage previously did an
     // O(N) linear scan of m_pages per registration to reject a
     // duplicate controller, which compounded to O(K²) for K page

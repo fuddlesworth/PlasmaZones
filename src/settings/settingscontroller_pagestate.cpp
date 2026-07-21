@@ -3,12 +3,18 @@
 
 // Active-page navigation + per-page dirty tracking + external-edit envelope
 // for SettingsController:
-//   * setActivePage / resolveToLeaf — switch the viewed page, resolving a
-//     parent category to a leaf and applying the simple/advanced mode gate
+//   * setActivePage / resolveToLeaf / firstLeafAnyMode — switch the viewed
+//     page, resolving a parent category to a leaf and applying the
+//     simple/advanced mode gate
 //   * navigateTo      — setActivePage plus an optional "#anchor" reveal
 //   * setAdvancedMode — flip the mode, re-filter the rail, re-gate the page
 //   * onSettings/ExternalSettingsChanged — NOTIFY → dirty / reload hooks
+//   * maybeDrainPendingExternalReload — adopt a reload deferred while dirty
 //   * setNeedsSave / dirtyPages / isPageDirty — dirty-state surface for QML
+//   * emitDirtyPagesChanged — the batched dirtyPagesChanged emit
+//   * syncDirtyMembership — the one m_dirtyPages insert/remove invariant
+//   * reconcilePagesDirty / reconcilePageDirty / reconcileRuleBackedDirty —
+//     re-attribute dirty state from the value-based truth
 //   * begin/endExternalEdit — stack envelope so sidebar/global widgets mark
 //     the correct page dirty
 //
@@ -196,12 +202,16 @@ void SettingsController::setActivePage(const QString& page)
         // m_loading suppresses onSettingsPropertyChanged — the QML Loader
         // reacts synchronously to activePageChanged and new page creation
         // may trigger NOTIFY signals that would otherwise mark pages dirty.
-        m_settingActivePage = true;
-        m_loading = true;
+        // Both flags are raised through the RAII scope rather than
+        // hand-restored: the emit below synchronously runs arbitrary QML page
+        // construction, and an exception escaping it would otherwise strand
+        // m_loading raised (dirty tracking suppressed for the rest of the
+        // session) and m_settingActivePage raised (every later navigation
+        // refused as reentrant).
+        const LoadingScope activePageScope(m_settingActivePage);
+        const LoadingScope loadingScope(m_loading);
         m_activePage = target;
         Q_EMIT activePageChanged();
-        m_loading = false;
-        m_settingActivePage = false;
     }
 }
 
@@ -488,13 +498,7 @@ void SettingsController::reconcilePagesDirty(const QSet<QString>& pages)
     // batch this way).
     bool changed = false;
     for (const QString& page : pages) {
-        const bool dirty = isPageDirty(page);
-        const bool had = m_dirtyPages.contains(page);
-        if (dirty && !had) {
-            m_dirtyPages.insert(page);
-            changed = true;
-        } else if (!dirty && had) {
-            m_dirtyPages.remove(page);
+        if (syncDirtyMembership(page, isPageDirty(page))) {
             changed = true;
         }
     }
@@ -512,13 +516,7 @@ void SettingsController::reconcilePageDirty(const QString& page)
     // the user was in simple mode). Batched into one NOTIFY.
     bool changed = false;
     const auto sync = [this, &changed](const QString& p) {
-        const bool dirty = isPageDirty(p);
-        const bool had = m_dirtyPages.contains(p);
-        if (dirty && !had) {
-            m_dirtyPages.insert(p);
-            changed = true;
-        } else if (!dirty && had) {
-            m_dirtyPages.remove(p);
+        if (syncDirtyMembership(p, isPageDirty(p))) {
             changed = true;
         }
     };
@@ -542,21 +540,21 @@ void SettingsController::reconcileRuleBackedDirty()
     // edit badges Rules even when the shared dirty bit does not transition. (The
     // Windows appearance page is a plain config page now — its dirtiness comes from
     // the config manifest via isPageDirty, not from the rule model.)
-    bool changed = false;
-    const auto sync = [this, &changed](const QString& page, bool dirty) {
-        if (dirty) {
-            if (!m_dirtyPages.contains(page)) {
-                m_dirtyPages.insert(page);
-                changed = true;
-            }
-        } else if (m_dirtyPages.remove(page)) {
-            changed = true;
-        }
-    };
-    sync(QStringLiteral("rules"), m_rulesPage->userRulesDirty());
-    if (changed) {
+    if (syncDirtyMembership(QStringLiteral("rules"), m_rulesPage->userRulesDirty())) {
         emitDirtyPagesChanged();
     }
+}
+
+bool SettingsController::syncDirtyMembership(const QString& page, bool dirty)
+{
+    if (dirty) {
+        if (m_dirtyPages.contains(page)) {
+            return false;
+        }
+        m_dirtyPages.insert(page);
+        return true;
+    }
+    return m_dirtyPages.remove(page);
 }
 
 void SettingsController::beginExternalEdit(const QString& page)
