@@ -63,10 +63,12 @@ PhosphorUi.SettingsAppWindow {
             "super-ultrawide": aspectRatioLabelsObject.superUltrawide,
             "portrait": aspectRatioLabelsObject.portrait
         })
-    // Name of the profile a pending (staged, unsaved) switch would apply,
-    // refreshed from the bridge on profilesChanged — every staged-active
-    // mutation announces itself through that signal. Empty when no profile
-    // switch is pending or the switch clears the active profile.
+    // Name of the profile that a Save would apply: the STAGED-active row,
+    // refreshed from the bridge on profilesChanged (every staged-active
+    // mutation announces itself through that signal). Empty when no profile
+    // is active. The footer message that consumes it is additionally gated on
+    // the Profiles page being dirty, so it surfaces for any staged profile
+    // edit, not only a staged switch.
     property string _pendingProfileName
 
     // Make the Save footer say what Save will actually do when the batch
@@ -382,6 +384,19 @@ PhosphorUi.SettingsAppWindow {
     // both at restore-time (Component.onCompleted) AND when activePage
     // changes externally (CLI --page, daemon broadcast, shortcut). DRY
     // the chain-walk so future tweaks happen in one place.
+    // Re-run on a mode flip: the flat rail has no scopes, but flipping back
+    // to the tree rail must restore the drill scope for the active page.
+    // Without this a mode-agnostic page (Rules, Layouts) leaves the rail at
+    // top level while the active page is nested — the counterpart pages only
+    // get there incidentally, via the redirect's activePageChanged.
+    Connections {
+        function onAdvancedModeChanged() {
+            window._drillIntoActivePage();
+        }
+
+        target: settingsController
+    }
+
     function _drillIntoActivePage() {
         // Flat simple-mode rail has no drill scopes — every page is a
         // top-level row, so there is nothing to restore into.
@@ -545,7 +560,10 @@ PhosphorUi.SettingsAppWindow {
     property bool _searchOpen: false
     /// True while the sidebar profile switcher's dropdown is open. Mirrored
     /// out of the header Component (whose ids are not reachable from this
-    /// scope) by a Binding next to the combo.
+    /// scope) by its onPopupOpenChanged handler, and force-cleared when that
+    /// delegate is destroyed — the combo hides in the compact rail, and a
+    /// destruction mid-popup would otherwise latch this true forever and
+    /// kill Ctrl+PgUp/PgDown for the rest of the session.
     property bool _profilePopupOpen: false
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
@@ -1010,6 +1028,10 @@ PhosphorUi.SettingsAppWindow {
             // _navShortcutsEnabled. Wired here because the extracted widget
             // cannot resolve the window id across files.
             onPopupOpenChanged: window._profilePopupOpen = popupOpen
+            // The compact rail unloads this delegate; without the clear a
+            // destruction while the dropdown is open leaves the suppression
+            // flag stuck true.
+            Component.onDestruction: window._profilePopupOpen = false
         }
     }
 }

@@ -10,6 +10,7 @@
 
 using PhosphorControl::ApplicationController;
 using PhosphorControl::PageController;
+using PhosphorControl::PageRegistry;
 
 // Named namespace (not anonymous) for external linkage — mirrors
 // test_application_controller.cpp; each test is its own executable so
@@ -202,6 +203,38 @@ private Q_SLOTS:
             ++hops;
         }
         QCOMPARE(hops, 64);
+    }
+
+    void skipsEntriesHiddenByTheCurrentMode()
+    {
+        // A history entry the simple/advanced tier hides must be skipped,
+        // not landed on: landing there lets the app's mode gate redirect
+        // straight back out, and that redirect re-records the entry and
+        // clears the forward trail, so Back would loop forever on it.
+        ApplicationController app;
+        registerAbc(app);
+        app.registerPage(new StubPage(QStringLiteral("adv")), {}, QStringLiteral("ADV"),
+                         QUrl(QStringLiteral("qrc:/adv.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+
+        app.setCurrentPageId(QStringLiteral("a"));
+        app.setCurrentPageId(QStringLiteral("adv"));
+        app.setCurrentPageId(QStringLiteral("b"));
+        // Back trail is now [a, adv]; hide the advanced-only entry.
+        app.registry()->setShowAdvanced(false);
+
+        // "adv" is skipped and dropped, landing on "a" instead.
+        QCOMPARE(app.goBack(), QStringLiteral("a"));
+        QVERIFY(!app.canGoBack());
+
+        // Forward retraces the same way: the hidden entry never comes back.
+        QCOMPARE(app.goForward(), QStringLiteral("b"));
+        QVERIFY(!app.canGoForward());
+
+        // With the tier visible again the entry is simply gone (dropped),
+        // which is the documented stale-entry policy.
+        app.registry()->setShowAdvanced(true);
+        QVERIFY(!app.canGoForward());
     }
 };
 

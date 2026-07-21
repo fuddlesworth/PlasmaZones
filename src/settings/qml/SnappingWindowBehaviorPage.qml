@@ -28,60 +28,52 @@ SettingsFlickable {
         // =================================================================
         // SNAP ASSIST
         // =================================================================
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: snapAssistCard.implicitHeight
+        SettingsCard {
+            headerText: i18n("Snap Assist")
+            searchAnchor: "snapAssist"
+            showToggle: true
+            toggleChecked: appSettings.snapAssistFeatureEnabled
+            collapsible: true
+            onToggleClicked: checked => {
+                return appSettings.snapAssistFeatureEnabled = checked;
+            }
 
-            SettingsCard {
-                id: snapAssistCard
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
 
-                anchors.fill: parent
-                headerText: i18n("Snap Assist")
-                searchAnchor: "snapAssist"
-                showToggle: true
-                toggleChecked: appSettings.snapAssistFeatureEnabled
-                collapsible: true
-                onToggleClicked: checked => {
-                    return appSettings.snapAssistFeatureEnabled = checked;
-                }
+                SettingsRow {
+                    title: i18n("Always show after snapping")
+                    searchAnchor: "alwaysShowAfterSnapping"
+                    description: i18n("Show a window picker after every snap to fill remaining empty zones")
 
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
+                    SettingsSwitch {
+                        id: snapAssistAlwaysSwitch
 
-                    SettingsRow {
-                        title: i18n("Always show after snapping")
-                        searchAnchor: "alwaysShowAfterSnapping"
-                        description: i18n("Show a window picker after every snap to fill remaining empty zones")
-
-                        SettingsSwitch {
-                            id: snapAssistAlwaysSwitch
-
-                            checked: appSettings.snapAssistEnabled
-                            accessibleName: i18n("Always show after snapping")
-                            onToggled: function (newValue) {
-                                appSettings.snapAssistEnabled = newValue;
-                            }
+                        checked: appSettings.snapAssistEnabled
+                        accessibleName: i18n("Always show after snapping")
+                        onToggled: function (newValue) {
+                            appSettings.snapAssistEnabled = newValue;
                         }
                     }
+                }
 
-                    SettingsSeparator {}
+                SettingsSeparator {}
 
-                    SettingsRow {
-                        title: i18n("Hold to enable")
-                        searchAnchor: "holdToEnable"
-                        description: i18n("Hold this modifier when releasing a window to show the picker for that snap only")
-                        enabled: !snapAssistAlwaysSwitch.checked
+                SettingsRow {
+                    title: i18n("Hold to enable")
+                    searchAnchor: "holdToEnable"
+                    description: i18n("Hold this modifier when releasing a window to show the picker for that snap only")
+                    enabled: !snapAssistAlwaysSwitch.checked
 
-                        ModifierAndMouseCheckBoxes {
-                            width: root.sliderPreferredWidth
-                            allowMultiple: true
-                            acceptMode: acceptModeAll
-                            triggers: root.settingsBridge.snapAssistTriggers
-                            defaultTriggers: root.settingsBridge.defaultSnapAssistTriggers
-                            tooltipEnabled: false
-                            onTriggersModified: triggers => {
-                                root.settingsBridge.snapAssistTriggers = triggers;
-                            }
+                    ModifierAndMouseCheckBoxes {
+                        width: root.sliderPreferredWidth
+                        allowMultiple: true
+                        acceptMode: acceptModeAll
+                        triggers: root.settingsBridge.snapAssistTriggers
+                        defaultTriggers: root.settingsBridge.defaultSnapAssistTriggers
+                        tooltipEnabled: false
+                        onTriggersModified: triggers => {
+                            root.settingsBridge.snapAssistTriggers = triggers;
                         }
                     }
                 }

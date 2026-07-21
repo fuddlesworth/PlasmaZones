@@ -46,6 +46,23 @@ Item {
     /// Simple-mode trim, forwarded to the embedded AnimationProfileEditor:
     /// hides the timing-mode machinery, keeping duration + shader + params.
     property bool simpleTiming: false
+    /// Extra event paths that receive every write this card makes, so one
+    /// card can drive a group of analogous events (e.g. a combined
+    /// "opened & closed" card writing both window.appearance.open and
+    /// .close). The card still READS from `eventPath` alone — the mirrors
+    /// are write-only followers.
+    ///
+    /// Mirroring is intrinsic to the write, deliberately NOT implemented by
+    /// observing profile-change signals: the shader signal is a
+    /// path-agnostic broadcast, so an observer cannot tell a user edit on
+    /// this card from an unrelated card's edit, a Discard, or a profile
+    /// switch, and would clobber divergent mirror values (or re-dirty the
+    /// config immediately after a Discard). Writing through the same call
+    /// the user's action triggers has none of those failure modes.
+    property var mirrorPaths: []
+
+    /// Every path this card writes: its own, then the mirrors.
+    readonly property var _writePaths: [root.eventPath].concat(root.mirrorPaths)
     /// The card's hosting SettingsCard. The virtualized card list re-registers
     /// its search anchor against this once the card builds, so a deep-link
     /// reveal can expand the card when it's collapsed.
@@ -169,7 +186,43 @@ Item {
         var next = Object.assign({}, root.currentShaderParams || {});
         next[paramId] = value;
         root.currentShaderParams = next;
-        settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, next);
+        root._setShaderOverrideOnAll(effectId, next);
+    }
+
+    // ── Group writers ───────────────────────────────────────────────
+    // Every controller write this card performs goes through one of
+    // these so `mirrorPaths` cannot be silently bypassed by a future
+    // call site.
+    function _setShaderOverrideOnAll(effectId, params) {
+        const paths = root._writePaths;
+        for (var i = 0; i < paths.length; ++i)
+            settingsController.animationsPage.setShaderOverride(paths[i], effectId, params);
+    }
+
+    function _setOverrideOnAll(profile) {
+        const paths = root._writePaths;
+        for (var i = 0; i < paths.length; ++i)
+            settingsController.animationsPage.setOverride(paths[i], profile);
+    }
+
+    function _clearOverrideOnAll() {
+        const paths = root._writePaths;
+        for (var i = 0; i < paths.length; ++i)
+            settingsController.animationsPage.clearOverride(paths[i]);
+    }
+
+    /// True iff every write path already carries @p effectId as its DIRECT
+    /// shader override (the empty string being the engaged-empty sentinel,
+    /// which is distinct from "no override at all").
+    function _allWritePathsHold(effectId) {
+        const paths = root._writePaths;
+        for (var i = 0; i < paths.length; ++i) {
+            const raw = settingsController.animationsPage.rawShaderProfile(paths[i]);
+            const direct = (raw && typeof raw.effectId === "string") ? raw.effectId : undefined;
+            if (direct !== effectId)
+                return false;
+        }
+        return true;
     }
 
     /// Batch write — randomize rolls N values that should land as one
@@ -180,7 +233,7 @@ Item {
             return;
 
         root.currentShaderParams = allParams;
-        settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, allParams);
+        root._setShaderOverrideOnAll(effectId, allParams);
     }
 
     function refreshShaderFromTree() {
@@ -264,7 +317,7 @@ Item {
             "curve": root.currentCurveString,
             "duration": root.currentDuration
         };
-        settingsController.animationsPage.setOverride(root.eventPath, profile);
+        root._setOverrideOnAll(profile);
     }
 
     // Current emitters that pass empty-path: `shaderProfileChanged`
@@ -399,9 +452,9 @@ Item {
                 // The reverse order would record neither on a partial
                 // failure, dropping the disable intent entirely.
                 if (root._shaderLegSupported)
-                    settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({}));
+                    root._setShaderOverrideOnAll("", ({}));
 
-                settingsController.animationsPage.clearOverride(root.eventPath);
+                root._clearOverrideOnAll();
             }
         }
 
@@ -517,28 +570,19 @@ Item {
                 }
                 onShaderEffectActivated: function (id) {
                     var sid = id || "";
-                    var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);
-                    var directEffectId = (rawShader && typeof rawShader.effectId === "string") ? rawShader.effectId : "";
-                    if (sid.length === 0) {
-                        // "None" picks the engaged-empty inheritance-
-                        // blocking sentinel. Skip the write when the
-                        // path already holds it.
-                        var alreadyDisabled = rawShader && typeof rawShader.effectId === "string" && rawShader.effectId === "";
-                        if (alreadyDisabled)
-                            return;
-
-                        settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({}));
-                        return;
-                    }
-                    // No-op when the user re-picks the value already
-                    // sitting at this path's DIRECT override.
-                    if (sid === directEffectId)
+                    // The no-op guards below test EVERY write path, not
+                    // just the primary: with mirrorPaths set, the primary
+                    // can already hold the picked value while a mirror
+                    // still carries a divergent one, and returning early
+                    // on the primary alone would leave the group split.
+                    if (root._allWritePathsHold(sid))
                         return;
 
-                    // Switching effect (or promoting an inherited
-                    // value to a direct override): drop the previous
-                    // effect's parameter map.
-                    settingsController.animationsPage.setShaderOverride(root.eventPath, sid, ({}));
+                    // "None" picks the engaged-empty inheritance-blocking
+                    // sentinel; otherwise switching effect (or promoting an
+                    // inherited value to a direct override) drops the
+                    // previous effect's parameter map.
+                    root._setShaderOverrideOnAll(sid, ({}));
                 }
                 onShaderParamWriteRequested: function (effectId, paramId, value) {
                     root._writeShaderParam(effectId, paramId, value);

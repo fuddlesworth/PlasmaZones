@@ -541,6 +541,34 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("focusFollowsMouse"),
                PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("pointer")});
 
+    // Condensed simple-mode pages. Their rows duplicate settings the
+    // advanced pages above also expose, deliberately: a search in simple
+    // mode must land on a page that mode can actually show, and the
+    // advanced twins are filtered out of the rail there. Anchors match the
+    // ids the simple pages register.
+    addSection(search, QStringLiteral("snapping-simple"), QStringLiteral("snappingSimple"),
+               PhosphorI18n::tr("Snapping"));
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("simpleActivateOnEveryDrag"),
+               PhosphorI18n::tr("Show zones on every drag"),
+               {PhosphorI18n::tr("overlay"), PhosphorI18n::tr("drag"), PhosphorI18n::tr("trigger")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("simpleHoldToActivate"),
+               PhosphorI18n::tr("Hold to show zones"), {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("trigger")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("simpleSnapAssist"),
+               PhosphorI18n::tr("Snap Assist"), {PhosphorI18n::tr("picker"), PhosphorI18n::tr("fill zones")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("simpleAlwaysShowAfterSnapping"),
+               PhosphorI18n::tr("Always show after snapping"), {PhosphorI18n::tr("snap assist")});
+
+    addSection(search, QStringLiteral("tiling-simple"), QStringLiteral("tilingSimple"), PhosphorI18n::tr("Tiling"));
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("simpleMasterRatio"),
+               PhosphorI18n::tr("Master ratio"),
+               {PhosphorI18n::tr("split"), PhosphorI18n::tr("proportion"), PhosphorI18n::tr("center")});
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("simpleMaxWindows"),
+               PhosphorI18n::tr("Max windows"), {PhosphorI18n::tr("limit"), PhosphorI18n::tr("count")});
+
+    addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("simpleExcludeNotificationsAndOsds"),
+               PhosphorI18n::tr("Exclude notifications and OSDs"),
+               {PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("volume"), PhosphorI18n::tr("brightness")});
+
     // Animations › General
     addSection(search, QStringLiteral("animations-general"), QStringLiteral("globalAnimationDefaults"),
                PhosphorI18n::tr("Global animation defaults"));

@@ -50,6 +50,44 @@ private:
     bool m_dirty = false;
 };
 
+// ── Simple/advanced visibility surface ─────────────────────────────
+// Registers one Always leaf, one AdvancedOnly leaf, one SimpleOnly leaf
+// (counterpart pair), and a virtual category whose only leaf is
+// AdvancedOnly — the fixture for the tier filter, the empty-category
+// auto-hide, pageAllowedInCurrentMode, and firstVisibleLeafId.
+void buildTieredRegistry(PageRegistry& reg)
+{
+    using PV = PageRegistry::PageVisibility;
+    auto* always = new StubPage(QStringLiteral("home"), &reg);
+    QVERIFY(reg.registerPage(
+        {QStringLiteral("home"), {}, QStringLiteral("Home"), {}, QUrl(QStringLiteral("qrc:/Home.qml")), always}));
+
+    auto* simple = new StubPage(QStringLiteral("easy"), &reg);
+    PageRegistry::Entry simpleEntry{
+        QStringLiteral("easy"), {}, QStringLiteral("Easy"), {}, QUrl(QStringLiteral("qrc:/Easy.qml")), simple};
+    simpleEntry.visibility = PV::SimpleOnly;
+    simpleEntry.counterpartId = QStringLiteral("full");
+    QVERIFY(reg.registerPage(std::move(simpleEntry)));
+
+    auto* full = new StubPage(QStringLiteral("full"), &reg);
+    PageRegistry::Entry fullEntry{
+        QStringLiteral("full"), {}, QStringLiteral("Full"), {}, QUrl(QStringLiteral("qrc:/Full.qml")), full};
+    fullEntry.visibility = PV::AdvancedOnly;
+    fullEntry.counterpartId = QStringLiteral("easy");
+    QVERIFY(reg.registerPage(std::move(fullEntry)));
+
+    auto* cat = new StubPage(QStringLiteral("cat"), &reg);
+    QVERIFY(reg.registerPage({QStringLiteral("cat"), {}, QStringLiteral("Category"), {}, QUrl(), cat}));
+    auto* deep = new StubPage(QStringLiteral("cat.deep"), &reg);
+    PageRegistry::Entry deepEntry{QStringLiteral("cat.deep"),
+                                  QStringLiteral("cat"),
+                                  QStringLiteral("Deep"),
+                                  {},
+                                  QUrl(QStringLiteral("qrc:/Deep.qml")),
+                                  deep};
+    deepEntry.visibility = PV::AdvancedOnly;
+    QVERIFY(reg.registerPage(std::move(deepEntry)));
+}
 } // namespace
 
 class TestPageRegistry : public QObject
@@ -264,45 +302,6 @@ private Q_SLOTS:
         QCOMPARE(leaf.value(QStringLiteral("hasQmlSource")).toBool(), true);
     }
 
-    // ── Simple/advanced visibility surface ─────────────────────────────
-    // Registers one Always leaf, one AdvancedOnly leaf, one SimpleOnly leaf
-    // (counterpart pair), and a virtual category whose only leaf is
-    // AdvancedOnly — the fixture for the tier filter, the empty-category
-    // auto-hide, pageAllowedInCurrentMode, and firstVisibleLeafId.
-    static void buildTieredRegistry(PageRegistry& reg)
-    {
-        using PV = PageRegistry::PageVisibility;
-        auto* always = new StubPage(QStringLiteral("home"), &reg);
-        reg.registerPage(
-            {QStringLiteral("home"), {}, QStringLiteral("Home"), {}, QUrl(QStringLiteral("qrc:/Home.qml")), always});
-
-        auto* simple = new StubPage(QStringLiteral("easy"), &reg);
-        PageRegistry::Entry simpleEntry{
-            QStringLiteral("easy"), {}, QStringLiteral("Easy"), {}, QUrl(QStringLiteral("qrc:/Easy.qml")), simple};
-        simpleEntry.visibility = PV::SimpleOnly;
-        simpleEntry.counterpartId = QStringLiteral("full");
-        reg.registerPage(std::move(simpleEntry));
-
-        auto* full = new StubPage(QStringLiteral("full"), &reg);
-        PageRegistry::Entry fullEntry{
-            QStringLiteral("full"), {}, QStringLiteral("Full"), {}, QUrl(QStringLiteral("qrc:/Full.qml")), full};
-        fullEntry.visibility = PV::AdvancedOnly;
-        fullEntry.counterpartId = QStringLiteral("easy");
-        reg.registerPage(std::move(fullEntry));
-
-        auto* cat = new StubPage(QStringLiteral("cat"), &reg);
-        reg.registerPage({QStringLiteral("cat"), {}, QStringLiteral("Category"), {}, QUrl(), cat});
-        auto* deep = new StubPage(QStringLiteral("cat.deep"), &reg);
-        PageRegistry::Entry deepEntry{QStringLiteral("cat.deep"),
-                                      QStringLiteral("cat"),
-                                      QStringLiteral("Deep"),
-                                      {},
-                                      QUrl(QStringLiteral("qrc:/Deep.qml")),
-                                      deep};
-        deepEntry.visibility = PV::AdvancedOnly;
-        reg.registerPage(std::move(deepEntry));
-    }
-
     void tierFilterFollowsShowAdvanced()
     {
         PageRegistry reg;
@@ -375,6 +374,10 @@ private Q_SLOTS:
         buildTieredRegistry(reg);
         QCOMPARE(reg.entry(QStringLiteral("easy")).counterpartId, QStringLiteral("full"));
         QCOMPARE(reg.entry(QStringLiteral("full")).counterpartId, QStringLiteral("easy"));
+        // Assert the page EXISTS before asserting its counterpart is empty:
+        // entry() returns a default-constructed Entry for an unknown id, so
+        // the bare QCOMPARE would also pass on a broken fixture.
+        QVERIFY(reg.hasPage(QStringLiteral("home")));
         QCOMPARE(reg.entry(QStringLiteral("home")).counterpartId, QString());
     }
 

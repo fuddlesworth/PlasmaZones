@@ -117,15 +117,29 @@ ColumnLayout {
 
     onFlattenTreeChanged: {
         if (root.flattenTree) {
+            // The whole list is being replaced — suppress per-row
+            // Transitions across BOTH the synchronous refresh the
+            // currentParentId reset triggers and the deferred one below,
+            // so the tree→flat swap lands in one frame instead of
+            // accordioning every row. Released by the same timer the
+            // initial fill uses.
+            root._suppressAccordion = true;
             // Cancel an in-flight drill cross-fade too: its ScriptAction
             // would otherwise re-apply pendingParentId AFTER this reset,
             // and the stale scope resurfaces on the flip back to the tree
-            // rail.
+            // rail. The animation drives listColumn.opacity and nothing
+            // re-asserts it (no declarative binding), so stopping
+            // mid-fade would strand the rail translucent — restore it
+            // here. The restore lives at this call site rather than in
+            // onStopped because restart() stops internally, and snapping
+            // to 1 there would flash on every rapid re-drill.
             if (drillAnimation.running) {
                 drillAnimation.stop();
                 drillAnimation.pendingParentId = "";
+                listColumn.opacity = 1;
             }
             root.currentParentId = "";
+            suppressAccordionTimer.restart();
         }
         // Deferred: the initial binding assignment can fire during
         // component creation, before the list model object exists.
@@ -183,7 +197,17 @@ ColumnLayout {
         root.expandedCategories = next;
     }
 
+    // Own-property guarded so the default-expanded semantics survive a
+    // consumer that assigned a plain `{}` literal to the public
+    // expandedCategories property (the docstring invites external writes,
+    // and only toggleCategory's clone preserves the prototype-less form).
+    // Without the guard an id colliding with an Object.prototype name would
+    // read the inherited builtin, which is `!== false`, i.e. accidentally
+    // correct here — but the same map keyed the other way is not, so keep
+    // the read honest.
     function _isExpanded(id) {
+        if (!Object.prototype.hasOwnProperty.call(root.expandedCategories, id))
+            return true;
         return root.expandedCategories[id] !== false;
     }
 
@@ -463,7 +487,13 @@ ColumnLayout {
                 // branch's `grandKids` optimisation.
                 const grandKids = root._scopeChildren(child.id);
                 const grand = grandKids.length > 0;
-                const childBreadcrumb = breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title;
+                // In flat mode a search result must read the same as the
+                // rail row it corresponds to: use the override and drop the
+                // ancestor breadcrumb, since the overridden title exists
+                // precisely because the registered one reads wrong without
+                // its ancestors — which is what a breadcrumb would restore.
+                const flatOverridden = root.flattenTree && Object.prototype.hasOwnProperty.call(root.flatTitleOverrides, child.id);
+                const childBreadcrumb = flatOverridden ? root.flatTitleOverrides[child.id] : (breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title);
                 // Always recurse so descendants can match.
                 if (grand)
                     collect(child.id, childBreadcrumb, depth + 1);

@@ -48,6 +48,8 @@ set(plasmazones_settings_SRCS
     # Pure decoration page→root scoping helpers (root dispatch, prefix match,
     # root-scoped tree diff), split from pagestate so they unit-test without
     # the whole settings-app object graph.
+    animationpagescope.h
+    animationpagescope.cpp
     decorationpagescope.h
     decorationpagescope.cpp
     # RAII begin/endExternalEdit wrapper, extracted from settingscontroller.h.
@@ -283,6 +285,7 @@ qt_add_qml_module(plasmazones-settings
         qml/TilingAlgorithmPage.qml
         qml/TilingSimplePage.qml
         qml/SnappingSimplePage.qml
+        qml/GlobalTimingDefaultsCard.qml
         qml/SnappingWindowHandlingCard.qml
         qml/SnappingFocusCard.qml
         qml/SnappingZoneSpanCard.qml

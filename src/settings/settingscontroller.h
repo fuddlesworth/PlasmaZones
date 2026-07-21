@@ -220,8 +220,9 @@ public:
     /// which stays correct across a per-page Discard/Reset. The ordering,
     /// shortcuts, virtual-screens, animation and decoration pages are
     /// value-based too, each against its own staged state rather than the
-    /// manifest. Only a page in none of those groups falls back to the
-    /// m_dirtyPages membership set.
+    /// manifest, and the condensed simple pages (@ref simplePageBackingPages)
+    /// answer with the union of their backing pages. Only a page in none of
+    /// those groups falls back to the m_dirtyPages membership set.
     Q_INVOKABLE bool isPageDirty(const QString& page) const;
 
     // ── Per-page Reset / Discard (kebab menu in the breadcrumb row) ──────────
@@ -229,8 +230,9 @@ public:
     /// defaults — this includes the Windows appearance page, whose Windows.* /
     /// Gaps.* keys are plain config), the ordering pages (drop the custom order),
     /// the shortcuts pages (unassign every quick slot), the virtual screens page
-    /// (unsplit every monitor), and the animation pages (clear overrides + reset
-    /// animation keys).
+    /// (unsplit every monitor), the animation pages (clear overrides + reset
+    /// animation keys), the decoration pages (clear their surface root), and the
+    /// condensed simple pages (delegate to their backing pages).
     Q_INVOKABLE bool pageSupportsReset(const QString& page) const;
 
     /// True when @p page can discard its own unsaved edits. Currently every page
@@ -242,14 +244,19 @@ public:
     /// Reset every config key owned by @p page to its schema default, staged
     /// for the user to Save or Discard (never persisted here). Manifest pages
     /// (including Windows appearance) reset their keys; the ordering / shortcuts /
-    /// virtual-screens / animation pages reset through their own staged machinery.
+    /// virtual-screens / animation / decoration pages reset through their own
+    /// staged machinery; a condensed simple page delegates to each backing page,
+    /// which resets those pages' FULL key sets (wider than the subset the simple
+    /// page shows — see the rationale at the pageSupportsReset definition).
     /// No-op only for a page with none of those.
     Q_INVOKABLE void resetPage(const QString& page);
 
     /// Revert every config key owned by @p page to the committed baseline,
     /// dropping that page's unsaved edits while leaving other pages untouched.
-    /// Handles the same special pages as resetPage, plus parent categories
-    /// (discards every discardable child leaf). No-op only for a page with
+    /// Handles the same special pages as resetPage (condensed simple pages
+    /// included, with the same widened scope), plus parent categories
+    /// (discards every discardable child leaf, skipping the simple pages whose
+    /// backing pages are siblings in that set). No-op only for a page with
     /// neither a manifest entry, a special-case branch, nor a child group.
     Q_INVOKABLE void discardPage(const QString& page);
 

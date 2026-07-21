@@ -363,10 +363,17 @@ QString ApplicationController::goBack()
     while (!m_backHistory.isEmpty()) {
         const QString target = m_backHistory.takeLast();
         // Drop stale entries: the page was unregistered after being
-        // visited, or the entry duplicates the current page (defensive —
+        // visited, the entry duplicates the current page (defensive —
         // setCurrentPageId's same-id early-return means recording never
-        // produces one, but a subclass override could).
-        if (target == m_currentPageId || !m_registry->hasPage(target)) {
+        // produces one, but a subclass override could), or the entry is
+        // hidden by the current simple/advanced tier. The tier check is
+        // load-bearing, not cosmetic: landing on a hidden page lets the
+        // app's mode gate redirect us, and that redirect arrives back
+        // through setCurrentPageId OUTSIDE the m_navigatingHistory window,
+        // so it re-records the entry we just popped and wipes the forward
+        // trail — the stacks never advance and Back becomes a no-op loop.
+        if (target == m_currentPageId || !m_registry->hasPage(target)
+            || !m_registry->pageAllowedInCurrentMode(target)) {
             continue;
         }
         if (!m_currentPageId.isEmpty()) {
@@ -394,8 +401,9 @@ QString ApplicationController::goForward()
     QString landed;
     while (!m_forwardHistory.isEmpty()) {
         const QString target = m_forwardHistory.takeLast();
-        // Same stale-entry policy as goBack.
-        if (target == m_currentPageId || !m_registry->hasPage(target)) {
+        // Same stale-entry policy as goBack, tier check included.
+        if (target == m_currentPageId || !m_registry->hasPage(target)
+            || !m_registry->pageAllowedInCurrentMode(target)) {
             continue;
         }
         if (!m_currentPageId.isEmpty()) {

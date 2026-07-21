@@ -34,7 +34,10 @@ SettingsFlickable {
     id: page
 
     /// Ordered list of `{ eventPath: string, eventLabel: string,
-    /// isParentNode: bool }` — one AnimationEventCard per entry, in order.
+    /// isParentNode: bool, mirrorPaths?: [string] }` — one
+    /// AnimationEventCard per entry, in order. `mirrorPaths` is optional
+    /// and makes the card write its edits to those extra paths as well
+    /// (see AnimationEventCard.mirrorPaths).
     property var eventModel: []
     /// Optional orientation banner rendered above the cards. Empty = none.
     /// Pages with an "All" cascade parent use it for a short inheritance
@@ -226,6 +229,9 @@ SettingsFlickable {
                     isParentNode: cardLoader.modelData.isParentNode === true
                     collapsible: true
                     simpleTiming: page.simpleTiming
+                    // Optional per-entry write-mirrors, so one card can
+                    // drive a group of analogous events.
+                    mirrorPaths: cardLoader.modelData.mirrorPaths || []
                 }
             }
         }

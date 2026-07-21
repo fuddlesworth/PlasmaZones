@@ -78,9 +78,12 @@ public:
      *  `goBack()` / `goForward()` move along the recorded trail without
      *  re-recording (they shuffle entries between the two stacks instead).
      *  Both return the page id landed on, or an empty string when there
-     *  was nowhere to go. Stale entries (pages unregistered after being
-     *  visited) are skipped and dropped. History depth is capped at
-     *  kMaxHistoryEntries; the oldest entry falls off first. */
+     *  was nowhere to go. Stale entries are skipped and dropped: pages
+     *  unregistered after being visited, and pages the current
+     *  simple/advanced tier hides (landing on one would let the app's mode
+     *  gate redirect us back out, which re-records the entry and corrupts
+     *  both stacks). History depth is capped at kMaxHistoryEntries; the
+     *  oldest entry falls off first. */
     bool canGoBack() const;
     bool canGoForward() const;
     Q_INVOKABLE QString goBack();

@@ -392,11 +392,13 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
 const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
 {
     // The condensed SimpleOnly pages host cards whose config keys are owned
-    // by the advanced pages listed here (snapping-simple surfaces the drag
-    // triggers + zone span from Overlay → Behavior and Snap Assist + window
-    // handling + focus from Window → Behavior; tiling-simple surfaces the
-    // algorithm picker + per-algorithm slots from Algorithm and smart gaps +
-    // focus from Window). They deliberately have NO pageOwnedConfigKeys
+    // by the advanced pages listed here. snapping-simple surfaces the drag
+    // triggers and the zone-span card from Overlay → Behavior, plus Snap
+    // Assist, the whole window-handling card and focus from Window →
+    // Behavior. tiling-simple surfaces the algorithm picker and its
+    // per-algorithm slots from Algorithm, plus the whole window-handling
+    // card (placement, drag and overflow behaviour, sticky handling, smart
+    // gaps, restore-on-login) and focus from Window. They deliberately have NO pageOwnedConfigKeys
     // entry — the one-owner invariant there forbids listing a key twice —
     // so dirtiness, Reset, and Discard delegate through this map instead.
     // animations-simple is absent: it rides the shared animation staging

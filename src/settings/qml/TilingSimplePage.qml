@@ -10,12 +10,14 @@ import org.kde.kirigami as Kirigami
  * @brief The simple-mode tiling surface (SimpleOnly counterpart of the
  * Algorithm page).
  *
- * Condenses the everyday tiling decisions into one card: WHICH algorithm
+ * Leads with the everyday tiling decisions in one card: WHICH algorithm
  * tiles your windows (picker + live preview + description), how wide the
- * master area is, and Smart gaps. Everything else — max windows, ratio step,
- * master count, custom script parameters, per-monitor overrides, insert/
- * overflow/focus policy — is advanced-mode depth on the Algorithm and
- * Window pages.
+ * master area is, and how many windows tile. The shared
+ * TilingWindowHandlingCard and TilingFocusCard follow, so placement,
+ * drag/overflow behaviour, smart gaps and focus policy are all here too —
+ * the same components the advanced Window page hosts. Left to advanced
+ * mode: ratio step size, master count, custom script parameters and the
+ * per-monitor overrides.
  *
  * Global scope only: unlike TilingAlgorithmPage there is no per-monitor
  * scope chip here, so every write goes to the global setting (or the

@@ -15,8 +15,11 @@ import org.kde.kirigami as Kirigami
  * AnimationEventCards, not forked simplified controls — but each card
  * covers a whole group of analogous events:
  *
- *   - Window opened & closed: the open card, with every edit MIRRORED onto
- *     the close leaf (see the Connections below) so one card sets both.
+ *   - Window opened & closed: the open card, declaring the close leaf as a
+ *     write MIRROR (see AnimationEventCard.mirrorPaths), so every edit the
+ *     card makes lands on both leaves. The card READS the open leaf, so a
+ *     close-leaf value diverged in advanced mode is not shown here and is
+ *     overwritten by the next edit on this card — and only by that.
  *   - Window minimized: the single minimize leaf (the restore direction is
  *     the same effect reversed; there is no separate leaf).
  *   - Window movement: the `window.movement` CASCADE PARENT — maximize,
@@ -39,208 +42,24 @@ AnimationEventCardList {
     id: simplePage
 
     readonly property QtObject globalSettings: settingsController.settings
-    readonly property var animController: settingsController.animationsPage
-
-    // ── Open ↔ close mirroring ──────────────────────────────────────────
-    // The open and close leaves are siblings (their shared parent also
-    // covers minimize and focus, so the cascade can't pair them alone).
-    // While this page is alive, any edit to the open leaf — timing or
-    // shader, set or clear — is copied verbatim onto the close leaf, so
-    // the single "Window opened & closed" card genuinely sets both.
-    // Recursion termination differs per leg: overrideChanged carries the
-    // real path, and a mirror write re-fires it with the MIRROR path, which
-    // is not a group key; shaderProfileChanged is a PATH-AGNOSTIC broadcast
-    // (always an empty path — see the controller's emit site), so there the
-    // _mirroring flag is the sole terminator.
-    readonly property var _mirrorGroups: ({
-            "window.appearance.open": ["window.appearance.close"]
-        })
-    property bool _mirroring: false
-
-    function _mirrorTiming(path) {
-        const mirrors = simplePage._mirrorGroups[path];
-        if (!mirrors || simplePage._mirroring)
-            return;
-        simplePage._mirroring = true;
-        if (simplePage.animController.hasOverride(path)) {
-            const raw = simplePage.animController.rawProfile(path);
-            for (let i = 0; i < mirrors.length; ++i)
-                simplePage.animController.setOverride(mirrors[i], raw);
-        } else {
-            for (let i = 0; i < mirrors.length; ++i)
-                simplePage.animController.clearOverride(mirrors[i]);
-        }
-        simplePage._mirroring = false;
-    }
-
-    // Re-mirror EVERY group's shader leg. shaderProfileChanged cannot say
-    // which path moved (it broadcasts with an empty path), so each signal
-    // re-syncs all groups from their source leaf's raw profile; the writes
-    // are no-ops when the mirror already matches, and _mirroring stops the
-    // re-entrant broadcast each setShaderOverride triggers.
-    function _mirrorAllShaderGroups() {
-        if (simplePage._mirroring)
-            return;
-        simplePage._mirroring = true;
-        const sources = Object.keys(simplePage._mirrorGroups);
-        for (let s = 0; s < sources.length; ++s) {
-            const source = sources[s];
-            const mirrors = simplePage._mirrorGroups[source];
-            const raw = simplePage.animController.rawShaderProfile(source);
-            // `effectId` present (possibly the "" engaged-empty sentinel)
-            // means a direct override exists; an empty map means none.
-            if (raw && typeof raw.effectId === "string") {
-                for (let i = 0; i < mirrors.length; ++i)
-                    simplePage.animController.setShaderOverride(mirrors[i], raw.effectId, raw.parameters || ({}));
-            } else {
-                for (let i = 0; i < mirrors.length; ++i)
-                    simplePage.animController.clearShaderOverride(mirrors[i]);
-            }
-        }
-        simplePage._mirroring = false;
-    }
-
-    Connections {
-        function onOverrideChanged(path) {
-            simplePage._mirrorTiming(path);
-        }
-
-        function onShaderProfileChanged(path) {
-            void (path);
-            simplePage._mirrorAllShaderGroups();
-        }
-
-        target: simplePage.animController
-    }
 
     Accessible.name: i18n("Animation essentials")
     simpleTiming: true
     headerText: i18n("Each card covers a whole group of events. Switch to Advanced in the sidebar for full per-event control and the shader library.")
-    // The Global animation defaults card — the SAME AnimationProfileEditor ↔
-    // Settings wiring as AnimationsGeneralPage (curve summary + Customize,
-    // Easing/Spring, Duration), minus that page's sequencing / min-distance /
-    // filter depth. The editor drives the Global profile every card below
-    // inherits from; per-card Duration overrides it per event group.
+    // The shared GlobalTimingDefaultsCard (curve summary + Customize,
+    // Easing/Spring, Duration), the same component the advanced General page
+    // hosts — without that page's sequencing / stagger / minimum-distance
+    // rows, which it appends as its own children. The editor drives the
+    // Global profile every card below inherits from; a per-card Duration
+    // overrides it for that event group.
     headerComponent: Component {
         ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
 
-            SettingsCard {
-                id: defaultsCard
-
+            GlobalTimingDefaultsCard {
                 Layout.fillWidth: true
-
-                readonly property QtObject cardSettings: simplePage.globalSettings
-                readonly property string _springPrefix: "spring:"
-                readonly property bool _isSpring: defaultsCard._isSpringCurve(defaultsCard.cardSettings.animationEasingCurve)
-                readonly property int _currentTimingMode: _isSpring ? CurvePresets.timingModeSpring : CurvePresets.timingModeEasing
-                // Last-seen values per timing axis so toggling Easing ↔ Spring
-                // round-trips without losing the other axis's tuning. Mirrors
-                // AnimationsGeneralPage.
-                property string _lastEasingCurve: CurvePresets.defaultEasingCurve
-                property real _lastSpringOmega: CurvePresets.defaultSpringOmega
-                property real _lastSpringZeta: CurvePresets.defaultSpringZeta
-                property bool _committingEditor: false
-
-                function _isSpringCurve(curveStr) {
-                    return typeof curveStr === "string" && curveStr.indexOf(defaultsCard._springPrefix) === 0;
-                }
-
-                function _parseSpring(curveStr) {
-                    var parts = curveStr.substring(defaultsCard._springPrefix.length).split(",");
-                    var w = parseFloat(parts[0]);
-                    var z = parseFloat(parts[1]);
-                    return {
-                        "omega": isFinite(w) ? w : CurvePresets.defaultSpringOmega,
-                        "zeta": isFinite(z) ? z : CurvePresets.defaultSpringZeta
-                    };
-                }
-
-                function _syncCachedValues() {
-                    var c = defaultsCard.cardSettings.animationEasingCurve;
-                    if (typeof c !== "string")
-                        return;
-                    if (defaultsCard._isSpringCurve(c)) {
-                        var s = defaultsCard._parseSpring(c);
-                        defaultsCard._lastSpringOmega = s.omega;
-                        defaultsCard._lastSpringZeta = s.zeta;
-                    } else if (c.length > 0) {
-                        defaultsCard._lastEasingCurve = c;
-                    }
-                }
-
-                function _seedEditor() {
-                    editor.timingMode = defaultsCard._currentTimingMode;
-                    editor.easingCurve = defaultsCard._lastEasingCurve;
-                    editor.springOmega = defaultsCard._lastSpringOmega;
-                    editor.springZeta = defaultsCard._lastSpringZeta;
-                    editor.duration = defaultsCard.cardSettings.animationDuration;
-                }
-
-                function _commitEditor() {
-                    defaultsCard._committingEditor = true;
-                    if (editor.timingMode === CurvePresets.timingModeSpring) {
-                        var encoded = defaultsCard._springPrefix + parseFloat(editor.springOmega.toFixed(2)) + "," + parseFloat(editor.springZeta.toFixed(2));
-                        if (defaultsCard.cardSettings.animationEasingCurve !== encoded) {
-                            defaultsCard._lastSpringOmega = parseFloat(editor.springOmega.toFixed(2));
-                            defaultsCard._lastSpringZeta = parseFloat(editor.springZeta.toFixed(2));
-                            defaultsCard.cardSettings.animationEasingCurve = encoded;
-                        }
-                    } else if (defaultsCard.cardSettings.animationEasingCurve !== editor.easingCurve) {
-                        defaultsCard._lastEasingCurve = editor.easingCurve;
-                        defaultsCard.cardSettings.animationEasingCurve = editor.easingCurve;
-                    }
-                    if (defaultsCard.cardSettings.animationDuration !== editor.duration)
-                        defaultsCard.cardSettings.animationDuration = editor.duration;
-                    defaultsCard._committingEditor = false;
-                }
-
-                Component.onCompleted: {
-                    defaultsCard._syncCachedValues();
-                    defaultsCard._seedEditor();
-                }
-
-                // External writes (a Discard, a profile switch, the advanced
-                // General page in a past session) move the profile under us —
-                // re-seed, but never while WE are the writer mid-edit.
-                Connections {
-                    function onAnimationEasingCurveChanged() {
-                        defaultsCard._syncCachedValues();
-                        if (!defaultsCard._committingEditor)
-                            defaultsCard._seedEditor();
-                    }
-
-                    function onAnimationDurationChanged() {
-                        if (!defaultsCard._committingEditor)
-                            defaultsCard._seedEditor();
-                    }
-
-                    target: defaultsCard.cardSettings
-                }
-
-                headerText: i18n("Animations")
-                searchAnchor: "simpleAnimations"
-                showToggle: true
-                toggleChecked: defaultsCard.cardSettings.animationsEnabled
-                onToggleClicked: function (checked) {
-                    defaultsCard.cardSettings.animationsEnabled = checked;
-                }
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    AnimationProfileEditor {
-                        id: editor
-
-                        Layout.fillWidth: true
-                        enabled: defaultsCard.toggleChecked
-                        // The Global default has no shader leg — effects are
-                        // picked on the per-event cards below.
-                        shaderLegSupported: false
-                        eventLabel: i18n("Global animation defaults")
-                        onValueChanged: defaultsCard._commitEditor()
-                    }
-                }
+                cardSettings: simplePage.globalSettings
+                collapsible: false
             }
 
             Kirigami.InlineMessage {
@@ -313,7 +132,8 @@ AnimationEventCardList {
         {
             "eventPath": "window.appearance.open",
             "eventLabel": i18n("Window opened & closed"),
-            "isParentNode": false
+            "isParentNode": false,
+            "mirrorPaths": ["window.appearance.close"]
         },
         {
             "eventPath": "window.appearance.minimize",

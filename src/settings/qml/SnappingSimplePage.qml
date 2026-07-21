@@ -10,11 +10,14 @@ import org.kde.kirigami as Kirigami
  * @brief The simple-mode snapping surface (SimpleOnly counterpart of the
  * Overlay → Behavior page).
  *
- * Condenses the everyday snapping decisions into one card: when the zone
+ * Leads with the everyday snapping decisions in one card: when the zone
  * overlay appears while dragging (always, or on a held trigger) and Snap
- * Assist (the fill-remaining-zones window picker). Everything else — toggle
- * mode, zone span, display filtering, overlay appearance, the zone selector,
- * window handling, priority, shortcuts, shaders — is advanced-mode depth.
+ * Assist (the fill-remaining-zones window picker). The shared
+ * SnappingZoneSpanCard, SnappingWindowHandlingCard and SnappingFocusCard
+ * follow, so multi-zone spanning, window handling and focus policy are here
+ * too — the same components the advanced pages host. Left to advanced mode:
+ * the overlay's tap-to-toggle latch, display filtering, overlay appearance,
+ * the zone selector, priority, shortcuts and shaders.
  */
 SettingsFlickable {
     id: root

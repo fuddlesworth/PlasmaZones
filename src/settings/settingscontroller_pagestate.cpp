@@ -13,6 +13,7 @@
 
 #include "settingscontroller.h"
 
+#include "animationpagescope.h"
 #include "decorationpagescope.h"
 
 #include "../core/logging.h"
@@ -95,101 +96,13 @@ const Settings::ConfigKeyList& animationConfigKeys()
     return keys;
 }
 
-// The per-page scope of an animation leaf. A surface leaf owns one event-path
-// root subtree (some with a carve-out); General owns only config keys; the
-// library leaves own the whole tree.
-struct AnimationPageScope
-{
-    enum Kind {
-        EventSubtree,
-        ConfigOnly,
-        WholeTree
-    };
-    Kind kind = WholeTree;
-    // For EventSubtree: a path is in scope iff it is under an `include` root AND
-    // not under an `exclude` root. window.movement (Motion) EXCLUDES
-    // window.movement.move, which the Dragging page owns — the one carve-out.
-    QStringList include;
-    QStringList exclude;
-};
-
-AnimationPageScope animationPageScope(const QString& page)
-{
-    if (page == QLatin1String("animations-general"))
-        return {AnimationPageScope::ConfigOnly, {}, {}};
-    // Roots mirror the surfacePath prefixes the QML pages bind and the
-    // ProfilePaths taxonomy. Keep in lockstep with the *Page.qml event lists.
-    static const QHash<QString, QPair<QStringList, QStringList>> kEventRoots{
-        {QStringLiteral("animations-windows"), {{QStringLiteral("window.appearance")}, {}}},
-        {QStringLiteral("animations-window-motion"),
-         {{QStringLiteral("window.movement")}, {QStringLiteral("window.movement.move")}}},
-        {QStringLiteral("animations-window-dragging"), {{QStringLiteral("window.movement.move")}, {}}},
-        {QStringLiteral("animations-osds"), {{QStringLiteral("osd")}, {}}},
-        {QStringLiteral("animations-overlays"), {{QStringLiteral("popup")}, {}}},
-        {QStringLiteral("animations-desktops"), {{QStringLiteral("desktop")}, {}}},
-        {QStringLiteral("animations-side-panels"), {{QStringLiteral("panel")}, {}}},
-        {QStringLiteral("animations-widgets"), {{QStringLiteral("widget")}, {}}},
-        {QStringLiteral("animations-editor"), {{QStringLiteral("editor")}, {}}},
-    };
-    const auto it = kEventRoots.constFind(page);
-    if (it != kEventRoots.cend())
-        return {AnimationPageScope::EventSubtree, it->first, it->second};
-    // animations-presets / animations-motionsets / animations-shaders.
-    return {AnimationPageScope::WholeTree, {}, {}};
-}
-
-// True iff @p path is @p root or a descendant of it, for any root in @p roots.
-bool animationPathUnderAny(const QString& path, const QStringList& roots)
-{
-    for (const QString& root : roots) {
-        if (path == root || path.startsWith(root + QLatin1Char('.')))
-            return true;
-    }
-    return false;
-}
-
-// True iff @p path falls inside an EventSubtree scope (under an include root,
-// clear of every exclude root).
-bool animationPathInScope(const QString& path, const AnimationPageScope& scope)
-{
-    return animationPathUnderAny(path, scope.include) && !animationPathUnderAny(path, scope.exclude);
-}
-
-// Built-in event paths that fall inside @p scope — the file-backed paths a
-// surface leaf's Reset/Discard/dirty acts on.
-QStringList animationScopedBuiltInPaths(const AnimationPageScope& scope)
-{
-    QStringList out;
-    for (const QString& path : PhosphorAnimation::ProfilePaths::allBuiltInPaths()) {
-        if (animationPathInScope(path, scope))
-            out.append(path);
-    }
-    return out;
-}
-
-// True iff the two shader trees' overrides differ anywhere inside @p scope. Walks
-// the union of both trees' overridden paths (so an override present in one and
-// absent in the other counts) filtered to the scope — this also catches
-// plugin-added paths that allBuiltInPaths() would miss.
-bool shaderTreeScopeDiffers(const PhosphorAnimationShaders::ShaderProfileTree& current,
-                            const PhosphorAnimationShaders::ShaderProfileTree& baseline,
-                            const AnimationPageScope& scope)
-{
-    QSet<QString> paths;
-    for (const QString& p : current.overriddenPaths())
-        if (animationPathInScope(p, scope))
-            paths.insert(p);
-    for (const QString& p : baseline.overriddenPaths())
-        if (animationPathInScope(p, scope))
-            paths.insert(p);
-    for (const QString& p : paths) {
-        if (current.hasOverride(p) != baseline.hasOverride(p))
-            return true;
-        if (current.directOverride(p) != baseline.directOverride(p))
-            return true;
-    }
-    return false;
-}
+// AnimationPageScope / animationPageScope / animationPathUnderAny /
+// animationPathInScope / animationScopedBuiltInPaths / shaderTreeScopeDiffers
+// moved to animationpagescope.{h,cpp}: pure page→event-root scoping logic
+// with no SettingsController dependency, split out for the same reason the
+// decoration equivalents were (direct unit-testability without building the
+// whole settings-app object graph, and to keep this translation unit inside
+// the file-size ceiling).
 
 // Every decoration leaf reads/writes the single shared DecorationProfileTree
 // settings key (one JSON blob covering windows + OSDs + popups), so
@@ -622,10 +535,17 @@ bool SettingsController::isPageDirty(const QString& page) const
     // Recurse through
     // isPageDirty (not a bare m_dirtyPages lookup) so a manifest-backed child
     // contributes its value-based dirty state to the collapsed parent badge.
+    // Condensed simple pages are skipped: their dirty state is by
+    // definition the union of backing pages that are siblings in this same
+    // set, so visiting them re-walks those pages' key lists for no new
+    // information (this is a hot path — see pageGroupChildren's note).
     const auto& groups = pageGroupChildren();
     const auto it = groups.constFind(page);
     if (it != groups.constEnd()) {
+        const auto& backing = simplePageBackingPages();
         for (const QString& child : *it) {
+            if (backing.contains(child))
+                continue;
             if (isPageDirty(child))
                 return true;
         }
@@ -642,6 +562,15 @@ bool SettingsController::pageSupportsReset(const QString& page) const
     // per-event override and reset the animation config keys; decoration surface
     // pages clear their own root subtree of the DecorationProfileTree (the
     // sets/shaders leaves the whole key).
+    //
+    // The condensed simple pages delegate to their backing advanced pages,
+    // which resets those pages' FULL key sets — deliberately wider than the
+    // subset the simple page displays. Narrowing is not expressible: the
+    // per-algorithm tuning the tiling simple page edits lives in ONE blob key
+    // (Tiling.Algorithm/perAlgorithmSettings) that also carries master count
+    // and custom script params. "Reset this page" in simple mode therefore
+    // means "reset this whole feature area", which is the honest reading of a
+    // page that IS the feature area in that mode.
     return pageOwnedConfigKeys().contains(page) || simplePageBackingPages().contains(page) || isOrderingPage(page)
         || isShortcutsPage(page) || page == QLatin1String("virtualscreens") || isAnimationPage(page)
         || isDecorationPage(page);
@@ -925,9 +854,10 @@ void SettingsController::resetPage(const QString& page)
         return;
     }
 
-    // Manifest-owned pages were handled at the top of this function; anything
-    // reaching here matched no manifest entry and no shared-domain / ordering /
-    // shortcut / virtual-screen branch, so there is nothing to reset.
+    // Manifest-owned pages and the condensed simple pages were handled at the
+    // top of this function; anything reaching here matched no manifest entry,
+    // no backing-page delegation, and no shared-domain / ordering / shortcut /
+    // virtual-screen branch, so there is nothing to reset.
     qCWarning(PlasmaZones::lcCore) << "resetPage: no config manifest for page" << page;
 }
 
@@ -1129,9 +1059,11 @@ void SettingsController::discardPage(const QString& page)
     // manifest-only walk would leave those staged edits in place, and the
     // section-disable confirm would then apply a partial edit — exactly what that
     // confirm exists to prevent. Non-discardable children (e.g. shaders browser)
-    // return false and are skipped.
+    // return false and are skipped, as are the condensed simple pages — they
+    // own no keys and would only re-discard their backing pages, which are
+    // always siblings in this same set.
     for (const QString& child : *git) {
-        if (pageSupportsDiscard(child))
+        if (pageSupportsDiscard(child) && !simplePageBackingPages().contains(child))
             discardPage(child);
     }
 }

@@ -274,7 +274,7 @@ ColumnLayout {
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
             visible: root.simpleTiming && root.timingMode === CurvePresets.timingModeSpring
-            text: i18n("Timing follows the spring curve set in the defaults above.")
+            text: i18n("Timing follows the inherited spring curve.")
             font.italic: true
             color: Kirigami.Theme.disabledTextColor
             wrapMode: Text.WordWrap

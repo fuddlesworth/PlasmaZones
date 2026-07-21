@@ -30,12 +30,12 @@ class PageController;
  * lives with whoever constructed the controller (typically the
  * ApplicationController owning a parent QObject chain), and lookups via
  * controller(id) return nullptr if the controller has been destroyed
- * out-of-order. Registry entries are never removed at runtime; the
- * catalogue is built at application start and is read-only thereafter.
- * Dynamic page registration (post-startup `registerPage` calls) is
- * supported and fires `pageRegistered`; dynamic removal is intentionally
- * NOT — apps that need plugin-style hot-unload should rebuild the
- * controller.
+ * out-of-order. The catalogue only ever GROWS: entries are never removed
+ * at runtime, but dynamic page registration (post-startup `registerPage`
+ * calls) is supported and fires `pageRegistered`, and an entry's
+ * simple/advanced tier can be restamped via setPageVisibility. Dynamic
+ * removal is intentionally NOT supported — apps that need plugin-style
+ * hot-unload should rebuild the controller.
  */
 class PHOSPHORCONTROL_EXPORT PageRegistry : public QObject
 {
@@ -182,7 +182,10 @@ public:
     // entryToVariant() (pageregistry.cpp): id, parentId, title, iconSource,
     // qmlSource, isCollapsible, hasDividerAfter, hasQmlSource. Used by
     // Sidebar.qml + Breadcrumbs.qml to drive their Repeaters without
-    // needing a custom QAbstractListModel.
+    // needing a custom QAbstractListModel. `visibility` and `counterpartId`
+    // are deliberately C++-only: tier filtering is applied here, inside the
+    // tree accessors, so QML never needs to re-derive it, and the
+    // counterpart is navigation policy the app owns.
     Q_INVOKABLE QVariantList topLevelPagesData() const;
     Q_INVOKABLE QVariantList childPagesData(const QString& parentId) const;
     Q_INVOKABLE QVariantMap pageData(const QString& id) const;

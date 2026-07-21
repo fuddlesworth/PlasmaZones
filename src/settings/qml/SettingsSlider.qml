@@ -42,6 +42,14 @@ RowLayout {
         property: "value"
         value: root.value
         when: !slider.pressed
+        // RestoreNone: Qt 6's default (RestoreBindingOrValue) would, on
+        // press, restore the value recorded before this Binding first
+        // activated — the Slider's declarative default, not the user's
+        // current value. The Slider's own press handling usually overwrites
+        // it in the same event, which is why it has never been visible, but
+        // consumers that feed a live preview from `slider.value` would show
+        // the transient as a flash.
+        restoreMode: Binding.RestoreNone
     }
 
     Slider {
