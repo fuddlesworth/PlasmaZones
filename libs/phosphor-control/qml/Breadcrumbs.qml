@@ -103,16 +103,26 @@ RowLayout {
 
     spacing: Kirigami.Units.smallSpacing
 
+    function _bumpRegistryTick() {
+        root._registryTick = root._registryTick + 1;
+    }
+
     Connections {
+        // Coalesced, matching the rail: startup fires one registerPage per
+        // page (~55), and `segments` returns a FRESH array each evaluation, so
+        // an uncoalesced bump tears down and rebuilds every crumb delegate —
+        // including its recursive firstVisibleLeafId binding — once per
+        // registration. Qt.callLater collapses the batch into one rebuild.
         function onPageRegistered() {
-            root._registryTick = root._registryTick + 1;
+            Qt.callLater(root._bumpRegistryTick);
         }
         // firstVisibleLeafId walks the TIER-FILTERED tree, so an ancestor
         // crumb's target changes when the visible set changes, not only when a
         // page is registered. Without this a per-entry setPageVisibility
         // restamp leaves targetId pointing at a leaf the mode now hides.
+        // Discrete event, not a batch — bumped synchronously.
         function onVisibleSetChanged() {
-            root._registryTick = root._registryTick + 1;
+            root._bumpRegistryTick();
         }
 
         target: root.controller.registry

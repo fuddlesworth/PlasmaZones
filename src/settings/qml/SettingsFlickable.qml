@@ -147,8 +147,6 @@ Flickable {
         settingsFlickable._pendingRevealAnchor = "";
         pendingRevealExpiry.stop();
 
-        var card = entry.card;
-
         // Collapsed-card check FIRST, before any visibility bail. A row inside
         // a collapsed SettingsCard is invisible by construction — the card
         // drops `contentClip.enabled` when its body goes dead, `enabled`
@@ -163,7 +161,14 @@ Flickable {
         // Every collapsed card on the chain, not just the nearest — a row in a
         // card nested inside another collapsed card stays invisible if only the
         // inner one opens.
-        var collapsedChain = SearchAnchors.cardChainFor(entry.item).filter(function (c) {
+        // Seed with the item itself when IT is a card. SettingsCard registers
+        // its own section anchor with item === card, and cardChainFor starts at
+        // item.parent — so without this, a deep link to a section scrolled to
+        // the shut header and pulsed it while the content stayed hidden.
+        var chain = SearchAnchors.cardChainFor(entry.item);
+        if (entry.item.isSettingsCard === true)
+            chain.unshift(entry.item);
+        var collapsedChain = chain.filter(function (c) {
             return c.collapsible === true && c.collapsed === true;
         });
         if (collapsedChain.length > 0) {
@@ -252,8 +257,15 @@ Flickable {
                 // condition, not by the card. Put the card back: we opened it
                 // speculatively, it bought nothing, and leaving it open is a
                 // visible side effect of a reveal that failed.
-                for (var ri = 0; ri < pendingCards.length; ++ri)
-                    pendingCards[ri].collapsed = true;
+                // Per-element guard: a card destroyed between the expand and
+                // this settle (Repeater rebuild, profile switch, page
+                // teardown) leaves a null here, and an unguarded write throws
+                // before the scroll fallback below — killing the reveal AND
+                // leaving the remaining cards open.
+                for (var ri = 0; ri < pendingCards.length; ++ri) {
+                    if (pendingCards[ri])
+                        pendingCards[ri].collapsed = true;
+                }
                 revealScrollAnim.to = 0;
                 revealScrollAnim.restart();
                 return;
@@ -269,7 +281,14 @@ Flickable {
         id: pendingRevealExpiry
 
         interval: Kirigami.Units.longDuration * 3
-        onTriggered: settingsFlickable._pendingRevealAnchor = ""
+        onTriggered: {
+            settingsFlickable._pendingRevealAnchor = "";
+            // Fall back to the top of the page, matching every other dead end
+            // in revealAnchor. Dropping the anchor silently left a search
+            // result doing nothing at all with no indication why.
+            revealScrollAnim.to = 0;
+            revealScrollAnim.restart();
+        }
     }
 
     NumberAnimation {

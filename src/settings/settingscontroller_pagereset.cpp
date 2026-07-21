@@ -264,12 +264,18 @@ void SettingsController::resetPage(const QString& page)
         // through to the daemon for any slot with no staged value, so the
         // loop below used to block the GUI thread on up to nine sequential
         // round-trips — and an all-default page paid all nine to stage nothing.
-        const QVariantMap allSlots =
+        const QDBusMessage slotsReply =
             DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                   QStringLiteral("getAllQuickLayoutSlots"), {snapping ? 0 : 1})
-                .arguments()
-                .value(0)
-                .toMap();
+                                   QStringLiteral("getAllQuickLayoutSlots"), {snapping ? 0 : 1});
+        if (slotsReply.type() != QDBusMessage::ReplyMessage) {
+            // Every per-slot accessor this replaced guards the reply type. An
+            // error map is indistinguishable from "all slots already
+            // unassigned", so without this a failed Reset stages nothing and
+            // looks like it succeeded.
+            qCWarning(PlasmaZones::lcCore)
+                << "resetPage: could not read quick layout slots from the daemon:" << slotsReply.errorMessage();
+        }
+        const QVariantMap allSlots = slotsReply.arguments().value(0).toMap();
         bool staged = false;
         for (int slot = 1; slot <= kQuickLayoutSlotCount; ++slot) {
             // Staged value wins over the daemon's, matching the per-slot
@@ -368,7 +374,7 @@ void SettingsController::discardPage(const QString& page)
 
     // Ordering pages: drop the staged custom order so the effective order falls
     // back to the saved value.
-    if (page == QLatin1String("snapping-ordering") || page == QLatin1String("tiling-ordering")) {
+    if (isOrderingPage(page)) {
         auto& staged = (page == QLatin1String("snapping-ordering")) ? m_stagedSnappingOrder : m_stagedTilingOrder;
         if (staged.has_value()) {
             staged.reset();
@@ -421,10 +427,8 @@ void SettingsController::discardPage(const QString& page)
     if (isAnimationPage(page)) {
         const AnimationPageScope scope = animationPageScope(page);
         if (scope.kind == AnimationPageScope::ConfigOnly) {
-            {
-                const LoadingScope loadingScope(m_loading);
-                m_settings.discardKeys(animationGeneralConfigKeys());
-            }
+            const LoadingScope loadingScope(m_loading);
+            m_settings.discardKeys(animationGeneralConfigKeys());
         } else if (scope.kind == AnimationPageScope::EventSubtree) {
             // LoadingScope opened BEFORE the file revert, matching resetPage.
             // The revert provokes settings NOTIFYs, and without suppression

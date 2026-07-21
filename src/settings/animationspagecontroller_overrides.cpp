@@ -16,6 +16,7 @@
 #include "animationspagecontroller.h"
 
 #include "../config/configdefaults.h"
+#include "../core/isettings.h"
 #include "../core/logging.h"
 #include "../phosphor_i18n.h"
 #include "animations_controller_detail.h"
@@ -136,9 +137,19 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
     // Lowest precedence: mergeMissingFields only fills fields no ancestor
     // supplied, so a real override at any level still wins.
     if (m_settings != nullptr) {
+        // Every Global field ISettings exposes, not just duration+curve. The
+        // daemon registers the whole Profile at Global, and minDistance /
+        // sequenceMode / staggerInterval are all user-editable on the Global
+        // card. Seeding two of them left the other three resolving to library
+        // defaults here while the daemon animated with the user's value — the
+        // same "the two disagree on one screen" bug this seed exists to close,
+        // left half-closed.
         using P = Profile;
         QVariantMap settingsGlobal;
         settingsGlobal.insert(QLatin1String(P::JsonFieldDuration), m_settings->animationDuration());
+        settingsGlobal.insert(QLatin1String(P::JsonFieldMinDistance), m_settings->animationMinDistance());
+        settingsGlobal.insert(QLatin1String(P::JsonFieldSequenceMode), m_settings->animationSequenceMode());
+        settingsGlobal.insert(QLatin1String(P::JsonFieldStaggerInterval), m_settings->animationStaggerInterval());
         const QString curve = m_settings->animationEasingCurve();
         if (!curve.isEmpty()) {
             settingsGlobal.insert(QLatin1String(P::JsonFieldCurve), curve);

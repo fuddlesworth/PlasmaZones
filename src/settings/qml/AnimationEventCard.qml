@@ -64,6 +64,14 @@ Item {
     /// the user's action triggers has none of those failure modes.
     property var mirrorPaths: []
 
+    /// Raw stored profile per write path, refreshed by refreshFromTree.
+    /// _setOverridePerPath is reached from the duration slider's valueChanged,
+    /// i.e. every tick of a drag — reading these from disk there meant one
+    /// synchronous file open per path per tick, which is exactly what the
+    /// advanced-mode short-circuit was added to avoid and simple mode is the
+    /// only mode this path runs in.
+    property var _pathCurves: ({})
+
     /// Every path this card writes: its own, then the mirrors.
     readonly property var _writePaths: [root.eventPath].concat(root.mirrorPaths)
     /// The card's hosting SettingsCard. The virtualized card list re-registers
@@ -113,13 +121,18 @@ Item {
     // Global until the page is rebuilt — visible on the simple page, where the
     // Global card and the cards inheriting from it share one screen.
     Connections {
+        // Bump the inheritance cache only. A full refreshFromTree here would
+        // re-create the very N-round-trip storm _inheritRev exists to prevent:
+        // dragging the Global duration fires this at slider rate, and every
+        // built card would pay six file opens plus two chain walks per tick.
+        // The breadcrumb and any override-OFF card read through
+        // _inheritResolved, which the bump alone invalidates. A card that owns
+        // an override shows its own values and does not care.
         function onAnimationDurationChanged() {
             root._inheritRev = root._inheritRev + 1;
-            root.refreshFromTree();
         }
         function onAnimationEasingCurveChanged() {
             root._inheritRev = root._inheritRev + 1;
-            root.refreshFromTree();
         }
 
         target: settingsController.settings
@@ -241,12 +254,19 @@ Item {
     function _setOverridePerPath(profile) {
         const paths = root._writePaths;
         for (var i = 0; i < paths.length; ++i) {
-            var raw = settingsController.animationsPage.rawProfile(paths[i]) || ({});
-            var perPath = {};
-            for (var k in profile)
-                perPath[k] = profile[k];
+            // Start from the path's OWN stored profile so fields this card
+            // does not edit (minDistance, sequenceMode, staggerInterval,
+            // presetName) survive the write instead of being truncated, then
+            // overlay what the card is committing. The cached curve is
+            // reapplied last: the commit map never carries one in simple mode,
+            // and a path that owns a curve must keep its own.
+            var raw = root._pathCurves[paths[i]] || ({});
+            var perPath = Object.assign({}, raw);
+            Object.assign(perPath, profile);
             if (typeof raw.curve === "string" && raw.curve.length > 0)
                 perPath.curve = raw.curve;
+            else
+                delete perPath.curve;
             settingsController.animationsPage.setOverride(paths[i], perPath);
         }
     }
@@ -297,7 +317,19 @@ Item {
     function _storedStateKey(path) {
         const profile = settingsController.animationsPage.rawProfile(path) || ({});
         const shader = settingsController.animationsPage.rawShaderProfile(path) || ({});
-        return JSON.stringify([profile, shader]);
+        // The CURVE is excluded on purpose. In simple mode this card writes
+        // per-path curves precisely so a path that owns one keeps it, so a
+        // curve difference is intended state, not divergence — counting it
+        // latched the banner ON permanently with no control able to clear it,
+        // while the banner promised the next edit would converge the group.
+        // Divergence is measured on what this card actually writes to every
+        // path: duration and the shader leg.
+        const compared = {};
+        for (var k in profile) {
+            if (k !== "curve" && k !== "name")
+                compared[k] = profile[k];
+        }
+        return JSON.stringify([compared, shader]);
     }
 
     /// Recompute _mirrorsDiverged. Called from both refreshers so it tracks
@@ -420,6 +452,13 @@ Item {
                 root.currentEasingCurve = curve;
         }
         root.currentDuration = effective.duration !== undefined ? effective.duration : CurvePresets.defaultDurationMs;
+        // Cache each write path's stored profile for _setOverridePerPath. This
+        // runs on every overrideChanged, which is exactly when a path's stored
+        // state can have moved.
+        var cache = {};
+        for (var pi = 0; pi < root._writePaths.length; ++pi)
+            cache[root._writePaths[pi]] = settingsController.animationsPage.rawProfile(root._writePaths[pi]) || ({});
+        root._pathCurves = cache;
         root._refreshMirrorDivergence();
     }
 
@@ -489,7 +528,7 @@ Item {
         // divergence banner on with no edit able to clear it. Failing loudly
         // here turns a permanent mystery banner into a one-line console
         // message naming the bad path.
-        for (var i = 0; i < root.mirrorPaths.length; ++i) {
+        for (var i = 0; root.mirrorPaths && i < root.mirrorPaths.length; ++i) {
             if (!settingsController.animationsPage.isValidEventPath(root.mirrorPaths[i]))
                 console.warn("AnimationEventCard(" + root.eventPath + "): mirrorPaths entry '" + root.mirrorPaths[i] + "' is not a valid event path; writes to it will be silently rejected");
         }

@@ -237,6 +237,33 @@ private Q_SLOTS:
         QVERIFY(!app.canGoForward());
     }
 
+    void currentPageOnTheBackStackIsNotAUsableEntry()
+    {
+        // A → X → A leaves the CURRENT page on the back stack (an ordinary
+        // revisit). With X hidden, the only remaining entry is the current
+        // page itself. Without the current-page clause in the shared
+        // predicate, canGoBack() reports true, goBack() then pushes the
+        // current page onto the FORWARD stack and returns its own id having
+        // navigated nowhere — a Back button that appears to work, does not
+        // move, and poisons the forward trail with a self-entry.
+        ApplicationController app;
+        registerAbc(app);
+        app.registerPage(new StubPage(QStringLiteral("adv")), {}, QStringLiteral("ADV"),
+                         QUrl(QStringLiteral("qrc:/adv.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+
+        app.setCurrentPageId(QStringLiteral("a"));
+        app.setCurrentPageId(QStringLiteral("adv"));
+        app.setCurrentPageId(QStringLiteral("a")); // back trail is now [a, adv], current a
+        app.registry()->setShowAdvanced(false); // hides adv
+
+        QVERIFY(!app.canGoBack());
+        QCOMPARE(app.goBack(), QString());
+        QCOMPARE(app.currentPageId(), QStringLiteral("a"));
+        // And the forward trail was not poisoned with a self-entry.
+        QVERIFY(!app.canGoForward());
+    }
+
     void canGoBackIsFalseWhenEveryEntryIsHidden()
     {
         // canGoBack must answer "will goBack() move", not "is the stack

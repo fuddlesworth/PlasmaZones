@@ -386,6 +386,19 @@ ColumnLayout {
     // repeat calls to the same function within one event-loop pass into a
     // single invocation, so a registration batch costs one rebuild. Also covers
     // async catalog warm-up (plugin loading, dynamic registration).
+    // The initial fill runs at Component.onCompleted, which can precede the
+    // consumer's registry being assigned — SidebarRows::build returns an empty
+    // list for a null registry, and nothing else would ever re-fill. The C++
+    // side deliberately tolerates a null/destroyed registry (see the QPointer
+    // note on SidebarRows), so the QML needs matching tolerance.
+    Connections {
+        function onRegistryChanged() {
+            Qt.callLater(root._refreshModel);
+        }
+
+        target: rowBuilder
+    }
+
     Connections {
         function onPageRegistered() {
             root._registryTick = root._registryTick + 1;
@@ -401,7 +414,18 @@ ColumnLayout {
         // already rebuilt.
         function onVisibleSetChanged() {
             root._registryTick = root._registryTick + 1;
-            root._refreshModel();
+            // A restamp can hide the very parent we are drilled into.
+            // visibleChildPages filters only the CHILDREN, so the rail would
+            // keep rendering a scope the mode has abolished (or collapse to a
+            // lone Back button over an empty list). onFlattenTreeChanged
+            // already resets drill state for exactly this reason on a mode
+            // flip; this is the same hazard reached through a per-entry
+            // restamp. Assigning currentParentId refreshes via its own
+            // handler, so only the else-branch needs an explicit refresh.
+            if (root.currentParentId !== "" && !root.controller.registry.pageAllowedInCurrentMode(root.currentParentId))
+                root.currentParentId = "";
+            else
+                root._refreshModel();
         }
 
         target: root.controller.registry
