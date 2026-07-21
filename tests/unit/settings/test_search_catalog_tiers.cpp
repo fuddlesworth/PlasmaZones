@@ -490,9 +490,10 @@ private Q_SLOTS:
         // Counted per call shape, not in total. kCall reaches addSetting and
         // addSection through one alternation, so a reformat that broke only
         // the addSection shape would still clear any combined floor on the
-        // strength of the addSetting hits alone. 195 addSetting, 60
-        // addSection, 255 unique pairs today; the floors sit close enough to
-        // catch a shape going dark while leaving room to prune entries.
+        // strength of the addSetting hits alone. 195 addSetting, 61
+        // addSection, 256 unique pairs today; the floors sit far enough below
+        // to catch a shape going dark while leaving generous room to prune
+        // entries.
         const auto shapeCallCount = [&catalogSrc](const QString& shape) {
             const QRegularExpression re(
                 QStringLiteral("\\badd%1\\(\\s*search\\s*,\\s*QStringLiteral\\(\"[^\"]+\"\\)\\s*,"
@@ -516,8 +517,12 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("catalogue parse matched only %1 addSection calls — that call shape "
                                            "changed and kCall no longer sees it")
                                 .arg(sectionCalls)));
+        // Floor at 200 against a measured 256: comfortably above the vacuity
+        // point (a regex going dark yields 0, not 200) yet far enough below the
+        // real count that an ordinary catalogue prune cannot trip it and get
+        // misread as a broken regex.
         QVERIFY2(
-            registered.size() > 240,
+            registered.size() > 200,
             qPrintable(
                 QStringLiteral("catalogue parse yielded only %1 unique (page, anchor) pairs").arg(registered.size())));
         expected.intersect(registered);

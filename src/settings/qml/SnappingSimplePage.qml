@@ -79,7 +79,6 @@ SettingsFlickable {
                     activeTitle: i18n("Hold to hide zones")
                     inactiveTitle: i18n("Hold to show zones")
                     activeDescription: i18n("Hold a modifier or mouse button while dragging to hide the zone overlay")
-                    inactiveDescription: i18n("Hold a modifier or mouse button to show zones while dragging")
                 }
 
                 SettingsSeparator {}

@@ -534,12 +534,27 @@ int visibleNavigableCount(const PhosphorControl::PageRegistry& registry, const Q
 
 } // namespace
 
+QString SettingsController::activeDirtyScope() const
+{
+    return dirtyScopeFor(m_activePage);
+}
+
 QString SettingsController::dirtyScopeFor(const QString& pageId) const
 {
     if (m_app == nullptr || m_app->registry() == nullptr || !m_app->registry()->hasPage(pageId)) {
         return pageId;
     }
     const PhosphorControl::PageRegistry& registry = *m_app->registry();
+    // Only a CONDENSED surface hoists. A page that exists in both modes speaks
+    // for itself in both, so widening its scope would badge it for edits it
+    // cannot show and its own Reset/Discard cannot reach — which is the defect
+    // this function exists to remove, not to relocate. `layouts` is the case
+    // that proves it: in simple mode it is the only visible row under
+    // `display` (virtualscreens is AdvancedOnly), so an ungated walk would
+    // badge Layouts for staged virtual-screen edits it has no control over.
+    if (registry.entry(pageId).visibility != PhosphorControl::PageRegistry::PageVisibility::SimpleOnly) {
+        return pageId;
+    }
     QString scope = pageId;
     for (int hop = 0; hop < 8; ++hop) {
         const QString parent = registry.parentIdOf(scope);

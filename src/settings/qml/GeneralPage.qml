@@ -229,12 +229,10 @@ SettingsFlickable {
         // `visible: !advancedOnly || settingsController.advancedMode`, so
         // omitting it would put the card back in simple mode.
         SettingsCard {
-            Layout.fillWidth: true
             headerText: i18n("Audio Analysis")
             searchAnchor: "audioAnalysis"
             collapsible: true
             advancedOnly: true
-            enabled: audioVizSwitch.checked && root.effectsBridge.cavaAvailable
             visible: (!advancedOnly || settingsController.advancedMode) && audioVizSwitch.checked && root.effectsBridge.cavaAvailable
 
             contentItem: ColumnLayout {

@@ -2459,47 +2459,37 @@ void Daemon::stop()
         return;
     }
 
-    // Tear down the daemon-owned PhosphorProfileRegistry entries this
-    // Daemon published so a later Daemon reconstruction (tests, or a
-    // live reconfigure that tears down and rebuilds the daemon in
-    // place) starts from a registry owning none of our entries. Mirrors
-    // the narrow-clear policy in `setupAnimationProfiles()` — a
-    // wholesale `clear()` would also evict any other consumer's
-    // entries if they happened to register before us.
+    // stop() deliberately does NOT unregister the settings-driven entries
+    // (`Global`, …), shed the shell-family-seed partition, or clear the
+    // low-precedence owner tag. `m_profileRegistry` is a value member, so it
+    // dies with the Daemon and no later Daemon can inherit its contents —
+    // there is no shared registry to leave polluted. The only way another
+    // consumer ever reached it was the QML static default pointer, and that is
+    // nulled above, before this gate.
     //
-    // The three partitions we publish under:
+    // Shedding them here would be actively wrong. All three are re-established
+    // only from `setupAnimationProfiles()`, which runs from the CONSTRUCTOR:
+    // neither `init()` nor `start()` calls it. A stop()→start() cycle on the
+    // same instance is supported (see the re-publish of the three QML statics
+    // and the idle re-arm in `start()`), and shedding them would bring it back
+    // with an empty seed partition and an empty low-precedence tag —
+    // `resolveWithInheritance` degrades to a single-layer walk and every shell
+    // `PhosphorMotionAnimation { profile: … }` resolves against nothing.
+    // Leaving them in place is what makes the cycle come back whole.
     //
-    //   - Settings-driven direct entries (`Global`, …): registered by
-    //     `publishActiveAnimationProfile` under the direct-owner tag.
-    //     Unregister each path here.
-    //   - Loader-owned user-JSON entries (tagged
-    //     `kPlasmaZonesUserProfilesOwnerTag`): we explicitly reset
-    //     `m_profileLoader` and `m_curveLoader` here so the loader
-    //     destructors run NOW (issuing their own `clearOwner(ownerTag)`
-    //     and tearing down the QFileSystemWatchers) rather than at
-    //     `~Daemon` body where they'd fire path-change signals into a
-    //     half-destroyed object during member destruction order.
-    //   - Shell animation family seeds (tagged
-    //     `kShellAnimationFamilySeedsOwnerTag`): published by
-    //     `seedShellAnimationFamilies`. `setupAnimationProfiles` already
-    //     clears this partition on the way in; shedding it here too keeps
-    //     teardown symmetric with setup, so a registry shared with another
-    //     consumer is not left holding this Daemon's seeds. The
-    //     low-precedence tag points at that same partition and is reset
-    //     alongside it, since leaving it set would name a partition that no
-    //     longer exists.
-    {
-        auto& profileRegistry = m_profileRegistry;
-        for (const QString* path : kSettingsDrivenProfilePaths) {
-            profileRegistry.unregisterProfile(*path);
-        }
-        profileRegistry.clearOwner(QString(kShellAnimationFamilySeedsOwnerTag));
-        profileRegistry.setLowPrecedenceOwnerTag(QString());
-        // Symmetric with the unregister above: a stop/re-init cycle on the
-        // same instance (the pattern the tests use) would otherwise start from
-        // a snapshot of the previous session's files.
-        m_rawJsonProfiles.clear();
-    }
+    // The one partition stop() still sheds is the loader-owned user-JSON
+    // partition (tagged `kPlasmaZonesUserProfilesOwnerTag`), and only as a side
+    // effect of the loader teardown below: `m_profileLoader` / `m_curveLoader`
+    // are reset so their destructors run NOW (issuing their own
+    // `clearOwner(ownerTag)` and tearing down the QFileSystemWatchers) rather
+    // than in the `~Daemon` body, where they would fire path-change signals
+    // into a half-destroyed object. The user-JSON entries are optional
+    // overrides on top of the seeds, so losing them across a cycle only drops
+    // the user's authored tweaks, not the shell's ability to resolve — and the
+    // seeds that remain keep inheritance working. The raw-JSON snapshot is
+    // cleared with them, since it mirrors exactly the entries those destructors
+    // drop.
+    m_rawJsonProfiles.clear();
 
     // Stop the publish coalescing trampoline before resetting the
     // loaders — the timer is a member QTimer, so its `timeout` slot

@@ -163,6 +163,15 @@ bool PageRegistry::hasPage(const QString& id) const
     return m_indexById.contains(id);
 }
 
+bool PageRegistry::hasNavigablePage(const QString& id) const
+{
+    const auto it = m_indexById.constFind(id);
+    if (it == m_indexById.constEnd()) {
+        return false;
+    }
+    return !m_pages.at(it.value()).qmlSource.isEmpty();
+}
+
 bool PageRegistry::allowedInMode(const QString& id, bool advanced) const
 {
     auto it = m_indexById.constFind(id);
@@ -377,9 +386,7 @@ QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) con
         return out;
     }
     // Exact reserve rather than a whole-catalogue upper bound: the index knows
-    // the child count up front. That matters because a recursive per-node
-    // caller runs this once per node, and a whole-catalogue reserve there would
-    // allocate room for every page to hold a handful of children, over and over.
+    // the child count up front.
     out.reserve(it.value().size());
     for (const qsizetype idx : it.value()) {
         out.append(m_pages.at(idx));

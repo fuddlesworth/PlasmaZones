@@ -9,6 +9,7 @@
 #include "PhosphorControl/SearchRanker.h"
 
 #include <QDebug>
+#include <QLatin1Char>
 
 namespace PhosphorControl {
 
@@ -250,14 +251,12 @@ QVector<SearchEntry> SearchController::buildIndex()
         // provider entries were exempt from it, which is the same dead-result
         // class the registration check was added to close, one level down.
         //
-        // ONE lookup answers both halves: entry() returns a default-constructed
-        // Entry for an unknown id, and registerPage() refuses an empty id, so an
-        // empty `id` here means exactly what hasPage() would have answered. Two
-        // lookups plus two Entry copies per entry per rebuild is real cost at
-        // catalogue scale, and a rebuild fires on every mode flip and every
-        // provider warm-up while a query is live.
-        const PageRegistry::Entry pe = m_app->registry()->entry(e.pageId);
-        if (pe.id.isEmpty() || pe.qmlSource.isEmpty()) {
+        // hasNavigablePage answers both halves in ONE index lookup with no
+        // Entry copy: it is false for an unknown id and for a registered
+        // category (empty qmlSource). A rebuild fires on every mode flip and
+        // every provider warm-up while a query is live, so at catalogue scale
+        // the copy this avoids is real.
+        if (!m_app->registry()->hasNavigablePage(e.pageId)) {
             // Reported once per offending ENTRY, not once per pageId: one bad
             // id is typically shared by a whole card's worth of anchors, and
             // keying on the id alone names only the first of them, so a
@@ -269,8 +268,8 @@ QVector<SearchEntry> SearchController::buildIndex()
             // re-evaluated every rebuild, so a page registered later rescues
             // its entries normally.
             const QString offender = e.pageId + QLatin1Char('\0') + e.title;
-            if (!m_warnedPageIds.contains(offender)) {
-                m_warnedPageIds.insert(offender);
+            if (!m_warnedEntryKeys.contains(offender)) {
+                m_warnedEntryKeys.insert(offender);
                 qWarning() << "SearchController: dropping search entry" << e.title << "— its pageId" << e.pageId
                            << "is not a registered, navigable page";
             }

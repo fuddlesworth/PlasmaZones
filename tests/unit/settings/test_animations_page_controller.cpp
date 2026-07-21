@@ -228,16 +228,23 @@ private Q_SLOTS:
     /// under one of the scope's roots is silently exempt from all three: the
     /// user edits it, the page reports itself clean, and Reset leaves it set.
     ///
+    /// Mirror paths are held to the same contract. A mirror receives every
+    /// write the primary does (AnimationEventCard's group writers loop
+    /// `_writePaths`), so it is exactly as dependent on the scope's roots: a
+    /// mirror declared outside them would be edited by the page, reported clean
+    /// by it, and survive its Reset.
+    ///
     /// The two lists were previously held together by a comment alone. This
     /// reads the QML as TEXT (no Qt Quick engine, no page construction) and
-    /// pulls the eventPath literals straight out of the eventModel, so adding
-    /// a card there without widening the scope fails here.
+    /// pulls the eventPath and mirrorPaths literals straight out of the
+    /// eventModel, so adding a card or a mirror there without widening the
+    /// scope fails here.
     ///
-    /// Scope limit, stated plainly: the parse sees `"eventPath": "…"` string
-    /// literals only. A card whose path came from a JS expression or a
-    /// property reference would not be seen, and the page has never used one.
-    /// The count guard below is what stops a rewrite in that style from
-    /// turning this into a test that asserts nothing.
+    /// Scope limit, stated plainly: the parse sees `"eventPath": "…"` and
+    /// `"mirrorPaths": [ … ]` string literals only. A path that came from a JS
+    /// expression or a property reference would not be seen, and the page has
+    /// never used one. The count guards below are what stop a rewrite in that
+    /// style from turning this into a test that asserts nothing.
     void simpleScopeCoversEverySimplePageCard()
     {
         const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/AnimationsSimplePage.qml");
@@ -256,6 +263,29 @@ private Q_SLOTS:
         QVERIFY2(cardPaths.size() >= 5,
                  qPrintable(QStringLiteral("parsed only %1 eventPath literals from AnimationsSimplePage.qml")
                                 .arg(cardPaths.size())));
+
+        // Mirrors: pull each `"mirrorPaths": [...]` array body, then the string
+        // literals inside it. Checked against the same scope and reported
+        // through the same list as the primaries, since the consequence of an
+        // out-of-scope mirror is identical.
+        static const QRegularExpression mirrorArrayRe(QStringLiteral("\"mirrorPaths\"\\s*:\\s*\\[([^\\]]*)\\]"));
+        static const QRegularExpression mirrorEntryRe(QStringLiteral("\"([^\"]+)\""));
+        QStringList mirrorPaths;
+        auto arrayIt = mirrorArrayRe.globalMatch(src);
+        while (arrayIt.hasNext()) {
+            const QString body = arrayIt.next().captured(1);
+            auto entryIt = mirrorEntryRe.globalMatch(body);
+            while (entryIt.hasNext())
+                mirrorPaths.append(entryIt.next().captured(1));
+        }
+
+        // One mirror on the page today (the combined opened & closed card). Its
+        // own non-vacuity floor, so a rewrite that stopped matching mirrors
+        // fails here rather than silently checking the primaries alone.
+        QVERIFY2(mirrorPaths.size() >= 1,
+                 qPrintable(QStringLiteral("parsed only %1 mirrorPaths literals from AnimationsSimplePage.qml")
+                                .arg(mirrorPaths.size())));
+        cardPaths.append(mirrorPaths);
 
         const AnimationPageScope scope = animationPageScope(QStringLiteral("animations-simple"));
         QCOMPARE(scope.kind, AnimationPageScope::EventSubtree);

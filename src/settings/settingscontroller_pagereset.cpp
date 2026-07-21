@@ -131,11 +131,12 @@ bool SettingsController::pageSupportsDiscard(const QString& page) const
     // Reset has no equivalent. This predicate has to describe what discardPage
     // accepts or the two disagree about the same page.
     //
-    // Widening is safe for the kebab: both QML consumers (Main.qml) pass
-    // activePage, which setActivePage always resolves to a concrete leaf, so no
-    // parent id ever reaches them. It is likewise safe for discardPage's own
-    // child walk below — every pageGroupChildren value holds leaf ids only, so a
-    // child can never re-match the group case.
+    // Parent ids DO reach the kebab: Main.qml passes activeDirtyScope, which
+    // hoists a condensed page to the group it is the sole visible row for, so
+    // "snapping" / "tiling" / "animations" arrive here routinely. The group
+    // branch in discardPage is the intended handler for them. It is likewise
+    // safe for discardPage's own child walk below — every pageGroupChildren
+    // value holds leaf ids only, so a child can never re-match the group case.
     return pageSupportsReset(page) || pageGroupChildren().contains(page);
 }
 

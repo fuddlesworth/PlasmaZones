@@ -212,6 +212,7 @@ void SettingsController::setActivePage(const QString& page)
         const ScopedFlag loadingScope(m_loading);
         m_activePage = target;
         Q_EMIT activePageChanged();
+        Q_EMIT activeDirtyScopeChanged();
     }
 }
 
@@ -232,6 +233,15 @@ void SettingsController::setAdvancedMode(bool advanced)
     // advanced). Re-run setActivePage against the current page: its gate
     // redirects to a visible page when hidden and no-ops when still visible.
     setActivePage(m_activePage);
+    // Unconditionally, AFTER that call. A page visible in both modes does not
+    // move, so setActivePage's own guard suppresses activePageChanged and with
+    // it the scope signal — yet the flip is exactly when the scope can change,
+    // because it changes which siblings are visible. Leaving this to
+    // setActivePage stranded every QML binding on the pre-flip scope, which is
+    // how the page kebab came to offer a Discard narrower than the badge next
+    // to it reported. Cheap to over-emit: the property is a bounded walk and
+    // its consumers are a handful of bindings.
+    Q_EMIT activeDirtyScopeChanged();
 }
 
 void SettingsController::onSettingsPropertyChanged()

@@ -15,9 +15,11 @@ namespace PhosphorControl {
 
 namespace {
 
-// Depth bound for every walk here. Defence in depth against a misregistered
-// page graph that names itself as its own ancestor: without it a search
-// keystroke would spin forever through the ring. Deliberately larger than
+// Nesting-depth bound for every walk here. Not a cycle guard: registerPage
+// requires a child's parent to be registered already, so the graph is acyclic
+// by construction and a descent always terminates (PageRegistry's
+// MaxParentChainHops documents the same reasoning for the upward walk). This
+// only bounds pathological nesting, and is deliberately larger than
 // ApplicationController's 32-hop parent-chain cap because these walks DESCEND
 // a tree (depth scales with nesting) while that one walks a single chain.
 constexpr int MaxWalkDepth = 64;
@@ -80,6 +82,44 @@ bool isExpanded(const QVariantMap& expandedCategories, const QString& id)
     return it.value() != QVariant(false);
 }
 
+// The descendant walk behind SidebarRows::firstTwoNavigableDescendants, taking
+// the scope's visible children as a parameter so a caller that has already
+// fetched them does not pay for the subtree-descending visibility test twice.
+// See the member function for what the count means to each caller.
+QList<PageRegistry::Entry> firstTwoNavigableUnder(const PageRegistry* registry, const QList<PageRegistry::Entry>& kids)
+{
+    QList<PageRegistry::Entry> found;
+    const std::function<void(const QList<PageRegistry::Entry>&, int)> gather =
+        [&](const QList<PageRegistry::Entry>& sub, int d) {
+            for (const PageRegistry::Entry& g : sub) {
+                if (found.size() > 1) {
+                    return;
+                }
+                if (!g.qmlSource.isEmpty()) {
+                    found.append(g);
+                    if (found.size() > 1) {
+                        return;
+                    }
+                }
+                // Warn like the other four walks in this file. A truncated
+                // count is not a cosmetic omission here: it flips a real drill
+                // target into "not enterable", so build() drops the row and
+                // resolveDrillScope evicts the rail out of the scope. Silence
+                // would leave nothing in the log explaining either.
+                if (d + 1 > MaxWalkDepth) {
+                    qWarning() << "SidebarRows: page tree nested deeper than" << MaxWalkDepth << "levels under id"
+                               << g.id
+                               << "— descendants below this point are not counted, so the category may not be offered "
+                                  "as a drill target";
+                    continue;
+                }
+                gather(registry->visibleChildPages(g.id), d + 1);
+            }
+        };
+    gather(kids, 0);
+    return found;
+}
+
 } // namespace
 
 SidebarRows::SidebarRows(QObject* parent)
@@ -132,39 +172,13 @@ QList<PageRegistry::Entry> SidebarRows::firstTwoNavigableDescendants(const QStri
     // agree about what "enterable" means, and the lib has no QML test harness,
     // so two copies of this walk would ship green the moment they diverged —
     // which is exactly what happened when resolveDrillScope was first written
-    // with its own copy that counted to one.
-    QList<PageRegistry::Entry> found;
+    // with its own copy that counted to one. resolveDrillScope reaches the walk
+    // through firstTwoNavigableUnder directly, because it has already fetched
+    // the scope's children; the walk itself is still the single shared one.
     if (!m_registry) {
-        return found;
+        return {};
     }
-    const std::function<void(const QString&, int)> gather = [&](const QString& pid, int d) {
-        if (found.size() > 1) {
-            return;
-        }
-        // Warn like the other four walks in this file. A truncated count is
-        // not a cosmetic omission here: it flips a real drill target into "not
-        // enterable", so build() drops the row and resolveDrillScope evicts the
-        // rail out of the scope. Silence would leave nothing in the log
-        // explaining either.
-        if (d > MaxWalkDepth) {
-            qWarning() << "SidebarRows: page tree nested deeper than" << MaxWalkDepth << "levels under id" << pid
-                       << "— descendants below this point are not counted, so the category may not be offered as a "
-                          "drill target";
-            return;
-        }
-        const QList<PageRegistry::Entry> sub = m_registry->visibleChildPages(pid);
-        for (const PageRegistry::Entry& g : sub) {
-            if (found.size() > 1) {
-                break;
-            }
-            if (!g.qmlSource.isEmpty()) {
-                found.append(g);
-            }
-            gather(g.id, d + 1);
-        }
-    };
-    gather(parentId, 0);
-    return found;
+    return firstTwoNavigableUnder(m_registry, m_registry->visibleChildPages(parentId));
 }
 
 QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, const QString& currentParentId,
@@ -300,6 +314,15 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
                 }
             };
         walk(currentParentId, 0, m_registry->visibleChildPages(currentParentId));
+
+        // Same trailing-divider trim the flat walk applies, for the same
+        // reason: the rows a seam was meant to separate can filter out. Under
+        // `animations` the simple-mode page carries the seam and every sibling
+        // after it is advanced-only, so in simple mode the divider is the last
+        // row emitted and the rail would draw a separator under nothing.
+        while (!out.isEmpty() && rowIsDivider(out.last().toMap())) {
+            out.removeLast();
+        }
         return out;
     }
 
@@ -452,8 +475,13 @@ QString SidebarRows::resolveDrillScope(const QString& currentParentId) const
     //   - qmlSource next, because a category with a page of its own is offered
     //     as a drill target without consulting its descendant count,
     //   - the count last, where 0 or 1 both mean "not an enterable scope".
-    const bool childHasChildren = !m_registry->visibleChildPages(currentParentId).isEmpty();
-    if (!childHasChildren) {
+    //
+    // The child list is fetched ONCE and handed to the descendant walk below:
+    // visibleChildPages runs the visibility test (which descends the subtree)
+    // per child, and the walk's first act would otherwise be to fetch this
+    // exact list again.
+    const QList<PageRegistry::Entry> kids = m_registry->visibleChildPages(currentParentId);
+    if (kids.isEmpty()) {
         return QString();
     }
     const PageRegistry::Entry scope = m_registry->entry(currentParentId);
@@ -463,7 +491,7 @@ QString SidebarRows::resolveDrillScope(const QString& currentParentId) const
     if (!scope.qmlSource.isEmpty()) {
         return currentParentId;
     }
-    return firstTwoNavigableDescendants(currentParentId).size() > 1 ? currentParentId : QString();
+    return firstTwoNavigableUnder(m_registry, kids).size() > 1 ? currentParentId : QString();
 }
 
 QVariantMap SidebarRows::flatPageData(const QString& pageId, const QVariantMap& flatTitleOverrides) const

@@ -337,7 +337,10 @@ namespace {
 struct NavigableState
 {
     QStringList ids;
-    int currentIdx = -1;
+    // qsizetype, matching QStringList::size(): the index is assigned straight
+    // from ids.size() and compared against it, and PageRegistry's own index
+    // map made the same choice to keep the narrowing out of the build.
+    qsizetype currentIdx = -1;
 };
 
 NavigableState collectNavigable(const PageRegistry* registry, const QString& currentPageId)
@@ -371,7 +374,7 @@ QString ApplicationController::gotoPreviousPage()
     if (state.ids.isEmpty()) {
         return QString();
     }
-    const int next = state.currentIdx <= 0 ? state.ids.size() - 1 : state.currentIdx - 1;
+    const qsizetype next = state.currentIdx <= 0 ? state.ids.size() - 1 : state.currentIdx - 1;
     setCurrentPageId(state.ids.at(next));
     // Report where we LANDED, not what we asked for. setCurrentPageId can be
     // re-entered during its own currentPageIdChanged emit (the app's bridge
@@ -388,7 +391,7 @@ QString ApplicationController::gotoNextPage()
     if (state.ids.isEmpty()) {
         return QString();
     }
-    const int next = state.currentIdx < 0 || state.currentIdx == state.ids.size() - 1 ? 0 : state.currentIdx + 1;
+    const qsizetype next = state.currentIdx < 0 || state.currentIdx == state.ids.size() - 1 ? 0 : state.currentIdx + 1;
     setCurrentPageId(state.ids.at(next));
     // Landed, not requested — see gotoPreviousPage.
     return m_currentPageId;

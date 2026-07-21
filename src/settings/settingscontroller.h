@@ -99,6 +99,7 @@ class SettingsController : public QObject
     // page registry (which filters the sidebar) and redirects away from a
     // page the new mode can't show. Pages bind card/row `visible:` to this.
     Q_PROPERTY(bool advancedMode READ advancedMode WRITE setAdvancedMode NOTIFY advancedModeChanged)
+    Q_PROPERTY(QString activeDirtyScope READ activeDirtyScope NOTIFY activeDirtyScopeChanged)
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
     Q_PROPERTY(DaemonController* daemonController READ daemonController CONSTANT)
     Q_PROPERTY(UpdateChecker* updateChecker READ updateChecker CONSTANT)
@@ -248,12 +249,27 @@ public:
     /// mode flip and would otherwise badge nowhere and be unreachable by that
     /// row's Discard.
     ///
-    /// Walks up while the page is the SOLE visible representative of its
-    /// group, which self-terminates: in simple mode `placement` and
-    /// `appearance` each still show two rows, so the walk stops below them,
-    /// and in advanced mode every category shows many rows so it never takes a
-    /// single hop. Returns @p pageId unchanged when no hop applies.
+    /// Only a CONDENSED page hoists — one registered `SimpleOnly`, which
+    /// exists precisely because it stands in for a subtree. A page shown in
+    /// both modes always speaks for itself, even when it happens to be the
+    /// only visible row under its parent: `layouts` is alone under `display`
+    /// in simple mode (virtualscreens is AdvancedOnly), and hoisting it would
+    /// badge Layouts for staged virtual-screen edits it cannot show or clear.
+    ///
+    /// From a condensed page it walks up while that page is the SOLE visible
+    /// representative of its group, which self-terminates: in simple mode
+    /// `placement` and `appearance` each still show two rows, so the walk
+    /// stops below them. Returns @p pageId unchanged when no hop applies.
     Q_INVOKABLE QString dirtyScopeFor(const QString& pageId) const;
+    /// `dirtyScopeFor(activePage)` as a NOTIFYing property.
+    ///
+    /// QML must bind this, not call `dirtyScopeFor(activePage)` directly: that
+    /// is a Q_INVOKABLE, so its result does not re-evaluate when the visible
+    /// set changes. A mode flip that leaves `activePage` alone (any page shown
+    /// in both modes) would otherwise strand every such binding on the
+    /// pre-flip scope, which is how the page kebab came to offer a Discard
+    /// that cleared less than the badge beside it reported.
+    QString activeDirtyScope() const;
 
     /// Reset every config key owned by @p page to its schema default, staged
     /// for the user to Save or Discard (never persisted here). Manifest pages
@@ -662,6 +678,10 @@ Q_SIGNALS:
     void savingFinished();
     void daemonRunningChanged();
     void advancedModeChanged();
+    /// Emitted whenever `activeDirtyScope` may have moved: the active page
+    /// changed, or the mode flip changed which pages are visible and therefore
+    /// whether the active one is still the sole representative of its group.
+    void activeDirtyScopeChanged();
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
     void availableAlgorithmsChanged();

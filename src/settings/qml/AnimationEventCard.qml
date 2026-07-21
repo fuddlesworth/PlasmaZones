@@ -73,16 +73,30 @@ Item {
     /// silently turning every mirror write into a write to a bogus path.
     property var mirrorPaths: []
 
-    /// Raw stored profile per write path, refreshed by refreshFromTree.
+    /// Raw stored TIMING profile per write path, refreshed by refreshFromTree.
     /// _setOverrideMerged and _storedStateKey read it to merge over, and to
     /// compare against, each path's own stored fields. It exists to avoid DISK
     /// I/O: both run from the duration slider's valueChanged, i.e. every tick
     /// of a drag, and reading each path's stored profile there meant a
     /// synchronous file open per path per reader per tick. With the cache the
-    /// only reads left on a tick are refreshFromTree's own, which seeds it at
-    /// exactly one open per path (the primary reuses the read refreshFromTree
-    /// already performs). Re-entrancy is _committing's job, not this cache's.
+    /// only timing reads left on a tick are refreshFromTree's own, which seeds
+    /// it at exactly one open per path (the primary reuses the read
+    /// refreshFromTree already performs). Re-entrancy is _committing's job,
+    /// not this cache's.
     property var _pathProfiles: ({})
+
+    /// The shader-axis counterpart, seeded on the same pass and read by
+    /// _storedStateKey. rawShaderProfile is not a file open but it is not cheap
+    /// either: every call re-reads the whole tree through
+    /// Settings::shaderProfileTree(), which does QJsonObject::fromVariantMap
+    /// plus ShaderProfileTree::fromJson plus a full prune walk. _storedStateKey
+    /// runs once per write path per divergence pass, so an uncached read there
+    /// made a mirrored card's drag tick cost one full tree parse per path on
+    /// top of the timing reads. With both snapshots seeded together, the reads
+    /// left on a tick are refreshFromTree's own on BOTH axes: one timing open
+    /// and one tree parse per path, with the primary reusing the reads
+    /// refreshFromTree already performs for its own toggle state.
+    property var _pathShaderProfiles: ({})
 
     /// True while _setOverrideMerged is writing, so the overrideChanged each
     /// write emits does not re-enter refreshFromTree mid-loop.
@@ -236,13 +250,48 @@ Item {
     // overwrite is coming before they make it. Always false for the
     // no-mirrors cards, which is every card outside the simple page.
     property bool _mirrorsDiverged: false
-    /// How many events the next edit here will converge: every mirror whose
-    /// stored state differs from the primary, plus the primary itself. Zero
-    /// when nothing diverges. The banner reports this rather than
-    /// _writePaths.length, which counts every event the card controls and so
-    /// would over-report the moment a card declares two or more mirrors and
-    /// only one of them diverges.
+    /// How many events hold a value that differs from another: every mirror
+    /// whose stored state differs from the primary, plus the primary itself.
+    /// Zero when nothing diverges. This counts the events the banner's "set
+    /// differently" clause names, which is NOT the same set the next edit
+    /// rewrites: both group writers loop _writePaths, so a converging edit
+    /// lands on every mirror including the ones already in step. The banner
+    /// therefore reports this for the divergence and _writePaths.length for
+    /// the reach of the next write. Using one number for both clauses
+    /// under-reported the write the moment a card declared two or more
+    /// mirrors and only one of them diverged.
     property int _divergentPathCount: 0
+
+    /// Unpacks a "spring:omega,zeta" wire string into `{ omega, zeta }`.
+    ///
+    /// A hand-edited "spring:12,abc" still RESOLVES as a spring rather than
+    /// falling back to easing, and Spring::fromString salvages nothing from a
+    /// failed parse: `if (!okOmega || !okZeta) return spring;` returns its
+    /// default-constructed Spring wholesale, so even the half the user got
+    /// right is discarded and "spring:12,abc" plays as (12.0, 0.8). Falling
+    /// back to the engine's own defaults here is what makes this file agree
+    /// with what the engine will actually play.
+    ///
+    /// Shared by _applyEffective (which seeds the controls) and
+    /// inheritSummaryText (which describes them). They read the same wire
+    /// string, so two parsers meant a malformed spring could be seeded as
+    /// (12.0, 0.8) while the "Current:" line beside it described something
+    /// else. One helper makes that disagreement unrepresentable.
+    function _springFromCurve(curve) {
+        const parts = curve.substring(7).split(",");
+        const w = parseFloat(parts[0]);
+        const z = parseFloat(parts[1]);
+        if (isFinite(w) && isFinite(z))
+            return ({
+                    "omega": w,
+                    "zeta": z
+                });
+
+        return ({
+                "omega": CurvePresets.defaultSpringOmega,
+                "zeta": CurvePresets.defaultSpringZeta
+            });
+    }
 
     // ── Inheritance summary (italic "Current: …" line when override off) ─
     function inheritSummaryText() {
@@ -250,13 +299,8 @@ Item {
         var curve = r.curve || CurvePresets.defaultEasingCurve;
         var dur = r.duration !== undefined ? r.duration : CurvePresets.defaultDurationMs;
         if (typeof curve === "string" && curve.indexOf("spring:") === 0) {
-            var parts = curve.substring(7).split(",");
-            var w = parseFloat(parts[0]);
-            var z = parseFloat(parts[1]);
-            if (isFinite(w) && isFinite(z))
-                return i18n("Spring · ω=%1 · ζ=%2", w.toFixed(1), z.toFixed(2));
-
-            return i18n("Spring · Custom");
+            const s = root._springFromCurve(curve);
+            return i18n("Spring · ω=%1 · ζ=%2", s.omega.toFixed(1), s.zeta.toFixed(2));
         }
         return i18n("%1 · %2 ms", CurvePresets.curveDisplayName(curve), Math.round(dur));
     }
@@ -472,14 +516,17 @@ Item {
     /// missing override and an empty one compare equal. Both come back as
     /// QVariantMaps, whose JS key order is the map's own sorted order, so two
     /// paths holding the same values always stringify identically.
-    /// Prefers the _pathProfiles snapshot when it holds this path: it is
-    /// refreshed on the same pass that calls this, and rawProfile() is a
-    /// synchronous file open, so re-reading here defeated the cache's whole
-    /// purpose on every drag tick.
+    /// Prefers the _pathProfiles / _pathShaderProfiles snapshots when they hold
+    /// this path: both are refreshed on the same pass that calls this, and both
+    /// underlying reads are expensive per call (a synchronous file open, and a
+    /// full shader-tree parse), so reading either here defeated the caches'
+    /// whole purpose on every drag tick. The uncached reads remain as the
+    /// fallback for a path the snapshots have not seen.
     function _storedStateKey(path) {
         const cached = root._pathProfiles[path];
         const profile = cached || settingsController.animationsPage.rawProfile(path) || ({});
-        const shader = settingsController.animationsPage.rawShaderProfile(path) || ({});
+        const cachedShader = root._pathShaderProfiles[path];
+        const shader = cachedShader || settingsController.animationsPage.rawShaderProfile(path) || ({});
         // Divergence is measured on exactly what this card WRITES to every
         // path: duration (commitOverride -> _setOverrideMerged) and the whole
         // shader leg (_setShaderOverrideOnAll, reached from the picker, the
@@ -570,7 +617,14 @@ Item {
         for (var i = 0; i < countPaths.length; ++i)
             shadowing += settingsController.animationsPage.shaderOverrideDescendantCount(countPaths[i]);
         root._shadowingChildrenCount = shadowing;
-        root._refreshMirrorDivergence();
+        // Divergence is deliberately NOT recomputed here. refreshFromTree owns
+        // it, and every call site of this function calls refreshFromTree
+        // immediately after (the two group writers' finally blocks,
+        // onShaderProfileChanged, and Component.onCompleted), so the banner
+        // still tracks the shader tree. Recomputing on both would walk every
+        // write path twice per shader-param slider tick, which is drag rate.
+        // A future caller that runs this ALONE must call refreshFromTree too,
+        // or the banner goes stale.
     }
 
     /// Seeds the working controls (timing mode, curve, duration) from an
@@ -580,35 +634,18 @@ Item {
     function _applyEffective(effective, resolvedCurve) {
         var curve = (typeof effective.curve === "string" && effective.curve.length > 0) ? effective.curve : resolvedCurve;
         if (typeof curve === "string" && curve.indexOf("spring:") === 0) {
-            var parts = curve.substring(7).split(",");
-            var w = parseFloat(parts[0]);
-            var z = parseFloat(parts[1]);
-            if (isFinite(w) && isFinite(z)) {
-                root.currentTimingMode = CurvePresets.timingModeSpring;
-                root.currentSpringOmega = w;
-                root.currentSpringZeta = z;
-            } else {
-                // A hand-edited "spring:abc,def" still RESOLVES as a spring
-                // rather than falling back to easing. Without the mode set here
-                // it kept its previous value (Easing on first seed) and drew a
-                // Duration slider the resolved spring ignores, while
-                // inheritSummaryText reported the same input as "Spring ·
-                // Custom".
-                //
-                // Omega / zeta are re-seeded from the engine's own defaults
-                // rather than left at their previous values, because
-                // Spring::fromString does not salvage anything from a failed
-                // parse: `if (!okOmega || !okZeta) return spring;` returns its
-                // default-constructed Spring wholesale, so even a half the user
-                // got right is discarded and "spring:12,abc" plays as
-                // (12.0, 0.8). Keeping stale values here drew a thumbnail and a
-                // summary for a spring the engine will never play, and flipping
-                // Override on then committed that fabricated
-                // "spring:<stale>,<stale>" as a real direct override.
-                root.currentTimingMode = CurvePresets.timingModeSpring;
-                root.currentSpringOmega = CurvePresets.defaultSpringOmega;
-                root.currentSpringZeta = CurvePresets.defaultSpringZeta;
-            }
+            // Spring mode is set for a malformed wire string too, since the
+            // engine still resolves one. Without it the mode kept its previous
+            // value (Easing on first seed) and drew a Duration slider the
+            // resolved spring ignores. _springFromCurve supplies the values the
+            // engine will actually play, so the controls, the thumbnail and the
+            // "Current:" line all describe the same spring, and flipping
+            // Override on commits that spring rather than a fabricated
+            // "spring:<stale>,<stale>".
+            const s = root._springFromCurve(curve);
+            root.currentTimingMode = CurvePresets.timingModeSpring;
+            root.currentSpringOmega = s.omega;
+            root.currentSpringZeta = s.zeta;
         } else {
             root.currentTimingMode = CurvePresets.timingModeEasing;
             if (typeof curve === "string" && curve.length > 0)
@@ -672,19 +709,25 @@ Item {
         // while suppressing the hint that explains why. Duration still comes
         // from `effective` below — only the mode falls back.
         root._applyEffective(effective, resolved.curve);
-        // Cache each write path's stored profile for _setOverrideMerged. This
-        // runs on every overrideChanged, which is exactly when a path's stored
-        // state can have moved.
+        // Cache each write path's stored profile on both axes, for
+        // _setOverrideMerged and _storedStateKey. This runs on every
+        // overrideChanged and on every shader-side refresh, which is exactly
+        // when a path's stored state can have moved.
         var cache = {};
+        var shaderCache = {};
         for (var pi = 0; pi < root._writePaths.length; ++pi) {
             const wp = root._writePaths[pi];
-            // The primary reuses `raw`, read at the top of this function,
-            // rather than opening the same file a second time on the same
-            // tick. That is what makes _pathProfiles' "one open per path per
-            // tick" claim true instead of merely halving the opens.
-            cache[wp] = (wp === root.eventPath) ? (raw || ({})) : (settingsController.animationsPage.rawProfile(wp) || ({}));
+            // The primary reuses `raw` and `rawShader`, both read at the top of
+            // this function, rather than repeating the same file open and the
+            // same tree parse on the same tick. That is what makes the caches'
+            // "one read per path per tick" claim true on both axes instead of
+            // merely halving the reads.
+            const isPrimary = wp === root.eventPath;
+            cache[wp] = isPrimary ? (raw || ({})) : (settingsController.animationsPage.rawProfile(wp) || ({}));
+            shaderCache[wp] = isPrimary ? (rawShader || ({})) : (settingsController.animationsPage.rawShaderProfile(wp) || ({}));
         }
         root._pathProfiles = cache;
+        root._pathShaderProfiles = shaderCache;
         root._refreshMirrorDivergence();
     }
 
@@ -745,13 +788,21 @@ Item {
     Layout.fillWidth: true
     Component.onCompleted: {
         // Name whatever _validMirrorPaths dropped. The drop itself is the
-        // guard — it keeps a typo'd mirror out of every writer and out of the
+        // guard — it keeps a rejected mirror out of every writer and out of the
         // divergence check, so the banner cannot latch on a path no edit could
         // ever converge. This turns the remaining silence into a one-line
-        // console message naming the bad path.
-        for (var i = 0; root.mirrorPaths && i < root.mirrorPaths.length; ++i) {
-            if (!settingsController.animationsPage.isValidEventPath(root.mirrorPaths[i]))
-                console.warn("AnimationEventCard(" + root.eventPath + "): mirrorPaths entry '" + root.mirrorPaths[i] + "' is not a valid event path; it has been dropped and will receive no writes");
+        // console message naming the dropped path.
+        //
+        // Derived from the SET DIFFERENCE against _validMirrorPaths rather than
+        // by re-running isValidEventPath here. Re-deciding would make this a
+        // second, independent copy of the keep rule, so any future change to
+        // what _validMirrorPaths keeps would leave the warning describing a
+        // drop that did not happen (or staying silent about one that did).
+        const declared = root.mirrorPaths || [];
+        const kept = root._validMirrorPaths;
+        for (var i = 0; i < declared.length; ++i) {
+            if (kept.indexOf(declared[i]) === -1)
+                console.warn("AnimationEventCard(" + root.eventPath + "): mirrorPaths entry '" + declared[i] + "' was not accepted as an event path; it has been dropped and will receive no writes");
         }
         refreshFromTree();
         refreshShaderFromTree();
@@ -957,12 +1008,19 @@ Item {
                 visible: root._mirrorsDiverged
                 // Names both axes _storedStateKey compares, because both have a
                 // group writer. Naming only the timing left the banner lit with
-                // no explanation after a shader-only divergence. Count is the
-                // diverging events plus the primary, so a card with several
-                // mirrors names only the ones actually affected. It is always
-                // two or more whenever the banner is visible, so a singular
-                // plural form here would never render.
-                text: i18n("This card controls %1 events that are set differently right now, and it shows only one of them. The next change you make to the timing or the shader here applies to all of them.", root._divergentPathCount)
+                // no explanation after a shader-only divergence.
+                //
+                // Two different counts, because the two clauses name two
+                // different sets. The first is _divergentPathCount, the
+                // diverging mirrors plus the primary they differ from, so a
+                // card with several mirrors names only the ones actually out of
+                // step. The second is _writePaths.length, because both group
+                // writers loop every write path: the converging edit rewrites
+                // the mirrors that already agreed as well. Reporting the
+                // divergence count in both places under-stated the reach of the
+                // next write. Both counts are two or more whenever the banner
+                // is visible, so a singular plural form here would never render.
+                text: i18n("%1 of the events this card controls are set differently right now, and it shows only one of them. The next change you make to the timing or the shader here applies to all %2 of them.", root._divergentPathCount, root._writePaths.length)
             }
 
             Label {

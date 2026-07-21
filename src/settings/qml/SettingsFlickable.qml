@@ -149,15 +149,15 @@ Flickable {
     }
 
     function revealAnchor(anchorId) {
-        // Cancel any in-flight expand-then-settle FIRST — before the registry
-        // lookup, which can early-return for a not-yet-registered id without
-        // touching the timer. A stale settle would otherwise fire against the
-        // PREVIOUS target and pulse the wrong row moments before the new
-        // anchor registers and scrolls somewhere else.
-        settingsFlickable._cancelPendingReveal();
-
+        // The registry lookup is a plain map read — it cannot fire a timer or
+        // a signal — so it is safe to resolve the target BEFORE cancelling the
+        // in-flight reveal. Every path below still cancels before it touches
+        // any reveal state, so a stale settle can never fire against the
+        // PREVIOUS target. Resolving first is what lets the cancel know which
+        // cards the NEW target needs left open (see the keep list below).
         var target = settingsFlickable._searchAnchors[anchorId];
         if (!target) {
+            settingsFlickable._cancelPendingReveal([]);
             // Not registered yet — retain and retry once it registers, so the
             // reveal isn't lost to the page-build / deferred-registration race.
             settingsFlickable._pendingRevealAnchor = anchorId;
@@ -169,6 +169,30 @@ Flickable {
             pendingRevealExpiry.restart();
             return;
         }
+
+        // The full card chain the NEW target lives in, nearest first. Computed
+        // BEFORE the cancel so it can serve as the cancel's keep list: a card
+        // the superseded reveal already opened for this same destination is
+        // kept open rather than slammed shut and reopened.
+        // Every card on the chain, not just the nearest — a row in a card
+        // nested inside another collapsed card stays invisible if only the
+        // inner one opens.
+        // Seed with the item itself when IT is a card. SettingsCard registers
+        // its own section anchor with item === card, and cardChainFor starts at
+        // item.parent — so without this, a deep link to a section scrolled to
+        // the shut header and pulsed it while the content stayed hidden.
+        var chain = SearchAnchors.cardChainFor(target);
+        if (target.isSettingsCard === true)
+            chain.unshift(target);
+        var collapsibleChain = chain.filter(function (c) {
+            return c.collapsible === true;
+        });
+
+        // Supersede the in-flight reveal, but keep open the cards this target
+        // needs. `carried` is the subset the superseded reveal opened that we
+        // kept — its ownership transfers to this reveal so a later failure
+        // still puts them back.
+        var carried = settingsFlickable._cancelPendingReveal(collapsibleChain);
 
         // This reveal wins over any anchor still awaiting registration.
         settingsFlickable._pendingRevealAnchor = "";
@@ -185,18 +209,8 @@ Flickable {
         // initiallyCollapsed), not the tier disagreement the guard was written
         // for. Effective visibility is only meaningful once the card is open,
         // so the bail moves after the expand.
-        // Every collapsed card on the chain, not just the nearest — a row in a
-        // card nested inside another collapsed card stays invisible if only the
-        // inner one opens.
-        // Seed with the item itself when IT is a card. SettingsCard registers
-        // its own section anchor with item === card, and cardChainFor starts at
-        // item.parent — so without this, a deep link to a section scrolled to
-        // the shut header and pulsed it while the content stayed hidden.
-        var chain = SearchAnchors.cardChainFor(target);
-        if (target.isSettingsCard === true)
-            chain.unshift(target);
-        var collapsedChain = chain.filter(function (c) {
-            return c.collapsible === true && c.collapsed === true;
+        var collapsedChain = collapsibleChain.filter(function (c) {
+            return c.collapsed === true;
         });
         if (collapsedChain.length > 0) {
             // Expand, then settle: drive the post-expand scroll off a one-shot
@@ -212,8 +226,10 @@ Flickable {
             // Remember everything we opened, so a reveal that turns out
             // invisible anyway can put them back rather than leaving cards the
             // user deliberately shut yanked open with the page scrolled
-            // somewhere unrelated.
-            settingsFlickable._revealPendingCards = collapsedChain;
+            // somewhere unrelated. `carried` are the cards the superseded
+            // reveal opened for this same target and we kept open, so they are
+            // this reveal's to revert too.
+            settingsFlickable._revealPendingCards = collapsedChain.concat(carried);
             var longest = Kirigami.Units.shortDuration;
             for (var di = 0; di < collapsedChain.length; ++di) {
                 if (collapsedChain[di] && collapsedChain[di].expandDurationMs > longest)
@@ -224,17 +240,30 @@ Flickable {
                 collapsedChain[ci].collapsed = false;
             revealSettleTimer.restart();
         } else if (!target.visible) {
-            // Genuinely invisible with no collapsed card to blame: the row is
-            // hidden by its own condition, most likely an advanced-only row
-            // reached in simple mode. It has no usable geometry, so scrolling
-            // to it would pulse the highlight over a zero-height strip. The
-            // search index filters these by tier already
-            // (SearchEntry.advancedOnly), so reaching here means the index and
-            // the row disagreed — fall back to the top of the page, which is at
-            // least a real destination. Tests effective `visible` rather than
-            // the advancedOnly flag so every hiding condition is covered.
-            revealScrollAnim.to = 0;
-            revealScrollAnim.restart();
+            // Invisible with every collapsible ancestor already open. Two
+            // distinct cases, told apart purely by whether the target has a
+            // SettingsCard ancestor at all — not by WHY it is hidden:
+            //   - It has an ancestor card: the common case is a card whose
+            //     master toggle gates its body off (contentClip.enabled goes
+            //     false, enabled inherits down, SettingsRow leads visible: with
+            //     enabled). The row is reachable — the user just flips a switch
+            //     that is on screen — so scroll to and pulse the nearest
+            //     ancestor card, whose header carries that toggle, rather than
+            //     dead-ending at the top of the page. An advanced-only row
+            //     reached in simple mode also lands here; the search index
+            //     filters those by tier (SearchEntry.advancedOnly), so it is an
+            //     index/row disagreement, and the card is at least a real,
+            //     on-screen destination.
+            //   - It has no ancestor card (a bare page-level row): there is
+            //     nothing to show it inside, so fall back to the top of the
+            //     page, which is at least a real destination.
+            settingsFlickable._revertRevealCards(carried);
+            if (chain.length > 0) {
+                settingsFlickable._scrollToReveal(chain[0]);
+            } else {
+                revealScrollAnim.to = 0;
+                revealScrollAnim.restart();
+            }
         } else {
             settingsFlickable._scrollToReveal(target);
         }
@@ -263,22 +292,39 @@ Flickable {
         revealHighlight.opacity = 0;
     }
 
-    /// Drops any pending expand-then-settle, reverts anything it opened, and
-    /// kills any highlight it left painted. Called at the top of every
-    /// revealAnchor so a superseded reveal can never fire against the old
-    /// target, whichever branch the new one takes.
-    function _cancelPendingReveal() {
-        // A superseded reveal by definition no longer needs its cards open.
+    /// Drops any pending expand-then-settle, reverts the cards it opened that
+    /// the superseding reveal does NOT need, and kills any highlight it left
+    /// painted. Called before any reveal state is touched so a superseded
+    /// reveal can never fire against the old target, whichever branch the new
+    /// one takes.
+    ///
+    /// @p keepOpen is the card chain the new target lives in. A card the
+    /// superseded reveal opened that is on this list is left open rather than
+    /// slammed shut and reopened moments later — two reveals into the same
+    /// collapsed card would otherwise make it visibly close and reopen.
+    /// Returns those kept cards so the caller can carry their reversion
+    /// ownership into the new reveal. Called with no argument (the stale-scroll
+    /// guard), every opened card is reverted.
+    function _cancelPendingReveal(keepOpen) {
         // Read into a local and clear the property first, matching the settle
         // timer's discipline so both consumers of _revealPendingCards read the
         // same way.
         const cards = settingsFlickable._revealPendingCards;
         settingsFlickable._revealPendingItem = null;
         settingsFlickable._revealPendingCards = [];
-        settingsFlickable._revertRevealCards(cards);
+        var kept = [];
+        var reverted = [];
+        for (var i = 0; i < cards.length; ++i) {
+            if (keepOpen && keepOpen.indexOf(cards[i]) >= 0)
+                kept.push(cards[i]);
+            else
+                reverted.push(cards[i]);
+        }
+        settingsFlickable._revertRevealCards(reverted);
         settingsFlickable._cancelRevealHighlight();
         settingsFlickable._revealToken = settingsFlickable._revealToken + 1;
         revealSettleTimer.stop();
+        return kept;
     }
 
     function _scrollToReveal(item) {
@@ -334,19 +380,35 @@ Flickable {
             }
             // Effective visibility is only final now that the card has finished
             // expanding — revealAnchor deliberately defers this check to here
-            // for the collapsed-card path. A row still hidden after the expand
-            // is hidden by its own condition (an advanced-only row in simple
-            // mode), so fall back to the top of the page rather than pulsing
-            // the highlight over a zero-height strip.
+            // for the collapsed-card path.
             if (!pending.visible) {
-                // Still hidden after the expand — the row is gated by its own
-                // condition, not by the card. Put the card back: we opened it
-                // speculatively, it bought nothing, and leaving it open is a
-                // visible side effect of a reveal that failed.
+                // Still hidden after the expand. Put the speculatively-opened
+                // cards back: they bought nothing, and leaving them open is a
+                // visible side effect of a reveal that ended somewhere else.
+                // Then, exactly as revealAnchor's own invisible branch does,
+                // tell the two hidden cases apart by whether the row has a
+                // SettingsCard ancestor:
+                //   - It has one: the common case is a card whose master toggle
+                //     gates its body off, so the expand could never reveal the
+                //     row — the user has to flip a switch on screen. Scroll to
+                //     and pulse the nearest ancestor card, whose header carries
+                //     that toggle. (An advanced-only row in simple mode also
+                //     lands here; the tier index normally filters it, so it is
+                //     an index/row disagreement, and the card is still a real
+                //     destination.)
+                //   - It has none (a bare page-level row): nothing to show it
+                //     inside, so fall back to the top of the page.
                 settingsFlickable._revertRevealCards(pendingCards);
                 settingsFlickable._cancelRevealHighlight();
-                revealScrollAnim.to = 0;
-                revealScrollAnim.restart();
+                var settleChain = SearchAnchors.cardChainFor(pending);
+                if (pending.isSettingsCard === true)
+                    settleChain.unshift(pending);
+                if (settleChain.length > 0) {
+                    settingsFlickable._scrollToReveal(settleChain[0]);
+                } else {
+                    revealScrollAnim.to = 0;
+                    revealScrollAnim.restart();
+                }
                 return;
             }
             settingsFlickable._scrollToReveal(pending);

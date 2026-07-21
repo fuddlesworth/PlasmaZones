@@ -185,22 +185,46 @@ Item {
             readonly property real actualHeight: rowLayout.implicitHeight
             onActualHeightChanged: root.setDelegateHeight(delegateRoot._itemId, actualHeight)
 
+            // The key this row registered under, captured at registration
+            // time. `_itemId` is a live binding on `modelData`, and during a
+            // model reset modelData detaches before Component.onDestruction
+            // runs — it would re-evaluate to "" through idOf's null-safe
+            // default and unregister the bare prefix instead of the real key.
+            // unregisterSearchAnchor matches on item identity, so that wrong
+            // key is a silent no-op and the real entry leaks, leaving the
+            // page's anchor map pointing at a destroyed Item. Caching the id
+            // makes the two halves symmetric by construction. Same shape as
+            // LayoutGridDelegate and ProfileRow.
+            property string _anchorId: ""
+
             Component.onCompleted: {
                 root.setDelegateHeight(delegateRoot._itemId, actualHeight);
                 if (root.anchorPrefix.length > 0) {
                     Qt.callLater(function () {
+                        // The coalesced callback can fire after this row has
+                        // been destroyed (model churn during fast filtering
+                        // or reloads); the dying context resolves ids to
+                        // undefined. Bail before dereferencing rather than
+                        // throwing — same guard as the sibling delegates.
+                        if (typeof delegateRoot === "undefined" || !delegateRoot || !delegateRoot.modelData)
+                            return;
                         var pg = SearchAnchors.pageFor(delegateRoot);
-                        if (pg)
-                            pg.registerSearchAnchor(root.anchorPrefix + delegateRoot._itemId, delegateRoot);
+                        if (pg) {
+                            delegateRoot._anchorId = root.anchorPrefix + delegateRoot._itemId;
+                            pg.registerSearchAnchor(delegateRoot._anchorId, delegateRoot);
+                        }
                     });
                 }
             }
             Component.onDestruction: {
-                if (root.anchorPrefix.length > 0) {
-                    var pg = SearchAnchors.pageFor(delegateRoot);
-                    if (pg)
-                        pg.unregisterSearchAnchor(root.anchorPrefix + delegateRoot._itemId, delegateRoot);
-                }
+                // Empty means registration never happened (no anchor prefix,
+                // no hosting page, or the row died before the callLater ran),
+                // so there is nothing to shed.
+                if (delegateRoot._anchorId.length === 0)
+                    return;
+                var pg = SearchAnchors.pageFor(delegateRoot);
+                if (pg)
+                    pg.unregisterSearchAnchor(delegateRoot._anchorId, delegateRoot);
             }
 
             width: root.width

@@ -275,6 +275,7 @@ qt_add_qml_module(plasmazones-settings
         rulemodel.cpp
     QML_FILES
         qml/Main.qml
+        qml/ConfirmDialogs.qml
         qml/Toast.qml
         qml/KeyboardShortcutOverlay.qml
         qml/GlobalSearchField.qml

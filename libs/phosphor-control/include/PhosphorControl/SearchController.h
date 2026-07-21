@@ -95,10 +95,13 @@ private:
     QVector<SearchEntry> m_staticEntries;
     QVector<ISearchProvider*> m_providers;
 
-    /// pageIds already reported as unregistered / non-navigable, so the drop
-    /// warning is emitted once per offending id rather than once per index
-    /// rebuild.
-    QSet<QString> m_warnedPageIds;
+    /// Entries already reported as living on an unregistered / non-navigable
+    /// page, keyed by (pageId, title), so the drop warning is emitted once per
+    /// offending ENTRY rather than once per index rebuild. Keyed per entry
+    /// rather than per pageId because one bad id is typically shared by a whole
+    /// card's worth of anchors, and naming only the first leaves the rest
+    /// silent once it is fixed.
+    QSet<QString> m_warnedEntryKeys;
 
     bool m_indexDirty = true;
     QVector<SearchEntry> m_index;

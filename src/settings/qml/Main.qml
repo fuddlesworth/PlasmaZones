@@ -33,7 +33,7 @@ PhosphorUi.SettingsAppWindow {
     // against the page's own scope (Loader breaks file-id lookup),
     // throwing `ReferenceError: defaultsConfirmDialog is not defined`
     // at runtime and leaving the user with no path to reset defaults.
-    readonly property alias defaultsConfirmDialog: defaultsConfirmDialog
+    readonly property alias defaultsConfirmDialog: confirmDialogs.defaults
     // Aspect-ratio labels consumed by the layout context menu's submenu, kept
     // at window scope rather than inside the Menu so future consumers
     // (Per-Screen Override picker, Layouts page) can bind to the same
@@ -306,7 +306,7 @@ PhosphorUi.SettingsAppWindow {
                     if (newValue)
                         settingsController.daemonController.setEnabled(true);
                     else
-                        daemonStopConfirm.open();
+                        confirmDialogs.daemonStop.open();
                 }
             }
         }
@@ -340,9 +340,14 @@ PhosphorUi.SettingsAppWindow {
             ToolButton {
                 id: pageActionsButton
 
-                // Re-evaluates on activePageChanged (activePage is referenced), so
-                // the button appears/disappears as the user moves between pages.
-                visible: settingsController.pageSupportsReset(settingsController.activePage) || settingsController.pageSupportsDiscard(settingsController.activePage)
+                // Re-evaluates on activePageChanged and on a mode flip, via
+                // activeDirtyScope's NOTIFY. Discard is queried against the
+                // SCOPE the menu item acts on, not the page: on a condensed
+                // page those differ, and gating the button on the narrower id
+                // would hide the only control that can clear what the rail's
+                // badge is reporting. Reset stays on activePage because it
+                // acts on activePage.
+                visible: settingsController.pageSupportsReset(settingsController.activePage) || settingsController.pageSupportsDiscard(settingsController.activeDirtyScope)
                 icon.name: "overflow-menu"
                 display: AbstractButton.IconOnly
                 text: i18n("Page actions")
@@ -553,11 +558,10 @@ PhosphorUi.SettingsAppWindow {
     }
 
     // ── Ctrl+PgUp / Ctrl+PgDown — step through navigable pages ──────
-    // Guarded: page navigation must not fire while any of the inline
-    // confirm dialogs (whatsNewDialog,
-    // defaultsConfirmDialog, sectionToggleDiscardConfirm, daemonStopConfirm,
-    // resetPageConfirmDialog, discardPageConfirmDialog), either of the
-    // window-root menus (layoutContextMenu, pageActionsMenu),
+    // Guarded: page navigation must not fire while the What's-New dialog is
+    // up, while any chrome confirm dialog is open (confirmDialogs.anyOpen
+    // covers all five), while either of the
+    // window-root menus (layoutContextMenu, pageActionsMenu) is open,
     // the shortcut
     // overlay, the global search dropdown, the sidebar profile switcher's
     // dropdown, the active page's own modal stack (RulesPage's
@@ -599,7 +603,7 @@ PhosphorUi.SettingsAppWindow {
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen && !window._profilePopupOpen && !pageActionsMenu.visible
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !confirmDialogs.anyOpen && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen && !window._profilePopupOpen && !pageActionsMenu.visible
 
     Shortcut {
         sequence: "Ctrl+PgUp"
@@ -678,184 +682,39 @@ PhosphorUi.SettingsAppWindow {
             // the animation controller's async file restore) and leave a
             // partial reset.
             enabled: !settingsController.app.applying && !settingsController.app.discarding
-            onTriggered: resetPageConfirmDialog.open()
+            onTriggered: confirmDialogs.resetPage.open()
         }
 
         MenuItem {
             text: i18n("Discard changes on this page")
             Accessible.name: text
             icon.name: "edit-undo"
-            visible: settingsController.pageSupportsDiscard(settingsController.dirtyScopeFor(settingsController.activePage))
+            visible: settingsController.pageSupportsDiscard(settingsController.activeDirtyScope)
             // Enabled only when the page carries unsaved edits and no
             // global Save/Discard batch is in flight. `dirtyPages` is
             // referenced purely to re-run this binding on
             // dirtyPagesChanged (isPageDirty itself is a function call
             // whose only QML dependency would otherwise be activePage).
             //
-            // Queried against dirtyScopeFor, not activePage: in simple mode a
-            // condensed page is the sole visible row for its whole feature
-            // area, so its badge already counts the area's hidden advanced
-            // leaves. Asking the narrower id here would grey out the one
-            // control that can clear what the badge is reporting.
+            // Queried against activeDirtyScope, not activePage: a condensed
+            // page is the sole visible row for its whole feature area, so its
+            // badge already counts the area's hidden leaves. Asking the
+            // narrower id here would grey out the one control that can clear
+            // what the badge reports. The property NOTIFYs on both a page
+            // change and a mode flip, so unlike a bare dirtyScopeFor(activePage)
+            // call it does not strand this binding on the pre-flip scope.
             enabled: {
                 void settingsController.dirtyPages;
-                return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.dirtyScopeFor(settingsController.activePage));
+                return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.activeDirtyScope);
             }
-            onTriggered: discardPageConfirmDialog.open()
+            onTriggered: confirmDialogs.discardPage.open()
         }
     }
-    Kirigami.PromptDialog {
-        id: defaultsConfirmDialog
-
-        title: i18n("Restore Defaults")
-        subtitle: i18n("Are you sure you want to reset all settings to their default values?")
-        standardButtons: Kirigami.Dialog.NoButton
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Restore Defaults")
-                icon.name: "document-revert"
-                onTriggered: {
-                    defaultsConfirmDialog.close();
-                    settingsController.defaults();
-                }
-            },
-            Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel"
-                onTriggered: defaultsConfirmDialog.close()
-            }
-        ]
-    }
-
-    // Per-page Reset — restores just the active page's settings to their
-    // defaults, staged for Save/Discard (opened from the breadcrumb kebab).
-    Kirigami.PromptDialog {
-        id: resetPageConfirmDialog
-
-        title: i18n("Reset Page to Defaults")
-        subtitle: i18n("Reset the settings on this page to their default values? You can still review the result and Save or Discard afterwards.")
-        standardButtons: Kirigami.Dialog.NoButton
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Reset Page")
-                icon.name: "document-revert"
-                onTriggered: {
-                    resetPageConfirmDialog.close();
-                    settingsController.resetPage(settingsController.activePage);
-                }
-            },
-            Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel"
-                onTriggered: resetPageConfirmDialog.close()
-            }
-        ]
-    }
-
-    // Per-page Discard — reverts just the active page's unsaved edits to the
-    // last-saved values, leaving other pages' changes intact.
-    Kirigami.PromptDialog {
-        id: discardPageConfirmDialog
-
-        // The scope this Discard will actually clear, which in simple mode is
-        // wider than the page on screen: a condensed page is the sole visible
-        // row for its whole feature area, so its Discard has to reach the
-        // area's hidden advanced leaves or the badge it carries can never be
-        // cleared from simple mode.
-        readonly property string discardScope: settingsController.dirtyScopeFor(settingsController.activePage)
-
-        title: i18n("Discard Page Changes")
-        // Say which it is. Telling the user "changes on other pages are kept"
-        // while clearing a whole feature area would be a false promise.
-        subtitle: discardScope === settingsController.activePage ? i18n("Discard the unsaved changes on this page? Changes on other pages are kept.") : i18n("This page is the whole feature area in simple mode, so discarding here drops the unsaved changes on every page in it. Changes elsewhere are kept.")
-        standardButtons: Kirigami.Dialog.NoButton
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Discard")
-                icon.name: "edit-undo"
-                onTriggered: {
-                    discardPageConfirmDialog.close();
-                    settingsController.discardPage(discardPageConfirmDialog.discardScope);
-                }
-            },
-            Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel"
-                onTriggered: discardPageConfirmDialog.close()
-            }
-        ]
-    }
-
-    // Confirm dialog for the sidebar's inline snapping/tiling toggle when
-    // the relevant page has unsaved edits. Disabling the section through
-    // beginExternalEdit/endExternalEdit commits the *_Enabled flag plus
-    // whatever the page has staged dirty — without this gate the user
-    // could silently apply a partial edit by flipping the sidebar toggle.
-    Kirigami.PromptDialog {
-        id: sectionToggleDiscardConfirm
-
-        // Set by the trailing-delegate SettingsSwitch before open(); the
-        // confirm action reads them to know which section to commit and
-        // what value to set.
-        property string pendingSection: ""
-        property bool pendingValue: false
-
-        title: i18n("Discard unsaved changes?")
-        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?")
-        standardButtons: Kirigami.Dialog.NoButton
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Discard and Disable")
-                icon.name: "edit-undo"
-                onTriggered: {
-                    const section = sectionToggleDiscardConfirm.pendingSection;
-                    const value = sectionToggleDiscardConfirm.pendingValue;
-                    sectionToggleDiscardConfirm.close();
-                    // Discard the section's staged edits first, THEN flip the
-                    // enable flag — otherwise the inline beginExternalEdit /
-                    // endExternalEdit pair would surface the still-staged edits
-                    // alongside the disable. discardPage("snapping"/"tiling")
-                    // reverts every manifest-backed leaf under that mode back to
-                    // the committed baseline (the framework PageAdapter.discard()
-                    // for these virtual parents is a no-op, so the old
-                    // registry.controller(section).discard() call did nothing).
-                    settingsController.discardPage(section);
-                    settingsController.beginExternalEdit(section);
-                    if (section === "snapping")
-                        appSettings.snappingEnabled = value;
-                    else
-                        appSettings.autotileEnabled = value;
-                    settingsController.endExternalEdit();
-                }
-            },
-            Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel"
-                onTriggered: sectionToggleDiscardConfirm.close()
-            }
-        ]
-    }
-
-    // Confirm before stopping the daemon from the header toggle. Declared at the
-    // window root (not in the headerTrailing Component) so the page-nav shortcut
-    // guard `_navShortcutsEnabled` can read its `visible` state; the header
-    // SettingsSwitch opens it via outer-scope reference.
-    Kirigami.PromptDialog {
-        id: daemonStopConfirm
-
-        title: i18n("Stop daemon?")
-        subtitle: i18n("Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.")
-        standardButtons: Kirigami.Dialog.Cancel
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Stop daemon")
-                icon.name: "system-shutdown"
-                onTriggered: {
-                    settingsController.daemonController.setEnabled(false);
-                    daemonStopConfirm.close();
-                }
-            }
-        ]
+    // Chrome-owned confirmation prompts (Restore Defaults, per-page Reset /
+    // Discard, the section-toggle discard, Stop daemon). Split into their own
+    // component when this file passed the 1150-line ceiling.
+    ConfirmDialogs {
+        id: confirmDialogs
     }
 
     // ── Keyboard-shortcut overlay ───────────────────────────────────
@@ -1022,16 +881,22 @@ PhosphorUi.SettingsAppWindow {
             readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
             readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
             // The id whose dirty state this row REPRESENTS, which is not
-            // always the id it renders. Simple mode flattens each of the
-            // Snapping / Tiling subtrees into one leaf row, and
-            // isPageDirty("snapping-simple") aggregates only the two leaves
-            // backing that simple page — edits staged on the mode's other
-            // advanced leaves (shaders, ordering, shortcuts, ...) survive the
-            // flip and would go unseen. The mode id aggregates the whole
-            // subtree in both modes and is what the section toggle hands to
-            // discardPage() / beginExternalEdit(), so badge, guard and commit
-            // share one scope.
+            // always the id it renders. Simple mode condenses a whole subtree
+            // down to one visible row, and that row's own dirty state covers
+            // only what it hosts — edits staged on the subtree's hidden
+            // advanced leaves survive the flip and would badge nowhere. The
+            // C++ side resolves this generally: the nearest ancestor group for
+            // which this page is the only visible navigable row, stopping at
+            // the first ancestor with two. It hoists only for a condensed
+            // (SimpleOnly) page, so a page that exists in both modes always
+            // speaks for itself.
             readonly property string dirtyScopeId: entry ? settingsController.dirtyScopeFor(entry.pageId) : ""
+            // The section-toggle's own scope, deliberately NOT dirtyScopeId.
+            // pendingSection feeds discardPage() / beginExternalEdit() and a
+            // subtitle that names one of exactly two features, so it must stay
+            // bounded to the two ids those consumers handle. dirtyScopeId is an
+            // unbounded walk result and could hop past them.
+            readonly property string sectionId: isSnapping ? "snapping" : "tiling"
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0
@@ -1114,15 +979,15 @@ PhosphorUi.SettingsAppWindow {
                     // confirm hands to discardPage() below, so it cannot see a
                     // narrower slice of the subtree than the commit it guards.
                     if (!newValue && settingsController.isPageDirty(trailingRow.dirtyScopeId)) {
-                        sectionToggleDiscardConfirm.pendingSection = trailingRow.dirtyScopeId;
-                        sectionToggleDiscardConfirm.pendingValue = newValue;
-                        sectionToggleDiscardConfirm.open();
+                        confirmDialogs.sectionToggle.pendingSection = trailingRow.sectionId;
+                        confirmDialogs.sectionToggle.pendingValue = newValue;
+                        confirmDialogs.sectionToggle.open();
                         // Snap the toggle visual back to its checked state
                         // — the binding to appSettings.* keeps it in sync
                         // automatically once the user makes a decision.
                         return;
                     }
-                    settingsController.beginExternalEdit(trailingRow.dirtyScopeId);
+                    settingsController.beginExternalEdit(trailingRow.sectionId);
                     if (trailingRow.isSnapping)
                         appSettings.snappingEnabled = newValue;
                     else

@@ -190,6 +190,13 @@ public:
     void setShowAdvanced(bool showAdvanced);
 
     Q_INVOKABLE bool hasPage(const QString& id) const;
+    /** True iff @p id is a registered page that carries its own QML body, i.e.
+     *  a navigable destination. False for an unknown id AND for a registered
+     *  virtual CATEGORY (empty qmlSource), which has no page body to land on.
+     *  Folds the "registered and navigable" test into one index lookup so a
+     *  caller filtering by reachability need not copy a whole Entry (four
+     *  QStrings, a QUrl and a QPointer) to read two isEmpty() bits. */
+    bool hasNavigablePage(const QString& id) const;
     /** True iff the page is reachable under the current showAdvanced mode:
      *  its own visibility tier passes AND so does every ancestor's. The
      *  ancestor walk matters because hiding a category hides its whole
@@ -278,7 +285,9 @@ public:
     // the counterpart is navigation policy the app owns.
     //
     // topLevelPagesData / childPagesData (and the Entry-returning
-    // topLevelPages()) have NO in-tree consumer: the rail
+    // topLevelPages()) have no in-tree consumer other than their own
+    // root-delegating twins — topLevelPagesData is childPagesData(QString())
+    // and topLevelPages is childPages(QString()). The rail
     // moved to SidebarRows and Breadcrumbs uses pageData / firstVisibleLeafId.
     // Retained as exported API for out-of-tree consumers, and covered by tests
     // so the serialization contract cannot rot. Same standing as
@@ -349,8 +358,12 @@ private:
     // entries), in registration order. Every tree accessor here descends
     // through this rather than rescanning m_pages: isEntryVisible used to walk
     // the whole catalogue per level to find one node's children, which made a
-    // single visibleChildPages call O(N²) and the sidebar's per-node search
-    // walk superlinear on the keystroke path. Built in registerPage and never
+    // single visibleChildPages call O(N²). It is now bounded by the subtree
+    // below the node — isEntryVisible still descends a virtual child's whole
+    // subtree, so visibleChildPages(p) costs O(subtree(p)) and the sidebar's
+    // per-node walk stays superlinear in the catalogue's depth. The rescan is
+    // gone; the per-node descent is inherent to the empty-category rule. Built
+    // in registerPage and never
     // invalidated — the catalogue only ever grows, and setPageVisibility
     // restamps a tier without moving an entry.
     QHash<QString, QList<qsizetype>> m_childrenByParent;

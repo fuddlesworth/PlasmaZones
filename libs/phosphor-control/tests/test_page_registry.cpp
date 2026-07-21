@@ -189,8 +189,17 @@ private Q_SLOTS:
                           childB});
         reg.registerPage({QStringLiteral("anim"), {}, QStringLiteral("Animations"), {}, QUrl(), other});
 
-        const auto children = reg.childPages(QStringLiteral("snap"));
-        QCOMPARE(children.size(), 2);
+        // Registration order WITHIN a parent is the sidebar render order, so
+        // pin the ids in order rather than the count: the per-parent buckets
+        // of the m_childrenByParent index are order-carrying, and a
+        // regression that reversed or sorted one would ship green against a
+        // size check. "behavior" before "appearance" is deliberately not
+        // alphabetical, so a sort would show up here.
+        QStringList childIds;
+        for (const auto& child : reg.childPages(QStringLiteral("snap"))) {
+            childIds << child.id;
+        }
+        QCOMPARE(childIds, (QStringList{QStringLiteral("snap.behavior"), QStringLiteral("snap.appearance")}));
         QCOMPARE(reg.topLevelPages().size(), 2);
     }
 
@@ -314,6 +323,44 @@ private Q_SLOTS:
         QCOMPARE(leaf.value(QStringLiteral("isCollapsible")).toBool(), true);
         QCOMPARE(leaf.value(QStringLiteral("hasDividerAfter")).toBool(), true);
         QCOMPARE(leaf.value(QStringLiteral("hasQmlSource")).toBool(), true);
+    }
+
+    void parentIdOfAnswersAllThreeShapes()
+    {
+        // parentIdOf is the one-field read that replaced copying a whole Entry
+        // per hop in the upward parent walk. Its two empty-string cases —
+        // unknown id, and a top-level page — are indistinguishable by return
+        // value, so both have to be named here or neither is pinned.
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+
+        QCOMPARE(reg.parentIdOf(QStringLiteral("cat.deep")), QStringLiteral("cat"));
+
+        // Assert existence first: a bare QCOMPARE against an empty string
+        // would also pass on a fixture where the page was never registered.
+        QVERIFY(reg.hasPage(QStringLiteral("home")));
+        QCOMPARE(reg.parentIdOf(QStringLiteral("home")), QString());
+
+        QVERIFY(!reg.hasPage(QStringLiteral("no-such-page")));
+        QCOMPARE(reg.parentIdOf(QStringLiteral("no-such-page")), QString());
+    }
+
+    void allPagesRefTracksTheCatalogue()
+    {
+        // The by-reference catalogue walk must expose the same set allPages()
+        // deep-copies, and a re-fetched reference must see a page registered
+        // later (the header forbids holding one ACROSS a registration, not
+        // fetching a fresh one after).
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+        QCOMPARE(reg.allPagesRef().size(), reg.allPages().size());
+        const qsizetype before = reg.allPagesRef().size();
+
+        auto* late = new StubPage(QStringLiteral("late"), &reg);
+        QVERIFY(reg.registerPage(
+            {QStringLiteral("late"), {}, QStringLiteral("Late"), {}, QUrl(QStringLiteral("qrc:/Late.qml")), late}));
+        QCOMPARE(reg.allPagesRef().size(), before + 1);
+        QCOMPARE(reg.allPagesRef().last().id, QStringLiteral("late"));
     }
 
     void tierFilterFollowsShowAdvanced()
