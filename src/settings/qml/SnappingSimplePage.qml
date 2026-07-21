@@ -120,8 +120,11 @@ SettingsFlickable {
             }
         }
 
-        // The shared cards below are the same components the advanced
-        // Snapping pages host — full parity, no forked rows.
+        // The three cards below are the same components the advanced
+        // Snapping pages host, so those rows cannot drift. The snap-assist
+        // rows in the card ABOVE are this page's own, worded for the simple
+        // surface — they intentionally differ from the advanced page's
+        // master-toggle card.
         SnappingZoneSpanCard {
             Layout.fillWidth: true
             settingsBridge: root.settingsBridge

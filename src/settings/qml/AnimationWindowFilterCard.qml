@@ -21,10 +21,12 @@ WindowFilterCard {
 
     /// The ISettings object holding the animation* filter keys.
     required property QtObject cardSettings
-    /// Prefix for this host's search anchors, so the two pages register
-    /// distinct ids for the same row (anchors are page-scoped, but the
-    /// global search catalogue keys on the pair).
-    property string anchorPrefix: ""
+    /// Search anchor id for the notifications row. Passed whole rather
+    /// than composed from a prefix: concatenating onto an identifier
+    /// silently changes its casing, which breaks the catalogue's exact-id
+    /// match. The two hosts register distinct ids because the global search
+    /// catalogue keys on (page, anchor).
+    property string notificationsAnchor: "excludeNotificationsAndOsds"
 
     Layout.fillWidth: true
 
@@ -46,7 +48,7 @@ WindowFilterCard {
 
             SettingsRow {
                 title: i18n("Exclude notifications and OSDs")
-                searchAnchor: card.anchorPrefix + "excludeNotificationsAndOsds"
+                searchAnchor: card.notificationsAnchor
                 description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
 
                 SettingsSwitch {

@@ -136,9 +136,16 @@ ColumnLayout {
         // Suppress per-row Transitions across BOTH the synchronous refresh
         // the currentParentId reset triggers and the deferred one below, so
         // a mode swap lands in one frame instead of accordioning every row.
+        //
         // Set AFTER the drill cancel above: stop() emits stopped()
         // synchronously, and that handler clears this flag — setting it
-        // first would leave the swap unsuppressed. Applies in BOTH
+        // first would leave the swap unsuppressed. Setting it after the
+        // currentParentId ASSIGNMENT is still sound even though that
+        // assignment refreshes the model synchronously: ListView only
+        // accumulates the change set and schedules a polish, so the
+        // Transitions' `enabled` bindings are not read until the later
+        // layout pass, by which time this flag is up. Do not "fix" the
+        // order. Applies in BOTH
         // directions; the flat→tree flip rebuilds the whole tree and
         // accordions harder than the flat direction. Released by the same
         // timer the initial fill uses.
@@ -500,11 +507,16 @@ ColumnLayout {
                 // branch's `grandKids` optimisation.
                 const grandKids = root._scopeChildren(child.id);
                 const grand = grandKids.length > 0;
-                // In flat mode a search result must read the same as the
-                // rail row it corresponds to: use the override and drop the
-                // ancestor breadcrumb, since the overridden title exists
-                // precisely because the registered one reads wrong without
-                // its ancestors — which is what a breadcrumb would restore.
+                // In flat mode an OVERRIDDEN id must read the same as its
+                // rail row: use the override and drop the ancestor
+                // breadcrumb, since the overridden title exists precisely
+                // because the registered one reads wrong without its
+                // ancestors — which is what a breadcrumb would restore.
+                // Non-overridden rows keep their breadcrumb here even
+                // though the flat rail shows none, deliberately: search
+                // results are a flat list from every scope, so the ancestor
+                // context is the only thing distinguishing same-named
+                // leaves.
                 const flatOverridden = root.flattenTree && Object.prototype.hasOwnProperty.call(root.flatTitleOverrides, child.id);
                 const childBreadcrumb = flatOverridden ? root.flatTitleOverrides[child.id] : (breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title);
                 // Always recurse so descendants can match.
@@ -624,14 +636,23 @@ ColumnLayout {
         // land without animation. Steady-state additions trigger
         // through Connections.onPageRegistered below, after this
         // timer fires.
-        suppressAccordionTimer.start();
+        suppressAccordionTimer.restart();
     }
 
     Timer {
         id: suppressAccordionTimer
         interval: Kirigami.Units.shortDuration
         repeat: false
-        onTriggered: root._suppressAccordion = false
+        // Never release the flag mid-drill: a mode flip restarts this timer,
+        // and the drill that follows re-arms the flag via onStarted — but
+        // this pending fire would then clear it while the cross-fade is
+        // still running, letting the ScriptAction's scope change rebuild the
+        // rows unsuppressed. The animation's own onStopped is the release in
+        // that case.
+        onTriggered: {
+            if (!drillAnimation.running)
+                root._suppressAccordion = false;
+        }
     }
 
     Connections {

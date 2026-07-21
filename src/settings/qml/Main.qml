@@ -391,7 +391,14 @@ PhosphorUi.SettingsAppWindow {
     // get there incidentally, via the redirect's activePageChanged.
     Connections {
         function onAdvancedModeChanged() {
-            window._drillIntoActivePage();
+            // Deferred: `sidebar.flattenTree` is bound to the same property
+            // this signal announces, and nothing orders a binding update
+            // against a Connections handler. Running inline could observe a
+            // still-true flattenTree, in which case BOTH the guard below and
+            // Sidebar.drillInto early-return and the scope is never restored
+            // — the exact bug this block exists to fix. callLater runs after
+            // the emission settles.
+            Qt.callLater(window._drillIntoActivePage);
         }
 
         target: settingsController

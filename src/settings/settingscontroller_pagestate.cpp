@@ -413,11 +413,11 @@ void SettingsController::setNeedsSave(bool needs)
         }
         if (!m_dirtyPages.contains(target)) {
             m_dirtyPages.insert(target);
-            Q_EMIT dirtyPagesChanged();
+            emitDirtyPagesChanged();
         }
     } else if (!m_dirtyPages.isEmpty()) {
         m_dirtyPages.clear();
-        Q_EMIT dirtyPagesChanged();
+        emitDirtyPagesChanged();
     }
 }
 
@@ -693,7 +693,7 @@ void SettingsController::reconcileRuleBackedDirty()
     };
     sync(QStringLiteral("rules"), m_rulesPage->userRulesDirty());
     if (changed) {
-        Q_EMIT dirtyPagesChanged();
+        emitDirtyPagesChanged();
     }
 }
 
@@ -884,7 +884,7 @@ void SettingsController::resetPage(const QString& page)
             m_dirtyPages.insert(page);
         else
             m_dirtyPages.remove(page);
-        Q_EMIT dirtyPagesChanged();
+        emitDirtyPagesChanged();
         return;
     }
 
@@ -963,7 +963,7 @@ void SettingsController::discardPage(const QString& page)
         m_dirtyPages.remove(page);
         // Always emit so the page's dirtyPagesChanged handler re-reads the
         // reverted config, even if other pages keep the global flag dirty.
-        Q_EMIT dirtyPagesChanged();
+        emitDirtyPagesChanged();
         return;
     }
 
@@ -1097,6 +1097,7 @@ void SettingsController::discardPage(const QString& page)
     // return false and are skipped, as are the condensed simple pages — they
     // own no keys and would only re-discard their backing pages, which are
     // always siblings in this same set.
+    const DirtyEmitScope batch(*this);
     for (const QString& child : *git) {
         if (pageSupportsDiscard(child) && !simplePageBackingPages().contains(child))
             discardPage(child);

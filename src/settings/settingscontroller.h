@@ -768,7 +768,6 @@ private:
     /// RAII batch window for the above — see the definition in
     /// settingscontroller_pagestate.cpp.
     class DirtyEmitScope;
-    friend class DirtyEmitScope;
     /// Emit dirtyPagesChanged, or record it as pending when a DirtyEmitScope
     /// is open.
     void emitDirtyPagesChanged();

@@ -165,9 +165,10 @@ SettingsFlickable {
                                 // which shadows the context property here — the
                                 // same trap documented for LayoutComboBox. The
                                 // controller has no autotileMasterCount, so the
-                                // bare form silently reads undefined and lands
-                                // as 0, which is AlgorithmPreview's
-                                // "unsupported" sentinel.
+                                // bare form reads undefined, coerces to 0, and
+                                // is clamped to 1 downstream — the preview
+                                // would silently ignore the configured master
+                                // count.
                                 masterCount: root.algoSettings.masterCount !== undefined ? root.algoSettings.masterCount : root.appSettingsObj.autotileMasterCount
                                 customParams: root.previewCustomParams
                                 zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
@@ -233,7 +234,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileSplitRatioMin
                         to: root.settingsBridge.autotileSplitRatioMax
                         stepSize: 0.05
-                        value: root.algoSettings.splitRatio !== undefined ? root.algoSettings.splitRatio : appSettings.autotileSplitRatio
+                        value: root.algoSettings.splitRatio !== undefined ? root.algoSettings.splitRatio : root.appSettingsObj.autotileSplitRatio
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
@@ -264,7 +265,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileMaxWindowsMin
                         to: root.settingsBridge.autotileMaxWindowsMax
                         stepSize: 1
-                        value: root.algoSettings.maxWindows !== undefined ? root.algoSettings.maxWindows : appSettings.autotileMaxWindows
+                        value: root.algoSettings.maxWindows !== undefined ? root.algoSettings.maxWindows : root.appSettingsObj.autotileMaxWindows
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }

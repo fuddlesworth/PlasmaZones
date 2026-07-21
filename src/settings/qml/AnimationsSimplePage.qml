@@ -74,7 +74,7 @@ AnimationEventCardList {
             // snapping/tiling and decoration filters).
             AnimationWindowFilterCard {
                 cardSettings: simplePage.globalSettings
-                anchorPrefix: "simple"
+                notificationsAnchor: "simpleExcludeNotificationsAndOsds"
             }
         }
     }

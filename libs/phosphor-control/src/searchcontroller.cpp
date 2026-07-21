@@ -39,6 +39,15 @@ SearchController::SearchController(ApplicationController* app, QObject* parent)
     : QObject(parent)
     , m_app(app)
 {
+    // The index is tier-filtered at build time (see buildIndex), so a
+    // simple/advanced flip changes which entries belong in it. Without this
+    // the filter would be computed once and the index would stay stale for
+    // the rest of the session — search would keep returning the previous
+    // mode's set. Wired here rather than in each app because the filter
+    // itself lives in this library.
+    if (m_app != nullptr && m_app->registry() != nullptr) {
+        connect(m_app->registry(), &PageRegistry::showAdvancedChanged, this, &SearchController::invalidate);
+    }
 }
 
 SearchController::~SearchController() = default;
@@ -189,15 +198,20 @@ QVector<SearchEntry> SearchController::buildIndex() const
     // (e.g. a rule's match summary) is respected. Actions are excluded: they
     // are commands, not page-resident targets, so a page breadcrumb would
     // mislabel them (their pageId is empty anyway).
+    // Same tier gate as the page loop above, shared by the static and
+    // provider loops: a setting/section/entity entry whose host page the
+    // current mode hides is not reachable, and the condensed simple pages
+    // deliberately register rows that duplicate their advanced twins —
+    // without this filter BOTH show up in either mode and one of them
+    // navigates nowhere useful. Actions are dispatched by actionId rather
+    // than by page address (and carry no pageId), so they are always kept.
+    const auto tierAllows = [this](const SearchEntry& e) {
+        return e.kind == SearchEntry::Kind::Action || e.pageId.isEmpty()
+            || m_app->registry()->pageAllowedInCurrentMode(e.pageId);
+    };
+
     for (SearchEntry e : m_staticEntries) {
-        // Same tier gate as the page loop above: a setting/section entry
-        // whose host page the current mode hides is not reachable, and the
-        // condensed simple pages deliberately register rows that duplicate
-        // their advanced twins — without this filter BOTH show up in either
-        // mode and one of them navigates nowhere useful. Actions carry no
-        // pageId and are always kept.
-        if (e.kind != SearchEntry::Kind::Action && !e.pageId.isEmpty()
-            && !m_app->registry()->pageAllowedInCurrentMode(e.pageId)) {
+        if (!tierAllows(e)) {
             continue;
         }
         if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page && e.kind != SearchEntry::Kind::Action) {
@@ -212,6 +226,9 @@ QVector<SearchEntry> SearchController::buildIndex() const
         }
         const QVector<SearchEntry> provided = provider->searchEntries();
         for (SearchEntry e : provided) {
+            if (!tierAllows(e)) {
+                continue;
+            }
             if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page && e.kind != SearchEntry::Kind::Action) {
                 e.subtitle = breadcrumbFor(e.pageId, true);
             }

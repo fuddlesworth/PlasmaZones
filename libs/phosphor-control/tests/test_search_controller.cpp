@@ -9,11 +9,13 @@
 #include "PhosphorControl/ISearchProvider.h"
 #include "PhosphorControl/PageController.h"
 #include "PhosphorControl/SearchController.h"
+#include "PhosphorControl/PageRegistry.h"
 #include "PhosphorControl/SearchEntry.h"
 
 using PhosphorControl::ApplicationController;
 using PhosphorControl::ISearchProvider;
 using PhosphorControl::PageController;
+using PhosphorControl::PageRegistry;
 using PhosphorControl::SearchController;
 using PhosphorControl::SearchEntry;
 
@@ -410,6 +412,41 @@ private Q_SLOTS:
         QSignalSpy spy(&sc, &SearchController::resultsChanged);
         sc.setQuery(QStringLiteral("general"));
         QCOMPARE(spy.count(), 1);
+    }
+
+    void hidesEntriesForPagesTheCurrentModeFilters()
+    {
+        // A result the active tier hides is unreachable: activating it lets
+        // the app's mode gate send the user somewhere else entirely. Both
+        // page entries and page-resident static entries must drop out, and
+        // the index must REBUILD on the flip rather than serving the mode's
+        // set from the session's first query onwards.
+        ApplicationController app;
+        app.registerPage(new StubPage(QStringLiteral("always")), {}, QStringLiteral("Always"),
+                         QUrl(QStringLiteral("qrc:/always.qml")));
+        app.registerPage(new StubPage(QStringLiteral("advanced")), {}, QStringLiteral("Advanced"),
+                         QUrl(QStringLiteral("qrc:/advanced.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+
+        SearchController sc(&app);
+        SearchEntry setting;
+        setting.kind = SearchEntry::Kind::Setting;
+        setting.pageId = QStringLiteral("advanced");
+        setting.title = QStringLiteral("Advanced knob");
+        sc.addEntry(setting);
+
+        // Advanced mode (the registry default): both are reachable.
+        sc.setQuery(QStringLiteral("advanced"));
+        QCOMPARE(sc.resultCount(), 2);
+
+        // Flip to simple WITHOUT touching the query: the live results must
+        // refresh, which only happens if the flip invalidated the index.
+        app.registry()->setShowAdvanced(false);
+        QCOMPARE(sc.resultCount(), 0);
+
+        // And back again.
+        app.registry()->setShowAdvanced(true);
+        QCOMPARE(sc.resultCount(), 2);
     }
 
 private:

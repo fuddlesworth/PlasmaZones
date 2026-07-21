@@ -211,12 +211,22 @@ Item {
             settingsController.animationsPage.clearOverride(paths[i]);
     }
 
+    // Returns the number cleared, or -1 if ANY path refused (the
+    // controller's "async discard in flight" sentinel). Summing a -1 into
+    // the count would make a refusal indistinguishable from a smaller
+    // successful clear.
     function _clearShaderOverrideDescendantsOnAll() {
         const paths = root._writePaths;
         var cleared = 0;
-        for (var i = 0; i < paths.length; ++i)
-            cleared += settingsController.animationsPage.clearShaderOverrideDescendants(paths[i]);
-        return cleared;
+        var refused = false;
+        for (var i = 0; i < paths.length; ++i) {
+            const n = settingsController.animationsPage.clearShaderOverrideDescendants(paths[i]);
+            if (n < 0)
+                refused = true;
+            else
+                cleared += n;
+        }
+        return refused ? -1 : cleared;
     }
 
     /// True iff every write path already carries @p effectId as its DIRECT

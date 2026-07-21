@@ -74,6 +74,19 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // Page entries are auto-derived from the registry; these add search terms a
     // user is likely to type that don't appear in the page title. Literal
     // PhosphorI18n::tr calls (not a wrapper) so `update-ts` extracts them.
+    // The condensed simple pages need their own synonym lists: in simple
+    // mode their advanced twins are filtered out of the index along with
+    // those pages' keywords, so without these a search for "trigger" or
+    // "easing" matches no page at all.
+    search->setPageKeywords(QStringLiteral("snapping-simple"),
+                            {PhosphorI18n::tr("snap"), PhosphorI18n::tr("zones"), PhosphorI18n::tr("trigger"),
+                             PhosphorI18n::tr("magnet"), PhosphorI18n::tr("drag")});
+    search->setPageKeywords(QStringLiteral("tiling-simple"),
+                            {PhosphorI18n::tr("tile"), PhosphorI18n::tr("algorithm"), PhosphorI18n::tr("master"),
+                             PhosphorI18n::tr("bsp"), PhosphorI18n::tr("grid"), PhosphorI18n::tr("autotile")});
+    search->setPageKeywords(QStringLiteral("animations-simple"),
+                            {PhosphorI18n::tr("animation"), PhosphorI18n::tr("motion"), PhosphorI18n::tr("easing"),
+                             PhosphorI18n::tr("duration"), PhosphorI18n::tr("effect")});
     search->setPageKeywords(QStringLiteral("overview"),
                             {PhosphorI18n::tr("monitor"), PhosphorI18n::tr("display"), PhosphorI18n::tr("mode"),
                              PhosphorI18n::tr("active layout")});
@@ -574,6 +587,75 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("simpleExcludeNotificationsAndOsds"),
                PhosphorI18n::tr("Exclude notifications and OSDs"),
                {PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("volume"), PhosphorI18n::tr("brightness")});
+
+    // The condensed simple pages host the SAME shared cards their advanced
+    // twins do, so every anchor those cards register needs a row against the
+    // simple page id too — SearchController drops entries whose host page the
+    // active tier hides, which would otherwise make all of these unsearchable
+    // in simple mode. Anchors are page-scoped, so the duplicate ids collide
+    // with nothing.
+    addSection(search, QStringLiteral("snapping-simple"), QStringLiteral("zoneSpan"), PhosphorI18n::tr("Zone Span"));
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("spanModifier"),
+               PhosphorI18n::tr("Span modifier"), {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("multi-zone")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("zoneSpanToggleMode"),
+               PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("zone span")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("edgeThreshold"),
+               PhosphorI18n::tr("Edge threshold"), {PhosphorI18n::tr("distance"), PhosphorI18n::tr("multi-zone")});
+    addSection(search, QStringLiteral("snapping-simple"), QStringLiteral("windowHandling"),
+               PhosphorI18n::tr("Window Handling"));
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("reSnapOnResolutionChange"),
+               PhosphorI18n::tr("Re-snap on resolution change"), {PhosphorI18n::tr("resolution")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("openNewWindowsInLastUsedZone"),
+               PhosphorI18n::tr("Open new windows in the last-used zone"), {PhosphorI18n::tr("new window")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("autoAssignNewWindowsAllLayouts"),
+               PhosphorI18n::tr("Auto-assign new windows for all layouts"), {PhosphorI18n::tr("auto-assign")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("restoreSizeOnUnsnap"),
+               PhosphorI18n::tr("Restore size on unsnap"), {PhosphorI18n::tr("unsnap"), PhosphorI18n::tr("size")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("restoreWindowsToPreviousZone"),
+               PhosphorI18n::tr("Restore windows to their previous zone"), {PhosphorI18n::tr("restore")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("restoreUnsnappedWindowsPosition"),
+               PhosphorI18n::tr("Restore unsnapped windows to their previous position"), {PhosphorI18n::tr("restore")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("unfloatToZoneFallback"),
+               PhosphorI18n::tr("Unfloat to a zone when there is no previous zone"), {PhosphorI18n::tr("unfloat")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("stickyWindows"),
+               PhosphorI18n::tr("Sticky windows"), {PhosphorI18n::tr("all desktops")});
+    addSection(search, QStringLiteral("snapping-simple"), QStringLiteral("focus"), PhosphorI18n::tr("Focus"));
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("focusNewWindows"),
+               PhosphorI18n::tr("Focus new windows"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("new window")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("focusFollowsMouse"),
+               PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("pointer")});
+
+    addSection(search, QStringLiteral("tiling-simple"), QStringLiteral("windowHandling"),
+               PhosphorI18n::tr("Window Handling"));
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("newWindowPlacement"),
+               PhosphorI18n::tr("New window placement"), {PhosphorI18n::tr("insert"), PhosphorI18n::tr("position")});
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("respectMinimumSize"),
+               PhosphorI18n::tr("Respect minimum size"), {PhosphorI18n::tr("minimum")});
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("smartGaps"), PhosphorI18n::tr("Smart gaps"),
+               {PhosphorI18n::tr("gaps"), PhosphorI18n::tr("single window")});
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("restoreUntiledWindowsPosition"),
+               PhosphorI18n::tr("Restore untiled windows to their previous position"), {PhosphorI18n::tr("restore")});
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("stickyWindows"),
+               PhosphorI18n::tr("Sticky windows"), {PhosphorI18n::tr("all desktops")});
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("dragBehavior"),
+               PhosphorI18n::tr("Drag behavior"), {PhosphorI18n::tr("float"), PhosphorI18n::tr("reorder")});
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("overflowBehavior"),
+               PhosphorI18n::tr("Overflow behavior"), {PhosphorI18n::tr("overflow"), PhosphorI18n::tr("unlimited")});
+    addSection(search, QStringLiteral("tiling-simple"), QStringLiteral("focus"), PhosphorI18n::tr("Focus"));
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("focusNewWindows"),
+               PhosphorI18n::tr("Focus new windows"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("new window")});
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("focusFollowsMouse"),
+               PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("pointer")});
+
+    addSection(search, QStringLiteral("animations-simple"), QStringLiteral("windowFiltering"),
+               PhosphorI18n::tr("Window Filtering"));
+    addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("excludeTransient"),
+               PhosphorI18n::tr("Exclude transient windows"),
+               {PhosphorI18n::tr("dialogs"), PhosphorI18n::tr("popups"), PhosphorI18n::tr("tooltips")});
+    addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("minimumWindowWidth"),
+               PhosphorI18n::tr("Minimum window width"), {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("narrow")});
+    addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("minimumWindowHeight"),
+               PhosphorI18n::tr("Minimum window height"), {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("short")});
 
     // Animations › General
     addSection(search, QStringLiteral("animations-general"), QStringLiteral("globalAnimationDefaults"),
