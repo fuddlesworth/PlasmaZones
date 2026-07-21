@@ -14,6 +14,7 @@
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorTiles/TilingState.h>
 #include <QHash>
+#include <QJsonObject>
 #include <QObject>
 #include <QRect>
 #include <QSet>
@@ -1489,6 +1490,49 @@ private:
     // autotile persistence is per-window, not per-desktop ratio/count).
     QSet<PhosphorEngine::TilingStateKey> m_userTunedSplitRatio;
     QSet<PhosphorEngine::TilingStateKey> m_userTunedMasterCount;
+
+    // Script-state bags rescued from TilingStates that a teardown destroys, so a
+    // re-created state for the same key can pick its bag back up. Toggling
+    // autotile off destroys the current context's state outright (see
+    // setAutotileScreens), taking with it the only copy of an opaque bag the
+    // algorithm's script authored — e.g. an aligned grid's column fractions from
+    // a manual resize. Toggling back on then lays out from scratch, which reads
+    // to the user as their adjustments being thrown away.
+    //
+    // Tagged with the EFFECTIVE algorithm id at harvest time, and handed back
+    // only when that still matches on re-creation, because TilingStateKey does
+    // not include the algorithm. The invariant to preserve is the one the wipe
+    // sites enforce for live states — bags never cross algorithms — and the
+    // stash guards it twice over: those sites also drop stash entries for the
+    // screens they wipe, and the tag is re-checked on the way back out. See
+    // restoreStashedScriptState for why both are kept. A tag mismatch discards
+    // rather than migrates; script state has no cross-algorithm meaning.
+    //
+    // Within-session only: nothing writes it to disk, so a daemon restart still
+    // starts from a clean layout.
+    struct StashedScriptState
+    {
+        QJsonObject scriptState;
+        QString algorithmId;
+    };
+    QHash<PhosphorEngine::TilingStateKey, StashedScriptState> m_scriptStateStash;
+
+    /// Rescue @p state's script-state bag into m_scriptStateStash under @p key,
+    /// tagged with the screen's CURRENT effective algorithm. Call before the
+    /// state is destroyed and before any override drop that would change what
+    /// "effective" resolves to. No-op for an empty bag, so a stale entry for the
+    /// key is left alone rather than replaced by nothing.
+    void stashScriptState(const PhosphorEngine::TilingStateKey& key, const PhosphorTiles::TilingState* state);
+
+    /// Hand a stashed bag back to a freshly created @p state for @p key, if one
+    /// is held and its algorithm tag still matches. Consumes the entry either
+    /// way: a matching bag now lives on the state, and a mismatched one is dead.
+    void restoreStashedScriptState(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state);
+
+    /// Drop every stashed bag for @p screenId, across all desktops and
+    /// activities. Used by the algorithm-wipe sites, whose whole purpose is to
+    /// stop a bag reaching a different algorithm.
+    void dropStashedScriptStates(const QString& screenId);
 
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
 

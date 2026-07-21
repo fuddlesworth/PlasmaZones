@@ -302,6 +302,12 @@ void PerScreenConfigResolver::wipeStateBagsOnEffectiveAlgorithmChange(const QStr
         }
         it.value()->setScriptState({});
     }
+    // Bags rescued from an earlier teardown of this screen are wiped on the same
+    // terms as the live ones. They carry an algorithm tag that would already
+    // refuse this new algorithm, so this is belt-and-braces against a later
+    // switch BACK to the old algorithm resurrecting a bag that this wipe was
+    // supposed to have ended.
+    m_engine->dropStashedScriptStates(screenId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

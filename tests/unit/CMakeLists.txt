@@ -261,6 +261,9 @@ target_compile_definitions(test_autotile_virtual PRIVATE "P_SOURCE_DIR=\"${PROJE
 p_add_test(test_autotile_ext_startup_float autotile/test_autotile_ext_startup_float.cpp)
 p_add_test(test_autotile_ext_algoswitch autotile/test_autotile_ext_algoswitch.cpp)
 target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+
+p_add_test(test_autotile_script_state_stash autotile/test_autotile_script_state_stash.cpp)
+target_compile_definitions(test_autotile_script_state_stash PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_ext_overflow autotile/test_autotile_ext_overflow.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
