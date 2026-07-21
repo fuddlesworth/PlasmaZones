@@ -358,6 +358,23 @@ Item {
         }
     }
 
+    /// Clears the shader override on every write path, returning the event to
+    /// inheritance. Distinct from writing the engaged-empty sentinel, which is
+    /// an explicit "None" that BLOCKS inheritance — that is the picker's job,
+    /// not the toggle's.
+    function _clearShaderOverrideOnAll() {
+        root._committingShader = true;
+        try {
+            const paths = root._writePaths;
+            for (var i = 0; i < paths.length; ++i)
+                settingsController.animationsPage.clearShaderOverride(paths[i]);
+        } finally {
+            root._committingShader = false;
+            root.refreshShaderFromTree();
+            root.refreshFromTree();
+        }
+    }
+
     /// Suppressed like the write path: each clearOverride emits
     /// overrideChanged synchronously, so an unguarded loop pays one full
     /// refresh per path (each re-reading EVERY path) and recomputes the
@@ -759,29 +776,39 @@ Item {
         headerText: root.eventLabel
         showToggle: true
         toggleChecked: root.overrideEnabled
-        // The toggle owns the TIMING override only. Gating the body on it
-        // would disable and hide every row including the shader picker, so a
-        // user could not drop a shader on an event without first creating a
-        // timing override they did not want — and toggling back off would then
-        // write the blocking sentinel and wipe the shader again. The timing
-        // half is gated on its own, by showTimingSection below.
+        // The toggle REPORTS whether this event has any direct override; it is
+        // not a precondition for making one. Gating the body on it would
+        // disable and hide every row including the shader picker, so a user
+        // could not drop a shader on an event without first creating a timing
+        // override they did not want. Picking a shader flips the toggle on by
+        // itself, because refreshFromTree derives it from both axes. The timing
+        // half is gated separately, by showTimingSection below.
         gateBodyOnToggle: false
         collapsible: root.collapsible
         onToggleClicked: function (checked) {
             if (checked) {
                 root.commitOverride();
             } else {
-                // Ordering: write the inheritance-blocking shader
-                // sentinel FIRST, then clear the timing override. If
-                // the timing clear ever fails mid-flight (e.g. QFile
-                // out-of-disk error inside `clearOverride`'s on-disk
-                // write), the shader sentinel is already persisted —
-                // the user's "disable" intent is recorded in the
-                // shader tree even if the timing-side write rolls back.
-                // The reverse order would record neither on a partial
-                // failure, dropping the disable intent entirely.
+                // The toggle reports whether this event has ANY direct
+                // override (refreshFromTree: hasRaw || hasShader), so turning
+                // it off must REMOVE both, returning the event to inheritance.
+                //
+                // It used to write the engaged-empty shader sentinel instead.
+                // That sentinel is an explicit "None" that BLOCKS inheritance,
+                // which is a different state from having no override — so the
+                // card then rendered "Inheriting from: <parent>" while the
+                // stored tree actively refused to inherit, and the block
+                // survived toggling back on because commitOverride only writes
+                // timing. Blocking an inherited shader is the picker's job and
+                // the picker is reachable independently of this toggle.
+                //
+                // Shader first, then timing: if the timing clear fails
+                // mid-flight (a QFile error inside clearOverride's on-disk
+                // write), the shader side is already committed, so a partial
+                // failure still moves toward the user's intent instead of
+                // recording neither half.
                 if (root._shaderLegSupported)
-                    root._setShaderOverrideOnAll("", ({}));
+                    root._clearShaderOverrideOnAll();
 
                 root._clearOverrideOnAll();
             }
