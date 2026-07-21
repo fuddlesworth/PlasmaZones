@@ -13,8 +13,7 @@
 
 namespace PhosphorTiles {
 
-// Use shared JSON keys from constants.h
-using namespace AutotileJsonKeys;
+// Bounds for the script-state sanitizer and the master-count / split-ratio clamps.
 using namespace AutotileDefaults;
 
 namespace {

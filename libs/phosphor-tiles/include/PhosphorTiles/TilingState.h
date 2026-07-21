@@ -401,7 +401,7 @@ public:
      * @brief Replace the script-state bag wholesale.
      *
      * Callers must pass already-sanitized JSON (see @c sanitizeScriptState in
-     * tilingstateserialization.cpp). No NOTIFY signal: this is internal state,
+     * tilingstatedata.cpp). No NOTIFY signal: this is internal state,
      * not a UI-observable property, and writing it must never schedule a retile
      * (that would risk a resize→retile→resize loop).
      */

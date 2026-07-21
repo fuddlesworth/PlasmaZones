@@ -113,7 +113,7 @@ set(phosphortiles_SRCS
     src/autotilelayoutsourcefactory.cpp
     src/tilingalgorithm.cpp
     src/tilingstate.cpp
-    src/tilingstateserialization.cpp
+    src/tilingstatedata.cpp
     src/splittree.cpp
     src/splittreerebuild.cpp
     src/scriptedalgorithmloader.cpp
