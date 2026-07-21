@@ -178,10 +178,10 @@ SettingsFlickable {
                 }
 
                 // One gate per knob stack: disabling a container propagates to
-                // every child, and SettingsRow/SettingsSeparator bind
-                // `visible: enabled`, so rows AND separators collapse together
-                // when the toggle is off (per-row gates left the separators
-                // behind as orphaned divider lines). This first stack is the
+                // every child, and SettingsRow/SettingsSeparator lead their
+                // `visible:` binding with `enabled`, so rows AND separators
+                // collapse together when the toggle is off (per-row gates left
+                // the separators behind as orphaned divider lines). This first stack is the
                 // simple-mode subset (bar count); the advanced stack follows.
                 ColumnLayout {
                     Layout.fillWidth: true

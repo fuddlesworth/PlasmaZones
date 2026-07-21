@@ -393,6 +393,13 @@ void SettingsController::buildApplicationController()
     // pushes the user's remembered choice in over this at startup.
     m_app->registry()->setShowAdvanced(m_advancedMode);
 
+    // Counterparts are stored unvalidated at registration (the target may be
+    // declared later), and nothing downstream checks them: a typo silently
+    // sends every affected mode flip and deep link to the fallback page and
+    // looks exactly like correct operation. Check once now that the whole
+    // catalogue is in, so the mistake surfaces as a startup warning.
+    m_app->registry()->validateCounterparts();
+
     // Bridge SettingsController.save/load to the framework's Apply/Cancel
     // (and to the global dirty flag QML chrome binds to).
     m_app->registerDomain(new SettingsStagingDomain(this, m_app.get()));

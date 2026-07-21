@@ -110,7 +110,11 @@ public:
         /// Always so unclassified pages show in both modes. See
         /// PageVisibility. setPageVisibility() remains for late
         /// reclassification but registration-time declaration is the
-        /// canonical path.
+        /// canonical path — it has NO in-tree caller and is retained for
+        /// plugin-style registration, where a host registers a page before
+        /// it knows the tier. Do not delete it as dead code: its
+        /// visibleSetChanged emit is the only reason that signal exists
+        /// separately from showAdvancedChanged.
         PageVisibility visibility = PageVisibility::Always;
         /// Optional id of this page's other-mode counterpart. When a mode
         /// flip (or a deep link) hides this page, the app's navigation
@@ -158,19 +162,35 @@ public:
     void setShowAdvanced(bool showAdvanced);
 
     Q_INVOKABLE bool hasPage(const QString& id) const;
-    /** True iff the page's visibility tier is allowed under the current
-     *  showAdvanced mode. Unknown ids return true — this is a tier
-     *  filter, not an existence check; validate with hasPage() first.
-     *  Unlike the tree accessors this does NOT apply the empty-category
-     *  descendant rule — it answers "may the user navigate here", which
-     *  for a navigable page is exactly the tier test. */
-    Q_INVOKABLE bool pageAllowedInCurrentMode(const QString& id) const;
+    /** True iff the page is reachable under the current showAdvanced mode:
+     *  its own visibility tier passes AND so does every ancestor's. The
+     *  ancestor walk matters because hiding a category hides its whole
+     *  subtree in the rail, so a page whose own tier passes under a filtered
+     *  parent has no row and no drill path — answering "yes" for it would
+     *  send search, keyboard next/prev and the mode gate somewhere the user
+     *  cannot navigate back from. Unknown ids return true: this is a tier
+     *  filter, not an existence check; validate with hasPage() first. It
+     *  does NOT apply the empty-category descendant rule the tree accessors
+     *  use — that asks "is this category worth drawing", not "may the user
+     *  navigate here". */
+    bool pageAllowedInCurrentMode(const QString& id) const;
+    /** Log a warning for every entry whose `counterpartId` names a page that
+     *  does not exist, is itself, or sits in the SAME tier (so a mode flip
+     *  would redirect to something equally hidden). Counterparts are stored
+     *  unvalidated at registration because the target may be registered
+     *  later, and nothing else ever checks them: a typo silently degrades
+     *  every affected mode flip and deep link to the fallback page, and looks
+     *  exactly like correct operation. Call once after registration
+     *  completes. Returns true when every counterpart resolves. */
+    bool validateCounterparts() const;
     /** Depth-first search (registration order) below `parentId` for the
      *  first navigable page visible under the current mode; empty string
      *  when nothing below the parent survives filtering. Pass an empty
      *  parentId to search from the root. This is the mode-aware
      *  replacement for a static "parent redirects to its first leaf"
      *  table. */
+    /// Q_INVOKABLE: Breadcrumbs.qml routes a non-navigable ancestor crumb
+    /// through this to avoid navigating into an empty page body.
     Q_INVOKABLE QString firstVisibleLeafId(const QString& parentId) const;
     Q_INVOKABLE PhosphorControl::PageController* controller(const QString& id) const;
     /** Look up an Entry by id. Returns a default-constructed (empty) Entry

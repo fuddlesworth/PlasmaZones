@@ -9,76 +9,100 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief The animation window filter: which windows are eligible for any
  * animation at all (transient windows, notifications and OSDs, and the
- * minimum width / height thresholds).
+ * minimum width / height thresholds), plus the explainer banner that sits
+ * above it.
  *
  * Hosted by BOTH the advanced Animations → General page and the simple-mode
  * Animations page. These are global config toggles on the animation-specific
  * filtering group, distinct from the snapping/tiling and decoration filters
  * that use the same WindowFilterCard shell.
+ *
+ * The root is a ColumnLayout rather than the WindowFilterCard itself so the
+ * banner can be declared here once instead of being copied into both hosts.
+ * The banner stays OUTSIDE the card body (matching where the hosts used to
+ * put it) so collapsing the card does not hide the explanation of what the
+ * card does.
  */
-WindowFilterCard {
+ColumnLayout {
     id: card
 
     /// The ISettings object holding the animation* filter keys.
     required property QtObject cardSettings
-    /// Search anchor id for the notifications row. Passed whole rather
-    /// than composed from a prefix: concatenating onto an identifier
+    /// Search anchor id for the notifications row. The global search
+    /// catalogue keys on (page, anchor), and the two hosts are different
+    /// pages, so a shared id would be unambiguous — this property is
+    /// redundant today and both hosts could use the same literal. It exists
+    /// only because searchcatalog.cpp already registers these two specific
+    /// ids and a contract test cross-checks the QML against it. Passed whole
+    /// rather than composed from a prefix: concatenating onto an identifier
     /// silently changes its casing, which breaks the catalogue's exact-id
-    /// match. The two hosts register distinct ids because the global search
-    /// catalogue keys on (page, anchor).
+    /// match.
     property string notificationsAnchor: "excludeNotificationsAndOsds"
 
     Layout.fillWidth: true
+    spacing: Kirigami.Units.largeSpacing
 
-    excludeTransient: card.cardSettings.animationExcludeTransientWindows
-    transientDescription: i18n("Skip animations for dialogs, popups, tooltips, and dropdown menus")
-    transientAccessibleName: i18n("Exclude transient windows from animations")
-    onExcludeTransientToggled: value => {
-        card.cardSettings.animationExcludeTransientWindows = value;
+    Kirigami.InlineMessage {
+        Layout.fillWidth: true
+        type: Kirigami.MessageType.Information
+        // Kirigami.InlineMessage defaults to hidden; opt in explicitly.
+        visible: true
+        text: i18n("Filtered windows are not animated. Use a Rule to keep a specific application animated even when a filter would exclude it.")
     }
 
-    // Animations-only extra row: exclude notifications / OSDs. Supplies its
-    // own leading separator so it composes under the transient row.
-    insertAfterTransient: Component {
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
+    WindowFilterCard {
+        Layout.fillWidth: true
 
-            SettingsSeparator {}
+        excludeTransient: card.cardSettings.animationExcludeTransientWindows
+        transientDescription: i18n("Skip animations for dialogs, popups, tooltips, and dropdown menus")
+        transientAccessibleName: i18n("Exclude transient windows from animations")
+        onExcludeTransientToggled: value => {
+            card.cardSettings.animationExcludeTransientWindows = value;
+        }
 
-            SettingsRow {
-                title: i18n("Exclude notifications and OSDs")
-                searchAnchor: card.notificationsAnchor
-                description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
+        // Animations-only extra row: exclude notifications / OSDs. Supplies
+        // its own leading separator so it composes under the transient row.
+        insertAfterTransient: Component {
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
 
-                SettingsSwitch {
-                    checked: card.cardSettings.animationExcludeNotificationsAndOsd
-                    accessibleName: i18n("Exclude notifications and on-screen displays from animations")
-                    onToggled: function (newValue) {
-                        card.cardSettings.animationExcludeNotificationsAndOsd = newValue;
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Exclude notifications and OSDs")
+                    searchAnchor: card.notificationsAnchor
+                    description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
+
+                    SettingsSwitch {
+                        checked: card.cardSettings.animationExcludeNotificationsAndOsd
+                        accessibleName: i18n("Exclude notifications and on-screen displays from animations")
+                        onToggled: function (newValue) {
+                            card.cardSettings.animationExcludeNotificationsAndOsd = newValue;
+                        }
                     }
                 }
             }
         }
-    }
 
-    minWidth: card.cardSettings.animationMinimumWindowWidth
-    minWidthFrom: settingsController.generalPage.animationMinimumWindowWidthMin
-    minWidthTo: settingsController.generalPage.animationMinimumWindowWidthMax
-    minWidthDescription: i18n("Windows narrower than this will not animate")
-    minWidthDisabledDescription: i18n("Disabled. No width threshold.")
-    minWidthAccessibleName: i18n("Minimum window width for animations")
-    onMinWidthModified: value => {
-        card.cardSettings.animationMinimumWindowWidth = value;
-    }
+        minWidth: card.cardSettings.animationMinimumWindowWidth
+        minWidthFrom: settingsController.generalPage.animationMinimumWindowWidthMin
+        minWidthTo: settingsController.generalPage.animationMinimumWindowWidthMax
+        minWidthDescription: i18n("Windows narrower than this will not animate")
+        minWidthDisabledDescription: i18n("Disabled. No width threshold.")
+        minWidthAccessibleName: i18n("Minimum window width for animations")
+        onMinWidthModified: value => {
+            card.cardSettings.animationMinimumWindowWidth = value;
+        }
 
-    minHeight: card.cardSettings.animationMinimumWindowHeight
-    minHeightFrom: settingsController.generalPage.animationMinimumWindowHeightMin
-    minHeightTo: settingsController.generalPage.animationMinimumWindowHeightMax
-    minHeightDescription: i18n("Windows shorter than this will not animate")
-    minHeightDisabledDescription: i18n("Disabled. No height threshold.")
-    minHeightAccessibleName: i18n("Minimum window height for animations")
-    onMinHeightModified: value => {
-        card.cardSettings.animationMinimumWindowHeight = value;
+        minHeight: card.cardSettings.animationMinimumWindowHeight
+        minHeightFrom: settingsController.generalPage.animationMinimumWindowHeightMin
+        minHeightTo: settingsController.generalPage.animationMinimumWindowHeightMax
+        minHeightDescription: i18n("Windows shorter than this will not animate")
+        minHeightDisabledDescription: i18n("Disabled. No height threshold.")
+        minHeightAccessibleName: i18n("Minimum window height for animations")
+        onMinHeightModified: value => {
+            card.cardSettings.animationMinimumWindowHeight = value;
+        }
     }
 }

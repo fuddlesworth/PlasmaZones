@@ -39,9 +39,11 @@ SettingsFlickable {
 
     // Simple/advanced split on this page: simple mode keeps the everyday
     // decoration controls (border on/off + width/radius/colour, hide title
-    // bars, gaps); the power surfaces (the per-window "Apply to" scope
-    // pickers, focus-fade timing, opacity/tint, window filtering, the
-    // performance card) declare `advancedOnly: true` on their card/row.
+    // bars, gaps); the power surfaces (the per-window "Apply to" scope pickers
+    // for border, title bar and opacity+tint, focus-fade timing, window
+    // filtering, the performance card) declare `advancedOnly: true` on their
+    // card or row. Note the opacity+tint card itself stays in simple mode; only
+    // its scope picker and the separator beside it are advanced.
 
     // "Apply to" scope options for the border / title-bar / opacity values, in
     // the order the schema declares them. The three keys share one token set,

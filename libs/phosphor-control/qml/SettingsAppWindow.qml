@@ -27,11 +27,6 @@ Kirigami.ApplicationWindow {
     //* Optional content pinned to the RIGHT of the header-extras row (e.g. a
     //  status toggle), sharing the row with the centered headerExtras.
     property alias headerTrailing: headerTrailingLoader.sourceComponent
-    /** Optional Component pinned to the LEFT edge of the full-width header
-     *  band, mirroring headerTrailing on the right. The centered
-     *  headerExtras slot stays window-centered regardless — the band
-     *  balances whichever side is wider with a phantom on the other. */
-    property alias headerLeading: headerLeadingLoader.sourceComponent
     //* Optional label for the unsaved-changes footer bar, replacing its plain
     //  "Unsaved changes" when the app can say what Save will actually do
     //  (e.g. name the profile a pending switch applies). Empty keeps the
@@ -390,13 +385,13 @@ Kirigami.ApplicationWindow {
                 // unlike routing the *visible* gate through a child, which
                 // would latch the band hidden. See the comment on `visible`
                 // below.
-                implicitHeight: (headerExtrasLoader.item !== null && headerExtrasLoader.item.visible) || (headerTrailingLoader.item !== null && headerTrailingLoader.item.visible) || (headerLeadingLoader.item !== null && headerLeadingLoader.item.visible) ? headerExtrasRow.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
+                implicitHeight: (headerExtrasLoader.item !== null && headerExtrasLoader.item.visible) || (headerTrailingLoader.item !== null && headerTrailingLoader.item.visible) ? headerExtrasRow.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
                 // Gate on the Loaders directly, NOT on headerExtrasRow.visible:
                 // reading a child's `visible` returns its EFFECTIVE visibility,
                 // so routing the condition through the row would latch the band
                 // hidden forever once it first collapsed (same trap as the
                 // breadcrumb trailing slot below).
-                visible: headerExtrasLoader.item !== null || headerTrailingLoader.item !== null || headerLeadingLoader.item !== null
+                visible: headerExtrasLoader.item !== null || headerTrailingLoader.item !== null
 
                 Rectangle {
                     anchors.fill: parent
@@ -406,28 +401,19 @@ Kirigami.ApplicationWindow {
                 RowLayout {
                     id: headerExtrasRow
 
-                    // Gated widths of the two edge slots — the phantom on the
-                    // NARROWER side pads the difference so the centered slot
-                    // stays window-centered whichever side is wider. Read via
-                    // the gated expressions rather than the Loaders' width,
-                    // which lags one layout-polish cycle behind the binding.
-                    readonly property real _leadingWidth: (headerLeadingLoader.item !== null && headerLeadingLoader.item.visible) ? headerLeadingLoader.item.implicitWidth : 0
+                    // Gated width of the trailing slot — the phantom on the left
+                    // pads the same amount so the centered slot stays
+                    // window-centered. Read via the gated expression rather
+                    // than the Loader's width, which lags one layout-polish
+                    // cycle behind the binding.
                     readonly property real _trailingWidth: (headerTrailingLoader.item !== null && headerTrailingLoader.item.visible) ? headerTrailingLoader.item.implicitWidth : 0
 
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.largeSpacing
                     spacing: 0
 
-                    Loader {
-                        id: headerLeadingLoader
-
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: (item !== null && item.visible) ? item.implicitWidth : 0
-                        Layout.preferredHeight: (item !== null && item.visible) ? item.implicitHeight : 0
-                    }
-
                     Item {
-                        Layout.preferredWidth: Math.max(0, headerExtrasRow._trailingWidth - headerExtrasRow._leadingWidth)
+                        Layout.preferredWidth: headerExtrasRow._trailingWidth
                     }
 
                     Item {
@@ -451,10 +437,6 @@ Kirigami.ApplicationWindow {
 
                     Item {
                         Layout.fillWidth: true
-                    }
-
-                    Item {
-                        Layout.preferredWidth: Math.max(0, headerExtrasRow._leadingWidth - headerExtrasRow._trailingWidth)
                     }
 
                     Loader {

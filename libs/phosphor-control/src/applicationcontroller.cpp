@@ -227,7 +227,7 @@ void ApplicationController::applyAll()
     // Iterating the live list would invalidate the outer iterators.
     //
     // m_inTransaction suppresses the inner per-domain recomputeDirty
-    // walks (A15 followup) so the transaction is O(N) instead of O(N²).
+    // walks so the transaction is O(N) instead of O(N²).
     // The trailing recomputeDirty() with the flag cleared emits the
     // single net dirtyChanged for the whole batch.
     const QList<QPointer<StagingDomain>> snapshot = m_domains;
@@ -335,7 +335,13 @@ QString ApplicationController::gotoPreviousPage()
     }
     const int next = state.currentIdx <= 0 ? state.ids.size() - 1 : state.currentIdx - 1;
     setCurrentPageId(state.ids.at(next));
-    return state.ids.at(next);
+    // Report where we LANDED, not what we asked for. setCurrentPageId can be
+    // re-entered during its own currentPageIdChanged emit (the app's bridge
+    // calls setActivePage, whose mode gate may redirect and snap this back), so
+    // on unwind m_currentPageId can differ from the request. Callers use the
+    // return value to sync their own state — making that true by construction
+    // beats relying on the two predicates agreeing.
+    return m_currentPageId;
 }
 
 QString ApplicationController::gotoNextPage()
@@ -346,7 +352,8 @@ QString ApplicationController::gotoNextPage()
     }
     const int next = state.currentIdx < 0 || state.currentIdx == state.ids.size() - 1 ? 0 : state.currentIdx + 1;
     setCurrentPageId(state.ids.at(next));
-    return state.ids.at(next);
+    // Landed, not requested — see gotoPreviousPage.
+    return m_currentPageId;
 }
 
 bool ApplicationController::canGoBack() const
@@ -361,8 +368,8 @@ bool ApplicationController::canGoForward() const
 
 // One step along the recorded trail: pop the newest entry from @p from,
 // push the page being left onto @p to, and navigate. Shared by goBack and
-// goForward, which differ only in which stack is which — pass 2 had to add
-// the same three-clause skip predicate to both copies, so the duplication
+// goForward, which differ only in which stack is which. Both need the same
+// three-clause skip predicate, so the duplication
 // had already cost a maintenance edit.
 QString ApplicationController::stepHistory(QStringList& from, QStringList& to)
 {
@@ -399,7 +406,9 @@ QString ApplicationController::stepHistory(QStringList& from, QStringList& to)
         m_navigatingHistory = true;
         setCurrentPageId(target);
         m_navigatingHistory = false;
-        landed = target;
+        // Read back rather than assuming `target`: setCurrentPageId can be
+        // re-entered during its own emit and redirected by the app's mode gate.
+        landed = m_currentPageId;
         break;
     }
     if (canGoBack() != couldGoBack || canGoForward() != couldGoForward) {

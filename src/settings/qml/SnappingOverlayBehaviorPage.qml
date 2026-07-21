@@ -15,7 +15,6 @@ SettingsFlickable {
 
     readonly property var settingsBridge: settingsController.snappingBehaviorPage
     readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
-    readonly property int thresholdMax: root.settingsBridge.adjacentThresholdMax
 
     contentHeight: content.implicitHeight
     clip: true

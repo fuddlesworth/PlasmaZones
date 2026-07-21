@@ -596,6 +596,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Always show after snapping"), {PhosphorI18n::tr("snap assist")});
 
     addSection(search, QStringLiteral("tiling-simple"), QStringLiteral("tilingSimple"), PhosphorI18n::tr("Tiling"));
+    // The algorithm picker is this page's headline control, and in simple mode
+    // the advanced Algorithm page is tier-filtered out along with its own
+    // "algorithm" anchor. Without this row a search for an algorithm name
+    // resolves only to the page itself and never reveals the picker.
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("simpleAlgorithm"),
+               PhosphorI18n::tr("Tiling algorithm"),
+               {PhosphorI18n::tr("algorithm"), PhosphorI18n::tr("bsp"), PhosphorI18n::tr("spiral"),
+                PhosphorI18n::tr("master"), PhosphorI18n::tr("grid"), PhosphorI18n::tr("layout")});
     addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("simpleMasterRatio"),
                PhosphorI18n::tr("Master ratio"),
                {PhosphorI18n::tr("split"), PhosphorI18n::tr("proportion"), PhosphorI18n::tr("center")});

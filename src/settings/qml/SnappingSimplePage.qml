@@ -16,8 +16,9 @@ import org.kde.kirigami as Kirigami
  * SnappingZoneSpanCard, SnappingWindowHandlingCard and SnappingFocusCard
  * follow, so multi-zone spanning, window handling and focus policy are here
  * too — the same components the advanced pages host. Left to advanced mode:
- * the overlay's tap-to-toggle latch, display filtering, overlay appearance,
- * the zone selector, priority, shortcuts and shaders.
+ * the overlay's tap-to-toggle latch, the Snap Assist hold trigger, display
+ * filtering, overlay appearance, the zone selector, priority, shortcuts and
+ * shaders.
  */
 SettingsFlickable {
     id: root
@@ -107,7 +108,7 @@ SettingsFlickable {
                     enabled: snapAssistFeatureSwitch.checked
                     title: i18n("Always show after snapping")
                     searchAnchor: "simpleAlwaysShowAfterSnapping"
-                    description: i18n("Show the window picker after every snap, not only while holding a modifier")
+                    description: i18n("Show the window picker after every snap, without waiting for you to hold anything")
 
                     SettingsSwitch {
                         checked: appSettings.snapAssistEnabled

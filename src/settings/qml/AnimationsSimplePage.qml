@@ -62,16 +62,10 @@ AnimationEventCardList {
                 collapsible: false
             }
 
-            Kirigami.InlineMessage {
-                Layout.fillWidth: true
-                type: Kirigami.MessageType.Information
-                visible: true
-                text: i18n("Filtered windows are not animated. Use a Rule to keep a specific application animated even when a filter would exclude it.")
-            }
-
             // The same animation window filter the advanced General page
             // hosts (animation-specific config group, distinct from the
-            // snapping/tiling and decoration filters).
+            // snapping/tiling and decoration filters), explainer banner
+            // included.
             AnimationWindowFilterCard {
                 cardSettings: simplePage.globalSettings
                 notificationsAnchor: "simpleExcludeNotificationsAndOsds"

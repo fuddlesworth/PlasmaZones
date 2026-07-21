@@ -130,90 +130,40 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                // Live preview, centered at top — same diagram the Algorithm
-                // page shows, fed from the saved tuning instead of live
-                // slider handles.
-                Item {
+                // Preview, description and picker — the shared block, also
+                // hosted by TilingAlgorithmPage. Fed from the saved tuning
+                // instead of live slider handles, and with no window-count
+                // caption, since this page leads with the picker itself.
+                //
+                // masterCount reads root.appSettingsObj, NOT the bare
+                // `appSettings`: AlgorithmPreview declares its own
+                // `appSettings`, which shadows the context property inside the
+                // component — the same trap documented for LayoutComboBox. The
+                // controller has no autotileMasterCount, so the bare form reads
+                // undefined, coerces to 0, and is clamped to 1 downstream, and
+                // the preview would silently ignore the configured master
+                // count.
+                AlgorithmPreviewCard {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.algorithmPreviewHeight
-
-                    Item {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
-                        width: root.algorithmPreviewWidth
-                        height: root.algorithmPreviewHeight
-
-                        Rectangle {
-                            anchors.fill: parent
-                            color: Kirigami.Theme.backgroundColor
-                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-                            border.width: 1
-                            radius: Kirigami.Units.smallSpacing
-
-                            AlgorithmPreview {
-                                anchors.fill: parent
-                                anchors.margins: Kirigami.Units.smallSpacing
-                                appSettings: settingsController
-                                showLabel: false
-                                algorithmId: root.selectedAlgorithm
-                                algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
-                                windowCount: maxWindowsSlider.slider.value
-                                splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : (root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
-                                // appSettingsObj, NOT the bare `appSettings`:
-                                // AlgorithmPreview declares its own
-                                // `appSettings` (fed settingsController above),
-                                // which shadows the context property here — the
-                                // same trap documented for LayoutComboBox. The
-                                // controller has no autotileMasterCount, so the
-                                // bare form reads undefined, coerces to 0, and
-                                // is clamped to 1 downstream — the preview
-                                // would silently ignore the configured master
-                                // count.
-                                masterCount: root.algoSettings.masterCount !== undefined ? root.algoSettings.masterCount : root.appSettingsObj.autotileMasterCount
-                                customParams: root.previewCustomParams
-                                zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
-                            }
-                        }
-                    }
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: root.algorithmPreviewWidth
-                    Layout.alignment: Qt.AlignHCenter
-                    text: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
-                    visible: text !== ""
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WordWrap
-                    opacity: 0.7
-                    font: Kirigami.Theme.smallFont
-                }
-
-                ColumnLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: Kirigami.Units.smallSpacing
-                    Layout.maximumWidth: Kirigami.Units.gridUnit * 25
-
-                    LayoutComboBox {
-                        id: algorithmCombo
-
-                        Layout.alignment: Qt.AlignHCenter
-                        Layout.fillWidth: true
-                        Accessible.name: i18n("Tiling algorithm")
-                        appSettings: settingsController
-                        showPreview: true
-                        layoutFilter: 1 // Autotile algorithms only
-                        showNoneOption: false
-                        currentLayoutId: "autotile:" + root.appSettingsObj.defaultAutotileAlgorithm
-                        onActivated: {
-                            let selectedId = algorithmCombo.currentValue;
-                            if (selectedId === "")
-                                selectedId = root.appSettingsObj.defaultAutotileAlgorithm;
-                            else if (selectedId.startsWith("autotile:"))
-                                selectedId = selectedId.substring(9);
-                            root.selectedAlgorithm = selectedId;
-                            root.appSettingsObj.defaultAutotileAlgorithm = selectedId;
-                        }
+                    previewWidth: root.algorithmPreviewWidth
+                    previewHeight: root.algorithmPreviewHeight
+                    searchAnchor: "simpleAlgorithm"
+                    algorithmId: root.selectedAlgorithm
+                    algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
+                    description: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
+                    currentAlgorithmId: root.appSettingsObj.defaultAutotileAlgorithm
+                    windowCount: maxWindowsSlider.slider.value
+                    splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : (root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
+                    supportsMasterCount: root.algoCapabilities ? (root.algoCapabilities.supportsMasterCount === true) : false
+                    masterCount: root.algoSettings.masterCount !== undefined ? root.algoSettings.masterCount : root.appSettingsObj.autotileMasterCount
+                    customParams: root.previewCustomParams
+                    zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
+                    onAlgorithmActivated: selectedId => {
+                        // An empty id means the combo's model rebuilt under the
+                        // selection — fall back to the persisted default.
+                        const algoId = selectedId === "" ? root.appSettingsObj.defaultAutotileAlgorithm : selectedId;
+                        root.selectedAlgorithm = algoId;
+                        root.appSettingsObj.defaultAutotileAlgorithm = algoId;
                     }
                 }
 

@@ -138,6 +138,14 @@ Item {
     // tracked dependency on this tick, the bindings would evaluate once
     // and stick at the initial (often empty, mid-warmup) result.
     property int _shaderRegistryRev: 0
+    // True when at least one mirror path's STORED state differs from the
+    // primary's. The card reads `eventPath` alone, so a mirror that was given
+    // its own value in advanced mode is invisible here, and the next edit on
+    // this card silently replaces it (every write goes through the group
+    // writers). Surfaced by the divergence banner below so the user knows the
+    // overwrite is coming before they make it. Always false for the
+    // no-mirrors cards, which is every card outside the simple page.
+    property bool _mirrorsDiverged: false
 
     // ── Inheritance summary (italic "Current: …" line when override off) ─
     function inheritSummaryText() {
@@ -243,6 +251,35 @@ Item {
         return true;
     }
 
+    /// Canonical form of one path's stored state: its direct timing profile
+    /// and its direct shader profile, both coerced to {} when absent so a
+    /// missing override and an empty one compare equal. Both come back as
+    /// QVariantMaps, whose JS key order is the map's own sorted order, so two
+    /// paths holding the same values always stringify identically.
+    function _storedStateKey(path) {
+        const profile = settingsController.animationsPage.rawProfile(path) || ({});
+        const shader = settingsController.animationsPage.rawShaderProfile(path) || ({});
+        return JSON.stringify([profile, shader]);
+    }
+
+    /// Recompute _mirrorsDiverged. Called from both refreshers so it tracks
+    /// every signal that can move either tree.
+    function _refreshMirrorDivergence() {
+        const mirrors = root.mirrorPaths;
+        if (!mirrors || mirrors.length === 0) {
+            root._mirrorsDiverged = false;
+            return;
+        }
+        const primary = root._storedStateKey(root.eventPath);
+        for (var i = 0; i < mirrors.length; ++i) {
+            if (root._storedStateKey(mirrors[i]) !== primary) {
+                root._mirrorsDiverged = true;
+                return;
+            }
+        }
+        root._mirrorsDiverged = false;
+    }
+
     /// Batch write — randomize rolls N values that should land as one
     /// `setShaderOverride` round-trip. Same stale-effect guard as
     /// `_writeShaderParam`.
@@ -269,17 +306,18 @@ Item {
         // overriddenPaths). Only meaningful for parent-node cards but
         // we always refresh so the binding stays consistent.
         //
-        // Counted across every write path, matching
-        // _clearShaderOverrideDescendantsOnAll: the banner's "Clear shadowing
-        // children" action clears descendants of the mirrors too, so counting
-        // the primary alone would under-report what the button is about to
-        // remove. Degenerates to the single-path count when there are no
-        // mirrors, which is every card in the tree today.
+        // Summed across every write path to match
+        // _clearShaderOverrideDescendantsOnAll, whose button clears the
+        // mirrors' descendants too. No card today is both a parent node and
+        // mirrored, so the mirror legs of this loop never run in the current
+        // config. The sum is kept so a future mirrored parent card reports
+        // what the button would actually remove.
         const countPaths = root._writePaths;
         var shadowing = 0;
         for (var i = 0; i < countPaths.length; ++i)
             shadowing += settingsController.animationsPage.shaderOverrideDescendantCount(countPaths[i]);
         root._shadowingChildrenCount = shadowing;
+        root._refreshMirrorDivergence();
     }
 
     function refreshFromTree() {
@@ -336,6 +374,7 @@ Item {
                 root.currentEasingCurve = curve;
         }
         root.currentDuration = effective.duration !== undefined ? effective.duration : CurvePresets.defaultDurationMs;
+        root._refreshMirrorDivergence();
     }
 
     // Build the on-disk profile object from the working state and
@@ -359,7 +398,17 @@ Item {
         if (path === "")
             return true;
 
-        return path === root.eventPath || root.eventPath.startsWith(path + ".");
+        // Mirrors are included even though the card never READS them: the
+        // divergence banner's state depends on their stored values, so an
+        // edit landing on a mirror alone (the same event's own card on the
+        // advanced page) has to re-run this card's refresh or the banner goes
+        // stale. Refreshing costs a re-read of the unchanged primary.
+        const paths = root._writePaths;
+        for (var i = 0; i < paths.length; ++i) {
+            if (path === paths[i] || paths[i].startsWith(path + "."))
+                return true;
+        }
+        return false;
     }
 
     implicitHeight: card.implicitHeight
@@ -536,6 +585,20 @@ Item {
                         }
                     }
                 ]
+            }
+
+            // ── Mirror divergence warning (mirrored cards only) ───────
+            // This card writes every mirror path but reads only the primary,
+            // so a mirror given its own value elsewhere is not shown by any
+            // control here and the next edit replaces it. Warn before that
+            // happens rather than after.
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
+                type: Kirigami.MessageType.Warning
+                visible: root._mirrorsDiverged
+                text: i18n("Another event this card controls is set differently right now, and this card shows only one of them. The next change you make here replaces the other event's settings.")
             }
 
             Label {

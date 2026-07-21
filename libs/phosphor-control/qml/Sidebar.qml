@@ -271,6 +271,30 @@ ColumnLayout {
         return found.length === 1 ? found[0] : null;
     }
 
+    // True when a category leads nowhere at all: no navigable descendant
+    // survives the current mode's filter. Distinct from
+    // _soleNavigableDescendant returning null, which also covers the ordinary
+    // "two or more children, so keep the drill step" case. Drawing a drill row
+    // for an empty category gives the user a row whose only content is a Back
+    // button. The registry's own empty-category rule hides such a node when it
+    // is a direct parent, but it is worth not depending on that here.
+    function _hasNoNavigableDescendant(parentId) {
+        const found = [];
+        const gather = function gather(pid, depth) {
+            if (depth > root._maxWalkDepth || found.length > 0)
+                return;
+            const kids = root._scopeChildren(pid);
+            for (let i = 0; i < kids.length && found.length === 0; ++i) {
+                const child = kids[i];
+                if (child.hasQmlSource)
+                    found.push(child);
+                gather(child.id, depth + 1);
+            }
+        };
+        gather(parentId, 0);
+        return found.length === 0;
+    }
+
     // Defence in depth against a misregistered page graph that
     // names itself as its own ancestor (parent ↔ self cycle, or a
     // longer ring). Without these caps a search keystroke would
@@ -424,6 +448,11 @@ ColumnLayout {
                     let rowHasQml = child.hasQmlSource === true;
                     let isDrill = !collapsible && childHasChildren;
                     if (isDrill && !rowHasQml) {
+                        // Nothing navigable under it at all: drilling in would
+                        // show a Back button and nothing else, so skip the row
+                        // entirely rather than offering a dead end.
+                        if (root._hasNoNavigableDescendant(child.id))
+                            continue;
                         const sole = root._soleNavigableDescendant(child.id);
                         if (sole) {
                             rowPageId = sole.id;
@@ -688,14 +717,18 @@ ColumnLayout {
         target: root.controller
     }
 
-    // Late-registered pages need to appear in the rail without a
-    // restart. The registry's pageRegistered signal fires once per
-    // registerPage() call; refreshing on each is cheap (the model
-    // diff keeps the visible delegates stable) and covers async
-    // catalog warm-up flows (plugin loading, dynamic registration).
+    // Late-registered pages need to appear in the rail without a restart. The
+    // registry's pageRegistered signal fires once per registerPage() call, and
+    // startup makes ~55 of them back to back — each would otherwise walk the
+    // whole registry (flat mode emits from the root unconditionally) and run
+    // the model diff, whose fallback branch is a forward scan with a
+    // ListModel.get() per probe. Coalesce through Qt.callLater, which collapses
+    // repeat calls to the same function within one event-loop pass into a
+    // single invocation, so a registration batch costs one rebuild. Also covers
+    // async catalog warm-up (plugin loading, dynamic registration).
     Connections {
         function onPageRegistered() {
-            root._refreshModel();
+            Qt.callLater(root._refreshModel);
         }
 
         // The rail is built from the registry's tier-filtered tree accessors,

@@ -35,13 +35,6 @@ Item {
     id: root
 
     // ── Public API ──────────────────────────────────────────────────────
-    /// When true this whole card belongs to advanced mode only: it collapses
-    /// out of the page while the settings app is in simple mode. Mirrors
-    /// SettingsRow.advancedOnly; a consumer's own `visible:` binding
-    /// overrides it.
-    property bool advancedOnly: false
-    visible: !advancedOnly || settingsController.advancedMode
-
     // Simple header: just provide a title string
     property string headerText: ""
     // Right-aligned hint shown after the heading (rule count, "N items", etc.).
@@ -73,9 +66,9 @@ Item {
     ///
     /// Set true at the START of the expand and false at the END of the collapse,
     /// so the rows are measurable for every frame the height is non-zero. The rows
-    /// hide themselves when disabled (SettingsRow binds `visible: enabled`), so a
-    /// value derived from the ramp would drop them out of the layout while the
-    /// card was still visibly sliding.
+    /// hide themselves when disabled (SettingsRow's `visible:` binding starts with
+    /// `enabled`), so a value derived from the ramp would drop them out of the
+    /// layout while the card was still visibly sliding.
     property bool _bodyLive: true
     /// How far open the body is: 0 shut, 1 fully open. The collapse animates
     /// THIS, and the body's height stays a live binding on it times the content's
@@ -83,8 +76,8 @@ Item {
     ///
     /// Animating the height directly cannot work. The animation samples its
     /// target when it starts, and a layout re-measure is asynchronous, so a body
-    /// whose size changed while the card was shut (SettingsRow hides itself via
-    /// `visible: enabled`, so any master toggle does exactly that) would animate
+    /// whose size changed while the card was shut (SettingsRow hides itself when
+    /// disabled, so any master toggle does exactly that) would animate
     /// to a stale height and snap at the end. A live binding tracks the settle
     /// instead, whenever it lands.
     property real _expandProgress: 1
@@ -94,6 +87,12 @@ Item {
     /// Deep-link reveal anchor id for this card (section-level target). Empty
     /// = not addressable. See SettingsFlickable.revealAnchor.
     property string searchAnchor: ""
+    /// When true this whole card belongs to advanced mode only: it collapses
+    /// out of the page while the settings app is in simple mode. Mirrors
+    /// SettingsRow.advancedOnly; a consumer's own `visible:` binding
+    /// overrides it.
+    property bool advancedOnly: false
+    visible: !advancedOnly || settingsController.advancedMode
     /// Stable type marker so a contained SettingsRow can identify its hosting
     /// card by walking up the parent chain (used to expand the card on reveal).
     readonly property bool isSettingsCard: true
@@ -101,7 +100,8 @@ Item {
     /// high enough that muted content stays legible — the disabled palette
     /// already greys the text, so a low opacity on top compounds into an
     /// unreadable wash. Note SettingsRows and SettingsSeparators hide themselves
-    /// when disabled (their `visible: enabled`), so a row-only body collapses
+    /// when disabled (their `visible:` binding leads with `enabled`), so a
+    /// row-only body collapses
     /// away entirely; cards with non-row content (editors, custom items) keep
     /// that content visibly muted by this opacity.
     readonly property real disabledContentOpacity: 0.85
@@ -434,8 +434,8 @@ Item {
             // Disabling the body takes them out of the focus chain, and the header
             // carries the keyboard affordance in their place.
             //
-            // Disabling also hides the rows, because SettingsRow binds
-            // `visible: enabled`, and a hidden row stops contributing to the
+            // Disabling also hides the rows, because SettingsRow's `visible:`
+            // binding leads with `enabled`, and a hidden row stops contributing to the
             // layout's implicit height. That re-measure is asynchronous, which is
             // why _bodyLive is set on the way OPEN before the ramp starts and
             // dropped on the way SHUT only once the ramp has finished.

@@ -7,7 +7,19 @@
 
 #include <QDebug>
 
+#include <algorithm>
+
 namespace PhosphorControl {
+
+namespace {
+
+// Depth bound for upward parent walks. registerPage() rejects an entry whose
+// parent is not already registered, so the graph is a DAG and a walk always
+// terminates — this only bounds pathological nesting. Mirrors the cap in
+// ApplicationController::parentChainFor; keep the two in step.
+constexpr int kMaxParentChainHops = 32;
+
+} // namespace
 
 PageRegistry::PageRegistry(QObject* parent)
     : QObject(parent)
@@ -47,10 +59,22 @@ bool PageRegistry::registerPage(Entry entry)
     // registration stays linear in K (vs. the prior O(K²) walk).
     PageController* const ctrl = entry.controller.data();
     if (m_controllerSet.contains(ctrl)) {
-        qWarning() << "PageRegistry::registerPage: controller already registered — refusing duplicate registration "
-                      "under id"
-                   << entry.id;
-        return false;
+        // The set stores bare addresses and has no removal path, so a hit may
+        // be a GHOST: a controller that has since been destroyed, whose address
+        // the allocator handed back for this new one. Every Entry guards its
+        // pointer with QPointer, so confirm against a live entry before
+        // refusing — otherwise a legitimate registration is rejected with a
+        // misleading "already registered". Only the error path pays the scan.
+        const bool liveDuplicate = std::any_of(m_pages.cbegin(), m_pages.cend(), [ctrl](const Entry& e) {
+            return e.controller.data() == ctrl;
+        });
+        if (liveDuplicate) {
+            qWarning() << "PageRegistry::registerPage: controller already registered — refusing duplicate registration "
+                          "under id"
+                       << entry.id;
+            return false;
+        }
+        m_controllerSet.remove(ctrl);
     }
 
     const QString id = entry.id;
@@ -138,13 +162,66 @@ bool PageRegistry::hasPage(const QString& id) const
 
 bool PageRegistry::pageAllowedInCurrentMode(const QString& id) const
 {
-    const auto it = m_indexById.constFind(id);
+    auto it = m_indexById.constFind(id);
     if (it == m_indexById.constEnd()) {
         // Tier filter only — unknown ids are not this method's concern
         // (hasPage() is the existence check), so express no opinion.
         return true;
     }
-    return modeAllows(m_pages.at(it.value()).visibility);
+    // Walk the parent chain, not just this entry's own tier. A page whose own
+    // tier passes but whose ancestor category is filtered out has no sidebar
+    // row and no drill path to it: isEntryVisible() already hides the ancestor,
+    // which takes the whole subtree with it. Answering "yes" here would let the
+    // search index, keyboard next/prev, the history skip predicate and the
+    // app's mode gate all send the user to a page they cannot navigate back
+    // from. Checking only the own tier made those four disagree with the rail.
+    //
+    // registerPage() rejects an entry whose parent is not already registered,
+    // so the parent graph is a DAG and this terminates; the hop cap is a
+    // belt-and-braces guard matching parentChainFor's.
+    int hops = 0;
+    while (it != m_indexById.constEnd() && hops < kMaxParentChainHops) {
+        const Entry& e = m_pages.at(it.value());
+        if (!modeAllows(e.visibility)) {
+            return false;
+        }
+        if (e.parentId.isEmpty()) {
+            return true;
+        }
+        it = m_indexById.constFind(e.parentId);
+        ++hops;
+    }
+    return true;
+}
+
+bool PageRegistry::validateCounterparts() const
+{
+    bool ok = true;
+    for (const Entry& e : m_pages) {
+        if (e.counterpartId.isEmpty()) {
+            continue;
+        }
+        if (e.counterpartId == e.id) {
+            qWarning() << "PageRegistry: page" << e.id << "declares itself as its own counterpart";
+            ok = false;
+            continue;
+        }
+        const auto it = m_indexById.constFind(e.counterpartId);
+        if (it == m_indexById.constEnd()) {
+            qWarning() << "PageRegistry: page" << e.id << "declares counterpart" << e.counterpartId
+                       << "which is not registered — mode flips and deep links will fall back instead of redirecting";
+            ok = false;
+            continue;
+        }
+        // Same tier means the flip lands on something the new mode hides too,
+        // so the redirect cannot help. Always a declaration bug.
+        if (m_pages.at(it.value()).visibility == e.visibility) {
+            qWarning() << "PageRegistry: page" << e.id << "and its counterpart" << e.counterpartId
+                       << "share a visibility tier — the counterpart cannot be the other mode's face of this page";
+            ok = false;
+        }
+    }
+    return ok;
 }
 
 QString PageRegistry::firstVisibleLeafId(const QString& parentId) const

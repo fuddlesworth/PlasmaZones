@@ -391,6 +391,98 @@ private Q_SLOTS:
         QCOMPARE(reg.entry(QStringLiteral("home")).counterpartId, QString());
     }
 
+    void validateCounterpartsAcceptsAReciprocalPair()
+    {
+        // The fixture's easy ↔ full pair is reciprocal and opposite-tier,
+        // which is the shape every real counterpart declaration must have.
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+        QVERIFY(reg.validateCounterparts());
+    }
+
+    void validateCounterpartsRejectsTheThreeBrokenShapes()
+    {
+        using PV = PageRegistry::PageVisibility;
+
+        // Counterpart names a page that was never registered. Nothing else in
+        // the stack checks this: the mode gate just falls back, so the typo is
+        // indistinguishable from correct operation without this warning.
+        {
+            PageRegistry reg;
+            auto* p = new StubPage(QStringLiteral("a"), &reg);
+            PageRegistry::Entry e{
+                QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p};
+            e.visibility = PV::SimpleOnly;
+            e.counterpartId = QStringLiteral("typo");
+            QVERIFY(reg.registerPage(std::move(e)));
+            QVERIFY(!reg.validateCounterparts());
+        }
+
+        // Self-reference: flipping mode would redirect to the page just hidden.
+        {
+            PageRegistry reg;
+            auto* p = new StubPage(QStringLiteral("a"), &reg);
+            PageRegistry::Entry e{
+                QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p};
+            e.visibility = PV::SimpleOnly;
+            e.counterpartId = QStringLiteral("a");
+            QVERIFY(reg.registerPage(std::move(e)));
+            QVERIFY(!reg.validateCounterparts());
+        }
+
+        // Same tier on both sides: the counterpart is hidden in exactly the
+        // mode the redirect is trying to escape to.
+        {
+            PageRegistry reg;
+            auto* p1 = new StubPage(QStringLiteral("a"), &reg);
+            PageRegistry::Entry e1{
+                QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p1};
+            e1.visibility = PV::SimpleOnly;
+            e1.counterpartId = QStringLiteral("b");
+            QVERIFY(reg.registerPage(std::move(e1)));
+
+            auto* p2 = new StubPage(QStringLiteral("b"), &reg);
+            PageRegistry::Entry e2{
+                QStringLiteral("b"), {}, QStringLiteral("B"), {}, QUrl(QStringLiteral("qrc:/B.qml")), p2};
+            e2.visibility = PV::SimpleOnly;
+            QVERIFY(reg.registerPage(std::move(e2)));
+
+            QVERIFY(!reg.validateCounterparts());
+        }
+    }
+
+    void reachabilityFollowsTheAncestorChain()
+    {
+        // A page whose OWN tier passes but whose parent category is filtered
+        // out has no sidebar row and no drill path to it. Answering "allowed"
+        // for it would let search, keyboard next/prev and the mode gate land
+        // the user somewhere they cannot navigate back from.
+        using PV = PageRegistry::PageVisibility;
+        PageRegistry reg;
+
+        auto* cat = new StubPage(QStringLiteral("adv-cat"), &reg);
+        PageRegistry::Entry catEntry{QStringLiteral("adv-cat"), {}, QStringLiteral("Advanced"), {}, QUrl(), cat};
+        catEntry.visibility = PV::AdvancedOnly;
+        QVERIFY(reg.registerPage(std::move(catEntry)));
+
+        // Child is Always — its own tier passes in BOTH modes.
+        auto* leaf = new StubPage(QStringLiteral("adv-cat.leaf"), &reg);
+        QVERIFY(reg.registerPage({QStringLiteral("adv-cat.leaf"),
+                                  QStringLiteral("adv-cat"),
+                                  QStringLiteral("Leaf"),
+                                  {},
+                                  QUrl(QStringLiteral("qrc:/Leaf.qml")),
+                                  leaf}));
+
+        reg.setShowAdvanced(true);
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("adv-cat.leaf")));
+
+        reg.setShowAdvanced(false);
+        // Own tier still says Always; the hidden ancestor is what makes it
+        // unreachable. Before the ancestor walk this returned true.
+        QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("adv-cat.leaf")));
+    }
+
     void setPageVisibilityReclassifiesLate()
     {
         // Registration-time declaration is the canonical path; this pins the

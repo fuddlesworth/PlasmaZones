@@ -354,6 +354,7 @@ qt_add_qml_module(plasmazones-settings
         qml/ModifierAndMouseCheckBoxes.qml
         qml/PositionPicker.qml
         qml/AlgorithmPreview.qml
+        qml/AlgorithmPreviewCard.qml
         qml/LayoutThumbnail.qml
         qml/PerScreenOverrideHelper.qml
         qml/DisplayMap.qml

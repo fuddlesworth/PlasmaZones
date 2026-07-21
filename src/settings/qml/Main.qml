@@ -858,9 +858,23 @@ PhosphorUi.SettingsAppWindow {
     // top-level row, no category headers or drill-downs. Advanced mode
     // keeps the full tree. The window-appearance leaf is registered as
     // Decorations → "General"; standing alone it must read "Appearance".
+    //
+    // The override titles are backed by a QtObject for the same reason
+    // aspectRatioLabelsObject is: the map itself is a `property var` bound to
+    // an object literal, which is frozen at construction time, so an i18n()
+    // call written inline would keep the language active during first
+    // instantiation. Each label is its own binding on the QtObject, which
+    // re-evaluates on QML's language-change signal and pushes a fresh map out
+    // through the literal.
+    QtObject {
+        id: flatTitleLabelsObject
+
+        readonly property string windowAppearance: i18n("Appearance")
+    }
+
     sidebar.flattenTree: !settingsController.advancedMode
     sidebar.flatTitleOverrides: ({
-            "window-appearance": i18n("Appearance")
+            "window-appearance": flatTitleLabelsObject.windowAppearance
         })
 
     // Simple/advanced mode toggle, pinned at the bottom of the sidebar — it
@@ -868,11 +882,20 @@ PhosphorUi.SettingsAppWindow {
     // header, using the rail's established label + switch row shape (the
     // same layout as the Snapping/Tiling enable rows). Fully controlled:
     // `checked` reads the controller and the toggle writes both the
-    // controller (live) and the QtCore.Settings store (persisted). Hidden
-    // in the compact icon-only rail (default footer contract for
-    // compact-unaware content).
+    // controller (live) and the QtCore.Settings store (persisted).
+    //
+    // Compact-aware: this toggle is the only route into advanced mode, so it
+    // must survive the icon-only rail. Declaring `property bool compact` opts
+    // out of the footer slot's default suppression (Sidebar.qml hides
+    // compact-unaware footers outright), and the sidebar feeds the live value
+    // in. The compact form drops the label and centres the switch, with the
+    // label moved into a hover tooltip the way SidebarRow does it.
     sidebar.footerContent: Component {
         Item {
+            id: advancedModeFooter
+
+            property bool compact: false
+
             implicitHeight: advancedModeRow.implicitHeight + Kirigami.Units.largeSpacing * 2
 
             RowLayout {
@@ -880,15 +903,28 @@ PhosphorUi.SettingsAppWindow {
 
                 anchors.fill: parent
                 // Match the rail rows' horizontal inset (SidebarRow pads by
-                // largeSpacing) and give the row breathing room above the
-                // window edge.
-                anchors.leftMargin: Kirigami.Units.largeSpacing
-                anchors.rightMargin: Kirigami.Units.largeSpacing
+                // largeSpacing, and drops to smallSpacing when compact) and
+                // give the row breathing room above the window edge.
+                anchors.leftMargin: advancedModeFooter.compact ? Kirigami.Units.smallSpacing : Kirigami.Units.largeSpacing
+                anchors.rightMargin: advancedModeFooter.compact ? Kirigami.Units.smallSpacing : Kirigami.Units.largeSpacing
                 anchors.topMargin: Kirigami.Units.largeSpacing
                 anchors.bottomMargin: Kirigami.Units.largeSpacing
-                spacing: Kirigami.Units.smallSpacing
+                // No inter-item gap in the compact rail: the switch is the only
+                // visible item there and the rail is barely wider than it, so a
+                // spacing slot would push the flanking spacers into shrinking
+                // the switch itself.
+                spacing: advancedModeFooter.compact ? 0 : Kirigami.Units.smallSpacing
+
+                // Leading spacer, compact only. Paired with the trailing one it
+                // centres the lone switch in the rail; the layout skips both
+                // while they are hidden.
+                Item {
+                    visible: advancedModeFooter.compact
+                    Layout.fillWidth: true
+                }
 
                 Label {
+                    visible: !advancedModeFooter.compact
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignVCenter
                     text: i18n("Advanced")
@@ -903,6 +939,22 @@ PhosphorUi.SettingsAppWindow {
                         settingsController.advancedMode = newValue;
                         uiModeSettings.advancedMode = newValue;
                     }
+
+                    HoverHandler {
+                        id: advancedModeHover
+                    }
+
+                    // Tooltip stands in for the hidden label, matching the
+                    // compact rail rows.
+                    ToolTip.text: i18n("Advanced")
+                    ToolTip.visible: advancedModeFooter.compact && advancedModeHover.hovered
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
+                }
+
+                // Trailing spacer, compact only. See the leading one above.
+                Item {
+                    visible: advancedModeFooter.compact
+                    Layout.fillWidth: true
                 }
             }
         }

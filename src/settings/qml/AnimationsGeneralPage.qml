@@ -150,15 +150,8 @@ SettingsFlickable {
         // animation at all. Relocated here from the old Animations App
         // Rules page — these are global config toggles, not per-window
         // rules, so they belong on the General page. Per-window
-        // overrides now live on the unified Rules page.
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            type: Kirigami.MessageType.Information
-            // Kirigami.InlineMessage defaults to hidden; opt in explicitly.
-            visible: true
-            text: i18n("Filtered windows are not animated. Use a Rule to keep a specific application animated even when a filter would exclude it.")
-        }
-
+        // overrides now live on the unified Rules page. The card carries its
+        // own explainer banner, so both hosts get it from one declaration.
         AnimationWindowFilterCard {
             cardSettings: page.appSettings
         }

@@ -104,23 +104,28 @@ void SearchController::setLimit(int n)
     recompute();
 }
 
+// The three content mutators below route through invalidate() rather than
+// setting m_indexDirty themselves: content added while a query is live (the
+// normal case for registerProvider on async provider warm-up) must refresh the
+// visible list, not sit stale until the next keystroke.
+
 void SearchController::setPageKeywords(const QString& pageId, const QStringList& keywords)
 {
     m_pageKeywords.insert(pageId, keywords);
-    m_indexDirty = true;
+    invalidate();
 }
 
 void SearchController::addEntry(const SearchEntry& entry)
 {
     m_staticEntries.push_back(entry);
-    m_indexDirty = true;
+    invalidate();
 }
 
 void SearchController::registerProvider(ISearchProvider* provider)
 {
     if (provider && !m_providers.contains(provider)) {
         m_providers.push_back(provider);
-        m_indexDirty = true;
+        invalidate();
     }
 }
 
@@ -139,9 +144,13 @@ QVector<SearchEntry> SearchController::buildIndex() const
     QVector<SearchEntry> entries;
     if (m_app == nullptr || m_app->registry() == nullptr) {
         // Defensive fallback (unreachable in practice — the app is alive for the
-        // controller's whole lifetime): return only static entries; page and
-        // provider entries both need the registry/app, which is unavailable here.
-        return entries + m_staticEntries;
+        // controller's whole lifetime). Return NOTHING rather than the static
+        // entries: without the registry there is no tier filter, so the
+        // condensed simple pages' rows and their advanced twins would ALL
+        // surface at once, which is exactly the duplication the filter below
+        // exists to prevent. An empty result list is the honest answer when the
+        // registry that defines reachability is gone.
+        return entries;
     }
 
     const QList<PageRegistry::Entry> pages = m_app->registry()->allPages();
@@ -264,18 +273,30 @@ void SearchController::recompute()
 
     const QVector<SearchEntry> ranked = SearchRanker::rank(m_query, m_index, m_limit);
 
-    m_resultsVariant.clear();
-    m_resultsVariant.reserve(ranked.size());
+    QVariantList nextResults;
+    nextResults.reserve(ranked.size());
     for (const SearchEntry& e : ranked) {
-        m_resultsVariant.push_back(toVariant(e));
+        nextResults.push_back(toVariant(e));
     }
 
     // "Did you mean …" only when a non-empty query found nothing. A limit of 0
     // empties results by the cap, not by absence of matches, so it must not
     // imply a typo.
-    m_suggestion = (ranked.isEmpty() && m_limit != 0 && !m_query.trimmed().isEmpty())
+    const QString nextSuggestion = (ranked.isEmpty() && m_limit != 0 && !m_query.trimmed().isEmpty())
         ? SearchRanker::closestTitle(m_query, m_index)
         : QString();
+
+    // Emit only on a real change. recompute() runs on every invalidate(), and
+    // visibleSetChanged fires it for mode flips that often do not alter what the
+    // current query matches — re-emitting there would rebuild the QML ListView
+    // and re-evaluate the results / resultCount / suggestion bindings for
+    // nothing. Compares the built variant list, so a reordering counts as a
+    // change while an identical rebuild does not.
+    if (nextResults == m_resultsVariant && nextSuggestion == m_suggestion) {
+        return;
+    }
+    m_resultsVariant = std::move(nextResults);
+    m_suggestion = nextSuggestion;
 
     Q_EMIT resultsChanged();
 }

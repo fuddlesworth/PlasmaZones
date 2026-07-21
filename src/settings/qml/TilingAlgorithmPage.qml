@@ -178,108 +178,41 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                // Live preview - centered at top
-                Item {
+                // Preview, description and picker — the shared block, also
+                // hosted by TilingSimplePage. Every layout input the user can
+                // edit feeds the preview from the live slider handle, so the
+                // diagram updates as the user drags any of them (master ratio
+                // and master count included, not just max windows). The
+                // "Max N windows" caption also tracks the windows slider.
+                AlgorithmPreviewCard {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.algorithmPreviewHeight + Kirigami.Units.gridUnit * 1.5
-
-                    // Preview container
-                    Item {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
-                        width: root.algorithmPreviewWidth
-                        height: root.algorithmPreviewHeight
-
-                        Rectangle {
-                            anchors.fill: parent
-                            color: Kirigami.Theme.backgroundColor
-                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-                            border.width: 1
-                            radius: Kirigami.Units.smallSpacing
-
-                            AlgorithmPreview {
-                                anchors.fill: parent
-                                anchors.margins: Kirigami.Units.smallSpacing
-                                appSettings: settingsController
-                                showLabel: false
-                                algorithmId: root.selectedAlgorithm
-                                algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
-                                // Every layout input the user can edit feeds the preview
-                                // from the live slider handle, so the diagram updates as the
-                                // user drags any of them (master ratio and master count
-                                // included, not just max windows). The "Max N windows"
-                                // caption below also tracks the windows slider.
-                                windowCount: previewWindowSlider.slider.value
-                                splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : (root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
-                                masterCount: root.algoSupportsMasterCount ? masterCountSlider.slider.value : 0
-                                customParams: root.liveCustomParams
-                                zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
-                            }
-                        }
-
-                        // Window count label below preview
-                        Label {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: parent.bottom
-                            anchors.topMargin: Kirigami.Units.smallSpacing
-                            text: i18np("Max %n window", "Max %n windows", previewWindowSlider.slider.value)
-                            font: Kirigami.Theme.fixedWidthFont
-                            opacity: 0.7
-                        }
-                    }
-                }
-
-                // Algorithm description (from script metadata)
-                Label {
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: root.algorithmPreviewWidth
-                    Layout.alignment: Qt.AlignHCenter
-                    text: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
-                    visible: text !== ""
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WordWrap
-                    opacity: 0.7
-                    font: Kirigami.Theme.smallFont
-                }
-
-                // Algorithm selection - uses LayoutComboBox with preview thumbnails
-                ColumnLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: Kirigami.Units.smallSpacing
-                    // Constant cap (not bound to parent.width) — binding a layout
-                    // child's max width to its enclosing layout's width feeds the
-                    // child size back into the same layout pass (recursive rearrange).
-                    Layout.maximumWidth: Kirigami.Units.gridUnit * 25
-
-                    LayoutComboBox {
-                        id: algorithmCombo
-
-                        Layout.alignment: Qt.AlignHCenter
-                        Layout.fillWidth: true
-                        Accessible.name: i18n("Tiling algorithm")
-                        appSettings: settingsController
-                        showPreview: true
-                        layoutFilter: 1 // Autotile algorithms only
-                        showNoneOption: false
-                        currentLayoutId: "autotile:" + root.effectiveAlgorithm
-                        onActivated: {
-                            // Extract algorithm ID from autotile: prefixed value
-                            let selectedId = algorithmCombo.currentValue;
-                            if (selectedId === "")
-                                selectedId = root.appSettingsObj.defaultAutotileAlgorithm;
-                            else if (selectedId.startsWith("autotile:"))
-                                selectedId = selectedId.substring(9);
-                            // Drive the page off the user's pick immediately, then
-                            // persist. Both go through root.appSettingsObj — NOT the
-                            // bare `appSettings`, which the combo shadows with the
-                            // controller in this scope (see appSettingsObj above).
-                            // Resetting global max-windows / split-ratio / master-count
-                            // here would clobber a sibling algorithm's per-algorithm slot.
-                            root.selectedAlgorithm = selectedId;
-                            root.writeSetting("Algorithm", selectedId, function (v) {
-                                root.appSettingsObj.defaultAutotileAlgorithm = v;
-                            });
-                        }
+                    previewWidth: root.algorithmPreviewWidth
+                    previewHeight: root.algorithmPreviewHeight
+                    algorithmId: root.selectedAlgorithm
+                    algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
+                    description: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
+                    currentAlgorithmId: root.effectiveAlgorithm
+                    captionText: i18np("Max %n window", "Max %n windows", previewWindowSlider.slider.value)
+                    windowCount: previewWindowSlider.slider.value
+                    splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : (root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
+                    supportsMasterCount: root.algoSupportsMasterCount
+                    masterCount: masterCountSlider.slider.value
+                    customParams: root.liveCustomParams
+                    zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
+                    onAlgorithmActivated: selectedId => {
+                        // An empty id means the combo's model rebuilt under the
+                        // selection — fall back to the persisted global default.
+                        const algoId = selectedId === "" ? root.appSettingsObj.defaultAutotileAlgorithm : selectedId;
+                        // Drive the page off the user's pick immediately, then
+                        // persist. Both go through root.appSettingsObj — NOT the
+                        // bare `appSettings`, which LayoutComboBox shadows with the
+                        // controller (see appSettingsObj above).
+                        // Resetting global max-windows / split-ratio / master-count
+                        // here would clobber a sibling algorithm's per-algorithm slot.
+                        root.selectedAlgorithm = algoId;
+                        root.writeSetting("Algorithm", algoId, function (v) {
+                            root.appSettingsObj.defaultAutotileAlgorithm = v;
+                        });
                     }
                 }
 

@@ -29,8 +29,15 @@ SettingsCard {
 
     /// The ISettings object holding the global animation profile.
     required property QtObject cardSettings
-    /// Extra rows appended below the timing editor.
-    default property alias extraContent: extraColumn.data
+    /// Extra rows appended below the timing editor. Aliased to `children`
+    /// rather than `data` so it agrees with the empty-slot collapse below,
+    /// which measures visual children: `data` also accepts non-Item objects
+    /// (Timer, Connections) that never reach `children`, which would leave a
+    /// populated slot measuring as empty. Both current hosts append only
+    /// visual rows, so this is behaviour-preserving, and a consumer that
+    /// tries to append a non-visual object now fails loudly at load instead
+    /// of silently landing in a slot that stays collapsed.
+    default property alias extraContent: extraColumn.children
 
     readonly property string _springPrefix: "spring:"
     readonly property bool _isSpring: card._isSpringCurve(card.cardSettings.animationEasingCurve)
