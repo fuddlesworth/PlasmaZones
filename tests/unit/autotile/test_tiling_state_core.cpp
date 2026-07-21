@@ -5,7 +5,6 @@
 #include <QSignalSpy>
 #include <QJsonObject>
 #include <QJsonArray>
-#include <QScopedPointer>
 
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/TilingState.h>
