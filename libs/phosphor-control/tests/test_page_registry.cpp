@@ -404,6 +404,41 @@ private Q_SLOTS:
         // Unknown id: warn-and-ignore, no crash.
         reg.setPageVisibility(QStringLiteral("no-such-page"), PageRegistry::PageVisibility::SimpleOnly);
     }
+
+    void restampAnnouncesTheVisibleSetWithoutFakingAModeFlip()
+    {
+        // showAdvancedChanged is the showAdvanced Q_PROPERTY's NOTIFY, so it
+        // must fire ONLY for a real mode flip; a per-entry restamp announces
+        // itself on visibleSetChanged instead. Without the split, every
+        // binding on the property re-evaluates and any consumer reading it as
+        // "the user switched modes" acts on a change that never happened.
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+
+        QSignalSpy modeSpy(&reg, &PageRegistry::showAdvancedChanged);
+        QSignalSpy visibleSpy(&reg, &PageRegistry::visibleSetChanged);
+
+        // A genuine mode flip announces both: the property really did change,
+        // and so did the visible set.
+        reg.setShowAdvanced(false);
+        QCOMPARE(modeSpy.count(), 1);
+        QCOMPARE(visibleSpy.count(), 1);
+
+        // A restamp changes the visible set but NOT the mode.
+        reg.setPageVisibility(QStringLiteral("full"), PageRegistry::PageVisibility::Always);
+        QCOMPARE(modeSpy.count(), 1);
+        QCOMPARE(visibleSpy.count(), 2);
+
+        // Restamping to the tier it already has is a no-op — no spurious
+        // rebuild for consumers caching a filtered view.
+        reg.setPageVisibility(QStringLiteral("full"), PageRegistry::PageVisibility::Always);
+        QCOMPARE(visibleSpy.count(), 2);
+
+        // An unknown id is warn-and-ignore, not an announcement.
+        reg.setPageVisibility(QStringLiteral("no-such-page"), PageRegistry::PageVisibility::SimpleOnly);
+        QCOMPARE(modeSpy.count(), 1);
+        QCOMPARE(visibleSpy.count(), 2);
+    }
 };
 
 QTEST_MAIN(TestPageRegistry)

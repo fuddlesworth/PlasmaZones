@@ -144,12 +144,14 @@ public:
     bool registerPage(Entry entry);
 
     /// Stamp a page's simple/advanced tier after it has been registered.
-    /// No-op (with a warning) for an unknown id. Kept separate from
-    /// registerPage so the classification lives in one post-build pass in
-    /// the app rather than threaded through every registration call site.
-    /// Intended to run at startup before the first paint — it does not emit
-    /// a change signal of its own (the initial showAdvanced push drives the
-    /// first filtered build).
+    /// No-op (with a warning) for an unknown id, and a no-op when the tier is
+    /// already what you are setting. Kept separate from registerPage so the
+    /// classification lives in one post-build pass in the app rather than
+    /// threaded through every registration call site. Normally runs at startup
+    /// before the first paint, but a real change emits visibleSetChanged() so
+    /// consumers that cache a tier-filtered view stay correct if it is called
+    /// later. It does NOT emit showAdvancedChanged: the mode itself is
+    /// untouched, only this one entry's tier.
     void setPageVisibility(const QString& id, PageVisibility visibility);
 
     bool showAdvanced() const;
@@ -200,6 +202,16 @@ public:
 Q_SIGNALS:
     void pageRegistered(const QString& id);
     void showAdvancedChanged();
+    /// The set of entries visible under the current mode may have changed —
+    /// either the mode flipped or an entry was restamped. Consumers that
+    /// cache a tier-filtered view (SearchController's index, any external
+    /// tree mirror) should rebuild on this rather than on
+    /// showAdvancedChanged, which fires only for a genuine mode flip.
+    /// Kept distinct because showAdvancedChanged is the NOTIFY of the
+    /// showAdvanced Q_PROPERTY: firing it when the property has not changed
+    /// would re-evaluate every binding on it and mislead any consumer that
+    /// reasonably reads it as "the user switched modes".
+    void visibleSetChanged();
 
 private:
     /// True iff `v` should be shown under the current `m_showAdvanced` mode

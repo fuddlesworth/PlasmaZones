@@ -46,7 +46,10 @@ SearchController::SearchController(ApplicationController* app, QObject* parent)
     // mode's set. Wired here rather than in each app because the filter
     // itself lives in this library.
     if (m_app != nullptr && m_app->registry() != nullptr) {
-        connect(m_app->registry(), &PageRegistry::showAdvancedChanged, this, &SearchController::invalidate);
+        // visibleSetChanged rather than showAdvancedChanged: it covers both a
+        // mode flip and a per-entry setPageVisibility restamp, which are the
+        // two things that change what the tier filter admits.
+        connect(m_app->registry(), &PageRegistry::visibleSetChanged, this, &SearchController::invalidate);
         // The index also derives its Page entries from the catalogue, which
         // GROWS at runtime (post-startup registerPage is a supported path),
         // so a late-registered page must reach the cache too.

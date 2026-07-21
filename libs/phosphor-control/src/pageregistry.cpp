@@ -74,10 +74,11 @@ void PageRegistry::setPageVisibility(const QString& id, PageVisibility visibilit
     m_pages[it.value()].visibility = visibility;
     // Announce the restamp: consumers that FILTER on the tier (the sidebar's
     // tree accessors, SearchController's cached index) have no other way to
-    // learn an entry changed tier. Reuses showAdvancedChanged rather than
-    // adding a second signal — every consumer of one wants the other, and
-    // the semantics are identical: "the visible set may have changed".
-    Q_EMIT showAdvancedChanged();
+    // learn an entry changed tier. Deliberately NOT showAdvancedChanged —
+    // that is the showAdvanced Q_PROPERTY's NOTIFY, and the mode has not
+    // changed here. Firing it would re-evaluate every binding on the property
+    // and lie to any consumer that reads it as "the user switched modes".
+    Q_EMIT visibleSetChanged();
 }
 
 bool PageRegistry::showAdvanced() const
@@ -92,6 +93,9 @@ void PageRegistry::setShowAdvanced(bool showAdvanced)
     }
     m_showAdvanced = showAdvanced;
     Q_EMIT showAdvancedChanged();
+    // A mode flip also changes the visible set, so tier-filtering caches
+    // rebuild off the same signal they use for a per-entry restamp.
+    Q_EMIT visibleSetChanged();
 }
 
 bool PageRegistry::modeAllows(PageVisibility v) const
