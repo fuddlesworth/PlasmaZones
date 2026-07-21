@@ -6,7 +6,7 @@
  * @brief Integration tests for AutotileEngine + virtual screen interaction
  *
  * Covers:
- * - State creation with virtual screen IDs (tilingStateForScreen / stateForKey)
+ * - State creation with virtual screen IDs (tilingStateForScreen)
  * - Retile triggers when virtual screen geometry changes
  * - State cleanup when virtual screen config is removed
  * - Per-screen autotile overrides resolved correctly for virtual screen IDs
@@ -144,8 +144,8 @@ private Q_SLOTS:
 
     void perDesktopState_virtualScreenId_createsDistinctStates()
     {
-        // stateForKey is private; test per-desktop state via the public API:
-        // setCurrentDesktop() + tilingStateForScreen().
+        // Per-desktop state via the public API: setCurrentDesktop() +
+        // tilingStateForScreen().
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");

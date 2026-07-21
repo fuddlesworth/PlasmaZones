@@ -1245,15 +1245,6 @@ private:
     }
 
     /**
-     * @brief Get PhosphorTiles::TilingState for an explicit key (bypasses current desktop/activity)
-     *
-     * Creates the state if it doesn't exist. Used by loadState() to restore states
-     * for arbitrary desktop/activity combinations without temporarily mutating
-     * m_context's current desktop/activity.
-     */
-    PhosphorTiles::TilingState* stateForKey(const PhosphorEngine::TilingStateKey& key);
-
-    /**
      * @brief Which states a global propagate writes.
      *
      * CurrentContext is the passive refresh: only the current desktop/activity's

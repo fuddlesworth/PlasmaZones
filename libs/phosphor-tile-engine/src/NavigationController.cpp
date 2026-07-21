@@ -423,9 +423,9 @@ QString NavigationController::crossDesktopFocusTarget(const QString& sourceScree
     }
     const PhosphorEngine::TilingStateKey targetKey{sourceScreenId, targetDesktop,
                                                    m_engine->m_context.currentActivity()};
-    // Non-creating lookup: stateForKey would CREATE and persist an empty
-    // TilingState for the target desktop on a miss, leaking a state on every
-    // cross-desktop focus probe to a desktop with no tiled windows.
+    // Non-creating lookup on purpose: a find-or-create would CREATE and persist
+    // an empty TilingState for the target desktop on a miss, leaking a state on
+    // every cross-desktop focus probe to a desktop with no tiled windows.
     PhosphorTiles::TilingState* targetState = m_engine->m_states.stateForKey(targetKey);
     if (!targetState) {
         return QString();

@@ -1272,28 +1272,6 @@ void AutotileEngine::dropStashedScriptStatesForAlgorithmChange(const QString& sc
     });
 }
 
-PhosphorTiles::TilingState* AutotileEngine::stateForKey(const TilingStateKey& key)
-{
-    if (key.screenId.isEmpty()) {
-        return nullptr;
-    }
-
-    return m_states.forKey(key, [&]() -> PhosphorTiles::TilingState* {
-        // Reject unknown screens (same validation as tilingStateForScreen)
-        if (!isKnownScreen(key.screenId)) {
-            qCWarning(PhosphorTileEngine::lcTileEngine)
-                << "AutotileEngine::stateForKey: unknown screen" << key.screenId;
-            return nullptr;
-        }
-
-        auto* state = new PhosphorTiles::TilingState(key.screenId, this);
-        state->setMasterCount(m_config->masterCount);
-        state->setSplitRatio(m_config->splitRatio);
-        restoreStashedScriptState(key, state);
-        return state;
-    });
-}
-
 QSet<int> AutotileEngine::desktopsWithActiveState() const
 {
     QSet<int> out;
