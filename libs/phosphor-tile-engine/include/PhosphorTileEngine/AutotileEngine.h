@@ -1509,9 +1509,11 @@ private:
     // per-key tag then adjudicates lazily at the moment a state takes a bag,
     // which is the second line of defence rather than the only one.
     //
-    // Three screen-id-scoped drops exist, none of them an algorithm comparison:
-    // orphaned virtual screens in setAutotileScreens, that same method's purge
-    // of screens no longer connected, and the desktop / activity prunes.
+    // Four unconditional drops exist, none of them an algorithm comparison. Two
+    // are screen-id-scoped: orphaned virtual screens in setAutotileScreens, and
+    // that same method's purge of screens no longer connected. The other two key
+    // on the part of the context that died rather than on the screen, in
+    // pruneStatesForDesktop and pruneStatesForActivities.
     //
     // Entries are reclaimed by a harvest that finds an EMPTY bag, which erases
     // rather than inserts (see stashScriptState). That is also what stops a bag
@@ -1530,11 +1532,13 @@ private:
     // in an opaque bag. Losing it on a toggle rebuilt a uniform layout, which is
     // the same complaint the bag's loss produced.
     //
-    // The tree moves in and out whole. It is never serialized: this is a rescue
-    // across a teardown, entirely within one session, so a JSON round trip would
-    // buy nothing and could only lose — SplitTree::fromJson clamps ratios and
-    // truncates past its deserialization caps, which are bounds for untrusted
-    // on-disk input rather than for a tree the engine owned a moment ago.
+    // The tree moves in and out whole, and there is no serialization to move it
+    // through: this is a rescue across a teardown, entirely within one session,
+    // so a JSON round trip would buy nothing and could only lose. The tree's
+    // serializer used to impose depth, node-count and ratio-clamping caps, which
+    // are bounds for untrusted on-disk input rather than for a tree the engine
+    // owned a moment ago. It was removed with the rest of the state
+    // serialization once nothing persisted a TilingState.
     //
     // Owning a unique_ptr makes the entry move-only, which is why the stash is a
     // std::unordered_map: Qt's containers are implicitly shared and require
@@ -1553,11 +1557,11 @@ private:
     std::unordered_map<PhosphorEngine::TilingStateKey, StashedScriptState> m_scriptStateStash;
 
     /// Rescue @p state's script-state bag and split tree into m_scriptStateStash
-    /// under @p key. Takes a mutable state because the tree is MOVED out of it —
-    /// the state is being destroyed, so nothing else will read it.
-    /// tagged with the screen's CURRENT effective algorithm. Call before the
-    /// state is destroyed and before any override drop that would change what
-    /// "effective" resolves to. An EMPTY bag erases the key's entry instead of
+    /// under @p key, tagged with the screen's CURRENT effective algorithm. Takes
+    /// a mutable state because the tree is MOVED out of it — the state is being
+    /// destroyed, so nothing else will read it. Call before the state is
+    /// destroyed and before any override drop that would change what "effective"
+    /// resolves to. An EMPTY bag erases the key's entry instead of
     /// inserting: the state is the truth for its key, so emptiness must not be
     /// shadowed by something stashed earlier.
     void stashScriptState(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state);

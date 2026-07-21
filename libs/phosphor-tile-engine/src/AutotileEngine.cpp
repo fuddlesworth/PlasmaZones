@@ -1274,8 +1274,10 @@ void AutotileEngine::restoreStashedScriptState(const TilingStateKey& key, Phosph
 void AutotileEngine::restoreStashedSplitTree(const TilingStateKey& key, PhosphorTiles::TilingState* state,
                                              const PhosphorTiles::TilingAlgorithm* algo)
 {
-    // Only when the state has no tree of its own: a live tree is always newer
-    // than a stashed one, exactly as for the bag.
+    // Only memory algorithms own a tree at all, so there is nothing to hand back
+    // to any other kind. Note this deliberately does NOT skip a state that
+    // already holds a tree — see the replace-rather-than-fill note below, which
+    // is why the bag's "a live one is always newer" rule does not apply here.
     if (!state || !algo || !algo->supportsMemory()) {
         return;
     }

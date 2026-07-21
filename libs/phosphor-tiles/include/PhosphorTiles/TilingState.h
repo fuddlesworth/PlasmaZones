@@ -413,8 +413,9 @@ public:
      * Enforces the AutotileDefaults::ScriptState* limits (compact-JSON byte
      * cap, nesting depth, total key count) and strips non-finite numbers.
      * Returns the sanitized object, or an empty object if the bag exceeds the
-     * byte cap and can't be safely stored. Shared by @c fromJson (load path)
-     * and the scripted-algorithm write-back path so both apply identical rules.
+     * byte cap and can't be safely stored. Applied on the scripted-algorithm
+     * write-back path, which is the only place an UNTRUSTED bag originates. The
+     * engine's stash hands back a bag that went through here on its way in.
      */
     static QJsonObject sanitizeScriptState(const QJsonObject& state);
 
@@ -480,7 +481,7 @@ private:
      */
     void forEachTiledWindow(const std::function<bool(const QString& windowId, int tiledIndex)>& func) const;
 
-    // ── Clamping helpers (DRY: shared by setters and fromJson) ──
+    // ── Clamping helpers (DRY: shared by the setters and the script-state sanitizer) ──
     static int clampMasterCount(int value);
     static qreal clampSplitRatio(qreal value);
 
