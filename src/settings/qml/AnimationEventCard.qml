@@ -67,17 +67,19 @@ Item {
     /// switch, and would clobber divergent mirror values (or re-dirty the
     /// config immediately after a Discard). Writing through the same call
     /// the user's action triggers has none of those failure modes.
+    /// Deliberately `var` (a JS array), not `list<string>`: _writePaths does
+    /// `[eventPath].concat(mirrorPaths)`, and Array.prototype.concat SPREADS
+    /// only true JS arrays. A QML list proxy would be appended as one element,
+    /// silently turning every mirror write into a write to a bogus path.
     property var mirrorPaths: []
 
     /// Raw stored profile per write path, refreshed by refreshFromTree.
     /// _setOverrideMerged reads it to merge over each path's own stored
-    /// fields. The cache is what makes the write loop see a CONSISTENT
-    /// pre-loop snapshot: setOverride emits overrideChanged on a direct
-    /// connection, so a refresh would otherwise re-enter partway through the
-    /// loop and later paths would merge over state the earlier writes already
-    /// moved. _committing suppresses that re-entry, and this holds the values
-    /// the loop started from.
-    property var _pathCurves: ({})
+    /// fields. It exists to avoid DISK I/O: the writer runs from the duration
+    /// slider's valueChanged, i.e. every tick of a drag, and reading each
+    /// path's stored profile there meant one synchronous file open per path
+    /// per tick. Re-entrancy is _committing's job, not this cache's.
+    property var _pathProfiles: ({})
 
     /// True while _setOverrideMerged is writing, so the overrideChanged each
     /// write emits does not re-enter refreshFromTree mid-loop.
@@ -155,9 +157,12 @@ Item {
     /// Override on, commitOverride persists those stale values while the
     /// italic "Current:" line beside them reads the new ones.
     ///
-    /// Costs one cached chain walk and no file reads, so the N-round-trip
-    /// storm the bump-only handler was guarding against stays prevented: a
-    /// card that owns an override short-circuits before the walk.
+    /// Costs one chain walk and no ADDITIONAL walk beyond the one the "Current:"
+    /// label already triggers, so the N-round-trip storm the bump-only handler
+    /// was guarding against stays prevented: a card that owns an override
+    /// short-circuits before the walk. The walk is registry-served in the app,
+    /// though resolvedProfile does fall back to a per-ancestor file read when a
+    /// level has no registry entry.
     function _reseedFromInherited() {
         root._inheritRev = root._inheritRev + 1;
         if (root.overrideEnabled)
@@ -285,13 +290,37 @@ Item {
     function _setOverrideMerged(profile, curveFromCommit) {
         const paths = root._writePaths;
         // Suppress the per-write refresh: setOverride emits overrideChanged
-        // synchronously, so without this the card re-reads every path's
-        // profile from disk once per path per tick of a duration drag. One
-        // refresh after the loop sees the same end state for a fraction of
-        // the cost.
+        // synchronously, so without this an N-path card pays N refreshes per
+        // tick of a duration drag, each re-reading every path. One refresh
+        // after the loop sees the same end state. For the common N=1 card this
+        // is a wash (one emit, one refresh, either way) — the saving is real
+        // only for a mirrored card, which is why the flag's REAL job is the
+        // consistency of the loop rather than the saving.
+        // try/finally, not a straight-line set/clear pair: QML has no RAII, and
+        // anything that throws inside the loop (a Q_INVOKABLE argument
+        // conversion, or settingsController resolving undefined during a page
+        // teardown) would otherwise leave this latched TRUE. That is not
+        // transient — onOverrideChanged would early-return for the rest of the
+        // session, so the card would stop tracking Discard, profile switches
+        // and external edits while still writing on every slider tick, and the
+        // list's Loaders latch built and never unload, so it is never
+        // reconstructed to recover.
         root._committing = true;
+        try {
+            root._setOverrideMergedLoop(profile, curveFromCommit);
+        } finally {
+            root._committing = false;
+        }
+        root._inheritRev++;
+        root.refreshFromTree();
+    }
+
+    /// The write loop itself. Split out so _setOverrideMerged's try/finally
+    /// reads as one statement and the flag's lifetime is obvious.
+    function _setOverrideMergedLoop(profile, curveFromCommit) {
+        const paths = root._writePaths;
         for (var i = 0; i < paths.length; ++i) {
-            var raw = root._pathCurves[paths[i]] || ({});
+            var raw = root._pathProfiles[paths[i]] || ({});
             var perPath = Object.assign({}, raw);
             Object.assign(perPath, profile);
             if (curveFromCommit !== undefined)
@@ -302,9 +331,6 @@ Item {
                 delete perPath.curve;
             settingsController.animationsPage.setOverride(paths[i], perPath);
         }
-        root._committing = false;
-        root._inheritRev++;
-        root.refreshFromTree();
     }
 
     function _clearOverrideOnAll() {
@@ -453,8 +479,13 @@ Item {
 
     function refreshFromTree() {
         var raw = settingsController.animationsPage.rawProfile(root.eventPath);
-        // _inheritRev is bumped BEFORE every refreshFromTree call, so the
-        // cached walk is current and a second C++ chain walk is redundant.
+        // Every caller that can MOVE the timing chain bumps _inheritRev first
+        // (_setOverrideMerged, onOverrideChanged), so the cached walk is
+        // current here and a second C++ chain walk would be redundant. The two
+        // that do not bump cannot move it: Component.onCompleted runs before
+        // the binding has ever evaluated, and onShaderProfileChanged moves the
+        // shader tree, which the timing chain does not read. A fifth caller
+        // that can move the chain MUST bump before calling.
         var resolved = root._inheritResolved;
         var hasRaw = raw && Object.keys(raw).length > 0;
         // The card's "Override" toggle reflects ANY direct override at
@@ -506,7 +537,7 @@ Item {
         var cache = {};
         for (var pi = 0; pi < root._writePaths.length; ++pi)
             cache[root._writePaths[pi]] = settingsController.animationsPage.rawProfile(root._writePaths[pi]) || ({});
-        root._pathCurves = cache;
+        root._pathProfiles = cache;
         root._refreshMirrorDivergence();
     }
 
@@ -761,7 +792,7 @@ Item {
                 Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Warning
                 visible: root._mirrorsDiverged
-                text: i18n("Another event this card controls is set differently right now, and this card shows only one of them. The next change you make here applies this card's duration and shader effect to both.")
+                text: i18np("Another event this card controls is set differently right now, and this card shows only one of them. The next change you make here applies this card's duration and shader effect to both.", "Other events this card controls are set differently right now, and this card shows only one of them. The next change you make here applies this card's duration and shader effect to all %n of them.", root.mirrorPaths.length)
             }
 
             Label {

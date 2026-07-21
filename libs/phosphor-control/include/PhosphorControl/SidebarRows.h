@@ -103,13 +103,14 @@ public:
      *
      *  Returns @p currentParentId when the rail can still render it, and an
      *  empty string when it must fall back to the top level. A scope stops
-     *  being renderable in two ways, and the rail is wrong in a different way
-     *  for each: if the tier filter hides the parent itself, the rail keeps
-     *  rendering a scope the mode has abolished; if the filter hides every
-     *  navigable descendant instead, the parent survives and the rail collapses
-     *  to a lone Back button over an empty list. build() already refuses to
-     *  OFFER a category that leads nowhere, so a rail that stays inside one is
-     *  inconsistent with the rows it draws.
+     *  being renderable in three ways, and the rail is wrong differently for
+     *  each: the tier filter hides the parent itself, so the rail renders a
+     *  scope the mode has abolished; the filter leaves the parent but hides
+     *  every navigable descendant, so the rail collapses to a lone Back button
+     *  over an empty list; or exactly ONE navigable descendant remains, which
+     *  build() flattens into a direct row one level up rather than offering as
+     *  a drill target, so the rail would be sitting in a scope its own rows do
+     *  not present as enterable.
      *
      *  Lives here rather than in QML because it is the same rule build() walks,
      *  and the lib has no QML test harness, so a second copy in JS would ship

@@ -279,8 +279,14 @@ private Q_SLOTS:
         SidebarRows rows;
         rows.setRegistry(&r);
         QVERIFY(reg(r, QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}, false, false, PV::AdvancedOnly));
+        // Two leaves so the scope is a genuine drill target before the flip:
+        // one would be flattened into a direct row instead (see
+        // resolveDrillScopeRejectsAScopeDownToASingleDescendant), which would
+        // make this test pass for the wrong reason.
         QVERIFY(reg(r, QStringLiteral("cat.leaf"), QStringLiteral("cat"), QStringLiteral("Leaf"),
                     QStringLiteral("qrc:/L.qml")));
+        QVERIFY(reg(r, QStringLiteral("cat.leaf2"), QStringLiteral("cat"), QStringLiteral("Leaf2"),
+                    QStringLiteral("qrc:/L2.qml")));
 
         QCOMPARE(rows.resolveDrillScope(QStringLiteral("cat")), QStringLiteral("cat"));
         r.setShowAdvanced(false);
@@ -290,11 +296,10 @@ private Q_SLOTS:
     void resolveDrillScopeRejectsAScopeWithNothingLeftUnderIt()
     {
         // The DISTINCT second failure: the parent survives the filter but
-        // every navigable page beneath it is hidden, so the rail collapses to
-        // a lone Back button over an empty list. build() already refuses to
-        // OFFER such a category (see treeSkipsADrillCategoryThatLeadsNowhere),
-        // so a rail that stays inside one disagrees with its own rows.
-        // Deleting the descendant walk leaves this the only failing case.
+        // every navigable page beneath it is hidden. Two advanced leaves, so
+        // the pre-state is a genuine drill target (build() flattens a
+        // one-descendant category rather than offering it), and simple mode
+        // then removes both.
         PageRegistry r;
         SidebarRows rows;
         rows.setRegistry(&r);
@@ -302,10 +307,39 @@ private Q_SLOTS:
         QVERIFY(reg(r, QStringLiteral("cat.sub"), QStringLiteral("cat"), QStringLiteral("Sub"), {}));
         QVERIFY(reg(r, QStringLiteral("cat.sub.adv"), QStringLiteral("cat.sub"), QStringLiteral("Adv"),
                     QStringLiteral("qrc:/A.qml"), false, false, PV::AdvancedOnly));
+        QVERIFY(reg(r, QStringLiteral("cat.sub.adv2"), QStringLiteral("cat.sub"), QStringLiteral("Adv2"),
+                    QStringLiteral("qrc:/B.qml"), false, false, PV::AdvancedOnly));
 
-        // Reachable while the leaf shows, including through the intermediate
-        // non-navigable category.
+        // Reachable while both leaves show, including through the intermediate
+        // non-navigable category, which is what makes the walk recursive.
         QCOMPARE(rows.resolveDrillScope(QStringLiteral("cat")), QStringLiteral("cat"));
+        r.setShowAdvanced(false);
+        QCOMPARE(rows.resolveDrillScope(QStringLiteral("cat")), QString());
+    }
+
+    void resolveDrillScopeRejectsAScopeDownToASingleDescendant()
+    {
+        // build() FLATTENS a category with exactly one navigable descendant
+        // into a direct row one level up (sidebarrows.cpp: `found.size() == 1`
+        // sets isDrill = false). A rail left drilled into such a category shows
+        // a Back button over one row that the level above renders directly, so
+        // the rail would disagree with its own rows. Counting only to one
+        // instead of two is exactly that bug, and this is the case that
+        // distinguishes them.
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        QVERIFY(reg(r, QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}));
+        QVERIFY(
+            reg(r, QStringLiteral("cat.a"), QStringLiteral("cat"), QStringLiteral("A"), QStringLiteral("qrc:/A.qml")));
+        QVERIFY(reg(r, QStringLiteral("cat.b"), QStringLiteral("cat"), QStringLiteral("B"),
+                    QStringLiteral("qrc:/B.qml"), false, false, PV::AdvancedOnly));
+
+        // Two navigable children: a real drill target.
+        QCOMPARE(rows.resolveDrillScope(QStringLiteral("cat")), QStringLiteral("cat"));
+
+        // Simple mode leaves exactly one, so build() would render "A" directly
+        // and never offer "cat" as a drill.
         r.setShowAdvanced(false);
         QCOMPARE(rows.resolveDrillScope(QStringLiteral("cat")), QString());
     }

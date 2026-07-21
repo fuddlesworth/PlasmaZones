@@ -318,8 +318,11 @@ ColumnLayout {
         PZCommon.CategoryMenuButton {
             // SettingsRow lays its default children out in a plain Row
             // positioner, so Layout.* attached properties are inert here —
-            // size explicitly or the button sits at implicit width.
-            width: Kirigami.Units.gridUnit * 16
+            // size explicitly or the button sits at implicit width. Clamped to
+            // the same 45% of the row that SettingsRow caps its control slot
+            // at: the Row neither clips nor shrinks its children, so a fixed
+            // 16 grid units overhangs the right margin on a narrow window.
+            width: Math.min(Kirigami.Units.gridUnit * 16, addPackRow.width * 0.45)
             enabled: addPackRow._addable.length > 0
             items: addPackRow._addable
             currentId: ""

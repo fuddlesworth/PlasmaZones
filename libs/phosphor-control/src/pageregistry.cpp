@@ -231,9 +231,21 @@ bool PageRegistry::validateCounterparts() const
             ok = false;
             continue;
         }
+        const Entry& other = m_pages.at(it.value());
+        // Counterparts are the two modes' faces of ONE surface, so the mapping
+        // has to hold in both directions. A one-way declaration redirects the
+        // outbound flip correctly and then dead-ends the return flip on the
+        // generic fallback — which looks exactly like correct operation from
+        // the outbound side, so nothing else would ever surface it.
+        if (other.counterpartId != e.id) {
+            qWarning() << "PageRegistry: page" << e.id << "declares counterpart" << e.counterpartId
+                       << "but that page declares"
+                       << (other.counterpartId.isEmpty() ? QStringLiteral("none") : other.counterpartId)
+                       << "— counterparts must point back at each other or the return mode flip falls back";
+            ok = false;
+        }
         // Same tier means the flip lands on something the new mode hides too,
         // so the redirect cannot help. Always a declaration bug.
-        const Entry& other = m_pages.at(it.value());
         if (other.visibility == e.visibility) {
             qWarning() << "PageRegistry: page" << e.id << "and its counterpart" << e.counterpartId
                        << "share a visibility tier — the counterpart cannot be the other mode's face of this page";
@@ -242,7 +254,11 @@ bool PageRegistry::validateCounterparts() const
             // relationship already known broken, and the reachability block
             // below would re-derive the same fact and report it as an ANCESTOR
             // filtering the counterpart out — sending a maintainer hunting for
-            // a filtered category that need not exist.
+            // a filtered category that need not exist. Reciprocity is checked
+            // ABOVE rather than below, because it is orthogonal to tier: a pair
+            // that is both same-tier and one-way has two independent faults and
+            // must report both, or the maintainer fixes one, re-runs, and
+            // discovers the other.
             continue;
         }
         // A counterpart with no QML of its own is a category: the mode gate
@@ -275,18 +291,6 @@ bool PageRegistry::validateCounterparts() const
                            << "— an ancestor category filters it out, so the redirect falls back anyway";
                 ok = false;
             }
-        }
-        // Counterparts are the two modes' faces of ONE surface, so the mapping
-        // has to hold in both directions. A one-way declaration redirects the
-        // outbound flip correctly and then dead-ends the return flip on the
-        // generic fallback — which looks exactly like correct operation from
-        // the outbound side, so nothing else would ever surface it.
-        if (other.counterpartId != e.id) {
-            qWarning() << "PageRegistry: page" << e.id << "declares counterpart" << e.counterpartId
-                       << "but that page declares"
-                       << (other.counterpartId.isEmpty() ? QStringLiteral("none") : other.counterpartId)
-                       << "— counterparts must point back at each other or the return mode flip falls back";
-            ok = false;
         }
     }
     return ok;
@@ -347,7 +351,7 @@ QList<PageRegistry::Entry> PageRegistry::topLevelPages() const
 QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) const
 {
     QList<Entry> out;
-    // No worst-case reserve: firstLeafAnyMode (settingscontroller_pagestate.cpp)
+    // No worst-case reserve: a recursive per-node caller in a consuming app
     // calls this per node as it recurses, so reserving the whole catalogue per
     // call allocates room for every page to hold a handful of children, over
     // and over. Same reasoning as visibleChildPages below.

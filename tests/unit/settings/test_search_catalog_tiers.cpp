@@ -104,7 +104,7 @@ struct Block
 /// LIMITATION: braces are counted lexically, including any inside string
 /// literals and JS expression bodies. One unbalanced brace in a QML string
 /// would shift every block boundary after it and silently mis-attribute
-/// anchors in either direction. Neither parsed file contains one today, and
+/// anchors in either direction. No parsed file contains one today, and
 /// theParserFindsAdvancedAnchors' per-file assertions would fail loudly if a
 /// shift ever collapsed a file's parse. Teach this to skip quoted spans before
 /// pointing it at a third file.
@@ -365,6 +365,26 @@ private Q_SLOTS:
         static const QRegularExpression kCall(
             QStringLiteral("\\badd(?:Setting|Section)\\(\\s*search\\s*,\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
         QSet<QString> unregistered;
+        // setPageKeywords takes the page id directly. A stale id there costs
+        // the page its entire synonym list SILENTLY: the call never reaches
+        // tierAllows, so nothing warns and the page just stops answering to
+        // its synonyms.
+        static const QRegularExpression kKeywords(
+            QStringLiteral("\\bsetPageKeywords\\(\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
+        int keywordIds = 0;
+        auto kit = kKeywords.globalMatch(catalogSrc);
+        while (kit.hasNext()) {
+            const QString pageId = kit.next().captured(1);
+            ++keywordIds;
+            if (!known.contains(pageId)) {
+                unregistered.insert(pageId);
+            }
+        }
+        // Same vacuity guard as the id slice: a regex that silently stops
+        // matching must fail loudly rather than validate nothing.
+        QVERIFY2(keywordIds > 20, // vacuity guard
+                 qPrintable(QStringLiteral("setPageKeywords parse yielded only %1 ids").arg(keywordIds)));
+
         auto it = kCall.globalMatch(catalogSrc);
         while (it.hasNext()) {
             const QString pageId = it.next().captured(1);

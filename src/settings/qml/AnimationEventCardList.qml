@@ -29,7 +29,7 @@ import "SearchAnchorHelpers.js" as SearchAnchors
  *       headerText: i18n("…optional orientation banner…")
  *       eventModel: [ { eventPath, eventLabel, isParentNode }, ... ]
  *       simpleTiming: true                       // optional, see below
- *       headerComponent: Component { ... }       // optional, replaces headerText
+ *       headerComponent: Component { ... }       // optional, rendered BELOW headerText
  *   }
  */
 SettingsFlickable {

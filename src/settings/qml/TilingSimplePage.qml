@@ -80,12 +80,13 @@ SettingsFlickable {
     // guard).
     //
     // Raised and lowered around the setter call in ONE statement block, which
-    // is only correct because TilingAlgorithmController's setters emit
-    // changed() synchronously (tilingalgorithmcontroller.cpp: the Q_EMIT sits
-    // directly after the write, same thread, direct connection). If a setter
-    // ever grows a save timer or a queued emit, the flag would already be down
-    // when the signal lands and _seedFromAlgorithm would fight the drag —
-    // lower it from Qt.callLater at that point, not before.
+    // is only correct because the signal it guards against,
+    // autotilePerAlgorithmSettingsChanged, is emitted SYNCHRONOUSLY by
+    // Settings::setAutotilePerAlgorithmSettings (settings.cpp, the Q_EMIT sits
+    // directly after the store write, same thread, direct connection). If that
+    // setter ever grows a save timer or a queued emit, the flag would already
+    // be down when the signal lands and _seedFromAlgorithm would fight the
+    // drag — lower it from Qt.callLater at that point, not before.
     property bool _committingSlot: false
 
     onSelectedAlgorithmChanged: _seedFromAlgorithm()

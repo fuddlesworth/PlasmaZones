@@ -33,7 +33,7 @@ namespace PlasmaZones {
 namespace {
 
 // Reset/Discard-only helpers: nothing outside this TU uses them, so internal
-// linkage is the right default. (isOrderingPage / isShortcutsPage are NOT here:
+// linkage is the right default. (orderingPageKind / isShortcutsPage are NOT here:
 // they were an anonymous namespace in _pagestate.cpp and moved to
 // settingscontroller_pagekeys.h when this file was split out of it, so the
 // dirty check and the reset read one definition.)
@@ -280,6 +280,9 @@ void SettingsController::resetPage(const QString& page)
             // cannot reach.
             qCWarning(PlasmaZones::lcCore)
                 << "resetPage: could not read quick layout slots from the daemon:" << slotsReply.errorMessage();
+            // Reconcile before leaving so a pre-existing stale dirty entry for
+            // this page is cleaned on this exit too, matching every other path.
+            reconcilePageDirty(page);
             Q_EMIT pageResetFailed(page);
             return;
         }

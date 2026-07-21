@@ -401,6 +401,13 @@ private Q_SLOTS:
         QVERIFY(reg.validateCounterparts());
     }
 
+    // Each block below trips ONE branch of validateCounterparts. The function
+    // returns a single bool for all six, so a QVERIFY(!ok) alone cannot tell
+    // which branch fired — a fixture usually trips several as collateral, and
+    // pass-6 mutation testing found two branches whose deletion left this
+    // green. QTest::ignoreMessage binds the assertion to the specific warning:
+    // it FAILS the test if the named message is not emitted, which is exactly
+    // the per-branch isolation the bool cannot give.
     void validateCounterpartsRejectsTheSixBrokenShapes()
     {
         using PV = PageRegistry::PageVisibility;
@@ -416,6 +423,7 @@ private Q_SLOTS:
             e.visibility = PV::SimpleOnly;
             e.counterpartId = QStringLiteral("typo");
             QVERIFY(reg.registerPage(std::move(e)));
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("which is not registered")));
             QVERIFY(!reg.validateCounterparts());
         }
 
@@ -428,6 +436,8 @@ private Q_SLOTS:
             e.visibility = PV::SimpleOnly;
             e.counterpartId = QStringLiteral("a");
             QVERIFY(reg.registerPage(std::move(e)));
+            QTest::ignoreMessage(QtWarningMsg,
+                                 QRegularExpression(QStringLiteral("declares itself as its own counterpart")));
             QVERIFY(!reg.validateCounterparts());
         }
 
@@ -448,6 +458,11 @@ private Q_SLOTS:
             e2.visibility = PV::SimpleOnly;
             QVERIFY(reg.registerPage(std::move(e2)));
 
+            // `b` names nobody, so reciprocity fires too and is consumed
+            // first (it is checked before the tier block). Both must be named
+            // or ignoreMessage fails on the unconsumed one.
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("must point back at each other")));
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("share a visibility tier")));
             QVERIFY(!reg.validateCounterparts());
         }
 
@@ -470,6 +485,7 @@ private Q_SLOTS:
             e2.visibility = PV::AdvancedOnly; // opposite tier, so only reciprocity is at fault
             QVERIFY(reg.registerPage(std::move(e2)));
 
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("must point back at each other")));
             QVERIFY(!reg.validateCounterparts());
         }
     }

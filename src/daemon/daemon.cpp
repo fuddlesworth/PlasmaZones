@@ -446,6 +446,11 @@ void Daemon::setupAnimationProfiles()
         requestAnimationProfilePublish();
     });
     connect(m_profileLoader.get(), &ProfileLoader::profilesChanged, this, [this]() {
+        // The loader has replaced its owned entries, so the cached raw JSON
+        // profiles are stale. Drop them before republishing; the publish
+        // re-snapshots from the registry, which holds the freshly parsed
+        // entries at this point.
+        m_rawJsonProfiles.clear();
         requestAnimationProfilePublish();
     });
     connect(m_curveLoader.get(), &CurveLoader::curvesChanged, this, [this]() {
@@ -541,16 +546,32 @@ void Daemon::publishActiveAnimationProfile()
             // curve animating at built-in defaults here while the settings app
             // resolved them from ISettings and displayed the user's values.
             // Per-field merge is what ProfileTree inheritance does everywhere
-            // else, so both sides now answer the same way.
+            // else, so both sides answer the same way.
             //
-            // Re-registered under the JSON's own owner tag so the loader's
-            // next reloadFromOwner still replaces it (which re-enters here via
-            // profilesChanged and re-merges).
-            const auto owned = reg.resolve(*path);
-            if (!owned.has_value()) {
-                continue;
+            // Merge from a CACHED RAW snapshot, never from what we last
+            // registered. Reading the registry back would be self-poisoning:
+            // the merged entry has every field engaged, so on the next tick
+            // no field is disengaged, nothing merges, and the user's later
+            // slider moves are silently ignored until the next file rescan.
+            // The snapshot is taken once per loader reload and dropped in the
+            // profilesChanged handler.
+            auto rawIt = m_rawJsonProfiles.constFind(*path);
+            if (rawIt == m_rawJsonProfiles.constEnd()) {
+                const auto owned = reg.resolve(*path);
+                if (!owned.has_value()) {
+                    // The loader claims this path but the registry has no
+                    // entry for it. That is an invariant violation, not a
+                    // normal state, and silently continuing would leave the
+                    // path with no profile at all.
+                    qCWarning(lcCore) << "animation profile publish: loader owns" << *path
+                                      << "but the registry has no entry — publishing settings defaults instead";
+                    reg.registerProfile(*path, settingsProfile);
+                    continue;
+                }
+                rawIt = m_rawJsonProfiles.insert(*path, *owned);
             }
-            Profile mergedProfile = *owned;
+
+            Profile mergedProfile = rawIt.value();
             if (!mergedProfile.duration.has_value())
                 mergedProfile.duration = settingsProfile.duration;
             if (!mergedProfile.curve)
@@ -561,7 +582,11 @@ void Daemon::publishActiveAnimationProfile()
                 mergedProfile.sequenceMode = settingsProfile.sequenceMode;
             if (!mergedProfile.staggerInterval.has_value())
                 mergedProfile.staggerInterval = settingsProfile.staggerInterval;
-            if (mergedProfile != *owned) {
+            if (!mergedProfile.presetName.has_value())
+                mergedProfile.presetName = settingsProfile.presetName;
+            // Re-registered under the JSON's own owner tag so the loader's
+            // next reloadFromOwner still replaces it.
+            if (!reg.resolve(*path).has_value() || *reg.resolve(*path) != mergedProfile) {
                 reg.registerProfile(*path, mergedProfile, reg.ownerOf(*path));
             }
             continue;

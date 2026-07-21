@@ -213,17 +213,22 @@ Flickable {
     /// Drops any pending expand-then-settle. Called at the top of every
     /// revealAnchor so a superseded reveal can never fire against the old
     /// target, whichever branch the new one takes.
-    function _cancelPendingReveal() {
-        // Put back the cards this reveal opened speculatively. A superseded
-        // reveal by definition no longer needs them open, and dropping the
-        // list without reverting leaks the expansion permanently — the exact
-        // side effect the settle timer's revert path exists to prevent,
-        // reached through the cancel path instead.
-        const pendingCards = settingsFlickable._revealPendingCards;
-        for (var ri = 0; ri < pendingCards.length; ++ri) {
-            if (pendingCards[ri])
-                pendingCards[ri].collapsed = true;
+    /// Re-collapse cards a reveal expanded speculatively. Every exit from a
+    /// reveal that does not end in a successful scroll must call this, or the
+    /// expansion leaks and the user is left with cards opened by a reveal that
+    /// bought nothing. Per-element guard: a card destroyed between the expand
+    /// and the exit leaves a null here, and an unguarded write would throw
+    /// before the remaining cards were put back.
+    function _revertRevealCards(cards) {
+        for (var ri = 0; ri < cards.length; ++ri) {
+            if (cards[ri])
+                cards[ri].collapsed = true;
         }
+    }
+
+    function _cancelPendingReveal() {
+        // A superseded reveal by definition no longer needs its cards open.
+        settingsFlickable._revertRevealCards(settingsFlickable._revealPendingCards);
         settingsFlickable._revealPendingItem = null;
         settingsFlickable._revealPendingCards = [];
         settingsFlickable._revealToken = settingsFlickable._revealToken + 1;
@@ -264,8 +269,15 @@ Flickable {
             var pendingCards = settingsFlickable._revealPendingCards;
             settingsFlickable._revealPendingItem = null;
             settingsFlickable._revealPendingCards = [];
-            if (!pending)
+            if (!pending) {
+                // The target was destroyed during the expand window (Repeater
+                // rebuild, profile switch, or a tier toggle that removed the
+                // row). _revealPendingItem is Item-typed, so QML auto-nulled
+                // it. Put the cards back: this is the THIRD exit from a reveal
+                // and it leaked them open just as the other two would have.
+                settingsFlickable._revertRevealCards(pendingCards);
                 return;
+            }
             // Effective visibility is only final now that the card has finished
             // expanding — revealAnchor deliberately defers this check to here
             // for the collapsed-card path. A row still hidden after the expand
@@ -277,15 +289,7 @@ Flickable {
                 // condition, not by the card. Put the card back: we opened it
                 // speculatively, it bought nothing, and leaving it open is a
                 // visible side effect of a reveal that failed.
-                // Per-element guard: a card destroyed between the expand and
-                // this settle (Repeater rebuild, profile switch, page
-                // teardown) leaves a null here, and an unguarded write throws
-                // before the scroll fallback below — killing the reveal AND
-                // leaving the remaining cards open.
-                for (var ri = 0; ri < pendingCards.length; ++ri) {
-                    if (pendingCards[ri])
-                        pendingCards[ri].collapsed = true;
-                }
+                settingsFlickable._revertRevealCards(pendingCards);
                 revealScrollAnim.to = 0;
                 revealScrollAnim.restart();
                 return;
@@ -299,7 +303,20 @@ Flickable {
     // 600 ms later while the user is reading somewhere else, with nothing on
     // screen to explain it.
     Connections {
-        function onMovementStarted() {
+        // contentY rather than movementStarted: Kirigami.WheelHandler scrolls
+        // by animating contentY, which routes through setContentY and never
+        // emits movementStarted (that fires only for drag and flick). Watching
+        // the signal alone would leave the guard inert for wheel input, which
+        // is the dominant path on the very component that exists to install
+        // WheelHandler.
+        //
+        // Safe against the reveal's OWN scroll: _pendingRevealAnchor is armed
+        // only on the not-yet-registered branch, which does not start
+        // revealScrollAnim, and the expiry's own fallback scroll has already
+        // cleared the anchor by the time it runs.
+        function onContentYChanged() {
+            if (revealScrollAnim.running || settingsFlickable._pendingRevealAnchor === "")
+                return;
             pendingRevealExpiry.stop();
             settingsFlickable._pendingRevealAnchor = "";
         }

@@ -21,7 +21,7 @@ SettingsFlickable {
     // The ISettings object (the `appSettings` context property), captured at page
     // scope. LayoutComboBox declares its own `appSettings: settingsController`,
     // which SHADOWS the context property inside the combo's onActivated — writing
-    // `appSettings.defaultAutotileAlgorithm` there hit a nonexistent property on
+    // the BARE `appSettings.defaultAutotileAlgorithm` there hit a nonexistent property on
     // the controller and silently dropped every algorithm change. Read/write the
     // algorithm through this reference so it always targets ISettings.
     readonly property var appSettingsObj: appSettings
@@ -225,7 +225,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileMaxWindowsMin
                         to: root.settingsBridge.autotileMaxWindowsMax
                         stepSize: 1
-                        value: root.settingValue("MaxWindows", root.liveAlgoSettings.maxWindows !== undefined ? root.liveAlgoSettings.maxWindows : appSettings.autotileMaxWindows)
+                        value: root.settingValue("MaxWindows", root.liveAlgoSettings.maxWindows !== undefined ? root.liveAlgoSettings.maxWindows : root.appSettingsObj.autotileMaxWindows)
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }
@@ -256,7 +256,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileSplitRatioMin
                         to: root.settingsBridge.autotileSplitRatioMax
                         stepSize: 0.05
-                        value: root.settingValue("SplitRatio", root.liveAlgoSettings.splitRatio !== undefined ? root.liveAlgoSettings.splitRatio : appSettings.autotileSplitRatio)
+                        value: root.settingValue("SplitRatio", root.liveAlgoSettings.splitRatio !== undefined ? root.liveAlgoSettings.splitRatio : root.appSettingsObj.autotileSplitRatio)
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
@@ -280,13 +280,13 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileSplitRatioStepMin
                         to: root.settingsBridge.autotileSplitRatioStepMax
                         stepSize: 0.01
-                        value: root.settingValue("SplitRatioStep", appSettings.autotileSplitRatioStep)
+                        value: root.settingValue("SplitRatioStep", root.appSettingsObj.autotileSplitRatioStep)
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
                         onMoved: value => {
                             root.writeSetting("SplitRatioStep", value, function (v) {
-                                appSettings.autotileSplitRatioStep = v;
+                                root.appSettingsObj.autotileSplitRatioStep = v;
                             });
                         }
                     }
@@ -309,7 +309,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileMasterCountMin
                         to: root.settingsBridge.autotileMasterCountMax
                         stepSize: 1
-                        value: root.settingValue("MasterCount", root.liveAlgoSettings.masterCount !== undefined ? root.liveAlgoSettings.masterCount : appSettings.autotileMasterCount)
+                        value: root.settingValue("MasterCount", root.liveAlgoSettings.masterCount !== undefined ? root.liveAlgoSettings.masterCount : root.appSettingsObj.autotileMasterCount)
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }

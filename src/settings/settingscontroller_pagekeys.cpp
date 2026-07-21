@@ -74,7 +74,7 @@ const Settings::ConfigKeyList& animationGeneralConfigKeys()
 }
 
 // The WHOLE animation "value" surface — General's keys PLUS the ShaderProfileTree
-// key. Used only by the non-surface library leaves (sets/shaders), whose
+// key. Used only by the non-surface library leaves (presets / motion sets / shaders), whose
 // Reset/Discard act on the entire editable tree (paired with clearAllOverrides /
 // revertPending for the per-event FILES).
 const Settings::ConfigKeyList& animationConfigKeys()

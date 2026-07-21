@@ -386,29 +386,38 @@ QString SidebarRows::resolveDrillScope(const QString& currentParentId) const
         return QString();
     }
 
-    // Any navigable descendant is enough: the scope renders SOMETHING the user
-    // can reach. Depth-capped like every other walk here, and the cap is a
-    // fail-CLOSED bound — a tree deep enough to hit it falls back to the top
-    // level rather than stranding the rail in a scope we could not verify.
-    bool found = false;
+    // Mirror build()'s drill rule EXACTLY, which counts to two:
+    //   0 navigable descendants -> the category is not offered at all,
+    //   1                       -> the row is flattened to that descendant and
+    //                              is NOT a drill target (the drill step would
+    //                              be pure friction),
+    //   2 or more               -> a real drill target.
+    // So anything below two means the rail must not be sitting inside this
+    // scope. Counting only to one would leave the rail drilled into a category
+    // that build() renders as a single direct row at the level above, which is
+    // the disagreement this function exists to prevent.
+    //
+    // Depth-capped like every other walk here, and the cap is fail-CLOSED: a
+    // tree deep enough to hit it falls back to the top level rather than
+    // stranding the rail in a scope we could not finish verifying.
+    int found = 0;
     const std::function<void(const QString&, int)> gather = [&](const QString& pid, int d) {
-        if (found || d > kMaxWalkDepth) {
+        if (found > 1 || d > kMaxWalkDepth) {
             return;
         }
         const QList<PageRegistry::Entry> kids = m_registry->visibleChildPages(pid);
         for (const PageRegistry::Entry& child : kids) {
-            if (!child.qmlSource.isEmpty()) {
-                found = true;
+            if (found > 1) {
                 return;
+            }
+            if (!child.qmlSource.isEmpty()) {
+                ++found;
             }
             gather(child.id, d + 1);
-            if (found) {
-                return;
-            }
         }
     };
     gather(currentParentId, 0);
-    return found ? currentParentId : QString();
+    return found > 1 ? currentParentId : QString();
 }
 
 QVariantMap SidebarRows::flatPageData(const QString& pageId, const QVariantMap& flatTitleOverrides) const

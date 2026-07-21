@@ -654,8 +654,9 @@ QString LayoutAdaptor::duplicateLayout(const QString& id)
 QString LayoutAdaptor::getQuickLayoutSlot(int mode, int slotNumber)
 {
     if (slotNumber < 1 || slotNumber > PhosphorProtocol::Service::QuickLayoutSlotCount) {
-        qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber << "(must be 1-"
-                                << PhosphorProtocol::Service::QuickLayoutSlotCount << ")";
+        qCWarning(lcDbusLayout)
+            << "Invalid quick layout slot number:" << slotNumber
+            << QStringLiteral("(must be 1-%1)").arg(PhosphorProtocol::Service::QuickLayoutSlotCount);
         return QString();
     }
 
@@ -667,8 +668,9 @@ QString LayoutAdaptor::getQuickLayoutSlot(int mode, int slotNumber)
 void LayoutAdaptor::setQuickLayoutSlot(int mode, int slotNumber, const QString& layoutId)
 {
     if (slotNumber < 1 || slotNumber > PhosphorProtocol::Service::QuickLayoutSlotCount) {
-        qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber << "(must be 1-"
-                                << PhosphorProtocol::Service::QuickLayoutSlotCount << ")";
+        qCWarning(lcDbusLayout)
+            << "Invalid quick layout slot number:" << slotNumber
+            << QStringLiteral("(must be 1-%1)").arg(PhosphorProtocol::Service::QuickLayoutSlotCount);
         return;
     }
 

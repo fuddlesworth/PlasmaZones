@@ -133,17 +133,19 @@ ColumnLayout {
      *  everything outside it. */
     property int _registryTick: 0
 
-    /// Cancel an in-flight drill cross-fade. Its ScriptAction would otherwise
-    /// re-apply pendingParentId AFTER a reset, and the stale scope resurfaces.
-    /// The animation drives listColumn.opacity and nothing re-asserts it (no
-    /// declarative binding), so stopping mid-fade would strand the rail
-    /// translucent — restore it here. The restore lives at the call site
-    /// rather than in onStopped because restart() stops internally, and
-    /// snapping to 1 there would flash on every rapid re-drill.
+    /// Invalidate every binding that reads the registry through a Q_INVOKABLE.
+    /// Those register no dependency of their own, so they need this to touch.
     function _bumpRegistryTick() {
         root._registryTick = root._registryTick + 1;
     }
 
+    /// Cancel an in-flight drill cross-fade. Its ScriptAction would otherwise
+    /// re-apply pendingParentId AFTER a reset, and the stale scope resurfaces.
+    /// The animation drives listColumn.opacity and nothing re-asserts it (no
+    /// declarative binding), so stopping mid-fade would strand the rail
+    /// translucent — restore it here rather than in onStopped, because
+    /// restart() stops internally and snapping to 1 there would flash on every
+    /// rapid re-drill.
     function _cancelDrill() {
         if (!drillAnimation.running)
             return;
@@ -431,7 +433,7 @@ ColumnLayout {
         // in the rail while search (the other tier-filtering consumer) had
         // already rebuilt.
         function onVisibleSetChanged() {
-            root._registryTick = root._registryTick + 1;
+            root._bumpRegistryTick();
             // A restamp can hide the very parent we are drilled into, or hide
             // every navigable page UNDER it while leaving the parent itself
             // visible. visibleChildPages filters only the children, so the
@@ -456,7 +458,16 @@ ColumnLayout {
                 root._cancelDrill();
                 root._suppressAccordion = true;
                 suppressAccordionTimer.restart();
+                // The assignment refreshes through onCurrentParentIdChanged,
+                // but ONLY when it is a real value change. A restamp landing
+                // mid-drill-IN from the top level has currentParentId still ""
+                // (the scope under evaluation is the animation's pending id),
+                // so this assignment is a no-op and nothing would rebuild the
+                // rail for the new visible set. Defer a refresh unconditionally
+                // and let Qt.callLater coalesce it with the synchronous one
+                // when the assignment did change the value.
                 root.currentParentId = "";
+                Qt.callLater(root._refreshModel);
             } else {
                 root._refreshModel();
             }

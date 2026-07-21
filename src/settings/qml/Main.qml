@@ -126,7 +126,10 @@ PhosphorUi.SettingsAppWindow {
         // as it was. Without a word from here the user reads that as "Reset
         // did nothing because there was nothing to reset".
         function onPageResetFailed(page) {
-            window.showToast(i18n("Could not reach the PlasmaZones service, so this page was left unchanged."));
+            // The signal carries the id so the shell can name the page. Fall
+            // back to the generic wording when the id resolves to nothing.
+            const title = settingsController.app.registry.pageData(page).title || "";
+            window.showToast(title.length > 0 ? i18n("Could not reach the PlasmaZones service, so %1 was left unchanged.", title) : i18n("Could not reach the PlasmaZones service, so this page was left unchanged."));
         }
 
         target: settingsController
