@@ -34,10 +34,11 @@ public:
     ///
     /// Retained as exported API and as the tested reference implementation of
     /// the tiering; it has no in-tree production caller (rank() is what the
-    /// controller uses). Folds `query` on EVERY call, so it is a single-entry probe, not a loop
-    /// body. `rank()` is the loop-safe entry point: it folds the query once
-    /// and matches against each entry's pre-folded fields. Adopting this in a
-    /// loop would reintroduce the per-entry folding cost rank() avoids.
+    /// controller uses). Folds `query` on EVERY call, so it is a single-entry
+    /// probe, not a loop body. `rank()` is the loop-safe entry point: it folds
+    /// the query once and matches against each entry's pre-folded fields.
+    /// Adopting this in a loop would reintroduce the per-entry folding cost
+    /// that rank() avoids.
     static int score(const QString& query, const SearchEntry& entry);
 
     /// Return entries with score > 0, sorted by score desc (stable: input

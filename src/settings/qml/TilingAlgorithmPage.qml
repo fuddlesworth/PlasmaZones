@@ -184,7 +184,7 @@ SettingsFlickable {
                     previewWidth: root.algorithmPreviewWidth
                     previewHeight: root.algorithmPreviewHeight
                     algorithmId: root.selectedAlgorithm
-                    description: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
+                    description: AlgoCaps.description(root.algoCapabilities)
                     currentAlgorithmId: root.effectiveAlgorithm
                     captionText: i18np("Max %n window", "Max %n windows", previewWindowSlider.slider.value)
                     windowCount: previewWindowSlider.slider.value
@@ -249,7 +249,8 @@ SettingsFlickable {
                     }
                 }
 
-                // Algorithm-specific settings (master-stack, three-column, centered-master)
+                // Ratio and count rows, shown only when the catalog says the
+                // algorithm exposes them.
                 SettingsSeparator {
                     visible: root.algoSupportsSplitRatio || root.algoSupportsMasterCount
                 }

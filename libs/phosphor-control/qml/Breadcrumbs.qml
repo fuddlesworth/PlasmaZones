@@ -141,8 +141,8 @@ RowLayout {
     // `titleResolver`. `_maxParentChainHops` is a property binding and
     // re-evaluates on its own, but `segments` reads flatPageData(), a
     // Q_INVOKABLE that registers no dependency, so without this bump the trail
-    // stays resolved against the old registry. Mirrors the same hook the rail
-    // carries in Sidebar.qml. Coalesced for the same reason the
+    // stays resolved against the old registry. Mirrors the rail's own
+    // registry-swap hook in Sidebar.qml. Coalesced for the same reason the
     // pageRegistered bump is.
     Connections {
         function onRegistryChanged() {

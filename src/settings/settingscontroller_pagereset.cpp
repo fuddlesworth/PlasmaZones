@@ -24,6 +24,7 @@
 #include "../core/logging.h"
 
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
 #include <QDebug>
@@ -36,7 +37,7 @@ namespace PlasmaZones {
 namespace {
 
 // Reset/Discard-only helpers: nothing outside this TU uses them, so internal
-// linkage is the right default. (orderingPageKind / isShortcutsPage / LoadingScope
+// linkage is the right default. (orderingPageKind / isShortcutsPage / ScopedFlag
 // are NOT here: they live in settingscontroller_pagekeys.h so the dirty check,
 // the reset and the discard read one definition.)
 
@@ -161,7 +162,7 @@ void SettingsController::resetPage(const QString& page)
             // Suppress onSettingsPropertyChanged for the reset's NOTIFY storm;
             // reconcile `page`'s dirty state explicitly below.
             {
-                const LoadingScope loadingScope(m_loading);
+                const ScopedFlag loadingScope(m_loading);
                 m_settings.resetKeys(*ownedIt);
             }
             reconcilePageDirty(page);
@@ -177,8 +178,15 @@ void SettingsController::resetPage(const QString& page)
         const auto backingIt = backing.constFind(page);
         if (backingIt != backing.constEnd()) {
             const DirtyEmitScope batch(*this);
-            for (const QString& backingPage : *backingIt)
+            for (const QString& backingPage : *backingIt) {
+                // Release-build half of the acyclic invariant asserted at
+                // simplePageBackingPages(): a backing page that is itself a
+                // backing key would recurse back into this branch forever, so
+                // skip it rather than overflow the stack.
+                if (backing.contains(backingPage))
+                    continue;
                 resetPage(backingPage);
+            }
             return;
         }
     }
@@ -224,7 +232,7 @@ void SettingsController::resetPage(const QString& page)
             // Reconcile before leaving so a pre-existing stale dirty entry for
             // this page is cleaned on this exit too, matching every other path.
             reconcilePageDirty(page);
-            Q_EMIT pageResetFailed(page);
+            Q_EMIT pageResetFailed(page, QString(ReasonDaemonUnreachable));
             return;
         }
         const QVariantMap allSlots = slotsReply.arguments().value(0).toMap();
@@ -261,21 +269,21 @@ void SettingsController::resetPage(const QString& page)
     // drives the page's _refreshConfig so the editor re-reads the reverted state.
     if (page == QLatin1String("virtualscreens")) {
         m_staging.clearVirtualScreenConfigs();
-        const QVariantList physicalScreens = screens();
-        for (const QVariant& entry : physicalScreens) {
-            const QString name = entry.toMap().value(QStringLiteral("name")).toString();
-            if (name.isEmpty())
-                continue;
-            const QString physId = physicalScreenId(name);
-            // A >1-entry config means the physical screen is split into virtual
-            // screens; single/empty means it is already at the native default.
-            if (!physId.isEmpty() && getVirtualScreenConfig(physId).size() > 1)
-                m_staging.stageVirtualScreenRemoval(physId);
+        // Which screens are split comes from the persisted config, NOT from a
+        // getVirtualScreenConfig() per screen. That loop was one blocking D-Bus
+        // round-trip per monitor on the GUI thread, and worse, it could not
+        // report a failure: the accessor returns an empty list both for "the
+        // daemon did not answer" and for "this monitor is not split", so an
+        // unreachable daemon staged zero removals and the page then reported
+        // itself clean — a failed reset indistinguishable from a successful one.
+        // The Settings map is local, is the same state save() writes back, and
+        // has no failure mode to confuse with an empty result.
+        const QHash<QString, PhosphorScreens::VirtualScreenConfig> configs = m_settings.virtualScreenConfigs();
+        for (auto it = configs.cbegin(); it != configs.cend(); ++it) {
+            if (!it.key().isEmpty() && it.value().hasSubdivisions())
+                m_staging.stageVirtualScreenRemoval(it.key());
         }
-        if (m_staging.hasStagedVirtualScreenConfigs())
-            m_dirtyPages.insert(page);
-        else
-            m_dirtyPages.remove(page);
+        syncDirtyMembership(page, m_staging.hasStagedVirtualScreenConfigs());
         // Unconditional emit, deliberately against the emit-on-change rule (as
         // setPendingAnchor is, for the same kind of reason). The dirty-set
         // membership may well be unchanged, but clearVirtualScreenConfigs() +
@@ -302,13 +310,13 @@ void SettingsController::resetPage(const QString& page)
     if (isAnimationPage(page)) {
         const AnimationPageScope scope = animationPageScope(page);
         // Set when a file clear does not complete. The reconcile and the
-        // pageResetFailed emit below both run AFTER the LoadingScope closes on
+        // pageResetFailed emit below both run AFTER the ScopedFlag closes on
         // every path, success or failure — reconciling while m_loading is still
         // raised skips maybeDrainPendingExternalReload, so the two paths used to
         // differ for no reason.
         bool failed = false;
         {
-            const LoadingScope loadingScope(m_loading);
+            const ScopedFlag loadingScope(m_loading);
             if (scope.kind == AnimationPageScope::ConfigOnly) {
                 m_settings.resetKeys(animationGeneralConfigKeys());
             } else if (scope.kind == AnimationPageScope::EventSubtree) {
@@ -354,7 +362,7 @@ void SettingsController::resetPage(const QString& page)
             // already-default page, so it must say so. Without this the user
             // presses Reset, the page stays dirty, and the only trace is a
             // qCWarning inside AnimationsPageController.
-            Q_EMIT pageResetFailed(page);
+            Q_EMIT pageResetFailed(page, QString(ReasonOverridesNotCleared));
         }
         return;
     }
@@ -372,7 +380,7 @@ void SettingsController::resetPage(const QString& page)
     // Same NOTIFY-storm suppression as the manifest path.
     if (isDecorationPage(page)) {
         {
-            const LoadingScope loadingScope(m_loading);
+            const ScopedFlag loadingScope(m_loading);
             const QString root = decorationSurfaceRoot(page);
             if (root.isEmpty()) {
                 m_settings.resetKeys(decorationConfigKeys());
@@ -412,7 +420,7 @@ void SettingsController::discardPage(const QString& page)
     const auto it = manifest.constFind(page);
     if (it != manifest.constEnd()) {
         {
-            const LoadingScope loadingScope(m_loading);
+            const ScopedFlag loadingScope(m_loading);
             m_settings.discardKeys(*it);
         }
         // Every owned key is back at the committed baseline, so the page is clean.
@@ -428,8 +436,12 @@ void SettingsController::discardPage(const QString& page)
         const auto backingIt = backing.constFind(page);
         if (backingIt != backing.constEnd()) {
             const DirtyEmitScope batch(*this);
-            for (const QString& backingPage : *backingIt)
+            for (const QString& backingPage : *backingIt) {
+                // Same acyclic guard as resetPage's delegation above.
+                if (backing.contains(backingPage))
+                    continue;
                 discardPage(backingPage);
+            }
             return;
         }
     }
@@ -477,7 +489,7 @@ void SettingsController::discardPage(const QString& page)
     // enabled while staged edits exist, so there is always something to clear.
     if (page == QLatin1String("virtualscreens")) {
         m_staging.clearVirtualScreenConfigs();
-        m_dirtyPages.remove(page);
+        syncDirtyMembership(page, false);
         // Always emit so the page's dirtyPagesChanged handler re-reads the
         // reverted config, even if other pages keep the global flag dirty.
         emitDirtyPagesChanged();
@@ -507,7 +519,7 @@ void SettingsController::discardPage(const QString& page)
         // produced. Letting it run to the end of the `if` would leave
         // suppression up across the reconcile.
         {
-            const LoadingScope loadingScope(m_loading);
+            const ScopedFlag loadingScope(m_loading);
             if (scope.kind == AnimationPageScope::ConfigOnly) {
                 m_settings.discardKeys(animationGeneralConfigKeys());
             } else if (scope.kind == AnimationPageScope::EventSubtree) {
@@ -553,7 +565,7 @@ void SettingsController::discardPage(const QString& page)
     // forwards as profilesChanged so the open cards refresh.
     if (isDecorationPage(page)) {
         {
-            const LoadingScope loadingScope(m_loading);
+            const ScopedFlag loadingScope(m_loading);
             const QString root = decorationSurfaceRoot(page);
             if (root.isEmpty()) {
                 m_settings.discardKeys(decorationConfigKeys());

@@ -43,7 +43,11 @@ QtObject {
     readonly property int defaultDurationMs: 150
     readonly property string defaultEasingCurve: "0.33,1.00,0.68,1.00"
     readonly property real defaultSpringOmega: 12
-    readonly property real defaultSpringZeta: 1
+    // Mirrors `PhosphorAnimation::Spring`'s member initialisers (Spring.h:
+    // omega = 12.0, zeta = 0.8), which are what `Spring::fromString` returns
+    // for any input it cannot parse. Any QML path that falls back to these
+    // must describe the spring the engine will actually play.
+    readonly property real defaultSpringZeta: 0.8
     // ── Easing curve presets (style + direction matrix) ─────────────
     readonly property var easingStyles: [
         {

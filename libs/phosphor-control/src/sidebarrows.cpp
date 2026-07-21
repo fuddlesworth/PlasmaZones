@@ -141,7 +141,7 @@ QList<PageRegistry::Entry> SidebarRows::firstTwoNavigableDescendants(const QStri
         if (found.size() > 1) {
             return;
         }
-        // Warn like the other three walks in this file. A truncated count is
+        // Warn like the other four walks in this file. A truncated count is
         // not a cosmetic omission here: it flips a real drill target into "not
         // enterable", so build() drops the row and resolveDrillScope evicts the
         // rail out of the scope. Silence would leave nothing in the log
@@ -328,6 +328,9 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
     const std::function<PageRegistry::Entry(const QString&, int)> findFirstNavigable =
         [&](const QString& parentId, int depth) -> PageRegistry::Entry {
         if (depth > MaxWalkDepth) {
+            qWarning() << "SidebarRows: page tree nested deeper than" << MaxWalkDepth << "levels under id" << parentId
+                       << "— no landing destination is looked for below this point, so the category's search result is "
+                          "dropped";
             return {};
         }
         const QList<PageRegistry::Entry> kids = m_registry->visibleChildPages(parentId);

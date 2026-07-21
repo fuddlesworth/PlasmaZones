@@ -3,8 +3,9 @@
 
 #pragma once
 
-// Page-class predicates, shared-domain config key lists, and the loading-flag
-// scope guard shared across the settings app's page translation units.
+// Page-class predicates, shared-domain config key lists, the quick-layout slot
+// count, and the loading-flag scope guard shared across the settings app's page
+// translation units.
 //
 // Internal to the settings app: not installed, not part of any public API.
 // These were an anonymous namespace in _pagestate.cpp before that file was
@@ -39,20 +40,20 @@ namespace PlasmaZones {
 /// TU-local copy in one of them only ever linked because CMAKE_UNITY_BUILD
 /// merged the two files into one batch. Same rationale as
 /// SettingsController::DirtyEmitScope.
-class LoadingScope
+class ScopedFlag
 {
 public:
-    explicit LoadingScope(bool& flag)
+    explicit ScopedFlag(bool& flag)
         : m_flag(flag)
         , m_previous(flag)
     {
         flag = true;
     }
-    ~LoadingScope()
+    ~ScopedFlag()
     {
         m_flag = m_previous;
     }
-    Q_DISABLE_COPY_MOVE(LoadingScope)
+    Q_DISABLE_COPY_MOVE(ScopedFlag)
 
 private:
     bool& m_flag;

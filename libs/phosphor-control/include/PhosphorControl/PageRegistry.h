@@ -96,7 +96,10 @@ public:
      * via topLevelPages() / childPages() / allPages() / entry(); they
      * may NOT mutate the underlying controller pointer to detach it
      * from the registry. The QPointer surface is read-only by
-     * convention — the registry is the only writer.
+     * convention — the registry is the only writer. allPagesRef() hands
+     * out the live list by const reference instead of a copy, for
+     * read-only whole-list walks; see its invalidation note (the
+     * reference does not survive the next registerPage).
      *
      * Out-of-tree code that needs to act on the controller should
      * prefer the explicit `controller(id)` accessor (which performs

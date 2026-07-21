@@ -85,7 +85,7 @@ Q_SIGNALS:
 
 private:
     void recompute();
-    QVector<SearchEntry> buildIndex() const;
+    QVector<SearchEntry> buildIndex();
 
     QPointer<ApplicationController> m_app = nullptr;
     QString m_query;
@@ -97,8 +97,8 @@ private:
 
     /// pageIds already reported as unregistered / non-navigable, so the drop
     /// warning is emitted once per offending id rather than once per index
-    /// rebuild. Mutable because buildIndex() is const.
-    mutable QSet<QString> m_warnedPageIds;
+    /// rebuild.
+    QSet<QString> m_warnedPageIds;
 
     bool m_indexDirty = true;
     QVector<SearchEntry> m_index;

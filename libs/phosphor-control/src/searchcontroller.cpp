@@ -141,7 +141,7 @@ void SearchController::invalidate()
     }
 }
 
-QVector<SearchEntry> SearchController::buildIndex() const
+QVector<SearchEntry> SearchController::buildIndex()
 {
     QVector<SearchEntry> entries;
     if (m_app == nullptr || m_app->registry() == nullptr) {
@@ -155,7 +155,12 @@ QVector<SearchEntry> SearchController::buildIndex() const
         return entries;
     }
 
-    const QList<PageRegistry::Entry> pages = m_app->registry()->allPages();
+    // By reference: both walks below only READ (fill a title hash, filter the
+    // navigable leaves), and neither registers a page, so nothing can
+    // reallocate m_pages while the reference is live. Copying the catalogue
+    // here cost an Entry deep-copy per page on every index rebuild, which fires
+    // on every mode flip and every provider warm-up.
+    const QList<PageRegistry::Entry>& pages = m_app->registry()->allPagesRef();
 
     // id → title map for breadcrumb assembly (parentChainFor yields ids).
     QHash<QString, QString> titles;
@@ -253,14 +258,19 @@ QVector<SearchEntry> SearchController::buildIndex() const
         // provider warm-up while a query is live.
         const PageRegistry::Entry pe = m_app->registry()->entry(e.pageId);
         if (pe.id.isEmpty() || pe.qmlSource.isEmpty()) {
-            // Reported once per offending pageId. This is a static authoring
-            // defect in the catalogue, not a runtime event, so re-warning on
-            // every rebuild would bury the genuinely new output behind one
-            // typo repeating on each keystroke-adjacent invalidate. The DROP
-            // is still re-evaluated every rebuild, so a page registered later
-            // rescues its entries normally.
-            if (!m_warnedPageIds.contains(e.pageId)) {
-                m_warnedPageIds.insert(e.pageId);
+            // Reported once per offending ENTRY, not once per pageId: one bad
+            // id is typically shared by a whole card's worth of anchors, and
+            // keying on the id alone names only the first of them, so a
+            // maintainer fixes that row and the rest stay silent for the life
+            // of the process. This is a static authoring defect in the
+            // catalogue, not a runtime event, so re-warning on every rebuild
+            // would bury genuinely new output behind one typo repeating on
+            // each keystroke-adjacent invalidate. The DROP is still
+            // re-evaluated every rebuild, so a page registered later rescues
+            // its entries normally.
+            const QString offender = e.pageId + QLatin1Char('\0') + e.title;
+            if (!m_warnedPageIds.contains(offender)) {
+                m_warnedPageIds.insert(offender);
                 qWarning() << "SearchController: dropping search entry" << e.title << "— its pageId" << e.pageId
                            << "is not a registered, navigable page";
             }

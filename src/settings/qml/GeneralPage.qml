@@ -217,20 +217,25 @@ SettingsFlickable {
         // =====================================================================
         // AUDIO ANALYSIS CARD (advanced)
         // =====================================================================
-        // The rest of the CAVA analysis parameter set. Its own card so the
-        // advancedOnly flag governs the whole block, rather than a hand-written
-        // `settingsController.advancedMode` term inside a visible: expression —
-        // that composition is exactly what advancedOnly exists to spare
-        // consumers. The card is gated on the same enable switch and cava
-        // presence as the bar-count stack, through `enabled`: SettingsRow leads
-        // its `visible:` binding with `enabled`, so the rows collapse away and
-        // the card rests at its header.
+        // The rest of the CAVA analysis parameter set, in its own card so one
+        // advancedOnly flag governs the whole block instead of every row
+        // carrying its own. The card is gated on the same enable switch and
+        // cava presence as the bar-count stack above, and is hidden as well as
+        // disabled for the same reason that stack is: a header-only card the
+        // user cannot expand still costs the page a largeSpacing slot.
+        //
+        // The advancedOnly term inside `visible` is required, not redundant. A
+        // consumer `visible:` binding REPLACES SettingsCard's own
+        // `visible: !advancedOnly || settingsController.advancedMode`, so
+        // omitting it would put the card back in simple mode.
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Audio Analysis")
+            searchAnchor: "audioAnalysis"
             collapsible: true
             advancedOnly: true
             enabled: audioVizSwitch.checked && root.effectsBridge.cavaAvailable
+            visible: (!advancedOnly || settingsController.advancedMode) && audioVizSwitch.checked && root.effectsBridge.cavaAvailable
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing

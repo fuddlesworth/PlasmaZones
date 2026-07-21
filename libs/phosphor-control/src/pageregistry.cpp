@@ -363,17 +363,10 @@ QString PageRegistry::parentIdOf(const QString& id) const
 
 QList<PageRegistry::Entry> PageRegistry::topLevelPages() const
 {
-    QList<Entry> out;
-    // Worst-case sizing: every registered page is top-level. Cheap upper
-    // bound matches the pattern used by allPagesData() so the variant
-    // and entry forms have the same allocation profile.
-    out.reserve(m_pages.size());
-    for (const Entry& e : m_pages) {
-        if (e.parentId.isEmpty()) {
-            out.append(e);
-        }
-    }
-    return out;
+    // Top-level entries are the empty-key bucket of the child index, in
+    // registration order — the same list childPages() reads for any other
+    // parent, so this is childPages(QString()) with the id spelled out.
+    return childPages(QString());
 }
 
 QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) const
@@ -383,7 +376,7 @@ QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) con
     if (it == m_childrenByParent.constEnd()) {
         return out;
     }
-    // Exact reserve, not the worst-case one topLevelPages uses: the index knows
+    // Exact reserve rather than a whole-catalogue upper bound: the index knows
     // the child count up front. That matters because a recursive per-node
     // caller runs this once per node, and a whole-catalogue reserve there would
     // allocate room for every page to hold a handful of children, over and over.
@@ -470,20 +463,24 @@ QVariantMap entryToVariant(const PageRegistry::Entry& e)
 
 QVariantList PageRegistry::topLevelPagesData() const
 {
-    QVariantList out;
-    for (const Entry& e : m_pages) {
-        if (e.parentId.isEmpty() && isEntryVisible(e)) {
-            out.append(entryToVariant(e));
-        }
-    }
-    return out;
+    // The empty key holds the top-level entries, so this is the childPagesData
+    // of the root — same index bucket, same registration order.
+    return childPagesData(QString());
 }
 
 QVariantList PageRegistry::childPagesData(const QString& parentId) const
 {
     QVariantList out;
-    for (const Entry& e : m_pages) {
-        if (e.parentId == parentId && isEntryVisible(e)) {
+    const auto it = m_childrenByParent.constFind(parentId);
+    if (it == m_childrenByParent.constEnd()) {
+        return out;
+    }
+    // Exact reserve for the same reason as childPages: the index knows the
+    // child count, and the visibility filter can only shrink the result.
+    out.reserve(it.value().size());
+    for (const qsizetype idx : it.value()) {
+        const Entry& e = m_pages.at(idx);
+        if (isEntryVisible(e)) {
             out.append(entryToVariant(e));
         }
     }

@@ -63,7 +63,7 @@ SettingsFlickable {
                     searchAnchor: "holdToActivate"
                     settingsBridge: root.settingsBridge
                     alwaysActive: alwaysActivateSwitch.checked
-                    sliderPreferredWidth: root.sliderPreferredWidth
+                    controlPreferredWidth: root.sliderPreferredWidth
                 }
 
                 SettingsSeparator {}

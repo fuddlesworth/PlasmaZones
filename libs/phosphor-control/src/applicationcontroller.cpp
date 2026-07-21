@@ -120,7 +120,7 @@ void ApplicationController::setPendingAnchor(const QString& pageId, const QStrin
     // a page that was renamed or never registered is a caller bug; say so here
     // rather than degrade quietly, matching setCurrentPageId's unknown-page
     // warning.
-    if (m_registry == nullptr || !m_registry->hasPage(pageId)) {
+    if (!m_registry->hasPage(pageId)) {
         qWarning() << "ApplicationController::setPendingAnchor: no registered page" << pageId
                    << "— dropping deep-link anchor" << anchor;
         return;

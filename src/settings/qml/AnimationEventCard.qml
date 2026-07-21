@@ -74,11 +74,14 @@ Item {
     property var mirrorPaths: []
 
     /// Raw stored profile per write path, refreshed by refreshFromTree.
-    /// _setOverrideMerged reads it to merge over each path's own stored
-    /// fields. It exists to avoid DISK I/O: the writer runs from the duration
-    /// slider's valueChanged, i.e. every tick of a drag, and reading each
-    /// path's stored profile there meant one synchronous file open per path
-    /// per tick. Re-entrancy is _committing's job, not this cache's.
+    /// _setOverrideMerged and _storedStateKey read it to merge over, and to
+    /// compare against, each path's own stored fields. It exists to avoid DISK
+    /// I/O: both run from the duration slider's valueChanged, i.e. every tick
+    /// of a drag, and reading each path's stored profile there meant a
+    /// synchronous file open per path per reader per tick. With the cache the
+    /// only reads left on a tick are refreshFromTree's own, which seeds it at
+    /// exactly one open per path (the primary reuses the read refreshFromTree
+    /// already performs). Re-entrancy is _committing's job, not this cache's.
     property var _pathProfiles: ({})
 
     /// True while _setOverrideMerged is writing, so the overrideChanged each
@@ -88,11 +91,25 @@ Item {
     /// The shader-axis counterpart, for _setShaderOverrideOnAll.
     property bool _committingShader: false
 
-    /// Every path this card writes: its own, then the mirrors.
-    /// `|| []` for the same reason Component.onCompleted guards the property:
-    /// it is deliberately untyped `var`, so a consumer can leave it undefined,
-    /// and concat would then append that as ONE bogus write path.
-    readonly property var _writePaths: [root.eventPath].concat(root.mirrorPaths || [])
+    /// The declared mirrors minus any the controller rejects as an event path.
+    /// A misspelled entry is refused by every writer, so it can never receive
+    /// an edit and its stored state can never match the primary's — which
+    /// latches the divergence banner on with no control able to clear it.
+    /// Dropping it here is what actually prevents that; Component.onCompleted
+    /// warns so the drop is not silent.
+    /// `|| []` because mirrorPaths is deliberately untyped `var`, so a consumer
+    /// can leave it undefined.
+    readonly property var _validMirrorPaths: {
+        const declared = root.mirrorPaths || [];
+        var kept = [];
+        for (var i = 0; i < declared.length; ++i) {
+            if (settingsController.animationsPage.isValidEventPath(declared[i]))
+                kept.push(declared[i]);
+        }
+        return kept;
+    }
+    /// Every path this card writes: its own, then the surviving mirrors.
+    readonly property var _writePaths: [root.eventPath].concat(root._validMirrorPaths)
     /// The card's hosting SettingsCard. The virtualized card list re-registers
     /// its search anchor against this once the card builds, so a deep-link
     /// reveal can expand the card when it's collapsed.
@@ -219,6 +236,13 @@ Item {
     // overwrite is coming before they make it. Always false for the
     // no-mirrors cards, which is every card outside the simple page.
     property bool _mirrorsDiverged: false
+    /// How many events the next edit here will converge: every mirror whose
+    /// stored state differs from the primary, plus the primary itself. Zero
+    /// when nothing diverges. The banner reports this rather than
+    /// _writePaths.length, which counts every event the card controls and so
+    /// would over-report the moment a card declares two or more mirrors and
+    /// only one of them diverges.
+    property int _divergentPathCount: 0
 
     // ── Inheritance summary (italic "Current: …" line when override off) ─
     function inheritSummaryText() {
@@ -360,6 +384,22 @@ Item {
         }
     }
 
+    /// True when ANY write path takes a shader leg. _shaderLegSupported answers
+    /// for the PRIMARY only, so gating a group mutation on it would skip a
+    /// mirror that does support one: that mirror's shader override would
+    /// survive the toggle, and _storedStateKey compares the shader map
+    /// unconditionally, so the divergence banner would latch on with no control
+    /// able to clear it. Matches the group-writer shape of every other mutation
+    /// on this card.
+    function _anyWritePathSupportsShaderLeg() {
+        const paths = root._writePaths;
+        for (var i = 0; i < paths.length; ++i) {
+            if (settingsController.animationsPage.supportsShaderLeg(paths[i]))
+                return true;
+        }
+        return false;
+    }
+
     /// Clears the shader override on every write path, returning the event to
     /// inheritance. Distinct from writing the engaged-empty sentinel, which is
     /// an explicit "None" that BLOCKS inheritance — that is the picker's job,
@@ -447,36 +487,50 @@ Item {
         // _writePaths, so a divergence on either axis really is converged by
         // the next edit on that axis, which is what the banner promises.
         //
-        // Everything else a leaf can carry is per-path by design and is left
-        // out: the curve, because the only mirrored card is the simple-mode one
-        // and its commitOverride passes `undefined` so each path keeps its own,
-        // and the motion-set fields (minDistance, sequenceMode,
-        // staggerInterval, presetName), because the merged writer preserves
-        // each path's own. Counting any of those latched the banner ON
-        // permanently with no control able to clear it. An allowlist, so a new
-        // stored-profile field cannot latch it again unless the card writes it.
+        // The curve is conditional because the card's own write is: advanced
+        // mode passes currentCurveString to every path (commitOverride), while
+        // simple mode passes `undefined` so each path keeps its own. So the
+        // curve is a converged axis exactly when !simpleTiming, and comparing
+        // it under that same condition keeps the allowlist tied to what this
+        // card writes rather than to the fact that today's only mirrored card
+        // happens to be a simple-mode one. Without the leg, a mirrored ADVANCED
+        // card would clobber a divergent mirror curve with the banner never
+        // lit; with it counted unconditionally, a simple-mode card latches the
+        // banner ON permanently over a curve no control there can converge.
+        //
+        // The motion-set fields (minDistance, sequenceMode, staggerInterval,
+        // presetName) are left out for the same reason: the merged writer
+        // preserves each path's own, so counting them latched the banner with
+        // no control able to clear it. An allowlist, so a new stored-profile
+        // field cannot latch it again unless the card writes it.
         const compared = {};
         if (profile.duration !== undefined)
             compared.duration = profile.duration;
+        if (!root.simpleTiming && profile.curve !== undefined)
+            compared.curve = profile.curve;
         return JSON.stringify([compared, shader]);
     }
 
     /// Recompute _mirrorsDiverged. Called from both refreshers so it tracks
     /// every signal that can move either tree.
     function _refreshMirrorDivergence() {
-        const mirrors = root.mirrorPaths;
-        if (!mirrors || mirrors.length === 0) {
+        const mirrors = root._validMirrorPaths;
+        if (mirrors.length === 0) {
             root._mirrorsDiverged = false;
+            root._divergentPathCount = 0;
             return;
         }
         const primary = root._storedStateKey(root.eventPath);
+        var diverged = 0;
         for (var i = 0; i < mirrors.length; ++i) {
-            if (root._storedStateKey(mirrors[i]) !== primary) {
-                root._mirrorsDiverged = true;
-                return;
-            }
+            if (root._storedStateKey(mirrors[i]) !== primary)
+                ++diverged;
         }
-        root._mirrorsDiverged = false;
+        root._mirrorsDiverged = diverged > 0;
+        // Plus one for the primary, which every diverging mirror differs FROM
+        // and which the converging edit also rewrites. Zero when nothing
+        // diverges, so the banner never renders a stale count.
+        root._divergentPathCount = diverged > 0 ? diverged + 1 : 0;
     }
 
     /// Batch write — randomize rolls N values that should land as one
@@ -534,15 +588,26 @@ Item {
                 root.currentSpringOmega = w;
                 root.currentSpringZeta = z;
             } else {
-                // A hand-edited "spring:abc,def" still RESOLVES as a spring —
-                // Spring::fromString clamps the unparseable halves to its own
-                // defaults rather than falling back to easing. Without this the
-                // mode kept its previous value (Easing on first seed) and drew
-                // a Duration slider the resolved spring ignores, while
+                // A hand-edited "spring:abc,def" still RESOLVES as a spring
+                // rather than falling back to easing. Without the mode set here
+                // it kept its previous value (Easing on first seed) and drew a
+                // Duration slider the resolved spring ignores, while
                 // inheritSummaryText reported the same input as "Spring ·
-                // Custom". Cached omega / zeta stay put: there is nothing
-                // parsed to replace them with.
+                // Custom".
+                //
+                // Omega / zeta are re-seeded from the engine's own defaults
+                // rather than left at their previous values, because
+                // Spring::fromString does not salvage anything from a failed
+                // parse: `if (!okOmega || !okZeta) return spring;` returns its
+                // default-constructed Spring wholesale, so even a half the user
+                // got right is discarded and "spring:12,abc" plays as
+                // (12.0, 0.8). Keeping stale values here drew a thumbnail and a
+                // summary for a spring the engine will never play, and flipping
+                // Override on then committed that fabricated
+                // "spring:<stale>,<stale>" as a real direct override.
                 root.currentTimingMode = CurvePresets.timingModeSpring;
+                root.currentSpringOmega = CurvePresets.defaultSpringOmega;
+                root.currentSpringZeta = CurvePresets.defaultSpringZeta;
             }
         } else {
             root.currentTimingMode = CurvePresets.timingModeEasing;
@@ -611,8 +676,14 @@ Item {
         // runs on every overrideChanged, which is exactly when a path's stored
         // state can have moved.
         var cache = {};
-        for (var pi = 0; pi < root._writePaths.length; ++pi)
-            cache[root._writePaths[pi]] = settingsController.animationsPage.rawProfile(root._writePaths[pi]) || ({});
+        for (var pi = 0; pi < root._writePaths.length; ++pi) {
+            const wp = root._writePaths[pi];
+            // The primary reuses `raw`, read at the top of this function,
+            // rather than opening the same file a second time on the same
+            // tick. That is what makes _pathProfiles' "one open per path per
+            // tick" claim true instead of merely halving the opens.
+            cache[wp] = (wp === root.eventPath) ? (raw || ({})) : (settingsController.animationsPage.rawProfile(wp) || ({}));
+        }
         root._pathProfiles = cache;
         root._refreshMirrorDivergence();
     }
@@ -673,15 +744,14 @@ Item {
     implicitHeight: card.implicitHeight
     Layout.fillWidth: true
     Component.onCompleted: {
-        // Validate declared mirrors once. A misspelled path is rejected by
-        // every writer, so the mirror silently never receives an edit and its
-        // stored state can never match the primary's — which latches the
-        // divergence banner on with no edit able to clear it. Failing loudly
-        // here turns a permanent mystery banner into a one-line console
-        // message naming the bad path.
+        // Name whatever _validMirrorPaths dropped. The drop itself is the
+        // guard — it keeps a typo'd mirror out of every writer and out of the
+        // divergence check, so the banner cannot latch on a path no edit could
+        // ever converge. This turns the remaining silence into a one-line
+        // console message naming the bad path.
         for (var i = 0; root.mirrorPaths && i < root.mirrorPaths.length; ++i) {
             if (!settingsController.animationsPage.isValidEventPath(root.mirrorPaths[i]))
-                console.warn("AnimationEventCard(" + root.eventPath + "): mirrorPaths entry '" + root.mirrorPaths[i] + "' is not a valid event path; writes to it will be silently rejected");
+                console.warn("AnimationEventCard(" + root.eventPath + "): mirrorPaths entry '" + root.mirrorPaths[i] + "' is not a valid event path; it has been dropped and will receive no writes");
         }
         refreshFromTree();
         refreshShaderFromTree();
@@ -816,7 +886,7 @@ Item {
                 // write), the shader side is already committed, so a partial
                 // failure still moves toward the user's intent instead of
                 // recording neither half.
-                if (root._shaderLegSupported)
+                if (root._anyWritePathSupportsShaderLeg())
                     root._clearShaderOverrideOnAll();
 
                 root._clearOverrideOnAll();
@@ -888,10 +958,11 @@ Item {
                 // Names both axes _storedStateKey compares, because both have a
                 // group writer. Naming only the timing left the banner lit with
                 // no explanation after a shader-only divergence. Count is the
-                // events the card controls, and the banner needs a mirror to be
-                // visible at all, so it is always two or more — a singular
+                // diverging events plus the primary, so a card with several
+                // mirrors names only the ones actually affected. It is always
+                // two or more whenever the banner is visible, so a singular
                 // plural form here would never render.
-                text: i18n("This card controls %1 events that are set differently right now, and it shows only one of them. The next change you make to the timing or the shader here applies to all of them.", root._writePaths.length)
+                text: i18n("This card controls %1 events that are set differently right now, and it shows only one of them. The next change you make to the timing or the shader here applies to all of them.", root._divergentPathCount)
             }
 
             Label {

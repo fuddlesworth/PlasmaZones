@@ -71,7 +71,7 @@ private:
     /// Cache UTF-8 encodings of disambiguation strings used by i18nc /
     /// i18ncp. QML pages reuse a small set ("ButtonLabel", "MenuItem"),
     /// so encoding once and re-looking-up by QString key avoids the per-
-    /// binding toUtf8 cost. Capped (see kMaxDisambiguationCacheEntries)
+    /// binding toUtf8 cost. Capped (see MaxDisambiguationCacheEntries)
     /// to keep pathological caller bugs from growing the cache without
     /// bound; once full, falls back to encoding on every call.
     QByteArray cachedDisambiguation(const QString& context) const;

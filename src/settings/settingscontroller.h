@@ -241,6 +241,19 @@ public:
     /// for. Kept as a separate query so the kebab can show the two items
     /// independently.
     Q_INVOKABLE bool pageSupportsDiscard(const QString& page) const;
+    /// The id whose dirty state @p pageId REPRESENTS, which is not always the
+    /// id it renders. Simple mode condenses whole subtrees down to a single
+    /// visible row, and that row's own dirty state covers only what it hosts,
+    /// so edits staged on the subtree's hidden advanced leaves survive the
+    /// mode flip and would otherwise badge nowhere and be unreachable by that
+    /// row's Discard.
+    ///
+    /// Walks up while the page is the SOLE visible representative of its
+    /// group, which self-terminates: in simple mode `placement` and
+    /// `appearance` each still show two rows, so the walk stops below them,
+    /// and in advanced mode every category shows many rows so it never takes a
+    /// single hop. Returns @p pageId unchanged when no hop applies.
+    Q_INVOKABLE QString dirtyScopeFor(const QString& pageId) const;
 
     /// Reset every config key owned by @p page to its schema default, staged
     /// for the user to Save or Discard (never persisted here). Manifest pages
@@ -629,6 +642,12 @@ public:
     Q_INVOKABLE void defaults();
     Q_INVOKABLE void launchEditor();
 
+    /// Why a `resetPage` refused, carried by `pageResetFailed`. These are
+    /// stable tokens the shell branches on to pick wording, not user-facing
+    /// text: i18n lives in QML in this tree.
+    static constexpr QLatin1String ReasonDaemonUnreachable{"daemon-unreachable"};
+    static constexpr QLatin1String ReasonOverridesNotCleared{"overrides-not-cleared"};
+
 Q_SIGNALS:
     void activePageChanged();
     void dirtyPagesChanged();
@@ -660,15 +679,24 @@ Q_SIGNALS:
     /// replaces whatever is in flight, so a `true` there would let the caller's
     /// success toast overwrite the reason emitted a moment earlier.
     void settingsTransferFailed(const QString& reason);
-    /// Emitted when `resetPage` cannot complete because a value it must read
-    /// first is unavailable (currently: the daemon's quick-layout slot map).
-    /// resetPage returns void and stages nothing on that path, so without this
-    /// the page reconciles CLEAN and the refusal is indistinguishable from a
-    /// page that was already at its defaults.
+    /// Emitted when `resetPage` refuses. resetPage returns void and stages
+    /// nothing on that path, so without this the page reconciles CLEAN and the
+    /// refusal is indistinguishable from a page that was already at its
+    /// defaults.
     ///
-    /// Carries no reason string: the wording is user-facing, and this tree
-    /// wires i18n in QML rather than C++, so the shell supplies the words.
-    void pageResetFailed(const QString& page);
+    /// Two branches emit it, and they fail for unrelated reasons, so the shell
+    /// cannot use one sentence for both:
+    ///   * `ReasonDaemonUnreachable` — a value resetPage must READ first is
+    ///     unavailable, currently the daemon's quick-layout slot map.
+    ///   * `ReasonOverridesNotCleared` — a WRITE was refused: an animation or
+    ///     decoration override could not be cleared, because an async discard
+    ///     still owns the snapshot map or a file could not be removed. The
+    ///     daemon is fine on this path.
+    ///
+    /// @p reason is one of the Reason* constants above, NOT user-facing
+    /// text: the wording is user-facing and this tree wires i18n in QML rather
+    /// than C++, so the shell supplies the words and branches on the token.
+    void pageResetFailed(const QString& page, const QString& reason);
     /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
     /// fails at the daemon — QML can surface the reason in a toast so the
     /// user knows the change wasn't saved.
@@ -776,10 +804,16 @@ private:
     // in simple mode. Both syncs share one dirtyPagesChanged emit.
     void reconcilePageDirty(const QString& page);
     /// Set @p page's m_dirtyPages membership to @p dirty, returning whether the
-    /// membership actually flipped. The one place that invariant is written: every
-    /// reconcile below composes its batched dirtyPagesChanged emit out of this,
-    /// so insert/remove and "did anything change" can never drift apart. Does not
+    /// membership actually flipped. The one place a SINGLE page's membership is
+    /// written: the reconcile helpers, setNeedsSave, and the Reset/Discard
+    /// branches that own their own staged state all go through this, so
+    /// insert/remove and "did anything change" can never drift apart. Does not
     /// emit — the caller owns the batching.
+    ///
+    /// Whole-set operations are the exception and do not route through it:
+    /// setNeedsSave(false) clears the set outright, and load() replaces it with
+    /// the full page set. Neither is a per-page decision, and both compare the
+    /// whole set before emitting.
     bool syncDirtyMembership(const QString& page, bool dirty);
     /// RAII batch window for the above: defers dirtyPagesChanged for the
     /// enclosing scope so a delegated Reset/Discard that walks several backing

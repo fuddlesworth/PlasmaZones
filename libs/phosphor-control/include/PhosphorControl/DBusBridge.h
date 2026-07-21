@@ -16,7 +16,7 @@ namespace PhosphorControl {
  * is wrong" rather than expected latency for in-memory daemon hash lookups.
  * Centralised so the struct default and the clamp warning agree.
  */
-inline constexpr int kDefaultSyncTimeoutMs = 500;
+inline constexpr int DefaultSyncTimeoutMs = 500;
 
 /**
  * Configured endpoint for a single D-Bus service the settings app talks to.
@@ -26,7 +26,7 @@ inline constexpr int kDefaultSyncTimeoutMs = 500;
  *   interfaceName — default interface used by call()/asyncCall(). Apps that
  *                   talk to multiple interfaces on the same object call
  *                   callOn() / asyncCallOn() with an explicit interface.
- *   syncTimeoutMs — bound for synchronous calls; see kDefaultSyncTimeoutMs.
+ *   syncTimeoutMs — bound for synchronous calls; see DefaultSyncTimeoutMs.
  *
  * The struct is a POD passed across the lib boundary by value, so it is
  * exported for visibility-hidden builds — downstream consumers need typeinfo
@@ -43,7 +43,7 @@ struct PHOSPHORCONTROL_EXPORT DBusEndpoint
     QString service;
     QString objectPath;
     QString interfaceName;
-    int syncTimeoutMs = kDefaultSyncTimeoutMs;
+    int syncTimeoutMs = DefaultSyncTimeoutMs;
 };
 
 /**

@@ -208,8 +208,8 @@ void SettingsController::setActivePage(const QString& page)
         // m_loading raised (dirty tracking suppressed for the rest of the
         // session) and m_settingActivePage raised (every later navigation
         // refused as reentrant).
-        const LoadingScope activePageScope(m_settingActivePage);
-        const LoadingScope loadingScope(m_loading);
+        const ScopedFlag activePageScope(m_settingActivePage);
+        const ScopedFlag loadingScope(m_loading);
         m_activePage = target;
         Q_EMIT activePageChanged();
     }
@@ -281,7 +281,18 @@ void SettingsController::setNeedsSave(bool needs)
     // setActivePage redirects them to their first child — so the target
     // always resolves to a concrete leaf page.
     if (needs) {
-        const QString target = m_externalEditStack.isEmpty() ? m_activePage : m_externalEditStack.top();
+        // Walk down to the topmost entry that names a page. beginExternalEdit
+        // pushes an empty sentinel when its id does not resolve, so the stack
+        // stays balanced against endExternalEdit's unconditional pop; such a
+        // scope contributes no target of its own and must fall through to the
+        // enclosing one (or m_activePage) rather than steal or erase it.
+        QString target = m_activePage;
+        for (auto it = m_externalEditStack.crbegin(); it != m_externalEditStack.crend(); ++it) {
+            if (!it->isEmpty()) {
+                target = *it;
+                break;
+            }
+        }
         // The target must resolve to a concrete leaf page; a parent-category id
         // (registered in the page tree but not a navigable leaf) would poison
         // m_dirtyPages with a page the user never directly edits. Assert in
@@ -293,8 +304,7 @@ void SettingsController::setNeedsSave(bool needs)
         if (isVirtualNode) {
             return;
         }
-        if (!m_dirtyPages.contains(target)) {
-            m_dirtyPages.insert(target);
+        if (syncDirtyMembership(target, true)) {
             emitDirtyPagesChanged();
         }
     } else if (!m_dirtyPages.isEmpty()) {
@@ -564,6 +574,14 @@ void SettingsController::beginExternalEdit(const QString& page)
     const QString resolved = resolveToLeaf(page);
     if (!validPageNames().contains(resolved)) {
         qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: unknown page" << page;
+        // Push an empty sentinel anyway. ExternalEditScope's destructor calls
+        // endExternalEdit unconditionally, so returning without pushing would
+        // pop an entry this scope never owned: with an enclosing envelope open
+        // it would steal that envelope's target and misattribute every later
+        // edit, and with none it would trip endExternalEdit's unbalanced-pop
+        // assert. An empty entry names no page, so setNeedsSave skips past it
+        // to the enclosing target.
+        m_externalEditStack.push(QString());
         return;
     }
     // Push onto the stack so nested begin/end pairs restore the outer
@@ -588,6 +606,9 @@ void SettingsController::endExternalEdit()
                    "endExternalEdit called with no matching beginExternalEdit on the stack.");
         return;
     }
+    // Drops empty sentinels the same way as real targets: the sentinel exists
+    // only to keep this pop paired with a begin that could not resolve its id,
+    // and it already carries "no target" for setNeedsSave.
     m_externalEditStack.pop();
 }
 

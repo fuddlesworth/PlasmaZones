@@ -135,6 +135,10 @@ Item {
                 opacity: 0.5
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
+                // Descriptions come from the algorithm catalog and run well
+                // past two lines in this card, so the overflow needs an
+                // ellipsis rather than a hard clip mid-word.
+                elide: Text.ElideRight
             }
         }
 

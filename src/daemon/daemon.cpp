@@ -2467,7 +2467,7 @@ void Daemon::stop()
     // wholesale `clear()` would also evict any other consumer's
     // entries if they happened to register before us.
     //
-    // The two partitions we publish under:
+    // The three partitions we publish under:
     //
     //   - Settings-driven direct entries (`Global`, …): registered by
     //     `publishActiveAnimationProfile` under the direct-owner tag.
@@ -2479,11 +2479,22 @@ void Daemon::stop()
     //     and tearing down the QFileSystemWatchers) rather than at
     //     `~Daemon` body where they'd fire path-change signals into a
     //     half-destroyed object during member destruction order.
+    //   - Shell animation family seeds (tagged
+    //     `kShellAnimationFamilySeedsOwnerTag`): published by
+    //     `seedShellAnimationFamilies`. `setupAnimationProfiles` already
+    //     clears this partition on the way in; shedding it here too keeps
+    //     teardown symmetric with setup, so a registry shared with another
+    //     consumer is not left holding this Daemon's seeds. The
+    //     low-precedence tag points at that same partition and is reset
+    //     alongside it, since leaving it set would name a partition that no
+    //     longer exists.
     {
         auto& profileRegistry = m_profileRegistry;
         for (const QString* path : kSettingsDrivenProfilePaths) {
             profileRegistry.unregisterProfile(*path);
         }
+        profileRegistry.clearOwner(QString(kShellAnimationFamilySeedsOwnerTag));
+        profileRegistry.setLowPrecedenceOwnerTag(QString());
         // Symmetric with the unregister above: a stop/re-init cycle on the
         // same instance (the pattern the tests use) would otherwise start from
         // a snapshot of the previous session's files.

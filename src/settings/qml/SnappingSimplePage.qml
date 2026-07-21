@@ -68,12 +68,18 @@ SettingsFlickable {
                 // Shared row — the same component the advanced Behavior page
                 // hosts, so the dual-purpose inversion (with "Show zones on
                 // every drag" on, the held trigger HIDES the overlay) is
-                // stated once for both surfaces.
+                // stated once for both surfaces. The wording is this page's
+                // own: simple mode talks about showing and hiding zones and
+                // leaves "activate" to the advanced page.
                 SnappingDragTriggerRow {
                     searchAnchor: "simpleHoldToActivate"
                     settingsBridge: root.settingsBridge
                     alwaysActive: alwaysActivateSwitch.checked
-                    sliderPreferredWidth: root.sliderPreferredWidth
+                    controlPreferredWidth: root.sliderPreferredWidth
+                    activeTitle: i18n("Hold to hide zones")
+                    inactiveTitle: i18n("Hold to show zones")
+                    activeDescription: i18n("Hold a modifier or mouse button while dragging to hide the zone overlay")
+                    inactiveDescription: i18n("Hold a modifier or mouse button to show zones while dragging")
                 }
 
                 SettingsSeparator {}

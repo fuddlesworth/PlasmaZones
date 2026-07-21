@@ -11,10 +11,10 @@
 
 #include <QObject>
 #include <QPointer>
-#include <QQmlEngine>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QtQml/qqmlregistration.h>
 
 namespace PhosphorControl {
 

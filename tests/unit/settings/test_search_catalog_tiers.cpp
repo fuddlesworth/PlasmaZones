@@ -80,9 +80,13 @@ QString stripLineComments(const QString& src)
         // where that would delete the line's opening brace and leave the
         // caller's brace stack off by one for the entire rest of the file.
         // Escapes are honoured so a literal \" cannot end the span early.
-        // Backticks count as quotes too: JS template literals appear in ten of
-        // the parsed QML files, and a `//` inside one truncates the line the
-        // same way.
+        //
+        // Backticks are NOT quotes here. No file under src/settings/qml holds a
+        // JS template literal, and the backticks that do appear (113 files
+        // carry them) are markdown code spans inside doc comments, always after
+        // the comment marker that already ends the scan. Treating one as a
+        // quote would only ever misfire: a code line whose backtick count is
+        // odd before a trailing `//` would keep its comment.
         int cut = -1;
         QChar quote;
         for (int i = 0; i < line.size(); ++i) {
@@ -95,7 +99,7 @@ QString stripLineComments(const QString& src)
                 }
                 continue;
             }
-            if (c == QLatin1Char('"') || c == QLatin1Char('\'') || c == QLatin1Char('`')) {
+            if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
                 quote = c;
             } else if (c == QLatin1Char('/') && i + 1 < line.size() && line.at(i + 1) == QLatin1Char('/')) {
                 cut = i;
@@ -231,6 +235,61 @@ const QHash<QString, QString>& qmlFileToPageId()
     return kMap;
 }
 
+/// The QML files in @p qmlDir that instantiate @p component, matched on its
+/// declaration form (`Component {`). Comments are stripped first so a
+/// commented-out instantiation is not a host.
+QStringList directHostsOf(const QString& qmlDir, const QString& component)
+{
+    const QRegularExpression kUse(QStringLiteral("\\b") + QRegularExpression::escape(component)
+                                  + QStringLiteral("\\s*\\{"));
+    QStringList out;
+    const QStringList files = QDir(qmlDir).entryList({QStringLiteral("*.qml")}, QDir::Files);
+    for (const QString& file : files) {
+        if (file == component + QStringLiteral(".qml")) {
+            continue;
+        }
+        if (stripComments(readAll(qmlDir + QLatin1Char('/') + file)).contains(kUse)) {
+            out << file;
+        }
+    }
+    return out;
+}
+
+/// The *Page.qml files that ultimately host @p component, walking through any
+/// intermediate shared components (AnimationWindowFilterCard wraps
+/// WindowFilterCard, and only the wrapper's own hosts are pages).
+///
+/// @p unresolved collects every step the walk could not carry to a page. It is
+/// the whole point of this function: an anchor whose hosting pages are not
+/// fully known cannot be checked against crossFileAdvanced() at all, and the
+/// caller fails rather than assuming coverage.
+QSet<QString> hostingPageFilesOf(const QString& qmlDir, const QString& component, QStringList& unresolved)
+{
+    QSet<QString> pages;
+    QSet<QString> visited{component};
+    QStringList queue{component};
+    while (!queue.isEmpty()) {
+        const QString current = queue.takeFirst();
+        const QStringList hosts = directHostsOf(qmlDir, current);
+        if (hosts.isEmpty()) {
+            unresolved << current + QStringLiteral(".qml (instantiated by no other file)");
+            continue;
+        }
+        for (const QString& host : hosts) {
+            if (host.endsWith(QLatin1String("Page.qml"))) {
+                pages.insert(host);
+                continue;
+            }
+            const QString base = host.chopped(4);
+            if (!visited.contains(base)) {
+                visited.insert(base);
+                queue << base;
+            }
+        }
+    }
+    return pages;
+}
+
 } // namespace
 
 class TestSearchCatalogTiers : public QObject
@@ -261,8 +320,7 @@ private Q_SLOTS:
         // advancedOnly=true row count: those two sets are not in a containment
         // relation. A catalogue row is also advanced-only when it sits on an
         // AdvancedOnly PAGE or comes from crossFileAdvanced(), neither of which
-        // shows up as a per-row `advancedOnly` in these two QML files (26 vs 22
-        // at the time of writing).
+        // shows up as a per-row `advancedOnly` in these two QML files.
         for (auto it = qmlFileToPageId().cbegin(); it != qmlFileToPageId().cend(); ++it) {
             const int n = advancedAnchorsIn(m_qmlDir + QLatin1Char('/') + it.key()).size();
             QVERIFY2(n > 0,
@@ -285,7 +343,10 @@ private Q_SLOTS:
         // written inline beside one of those anchors is a real gate that a
         // page-only glob never sees.
         const QStringList files = QDir(m_qmlDir).entryList({QStringLiteral("*.qml")}, QDir::Files);
-        QVERIFY2(files.size() > 100,
+        // 153 files today. The floor sits just under that: this glob is the
+        // test's whole input, so a directory move or a filter typo that halved
+        // it must fail rather than quietly narrow the sweep.
+        QVERIFY2(files.size() > 140,
                  qPrintable(QStringLiteral("only %1 QML files globbed from %2").arg(files.size()).arg(m_qmlDir)));
         // A mapped file that was renamed away would otherwise leave both this
         // test and catalogueTiersMatchTheQml parsing an empty string.
@@ -295,11 +356,12 @@ private Q_SLOTS:
         }
 
         QStringList missing;
-        // Shared components have no single host page, so their gated anchors
-        // cannot be attributed by this per-file parse at all. They are skipped
-        // by name and counted here rather than dropped, and the skip is only
-        // legal when crossFileAdvanced() already carries the anchor under a
-        // real page id. An unaccounted one fails below.
+        // A shared component declares its gate in one file and is rendered from
+        // several, so the per-file parse cannot name its page on its own. Its
+        // hosts are resolved below instead, and the skip is only legal when
+        // crossFileAdvanced() carries the anchor under EVERY hosting page id.
+        // Anything the resolution cannot pin down fails below rather than
+        // passing as covered.
         QStringList sharedSkipped;
         QStringList unaccounted;
         for (const QString& file : files) {
@@ -314,19 +376,46 @@ private Q_SLOTS:
                 missing << file;
                 continue;
             }
-            bool covered = true;
-            for (const QString& a : anchors) {
-                const QString suffix = QLatin1Char('/') + a;
-                bool found = false;
-                for (const QString& pair : crossFileAdvanced()) {
-                    if (pair.endsWith(suffix)) {
-                        found = true;
-                        break;
-                    }
+            // Resolve the pages that ACTUALLY instantiate this component and
+            // require an exact pageId/anchor entry for each of them. A bare
+            // name-suffix match against crossFileAdvanced() used to accept any
+            // page's entry, so a shared card hosted by a SECOND page was fully
+            // accounted for by the FIRST page's pair — and catalogueTiersMatchTheQml,
+            // whose `expected` is seeded from this same set, then never learned
+            // about the second page at all. That is the drift this test exists
+            // to catch, so the match has to name the page.
+            QStringList unresolvedHosts;
+            const QSet<QString> hostPages = hostingPageFilesOf(m_qmlDir, file.chopped(4), unresolvedHosts);
+            QStringList hostPageIds;
+            for (const QString& page : hostPages) {
+                if (qmlFileToPageId().contains(page)) {
+                    hostPageIds << qmlFileToPageId().value(page);
+                } else {
+                    unresolvedHosts << page + QStringLiteral(" (no qmlFileToPageId entry)");
                 }
-                if (!found) {
-                    covered = false;
-                    unaccounted << file + suffix;
+            }
+
+            bool covered = true;
+            if (!unresolvedHosts.isEmpty() || hostPageIds.isEmpty()) {
+                // Cannot attribute the anchor to a page id, so cannot certify
+                // it either. Report rather than assume, listing what blocked
+                // the walk so the fix is obvious.
+                covered = false;
+                for (const QString& a : anchors) {
+                    unaccounted << QStringLiteral("%1 declares %2 but its hosting pages are unresolved: %3")
+                                       .arg(file, a,
+                                            unresolvedHosts.isEmpty() ? QStringLiteral("no page instantiates it")
+                                                                      : unresolvedHosts.join(QStringLiteral(", ")));
+                }
+            } else {
+                for (const QString& a : anchors) {
+                    for (const QString& pageId : hostPageIds) {
+                        const QString pair = pageId + QLatin1Char('/') + a;
+                        if (!crossFileAdvanced().contains(pair)) {
+                            covered = false;
+                            unaccounted << QStringLiteral("%1 (declared in %2)").arg(pair, file);
+                        }
+                    }
                 }
             }
             if (covered) {
@@ -397,12 +486,40 @@ private Q_SLOTS:
         // basis, so if kCall stops matching (a catalogue reformat, or a page id
         // hoisted into a constant) it comes back empty, the intersect empties
         // `expected`, and both assertions below pass having compared nothing.
-        // The catalogue registers ~255 unique (page, anchor) pairs, so a floor
-        // well under that still catches a broken regex.
-        QVERIFY2(registered.size() > 150,
-                 qPrintable(QStringLiteral("catalogue parse yielded only %1 (page, anchor) pairs — kCall no longer "
-                                           "matches the catalogue's call shape")
-                                .arg(registered.size())));
+        //
+        // Counted per call shape, not in total. kCall reaches addSetting and
+        // addSection through one alternation, so a reformat that broke only
+        // the addSection shape would still clear any combined floor on the
+        // strength of the addSetting hits alone. 195 addSetting, 60
+        // addSection, 255 unique pairs today; the floors sit close enough to
+        // catch a shape going dark while leaving room to prune entries.
+        const auto shapeCallCount = [&catalogSrc](const QString& shape) {
+            const QRegularExpression re(
+                QStringLiteral("\\badd%1\\(\\s*search\\s*,\\s*QStringLiteral\\(\"[^\"]+\"\\)\\s*,"
+                               "\\s*QStringLiteral\\(\"[^\"]+\"\\)")
+                    .arg(shape));
+            int count = 0;
+            auto sit = re.globalMatch(catalogSrc);
+            while (sit.hasNext()) {
+                sit.next();
+                ++count;
+            }
+            return count;
+        };
+        const int settingCalls = shapeCallCount(QStringLiteral("Setting"));
+        const int sectionCalls = shapeCallCount(QStringLiteral("Section"));
+        QVERIFY2(settingCalls > 170,
+                 qPrintable(QStringLiteral("catalogue parse matched only %1 addSetting calls — that call shape "
+                                           "changed and kCall no longer sees it")
+                                .arg(settingCalls)));
+        QVERIFY2(sectionCalls > 50,
+                 qPrintable(QStringLiteral("catalogue parse matched only %1 addSection calls — that call shape "
+                                           "changed and kCall no longer sees it")
+                                .arg(sectionCalls)));
+        QVERIFY2(
+            registered.size() > 240,
+            qPrintable(
+                QStringLiteral("catalogue parse yielded only %1 unique (page, anchor) pairs").arg(registered.size())));
         expected.intersect(registered);
 
         const QSet<QString> missing = expected - flagged;

@@ -68,6 +68,14 @@ function defaultSplitRatio(caps) {
     return caps ? caps.defaultSplitRatio : undefined;
 }
 
+/// The algorithm's own prose description, empty when the catalog has no entry
+/// for it. Every surface that shows the description picks its own answer for
+/// the empty case: the pages leave the caption blank, the wizard falls back to
+/// its curated string.
+function description(caps) {
+    return (caps && caps.description) || "";
+}
+
 /// Which zone numbers the preview labels. "all" when the catalog is silent,
 /// matching the preview's own default.
 function zoneNumberDisplay(caps) {

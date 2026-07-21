@@ -191,7 +191,7 @@ SettingsFlickable {
                     previewHeight: root.algorithmPreviewHeight
                     searchAnchor: "simpleAlgorithm"
                     algorithmId: root.selectedAlgorithm
-                    description: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
+                    description: AlgoCaps.description(root.algoCapabilities)
                     currentAlgorithmId: root.appSettingsObj.defaultAutotileAlgorithm
                     windowCount: maxWindowsSlider.slider.value
                     // An algorithm with no ratio control of its own draws at the

@@ -129,11 +129,21 @@ PhosphorUi.SettingsAppWindow {
         // resetPage stages nothing when it refuses, so the page simply stays
         // as it was. Without a word from here the user reads that as "Reset
         // did nothing because there was nothing to reset".
-        function onPageResetFailed(page) {
+        function onPageResetFailed(page, reason) {
             // The signal carries the id so the shell can name the page. Fall
             // back to the generic wording when the id resolves to nothing.
+            //
+            // It also carries WHY, because the two branches that refuse fail
+            // for unrelated reasons: one could not read the daemon's slot map,
+            // the other could not clear an override while a discard still owns
+            // it. Naming the daemon on the second would be a false explanation.
             const title = settingsController.app.registry.pageData(page).title || "";
-            window.showToast(title.length > 0 ? i18n("Could not reach the PlasmaZones service, so %1 was left unchanged.", title) : i18n("Could not reach the PlasmaZones service, so this page was left unchanged."));
+            const named = title.length > 0;
+            if (reason === "overrides-not-cleared") {
+                window.showToast(named ? i18n("Some settings on %1 are still being saved, so it was left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so it was left unchanged. Try again in a moment."));
+                return;
+            }
+            window.showToast(named ? i18n("Could not reach the PlasmaZones service, so %1 was left unchanged.", title) : i18n("Could not reach the PlasmaZones service, so this page was left unchanged."));
         }
 
         target: settingsController
@@ -675,15 +685,21 @@ PhosphorUi.SettingsAppWindow {
             text: i18n("Discard changes on this page")
             Accessible.name: text
             icon.name: "edit-undo"
-            visible: settingsController.pageSupportsDiscard(settingsController.activePage)
+            visible: settingsController.pageSupportsDiscard(settingsController.dirtyScopeFor(settingsController.activePage))
             // Enabled only when the page carries unsaved edits and no
             // global Save/Discard batch is in flight. `dirtyPages` is
             // referenced purely to re-run this binding on
             // dirtyPagesChanged (isPageDirty itself is a function call
             // whose only QML dependency would otherwise be activePage).
+            //
+            // Queried against dirtyScopeFor, not activePage: in simple mode a
+            // condensed page is the sole visible row for its whole feature
+            // area, so its badge already counts the area's hidden advanced
+            // leaves. Asking the narrower id here would grey out the one
+            // control that can clear what the badge is reporting.
             enabled: {
                 void settingsController.dirtyPages;
-                return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.activePage);
+                return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.dirtyScopeFor(settingsController.activePage));
             }
             onTriggered: discardPageConfirmDialog.open()
         }
@@ -741,8 +757,17 @@ PhosphorUi.SettingsAppWindow {
     Kirigami.PromptDialog {
         id: discardPageConfirmDialog
 
+        // The scope this Discard will actually clear, which in simple mode is
+        // wider than the page on screen: a condensed page is the sole visible
+        // row for its whole feature area, so its Discard has to reach the
+        // area's hidden advanced leaves or the badge it carries can never be
+        // cleared from simple mode.
+        readonly property string discardScope: settingsController.dirtyScopeFor(settingsController.activePage)
+
         title: i18n("Discard Page Changes")
-        subtitle: i18n("Discard the unsaved changes on this page? Changes on other pages are kept.")
+        // Say which it is. Telling the user "changes on other pages are kept"
+        // while clearing a whole feature area would be a false promise.
+        subtitle: discardScope === settingsController.activePage ? i18n("Discard the unsaved changes on this page? Changes on other pages are kept.") : i18n("This page is the whole feature area in simple mode, so discarding here drops the unsaved changes on every page in it. Changes elsewhere are kept.")
         standardButtons: Kirigami.Dialog.NoButton
         customFooterActions: [
             Kirigami.Action {
@@ -750,7 +775,7 @@ PhosphorUi.SettingsAppWindow {
                 icon.name: "edit-undo"
                 onTriggered: {
                     discardPageConfirmDialog.close();
-                    settingsController.discardPage(settingsController.activePage);
+                    settingsController.discardPage(discardPageConfirmDialog.discardScope);
                 }
             },
             Kirigami.Action {
@@ -989,10 +1014,11 @@ PhosphorUi.SettingsAppWindow {
             // "id" to "pageId" (the prior name shadowed the QML id:
             // directive); read `entry.pageId` accordingly.
             readonly property var entry: parent ? parent.modelData : null
-            // Match the drill-parent rows AND their simple-mode flattened
-            // forms: with the single-leaf drill flattening in Sidebar.qml,
-            // the "Snapping"/"Tiling" rows carry the simple leaf's pageId in
-            // simple mode, and the inline enable toggles must stay with them.
+            // Match the drill-parent rows AND their simple-mode counterparts:
+            // simple mode builds the rail through SidebarRows' FLAT walk,
+            // which emits every visible leaf at depth 0, so there the
+            // "Snapping"/"Tiling" rows carry the simple leaf's own pageId.
+            // The inline enable toggles must stay with them.
             readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
             readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
             // The id whose dirty state this row REPRESENTS, which is not
@@ -1005,7 +1031,7 @@ PhosphorUi.SettingsAppWindow {
             // subtree in both modes and is what the section toggle hands to
             // discardPage() / beginExternalEdit(), so badge, guard and commit
             // share one scope.
-            readonly property string dirtyScopeId: isSnapping ? "snapping" : (isTiling ? "tiling" : (entry ? entry.pageId : ""))
+            readonly property string dirtyScopeId: entry ? settingsController.dirtyScopeFor(entry.pageId) : ""
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0
@@ -1087,8 +1113,8 @@ PhosphorUi.SettingsAppWindow {
                     // The guard queries `dirtyScopeId`, the same mode id the
                     // confirm hands to discardPage() below, so it cannot see a
                     // narrower slice of the subtree than the commit it guards.
-                    if (!newValue && trailingRow.entry && settingsController.isPageDirty(trailingRow.dirtyScopeId)) {
-                        sectionToggleDiscardConfirm.pendingSection = trailingRow.isSnapping ? "snapping" : "tiling";
+                    if (!newValue && settingsController.isPageDirty(trailingRow.dirtyScopeId)) {
+                        sectionToggleDiscardConfirm.pendingSection = trailingRow.dirtyScopeId;
                         sectionToggleDiscardConfirm.pendingValue = newValue;
                         sectionToggleDiscardConfirm.open();
                         // Snap the toggle visual back to its checked state
@@ -1096,7 +1122,7 @@ PhosphorUi.SettingsAppWindow {
                         // automatically once the user makes a decision.
                         return;
                     }
-                    settingsController.beginExternalEdit(trailingRow.isSnapping ? "snapping" : "tiling");
+                    settingsController.beginExternalEdit(trailingRow.dirtyScopeId);
                     if (trailingRow.isSnapping)
                         appSettings.snappingEnabled = newValue;
                     else

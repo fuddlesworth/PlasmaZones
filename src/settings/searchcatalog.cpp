@@ -242,6 +242,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                 PhosphorI18n::tr("sound")});
     addSetting(search, QStringLiteral("general"), QStringLiteral("spectrumBars"), PhosphorI18n::tr("Spectrum bars"),
                {PhosphorI18n::tr("cava"), PhosphorI18n::tr("bands"), PhosphorI18n::tr("frequency")});
+    addSection(search, QStringLiteral("general"), QStringLiteral("audioAnalysis"), PhosphorI18n::tr("Audio Analysis"),
+               /*advancedOnly=*/true);
     addSetting(
         search, QStringLiteral("general"), QStringLiteral("audioNoiseReduction"), PhosphorI18n::tr("Noise reduction"),
         {PhosphorI18n::tr("cava"), PhosphorI18n::tr("smoothing"), PhosphorI18n::tr("smooth")}, /*advancedOnly=*/true);

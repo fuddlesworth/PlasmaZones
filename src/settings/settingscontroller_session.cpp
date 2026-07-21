@@ -746,7 +746,7 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // settingscontroller.cpp) early-return when m_loading is true.
         bool animationsReverted = false;
         {
-            const LoadingScope loadingScope(m_loading);
+            const ScopedFlag loadingScope(m_loading);
             m_settings.load();
             // Page controllers with their own on-disk staging surfaces
             // (animations / rules) must reload too — m_settings.load()

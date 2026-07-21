@@ -663,7 +663,11 @@ private Q_SLOTS:
         reg.setPageVisibility(QStringLiteral("full"), PageRegistry::PageVisibility::Always);
         QCOMPARE(visibleSpy.count(), 2);
 
-        // An unknown id is warn-and-ignore, not an announcement.
+        // An unknown id is warn-and-ignore, not an announcement. Pinning the
+        // warning as well as the silence keeps both halves of that contract
+        // under test: the signal counts alone stay green if the warn is dropped.
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("setPageVisibility: unknown page id .*no-such-page")));
         reg.setPageVisibility(QStringLiteral("no-such-page"), PageRegistry::PageVisibility::SimpleOnly);
         QCOMPARE(modeSpy.count(), 1);
         QCOMPARE(visibleSpy.count(), 2);

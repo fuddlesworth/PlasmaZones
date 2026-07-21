@@ -23,6 +23,9 @@
 #include "settingscontroller.h"
 
 #include "../config/configdefaults.h"
+#include "../core/logging.h"
+
+#include <PhosphorControl/PageRegistry.h>
 
 #include <QHash>
 #include <QSet>
@@ -35,14 +38,16 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
 {
     // Single source of truth: parent name → set of leaf child page
     // names. Used by `isPageDirty` to propagate dirty state from a
-    // leaf to any group it belongs to. Covers parents at every level:
-    // top-level categories (placement / display / appearance) AND the
-    // mid-level virtual parents nested beneath them (snapping / tiling
-    // under placement; animations-transitions / animations-motion /
-    // animations-library; the *-cat headers) whose children don't share
-    // their name prefix — the
-    // explicit set sidesteps the asymmetry between prefix-walk and
-    // direct membership lookup.
+    // leaf to any group it belongs to. Covers parents at every level, fifteen
+    // in all. Top-level categories: placement, display, appearance. Mid-level
+    // virtual parents nested beneath them: snapping and tiling under placement;
+    // animations and decorations under appearance; animations-transitions,
+    // animations-motion and animations-library under animations;
+    // decorations-surfaces and decorations-library under decorations. Then the
+    // three *-cat collapsible headers (snapping-overlay-cat,
+    // snapping-config-cat, tiling-config-cat). Their children don't share their
+    // name prefix, so the explicit set sidesteps the asymmetry between a
+    // prefix-walk and a direct membership lookup.
     //
     // The "animations" entry is built at static-init by unioning the
     // virtual sub-buckets (`animations-transitions`, `animations-motion`,
@@ -405,11 +410,39 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
     // so dirtiness, Reset, and Discard delegate through this map instead.
     // animations-simple is absent: it rides the shared animation staging
     // domain like every other animation leaf.
+    //
+    // INVARIANT — this map must be ACYCLIC, one level deep: no backing VALUE
+    // may itself be a backing KEY. resetPage and discardPage delegate a simple
+    // page to its backing pages by recursing on themselves, so a value that is
+    // also a key would recurse forever and blow the stack. The values are
+    // advanced leaves and the keys are condensed simple pages, which is why
+    // the two sets are disjoint today, but nothing about the declaration
+    // enforces that on its own.
     static const QHash<QString, QStringList> backing{
         {QStringLiteral("snapping-simple"),
          {QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-window-behavior")}},
         {QStringLiteral("tiling-simple"), {QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm")}},
     };
+    // Checked once at first call, in debug AND release: the assert names the
+    // offending page for a developer, and resetPage / discardPage additionally
+    // skip any such value so a release build breaks the recursion instead of
+    // overflowing the stack.
+    static const bool acyclic = [] {
+        for (auto it = backing.constBegin(); it != backing.constEnd(); ++it) {
+            for (const QString& value : it.value()) {
+                if (backing.contains(value)) {
+                    qCWarning(PlasmaZones::lcCore)
+                        << "simplePageBackingPages: backing page" << value << "of" << it.key()
+                        << "is itself a backing key — the delegation recursion would not terminate";
+                    return false;
+                }
+            }
+        }
+        return true;
+    }();
+    Q_ASSERT_X(acyclic, "SettingsController::simplePageBackingPages",
+               "A backing page is itself a backing key; the Reset/Discard delegation would recurse forever.");
+    Q_UNUSED(acyclic)
     return backing;
 }
 
@@ -467,6 +500,61 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("animations-shaders"),
     };
     return pages;
+}
+
+namespace {
+
+// Visible pages under `parentId` that the rail can render as a row of their
+// own (a non-empty qmlSource), counted only up to `limit` so the caller can ask
+// "more than one?" without walking a whole subtree.
+int visibleNavigableCount(const PhosphorControl::PageRegistry& registry, const QString& parentId, int limit,
+                          int depth = 0)
+{
+    // The tree is four levels deep at most; the bound just makes a malformed
+    // registry terminate instead of spinning.
+    if (depth > 8) {
+        return limit;
+    }
+    int n = 0;
+    const auto children = registry.visibleChildPages(parentId);
+    for (const PhosphorControl::PageRegistry::Entry& child : children) {
+        if (!child.qmlSource.isEmpty()) {
+            ++n;
+        }
+        if (n >= limit) {
+            return n;
+        }
+        n += visibleNavigableCount(registry, child.id, limit - n, depth + 1);
+        if (n >= limit) {
+            return n;
+        }
+    }
+    return n;
+}
+
+} // namespace
+
+QString SettingsController::dirtyScopeFor(const QString& pageId) const
+{
+    if (m_app == nullptr || m_app->registry() == nullptr || !m_app->registry()->hasPage(pageId)) {
+        return pageId;
+    }
+    const PhosphorControl::PageRegistry& registry = *m_app->registry();
+    QString scope = pageId;
+    for (int hop = 0; hop < 8; ++hop) {
+        const QString parent = registry.parentIdOf(scope);
+        // Only ids pageGroupChildren knows aggregate a subtree. isPageDirty and
+        // discardPage both dispatch on that map, so stopping here keeps the
+        // scope to something they can actually act on.
+        if (parent.isEmpty() || !pageGroupChildren().contains(parent)) {
+            break;
+        }
+        if (visibleNavigableCount(registry, parent, 2) != 1) {
+            break;
+        }
+        scope = parent;
+    }
+    return scope;
 }
 
 } // namespace PlasmaZones
