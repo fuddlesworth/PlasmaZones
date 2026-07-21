@@ -373,10 +373,31 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     ensureGlContextCurrent();
 
     bool insertedAny = false;
+    const Kind desiredKind = showing ? Kind::PeekHide : Kind::PeekShow;
     const QList<KWin::LogicalOutput*> screens = KWin::effects->screens();
     for (KWin::LogicalOutput* screen : screens) {
         if (!screen) {
             continue;
+        }
+        // Hand the bare desktop back to the cache before it dies with the leg
+        // that owns it. BOTH peek kinds hold the same endpoints — toTex is the
+        // bare desktop for a hide leg (it captured it) and for a show leg (it
+        // took it out of the cache) — so a captured leg about to be displaced
+        // by its opposite is a valid source, and re-seeding costs nothing but a
+        // shared_ptr copy.
+        //
+        // Without this, fast toggling dead-ends on the THIRD leg: the show leg
+        // consumes the cache entry at its first paint, the hide leg that
+        // displaces it re-seeds only when IT paints, and a show leg arriving in
+        // that gap finds an empty cache and takes the skip below — killing the
+        // leg on screen and starting nothing. Re-seeding here keeps the chain
+        // fed no matter how fast the legs displace each other. A hide leg that
+        // does reach its own capture overwrites this with a fresh one.
+        const auto live = m_active.find(screen);
+        if (live != m_active.end() && live->second.kind != Kind::Switch && live->second.kind != desiredKind
+            && live->second.captured && live->second.toTex
+            && m_peekDesktopCache.find(screen) == m_peekDesktopCache.end()) {
+            m_peekDesktopCache[screen] = live->second.toTex;
         }
         // The show leg blends FROM the bare desktop, which cannot be captured
         // once the windows are visible again — it replays the hide leg's cached
@@ -394,15 +415,14 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
             // is not ours to truncate. The context is already current (above);
             // repaint so the settled scene draws a frame nothing else
             // schedules.
-            const auto staleIt = m_active.find(screen);
-            if (staleIt != m_active.end() && staleIt->second.kind == Kind::PeekHide) {
-                m_active.erase(staleIt);
+            if (live != m_active.end() && live->second.kind == Kind::PeekHide) {
+                m_active.erase(live);
                 KWin::effects->addRepaint(screen->geometry());
             }
             continue;
         }
         OutputTransition tr = proto;
-        tr.kind = showing ? Kind::PeekHide : Kind::PeekShow;
+        tr.kind = desiredKind;
         // tr.switchDelta stays zero: a peek has no pager direction, so
         // direction-aware packs fall back to their configured params via
         // switchDirection()'s fallback path.
@@ -418,10 +438,10 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
         //
         // How to resume depends on the curve, because easeProgress treats the
         // two kinds completely differently.
-        const auto displaced = m_active.find(screen);
-        if (displaced != m_active.end() && displaced->second.kind != Kind::Switch
-            && displaced->second.kind != tr.kind) {
-            const OutputTransition& old = displaced->second;
+        // `live` is still valid here: the only erase above is followed by a
+        // `continue`, and nothing between them touches m_active.
+        if (live != m_active.end() && live->second.kind != Kind::Switch && live->second.kind != tr.kind) {
+            const OutputTransition& old = live->second;
             // The split is on the NEW leg's curve, because that alone decides
             // how paintOutput reads t back out: easeProgress returns
             // state.value for a stateful curve and IGNORES the linear clock,
