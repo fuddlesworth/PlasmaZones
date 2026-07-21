@@ -278,7 +278,7 @@ p_add_test(test_autotile_ext_overflow autotile/test_autotile_ext_overflow.cpp)
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_tiling_state_windows autotile/test_tiling_state_windows.cpp)
 p_add_test(test_tiling_state_config autotile/test_tiling_state_config.cpp)
-p_add_test(test_tiling_state_serial autotile/test_tiling_state_serial.cpp)
+p_add_test(test_tiling_state_core autotile/test_tiling_state_core.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Overflow Manager Tests

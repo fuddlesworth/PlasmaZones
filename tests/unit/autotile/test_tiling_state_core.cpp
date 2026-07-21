@@ -25,7 +25,7 @@ using namespace PlasmaZones;
  * - calculatedZones (set/get, default)
  * - windowIndex / containsWindow / windowPosition
  */
-class TestTilingStateSerial : public QObject
+class TestTilingStateCore : public QObject
 {
     Q_OBJECT
 
@@ -354,5 +354,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestTilingStateSerial)
-#include "test_tiling_state_serial.moc"
+QTEST_MAIN(TestTilingStateCore)
+#include "test_tiling_state_core.moc"
