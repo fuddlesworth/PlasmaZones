@@ -201,6 +201,11 @@ void TilingState::clearSplitTree()
     m_splitTree.reset();
 }
 
+std::unique_ptr<SplitTree> TilingState::takeSplitTree()
+{
+    return std::move(m_splitTree);
+}
+
 void TilingState::rebuildSplitTree()
 {
     if (!m_splitTree) {

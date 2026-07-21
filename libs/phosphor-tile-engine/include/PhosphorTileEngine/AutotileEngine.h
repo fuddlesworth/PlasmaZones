@@ -1530,9 +1530,15 @@ private:
     // in an opaque bag. Losing it on a toggle rebuilt a uniform layout, which is
     // the same complaint the bag's loss produced.
     //
-    // Held as JSON rather than a live tree so the entry stays copyable, and so a
-    // restore runs SplitTree::fromJson's clamping and structural validation
-    // instead of trusting a pointer parked across a teardown.
+    // The tree moves in and out whole. It is never serialized: this is a rescue
+    // across a teardown, entirely within one session, so a JSON round trip would
+    // buy nothing and could only lose — SplitTree::fromJson clamps ratios and
+    // truncates past its deserialization caps, which are bounds for untrusted
+    // on-disk input rather than for a tree the engine owned a moment ago.
+    //
+    // Owning a unique_ptr makes the entry move-only, which is why the stash is a
+    // std::unordered_map: Qt's containers are implicitly shared and require
+    // copyable values, so this cannot be a QHash.
     //
     // The tree is NOT governed by the algorithm tag. Bags never cross algorithms,
     // but trees deliberately do carry between two MEMORY algorithms — that is the
@@ -1541,18 +1547,20 @@ private:
     struct StashedScriptState
     {
         QJsonObject scriptState;
-        QJsonObject splitTree;
+        std::unique_ptr<PhosphorTiles::SplitTree> splitTree;
         QString algorithmId;
     };
-    QHash<PhosphorEngine::TilingStateKey, StashedScriptState> m_scriptStateStash;
+    std::unordered_map<PhosphorEngine::TilingStateKey, StashedScriptState> m_scriptStateStash;
 
-    /// Rescue @p state's script-state bag into m_scriptStateStash under @p key,
+    /// Rescue @p state's script-state bag and split tree into m_scriptStateStash
+    /// under @p key. Takes a mutable state because the tree is MOVED out of it —
+    /// the state is being destroyed, so nothing else will read it.
     /// tagged with the screen's CURRENT effective algorithm. Call before the
     /// state is destroyed and before any override drop that would change what
     /// "effective" resolves to. An EMPTY bag erases the key's entry instead of
     /// inserting: the state is the truth for its key, so emptiness must not be
     /// shadowed by something stashed earlier.
-    void stashScriptState(const PhosphorEngine::TilingStateKey& key, const PhosphorTiles::TilingState* state);
+    void stashScriptState(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state);
 
     /// Hand a stashed bag to @p state for @p key, if one is held and its
     /// algorithm tag matches what the screen currently resolves to. Purely

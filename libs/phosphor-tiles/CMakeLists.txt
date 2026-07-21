@@ -116,7 +116,6 @@ set(phosphortiles_SRCS
     src/tilingstateserialization.cpp
     src/splittree.cpp
     src/splittreerebuild.cpp
-    src/splittreeserializer.cpp
     src/scriptedalgorithmloader.cpp
     src/luautilealgorithm.cpp
     src/tilescriptmetadata.cpp

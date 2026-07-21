@@ -272,22 +272,6 @@ public:
     bool rebuildFromOrder(const QStringList& tiledWindows,
                           qreal defaultSplitRatio = AutotileDefaults::DefaultSplitRatio);
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Serialization
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Serialize the tree to JSON
-     */
-    QJsonObject toJson() const;
-
-    /**
-     * @brief Deserialize a tree from JSON
-     * @param json Serialized tree
-     * @return Reconstructed tree, or nullptr on error
-     */
-    static std::unique_ptr<SplitTree> fromJson(const QJsonObject& json);
-
 private:
     enum class InsertReady {
         Proceed,
@@ -322,13 +306,6 @@ private:
 
     static int subtreeHeight(const SplitNode* node, int depth = 0);
     static void splitLeaf(SplitNode* leaf, const QString& newId, qreal ratio);
-
-    static constexpr int MaxDeserializationDepth = AutotileDefaults::MaxRuntimeTreeDepth;
-    static constexpr int MaxDeserializationNodes = 1024; ///< Limit total nodes to prevent memory exhaustion
-
-    static QJsonObject nodeToJson(const SplitNode* node, int depth = 0);
-    static std::unique_ptr<SplitNode> nodeFromJson(const QJsonObject& json, SplitNode* parent, int depth,
-                                                   int& nodeCount, int& clampedRatios, QSet<QString>& seenIds);
 };
 
 } // namespace PhosphorTiles

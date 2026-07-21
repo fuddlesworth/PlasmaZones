@@ -365,6 +365,15 @@ public:
     void clearSplitTree();
 
     /**
+     * @brief Hand the split tree to the caller, leaving this state without one.
+     *
+     * For rescuing a tree out of a state that is about to be destroyed. Returns
+     * null when there is no tree. Unlike @c splitTree() this transfers ownership,
+     * so the tree outlives the state rather than being serialized to survive it.
+     */
+    std::unique_ptr<SplitTree> takeSplitTree();
+
+    /**
      * @brief Rebuild the split tree from the current tiled window order
      *
      * Used after operations that reorder windows (move, promote, rotate)
