@@ -244,8 +244,8 @@ void SettingsController::buildApplicationController()
     // Behavior/Appearance pair, so they need no overlay/selector disambiguation) —
     // only the parents changed, keeping the per-page controller ids stable.
     // The simple-mode tiling surface leads: a SimpleOnly leaf condensing the
-    // everyday decisions (algorithm picker + preview, master ratio, smart
-    // gaps). In advanced mode it is filtered out and the full per-page tree
+    // everyday decisions (algorithm picker + preview, master ratio, max
+    // windows). In advanced mode it is filtered out and the full per-page tree
     // shows instead; it and the Algorithm page are counterparts so mode
     // flips and deep links land sensibly.
     regVirtual(QStringLiteral("tiling-simple"), QStringLiteral("tiling"), PhosphorI18n::tr("Tiling"),
@@ -398,7 +398,10 @@ void SettingsController::buildApplicationController()
     // sends every affected mode flip and deep link to the fallback page and
     // looks exactly like correct operation. Check once now that the whole
     // catalogue is in, so the mistake surfaces as a startup warning.
-    m_app->registry()->validateCounterparts();
+    if (!m_app->registry()->validateCounterparts()) {
+        qCWarning(lcCore) << "Page counterpart declarations are inconsistent — mode flips and deep links from the "
+                             "affected pages will fall back instead of redirecting. See the warnings above.";
+    }
 
     // Bridge SettingsController.save/load to the framework's Apply/Cancel
     // (and to the global dirty flag QML chrome binds to).

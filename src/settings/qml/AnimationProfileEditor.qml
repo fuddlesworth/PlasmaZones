@@ -131,17 +131,7 @@ ColumnLayout {
     /// snapshot the effect at user-action time and skip late writes
     /// against a stale effect.
     signal shaderParamWriteRequested(string effectId, string paramId, var value)
-    /// Lock toolbar affordances. The editor self-updates
-    /// `lockedShaderParams` before emitting these — consumers only need
-    /// to subscribe if they want to persist the lock state somewhere
-    /// (the per-event card writes to controller; the global-defaults page
-    /// leaves locking off). Both signals fire AFTER the editor's own
-    /// state mutation, so a consumer reading `lockedShaderParams` in
-    /// the handler sees the post-toggle map.
-    signal lockToggleRequested(string paramId, bool locked)
-    signal lockAllToggleRequested(bool locked)
-    /// Randomize all params. Same self-update contract as the lock
-    /// signals: the editor rolls a new map (honouring the lock set)
+    /// Randomize all params. The editor rolls a new map (honouring the lock set)
     /// and assigns it to `shaderParams` BEFORE emitting. The signal
     /// payload carries the rolled map so a consumer that wants to
     /// persist (per-event card → controller) doesn't have to re-read
@@ -361,17 +351,12 @@ ColumnLayout {
         compact: true
         // The shared editor owns the lock map (aliased onto
         // `lockedShaderParams`) and hosts the colour dialog, so only the
-        // value-write and randomize signals need handling here. The lock
-        // signals are re-emitted for API parity; current consumers ignore
-        // them (lock state is working-state only).
+        // value-write and randomize signals need handling here. Lock state is
+        // working-state only and is not re-emitted: no consumer persists it,
+        // and forwarding signals nothing listens to only invites the next
+        // reader to hunt for the handler that does.
         onValueChanged: function (effectId, paramId, value) {
             root.shaderParamWriteRequested(effectId, paramId, value);
-        }
-        onLockToggled: function (paramId, locked) {
-            root.lockToggleRequested(paramId, locked);
-        }
-        onLockAllRequested: function (locked) {
-            root.lockAllToggleRequested(locked);
         }
         onRandomizeRequested: function (rolled) {
             // Stage the rolled map so the UI updates before the consumer's

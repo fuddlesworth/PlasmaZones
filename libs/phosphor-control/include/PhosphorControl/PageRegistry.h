@@ -175,13 +175,15 @@ public:
      *  navigate here". */
     bool pageAllowedInCurrentMode(const QString& id) const;
     /** Log a warning for every entry whose `counterpartId` names a page that
-     *  does not exist, is itself, or sits in the SAME tier (so a mode flip
-     *  would redirect to something equally hidden). Counterparts are stored
-     *  unvalidated at registration because the target may be registered
-     *  later, and nothing else ever checks them: a typo silently degrades
-     *  every affected mode flip and deep link to the fallback page, and looks
-     *  exactly like correct operation. Call once after registration
-     *  completes. Returns true when every counterpart resolves. */
+     *  does not exist, is itself, sits in the SAME tier (so a mode flip would
+     *  redirect to something equally hidden), or does not name this entry back
+     *  (a one-way declaration dead-ends the RETURN flip on the app fallback).
+     *  Counterparts are stored unvalidated at registration because the target
+     *  may be registered later, and nothing else ever checks them: a typo
+     *  silently degrades every affected mode flip and deep link to the
+     *  fallback page, and looks exactly like correct operation. Call once
+     *  after registration completes. Returns true when every counterpart
+     *  resolves. */
     bool validateCounterparts() const;
     /** Depth-first search (registration order) below `parentId` for the
      *  first navigable page visible under the current mode; empty string

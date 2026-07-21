@@ -693,7 +693,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("pointer")});
 
     addSection(search, QStringLiteral("animations-simple"), QStringLiteral("windowFiltering"),
-               PhosphorI18n::tr("Window Filtering"));
+               PhosphorI18n::tr("Window filtering"));
     addSetting(search, QStringLiteral("animations-simple"), QStringLiteral("excludeTransient"),
                PhosphorI18n::tr("Exclude transient windows"),
                {PhosphorI18n::tr("dialogs"), PhosphorI18n::tr("popups"), PhosphorI18n::tr("tooltips")});
@@ -715,7 +715,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Minimum distance"),
                {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("skip"), PhosphorI18n::tr("geometry")});
     addSection(search, QStringLiteral("animations-general"), QStringLiteral("windowFiltering"),
-               PhosphorI18n::tr("Window Filtering"));
+               PhosphorI18n::tr("Window filtering"));
     addSetting(search, QStringLiteral("animations-general"), QStringLiteral("excludeTransient"),
                PhosphorI18n::tr("Exclude transient windows"),
                {PhosphorI18n::tr("dialogs"), PhosphorI18n::tr("popups"), PhosphorI18n::tr("tooltips"),

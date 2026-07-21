@@ -73,10 +73,12 @@ SettingsFlickable {
         return ("#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b)).toUpperCase();
     }
 
-    // The tint colour is always stored opaque. The opacity-tint shader scales
-    // the wash by the colour's own alpha AND by the tint strength slider, so a
-    // translucent stored colour would apply alpha twice and give the user two
-    // controls for one effect. Tint strength is the sole alpha control.
+    // The tint colour is always stored opaque. The opacity-tint shader ignores
+    // the colour's own alpha and uses the tint strength slider as the sole
+    // control, so storing a translucent colour would silently discard
+    // information the user thought they set. Scaling the wash by both was the
+    // double-apply the shader was changed to avoid, so do not reintroduce it
+    // here by storing alpha.
     function colorToOpaqueHex(c) {
         return "#FF" + root.colorToHex(c).slice(3);
     }
@@ -735,7 +737,7 @@ SettingsFlickable {
         id: tintColorDialog
 
         // No alpha channel here. Tint strength already controls how strongly
-        // the wash lands, and the shader multiplies the two together.
+        // the wash lands, and the shader ignores the colour's own alpha.
         title: i18n("Choose Tint Color")
         onAccepted: root.ctl.windowTintColor = root.colorToOpaqueHex(selectedColor)
     }

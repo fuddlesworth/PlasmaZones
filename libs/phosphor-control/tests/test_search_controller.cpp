@@ -117,6 +117,12 @@ private Q_SLOTS:
         m_app->registerPage(new StubPage(QStringLiteral("snapping-appearance-colors")),
                             QStringLiteral("snapping-appearance"), QStringLiteral("Colors"),
                             QUrl(QStringLiteral("qrc:/Colors.qml")));
+        // StubProvider's entities claim pageId "rules", and buildIndex now
+        // drops entries whose pageId is not a registered page (they navigate
+        // nowhere). Register it so the provider cases exercise the provider
+        // path rather than the unregistered-id drop.
+        m_app->registerPage(new StubPage(QStringLiteral("rules")), {}, QStringLiteral("Rules"),
+                            QUrl(QStringLiteral("qrc:/Rules.qml")));
     }
 
     void cleanup()
@@ -272,6 +278,62 @@ private Q_SLOTS:
             }
         }
         QVERIFY(found);
+    }
+
+    void entryWithUnregisteredPageIdIsDropped()
+    {
+        // pageAllowedInCurrentMode returns true for an unknown id on purpose
+        // (tier filter, not an existence check), so a typo'd pageId would
+        // otherwise reach the results and navigate nowhere — the app's mode
+        // gate rejects the id and bounces the user elsewhere.
+        SearchController sc(m_app);
+        SearchEntry typo;
+        typo.kind = SearchEntry::Kind::Setting;
+        typo.pageId = QStringLiteral("exclusions"); // folded out long ago
+        typo.anchor = QStringLiteral("whatever");
+        typo.title = QStringLiteral("Ghost setting");
+        sc.addEntry(typo);
+
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("pageId .*exclusions.* is not a registered page")));
+        sc.setQuery(QStringLiteral("ghost"));
+        for (const QVariant& v : sc.results()) {
+            QVERIFY(v.toMap().value(QStringLiteral("title")).toString() != QStringLiteral("Ghost setting"));
+        }
+    }
+
+    void advancedOnlyEntryIsHiddenInSimpleMode()
+    {
+        // SearchEntry::advancedOnly is the ONLY thing keeping an advanced row
+        // off the simple-mode result list when its owning page is visible in
+        // BOTH modes (the page-tier gate cannot help there). Roughly 25
+        // catalogue rows depend on it, so without this test deleting the
+        // `!e.advancedOnly ||` clause in SearchController::tierAllows passes
+        // the whole suite.
+        SearchController sc(m_app);
+        SearchEntry advanced;
+        advanced.kind = SearchEntry::Kind::Setting;
+        advanced.pageId = QStringLiteral("general"); // Always tier — visible in both modes
+        advanced.anchor = QStringLiteral("borderScope");
+        advanced.title = QStringLiteral("Apply borders to");
+        advanced.advancedOnly = true;
+        sc.addEntry(advanced);
+
+        const auto titles = [&sc]() {
+            QStringList out;
+            for (const QVariant& v : sc.results()) {
+                out << v.toMap().value(QStringLiteral("title")).toString();
+            }
+            return out;
+        };
+
+        m_app->registry()->setShowAdvanced(true);
+        sc.setQuery(QStringLiteral("borders"));
+        QVERIFY(titles().contains(QStringLiteral("Apply borders to")));
+
+        m_app->registry()->setShowAdvanced(false);
+        sc.setQuery(QStringLiteral("borders"));
+        QVERIFY(!titles().contains(QStringLiteral("Apply borders to")));
     }
 
     void providerEntitiesAreSearchable()

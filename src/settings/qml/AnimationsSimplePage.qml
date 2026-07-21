@@ -60,6 +60,9 @@ AnimationEventCardList {
                 Layout.fillWidth: true
                 cardSettings: simplePage.globalSettings
                 collapsible: false
+                // Match the cards below: simple mode is duration-only, so the
+                // Global card must not be the one place Spring can be chosen.
+                simpleTiming: simplePage.simpleTiming
             }
 
             // The same animation window filter the advanced General page

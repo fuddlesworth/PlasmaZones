@@ -286,6 +286,92 @@ private Q_SLOTS:
         QCOMPARE(rowAt(out, 0).value(QStringLiteral("_depth")).toInt(), 0);
     }
 
+    void searchSpansEveryScopeWhileDrilledIn()
+    {
+        // Search is global no matter how deep the user has drilled. Rooting
+        // the walk at currentParentId instead would narrow results to the
+        // current category while the rail still looks top-level (the Back
+        // button is hidden whenever a search is active), so the user gets an
+        // empty list and no reason why.
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        QVERIFY(reg(r, QStringLiteral("snapping"), {}, QStringLiteral("Snapping"), {}));
+        QVERIFY(reg(r, QStringLiteral("snapping.behavior"), QStringLiteral("snapping"), QStringLiteral("Behavior"),
+                    QStringLiteral("qrc:/B.qml")));
+        QVERIFY(reg(r, QStringLiteral("rules"), {}, QStringLiteral("Rules"), QStringLiteral("qrc:/R.qml")));
+
+        // Drilled into "snapping", searching for a page that lives outside it.
+        const QVariantList out = rows.build(false, QStringLiteral("rules"), QStringLiteral("snapping"), {}, {});
+        QCOMPARE(idsOf(out), QStringList{QStringLiteral("rules")});
+    }
+
+    void flatPageDataAppliesTheSameOverrideTheRailUses()
+    {
+        // Breadcrumbs resolves flat titles through this, so it must agree with
+        // the rail row for the same id — the two used to be separate
+        // implementations, and only the rail's was covered.
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        QVERIFY(reg(r, QStringLiteral("cat"), {}, QStringLiteral("Decorations"), {}));
+        QVERIFY(reg(r, QStringLiteral("cat.general"), QStringLiteral("cat"), QStringLiteral("General"),
+                    QStringLiteral("qrc:/G.qml")));
+        const QVariantMap overrides{{QStringLiteral("cat.general"), QStringLiteral("Window Appearance")}};
+
+        const QVariantMap data = rows.flatPageData(QStringLiteral("cat.general"), overrides);
+        QCOMPARE(data.value(QStringLiteral("title")).toString(), QStringLiteral("Window Appearance"));
+        QCOMPARE(data.value(QStringLiteral("pageId")).toString().isEmpty(), true); // registry dict uses "id"
+        QCOMPARE(data.value(QStringLiteral("id")).toString(), QStringLiteral("cat.general"));
+
+        // Same id, same override, via the rail: titles must match.
+        const QVariantList railRows = rows.build(true, QString(), QString(), {}, overrides);
+        QVERIFY(!railRows.isEmpty());
+        bool matched = false;
+        for (const QVariant& v : railRows) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("pageId")).toString() == QStringLiteral("cat.general")) {
+                QCOMPARE(m.value(QStringLiteral("title")).toString(), QStringLiteral("Window Appearance"));
+                matched = true;
+            }
+        }
+        QVERIFY(matched);
+
+        // A page with no override keeps its registered title.
+        QCOMPARE(rows.flatPageData(QStringLiteral("cat.general"), {}).value(QStringLiteral("title")).toString(),
+                 QStringLiteral("General"));
+        // Unknown id yields an empty map, not a title-only dict.
+        QVERIFY(rows.flatPageData(QStringLiteral("no-such-page"), overrides).isEmpty());
+    }
+
+    void searchReturnsNothingWhenEveryPageIsHiddenByTheTier()
+    {
+        // A registry that EXISTS but whose every entry is filtered out by the
+        // active tier is a different path from the null-registry early return.
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        QVERIFY(reg(r, QStringLiteral("adv"), {}, QStringLiteral("Advanced Thing"), QStringLiteral("qrc:/A.qml"), false,
+                    false, PV::AdvancedOnly));
+        r.setShowAdvanced(false);
+
+        QVERIFY(rows.build(false, QStringLiteral("advanced"), QString(), {}, {}).isEmpty());
+        QVERIFY(rows.build(false, QString(), QString(), {}, {}).isEmpty());
+        QVERIFY(rows.build(true, QString(), QString(), {}, {}).isEmpty());
+    }
+
+    void buildsNothingForARegisteredButEmptyTree()
+    {
+        // Registry present, zero pages — falls through the whole walk rather
+        // than hitting the null-registry guard.
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        QVERIFY(rows.build(false, QString(), QString(), {}, {}).isEmpty());
+        QVERIFY(rows.build(true, QString(), QString(), {}, {}).isEmpty());
+        QVERIFY(rows.build(false, QStringLiteral("anything"), QString(), {}, {}).isEmpty());
+    }
+
     void searchMatchesOnTheBreadcrumbAndFlattensResults()
     {
         PageRegistry r;

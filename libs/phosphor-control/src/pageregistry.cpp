@@ -191,7 +191,15 @@ bool PageRegistry::pageAllowedInCurrentMode(const QString& id) const
         it = m_indexById.constFind(e.parentId);
         ++hops;
     }
-    return true;
+    // Fell out without reaching a root: either the chain is nested deeper than
+    // the cap, or a parentId resolved to nothing (structurally impossible —
+    // registerPage rejects an unknown parent). Fail CLOSED. Answering "visible"
+    // for a page whose ancestry could not be verified is the same lie the
+    // ancestor walk above exists to prevent: it would let search, keyboard
+    // next/prev and the mode gate offer a row the rail cannot draw.
+    qWarning() << "PageRegistry::pageAllowedInCurrentMode: could not resolve the ancestor chain for" << id << "within"
+               << kMaxParentChainHops << "hops — treating it as hidden";
+    return false;
 }
 
 bool PageRegistry::validateCounterparts() const
@@ -215,9 +223,22 @@ bool PageRegistry::validateCounterparts() const
         }
         // Same tier means the flip lands on something the new mode hides too,
         // so the redirect cannot help. Always a declaration bug.
-        if (m_pages.at(it.value()).visibility == e.visibility) {
+        const Entry& other = m_pages.at(it.value());
+        if (other.visibility == e.visibility) {
             qWarning() << "PageRegistry: page" << e.id << "and its counterpart" << e.counterpartId
                        << "share a visibility tier — the counterpart cannot be the other mode's face of this page";
+            ok = false;
+        }
+        // Counterparts are the two modes' faces of ONE surface, so the mapping
+        // has to hold in both directions. A one-way declaration redirects the
+        // outbound flip correctly and then dead-ends the return flip on the
+        // generic fallback — which looks exactly like correct operation from
+        // the outbound side, so nothing else would ever surface it.
+        if (other.counterpartId != e.id) {
+            qWarning() << "PageRegistry: page" << e.id << "declares counterpart" << e.counterpartId
+                       << "but that page declares"
+                       << (other.counterpartId.isEmpty() ? QStringLiteral("none") : other.counterpartId)
+                       << "— counterparts must point back at each other or the return mode flip falls back";
             ok = false;
         }
     }

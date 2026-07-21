@@ -52,9 +52,17 @@ bool animationPathInScope(const QString& path, const AnimationPageScope& scope);
 
 /// Built-in event paths that fall inside @p scope — the file-backed paths a
 /// surface leaf's Reset/Discard/dirty acts on.
+///
+/// PRECONDITION: EventSubtree scopes only. Both this and shaderTreeScopeDiffers
+/// funnel through animationPathInScope, which requires a non-empty `include`,
+/// so a WholeTree or ConfigOnly scope yields the EMPTY set here and "no
+/// difference" below — NOT "everything", which is what WholeTree's name
+/// suggests. Every caller pre-branches on scope.kind, which is why that is
+/// safe today; call these only on an EventSubtree scope.
 QStringList animationScopedBuiltInPaths(const AnimationPageScope& scope);
 
 /// True iff the two shader trees' overrides differ anywhere inside @p scope.
+/// Same EventSubtree-only precondition as animationScopedBuiltInPaths above.
 bool shaderTreeScopeDiffers(const PhosphorAnimationShaders::ShaderProfileTree& current,
                             const PhosphorAnimationShaders::ShaderProfileTree& baseline,
                             const AnimationPageScope& scope);

@@ -52,6 +52,15 @@ RowLayout {
     // binding only re-evaluates when `currentPageId` changes and a
     // post-registration ancestor title update would never reach QML.
     property int _registryTick: 0
+
+    // Flat-title resolution shared with the rail. Holds no state of its own —
+    // it exists purely so flatPageData() has a registry to look through.
+    SidebarRows {
+        id: titleResolver
+
+        registry: root.controller ? root.controller.registry : null
+    }
+
     //* Ordered ancestors → current. Each entry is a page-data dict.
     readonly property var segments: {
         // Touch _registryTick so the binding declares its dependency on
@@ -59,17 +68,13 @@ RowLayout {
         // — it's the change-notify that matters.
         void root._registryTick;
         if (root.flattenTree) {
-            const leaf = root.controller.registry.pageData(root.controller.currentPageId);
+            // Resolved through the SAME C++ the flat rail uses, so the crumb
+            // and the row it names can never disagree. Re-implementing the
+            // override lookup here in JS meant two copies of one rule, and the
+            // copy the lib cannot unit-test (no QML harness) was this one.
+            const leaf = titleResolver.flatPageData(root.controller.currentPageId, root.flatTitleOverrides);
             if (!leaf || !leaf.id)
                 return [];
-            // Own-property guard — the override map is a plain object
-            // literal, so an id colliding with an Object.prototype name
-            // would read an inherited builtin as a truthy title (see the
-            // prototype-less seen-map note below).
-            if (Object.prototype.hasOwnProperty.call(root.flatTitleOverrides, leaf.id))
-                return [Object.assign({}, leaf, {
-                        "title": root.flatTitleOverrides[leaf.id]
-                    })];
             return [leaf];
         }
         const out = [];

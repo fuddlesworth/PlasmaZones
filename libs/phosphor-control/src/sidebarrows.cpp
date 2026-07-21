@@ -21,6 +21,15 @@ namespace {
 // a tree (depth scales with nesting) while that one walks a single chain.
 constexpr int kMaxWalkDepth = 64;
 
+// The one place a flat-mode title override is applied. Both the flat rail walk
+// and the Q_INVOKABLE Breadcrumbs calls go through here, so the rail and the
+// crumb can never disagree about a leaf's flat title.
+QString flatTitleOf(const QString& pageId, const QString& registeredTitle, const QVariantMap& flatTitleOverrides)
+{
+    const auto it = flatTitleOverrides.constFind(pageId);
+    return it == flatTitleOverrides.constEnd() ? registeredTitle : it.value().toString();
+}
+
 // Role keys. Declared once so a typo cannot silently produce a row the
 // delegate reads as undefined.
 constexpr QLatin1String kPageId{"pageId"};
@@ -134,10 +143,8 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
                 seen.insert(child.id);
                 const int before = out.size();
                 if (!child.qmlSource.isEmpty()) {
-                    const auto override_ = flatTitleOverrides.constFind(child.id);
-                    const QString title =
-                        override_ == flatTitleOverrides.constEnd() ? child.title : override_.value().toString();
-                    out.append(makeRow(child.id, title, child.iconSource, true, 0, false, false, false, false));
+                    out.append(makeRow(child.id, flatTitleOf(child.id, child.title, flatTitleOverrides),
+                                       child.iconSource, true, 0, false, false, false, false));
                 }
                 emitLeaves(child.id, depth + 1);
 
@@ -247,7 +254,6 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
     // no match metadata and would break the result list's reading order.
     const QString needle = searchText.toLower();
     QSet<QString> seen;
-    seen.insert(currentParentId);
 
     // Walk down until a navigable descendant appears, so a category-only
     // parent whose TITLE matches still routes the user somewhere useful.
@@ -320,8 +326,31 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
             }
         }
     };
-    collect(currentParentId, QString(), 0);
+    // Walk from the ROOT, not from currentParentId: search spans every scope
+    // regardless of how deep the user has drilled. Rooting it at the drill
+    // parent silently narrows the results to the current category while the
+    // rail still looks top-level — the Back button that would explain the
+    // scope is hidden whenever a search is active (Sidebar.qml) — so a user
+    // inside "Snapping" searching for a Rules page would get an empty list and
+    // no reason why. It would also make the ancestor breadcrumb above
+    // pointless: every result would share the same prefix.
+    collect(QString(), QString(), 0);
     return out;
+}
+
+QVariantMap SidebarRows::flatPageData(const QString& pageId, const QVariantMap& flatTitleOverrides) const
+{
+    if (m_registry == nullptr) {
+        return {};
+    }
+    QVariantMap data = m_registry->pageData(pageId);
+    if (data.isEmpty()) {
+        // Unknown id — hand back the empty map rather than a dict carrying only
+        // an overridden title, so the caller's "no such page" check still works.
+        return data;
+    }
+    data.insert(kTitle, flatTitleOf(pageId, data.value(kTitle).toString(), flatTitleOverrides));
+    return data;
 }
 
 } // namespace PhosphorControl

@@ -29,6 +29,13 @@ SettingsCard {
 
     /// The ISettings object holding the global animation profile.
     required property QtObject cardSettings
+    /// Trims the timing editor to what simple mode exposes, matching the
+    /// AnimationEventCard.simpleTiming the cards below this one use. Without
+    /// it this card would still offer Easing/Spring and the curve editor while
+    /// every card under it hides them: picking Spring here seeds those cards to
+    /// spring, which hides their Duration row, leaving simple mode with no
+    /// reachable timing control at all until the user switches to Advanced.
+    property bool simpleTiming: false
     /// Extra rows appended below the timing editor. Aliased to `children`
     /// rather than `data` so it agrees with the empty-slot collapse below,
     /// which measures visual children: `data` also accepts non-Item objects
@@ -162,6 +169,7 @@ SettingsCard {
 
             Layout.fillWidth: true
             enabled: card.toggleChecked
+            simpleTiming: card.simpleTiming
             // The Global default has no shader leg in this UI — shader
             // overrides live on the per-event and Rules layers.
             shaderLegSupported: false

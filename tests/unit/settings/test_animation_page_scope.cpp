@@ -191,6 +191,26 @@ private Q_SLOTS:
         const ShaderProfileTree current;
         QVERIFY(shaderTreeScopeDiffers(current, baseline, motion));
     }
+
+    void nonSubtreeScopesYieldNothingFromTheSubtreeHelpers()
+    {
+        // Both helpers funnel through animationPathInScope, which requires a
+        // non-empty `include`. So a WholeTree scope yields the EMPTY path set
+        // and reports "no difference" — NOT "everything", which is what the
+        // name suggests and what a caller forgetting to branch on scope.kind
+        // would assume. Every current caller pre-branches, so this pins the
+        // degenerate contract the header documents rather than a behaviour
+        // anyone should rely on.
+        const AnimationPageScope whole = animationPageScope(QStringLiteral("animations-presets"));
+        QCOMPARE(whole.kind, AnimationPageScope::WholeTree);
+        QVERIFY(animationScopedBuiltInPaths(whole).isEmpty());
+
+        ShaderProfileTree current;
+        current.setOverride(QStringLiteral("window.movement.snapIn"), effectProfile(QStringLiteral("slide")));
+        const ShaderProfileTree baseline;
+        // Trees plainly differ, yet a WholeTree scope reports no difference.
+        QVERIFY(!shaderTreeScopeDiffers(current, baseline, whole));
+    }
 };
 
 QTEST_MAIN(TestAnimationPageScope)

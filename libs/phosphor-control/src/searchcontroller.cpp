@@ -8,6 +8,8 @@
 #include "PhosphorControl/PageRegistry.h"
 #include "PhosphorControl/SearchRanker.h"
 
+#include <QDebug>
+
 namespace PhosphorControl {
 
 namespace {
@@ -229,6 +231,18 @@ QVector<SearchEntry> SearchController::buildIndex() const
         if (e.kind == SearchEntry::Kind::Action || e.pageId.isEmpty()) {
             return true;
         }
+        // Unregistered pageId — drop it, loudly. pageAllowedInCurrentMode
+        // deliberately "expresses no opinion" on an unknown id (it is a tier
+        // filter, not an existence check), so without this a typo'd pageId in
+        // the catalogue sails through every gate below and produces a result
+        // that navigates nowhere: the app's mode gate rejects the id and
+        // bounces the user to a fallback page. The static allowlist that used
+        // to bound this set is gone, and nothing replaced that check.
+        if (!m_app->registry()->hasPage(e.pageId)) {
+            qWarning() << "SearchController: dropping search entry" << e.title << "— its pageId" << e.pageId
+                       << "is not a registered page";
+            return false;
+        }
         if (!m_app->registry()->pageAllowedInCurrentMode(e.pageId)) {
             return false;
         }
@@ -246,9 +260,12 @@ QVector<SearchEntry> SearchController::buildIndex() const
     }
 
     for (const ISearchProvider* provider : m_providers) {
-        if (provider == nullptr) {
-            continue;
-        }
+        // No null check: registerProvider rejects nullptr and dedupes, and
+        // there is no removal path, so an entry here is always non-null. A
+        // check would read as protection against the dangling-provider case the
+        // header warns about ("not owned; must outlive this"), which it cannot
+        // detect — ISearchProvider is not a QObject, so there is nothing to
+        // QPointer. Provider lifetime stays the caller's contract.
         const QVector<SearchEntry> provided = provider->searchEntries();
         for (SearchEntry e : provided) {
             if (!tierAllows(e)) {

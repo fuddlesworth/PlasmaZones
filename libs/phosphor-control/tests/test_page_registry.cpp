@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 #include <QUrl>
@@ -400,7 +401,7 @@ private Q_SLOTS:
         QVERIFY(reg.validateCounterparts());
     }
 
-    void validateCounterpartsRejectsTheThreeBrokenShapes()
+    void validateCounterpartsRejectsTheFourBrokenShapes()
     {
         using PV = PageRegistry::PageVisibility;
 
@@ -449,6 +450,55 @@ private Q_SLOTS:
 
             QVERIFY(!reg.validateCounterparts());
         }
+
+        // One-way declaration: `a` points at `b`, but `b` names nobody. The
+        // OUTBOUND flip off `a` redirects correctly, so this shape looks
+        // healthy from the side anyone would test by hand — it is the RETURN
+        // flip off `b` that silently lands on the app fallback instead of `a`.
+        {
+            PageRegistry reg;
+            auto* p1 = new StubPage(QStringLiteral("a"), &reg);
+            PageRegistry::Entry e1{
+                QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p1};
+            e1.visibility = PV::SimpleOnly;
+            e1.counterpartId = QStringLiteral("b");
+            QVERIFY(reg.registerPage(std::move(e1)));
+
+            auto* p2 = new StubPage(QStringLiteral("b"), &reg);
+            PageRegistry::Entry e2{
+                QStringLiteral("b"), {}, QStringLiteral("B"), {}, QUrl(QStringLiteral("qrc:/B.qml")), p2};
+            e2.visibility = PV::AdvancedOnly; // opposite tier, so only reciprocity is at fault
+            QVERIFY(reg.registerPage(std::move(e2)));
+
+            QVERIFY(!reg.validateCounterparts());
+        }
+    }
+
+    void reachabilityFailsClosedOnAnUnresolvableAncestorChain()
+    {
+        // pageAllowedInCurrentMode answers for search, keyboard next/prev and
+        // the mode gate. If it cannot verify a page's ancestry it must say
+        // "hidden": claiming visible would offer a row the rail cannot draw.
+        // The registry rejects unknown parents, so the only way to reach the
+        // guard is a chain deeper than the hop cap.
+        PageRegistry reg;
+        QString parent;
+        for (int i = 0; i < 40; ++i) {
+            const QString id = QStringLiteral("n%1").arg(i);
+            auto* p = new StubPage(id, &reg);
+            PageRegistry::Entry e{id, parent, id, {}, QUrl(QStringLiteral("qrc:/N.qml")), p};
+            QVERIFY(reg.registerPage(std::move(e)));
+            parent = id;
+        }
+        // Shallow entries still resolve normally.
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("n0")));
+        // Pin the BOUNDARY, not just a value either side of it: n31 is 31 hops
+        // from the root and still resolves, n32 is the first to exceed the
+        // 32-hop cap. Asserting only a far-past-the-cap id would stay green if
+        // the constant moved.
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("n31")));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("could not resolve the ancestor chain")));
+        QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("n32")));
     }
 
     void reachabilityFollowsTheAncestorChain()

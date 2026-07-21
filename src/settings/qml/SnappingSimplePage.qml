@@ -39,6 +39,10 @@ SettingsFlickable {
             Layout.fillWidth: true
             headerText: i18n("Snapping")
             searchAnchor: "snappingSimple"
+            // Matches every shared card below it, and the advanced
+            // counterpart's lead card — a non-collapsible card at the top of a
+            // page of collapsible ones reads as a broken affordance.
+            collapsible: true
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing

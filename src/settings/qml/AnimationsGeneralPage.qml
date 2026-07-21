@@ -45,7 +45,7 @@ SettingsFlickable {
             type: Kirigami.MessageType.Information
             // Kirigami.InlineMessage defaults to hidden; opt in explicitly.
             visible: true
-            text: i18n("These defaults apply to every animation event unless a sub-page (Window, Zone, OSD, etc.) defines its own override.")
+            text: i18n("These defaults apply to every animation event unless a sub-page (Windows, OSDs, Desktops, etc.) defines its own override.")
         }
 
         GlobalTimingDefaultsCard {

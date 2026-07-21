@@ -6,6 +6,7 @@
 #include "phosphorcontrol_export.h"
 
 #include <QObject>
+#include <QPointer>
 #include <QQmlEngine>
 #include <QString>
 #include <QVariantList>
@@ -81,12 +82,29 @@ public:
     Q_INVOKABLE QVariantList build(bool flattenTree, const QString& searchText, const QString& currentParentId,
                                    const QVariantMap& expandedCategories, const QVariantMap& flatTitleOverrides) const;
 
+    /** Registry page-data for @p pageId with its flat-mode title override
+     *  applied, or an empty map for an unknown id.
+     *
+     *  Exists so Breadcrumbs resolves the override through the SAME code the
+     *  rail uses. It previously re-implemented the lookup in QML JS (down to
+     *  its own hasOwnProperty guard against ids colliding with
+     *  Object.prototype names), which meant two implementations of one rule,
+     *  the QML one uncovered — the lib has no QML test harness, so a
+     *  divergence between them would ship green. QVariantMap has no prototype,
+     *  so the guard the JS needed is structurally unnecessary here. */
+    Q_INVOKABLE QVariantMap flatPageData(const QString& pageId, const QVariantMap& flatTitleOverrides) const;
+
 Q_SIGNALS:
     void registryChanged();
 
 private:
-    QObject* m_registryGuard = nullptr;
-    PageRegistry* m_registry = nullptr;
+    /// QPointer, not a raw pointer: the registry is set from QML
+    /// (`registry: root.controller.registry`) and is owned by the
+    /// ApplicationController, not by this object. If that controller is torn
+    /// down first, a raw pointer would leave build() dereferencing freed
+    /// memory behind a null check that still reads as non-null. QPointer makes
+    /// the existing `m_registry == nullptr` guard actually true in that case.
+    QPointer<PageRegistry> m_registry;
 };
 
 } // namespace PhosphorControl

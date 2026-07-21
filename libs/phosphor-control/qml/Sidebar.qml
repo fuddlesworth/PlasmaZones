@@ -15,10 +15,9 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  * Vertical layout:
  *
  *   ┌─────────────────────────┐
- *   │ SearchField  (sticky)   │
- *   ├─────────────────────────┤
- *   ┌─────────────────────────┐
  *   │ headerContent (sticky)  │
+ *   ├─────────────────────────┤
+ *   │ SearchField  (sticky)   │
  *   ├─────────────────────────┤
  *   │ Back button (when drilled)
  *   │ ListView (scrollable)   │

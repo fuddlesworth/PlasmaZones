@@ -189,7 +189,6 @@ SettingsFlickable {
                     previewWidth: root.algorithmPreviewWidth
                     previewHeight: root.algorithmPreviewHeight
                     algorithmId: root.selectedAlgorithm
-                    algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
                     description: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
                     currentAlgorithmId: root.effectiveAlgorithm
                     captionText: i18np("Max %n window", "Max %n windows", previewWindowSlider.slider.value)

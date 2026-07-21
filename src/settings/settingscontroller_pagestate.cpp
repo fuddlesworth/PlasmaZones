@@ -9,12 +9,17 @@
 //   * begin/endExternalEdit — stack envelope so sidebar/global widgets mark
 //     the correct page dirty
 //
+// Per-page Reset/Discard moved to the sibling settingscontroller_pagereset.cpp
+// when this file passed the 1150-line ceiling; the page-class predicates and
+// shared-domain key lists both halves use live in settingscontroller_pagekeys.h.
+//
 // Same class as settingscontroller.cpp, separate TU, no API change.
 
 #include "settingscontroller.h"
 
 #include "animationpagescope.h"
 #include "decorationpagescope.h"
+#include "settingscontroller_pagekeys.h"
 
 #include "../core/logging.h"
 
@@ -25,149 +30,6 @@
 #include <QTimer>
 
 namespace PlasmaZones {
-
-namespace {
-
-// The two drag-to-reorder pages. Their state is the staged order optional
-// (m_stagedSnappingOrder / m_stagedTilingOrder), not config-manifest keys, so
-// per-page Reset/Discard dispatches to the ordering helpers rather than
-// resetKeys/discardKeys.
-bool isOrderingPage(const QString& page)
-{
-    return page == QLatin1String("snapping-ordering") || page == QLatin1String("tiling-ordering");
-}
-
-// The two Quick Shortcuts pages. Their editable state is the per-mode staged
-// quick-slot layout assignments in StagingService (daemon-backed); the shortcut
-// keysequence is a read-only default in the standalone. Reset unassigns every
-// slot (the default), Discard drops the staged edits.
-bool isShortcutsPage(const QString& page)
-{
-    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts");
-}
-
-// Quick-layout slots are numbered 1..9 (see SettingsController::getQuickLayoutSlot).
-constexpr int kQuickLayoutSlotCount = 9;
-
-// Every animation leaf shares the single AnimationsPageController staging domain
-// AND the single ShaderProfileTree key, but Reset/Discard/dirty are NOT
-// whole-tree: each surface leaf (windows/osds/overlays/desktops/motion/dragging/
-// panels/widgets/editor) owns one event-path subtree (see animationPageScope),
-// the general leaf owns only the config keys, and the sets/shaders library leaves
-// act on the whole editable tree. Scoping keeps a Reset on one surface from
-// wiping the others (mirrors the decoration domain below).
-bool isAnimationPage(const QString& page)
-{
-    return SettingsController::pageGroupChildren().value(QStringLiteral("animations")).contains(page);
-}
-
-// The animation config keys OTHER than the per-event surfaces: the global
-// enable, the baseline motion Profile blob, and window filtering. Owned by the
-// Animations → General leaf. The ShaderProfileTree key is deliberately ABSENT —
-// it is per-event state scoped through animationPageScope, not a General-page
-// key. (The per-event override FILES are likewise not config keys.)
-const Settings::ConfigKeyList& animationGeneralConfigKeys()
-{
-    using CD = ConfigDefaults;
-    static const Settings::ConfigKeyList keys{
-        {CD::animationsGroup(), CD::enabledKey()},
-        {CD::animationsGroup(), CD::animationProfileKey()},
-        {CD::animationsWindowFilteringGroup(), CD::transientWindowsKey()},
-        {CD::animationsWindowFilteringGroup(), CD::notificationsAndOsdKey()},
-        {CD::animationsWindowFilteringGroup(), CD::minimumWindowWidthKey()},
-        {CD::animationsWindowFilteringGroup(), CD::minimumWindowHeightKey()},
-    };
-    return keys;
-}
-
-// The WHOLE animation "value" surface — General's keys PLUS the ShaderProfileTree
-// key. Used only by the non-surface library leaves (sets/shaders), whose
-// Reset/Discard act on the entire editable tree (paired with clearAllOverrides /
-// revertPending for the per-event FILES).
-const Settings::ConfigKeyList& animationConfigKeys()
-{
-    using CD = ConfigDefaults;
-    static const Settings::ConfigKeyList keys = []() {
-        Settings::ConfigKeyList k = animationGeneralConfigKeys();
-        k.append({CD::animationsGroup(), CD::shaderProfileTreeKey()});
-        return k;
-    }();
-    return keys;
-}
-
-// AnimationPageScope / animationPageScope / animationPathUnderAny /
-// animationPathInScope / animationScopedBuiltInPaths / shaderTreeScopeDiffers
-// moved to animationpagescope.{h,cpp}: pure page→event-root scoping logic
-// with no SettingsController dependency, split out for the same reason the
-// decoration equivalents were (direct unit-testability without building the
-// whole settings-app object graph, and to keep this translation unit inside
-// the file-size ceiling).
-
-// Every decoration leaf reads/writes the single shared DecorationProfileTree
-// settings key (one JSON blob covering windows + OSDs + popups), so
-// pageGroupChildren("decorations") — the canonical leaf set — identifies them
-// all. Reset/Discard/dirty are NOT whole-tree, though: the three surface pages
-// each own one root subtree (see decorationSurfaceRoot), so resetting OSDs must
-// not touch the Windows overrides. Only the sets/shaders library leaves act on
-// the whole editable tree.
-bool isDecorationPage(const QString& page)
-{
-    return SettingsController::pageGroupChildren().value(QStringLiteral("decorations")).contains(page);
-}
-
-// decorationSurfaceRoot / decorationPathInRoot / decorationRootDiffers moved
-// to decorationpagescope.{h,cpp}: they are pure page→root scoping logic with
-// no SettingsController dependency, split out so the root dispatch and
-// root-scoped diffing are directly unit-testable
-// (tests/unit/settings/test_decoration_page_scope.cpp) without constructing
-// the whole settings-app object graph.
-
-// The decoration "value" surface: one Store-backed key. It cannot ride the
-// pageOwnedConfigKeys manifest — every decoration leaf would own the
-// same key, violating the manifest's one-owner invariant — so the decoration
-// branches in isPageDirty/resetPage/discardPage dispatch through this list
-// instead. Unlike the animation domain there are no side files: reset/discard
-// is entirely resetKeys/discardKeys, and the decorationProfileTreeChanged
-// re-emit drives DecorationPageController::profilesChanged so open cards
-// refresh.
-//
-// The Decorations.WindowFiltering knobs are NOT here — they live on the
-// Decorations → General (window-appearance) page and ride that page's
-// pageOwnedConfigKeys manifest entry, not this shared surface-tree domain.
-const Settings::ConfigKeyList& decorationConfigKeys()
-{
-    using CD = ConfigDefaults;
-    static const Settings::ConfigKeyList keys{
-        {CD::decorationsGroup(), CD::decorationProfileTreeKey()},
-    };
-    return keys;
-}
-
-// RAII suppression of onSettingsPropertyChanged around bulk resetKeys /
-// discardKeys NOTIFY storms: raises the loading flag for the enclosing scope
-// and restores the previous value on exit. Every reset/discard branch shares
-// this instead of hand-rolling the save/set/qScopeGuard triple.
-class LoadingScope
-{
-public:
-    explicit LoadingScope(bool& flag)
-        : m_flag(flag)
-        , m_previous(flag)
-    {
-        flag = true;
-    }
-    ~LoadingScope()
-    {
-        m_flag = m_previous;
-    }
-    Q_DISABLE_COPY_MOVE(LoadingScope)
-
-private:
-    bool& m_flag;
-    bool m_previous;
-};
-
-} // namespace
 
 // Defers dirtyPagesChanged for the enclosing scope so a delegated
 // Reset/Discard that walks several backing pages emits one NOTIFY instead of
@@ -214,6 +76,11 @@ void SettingsController::navigateTo(const QString& address)
     const QString page = (hash < 0) ? address : address.left(hash);
     const QString anchor = (hash < 0) ? QString() : address.mid(hash + 1);
 
+    // Resolved once and reused below: neither the registry topology nor the
+    // mode can change across setActivePage, and resolveToLeaf walks the tree
+    // recursively for a category address.
+    const QString resolved = resolveToLeaf(page);
+
     setActivePage(page);
 
     // Key the anchor to the resolved leaf, and only when that leaf is what
@@ -222,7 +89,6 @@ void SettingsController::navigateTo(const QString& address)
     // content does not exist; stashing it there would leave a stale pending
     // reveal for the next visit. A bogus address is rejected the same way.
     if (!anchor.isEmpty() && app() != nullptr) {
-        const QString resolved = resolveToLeaf(page);
         if (validPageNames().contains(resolved) && m_activePage == resolved) {
             app()->setPendingAnchor(resolved, anchor);
         }
@@ -303,9 +169,37 @@ void SettingsController::setActivePage(const QString& page)
                                          << "counterpart" << counterpart;
             target = counterpart;
         } else {
-            qCDebug(PlasmaZones::lcCore) << "Page" << target
-                                         << "is hidden in the current mode; redirecting to overview";
-            target = QStringLiteral("overview");
+            // No counterpart. Before falling all the way back to Overview, walk
+            // up the ancestry and take the nearest ancestor that still has a
+            // visible leaf: a user on Animations → Windows who flips to simple
+            // mode wants the simple Animations surface, not the dashboard.
+            // Most AdvancedOnly pages declare no counterpart (only the three
+            // condensed surfaces do), so without this the mode toggle throws
+            // away the user's location for the majority of the catalogue.
+            // Nearest-first: parentChainFor returns the chain root-first.
+            QString fallback;
+            const QStringList chain = m_app->parentChainFor(target);
+            for (auto it = chain.crbegin(); it != chain.crend(); ++it) {
+                const QString leaf = m_app->registry()->firstVisibleLeafId(*it);
+                // Re-test the gate's own predicate on the candidate.
+                // firstVisibleLeafId filters DESCENDANTS but never asks whether
+                // the ancestor it was handed is itself reachable, so for an
+                // AdvancedOnly/SimpleOnly category it can hand back a leaf whose
+                // ancestry is filtered — including the very target we are
+                // redirecting away from. Every virtual parent is Always today,
+                // so this cannot fire yet; checking here means it never can.
+                if (!leaf.isEmpty() && validPageNames().contains(leaf)
+                    && m_app->registry()->pageAllowedInCurrentMode(leaf)) {
+                    fallback = leaf;
+                    break;
+                }
+            }
+            if (fallback.isEmpty()) {
+                fallback = QStringLiteral("overview");
+            }
+            qCDebug(PlasmaZones::lcCore) << "Page" << target << "is hidden in the current mode; redirecting to"
+                                         << fallback;
+            target = fallback;
         }
     }
     // Reentrancy guard: a slot connected to activePageChanged that
@@ -597,37 +491,6 @@ bool SettingsController::isPageDirty(const QString& page) const
     return false;
 }
 
-bool SettingsController::pageSupportsReset(const QString& page) const
-{
-    // Config-manifest pages write schema defaults (this includes the Windows
-    // appearance page, whose Windows.* + Gaps.* keys are in the manifest); ordering
-    // pages drop the custom order; shortcuts pages unassign every quick slot; the
-    // virtual screens page unsplits every monitor; animation pages clear every
-    // per-event override and reset the animation config keys; decoration surface
-    // pages clear their own root subtree of the DecorationProfileTree (the
-    // sets/shaders leaves the whole key).
-    //
-    // The condensed simple pages delegate to their backing advanced pages,
-    // which resets those pages' FULL key sets — deliberately wider than the
-    // subset the simple page displays. Narrowing is not expressible: the
-    // per-algorithm tuning the tiling simple page edits lives in ONE blob key
-    // (Tiling.Algorithm/perAlgorithmSettings) that also carries master count
-    // and custom script params. "Reset this page" in simple mode therefore
-    // means "reset this whole feature area", which is the honest reading of a
-    // page that IS the feature area in that mode.
-    return pageOwnedConfigKeys().contains(page) || simplePageBackingPages().contains(page) || isOrderingPage(page)
-        || isShortcutsPage(page) || page == QLatin1String("virtualscreens") || isAnimationPage(page)
-        || isDecorationPage(page);
-}
-
-bool SettingsController::pageSupportsDiscard(const QString& page) const
-{
-    // Every page that supports reset also supports discard (animation pages are
-    // already covered by pageSupportsReset). Kept as a distinct query so the two
-    // kebab items can diverge if a future page becomes discard-only.
-    return pageSupportsReset(page);
-}
-
 void SettingsController::reconcilePagesDirty(const QSet<QString>& pages)
 {
     // Batched reconcilePageDirty: adjust every page's m_dirtyPages membership
@@ -705,423 +568,6 @@ void SettingsController::reconcileRuleBackedDirty()
     sync(QStringLiteral("rules"), m_rulesPage->userRulesDirty());
     if (changed) {
         emitDirtyPagesChanged();
-    }
-}
-
-void SettingsController::resetPage(const QString& page)
-{
-    // Manifest-owned pages FIRST, mirroring isPageDirty and discardPage. A page
-    // can belong to a shared-domain GROUP (animations / decorations) yet own its
-    // own config keys: window-appearance is a decorations-group child, so
-    // isDecorationPage(page) is true, but its Windows.* / Gaps.* keys live in
-    // the manifest. Checking the shared-domain branches first would reset the
-    // whole DecorationProfileTree instead of the page's own keys, and since
-    // isPageDirty and discardPage both route window-appearance through its
-    // manifest, Reset must too or the three disagree.
-    {
-        const auto& manifest = pageOwnedConfigKeys();
-        const auto ownedIt = manifest.constFind(page);
-        if (ownedIt != manifest.constEnd()) {
-            // Suppress onSettingsPropertyChanged for the reset's NOTIFY storm;
-            // reconcile `page`'s dirty state explicitly below.
-            {
-                const LoadingScope loadingScope(m_loading);
-                m_settings.resetKeys(*ownedIt);
-            }
-            reconcilePageDirty(page);
-            return;
-        }
-    }
-
-    // Condensed SimpleOnly pages own no keys — Reset delegates to each
-    // backing advanced page in turn (each recursion reconciles itself, and
-    // reconcilePageDirty cascades back to this page).
-    {
-        const auto& backing = simplePageBackingPages();
-        const auto backingIt = backing.constFind(page);
-        if (backingIt != backing.constEnd()) {
-            const DirtyEmitScope batch(*this);
-            for (const QString& backingPage : *backingIt)
-                resetPage(backingPage);
-            return;
-        }
-    }
-
-    // Animation pages: reset to defaults, scoped like the decoration domain
-    // below. A SURFACE leaf clears only its own event subtree — its per-event
-    // override FILES and its shader-tree overrides — leaving the other surfaces,
-    // General's config keys, and the library untouched. General resets only its
-    // config keys (enable / motion Profile / filtering). A library leaf resets
-    // the whole tree (every file + every animation key). All staged like ordinary
-    // edits: cleared files are snapshotted so Discard restores them, and Save
-    // commits. Suppress onSettingsPropertyChanged during the reset; reconcile the
-    // whole animation leaf set below (a scoped reset can flip a sibling's badge,
-    // and any stale m_dirtyPages entry must clear too).
-    if (isAnimationPage(page)) {
-        const AnimationPageScope scope = animationPageScope(page);
-        {
-            const LoadingScope loadingScope(m_loading);
-            if (scope.kind == AnimationPageScope::ConfigOnly) {
-                m_settings.resetKeys(animationGeneralConfigKeys());
-            } else if (scope.kind == AnimationPageScope::EventSubtree) {
-                // Files first. -1 means the clear did not complete (refused
-                // mid-discard, or a file could not be removed): leave the shader
-                // tree un-reset so the page stays visibly dirty for a retry rather
-                // than reporting a half-done reset as clean. The page toasts why.
-                if (m_animationsPage != nullptr
-                    && m_animationsPage->clearOverridesUnder(animationScopedBuiltInPaths(scope)) < 0) {
-                    reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
-                    return;
-                }
-                // Shader tree: clear only this scope's overrides (default = none).
-                PhosphorAnimationShaders::ShaderProfileTree tree = m_settings.shaderProfileTree();
-                bool changed = false;
-                const QStringList overridden = tree.overriddenPaths();
-                for (const QString& path : overridden) {
-                    if (animationPathInScope(path, scope) && tree.clearOverride(path))
-                        changed = true;
-                }
-                if (changed)
-                    m_settings.setShaderProfileTree(tree);
-                // A page hosting the global timing / filter cards resets those
-                // keys too (the condensed simple page). Deliberately the
-                // General key list, NOT animationConfigKeys: the shader-tree
-                // key is per-event state already handled per scope above.
-                if (scope.includeGeneralKeys)
-                    m_settings.resetKeys(animationGeneralConfigKeys());
-            } else {
-                // WholeTree library leaf: files + every animation key.
-                if (m_animationsPage != nullptr && m_animationsPage->clearAllOverrides() < 0) {
-                    reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
-                    return;
-                }
-                m_settings.resetKeys(animationConfigKeys());
-            }
-        }
-        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
-        return;
-    }
-
-    // Decoration pages: reset to the built-in defaults. The stored blob holds
-    // only user edits; the built-in card chrome for the OSD and popups is a
-    // read-side seed layer (Settings::decorationProfileTree overlays
-    // ConfigDefaults::decorationProfileTree at lowest precedence). So a SURFACE
-    // page clears only its own root subtree's overrides — the seeds show
-    // through again, restoring the default chrome for seeded surfaces and "no
-    // decoration" everywhere else — leaving the other two roots (and the
-    // global baseline) standing; a non-surface leaf (sets/shaders, empty root)
-    // resets the whole tree key.
-    // Staged like ordinary edits: Save commits, Discard restores the baseline.
-    // Same NOTIFY-storm suppression as the manifest path.
-    if (isDecorationPage(page)) {
-        {
-            const LoadingScope loadingScope(m_loading);
-            const QString root = decorationSurfaceRoot(page);
-            if (root.isEmpty()) {
-                m_settings.resetKeys(decorationConfigKeys());
-            } else {
-                PhosphorSurfaceShaders::DecorationProfileTree tree = m_settings.decorationProfileTree();
-                bool changed = false;
-                // overriddenPaths() returns a copy, so clearing during the walk
-                // is safe. Only this root's overrides go; the stored default
-                // for a surface subtree is "no user overrides", and the write
-                // path strips whatever seed-injected entries the merged read
-                // view carried, so the seeds re-surface on the next read.
-                const QStringList paths = tree.overriddenPaths();
-                for (const QString& path : paths) {
-                    if (decorationPathInRoot(path, root) && tree.clearOverride(path))
-                        changed = true;
-                }
-                if (changed)
-                    m_settings.setDecorationProfileTree(tree);
-            }
-        }
-        // isPageDirty(decoration) is value-based. Reconcile EVERY decoration
-        // leaf, not just the active page: a subtree reset can flip a sibling
-        // parent/child leaf's badge, and any stale m_dirtyPages entry left by an
-        // edit made while another leaf was active must clear too or needsSave()
-        // sticks true with no badge to explain it (mirrors the discardPage
-        // decoration branch). Batched so dirtyPagesChanged fires at most once.
-        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decorations")));
-        return;
-    }
-
-    // Ordering pages: "reset to defaults" means dropping the custom order.
-    // resetSnappingOrder/resetTilingOrder stage the empty (default) order and
-    // mark the active page dirty themselves.
-    if (page == QLatin1String("snapping-ordering")) {
-        resetSnappingOrder();
-        return;
-    }
-    if (page == QLatin1String("tiling-ordering")) {
-        resetTilingOrder();
-        return;
-    }
-
-    // Quick Shortcuts: "reset to defaults" unassigns every slot (the default is
-    // no assignment). Stage an empty id ONLY for slots that currently hold an
-    // assignment — an already-empty slot needs no change, so resetting an
-    // all-default page stages nothing (stays clean) and Save flushes no no-op
-    // clears. quickLayoutSlotsChanged refreshes the slot cards.
-    if (isShortcutsPage(page)) {
-        const bool snapping = (page == QLatin1String("snapping-shortcuts"));
-        for (int slot = 1; slot <= kQuickLayoutSlotCount; ++slot) {
-            const QString current = snapping ? getQuickLayoutSlot(slot) : getTilingQuickLayoutSlot(slot);
-            if (current.isEmpty())
-                continue;
-            if (snapping)
-                m_staging.stageSnappingQuickSlot(slot, QString());
-            else
-                m_staging.stageTilingQuickSlot(slot, QString());
-        }
-        Q_EMIT quickLayoutSlotsChanged();
-        reconcilePageDirty(page);
-        return;
-    }
-
-    // Virtual Screens: "reset to defaults" unsplits every monitor. Drop any
-    // in-progress split edits, then stage a removal for each physical screen
-    // that currently HAS virtual screens (a >1-entry config). save() flushes
-    // the removals to the daemon + Settings. dirtyPagesChanged (emitted below)
-    // drives the page's _refreshConfig so the editor re-reads the reverted state.
-    if (page == QLatin1String("virtualscreens")) {
-        m_staging.clearVirtualScreenConfigs();
-        const QVariantList physicalScreens = screens();
-        for (const QVariant& entry : physicalScreens) {
-            const QString name = entry.toMap().value(QStringLiteral("name")).toString();
-            if (name.isEmpty())
-                continue;
-            const QString physId = physicalScreenId(name);
-            // A >1-entry config means the physical screen is split into virtual
-            // screens; single/empty means it is already at the native default.
-            if (!physId.isEmpty() && getVirtualScreenConfig(physId).size() > 1)
-                m_staging.stageVirtualScreenRemoval(physId);
-        }
-        if (m_staging.hasStagedVirtualScreenConfigs())
-            m_dirtyPages.insert(page);
-        else
-            m_dirtyPages.remove(page);
-        emitDirtyPagesChanged();
-        return;
-    }
-
-    // Manifest-owned pages and the condensed simple pages were handled at the
-    // top of this function; anything reaching here matched no manifest entry,
-    // no backing-page delegation, and no shared-domain / ordering / shortcut /
-    // virtual-screen branch, so there is nothing to reset.
-    qCWarning(PlasmaZones::lcCore) << "resetPage: no config manifest for page" << page;
-}
-
-void SettingsController::discardPage(const QString& page)
-{
-    const auto& manifest = pageOwnedConfigKeys();
-    const auto it = manifest.constFind(page);
-    if (it != manifest.constEnd()) {
-        {
-            const LoadingScope loadingScope(m_loading);
-            m_settings.discardKeys(*it);
-        }
-        // Every owned key is back at the committed baseline, so the page is clean.
-        reconcilePageDirty(page);
-        return;
-    }
-
-    // Condensed SimpleOnly pages own no keys — Discard delegates to each
-    // backing advanced page (mirrors resetPage; reconcilePageDirty cascades
-    // back to this page).
-    {
-        const auto& backing = simplePageBackingPages();
-        const auto backingIt = backing.constFind(page);
-        if (backingIt != backing.constEnd()) {
-            const DirtyEmitScope batch(*this);
-            for (const QString& backingPage : *backingIt)
-                discardPage(backingPage);
-            return;
-        }
-    }
-
-    // Ordering pages: drop the staged custom order so the effective order falls
-    // back to the saved value.
-    if (page == QLatin1String("snapping-ordering") || page == QLatin1String("tiling-ordering")) {
-        auto& staged = (page == QLatin1String("snapping-ordering")) ? m_stagedSnappingOrder : m_stagedTilingOrder;
-        if (staged.has_value()) {
-            staged.reset();
-            if (page == QLatin1String("snapping-ordering"))
-                Q_EMIT stagedSnappingOrderChanged();
-            else
-                Q_EMIT stagedTilingOrderChanged();
-        }
-        reconcilePageDirty(page);
-        return;
-    }
-
-    // Quick Shortcuts: drop the mode's staged quick-slot edits so the getters
-    // fall back to the daemon's saved slots.
-    if (isShortcutsPage(page)) {
-        const bool snapping = (page == QLatin1String("snapping-shortcuts"));
-        const bool hadStaged =
-            snapping ? m_staging.hasStagedSnappingQuickSlots() : m_staging.hasStagedTilingQuickSlots();
-        if (hadStaged) {
-            if (snapping)
-                m_staging.clearSnappingQuickSlots();
-            else
-                m_staging.clearTilingQuickSlots();
-            Q_EMIT quickLayoutSlotsChanged();
-        }
-        reconcilePageDirty(page);
-        return;
-    }
-
-    // Virtual Screens: drop every staged virtual-screen edit so the editor
-    // falls back to the daemon's saved configs. The Discard menu item is only
-    // enabled while staged edits exist, so there is always something to clear.
-    if (page == QLatin1String("virtualscreens")) {
-        m_staging.clearVirtualScreenConfigs();
-        m_dirtyPages.remove(page);
-        // Always emit so the page's dirtyPagesChanged handler re-reads the
-        // reverted config, even if other pages keep the global flag dirty.
-        emitDirtyPagesChanged();
-        return;
-    }
-
-    // Animation pages: discard reverts to the committed baseline, scoped like the
-    // decoration domain below. A SURFACE leaf reverts only its own event subtree —
-    // its override FILES (revertPendingUnder) and its shader-tree paths (restored
-    // to baseline) — so discarding OSDs cannot drop a pending Windows edit.
-    // General reverts only its config keys. A library leaf reverts the whole tree
-    // (all files via revertPending + every animation key via discardKeys).
-    // Reverting the shader tree re-emits shaderProfileTreeChanged, which the
-    // controller observes to refresh the cards.
-    if (isAnimationPage(page)) {
-        const AnimationPageScope scope = animationPageScope(page);
-        if (scope.kind == AnimationPageScope::ConfigOnly) {
-            {
-                const LoadingScope loadingScope(m_loading);
-                m_settings.discardKeys(animationGeneralConfigKeys());
-            }
-        } else if (scope.kind == AnimationPageScope::EventSubtree) {
-            if (m_animationsPage != nullptr)
-                m_animationsPage->revertPendingUnder(animationScopedBuiltInPaths(scope));
-            // Shader tree: restore only this scope's paths to their baseline value
-            // (re-add / change / remove), leaving the other surfaces' staged edits.
-            const LoadingScope loadingScope(m_loading);
-            PhosphorAnimationShaders::ShaderProfileTree current = m_settings.shaderProfileTree();
-            const PhosphorAnimationShaders::ShaderProfileTree baseline = m_settings.committedShaderProfileTree();
-            QSet<QString> paths;
-            for (const QString& p : current.overriddenPaths())
-                if (animationPathInScope(p, scope))
-                    paths.insert(p);
-            for (const QString& p : baseline.overriddenPaths())
-                if (animationPathInScope(p, scope))
-                    paths.insert(p);
-            bool changed = false;
-            for (const QString& path : paths) {
-                if (baseline.hasOverride(path)) {
-                    const auto committed = baseline.directOverride(path);
-                    if (!current.hasOverride(path) || current.directOverride(path) != committed) {
-                        current.setOverride(path, committed);
-                        changed = true;
-                    }
-                } else if (current.clearOverride(path)) {
-                    changed = true;
-                }
-            }
-            if (changed)
-                m_settings.setShaderProfileTree(current);
-            // A page hosting the global timing / filter cards discards those
-            // keys too (the condensed simple page), mirroring its reset scope.
-            if (scope.includeGeneralKeys)
-                m_settings.discardKeys(animationGeneralConfigKeys());
-        } else {
-            // WholeTree library leaf.
-            if (m_animationsPage != nullptr)
-                m_animationsPage->revertPending();
-            const LoadingScope loadingScope(m_loading);
-            m_settings.discardKeys(animationConfigKeys());
-        }
-        // Reconcile every animation leaf against the value-based truth (this
-        // surface clean post-discard; siblings unchanged). Value-based on purpose:
-        // revertPendingUnder can refuse mid-async or retain a failed restore.
-        // Batched: one emission at most.
-        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
-        return;
-    }
-
-    // Decoration pages: discard reverts to the committed baseline. A SURFACE page
-    // reverts only its own root subtree — each such path is restored to the
-    // baseline's value (re-added, changed, or removed) while the other two roots'
-    // staged edits stand — so discarding OSDs cannot drop a pending Windows edit.
-    // A non-surface leaf (sets/shaders, empty root) reverts the whole tree key via
-    // discardKeys. Either way the setDecorationProfileTree / discardKeys write
-    // re-emits decorationProfileTreeChanged, which DecorationPageController
-    // forwards as profilesChanged so the open cards refresh.
-    if (isDecorationPage(page)) {
-        {
-            const LoadingScope loadingScope(m_loading);
-            const QString root = decorationSurfaceRoot(page);
-            if (root.isEmpty()) {
-                m_settings.discardKeys(decorationConfigKeys());
-            } else {
-                PhosphorSurfaceShaders::DecorationProfileTree current = m_settings.decorationProfileTree();
-                const PhosphorSurfaceShaders::DecorationProfileTree baseline =
-                    m_settings.committedDecorationProfileTree();
-                // Union of this root's overridden paths across both trees so a
-                // path that only exists in one (a staged add, or a baseline
-                // override the user cleared) is reconciled in the right direction.
-                QSet<QString> paths;
-                for (const QString& p : current.overriddenPaths())
-                    if (decorationPathInRoot(p, root))
-                        paths.insert(p);
-                for (const QString& p : baseline.overriddenPaths())
-                    if (decorationPathInRoot(p, root))
-                        paths.insert(p);
-                bool changed = false;
-                for (const QString& path : paths) {
-                    if (baseline.hasOverride(path)) {
-                        const auto committed = baseline.directOverride(path);
-                        if (!current.hasOverride(path) || current.directOverride(path) != committed) {
-                            current.setOverride(path, committed);
-                            changed = true;
-                        }
-                    } else if (current.clearOverride(path)) {
-                        changed = true;
-                    }
-                }
-                if (changed)
-                    m_settings.setDecorationProfileTree(current);
-            }
-        }
-        // Reconcile every decoration leaf against the value-based truth (this
-        // surface clean post-discard; siblings unchanged). Batched: one emission
-        // at most.
-        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decorations")));
-        return;
-    }
-
-    // Parent category (e.g. "snapping" / "tiling" / "placement"): discard every
-    // discardable leaf beneath it. Lets the sidebar's section-disable confirm
-    // drop a whole mode's staged edits before flipping the enable flag, rather
-    // than relying on the framework PageAdapter::discard() no-op.
-    const auto& groups = pageGroupChildren();
-    const auto git = groups.constFind(page);
-    if (git == groups.constEnd()) {
-        qCWarning(PlasmaZones::lcCore) << "discardPage: no config manifest or child group for page" << page;
-        return;
-    }
-    // Dispatch on pageSupportsDiscard, not manifest membership: the ordering and
-    // Quick Shortcuts children are deliberately absent from the config manifest
-    // (they revert through their own staged machinery) yet isPageDirty recurses
-    // into them, so a parent is reported dirty when only they are edited. A
-    // manifest-only walk would leave those staged edits in place, and the
-    // section-disable confirm would then apply a partial edit — exactly what that
-    // confirm exists to prevent. Non-discardable children (e.g. shaders browser)
-    // return false and are skipped, as are the condensed simple pages — they
-    // own no keys and would only re-discard their backing pages, which are
-    // always siblings in this same set.
-    const DirtyEmitScope batch(*this);
-    for (const QString& child : *git) {
-        if (pageSupportsDiscard(child) && !simplePageBackingPages().contains(child))
-            discardPage(child);
     }
 }
 

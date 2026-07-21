@@ -46,6 +46,12 @@ Kirigami.ApplicationWindow {
      *      window.sidebar.currentParentId  // read
      *      window.sidebar.footerContent: Component { ... }
      *      window.sidebar.trailingDelegate: Component { ... }
+     *      window.sidebar.flattenTree            // simple-mode flat rail
+     *      window.sidebar.flatTitleOverrides     // per-leaf flat titles
+     *
+     *  The last two are also read back by this window to keep Breadcrumbs
+     *  in step with the rail, so a consumer must set them through this alias
+     *  rather than on the Sidebar directly.
      *
      *  Underscore-prefixed members on the underlying Sidebar
      *  (`_isExpanded`, `_refreshModel`, `_suppressAccordion`, …) are

@@ -100,6 +100,14 @@ struct Block
 /// the caller can look at a block's OWN body. Without excluding nested blocks a
 /// parent inherits any `advancedOnly` its children declare, which would mark
 /// every anchor on the page.
+///
+/// LIMITATION: braces are counted lexically, including any inside string
+/// literals and JS expression bodies. One unbalanced brace in a QML string
+/// would shift every block boundary after it and silently mis-attribute
+/// anchors in either direction. Neither parsed file contains one today, and
+/// theParserFindsAdvancedAnchors' per-file assertions would fail loudly if a
+/// shift ever collapsed a file's parse. Teach this to skip quoted spans before
+/// pointing it at a third file.
 QList<Block> parseBlocks(const QString& src)
 {
     QList<Block> all;
@@ -201,11 +209,31 @@ private Q_SLOTS:
     /// silently stops matching turns the whole test into a vacuous pass.
     void theParserFindsAdvancedAnchors()
     {
-        int total = 0;
+        // Per-file, not just a global total: a bare `total >= N` stays green
+        // when one file's parse collapses and another's grows, which is exactly
+        // the half-broken-regex case this test exists to catch. Every file in
+        // the map carries advanced anchors by construction — that is why it is
+        // in the map — so each must contribute at least one.
+        // Per-file rather than a global floor. `total >= 20` stayed green when
+        // one file's parse collapsed and another's grew — exactly the
+        // half-broken-regex case this exists to catch. Every file in the map is
+        // in the map BECAUSE it carries advanced anchors, so each must
+        // contribute at least one; that is a derived invariant, not a magic
+        // number, and it localises the failure to the file that broke.
+        //
+        // Deliberately NOT cross-checked against the catalogue's
+        // advancedOnly=true row count: those two sets are not in a containment
+        // relation. A catalogue row is also advanced-only when it sits on an
+        // AdvancedOnly PAGE or comes from crossFileAdvanced(), neither of which
+        // shows up as a per-row `advancedOnly` in these two QML files (26 vs 22
+        // at the time of writing).
         for (auto it = qmlFileToPageId().cbegin(); it != qmlFileToPageId().cend(); ++it) {
-            total += advancedAnchorsIn(m_qmlDir + QLatin1Char('/') + it.key()).size();
+            const int n = advancedAnchorsIn(m_qmlDir + QLatin1Char('/') + it.key()).size();
+            QVERIFY2(n > 0,
+                     qPrintable(QStringLiteral("no advanced anchors parsed from %1 — the regex or the file's "
+                                               "advancedOnly usage changed")
+                                    .arg(it.key())));
         }
-        QVERIFY2(total >= 20, qPrintable(QStringLiteral("only %1 advanced anchors parsed").arg(total)));
     }
 
     void catalogueTiersMatchTheQml()

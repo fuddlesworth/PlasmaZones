@@ -24,8 +24,7 @@ SettingsCard {
             searchAnchor: "newWindowPlacement"
             description: i18n("Where newly opened windows appear in the tiling order")
 
-            ComboBox {
-                Layout.fillWidth: false
+            WideComboBox {
                 Accessible.name: i18n("New window placement")
                 textRole: "text"
                 valueRole: "value"
@@ -112,7 +111,7 @@ SettingsCard {
 
             WideComboBox {
                 Accessible.name: i18n("Autotile drag behavior")
-                Accessible.description: i18n("Selects how dragging a tiled window on an autotile screen behaves: Float converts it to free-floating, Reorder keeps it tiled and swaps it into the drop slot.")
+                Accessible.description: i18n("Selects how dragging a tiled window on an autotile screen behaves. Float converts it to free-floating and Reorder keeps it tiled, swapping it into the drop slot.")
                 textRole: "text"
                 valueRole: "value"
                 model: settingsController.valueOptions("Tiling.Behavior", "DragBehavior")
@@ -130,7 +129,7 @@ SettingsCard {
 
             WideComboBox {
                 Accessible.name: i18n("Autotile overflow behavior")
-                Accessible.description: i18n("Selects how windows beyond the max-windows cap are handled: Float excess windows, or Unlimited to tile every window regardless of count.")
+                Accessible.description: i18n("Selects how windows beyond the max-windows cap are handled. Float floats the excess windows and Unlimited tiles every window regardless of count.")
                 textRole: "text"
                 valueRole: "value"
                 model: settingsController.valueOptions("Tiling.Behavior", "OverflowBehavior")

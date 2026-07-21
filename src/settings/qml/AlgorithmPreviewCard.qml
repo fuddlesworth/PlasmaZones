@@ -27,8 +27,6 @@ ColumnLayout {
 
     /// Algorithm currently driving the preview.
     required property string algorithmId
-    /// Display name from the algorithm's metadata, shown when showLabel is on.
-    property string algorithmName: ""
     /// Description from the algorithm's metadata. Empty hides the label.
     property string description: ""
     /// Algorithm id the picker shows as current. Usually algorithmId, but the
@@ -103,9 +101,11 @@ ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.smallSpacing
                     appSettings: settingsController
+                    // showLabel is hard-off here, so AlgorithmPreview.algorithmName
+                    // could never render — the card deliberately titles itself
+                    // instead. No algorithmName is forwarded for that reason.
                     showLabel: false
                     algorithmId: card.algorithmId
-                    algorithmName: card.algorithmName
                     windowCount: card.windowCount
                     splitRatio: card.splitRatio
                     masterCount: card.supportsMasterCount ? card.masterCount : 0

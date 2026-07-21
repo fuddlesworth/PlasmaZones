@@ -426,7 +426,11 @@ SettingsFlickable {
                         TextField {
                             id: audioSourceField
 
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 12
+                            // SettingsRow lays its default children out in a
+                            // plain Row positioner, so Layout.* attached
+                            // properties are ignored here — set the width
+                            // directly or the field renders at implicit width.
+                            width: Kirigami.Units.gridUnit * 12
                             Accessible.name: i18n("Audio source")
                             onEditingFinished: appSettings.audioInputSource = text
 

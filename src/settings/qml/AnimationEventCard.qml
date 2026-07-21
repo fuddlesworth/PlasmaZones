@@ -18,7 +18,8 @@ import org.kde.kirigami as Kirigami
  * Controls: timing-mode (Easing/Spring), curve thumbnail with
  * "Customize…" dialog, duration slider, inheritance breadcrumb, and — on
  * shader-supported paths — the shader picker and its per-shader parameter
- * editor (both wired through the shared AnimationProfileEditor).
+ * editor (both wired through the shared AnimationProfileEditor). Setting
+ * `simpleTiming` trims that down to duration, shader and shader parameters.
  *
  * Required properties:
  *   - eventPath:  full path string from `ProfilePaths::` (e.g. "editor.snapIn")
@@ -28,6 +29,10 @@ import org.kde.kirigami as Kirigami
  *   - isParentNode: bool — flips the inheritance banner copy
  *   - alwaysEnabled: bool — hides the override toggle (the global root)
  *   - collapsible: bool — header click collapses the body
+ *   - simpleTiming: bool — hides the timing-mode combo and the curve editor,
+ *     and keeps a duration-only edit from pinning the inherited curve
+ *   - mirrorPaths: list<string> — extra event paths every write is echoed to,
+ *     so one card can front several events (open mirrored onto close)
  */
 Item {
     // Both the curve editor and the colour picker now live inside the
@@ -382,9 +387,20 @@ Item {
     // `name` field automatically.
     function commitOverride() {
         var profile = {
-            "curve": root.currentCurveString,
             "duration": root.currentDuration
         };
+        // Simple mode hides the timing-mode combo and the Customize dialog, and
+        // currentCurveString is seeded from the RESOLVED (inherited) profile
+        // when this card owns no override. Writing it unconditionally means
+        // dragging Duration alone silently pins a copy of the Global curve here
+        // as a direct override — this event then stops tracking later Global
+        // curve changes, and simple mode shows no control hinting that a curve
+        // override exists or how to clear it. Carry the curve only when the
+        // card already owns one, or when the user can actually see and edit it.
+        var raw = settingsController.animationsPage.rawProfile(root.eventPath) || ({});
+        var ownsCurve = typeof raw.curve === "string" && raw.curve.length > 0;
+        if (!root.simpleTiming || ownsCurve)
+            profile.curve = root.currentCurveString;
         root._setOverrideOnAll(profile);
     }
 

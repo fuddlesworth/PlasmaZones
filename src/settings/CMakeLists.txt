@@ -45,9 +45,15 @@ set(plasmazones_settings_SRCS
     settingscontroller_dbuswire.cpp
     # Active-page navigation + per-page dirty tracking + external-edit envelope.
     settingscontroller_pagestate.cpp
-    # Pure decoration page→root scoping helpers (root dispatch, prefix match,
-    # root-scoped tree diff), split from pagestate so they unit-test without
-    # the whole settings-app object graph.
+    # Per-page Reset/Discard, split from pagestate at the 1150-line ceiling.
+    settingscontroller_pagereset.cpp
+    # Page-class predicates + shared-domain key lists both halves need (was an
+    # anonymous namespace in pagestate; internal linkage cannot span two TUs).
+    settingscontroller_pagekeys.h
+    settingscontroller_pagekeys.cpp
+    # Pure page→root scoping helpers for the animation and decoration domains
+    # (root dispatch, prefix match, scoped tree diff), split from pagestate so
+    # they unit-test without the whole settings-app object graph.
     animationpagescope.h
     animationpagescope.cpp
     decorationpagescope.h

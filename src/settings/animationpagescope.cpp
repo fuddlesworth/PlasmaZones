@@ -70,11 +70,26 @@ bool animationPathInScope(const QString& path, const AnimationPageScope& scope)
 
 QStringList animationScopedBuiltInPaths(const AnimationPageScope& scope)
 {
+    // Memoised per scope. isPageDirty is a hot path and a collapsed-parent
+    // query recurses over every animation leaf, each of which would otherwise
+    // re-scan the whole built-in path list. Safe to cache because the inputs
+    // are both immutable at runtime: allBuiltInPaths() is a compile-time list
+    // (itself a function-local static), and a scope's include/exclude roots
+    // are fixed per page id by animationPageScope. Keyed on the roots rather
+    // than the page id so callers that build a scope by hand still hit it.
+    static QHash<QString, QStringList> cache;
+    const QString key =
+        scope.include.join(QLatin1Char('\x1f')) + QLatin1Char('\x1e') + scope.exclude.join(QLatin1Char('\x1f'));
+    const auto it = cache.constFind(key);
+    if (it != cache.constEnd())
+        return it.value();
+
     QStringList out;
     for (const QString& path : PhosphorAnimation::ProfilePaths::allBuiltInPaths()) {
         if (animationPathInScope(path, scope))
             out.append(path);
     }
+    cache.insert(key, out);
     return out;
 }
 

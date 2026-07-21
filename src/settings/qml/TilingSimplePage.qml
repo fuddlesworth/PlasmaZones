@@ -24,6 +24,13 @@ import org.kde.kirigami as Kirigami
  * selected algorithm's global per-algorithm slot, matching the advanced
  * page's global path — never the flat global SplitRatio, which would
  * clobber sibling algorithms' slots).
+ *
+ * One consequence worth knowing: a per-monitor override authored in advanced
+ * mode still WINS over anything edited here. A user who set a per-monitor Max
+ * windows or Master ratio, then switched to simple, will see this page's
+ * slider move while that monitor's effective value does not change, because
+ * the override shadows the global slot this page writes. Simple mode shows no
+ * scope chip, so nothing on screen says so.
  */
 SettingsFlickable {
     id: root
@@ -126,6 +133,10 @@ SettingsFlickable {
             Layout.fillWidth: true
             headerText: i18n("Tiling")
             searchAnchor: "tilingSimple"
+            // Matches every shared card below it, and the advanced
+            // counterpart's lead card — a non-collapsible card at the top of a
+            // page of collapsible ones reads as a broken affordance.
+            collapsible: true
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -149,7 +160,6 @@ SettingsFlickable {
                     previewHeight: root.algorithmPreviewHeight
                     searchAnchor: "simpleAlgorithm"
                     algorithmId: root.selectedAlgorithm
-                    algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
                     description: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
                     currentAlgorithmId: root.appSettingsObj.defaultAutotileAlgorithm
                     windowCount: maxWindowsSlider.slider.value
