@@ -256,12 +256,12 @@ add_test(NAME test_autotile_virtual COMMAND test_autotile_virtual)
 target_compile_definitions(test_autotile_virtual PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# autotile/ - Autotile Engine Extended Tests (startup, float, algoswitch, overflow)
+# autotile/ - Autotile Engine Extended Tests (startup, float, algoswitch,
+#             script-state stash, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_autotile_ext_startup_float autotile/test_autotile_ext_startup_float.cpp)
 p_add_test(test_autotile_ext_algoswitch autotile/test_autotile_ext_algoswitch.cpp)
 target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-
 p_add_test(test_autotile_script_state_stash autotile/test_autotile_script_state_stash.cpp)
 target_compile_definitions(test_autotile_script_state_stash PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_ext_overflow autotile/test_autotile_ext_overflow.cpp)

@@ -1501,12 +1501,18 @@ private:
     //
     // Tagged with the EFFECTIVE algorithm id at harvest time, and handed back
     // only when that still matches on re-creation, because TilingStateKey does
-    // not include the algorithm. The invariant to preserve is the one the wipe
-    // sites enforce for live states — bags never cross algorithms — and the
-    // stash guards it twice over: those sites also drop stash entries for the
-    // screens they wipe, and the tag is re-checked on the way back out. See
-    // restoreStashedScriptState for why both are kept. A tag mismatch discards
-    // rather than migrates; script state has no cross-algorithm meaning.
+    // not include the algorithm. That tag is what preserves the invariant the
+    // wipe sites enforce for live states: bags never cross algorithms. The wipe
+    // sites deliberately do NOT drop stash entries themselves — they reason
+    // about a screen as a whole, while the stash holds one entry per
+    // (desktop, activity) context, so a screen-wide drop there erased bags the
+    // wipe had never examined and broke the toggle-off rescue outright on
+    // screens pinned to their own algorithm. A tag mismatch discards rather
+    // than migrates; script state has no cross-algorithm meaning.
+    //
+    // The other half of the invariant is that an EMPTY bag erases the entry
+    // (see stashScriptState), so a bag a live wipe cleared cannot be shadowed
+    // by a stale entry and handed back later.
     //
     // Within-session only: nothing writes it to disk, so a daemon restart still
     // starts from a clean layout.
@@ -1520,18 +1526,22 @@ private:
     /// Rescue @p state's script-state bag into m_scriptStateStash under @p key,
     /// tagged with the screen's CURRENT effective algorithm. Call before the
     /// state is destroyed and before any override drop that would change what
-    /// "effective" resolves to. No-op for an empty bag, so a stale entry for the
-    /// key is left alone rather than replaced by nothing.
+    /// "effective" resolves to. An EMPTY bag erases the key's entry instead of
+    /// inserting: the state is the truth for its key, so emptiness must not be
+    /// shadowed by something stashed earlier.
     void stashScriptState(const PhosphorEngine::TilingStateKey& key, const PhosphorTiles::TilingState* state);
 
     /// Hand a stashed bag back to a freshly created @p state for @p key, if one
-    /// is held and its algorithm tag still matches. Consumes the entry either
-    /// way: a matching bag now lives on the state, and a mismatched one is dead.
+    /// is held and its algorithm tag still matches. A mismatched entry is erased
+    /// (nothing can make it valid again); a matching one is left in place, so a
+    /// transient state that is created and then discarded cannot consume it.
     void restoreStashedScriptState(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state);
 
     /// Drop every stashed bag for @p screenId, across all desktops and
-    /// activities. Used by the algorithm-wipe sites, whose whole purpose is to
-    /// stop a bag reaching a different algorithm.
+    /// activities. For screen ids that are going away for good (an orphaned
+    /// virtual screen) or moving wholesale to another algorithm (a global
+    /// switch). The per-screen wipe sites do NOT use this — see the note on
+    /// m_scriptStateStash for why the per-key tag covers them instead.
     void dropStashedScriptStates(const QString& screenId);
 
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin

@@ -302,12 +302,21 @@ void PerScreenConfigResolver::wipeStateBagsOnEffectiveAlgorithmChange(const QStr
         }
         it.value()->setScriptState({});
     }
-    // Bags rescued from an earlier teardown of this screen are wiped on the same
-    // terms as the live ones. They carry an algorithm tag that would already
-    // refuse this new algorithm, so this is belt-and-braces against a later
-    // switch BACK to the old algorithm resurrecting a bag that this wipe was
-    // supposed to have ended.
-    m_engine->dropStashedScriptStates(screenId);
+    // Stashed bags are deliberately NOT dropped here. Each carries its own
+    // algorithm tag and AutotileEngine::restoreStashedScriptState re-checks it
+    // per key, which is strictly more precise than a screen-wide drop: this
+    // helper's old/new pair describes the screen as a whole, while the stash
+    // holds one entry per (desktop, activity) context, including contexts this
+    // wipe never walked because their state was already torn down.
+    //
+    // A screen-wide drop here also broke the toggle-off rescue outright. That
+    // path harvests the bag and THEN calls removeOverridesForScreen, whose
+    // in-memory override teardown reaches this helper as override -> global.
+    // The ids differ, so the drop erased the bag one step after it was rescued,
+    // on exactly the screens pinned to their own algorithm. The persisted
+    // per-screen settings survive that teardown and re-derive the same
+    // algorithm on re-enable, so the tag matches and the bag is handed back —
+    // which is the correct outcome and the one the drop prevented.
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

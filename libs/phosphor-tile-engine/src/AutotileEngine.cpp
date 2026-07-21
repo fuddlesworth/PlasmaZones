@@ -348,19 +348,20 @@ void AutotileEngine::connectSignals()
                             releaseScreenStateForTeardown(sid, state, releasedWindows,
                                                           /*drainOverflow=*/false);
                             m_configResolver->removeOverridesForScreen(sid);
-                            // Deliberately NOT stashed, and any bag stashed by an
-                            // earlier toggle-off is dropped: this VS id is gone
-                            // for good and is never reused, so a rescued bag
-                            // could only sit in the stash forever. The wipe
-                            // inside removeOverridesForScreen cannot be relied on
-                            // for this — it no-ops when the effective algorithm
-                            // did not change.
-                            dropStashedScriptStates(sid);
                             m_userTunedSplitRatio.remove(key);
                             m_userTunedMasterCount.remove(key);
                         });
                     for (const QString& sid : std::as_const(orphanedVsIds)) {
                         m_overflow.takeForScreen(sid);
+                        // Nothing is stashed for an orphaned VS, and any bag a
+                        // previous toggle-off left is dropped: the id is gone for
+                        // good and is never reused, so a rescued bag could only
+                        // sit in the stash forever. Hoisted here rather than into
+                        // the per-context callback above (which visits every
+                        // desktop/activity of the same id and would re-scan an
+                        // already-cleaned stash), for the same reason drainOverflow
+                        // is deferred to this loop.
+                        dropStashedScriptStates(sid);
                     }
                     for (const QString& windowId : std::as_const(releasedWindows)) {
                         m_states.removeWindow(windowId);
@@ -696,7 +697,18 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // tilingStateForScreen() creates the PhosphorTiles::TilingState lazily, so windows that arrive
     // shortly after (via KWin effect re-notification) have a state ready.
     for (const QString& screenId : added) {
-        tilingStateForScreen(screenId);
+        PhosphorTiles::TilingState* const addedState = tilingStateForScreen(screenId);
+        // Hand back a bag rescued when this screen was toggled off. The state
+        // factory attempts this too, for a context re-created later (a desktop
+        // switch back to where the toggle happened), but the factory alone is not
+        // enough on the re-enable path: the daemon applies per-screen config
+        // BEFORE re-activating screens, and applyPerScreenConfig both creates the
+        // state and then wipes its bag. That wipe compares against a resolver that
+        // no longer remembers this screen's algorithm — the toggle-off dropped the
+        // in-memory override — so it reads global -> override and clears a bag it
+        // should not have. Re-applying here, after that wipe, is what makes the
+        // round trip survive. Idempotent: a matching entry is left in the stash.
+        restoreStashedScriptState(currentKeyForScreen(screenId), addedState);
         // Skip retile if windows are expected to arrive shortly (pending initial
         // order from seedAutotileOrderForScreen). The KWin effect sends windowOpened
         // D-Bus calls after receiving autotileScreensChanged, and each insertWindow
@@ -1056,15 +1068,16 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
             it.value()->clearSplitTree();
         }
         it.value()->setScriptState({});
-        dropStashedScriptStates(it.key().screenId);
     }
-    // Screens with no live state for any context are not covered by the loop
-    // above, yet may still hold a stashed bag from a teardown. They follow the
-    // global algorithm exactly when they have no Algorithm override, which is
-    // the same gate the loop applies.
-    m_scriptStateStash.removeIf([&](const auto& entry) {
-        return !hasAlgoOverride(entry.key().screenId);
-    });
+    // Stashed bags are deliberately left alone. They are adjudicated per key by
+    // the algorithm tag when a state picks one back up, and that is the only
+    // reading that survives a toggle-off: this gate asks hasAlgoOverride, but a
+    // toggle-off has already dropped the screen's IN-MEMORY override, so a screen
+    // pinned to its own algorithm by persisted settings reads here as following
+    // the global one. Dropping on that would throw away the bag of a screen whose
+    // effective algorithm never moved. The tag knows what the bag was written
+    // under and compares it against what the screen actually resolves to on the
+    // way back out, which is right in both cases.
 
     Q_EMIT algorithmChanged(m_algorithmId);
 
@@ -1150,8 +1163,13 @@ void AutotileEngine::stashScriptState(const TilingStateKey& key, const PhosphorT
     }
     const QJsonObject bag = state->scriptState();
     if (bag.isEmpty()) {
-        // Nothing worth keeping. Deliberately not an erase: a state that never
-        // had a bag says nothing about one stashed earlier under the same key.
+        // The state's bag IS the truth for this key, so an empty one erases any
+        // entry stashed earlier rather than leaving it to shadow the emptiness.
+        // That is what stops a wiped bag coming back: an algorithm switch clears
+        // the live state, and without this erase a stale entry from a previous
+        // teardown would still be sitting there, tagged with the algorithm the
+        // user has now switched back to, ready to be handed to the next state.
+        m_scriptStateStash.remove(key);
         return;
     }
     // The screen's effective algorithm RIGHT NOW is the one whose script wrote
@@ -1171,22 +1189,32 @@ void AutotileEngine::restoreStashedScriptState(const TilingStateKey& key, Phosph
         return;
     }
     const StashedScriptState stashed = *it;
-    m_scriptStateStash.erase(it);
-    if (stashed.algorithmId != m_configResolver->effectiveAlgorithmId(key.screenId)) {
+    const QString effectiveId = m_configResolver->effectiveAlgorithmId(key.screenId);
+    if (stashed.algorithmId != effectiveId) {
         // The algorithm changed while the state was gone, so the bag is opaque
         // data belonging to something else now — the same verdict the live wipe
-        // sites reach for a bag on a surviving state.
+        // sites reach for a bag on a surviving state. Erase it: nothing will ever
+        // make this entry valid again, because the tag is what it was written
+        // under, not what it could become.
         //
-        // This OVERLAPS the dropStashedScriptStates() calls at those wipe sites:
-        // mutation testing shows either mechanism alone satisfies the invariant
-        // tests, so neither is load-bearing on its own today. Both are kept
-        // deliberately, because they fail differently. The drops are eager and
-        // keyed by screen, which is also what stops dead entries accumulating;
-        // this check is per-key and catches an algorithm change that reaches the
-        // stash by a path with no drop call — the failure mode a future teardown
-        // site would introduce by forgetting one.
+        // This tag is the ONLY thing enforcing "bags never cross algorithms" for
+        // stashed state. The wipe sites deliberately do not drop stash entries —
+        // they reason about a screen as a whole, while the stash is per
+        // (desktop, activity) context, and a screen-wide drop there erased bags
+        // the wipe had never examined (see
+        // PerScreenConfigResolver::wipeStateBagsOnEffectiveAlgorithmChange).
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "Discarding stashed script state for" << key.screenId << "desktop" << key.desktop << "activity"
+            << key.activity << "- stashed under" << stashed.algorithmId << "but screen now runs" << effectiveId;
+        m_scriptStateStash.erase(it);
         return;
     }
+    // Deliberately NOT erased on a match. The entry is refreshed (or erased) by
+    // the next stashScriptState for this key, and leaving it costs one bag while
+    // closing a real hole: tilingStateForScreen is find-or-CREATE, so a transient
+    // lookup that materialises a state and then discards it (updateStickyScreenPins
+    // takes and deletes exactly such a state) would otherwise consume the entry
+    // and lose the bag with the state nobody kept.
     state->setScriptState(stashed.scriptState);
 }
 
