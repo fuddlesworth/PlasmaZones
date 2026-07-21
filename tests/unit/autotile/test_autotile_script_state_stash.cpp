@@ -263,12 +263,13 @@ private Q_SLOTS:
         QVERIFY(bagOn(engine, screen).isEmpty());
     }
 
-    /// A bag a live wipe cleared must stay cleared. The per-screen wipe sites
-    /// deliberately leave the stash alone (the per-key algorithm tag covers
-    /// them), so the thing that ends the bag here is the teardown harvesting an
-    /// EMPTY bag and erasing the entry rather than letting a stale one shadow it.
-    /// Without that erase the tag still matches on the way back to bsp and the
-    /// wiped fractions reappear.
+    /// A bag a live wipe cleared must stay cleared. Two mechanisms independently
+    /// achieve that here and this test pins their disjunction, not either one:
+    /// the per-screen wipe drops the stale entry as it clears the live bag, and
+    /// the later teardown would erase it anyway by harvesting an EMPTY bag.
+    /// Disabling either alone leaves this green. The drop is pinned on its own by
+    /// testStashEntryIsDroppedWhenEffectiveAlgorithmMoves, which puts the entry on
+    /// a desktop no teardown revisits.
     void testWipedBagIsNotResurrectedByAlgorithmRoundTrip()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
@@ -298,16 +299,21 @@ private Q_SLOTS:
     }
 
     /// A screen pinned to its own algorithm does not follow a GLOBAL switch, so
-    /// its stashed bag must survive one. What this pins is that setAlgorithm
-    /// does not drop stash entries by screen: the toggle-off has already dropped
-    /// the screen's in-memory override, so a hasAlgoOverride gate there reads
-    /// FALSE for a screen whose pinning survives in persisted settings, and
-    /// dropping on that reading would discard a bag whose algorithm never moved.
-    /// The per-key tag adjudicates it correctly instead.
+    /// its stashed bag must survive one. What this pins is the GATE that decides
+    /// which screens the switch applies to: the toggle-off has already dropped
+    /// the screen's in-memory override, so an override-map reading calls a screen
+    /// pinned by persisted settings a follower and destroys a bag whose algorithm
+    /// never moved. The resolver's remembered "built under" id is what answers it
+    /// correctly, and the per-key tag is the second line of defence.
+    ///
+    /// The screen needs a state on a second desktop for this test to have any
+    /// power. Without one it holds no state at all while toggled off, the switch
+    /// visits nothing, and the test passes against a gate that never ran.
     void testStashSurvivesGlobalSwitchWhenScreenIsPinned()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
+        engine.setCurrentDesktop(1);
         engine.setAutotileScreens({screen});
         engine.setAlgorithm(QLatin1String("master-stack"));
         // Pinned to a THIRD id, distinct from both the old and the new global
@@ -317,12 +323,87 @@ private Q_SLOTS:
         engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("spiral")));
         QVERIFY(seedBag(engine, screen, sampleBag()));
 
+        // A second context on the same screen, so the toggle-off below leaves a
+        // live state behind. Without one the screen has no state at all while it
+        // is off, setAlgorithm's wipe loop iterates nothing, and this test cannot
+        // observe the by-screen drop it exists to forbid.
+        engine.setCurrentDesktop(2);
+        QVERIFY(seedBag(engine, screen, sampleBag(0.4)));
+        engine.setCurrentDesktop(1);
+
         engine.setAutotileScreens({});
         // The global algorithm moves while the screen is off. The screen is
         // pinned to spiral, so its effective algorithm never changed.
         engine.setAlgorithm(QLatin1String("bsp"));
         engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("spiral")));
         engine.setAutotileScreens({screen});
+
+        QCOMPARE(bagOn(engine, screen), sampleBag());
+    }
+
+    /// The eager drop must actually drop. Every other test here asserts a bag
+    /// SURVIVES, so neutering dropStashedScriptStatesForAlgorithmChange makes
+    /// them greener rather than redder and the whole mechanism can be deleted
+    /// without a failure. This one asserts the opposite direction: once a
+    /// screen's effective algorithm genuinely moves, the entry written under the
+    /// OLD algorithm is gone for good, not merely refused by the tag. Switching
+    /// back is what tells the two apart — a refused entry would reappear.
+    void testStashEntryIsDroppedWhenEffectiveAlgorithmMoves()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("bsp")));
+
+        // The entry under test belongs to desktop 2. It has to be a desktop the
+        // rest of the test never tears down again: a teardown harvest rewrites
+        // or (on an empty bag) erases the entry, which masks the drop completely.
+        engine.setCurrentDesktop(2);
+        QVERIFY(seedBag(engine, screen, sampleBag()));
+        // Desktop 1 keeps a live state so the screen still has one while the
+        // algorithm moves below.
+        engine.setCurrentDesktop(1);
+        QVERIFY(seedBag(engine, screen, sampleBag(0.4)));
+
+        // Tear down desktop 2 only, leaving a bsp-tagged entry for {screen, 2}.
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({});
+
+        // The screen's effective algorithm genuinely moves. The eager drop is
+        // what must kill the bsp entry here, while desktop 2 has no state to
+        // harvest and nothing else can reach it.
+        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("spiral")));
+        // Back to bsp, so the tag would MATCH again on the way out. Only an
+        // entry that was actually removed stays gone.
+        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("bsp")));
+
+        engine.setAutotileScreens({screen});
+
+        QVERIFY(bagOn(engine, screen).isEmpty());
+    }
+
+    /// A screen pinned to the SAME id the global is leaving is still pinned, so
+    /// the switch must not touch it. The daemon injects the Algorithm key for
+    /// every screen a layout assigns without comparing it to the global, so this
+    /// is ordinary configuration rather than a corner. Reading "did this screen
+    /// move?" off the remembered id alone answers yes here — the id it was built
+    /// under genuinely equals the outgoing global — which is why the live
+    /// override map has to be consulted first.
+    void testPinnedScreenSurvivesGlobalSwitchAwayFromItsOwnId()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        // Pinned to the algorithm the global is currently on.
+        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("master-stack")));
+        QVERIFY(seedBag(engine, screen, sampleBag()));
+
+        // The global moves away. The screen keeps master-stack via its override.
+        engine.setAlgorithm(QLatin1String("bsp"));
 
         QCOMPARE(bagOn(engine, screen), sampleBag());
     }

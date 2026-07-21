@@ -887,6 +887,10 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     m_scriptStateStash.removeIf([this](const auto& entry) {
         return !isKnownScreen(entry.key().screenId);
     });
+    // The remembered "built under" id is bookkeeping for those same bags, so it
+    // is retired on the same event. Left behind it would be the stale "old" side
+    // of a comparison for an id that is never coming back.
+    m_configResolver->forgetRememberedAlgorithmsForUnknownScreens();
 
     // Clear any pending deferred retiles and retry state for removed screens
     for (auto pit = m_pendingRetileScreens.begin(); pit != m_pendingRetileScreens.end();) {
@@ -1049,6 +1053,11 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // observable window where m_algorithmId disagreed with the value
     // being persisted.
     m_algorithmEverSet = true;
+    // The outgoing global id, captured before the assignment below. The state
+    // clear further down needs it to tell a screen that FOLLOWED the old global
+    // from one pinned to its own algorithm, and by then m_algorithmId is the
+    // incoming id and can no longer answer that.
+    const QString previousAlgorithmId = m_algorithmId;
     m_algorithmId = newId;
     m_config->algorithmId = newId;
 
@@ -1101,29 +1110,13 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // consistent state (no stale trees from the old algorithm). Safe because
     // this point is reached only when the algorithm id changed (early return
     // above), so every non-overridden state's effective algorithm changed.
-    const bool clearSplitTrees = newAlgo && !newAlgo->supportsMemory();
-    for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
-        if (!it.value() || hasAlgoOverride(it.key().screenId)) {
-            continue;
-        }
-        if (clearSplitTrees) {
-            it.value()->clearSplitTree();
-        }
-        it.value()->setScriptState({});
-        // Stashed bags for this screen go the same way, minus any already
-        // written under the incoming algorithm. Inside the loop so it inherits
-        // the live-and-unoverridden gate above: a screen that is toggled OFF has
-        // no live state here and no in-memory override left, so it would read as
-        // following the global algorithm even when its persisted settings pin it
-        // elsewhere. Dropping on that reading would discard the bag of a screen
-        // whose effective algorithm never moved, which is the failure this whole
-        // area has produced twice already.
-        dropStashedScriptStatesForAlgorithmChange(it.key().screenId, m_algorithmId);
-    }
-    // The screens that just followed the global switch are on a new algorithm
-    // now, so the resolver must stop reporting the old id as what their states
-    // were built under. Screens that are toggled off keep their remembered id.
-    m_configResolver->forgetRememberedAlgorithmForGlobalFollowers();
+    // The resolver owns this: it is the same wipe a per-screen effective change
+    // runs, and it is the only place that knows what each screen's states were
+    // BUILT UNDER. Deriving that here from hasAlgoOverride cannot work — a
+    // toggle-off has already dropped the in-memory override, so a screen pinned
+    // by persisted settings reads as a follower and its rescued bag is destroyed
+    // one step after the teardown saved it.
+    m_configResolver->applyGlobalAlgorithmChange(previousAlgorithmId, m_algorithmId);
 
     Q_EMIT algorithmChanged(m_algorithmId);
 

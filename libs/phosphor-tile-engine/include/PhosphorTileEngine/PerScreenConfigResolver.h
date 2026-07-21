@@ -104,6 +104,18 @@ public:
     void removeOverridesForScreen(const QString& screenId);
 
     /**
+     * @brief Drop remembered algorithms for screens that are no longer connected.
+     *
+     * The mirror of the engine's stash purge, run on the same event: these ids
+     * describe bags that have just been discarded, so keeping them would leave a
+     * stale "old" side for a screen that is never coming back. Keyed on
+     * connectedness, NOT autotile membership — a screen merely toggled out of
+     * autotile keeps its memory, which is what marks it as pinned rather than
+     * following the global algorithm.
+     */
+    void forgetRememberedAlgorithmsForUnknownScreens();
+
+    /**
      * @brief Drop a screen's overrides AND the remembered algorithm, for an id
      *        that will never be reused (an orphaned virtual screen).
      *
@@ -113,17 +125,26 @@ public:
     void forgetScreen(const QString& screenId);
 
     /**
-     * @brief Forget the remembered algorithm for screens that follow the GLOBAL
-     *        one, after that global has moved.
+     * @brief Apply a GLOBAL algorithm switch to every screen that follows it.
      *
-     * Called by AutotileEngine::setAlgorithm. Only screens that are live and
-     * carry no Algorithm override are affected — they are exactly the screens
-     * whose effective algorithm the global switch just changed, and whose live
-     * bags setAlgorithm wipes in the same breath. A screen that is toggled OFF
-     * keeps its memory: its persisted pinning is what it will come back on, and
-     * the global moving underneath it does not change that.
+     * Called by AutotileEngine::setAlgorithm with the outgoing and incoming
+     * global ids. A screen follows the global one unless it is pinned by a
+     * per-screen Algorithm override, and the pinning must be read from what the
+     * screen's states were BUILT UNDER rather than from the live override map:
+     * a toggle-off has already dropped that map, so a screen pinned by persisted
+     * settings reads there as a follower. Acting on that reading wiped the bags
+     * of screens whose effective algorithm never moved.
+     *
+     * Only screens holding at least one live state are visited. A screen with no
+     * state anywhere keeps both its remembered id and its stashed bags, so a
+     * switch away and back hands them over intact.
+     *
+     * This is the single entry point for "the effective algorithm moved" on a
+     * global switch; per-screen changes reach the same wipe through
+     * applyPerScreenConfig. Keeping one implementation is deliberate — two of
+     * them disagreeing about the gate is what produced the bug above.
      */
-    void forgetRememberedAlgorithmForGlobalFollowers();
+    void applyGlobalAlgorithmChange(const QString& previousGlobalId, const QString& newGlobalId);
 
     /**
      * @brief Inject a per-context (window-rule) gap-override provider.
@@ -173,6 +194,13 @@ private:
     /// algorithms; see the implementation comment for why this lives here.
     void wipeStateBagsOnEffectiveAlgorithmChange(const QString& screenId, const QString& oldEffectiveId,
                                                  const QString& newEffectiveId);
+
+    /// Whether @p screenId followed the global algorithm that is being replaced,
+    /// and so should take the wipe a global switch runs. A live Algorithm
+    /// override always pins the screen; failing that the remembered "built
+    /// under" id decides, because a teardown may have dropped the map. See the
+    /// implementation for why the precedence is fixed rather than per caller.
+    bool screenFollowsGlobalAlgorithm(const QString& screenId, const QString& previousGlobalId) const;
 
     /// The Algorithm id stored in @p map, or @p fallback when the key is absent
     /// OR stores an empty string. The empty case matters: effectiveAlgorithmId

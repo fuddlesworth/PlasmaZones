@@ -243,7 +243,12 @@ void PerScreenConfigResolver::updatePerScreenOverride(const QString& screenId, c
             << "updatePerScreenOverride: no override map for screen" << screenId << "- cannot update key" << key;
         return;
     }
-    const QString oldEffective = algorithmIdFromMap(*it, m_engine->m_algorithmId);
+    // Through rememberedAlgorithmId, not algorithmIdFromMap directly. The two
+    // agree here — the early return above proves the map exists, so no teardown
+    // has dropped it and the map's own reading is sound — but "what were this
+    // screen's states built under" has exactly one authority, and every bug in
+    // this area has come from a second one answering it differently.
+    const QString oldEffective = rememberedAlgorithmId(screenId, *it);
     (*it)[key] = value;
     // Every other mutator of this map routes an effective-algorithm change
     // through the wipe, and the comments on that helper claim it sees them all.
@@ -259,44 +264,31 @@ void PerScreenConfigResolver::updatePerScreenOverride(const QString& screenId, c
 
 void PerScreenConfigResolver::removeOverridesForScreen(const QString& screenId)
 {
-    // take(), not remove(): dropping an Algorithm override moves the screen's
-    // effective algorithm back to the global one, so the same wipe the other two
-    // drop paths run is owed here. Both callers tear down only SOME of the
-    // screen's states — the autotile toggle-off path prunes the current
-    // (desktop, activity) context only and leaves the others live — and those
-    // survivors' split trees and script state were built under the OVERRIDDEN
-    // algorithm. Without the wipe they cross algorithms and nothing later
-    // notices: a re-enable that lands the screen on a bare-autotile map with no
-    // Algorithm key computes old == new == global and wipes nothing.
-    //
-    // Safe from inside the callers' PerScreenStates::removeStatesIf() callbacks:
-    // the wipe only reads states() (a const ref, no detach) and mutates the
-    // TilingState objects, never the hash the caller is iterating. The
-    // orphaned-virtual-screen caller removes every context of the id anyway, so
-    // there the wipe is a harmless no-op on states about to be destroyed. The
-    // helper itself no-ops when the two ids match, so a screen whose override
-    // named the global algorithm keeps its bags.
+    // take(), not remove(): the outgoing map is what the remembered id is
+    // derived from below.
     const QVariantMap previous = m_perScreenOverrides.take(screenId);
-    // Remember, do NOT wipe. See the header: dropping the in-memory map is not a
-    // configuration change, and wiping on the override -> global reading it
-    // produces would destroy the bags of every context the caller's teardown
-    // left alive. The recorded id is what the next genuine change compares
-    // against.
+    // Remember, do NOT wipe. Dropping the in-memory map is a teardown, not a
+    // configuration change: the sole caller (AutotileEngine::setAutotileScreens)
+    // prunes the current (desktop, activity) context only and leaves the screen's
+    // other contexts live. Wiping on the override -> global reading this produces
+    // would destroy exactly the bags that teardown just rescued, on screens whose
+    // effective algorithm never moved. The recorded id is what the next genuine
+    // change compares against, and it is also what tells a later global switch
+    // that this screen is pinned rather than following along.
     m_rememberedAlgorithmId[screenId] = algorithmIdFromMap(previous, m_engine->m_algorithmId);
+}
+
+void PerScreenConfigResolver::forgetRememberedAlgorithmsForUnknownScreens()
+{
+    m_rememberedAlgorithmId.removeIf([this](const auto& entry) {
+        return !m_engine->isKnownScreen(entry.key());
+    });
 }
 
 void PerScreenConfigResolver::forgetScreen(const QString& screenId)
 {
     m_perScreenOverrides.remove(screenId);
     m_rememberedAlgorithmId.remove(screenId);
-}
-
-void PerScreenConfigResolver::forgetRememberedAlgorithmForGlobalFollowers()
-{
-    m_rememberedAlgorithmId.removeIf([this](const auto& entry) {
-        return m_engine->isAutotileScreen(entry.key())
-            && !m_perScreenOverrides.value(entry.key()).contains(QString(PerScreenKeys::Algorithm));
-    });
 }
 
 QString PerScreenConfigResolver::algorithmIdFromMap(const QVariantMap& map, const QString& fallback)
@@ -315,6 +307,61 @@ QString PerScreenConfigResolver::rememberedAlgorithmId(const QString& screenId,
     return algorithmIdFromMap(previousOverrides, m_engine->m_algorithmId);
 }
 
+void PerScreenConfigResolver::applyGlobalAlgorithmChange(const QString& previousGlobalId, const QString& newGlobalId)
+{
+    // Distinct screens holding at least one live state. A screen with no state
+    // in any context is deliberately not visited: there is nothing to wipe, and
+    // its stashed bags stay valid under the id they were written with, so a
+    // switch away and back hands them over.
+    QSet<QString> screensWithLiveState;
+    const auto& states = m_engine->m_states.states();
+    for (auto it = states.constBegin(); it != states.constEnd(); ++it) {
+        if (it.value()) {
+            screensWithLiveState.insert(it.key().screenId);
+        }
+    }
+
+    for (const QString& screenId : std::as_const(screensWithLiveState)) {
+        if (!screenFollowsGlobalAlgorithm(screenId, previousGlobalId)) {
+            continue;
+        }
+        wipeStateBagsOnEffectiveAlgorithmChange(screenId, previousGlobalId, newGlobalId);
+    }
+}
+
+bool PerScreenConfigResolver::screenFollowsGlobalAlgorithm(const QString& screenId,
+                                                           const QString& previousGlobalId) const
+{
+    // Fixed precedence, and the order is the whole point. Every regression in
+    // this area has come from asking one source a question it could not answer
+    // at that moment, so both sources are consulted in a defined order rather
+    // than one being picked per call site.
+    //
+    // 1. A live Algorithm override pins the screen, full stop. Its effective
+    //    algorithm is that override both before and after the global moves, so
+    //    it never follows — INCLUDING when the override names the same id the
+    //    global is leaving. The daemon injects the Algorithm key for every
+    //    screen a layout assigns, without comparing it to the global, so
+    //    "pinned to the outgoing global id" is an ordinary configuration.
+    if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::Algorithm)) {
+        return false;
+    }
+    // 2. No live override, but the screen has been reconfigured before: a
+    //    teardown may have dropped the map, so the remembered "built under" id
+    //    is the only trustworthy reading. It is what distinguishes a screen
+    //    pinned by PERSISTED settings from one genuinely following the global.
+    const auto remembered = m_rememberedAlgorithmId.constFind(screenId);
+    if (remembered != m_rememberedAlgorithmId.constEnd()) {
+        return *remembered == previousGlobalId;
+    }
+    // 3. Never reconfigured and no override: a plain follower. Deliberately NOT
+    //    rememberedAlgorithmId(), whose fallback resolves through
+    //    m_engine->m_algorithmId — already moved to the incoming id by the
+    //    caller, so it would read as "already on the new algorithm" and skip the
+    //    wipe this screen needs.
+    return true;
+}
+
 void PerScreenConfigResolver::wipeStateBagsOnEffectiveAlgorithmChange(const QString& screenId,
                                                                       const QString& oldEffectiveId,
                                                                       const QString& newEffectiveId)
@@ -322,11 +369,13 @@ void PerScreenConfigResolver::wipeStateBagsOnEffectiveAlgorithmChange(const QStr
     // Invariant: state bags never cross algorithms. Script state is opaque
     // state private to the algorithm that wrote it (e.g. an aligned grid's
     // column fractions) with no meaning to any other; split trees only carry
-    // over between memory algorithms. AutotileEngine::setAlgorithm() enforces
-    // this for global switches but deliberately skips Algorithm-overridden
-    // screens, so per-screen effective changes — an override added, swapped, or
-    // removed — are enforced here, on every (desktop, activity) state of the
-    // screen (they all followed the old effective algorithm). The deferred
+    // over between memory algorithms. Every effective change enforces it here,
+    // on every (desktop, activity) state of the screen (they all followed the
+    // old effective algorithm): per-screen changes — an override added, swapped,
+    // or removed — arrive from applyPerScreenConfig, and a global switch arrives
+    // from applyGlobalAlgorithmChange for the screens that follow it. Having a
+    // single implementation is the point; a second one in the engine disagreed
+    // with this gate and destroyed rescued bags. The deferred
     // retile the callers schedule does NOT rebuild these bags; it reads them.
     // Record what the screen resolves to now, whether or not anything moved, so
     // the next change compares against the last id actually seen rather than
