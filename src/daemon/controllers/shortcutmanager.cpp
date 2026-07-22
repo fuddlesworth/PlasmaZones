@@ -3,8 +3,8 @@
 
 #include "shortcutmanager.h"
 
-#include "../config/configdefaults.h"
-#include "../config/settings.h"
+#include "config/configdefaults.h"
+#include "config/settings.h"
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
 

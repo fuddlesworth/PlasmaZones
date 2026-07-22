@@ -424,7 +424,7 @@ add_test(NAME test_overlay_scope_prefixes COMMAND test_overlay_scope_prefixes)
 # plasmazones_core.
 add_executable(test_snap_assist_thumbnail_provider
     daemon/test_snap_assist_thumbnail_provider.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/snapassistthumbnailprovider.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/rendering/snapassistthumbnailprovider.cpp
 )
 # PhosphorProtocol pulls in ServiceConstants.h's
 # SnapAssistThumbnailCacheCapacity that the provider's CacheCapacity now

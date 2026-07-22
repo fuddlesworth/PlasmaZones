@@ -12,9 +12,9 @@
 #include "core/utils/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../snapassistthumbnailprovider.h"
-#include "../dmabuftextureprovider.h"
-#include "../dmabuffencewaiter.h"
+#include "../rendering/snapassistthumbnailprovider.h"
+#include "../rendering/dmabuftextureprovider.h"
+#include "../rendering/dmabuffencewaiter.h"
 #include <QGuiApplication>
 #include <QImage>
 #include <QQuickWindow>

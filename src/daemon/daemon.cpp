@@ -41,8 +41,8 @@
 #include <array>
 
 #include "overlayservice.h"
-#include "unifiedlayoutcontroller.h"
-#include "shortcutmanager.h"
+#include "controllers/unifiedlayoutcontroller.h"
+#include "controllers/shortcutmanager.h"
 #include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneentryscaffold.h"
 #include "rendering/zoneshadernoderhi.h"
@@ -69,7 +69,7 @@
 #include "core/platform/logging.h"
 #include "core/resolve/animationbootstrap.h"
 #include "core/resolve/screenmoderouter.h"
-#include "contextresolverwiring.h"
+#include "controllers/contextresolverwiring.h"
 
 #include <PhosphorContext/ContextResolver.h>
 #include "core/utils/utils.h"
@@ -98,7 +98,7 @@
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleStore.h>
 
-#include "enginefactory.h"
+#include "controllers/enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorTiles/TilingAlgorithm.h>

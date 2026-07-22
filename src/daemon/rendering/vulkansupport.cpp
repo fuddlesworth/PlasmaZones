@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "vulkan_support.h"
+#include "vulkansupport.h"
 
 #include <QLibrary>
 #include <QQuickWindow>

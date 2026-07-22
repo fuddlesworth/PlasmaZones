@@ -450,9 +450,9 @@ install(TARGETS plasmazones_shaderpreview
 # Daemon executable
 set(plasmazones_daemon_SRCS
     daemon/main.cpp
-    daemon/vulkan_support.cpp
+    daemon/rendering/vulkansupport.cpp
     daemon/daemon.cpp
-    daemon/enginefactory.cpp
+    daemon/controllers/enginefactory.cpp
     daemon/daemon/start.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/idle.cpp
@@ -466,8 +466,8 @@ set(plasmazones_daemon_SRCS
     # (VirtualDesktopManager + ActivityManager + ScreenModeRouter + ISettings)
     # to the LGPL PhosphorContext::IContextResolver triple. Owned by Daemon
     # alongside m_contextResolver — see the wiring in daemon/daemon.h.
-    daemon/contextresolverwiring.h
-    daemon/contextresolverwiring.cpp
+    daemon/controllers/contextresolverwiring.h
+    daemon/controllers/contextresolverwiring.cpp
     daemon/overlayservice.cpp
     daemon/overlayservice/animation_config.cpp
     daemon/overlayservice/lifecycle.cpp
@@ -487,25 +487,25 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice.h
     daemon/overlayservice_types.h
     daemon/overlayservice/internal.h
-    daemon/snapassistthumbnailprovider.cpp
-    daemon/snapassistthumbnailprovider.h
+    daemon/rendering/snapassistthumbnailprovider.cpp
+    daemon/rendering/snapassistthumbnailprovider.h
     # Zero-copy GPU thumbnail path (PLASMAZONES_DMABUF_THUMBNAILS): imports
     # dma-bufs handed from the kwin-effect as Vulkan-backed QSGTextures.
-    daemon/dmabuftextureprovider.cpp
-    daemon/dmabuftextureprovider.h
-    daemon/dmabuffencewaiter.cpp
-    daemon/dmabuffencewaiter.h
+    daemon/rendering/dmabuftextureprovider.cpp
+    daemon/rendering/dmabuftextureprovider.h
+    daemon/rendering/dmabuffencewaiter.cpp
+    daemon/rendering/dmabuffencewaiter.h
     # OpenGL-RHI fallback import (EGL dma-buf -> GL texture). Isolated TU so its
     # epoxy GL/EGL headers don't mix with the Vulkan + Qt RHI headers.
-    daemon/dmabufglimport.cpp
-    daemon/dmabufglimport.h
-    daemon/shortcutmanager.cpp
-    daemon/shortcutmanager.h
-    daemon/zoneselectorcontroller.cpp
-    daemon/zoneselectorcontroller.h
+    daemon/rendering/dmabufglimport.cpp
+    daemon/rendering/dmabufglimport.h
+    daemon/controllers/shortcutmanager.cpp
+    daemon/controllers/shortcutmanager.h
+    daemon/controllers/zoneselectorcontroller.cpp
+    daemon/controllers/zoneselectorcontroller.h
     # Mode tracking and smart toggle (Unified Layout Model)
-    daemon/unifiedlayoutcontroller.cpp
-    daemon/unifiedlayoutcontroller.h
+    daemon/controllers/unifiedlayoutcontroller.cpp
+    daemon/controllers/unifiedlayoutcontroller.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering
 )
 
@@ -567,7 +567,7 @@ target_link_libraries(plasmazonesd PRIVATE PkgConfig::Epoxy)
 # first GL include and refuses to coexist with GL/gl.h, which jumbo-grouping
 # with the Vulkan + Qt RHI sources would pull in. Standalone TU keeps its
 # EGL/GL headers fully isolated.
-set_source_files_properties(daemon/dmabufglimport.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(daemon/rendering/dmabufglimport.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 install(TARGETS plasmazonesd DESTINATION ${KDE_INSTALL_BINDIR})
 
@@ -671,7 +671,7 @@ endif()
 
 set(plasmazones_editor_SRCS
     editor/main.cpp
-    daemon/vulkan_support.cpp
+    daemon/rendering/vulkansupport.cpp
     editor/EditorController.cpp
     editor/EditorLaunchController.cpp
     editor/EditorLaunchController.h

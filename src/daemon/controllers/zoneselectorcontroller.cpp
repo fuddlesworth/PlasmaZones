@@ -3,14 +3,14 @@
 
 #include "zoneselectorcontroller.h"
 #include <PhosphorZones/Zone.h>
-#include "../common/layoutpreviewserialize.h"
+#include "common/layoutpreviewserialize.h"
 #include "core/types/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
 #include "core/utils/unifiedlayoutlist.h"
 #include "core/utils/utils.h"
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorScreens/Manager.h>
-#include "overlayservice/internal.h"
+#include "../overlayservice/internal.h"
 #include <QGuiApplication>
 #include <QQuickItem>
 #include <QScreen>

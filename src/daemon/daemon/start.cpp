@@ -4,8 +4,8 @@
 #include "../daemon.h"
 #include "helpers.h"
 #include "../overlayservice.h"
-#include "../unifiedlayoutcontroller.h"
-#include "../shortcutmanager.h"
+#include "../controllers/unifiedlayoutcontroller.h"
+#include "../controllers/shortcutmanager.h"
 #include "../../config/settingsconfigstore.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>

@@ -17,7 +17,7 @@
 #include "../config/configdefaults.h"
 #include "version.h"
 #include "../daemon/rendering/zoneshaderitem.h"
-#include "../daemon/vulkan_support.h"
+#include "daemon/rendering/vulkansupport.h"
 
 #include <QApplication>
 #include <QFile>
@@ -77,7 +77,7 @@ int main(int argc, char* argv[])
     // window-manager helper, not a game client. Both env vars are cleared:
     // MANGOHUD=0 alone is not enough on all manifest versions; the explicit
     // DISABLE_MANGOHUD opt-out is honored regardless of MANGOHUD's value.
-    // Must run before QVulkanInstance::create() in vulkan_support.cpp.
+    // Must run before QVulkanInstance::create() in vulkansupport.cpp.
     qunsetenv("MANGOHUD");
     qputenv("DISABLE_MANGOHUD", "1");
 

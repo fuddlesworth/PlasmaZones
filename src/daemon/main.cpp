@@ -12,7 +12,7 @@
 #include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneshaderitem.h"
 #include "version.h"
-#include "vulkan_support.h"
+#include "rendering/vulkansupport.h"
 #include "waylandsessioncheck.h"
 
 #include <PhosphorProtocol/Registration.h>
@@ -95,7 +95,7 @@ int main(int argc, char* argv[])
     // background service, not a game client. Both env vars are cleared:
     // MANGOHUD=0 alone is not enough on all manifest versions; the explicit
     // DISABLE_MANGOHUD opt-out is honored regardless of MANGOHUD's value.
-    // Must run before QVulkanInstance::create() in vulkan_support.cpp.
+    // Must run before QVulkanInstance::create() in vulkansupport.cpp.
     qunsetenv("MANGOHUD");
     qputenv("DISABLE_MANGOHUD", "1");
 

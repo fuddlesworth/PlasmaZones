@@ -3,7 +3,7 @@
 
 #include "../daemon.h"
 #include "../overlayservice.h"
-#include "../unifiedlayoutcontroller.h"
+#include "../controllers/unifiedlayoutcontroller.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorScreens/Manager.h>

@@ -3,7 +3,7 @@
 
 #include "../daemon.h"
 #include "../overlayservice.h"
-#include "../unifiedlayoutcontroller.h"
+#include "../controllers/unifiedlayoutcontroller.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "core/resolve/screenmoderouter.h"
 #include <PhosphorContext/ContextResolver.h>

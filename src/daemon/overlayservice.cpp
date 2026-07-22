@@ -3,8 +3,8 @@
 
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
-#include "snapassistthumbnailprovider.h"
-#include "dmabuftextureprovider.h"
+#include "rendering/snapassistthumbnailprovider.h"
+#include "rendering/dmabuftextureprovider.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 #include <PhosphorOverlay/ShellHost.h>
@@ -38,7 +38,7 @@
 
 #include "core/platform/logging.h"
 #include "phosphor_qml_i18n.h"
-#include "vulkan_support.h"
+#include "rendering/vulkansupport.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>

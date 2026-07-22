@@ -5,7 +5,7 @@
 #include "helpers.h"
 #include "macros.h"
 #include "../overlayservice.h"
-#include "../unifiedlayoutcontroller.h"
+#include "../controllers/unifiedlayoutcontroller.h"
 #include "../../config/settings.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorEngine/IPlacementEngine.h>

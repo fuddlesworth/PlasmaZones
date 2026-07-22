@@ -9,7 +9,7 @@
 #include <PhosphorRendering/ZoneShaderNodeRhi.h>
 #include <PhosphorRendering/ZoneUniformExtension.h>
 
-#include "../../config/configdefaults.h"
+#include "config/configdefaults.h"
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
 

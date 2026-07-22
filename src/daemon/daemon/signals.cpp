@@ -5,8 +5,8 @@
 #include "helpers.h"
 #include "macros.h"
 #include "../overlayservice.h"
-#include "../unifiedlayoutcontroller.h"
-#include "../shortcutmanager.h"
+#include "../controllers/unifiedlayoutcontroller.h"
+#include "../controllers/shortcutmanager.h"
 #include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>

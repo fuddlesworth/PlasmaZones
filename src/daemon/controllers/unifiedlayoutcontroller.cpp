@@ -9,7 +9,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorScreens/Manager.h>
-#include "../config/settings.h"
+#include "config/settings.h"
 #include "core/types/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include "core/platform/logging.h"
