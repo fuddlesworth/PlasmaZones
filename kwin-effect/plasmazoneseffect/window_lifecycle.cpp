@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 #include "shader_internal.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -11,18 +11,19 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <effect/effecthandler.h>
+#include <virtualdesktops.h>
 #include <window.h>
 
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QScopeGuard>
 
-#include "../autotilehandler.h"
-#include "../snaphandler.h"
-#include "../dragtracker.h"
-#include "../navigationhandler.h"
-#include "../screenchangehandler.h"
-#include "../windowanimator.h"
+#include "autotilehandler/autotilehandler.h"
+#include "handlers/snaphandler.h"
+#include "handlers/dragtracker.h"
+#include "handlers/navigationhandler.h"
+#include "handlers/screenchangehandler.h"
+#include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
 

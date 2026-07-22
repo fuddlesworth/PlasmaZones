@@ -60,7 +60,7 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
-#include "../helpers/IsolatedConfigGuard.h"
+#include "helpers/IsolatedConfigGuard.h"
 #include "config/configdefaults.h"
 #include "config/configkeys.h"
 

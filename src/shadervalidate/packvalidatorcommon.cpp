@@ -5,10 +5,11 @@
 
 #include "packvalidatorcommon.h"
 
-#include "../daemon/rendering/zoneentryscaffold.h"
+#include "daemon/rendering/zoneentryscaffold.h"
 
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QDir>
 #include <QFile>

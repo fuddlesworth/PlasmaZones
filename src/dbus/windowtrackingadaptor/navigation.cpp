@@ -13,9 +13,9 @@
 // requestMoveSpecificWindowToZone and reportNavigationFeedback stay — they are
 // pure signal emitters used cross-mode.
 
-#include "../windowtrackingadaptor.h"
-#include "../../core/logging.h"
-#include "../../core/screenmoderouter.h"
+#include "windowtrackingadaptor.h"
+#include "core/platform/logging.h"
+#include "core/resolve/screenmoderouter.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>

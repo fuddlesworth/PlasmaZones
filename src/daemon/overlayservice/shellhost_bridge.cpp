@@ -12,9 +12,9 @@
 // with the shell-host wiring conceptually.
 
 #include "internal.h"
-#include "../overlayservice.h"
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "daemon/overlayservice.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include "phosphor_roles.h"
 #include "phosphor_slot_keys.h"
 

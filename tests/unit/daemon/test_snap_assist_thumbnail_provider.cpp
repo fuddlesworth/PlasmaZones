@@ -5,7 +5,7 @@
 // uniqueness across inserts, eviction-tied URL state, and the brace-handed
 // braced-UUID lookup path.
 
-#include "../../../src/daemon/snapassistthumbnailprovider.h"
+#include "daemon/rendering/snapassistthumbnailprovider.h"
 
 #include <QtTest/QtTest>
 #include <QImage>

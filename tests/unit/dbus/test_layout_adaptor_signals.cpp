@@ -20,14 +20,14 @@
 #include <QTest>
 #include <QSignalSpy>
 
-#include "dbus/layoutadaptor.h"
+#include "dbus/layoutadaptor/layoutadaptor.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
-#include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
 
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
-#include "../compositorclock.h"
+#include "plasmazoneseffect.h"
+#include "compositor/compositorclock.h"
 #include "shader_internal.h"
 #include "surface_fold.h"
 #include "shader_resolve.h"
@@ -32,7 +32,7 @@
 #include <chrono>
 #include <type_traits>
 
-#include "../windowanimator.h"
+#include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
 

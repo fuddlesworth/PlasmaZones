@@ -23,12 +23,12 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include "FakeScreenProvider.h"
-#include "core/interfaces.h"
+#include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "dbus/snapadaptor.h"
-#include "dbus/windowtrackingadaptor.h"
+#include "dbus/snapadaptor/snapadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorRules/RuleStore.h>
@@ -38,8 +38,8 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include "config/configdefaults.h"
 #include <QUuid>
-#include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
@@ -49,7 +49,7 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 // Stub Settings
 // =========================================================================
 
-#include "../helpers/StubSettings.h"
+#include "helpers/StubSettings.h"
 
 using StubSettingsConvenience = StubSettings;
 

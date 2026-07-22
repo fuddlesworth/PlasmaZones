@@ -6,8 +6,8 @@
 #include <QDBusConnectionInterface>
 #include <QProcess>
 #include <QTimer>
-#include "../../src/core/constants.h"
-#include "../../src/core/logging.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 
 namespace PlasmaZones {

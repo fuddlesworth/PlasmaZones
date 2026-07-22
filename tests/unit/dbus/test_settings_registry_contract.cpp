@@ -50,11 +50,11 @@
 
 #include <memory>
 
-#include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/SettingsFetchScraper.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/SettingsFetchScraper.h"
 #include "config/settings.h"
-#include "core/shaderregistry.h"
-#include "dbus/settingsadaptor.h"
+#include "core/interfaces/shaderregistry.h"
+#include "dbus/settingsadaptor/settingsadaptor.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 

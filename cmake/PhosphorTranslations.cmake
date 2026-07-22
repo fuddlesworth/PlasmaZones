@@ -21,14 +21,10 @@ set(PLASMAZONESD_I18N_SOURCES
     ${CMAKE_SOURCE_DIR}/src/daemon/daemon.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/daemon/osd.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/overlayservice.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/shortcutmanager.cpp
-    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/windowdragadaptor.cpp
     ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/drag.cpp
 )
-file(GLOB PLASMAZONESD_AUTOTILE_SOURCES
-    "${CMAKE_SOURCE_DIR}/src/autotile/algorithms/*.cpp"
-)
-list(APPEND PLASMAZONESD_I18N_SOURCES ${PLASMAZONESD_AUTOTILE_SOURCES})
 file(GLOB PLASMAZONESD_QML "${CMAKE_SOURCE_DIR}/src/ui/*.qml")
 
 file(GLOB PLASMAZONES_EDITOR_I18N_SOURCES

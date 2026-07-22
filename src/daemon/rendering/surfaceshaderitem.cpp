@@ -3,7 +3,7 @@
 
 #include "surfaceshaderitem.h"
 
-#include "../../core/logging.h"
+#include "core/platform/logging.h"
 
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorRendering/ShaderNodeRhi.h>

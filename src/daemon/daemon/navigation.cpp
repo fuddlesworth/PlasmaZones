@@ -1,24 +1,24 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../daemon.h"
+#include "daemon/daemon.h"
 #include "helpers.h"
 #include "macros.h"
-#include "../overlayservice.h"
-#include "../unifiedlayoutcontroller.h"
-#include "../../config/settings.h"
+#include "daemon/overlayservice.h"
+#include "daemon/controllers/unifiedlayoutcontroller.h"
+#include "config/settings.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include "../../core/constants.h"
-#include "../../core/logging.h"
-#include "../../core/screenmoderouter.h"
-#include "../../core/utils.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
+#include "core/resolve/screenmoderouter.h"
+#include "core/utils/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../../dbus/snapadaptor.h"
-#include "../../dbus/windowtrackingadaptor.h"
+#include "dbus/snapadaptor/snapadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>

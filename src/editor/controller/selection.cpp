@@ -3,8 +3,8 @@
 
 #include "../EditorController.h"
 #include "../services/ZoneManager.h"
-#include "../../core/constants.h"
-#include "../../core/logging.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
 
 #include <QGuiApplication>
 #include <QScreen>

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -17,7 +17,8 @@
 
 #include <optional>
 
-#include "../navigationhandler.h"
+#include "autotilehandler/autotilehandler.h"
+#include "handlers/navigationhandler.h"
 #include "window_query.h"
 
 namespace PlasmaZones {

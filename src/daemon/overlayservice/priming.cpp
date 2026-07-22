@@ -7,8 +7,8 @@
 // before the user-triggered show path takes over.
 
 #include "internal.h"
-#include "../overlayservice.h"
-#include "../../core/logging.h"
+#include "daemon/overlayservice.h"
+#include "core/platform/logging.h"
 
 #include <PhosphorLayer/Surface.h>
 

@@ -32,7 +32,7 @@
 
 #include <algorithm>
 
-#include "core/constants.h"
+#include "core/types/constants.h"
 #include "editor/services/ZoneManager.h"
 #include "editor/undo/commands/DeleteZoneCommand.h"
 #include <PhosphorZones/Zone.h>

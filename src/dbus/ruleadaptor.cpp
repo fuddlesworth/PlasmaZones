@@ -3,8 +3,8 @@
 
 #include "ruleadaptor.h"
 
-#include "core/baselinecleanup.h"
-#include "core/logging.h"
+#include "core/types/baselinecleanup.h"
+#include "core/platform/logging.h"
 
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleSet.h>

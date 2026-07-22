@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "colorimporter.h"
-#include "../core/constants.h"
+#include "core/types/constants.h"
 #include <QFile>
 #include <QTextStream>
 #include <QJsonDocument>

@@ -21,7 +21,7 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 
-#include "../helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
 
 using PhosphorSnapEngine::SnapNavigationTargetResolver;
 using PhosphorSnapEngine::SnapState;

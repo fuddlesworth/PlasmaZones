@@ -12,10 +12,9 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Test)
 # Include directories for tests
 include_directories(
     ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src/core
-    ${CMAKE_SOURCE_DIR}/src/dbus
-    ${CMAKE_SOURCE_DIR}/src/config
     ${CMAKE_BINARY_DIR}/src  # For generated headers like plasmazones_export.h
+    # Tests include shared fixtures as "helpers/X.h" from any partition depth.
+    ${CMAKE_SOURCE_DIR}/tests/unit
 )
 
 # Add subdirectories

@@ -1,28 +1,29 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../daemon.h"
-#include "../overlayservice.h"
-#include "../unifiedlayoutcontroller.h"
-#include "../../core/screenmoderouter.h"
+#include "daemon/daemon.h"
+#include "daemon/overlayservice.h"
+#include "daemon/controllers/unifiedlayoutcontroller.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
+#include "core/resolve/screenmoderouter.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include <PhosphorZones/ZoneDetector.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/IPlacementState.h>
-#include "../../dbus/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "helpers.h"
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include "../../config/settings.h"
+#include "config/settings.h"
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>

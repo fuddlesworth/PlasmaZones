@@ -8,9 +8,9 @@
 // rekey is the primary risk-source for.
 
 #include "internal.h"
-#include "../overlayservice.h"
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "daemon/overlayservice.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorOverlay/ShellState.h>

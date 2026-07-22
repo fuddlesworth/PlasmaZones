@@ -53,18 +53,18 @@
 #include <QTest>
 #include <QXmlStreamReader>
 
-#include "../../../src/dbus/autotileadaptor.h"
-#include "../../../src/dbus/compositorbridgeadaptor.h"
-#include "../../../src/dbus/controladaptor.h"
-#include "../../../src/dbus/layoutadaptor.h"
-#include "../../../src/dbus/overlayadaptor.h"
-#include "../../../src/dbus/settingsadaptor.h"
-#include "../../../src/dbus/shaderadaptor.h"
-#include "../../../src/dbus/snapadaptor.h"
-#include "../../../src/dbus/windowdragadaptor.h"
-#include "../../../src/dbus/ruleadaptor.h"
-#include "../../../src/dbus/windowtrackingadaptor.h"
-#include "../../../src/dbus/zonedetectionadaptor.h"
+#include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/compositorbridgeadaptor.h"
+#include "dbus/controladaptor.h"
+#include "dbus/layoutadaptor/layoutadaptor.h"
+#include "dbus/overlayadaptor.h"
+#include "dbus/settingsadaptor/settingsadaptor.h"
+#include "dbus/shaderadaptor.h"
+#include "dbus/snapadaptor/snapadaptor.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
+#include "dbus/ruleadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/zonedetectionadaptor.h"
 
 using namespace PlasmaZones;
 

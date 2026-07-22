@@ -39,7 +39,7 @@
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorLayer/Role.h>
 
-#include "../../../src/daemon/overlayservice/phosphor_roles.h"
+#include "daemon/overlayservice/phosphor_roles.h"
 
 using namespace PlasmaZones;
 namespace PAL = PhosphorAnimationLayer;

@@ -9,10 +9,10 @@
 //   isWindowFloating, queryWindowFloating, setWindowFloating (WTS delegate),
 //   getFloatingWindows, applyGeometryForFloat, setWindowFloatingForScreen.
 
-#include "../windowtrackingadaptor.h"
-#include "../../core/interfaces.h"
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "windowtrackingadaptor.h"
+#include "core/interfaces/interfaces.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 

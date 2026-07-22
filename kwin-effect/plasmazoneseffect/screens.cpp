@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include <PhosphorIdentity/ScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -27,9 +27,9 @@
 
 #include <climits>
 
-#include "../autotilehandler.h"
-#include "../compositorclock.h"
-#include "../windowanimator.h"
+#include "autotilehandler/autotilehandler.h"
+#include "compositor/compositorclock.h"
+#include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
 

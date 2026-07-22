@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../core/single_instance_service.h"
+#include "core/platform/singleinstanceservice.h"
 
 #include <QObject>
 #include <QString>

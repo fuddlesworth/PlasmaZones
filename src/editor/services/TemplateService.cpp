@@ -3,11 +3,11 @@
 
 #include "TemplateService.h"
 #include "TemplateStrategy.h"
-#include "../../core/constants.h"
+#include "core/types/constants.h"
 
 #include <QUuid>
 #include <QLatin1String>
-#include "../../core/logging.h"
+#include "core/platform/logging.h"
 
 using namespace PlasmaZones;
 

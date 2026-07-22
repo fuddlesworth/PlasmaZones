@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "SettingsDbusQueries.h"
-#include "../../core/dbusvariantutils.h"
-#include "../../core/logging.h"
+#include "core/utils/dbusvariantutils.h"
+#include "core/platform/logging.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>

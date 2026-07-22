@@ -8,18 +8,18 @@
 // watches the seat and pushes the answer to the effect over D-Bus, which is the only
 // reason any of this is here rather than beside the code that acts on it.
 
-#include "../daemon.h"
+#include "daemon/daemon.h"
 
-#include "../../core/logging.h"
+#include "core/platform/logging.h"
 
 // Settings must be COMPLETE here: m_settings is a unique_ptr<Settings>, daemon.h only
 // forward-declares it, and this file connects to its signals and calls its accessors. It
 // compiles without this only because the unity build happens to group this TU with one
 // that includes settings.h — which is not a guarantee, it is a coincidence of chunking.
-#include "../../config/settings.h"
-#include "../../core/isettings.h"
-#include "../../dbus/compositorbridgeadaptor.h"
-#include "../../dbus/settingsadaptor.h"
+#include "config/settings.h"
+#include "core/interfaces/isettings.h"
+#include "dbus/compositorbridgeadaptor.h"
+#include "dbus/settingsadaptor/settingsadaptor.h"
 
 #include <PhosphorServiceIdle/IdleService.h>
 

@@ -6,8 +6,8 @@
 // connect/load bring-up that onDaemonReady drives, while signals.cpp holds the
 // slot bodies.
 
-#include "../autotilehandler.h"
-#include "../plasmazoneseffect.h"
+#include "autotilehandler.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 

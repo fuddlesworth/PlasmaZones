@@ -10,8 +10,8 @@
 // (catalog + mode) rather than resolving it here.
 
 #include "internal.h"
-#include "../overlayservice.h"
-#include "../../core/logging.h"
+#include "daemon/overlayservice.h"
+#include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
 #include "phosphor_roles.h"
 

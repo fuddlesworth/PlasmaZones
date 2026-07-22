@@ -13,9 +13,9 @@
 #include <chrono>
 #include <memory>
 
-#include "shortcutmanager.h"
+#include "controllers/shortcutmanager.h"
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
-#include "../core/types.h"
+#include "core/types/types.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorEngine/PlacementEngineBase.h>

@@ -10,7 +10,7 @@
 // NOT the focus/rule refresh path: updateAllDecorations reconciles in place and
 // removes only what it did not revisit. See decorations.cpp.
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>

@@ -51,8 +51,8 @@
 #include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
-#include "../../../src/config/settings.h"
-#include "../helpers/IsolatedConfigGuard.h"
+#include "config/settings.h"
+#include "helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorAnimation;

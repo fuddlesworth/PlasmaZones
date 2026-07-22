@@ -16,7 +16,7 @@
 #include <PhosphorScripting/LuauEngine.h>
 #include <PhosphorScripting/LuauWatchdog.h>
 
-#include "../helpers/ScriptTestHelpers.h"
+#include "helpers/ScriptTestHelpers.h"
 
 #include <QTemporaryDir>
 

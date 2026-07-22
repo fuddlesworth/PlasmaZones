@@ -44,8 +44,8 @@ list(APPEND CMAKE_AUTOMOC_MACRO_NAMES "KWIN_EFFECT_FACTORY_SUPPORTED")
 
 # Effect sources
 set(plasmazones_effect_SRCS
-    plasmazoneseffect.cpp
-    plasmazoneseffect.h
+    plasmazoneseffect/plasmazoneseffect.cpp
+    plasmazoneseffect/plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
     plasmazoneseffect/decoration_appearance.cpp
     plasmazoneseffect/decorations.cpp
@@ -81,40 +81,41 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/transition_types.h
     plasmazoneseffect/types.h
     plasmazoneseffect/surface_fold.h
-    shadertransitionmanager.h
-    shadertransitionmanager.cpp
-    autotilehandler.cpp
-    autotilehandler.h
+    transitions/shadertransitionmanager.h
+    transitions/shadertransitionmanager.cpp
+    transitions/desktoptransitionmanager.cpp
+    transitions/desktoptransitioncapture.cpp
+    transitions/desktoptransitionshader.cpp
+    transitions/desktoptransitionteardown.cpp
+    transitions/desktoptransitionmanager.h
+    autotilehandler/autotilehandler.cpp
+    autotilehandler/autotilehandler.h
     autotilehandler/signals.cpp
     autotilehandler/state.cpp
     autotilehandler/tiling.cpp
     autotilehandler/wiring.cpp
-    snaphandler.cpp
-    snaphandler.h
-    desktoptransitionmanager.cpp
-    desktoptransitioncapture.cpp
-    desktoptransitionshader.cpp
-    desktoptransitionteardown.cpp
-    desktoptransitionmanager.h
-    navigationhandler.cpp
-    navigationhandler.h
-    screenchangehandler.cpp
-    screenchangehandler.h
-    snapassisthandler.cpp
-    snapassisthandler.h
-    snapassistthumbnailcapture.cpp
-    snapassistthumbnailcapture.h
-    windowanimator.cpp
-    windowanimator.h
-    compositorclock.cpp
-    compositorclock.h
-    dragtracker.cpp
-    dragtracker.h
+    handlers/snaphandler.cpp
+    handlers/snaphandler.h
+    handlers/navigationhandler.cpp
+    handlers/navigationhandler.h
+    handlers/screenchangehandler.cpp
+    handlers/screenchangehandler.h
+    handlers/snapassisthandler.cpp
+    handlers/snapassisthandler.h
+    handlers/dragtracker.cpp
+    handlers/dragtracker.h
+    compositor/snapassistthumbnailcapture.cpp
+    compositor/snapassistthumbnailcapture.h
+    compositor/windowanimator.cpp
+    compositor/windowanimator.h
+    compositor/compositorclock.cpp
+    compositor/compositorclock.h
+    compositor/deferredwindowcommits.h
     # virtualscreenid moved to libs/phosphor-identity (PhosphorIdentity::VirtualScreenId).
     # Consumers include <PhosphorIdentity/VirtualScreenId.h> directly; reachable
     # transitively via PhosphorCompositor::PhosphorCompositor's PhosphorIdentity link.
-    kwin_compositor_bridge.cpp
-    kwin_compositor_bridge.h
+    compositor/compositorbridge.cpp
+    compositor/compositorbridge.h
 )
 
 # Create the KWin effect plugin using KDE's plugin macro
@@ -129,7 +130,7 @@ kcoreaddons_add_plugin(kwin_effect_plasmazones
 # GL header; jumbo-grouping it with the other effect sources (which pull in
 # KWin's GL headers) would break that ordering. Mirrors the daemon's identical
 # guard on dmabufglimport.cpp (src/CMakeLists.txt).
-set_source_files_properties(snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(compositor/snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 # All four TUs of DesktopTransitionManager stay out of the Unity blob.
 #
 # None of them fixes a PRESENT collision, and the comments here used to imply
@@ -148,10 +149,10 @@ set_source_files_properties(snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY
 # sharing a name with any other blob member would fail the build in a way that
 # reads as unrelated. Keeping the whole class out costs only blob parallelism
 # and cross-TU inlining, neither of which matters for four small TUs.
-set_source_files_properties(desktoptransitionmanager.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-set_source_files_properties(desktoptransitioncapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-set_source_files_properties(desktoptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-set_source_files_properties(desktoptransitionteardown.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(transitions/desktoptransitionmanager.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(transitions/desktoptransitioncapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(transitions/desktoptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(transitions/desktoptransitionteardown.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE

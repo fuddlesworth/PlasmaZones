@@ -1,25 +1,25 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../windowtrackingadaptor.h"
+#include "windowtrackingadaptor.h"
 #include "internal.h"
 #include "persistenceworker.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include "../../config/configbackends.h"
-#include "../../core/interfaces.h"
-#include "../../core/screenmoderouter.h"
+#include "config/configbackends.h"
+#include "core/interfaces/interfaces.h"
+#include "core/resolve/screenmoderouter.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QSet>
-#include "../../config/configkeys.h"
+#include "config/configkeys.h"
 #include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorIdentity/WindowId.h>

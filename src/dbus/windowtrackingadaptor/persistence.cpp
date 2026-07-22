@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../windowtrackingadaptor.h"
+#include "windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "../../core/geometryutils.h"
+#include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include <QScreen>
 #include <QJsonDocument>
 #include <QJsonObject>

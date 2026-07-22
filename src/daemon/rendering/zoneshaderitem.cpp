@@ -9,9 +9,9 @@
 #include <PhosphorRendering/ZoneShaderNodeRhi.h>
 #include <PhosphorRendering/ZoneUniformExtension.h>
 
-#include "../../config/configdefaults.h"
-#include "../../core/constants.h"
-#include "../../core/logging.h"
+#include "config/configdefaults.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
 
 #include <PhosphorRendering/ShaderEffect.h>
 

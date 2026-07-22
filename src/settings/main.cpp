@@ -1,27 +1,27 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../core/animationbootstrap.h"
-#include "../core/logging.h"
-#include "../core/single_instance_service.h"
-#include "../core/translationloader.h"
-#include "../config/configmigration.h"
-#include "settingscontroller.h"
+#include "core/resolve/animationbootstrap.h"
+#include "core/platform/logging.h"
+#include "core/platform/singleinstanceservice.h"
+#include "core/utils/translationloader.h"
+#include "config/configmigration.h"
+#include "settings/controller/settingscontroller.h"
 #include "settingslaunchcontroller.h"
 #include "version.h"
 #include "phosphor_i18n.h"
 #include "phosphor_qml_i18n.h"
-#include "searchcatalog.h"
-#include "searchproviders.h"
-#include "profilepagecontroller.h"
-#include "profilestore.h"
-#include "rulecontroller.h"
-#include "rulemodel.h"
+#include "settings/search/searchcatalog.h"
+#include "settings/search/searchproviders.h"
+#include "settings/pages/profilepagecontroller.h"
+#include "settings/stores/profilestore.h"
+#include "settings/rules/rulecontroller.h"
+#include "settings/rules/rulemodel.h"
 
 #include <PhosphorControl/SearchController.h>
 
-#include "../core/constants.h"
-#include "../daemon/rendering/zoneshaderitem.h"
+#include "core/types/constants.h"
+#include "daemon/rendering/zoneshaderitem.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <PhosphorAnimation/PhosphorCurve.h>

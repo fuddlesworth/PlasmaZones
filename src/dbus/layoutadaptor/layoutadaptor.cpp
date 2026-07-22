@@ -1,0 +1,850 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "layoutadaptor.h"
+#include "dbus/dbushelpers.h"
+#include "core/interfaces/interfaces.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutFactory.h>
+#include <PhosphorZones/Zone.h>
+#include "core/types/constants.h"
+#include <PhosphorZones/LayoutUtils.h>
+#include "common/layoutpreviewserialize.h"
+#include "core/utils/unifiedlayoutlist.h"
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorTiles/AutotilePreviewRender.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include <PhosphorWorkspaces/ActivityManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
+#include "core/platform/logging.h"
+#include "core/interfaces/shaderregistry.h"
+#include <PhosphorScreens/Manager.h>
+#include "core/utils/utils.h"
+
+#include <PhosphorLayoutApi/AlgorithmMetadata.h>
+#include <PhosphorLayoutApi/AspectRatioClass.h>
+#include <PhosphorLayoutApi/ILayoutSource.h>
+#include <PhosphorLayoutApi/LayoutPreview.h>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QScreen>
+#include <QThread>
+#include <PhosphorScreens/ScreenIdentity.h>
+#include <QUuid>
+
+namespace PlasmaZones {
+
+namespace {
+
+// Map the D-Bus quick-slot mode wire value (0 = Snapping, 1 = Autotile) to
+// the registry's AssignmentEntry::Mode. Any other value clamps to Snapping.
+PhosphorZones::AssignmentEntry::Mode quickSlotMode(int mode)
+{
+    return mode == PhosphorZones::AssignmentEntry::Autotile ? PhosphorZones::AssignmentEntry::Autotile
+                                                            : PhosphorZones::AssignmentEntry::Snapping;
+}
+
+// `getLayout` is contractually a *Layout*-schema endpoint: its sole consumer
+// (the editor's loadLayout parser, DBusLayoutService::loadLayout → getLayout)
+// reads the layout name under `name` and each zone's geometry nested under
+// `relativeGeometry`. Autotile "layouts" are synthesized on the fly from a
+// LayoutPreview, whose own wire shape (PlasmaZones::toJson) is the *flat*
+// preview schema consumed by the layout picker / OSD (getLayoutPreview*).
+// Returning that flat shape from getLayout left the editor parsing every zone
+// to a (0,0,0,0) rect — a blank canvas in preview mode. Project the preview
+// into the Layout schema the editor expects instead.
+QJsonObject autotilePreviewToLayoutJson(const PhosphorLayout::LayoutPreview& preview)
+{
+    QJsonObject layout;
+    layout[::PhosphorZones::ZoneJsonKeys::Id] = preview.id;
+    layout[::PhosphorZones::ZoneJsonKeys::Name] = preview.displayName;
+
+    QJsonArray zones;
+    for (int i = 0; i < preview.zones.size(); ++i) {
+        const QRectF& r = preview.zones.at(i);
+        QJsonObject relGeo;
+        relGeo[::PhosphorZones::ZoneJsonKeys::X] = r.x();
+        relGeo[::PhosphorZones::ZoneJsonKeys::Y] = r.y();
+        relGeo[::PhosphorZones::ZoneJsonKeys::Width] = r.width();
+        relGeo[::PhosphorZones::ZoneJsonKeys::Height] = r.height();
+
+        QJsonObject zone;
+        // Synthetic per-zone id: autotile previews are read-only in the editor
+        // (previewMode is forced for autotile ids), but the editor's zone model
+        // and QML key zones by id, never index — so each needs a stable id.
+        zone[::PhosphorZones::ZoneJsonKeys::Id] = QUuid::createUuid().toString();
+        zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] =
+            (i < preview.zoneNumbers.size()) ? preview.zoneNumbers.at(i) : (i + 1);
+        zone[::PhosphorZones::ZoneJsonKeys::RelativeGeometry] = relGeo;
+        zones.append(zone);
+    }
+    layout[::PhosphorZones::ZoneJsonKeys::Zones] = zones;
+    return layout;
+}
+
+} // namespace
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Constructor and Signal Setup
+// ═══════════════════════════════════════════════════════════════════════════════
+
+LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* parent)
+    : QDBusAbstractAdaptor(parent)
+    , m_layoutManager(manager)
+{
+    if (!m_layoutManager) {
+        // Every bus-reachable slot dereferences m_layoutManager unguarded, so
+        // there is no inert degradation available here — only a null-deref on
+        // the first D-Bus call, far from the composition root that caused it.
+        // The construction-time pattern in windowtrackingadaptor/enginewiring.cpp
+        // uses qFatal for the same class of misconfiguration; mirror it so debug
+        // AND release both halt loudly at the point of the mistake.
+        qFatal(
+            "LayoutAdaptor: constructed with a null PhosphorZones::LayoutRegistry — "
+            "every D-Bus slot would dereference it");
+    }
+    connectLayoutManagerSignals();
+    initCoalesceTimer();
+}
+
+LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, PhosphorWorkspaces::VirtualDesktopManager* vdm,
+                             PhosphorScreens::ScreenManager* screenManager, QObject* parent)
+    : QDBusAbstractAdaptor(parent)
+    , m_layoutManager(manager)
+    , m_virtualDesktopManager(vdm)
+    , m_screenManager(screenManager)
+{
+    if (!m_layoutManager) {
+        qFatal(
+            "LayoutAdaptor: constructed with a null PhosphorZones::LayoutRegistry — "
+            "every D-Bus slot would dereference it");
+    }
+    connectLayoutManagerSignals();
+    connectVirtualDesktopSignals();
+    initCoalesceTimer();
+}
+
+void LayoutAdaptor::initCoalesceTimer()
+{
+    m_layoutSourceCoalesce.setSingleShot(true);
+    m_layoutSourceCoalesce.setInterval(200);
+    connect(&m_layoutSourceCoalesce, &QTimer::timeout, this, [this]() {
+        Q_EMIT layoutListChanged();
+    });
+}
+
+void LayoutAdaptor::connectLayoutManagerSignals()
+{
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
+            &LayoutAdaptor::onActiveLayoutChanged);
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutsChanged, this, &LayoutAdaptor::onLayoutsChanged);
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutAssigned, this, &LayoutAdaptor::onLayoutAssigned);
+}
+
+void LayoutAdaptor::onActiveLayoutChanged(PhosphorZones::Layout* layout)
+{
+    m_cachedActiveLayoutId = QUuid();
+    m_cachedActiveLayoutJson.clear();
+    if (layout) {
+        const QString layoutIdStr = layout->id().toString();
+        // Compact serialisation: this is the hottest layoutChanged emit path
+        // (fires on every active-layout switch). Pretty-printing drops ~30%
+        // of the payload over the bus with no functional difference —
+        // QJsonDocument::fromJson round-trips either form identically.
+        Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson(QJsonDocument::Compact)));
+        // Cheap companion to layoutChanged(json): carries only the UUID so
+        // subscribers that re-load from disk (editor) can bind to the UUID
+        // signal and skip the 5–20 KB JSON marshalling on context switches.
+        // Additive — existing consumers of layoutChanged(json) are unaffected.
+        Q_EMIT activeLayoutChanged(layoutIdStr);
+        qCInfo(lcDbusLayout) << "Emitting activeLayoutIdChanged D-Bus signal for:" << layoutIdStr;
+        Q_EMIT activeLayoutIdChanged(layoutIdStr);
+    }
+}
+
+void LayoutAdaptor::onLayoutsChanged()
+{
+    invalidateCache();
+    Q_EMIT layoutListChanged();
+}
+
+void LayoutAdaptor::onLayoutAssigned(const QString& screen, int virtualDesktop, PhosphorZones::Layout* layout)
+{
+    // Don't echo back to the KCM during setAssignmentEntry — the KCM initiated the
+    // change and will reload from KConfig. The daemon's internal layoutAssigned signal
+    // still fires for geometry recalc, but the D-Bus screenLayoutChanged is suppressed.
+    if (m_suppressScreenLayoutSignal)
+        return;
+
+    if (layout) {
+        Q_EMIT screenLayoutChanged(screen, layout->id().toString(), virtualDesktop);
+    } else {
+        // layout is nullptr for autotile assignments or cleared assignments.
+        // Resolve the assignment ID at the EXACT level that changed:
+        // - virtualDesktop > 0: per-desktop change → resolve at that desktop
+        // - virtualDesktop == 0: base/display-default change → resolve at base (desktop=0)
+        // Using currentDesktop() for base changes would leak per-desktop entries
+        // into the display-default signal, causing the KCM to show wrong values.
+        int desktop = virtualDesktop;
+        QString activity = (virtualDesktop > 0 && m_activityManager) ? m_activityManager->currentActivity() : QString();
+        QString assignmentId = m_layoutManager->assignmentIdForScreen(screen, desktop, activity);
+        Q_EMIT screenLayoutChanged(screen, assignmentId, virtualDesktop);
+    }
+}
+
+void LayoutAdaptor::setVirtualDesktopManager(PhosphorWorkspaces::VirtualDesktopManager* vdm)
+{
+    if (m_virtualDesktopManager) {
+        disconnect(m_virtualDesktopManager, nullptr, this, nullptr);
+    }
+
+    m_virtualDesktopManager = vdm;
+    connectVirtualDesktopSignals();
+}
+
+void LayoutAdaptor::connectVirtualDesktopSignals()
+{
+    if (m_virtualDesktopManager) {
+        connect(m_virtualDesktopManager, &PhosphorWorkspaces::VirtualDesktopManager::desktopCountChanged, this,
+                &LayoutAdaptor::virtualDesktopCountChanged);
+    }
+}
+
+void LayoutAdaptor::invalidateCache()
+{
+    m_cachedActiveLayoutJson.clear();
+    m_cachedActiveLayoutId = QUuid();
+    m_cachedLayoutJson.clear();
+}
+
+void LayoutAdaptor::notifyLayoutListChanged()
+{
+    invalidateCache();
+    Q_EMIT layoutListChanged();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Helper Methods
+// ═══════════════════════════════════════════════════════════════════════════════
+
+std::optional<QUuid> LayoutAdaptor::parseAndValidateUuid(const QString& id, const QString& operation) const
+{
+    return DbusHelpers::parseAndValidateUuid(id, operation, lcDbusLayout);
+}
+
+PhosphorZones::Layout* LayoutAdaptor::getValidatedLayout(const QString& id, const QString& operation)
+{
+    auto uuidOpt = parseAndValidateUuid(id, operation);
+    if (!uuidOpt) {
+        return nullptr;
+    }
+
+    auto* layout = m_layoutManager->layoutById(*uuidOpt);
+    if (!layout) {
+        qCWarning(lcDbusLayout) << "Cannot" << operation << "- layout not found:" << id;
+        return nullptr;
+    }
+
+    return layout;
+}
+
+bool LayoutAdaptor::validateNonEmpty(const QString& value, const QString& paramName, const QString& operation) const
+{
+    return DbusHelpers::validateNonEmpty(value, paramName, operation, lcDbusLayout);
+}
+
+std::optional<QJsonObject> LayoutAdaptor::parseJsonObject(const QString& jsonString, const QString& operation) const
+{
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(jsonString.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qCWarning(lcDbusLayout) << "Invalid JSON for" << operation << "- parse error:" << parseError.errorString()
+                                << "at offset" << parseError.offset;
+        return std::nullopt;
+    }
+
+    if (!doc.isObject()) {
+        qCWarning(lcDbusLayout) << "JSON for" << operation << "is not an object";
+        return std::nullopt;
+    }
+
+    return doc.object();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PhosphorZones::Layout Queries
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString LayoutAdaptor::getActiveLayout()
+{
+    // Return the default layout (settings-based fallback) rather than
+    // the transient internal active layout, so KCM and other D-Bus
+    // consumers see the user's configured default.
+    auto* layout = m_layoutManager->defaultLayout();
+    if (!layout) {
+        return QString();
+    }
+
+    if (m_cachedActiveLayoutId == layout->id() && !m_cachedActiveLayoutJson.isEmpty()) {
+        return m_cachedActiveLayoutJson;
+    }
+
+    m_cachedActiveLayoutJson = QString::fromUtf8(QJsonDocument(layout->toJson()).toJson());
+    m_cachedActiveLayoutId = layout->id();
+    return m_cachedActiveLayoutJson;
+}
+
+QStringList LayoutAdaptor::getLayoutList()
+{
+    QStringList result;
+
+    const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
+        m_layoutManager, m_algorithmRegistry, /*includeAutotile=*/true,
+        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, /*includeManual=*/true, /*includeAutotile=*/true),
+        m_autotileLayoutSource);
+    for (const auto& entry : entries) {
+        QJsonObject json = PlasmaZones::toJson(entry);
+
+        // Enrich manual-layout entries with Layout-specific fields that
+        // LayoutPreview doesn't carry (hasSystemOrigin, hiddenFromSelector,
+        // defaultOrder, allow-lists).
+        auto uuidOpt = Utils::parseUuid(entry.id);
+        if (uuidOpt) {
+            PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
+            if (layout) {
+                json[QStringLiteral("hasSystemOrigin")] = layout->hasSystemOrigin();
+                json[QStringLiteral("hiddenFromSelector")] = layout->hiddenFromSelector();
+                if (layout->defaultOrder() != PhosphorZones::Layout::DefaultOrderUnset) {
+                    json[QStringLiteral("defaultOrder")] = layout->defaultOrder();
+                }
+
+                // Include allow-lists so KCM can show the filter badge
+                PhosphorZones::LayoutUtils::serializeAllowLists(json, layout->allowedScreens(),
+                                                                layout->allowedDesktops(), layout->allowedActivities());
+            }
+        } else if (PhosphorLayout::LayoutId::isAutotile(entry.id)) {
+            // Autotile entries have no Layout object; their hiddenFromSelector
+            // (curated-picker state) lives in the unified sidecar keyed by
+            // "autotile:<id>". Surface it so the settings list shows the eye
+            // toggle's true state.
+            const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(entry.id);
+            if (!algoId.isEmpty()) {
+                const QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
+                json[QStringLiteral("hiddenFromSelector")] =
+                    overrides.value(PhosphorZones::ZoneJsonKeys::HiddenFromSelector).toBool(false);
+            }
+        }
+
+        result.append(QString::fromUtf8(QJsonDocument(json).toJson(QJsonDocument::Compact)));
+    }
+
+    return result;
+}
+
+QString LayoutAdaptor::getLayout(const QString& id)
+{
+    // Handle autotile algorithm preview layouts
+    if (PhosphorLayout::LayoutId::isAutotile(id)) {
+        QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(id);
+        auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algoId) : nullptr;
+        if (!algo) {
+            qCWarning(lcDbusLayout) << "Autotile algorithm not found:" << algoId;
+            return QString();
+        }
+        // previewFromAlgorithm applies configured params (active-algorithm
+        // maxWindows, master-count, split-ratio) when the caller passes a
+        // non-positive windowCount, so no adapter helper is needed here.
+        PhosphorLayout::LayoutPreview preview =
+            PhosphorTiles::previewFromAlgorithm(algoId, algo, -1, m_algorithmRegistry);
+        // getLayout returns a Layout-schema document (editor parser contract);
+        // the flat preview schema belongs to getLayoutPreview*, not here.
+        QJsonObject json = autotilePreviewToLayoutJson(preview);
+        // Apply stored per-algorithm overrides (gaps, visibility, shader)
+        QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
+        for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it) {
+            json[it.key()] = it.value();
+        }
+        return QString::fromUtf8(QJsonDocument(json).toJson());
+    }
+
+    auto uuidOpt = parseAndValidateUuid(id, QStringLiteral("get layout"));
+    if (!uuidOpt) {
+        return QString();
+    }
+    QUuid uuid = *uuidOpt;
+
+    if (m_cachedLayoutJson.contains(uuid)) {
+        return m_cachedLayoutJson[uuid];
+    }
+
+    auto* layout = m_layoutManager->layoutById(uuid);
+    if (!layout) {
+        qCWarning(lcDbusLayout) << "Layout not found:" << id;
+        return QString();
+    }
+
+    QString json = QString::fromUtf8(QJsonDocument(layout->toJson()).toJson());
+    m_cachedLayoutJson[uuid] = json;
+    return json;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Visibility Filtering
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void LayoutAdaptor::invalidateLayoutJsonCacheFor(const QUuid& uuid)
+{
+    m_cachedLayoutJson.remove(uuid);
+    if (m_cachedActiveLayoutId == uuid) {
+        m_cachedActiveLayoutId = QUuid();
+        m_cachedActiveLayoutJson.clear();
+    }
+}
+
+// Property-name constants for the compact layoutPropertyChanged signal.
+// Centralizes the wire format so the three mutators and any future
+// subscriber-side dispatcher cannot drift on spelling. Stored as
+// `const QString` (via QStringLiteral's static UTF-16 storage) so the
+// emit sites don't allocate a temporary QString on every property change.
+namespace {
+const QString kPropHidden = QStringLiteral("hidden");
+const QString kPropAutoAssign = QStringLiteral("autoAssign");
+const QString kPropAspectRatioClass = QStringLiteral("aspectRatioClass");
+} // namespace
+
+void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
+{
+    // Autotile algorithms have no backing Layout object — their per-id settings
+    // (here, hiddenFromSelector for the curated picker) live in the unified
+    // layout-settings.json sidecar keyed by "autotile:<id>".
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        // A bare "autotile:" id yields an empty algorithm key; writing under it
+        // would create an orphan sidecar entry no algorithm maps to. Mirror
+        // updateLayout's guard and reject it.
+        if (algoId.isEmpty()) {
+            qCWarning(lcDbusLayout) << "setLayoutHidden: autotile id with empty algorithm id rejected:" << layoutId;
+            return;
+        }
+        const QString hiddenKey = PhosphorZones::ZoneJsonKeys::HiddenFromSelector;
+        QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
+        if (overrides.value(hiddenKey).toBool(false) == hidden) {
+            return;
+        }
+        // Persist only the hiding state; drop the key on re-show so the entry
+        // collapses back to the algorithm default instead of storing "false".
+        if (hidden) {
+            overrides.insert(hiddenKey, true);
+        } else {
+            overrides.remove(hiddenKey);
+        }
+        m_layoutManager->saveAutotileOverrides(algoId, overrides);
+        qCInfo(lcDbusLayout) << "Set autotile" << layoutId << "hidden:" << hidden;
+        Q_EMIT layoutPropertyChanged(layoutId, kPropHidden, QDBusVariant(hidden));
+        return;
+    }
+
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("set layout hidden"));
+    if (!layout) {
+        return;
+    }
+
+    // Value-equality guard: skip the mutation + cache invalidation +
+    // signal fan-out when the incoming value already matches the current
+    // one. Mirrors the Phase 1.1 guard in SettingsAdaptor::setSetting so
+    // a settled checkbox cannot spam subscribers with no-op reloads.
+    if (layout->hiddenFromSelector() == hidden) {
+        return;
+    }
+
+    layout->setHiddenFromSelector(hidden);
+    // Note: saveLayouts() is triggered automatically via layoutModified signal
+
+    // Invalidate the cached JSON for this layout so a later getLayout()
+    // re-serializes with the new value. Subscribers that want the full
+    // shape after a property mutation pull via getLayout — the signal is
+    // deliberately narrow.
+    invalidateLayoutJsonCacheFor(layout->id());
+
+    qCInfo(lcDbusLayout) << "Set layout" << layoutId << "hidden:" << hidden;
+    // Phase 4 of refactor/dbus-performance: emit the compact property
+    // signal (3 strings + 1 bool over the wire) instead of layoutChanged
+    // with the full 5–20 KB JSON payload. layoutListChanged is likewise
+    // not emitted — the list didn't change.
+    Q_EMIT layoutPropertyChanged(layoutId, kPropHidden, QDBusVariant(hidden));
+}
+
+void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
+{
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("set layout auto-assign"));
+    if (!layout) {
+        return;
+    }
+
+    if (layout->autoAssign() == enabled) {
+        return;
+    }
+
+    layout->setAutoAssign(enabled);
+    // Note: saveLayouts() is triggered automatically via layoutModified signal
+
+    invalidateLayoutJsonCacheFor(layout->id());
+
+    qCInfo(lcDbusLayout) << "Set layout" << layoutId << "autoAssign:" << enabled;
+    Q_EMIT layoutPropertyChanged(layoutId, kPropAutoAssign, QDBusVariant(enabled));
+}
+
+void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspectRatioClass)
+{
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("set layout aspect ratio"));
+    if (!layout) {
+        return;
+    }
+
+    // The bus hands us a raw int and any session process can reach it, so
+    // normalise once, up front, and use that single value for the change check,
+    // the store, the log and the signal. setAspectRatioClassInt clamps
+    // internally, so anything derived from the raw argument past this point
+    // would broadcast a class that was never stored (e.g. 99 → Any) and that
+    // getLayout would then contradict. The emitted value must be the stored one.
+    const int normalized =
+        static_cast<int>(PhosphorLayout::ScreenClassification::fromJsonValue(QJsonValue(aspectRatioClass)));
+
+    if (static_cast<int>(layout->aspectRatioClass()) == normalized) {
+        return;
+    }
+
+    layout->setAspectRatioClassInt(normalized);
+
+    invalidateLayoutJsonCacheFor(layout->id());
+
+    qCInfo(lcDbusLayout) << "Set layout" << layoutId << "aspectRatioClass:" << normalized;
+    Q_EMIT layoutPropertyChanged(layoutId, kPropAspectRatioClass, QDBusVariant(normalized));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PhosphorZones::Layout Management
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void LayoutAdaptor::setActiveLayout(const QString& id)
+{
+    auto* layout = getValidatedLayout(id, QStringLiteral("set active layout"));
+    if (!layout) {
+        return;
+    }
+
+    m_layoutManager->setActiveLayoutById(layout->id());
+}
+
+void LayoutAdaptor::applyQuickLayout(int mode, int number, const QString& screenId)
+{
+    m_layoutManager->applyQuickLayout(quickSlotMode(mode), number,
+                                      PhosphorScreens::ScreenIdentity::idForName(screenId));
+}
+
+QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
+{
+    if (!validateNonEmpty(name, QStringLiteral("name"), QStringLiteral("create layout"))) {
+        return QString();
+    }
+
+    PhosphorZones::Layout* layout = PhosphorZones::LayoutFactory::create(type, m_layoutManager);
+    if (!layout) {
+        qCWarning(lcDbusLayout) << "Failed to create layout of type:" << type;
+        return QString();
+    }
+
+    // D-Bus boundary clamp: callers can bypass the editor UI's name cap.
+    layout->setName(clampName(name));
+
+    // Auto-detect aspect ratio class from the primary screen (virtual-screen-aware)
+    QScreen* screen = Utils::primaryScreen();
+    if (screen) {
+        const QString primaryId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
+        auto* mgr = m_screenManager;
+        QRect geo =
+            (mgr && mgr->screenGeometry(primaryId).isValid()) ? mgr->screenGeometry(primaryId) : screen->geometry();
+        layout->setAspectRatioClass(PhosphorLayout::ScreenClassification::classify(geo.width(), geo.height()));
+    }
+
+    m_layoutManager->addLayout(layout);
+
+    qCInfo(lcDbusLayout) << "Created layout" << name << "of type" << type;
+    // Addition-specific companion to layoutListChanged (emitted by the
+    // PhosphorZones::LayoutRegistry::layoutsChanged fan-out). Subscribers that only care
+    // about new layouts — e.g. the settings list auto-select path — can
+    // react without diffing the full list.
+    const QString newId = layout->id().toString();
+    Q_EMIT layoutCreated(newId);
+    return newId;
+}
+
+void LayoutAdaptor::deleteLayout(const QString& id)
+{
+    auto* layout = getValidatedLayout(id, QStringLiteral("delete layout"));
+    if (!layout) {
+        return;
+    }
+
+    if (layout->isSystemLayout()) {
+        qCWarning(lcDbusLayout) << "Cannot delete system layout:" << id;
+        return;
+    }
+
+    QUuid uuid = layout->id();
+    const QString deletedId = uuid.toString();
+    m_layoutManager->removeLayoutById(uuid);
+
+    m_cachedLayoutJson.remove(uuid);
+    if (m_cachedActiveLayoutId == uuid) {
+        m_cachedActiveLayoutId = QUuid();
+        m_cachedActiveLayoutJson.clear();
+    }
+    qCInfo(lcDbusLayout) << "Deleted layout" << id;
+    // Deletion-specific companion to layoutListChanged — lets subscribers
+    // evict per-layout state keyed by UUID before the list refresh lands.
+    Q_EMIT layoutDeleted(deletedId);
+}
+
+QString LayoutAdaptor::duplicateLayout(const QString& id)
+{
+    auto* source = getValidatedLayout(id, QStringLiteral("duplicate layout"));
+    if (!source) {
+        return QString();
+    }
+
+    auto* duplicate = m_layoutManager->duplicateLayout(source);
+    if (!duplicate) {
+        qCWarning(lcDbusLayout) << "Failed to duplicate layout:" << id;
+        return QString();
+    }
+
+    // The registry appends its duplicate suffix without regard to length (it
+    // has no name limit of its own), so re-apply the boundary clamp here like
+    // every other name-producing adaptor entry point. Trim the BASE, not the
+    // result: a tail clamp on a long name would cut the suffix off and leave
+    // the copy visually identical to its source. clampName's surrogate
+    // back-off keeps the reduced-budget cut from splitting a pair.
+    //
+    // Rebuild the name from the source rather than unpicking the duplicate's:
+    // `duplicateLayout` is contractually `source->name() + duplicateNameSuffix()`,
+    // so clamping the source name to the reduced budget and re-appending the
+    // suffix is the same string, without needing the suffix to still be
+    // recognisable on the far side. A name already within the limit clamps to
+    // itself, so the common case reassigns an identical string and Layout::setName
+    // no-ops on it.
+    const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
+    duplicate->setName(clampName(source->name(), MaxLayoutNameLength - suffix.size()) + suffix);
+
+    qCInfo(lcDbusLayout) << "Duplicated layout" << id << "to" << duplicate->id();
+    const QString dupId = duplicate->id().toString();
+    Q_EMIT layoutCreated(dupId);
+    return dupId;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Quick PhosphorZones::Layout Slots
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString LayoutAdaptor::getQuickLayoutSlot(int mode, int slotNumber)
+{
+    if (slotNumber < 1 || slotNumber > PhosphorProtocol::Service::QuickLayoutSlotCount) {
+        qCWarning(lcDbusLayout)
+            << "Invalid quick layout slot number:" << slotNumber
+            << QStringLiteral("(must be 1-%1)").arg(PhosphorProtocol::Service::QuickLayoutSlotCount);
+        return QString();
+    }
+
+    // Return raw assignment ID (UUID string or autotile ID)
+    auto slots = m_layoutManager->quickLayoutSlots(quickSlotMode(mode));
+    return slots.value(slotNumber);
+}
+
+void LayoutAdaptor::setQuickLayoutSlot(int mode, int slotNumber, const QString& layoutId)
+{
+    if (slotNumber < 1 || slotNumber > PhosphorProtocol::Service::QuickLayoutSlotCount) {
+        qCWarning(lcDbusLayout)
+            << "Invalid quick layout slot number:" << slotNumber
+            << QStringLiteral("(must be 1-%1)").arg(PhosphorProtocol::Service::QuickLayoutSlotCount);
+        return;
+    }
+
+    // Validate UUID format for manual layouts (skip for autotile IDs)
+    if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("set quick layout slot"));
+        if (!uuidOpt) {
+            return;
+        }
+    }
+
+    m_layoutManager->setQuickLayoutSlot(quickSlotMode(mode), slotNumber, layoutId);
+    qCInfo(lcDbusLayout) << "Set quick layout slot" << slotNumber << "mode" << mode << "to" << layoutId;
+    Q_EMIT quickLayoutSlotsChanged();
+}
+
+void LayoutAdaptor::setAllQuickLayoutSlots(int mode, const QVariantMap& slots)
+{
+    QHash<int, QString> parsedSlots;
+
+    for (auto it = slots.begin(); it != slots.end(); ++it) {
+        bool ok;
+        int slotNumber = it.key().toInt(&ok);
+        if (!ok || slotNumber < 1 || slotNumber > PhosphorProtocol::Service::QuickLayoutSlotCount) {
+            qCWarning(lcDbusLayout)
+                << "Invalid slot key:" << it.key()
+                << QStringLiteral("(must be 1-%1)").arg(PhosphorProtocol::Service::QuickLayoutSlotCount);
+            continue;
+        }
+
+        QString layoutId = it.value().toString();
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+            auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch quick layout slot"));
+            if (!uuidOpt) {
+                continue;
+            }
+        }
+        parsedSlots[slotNumber] = layoutId;
+    }
+
+    m_layoutManager->setAllQuickLayoutSlots(quickSlotMode(mode), parsedSlots);
+    qCInfo(lcDbusLayout) << "Batch set" << parsedSlots.size() << "quick layout slots mode" << mode;
+    Q_EMIT quickLayoutSlotsChanged();
+}
+
+QVariantMap LayoutAdaptor::getAllQuickLayoutSlots(int mode)
+{
+    QVariantMap result;
+    auto slots = m_layoutManager->quickLayoutSlots(quickSlotMode(mode));
+    for (auto it = slots.begin(); it != slots.end(); ++it) {
+        result[QString::number(it.key())] = it.value();
+    }
+    return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Virtual Desktop Info
+// ═══════════════════════════════════════════════════════════════════════════════
+
+int LayoutAdaptor::getVirtualDesktopCount()
+{
+    return m_virtualDesktopManager ? m_virtualDesktopManager->desktopCount() : 1;
+}
+
+QStringList LayoutAdaptor::getVirtualDesktopNames()
+{
+    return m_virtualDesktopManager ? m_virtualDesktopManager->desktopNames() : QStringList{QStringLiteral("Desktop 1")};
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Settings Access
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void LayoutAdaptor::setSettings(ISettings* settings)
+{
+    m_settings = settings;
+}
+
+void LayoutAdaptor::setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry)
+{
+    m_algorithmRegistry = registry;
+}
+
+void LayoutAdaptor::setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source)
+{
+    m_autotileLayoutSource = source;
+}
+
+void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)
+{
+    // The adaptor is a QDBusAbstractAdaptor child of the service-owning
+    // QObject — signal plumbing and the coalesce QTimer live on this
+    // thread only. Catch cross-thread setters at dev time before they
+    // cause subtle double-emit races.
+    Q_ASSERT(QThread::currentThread() == thread());
+    // The daemon/editor/settings each call setLayoutSource exactly once
+    // during init(); allow idempotent re-assignment with the same pointer
+    // but trip on a silent swap that would leave stale connections wired.
+    // Release-build behaviour is intentionally lenient: the disconnect-
+    // by-receiver block below already drops the prior connection, so a
+    // re-wire that escapes debug only loses the OLD source's coalesced
+    // emissions (the new source's are wired on the next branch). Asserts
+    // catch the dev-time programmer error; release degrades to single-
+    // source-wins rather than a hard crash so a misconfigured
+    // composition root stays observable instead of unkillable.
+    Q_ASSERT_X(!m_layoutSource || m_layoutSource == source, "LayoutAdaptor::setLayoutSource",
+               "rebinding to a different ILayoutSource is a programmer error — debug asserts; release silently "
+               "swaps to the new source (old source's coalesce-timer connection is dropped first)");
+
+    if (m_layoutSource == source)
+        return;
+
+    // Drop any prior connection into the coalesce timer before rebinding.
+    // Disconnect-by-receiver: the timer is the only sink we ever wire
+    // contentsChanged into, so the narrow target keeps unrelated signal
+    // fan-outs on @p source intact.
+    if (m_layoutSource) {
+        disconnect(m_layoutSource, nullptr, &m_layoutSourceCoalesce, nullptr);
+    }
+
+    m_layoutSource = source;
+
+    if (!m_layoutSource) {
+        // Explicit clear: stop any in-flight coalesce so the next
+        // setLayoutSource(non-null) doesn't trip its initial timeout()
+        // for stale state. Mirrors invalidateCache() above — the cache
+        // is already nuked because subsequent getLayoutPreviewList()
+        // bails on the null source check.
+        m_layoutSourceCoalesce.stop();
+        return;
+    }
+
+    // Coalesce bursts of contentsChanged (AlgorithmRegistry churn on
+    // startup, scripted-algorithm hot-reload) into one layoutListChanged
+    // D-Bus emission — see m_layoutSourceCoalesce member comment.
+    connect(m_layoutSource, &PhosphorLayout::ILayoutSource::contentsChanged, &m_layoutSourceCoalesce,
+            QOverload<>::of(&QTimer::start));
+    // Kick the coalesce timer once on bind so a fully-populated source
+    // (typical for AutotileLayoutSource over a registry that's been
+    // populated synchronously by the built-in registration sweep) still
+    // produces a layoutListChanged D-Bus emission for any client that
+    // attached before this bind. One extra signal at startup is cheap;
+    // a never-invalidated client cache is not.
+    m_layoutSourceCoalesce.start();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Source-agnostic PhosphorZones::Layout Preview (PhosphorLayout::ILayoutSource bridge)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString LayoutAdaptor::getLayoutPreviewList()
+{
+    if (!m_layoutSource) {
+        return QStringLiteral("[]");
+    }
+    QJsonArray array;
+    const auto previews = m_layoutSource->availableLayouts();
+    for (const auto& preview : previews) {
+        array.append(PlasmaZones::toJson(preview));
+    }
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+QString LayoutAdaptor::getLayoutPreview(const QString& id, int windowCount)
+{
+    if (!m_layoutSource || id.isEmpty()) {
+        return QStringLiteral("{}");
+    }
+    const auto preview = m_layoutSource->previewAt(id, windowCount);
+    if (preview.id.isEmpty()) {
+        // ILayoutSource contract: empty id signals "unknown to this source".
+        return QStringLiteral("{}");
+    }
+    return QString::fromUtf8(QJsonDocument(PlasmaZones::toJson(preview)).toJson(QJsonDocument::Compact));
+}
+
+} // namespace PlasmaZones

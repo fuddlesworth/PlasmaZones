@@ -3,7 +3,7 @@
 
 #include "BaseZoneCommand.h"
 #include "../../services/ZoneManager.h"
-#include "../../../core/logging.h"
+#include "core/platform/logging.h"
 
 namespace PlasmaZones {
 

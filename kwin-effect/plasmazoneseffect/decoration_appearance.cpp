@@ -8,9 +8,9 @@
 // decorations.cpp, which owns the decoration chain. updateWindowDecoration
 // remains the sole consumer path.
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
-#include "../autotilehandler.h"
+#include "autotilehandler/autotilehandler.h"
 #include "shader_resolve.h"
 #include "window_query.h"
 

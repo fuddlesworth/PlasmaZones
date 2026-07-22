@@ -2,18 +2,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "internal.h"
-#include "../overlayservice.h"
+#include "daemon/overlayservice.h"
 #include "qml_property_names.h"
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorRendering/ShaderCompiler.h>
-#include "../../core/cavaoptions.h"
-#include "../../core/logging.h"
+#include "core/types/cavaoptions.h"
+#include "core/platform/logging.h"
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
-#include "../../core/shaderregistry.h"
-#include "../../core/utils.h"
+#include "core/interfaces/shaderregistry.h"
+#include "core/utils/utils.h"
 #include <QQuickWindow>
 #include <QScreen>
 #include <QTimer>

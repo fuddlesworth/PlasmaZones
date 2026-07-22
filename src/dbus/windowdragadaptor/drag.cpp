@@ -1,27 +1,27 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../windowdragadaptor.h"
+#include "windowdragadaptor.h"
 #include "dragactivation.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
-#include "../../config/configdefaults.h"
-#include "../../core/enums.h"
-#include "../windowtrackingadaptor.h"
-#include "../../core/interfaces.h"
+#include "config/configdefaults.h"
+#include "core/types/enums.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "core/interfaces/interfaces.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "../../core/geometryutils.h"
+#include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
-#include "../../core/zoneselectorlayout.h"
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "core/types/zoneselectorlayout.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../../core/constants.h"
+#include "core/types/constants.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 

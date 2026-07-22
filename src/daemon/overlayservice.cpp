@@ -3,8 +3,8 @@
 
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
-#include "snapassistthumbnailprovider.h"
-#include "dmabuftextureprovider.h"
+#include "rendering/snapassistthumbnailprovider.h"
+#include "rendering/dmabuftextureprovider.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 #include <PhosphorOverlay/ShellHost.h>
@@ -16,12 +16,12 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include "../common/layoutpreviewserialize.h"
-#include "../core/unifiedlayoutlist.h"
-#include "../core/geometryutils.h"
+#include "common/layoutpreviewserialize.h"
+#include "core/utils/unifiedlayoutlist.h"
+#include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
-#include "../core/utils.h"
-#include "../core/constants.h"
+#include "core/utils/utils.h"
+#include "core/types/constants.h"
 
 #include <QCoreApplication>
 #include <QCursor>
@@ -36,9 +36,9 @@
 #include <QTimer>
 #include <QMutexLocker>
 
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 #include "phosphor_qml_i18n.h"
-#include "vulkan_support.h"
+#include "rendering/vulkansupport.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>

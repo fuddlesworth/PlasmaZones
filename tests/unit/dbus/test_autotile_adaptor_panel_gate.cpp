@@ -19,9 +19,9 @@
 #include <PhosphorProtocol/WindowMarshalling.h>
 
 #include <PhosphorTileEngine/AutotileEngine.h>
-#include "../helpers/AutotileTestHelpers.h"
+#include "helpers/AutotileTestHelpers.h"
 #include <PhosphorScreens/Manager.h>
-#include "dbus/autotileadaptor.h"
+#include "dbus/autotileadaptor/autotileadaptor.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;

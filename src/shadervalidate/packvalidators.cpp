@@ -10,7 +10,7 @@
 
 #include "packvalidatorcommon.h"
 
-#include "../daemon/rendering/zoneentryscaffold.h"
+#include "daemon/rendering/zoneentryscaffold.h"
 
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>

@@ -10,7 +10,7 @@
 // are a separate concern: a window can carry either of these with no decoration at
 // all, and a decorated window can carry neither.
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
