@@ -685,6 +685,8 @@ set(plasmazones_editor_SRCS
     editor/main.cpp
     daemon/rendering/vulkansupport.cpp
     editor/EditorController.cpp
+    editor/EditorGapsModel.cpp
+    editor/EditorGapsModel.h
     editor/EditorLaunchController.cpp
     editor/EditorLaunchController.h
     editor/EditorAppAdaptor.cpp
