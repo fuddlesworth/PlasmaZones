@@ -59,6 +59,7 @@
 
 #include "shader_resolve.h"
 #include "types.h"
+#include "effect_state.h"
 
 namespace KWin {
 class SurfaceItem;
@@ -768,11 +769,7 @@ private:
     // appearance); `lastMs` dedupes the per-frame advance across the chain's
     // packs. windowSurfaceAnimates keeps the window repainting while a value
     // is inside its near-0/near-1 thresholds, so the ramp runs to completion.
-    struct FocusFadeState
-    {
-        float value = -1.0f;
-        qint64 lastMs = -1;
-    };
+    // FocusFadeState moved to effect_state.h.
     QHash<QString, FocusFadeState> m_focusFade;
     // Live focus cross-fade duration (ms) for the uSurfaceFocused ramp (border
     // colour mix + the focus-fade content pack). A STANDALONE decoration
@@ -834,25 +831,7 @@ private:
     // Scope tokens live in PhosphorCompositor::WindowAppearanceScope: "tiled"
     // (snapped OR autotile-managed), "normal" (Normal type AND not transient),
     // "all" (every window). Defaults match ConfigDefaults::windowBorderScope().
-    struct WindowAppearanceDefault
-    {
-        bool showBorder = false;
-        QString borderScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
-        int borderWidth = 0;
-        int borderRadius = 0;
-        QString activeColor;
-        QString inactiveColor;
-        bool hideTitleBar = false;
-        QString titleBarScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
-        // Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*),
-        // rendered by the built-in "opacity-tint" pack in easy mode. The tint
-        // colour carries hex or the accent sentinel like the border colours.
-        bool showOpacityTint = false;
-        QString opacityTintScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
-        double opacity = 1.0;
-        double tintStrength = 0.0;
-        QString tintColor;
-    };
+    // WindowAppearanceDefault moved to effect_state.h.
     WindowAppearanceDefault m_windowAppearanceDefault;
 
     /// True when a config-default border, hidden title bar, or opacity+tint
@@ -937,11 +916,7 @@ private:
     // window_lifecycle.cpp): it is cheap, and deferring it let a re-decorated
     // title bar flash for the throttle window. QPointer auto-nulls if the
     // window dies before the flush; the flush skips those entries.
-    struct PendingFrameGeometry
-    {
-        QRect geometry;
-        QPointer<KWin::EffectWindow> window;
-    };
+    // PendingFrameGeometry moved to effect_state.h.
     QHash<QString, PendingFrameGeometry> m_pendingFrameGeometry;
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
@@ -1138,37 +1113,7 @@ private:
     /// at most once per frame.
     float advanceFocusFade(const QString& windowId, bool focused);
 
-    /// Resolves a pack id to its compiled program, compiling on a cache miss. The fold
-    /// memoises the decoration-profile lookup behind this, so the input side takes it
-    /// as a callable rather than resolving the tree a second time.
-    ///
-    /// A NON-OWNING reference to the caller's lambda, not a std::function. The fold's
-    /// resolver captures three pointers (24 bytes), which is past libstdc++'s 16-byte
-    /// small-object buffer — so every conversion to std::function HEAP-ALLOCATED, and the
-    /// fold converts twice. At eight decorated windows across two outputs at 60Hz that is
-    /// some four thousand malloc/free pairs a second, added by a refactor that shipped
-    /// inside a performance PR. The callee only ever invokes it during the call, so a
-    /// borrowed reference is all it ever needed.
-    class CompiledPackResolver
-    {
-    public:
-        template<typename F, typename = std::enable_if_t<!std::is_same_v<std::decay_t<F>, CompiledPackResolver>>>
-        CompiledPackResolver(F&& fn) // NOLINT(google-explicit-constructor): behaves as a callable
-            : m_ctx(static_cast<void*>(std::addressof(fn)))
-            , m_invoke([](void* ctx, const QString& packId) -> CompiledSurfacePack* {
-                return (*static_cast<std::remove_reference_t<F>*>(ctx))(packId);
-            })
-        {
-        }
-        CompiledSurfacePack* operator()(const QString& packId) const
-        {
-            return m_invoke(m_ctx, packId);
-        }
-
-    private:
-        void* m_ctx;
-        CompiledSurfacePack* (*m_invoke)(void*, const QString&);
-    };
+    // CompiledPackResolver moved to effect_state.h.
 
     /// (Re)allocate a window's composite / capture / per-pack buffer targets for the
     /// current size, scale and chain, dropping every cache an allocation makes stale.
@@ -1585,6 +1530,18 @@ private:
     /// tree on arrival.
     void seedDecorationTreeBaseline();
 
+    // Constructor wiring, decomposed from the ctor along its original comment
+    // seams (definitions in lifecycle_wiring.cpp). Each is called exactly once,
+    // from the ctor, in this declared order. Not part of the public surface —
+    // pure ctor decomposition, so their bodies keep the ordering guarantees the
+    // inline sequence had (notably: connect the screen signals before iterating
+    // the current screens() in initRenderingAndRegistries).
+    void initRenderingAndRegistries();
+    void initTimers();
+    void connectDragTracker();
+    void connectWindowAndScreenSignals();
+    void connectDaemonSubscriptions();
+
     /// Coalesce a full border sweep to the end of the event-loop turn. The
     /// config-default appearance loaders (and the accent / inactive colour
     /// loaders) each land as a separate async settings reply; several arriving in
@@ -1678,11 +1635,7 @@ private:
     /// SetWindowLayer rule is applied to a window. Deliberately NOT re-captured
     /// while a rule owns the layer, so the restore returns the window to the
     /// user's own state, not to an intermediate rule state.
-    struct WindowLayerSnapshot
-    {
-        bool keepAbove = false;
-        bool keepBelow = false;
-    };
+    // WindowLayerSnapshot moved to effect_state.h.
     QHash<QString, WindowLayerSnapshot> m_ruleWindowLayerSnapshots;
 
     std::unique_ptr<NavigationHandler> m_navigationHandler;
@@ -1774,6 +1727,18 @@ private:
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
                                bool holdAddedGrab = false, bool animateMinimized = false,
                                std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
+    /// Resolve the compiled shader program for @p effectId, compiling it (read
+    /// source, assemble entry point, expand includes, splice the param preamble +
+    /// HDR finalize + PLASMAZONES_KWIN define, generate the KWin custom shader,
+    /// and cache every uniform location) on the first miss. Assumes the GL
+    /// context is already current — the sole caller (beginShaderTransition) makes
+    /// it current before the call, since the same context also drives its texture
+    /// uploads. Returns a pointer to the cached entry, whose `shader` is null when
+    /// this @p effectId is a cached compile-failure sentinel. Returns nullptr on a
+    /// transient failure (missing / empty / unexpandable source) that is NOT
+    /// cached, so a later trigger re-attempts. Definition in shader_textures.cpp.
+    const CachedShader* compileOrLoadAnimationShader(const QString& effectId,
+                                                     const PhosphorAnimationShaders::AnimationShaderEffect& eff);
     void endShaderTransition(KWin::EffectWindow* window);
 
     // First-frame open suppression — implementations in window_lifecycle.cpp.
@@ -2179,11 +2144,7 @@ private:
     // cancel can never hit an unrelated reverse leg (a superseding leg,
     // or any future reverse event). Entries are erased on consume and on
     // windowDeleted (raw-pointer-keyed, bounded like its siblings above).
-    struct MinimizeShaderStamp
-    {
-        qint64 timeMs = 0;
-        quint64 generation = 0;
-    };
+    // MinimizeShaderStamp moved to effect_state.h.
     QHash<KWin::EffectWindow*, MinimizeShaderStamp> m_minimizeShaderStamp;
 
     // Cursor output tracking (for daemon shortcut screen detection on Wayland)

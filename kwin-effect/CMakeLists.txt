@@ -47,6 +47,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/plasmazoneseffect.cpp
     plasmazoneseffect/plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
+    plasmazoneseffect/lifecycle_wiring.cpp
     plasmazoneseffect/decoration_appearance.cpp
     plasmazoneseffect/decorations.cpp
     plasmazoneseffect/decoration_teardown.cpp
@@ -75,12 +76,15 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/mesh_sim.h
     plasmazoneseffect/paint_pipeline.cpp
     plasmazoneseffect/shader_transitions.cpp
+    plasmazoneseffect/shader_config_dbus.cpp
+    plasmazoneseffect/shader_textures.cpp
     plasmazoneseffect/surface_compile.cpp
     plasmazoneseffect/shader_resolve.cpp
     plasmazoneseffect/shader_resolve.h
     plasmazoneseffect/shader_internal.h
     plasmazoneseffect/surface_types.h
     plasmazoneseffect/transition_types.h
+    plasmazoneseffect/effect_state.h
     plasmazoneseffect/types.h
     plasmazoneseffect/surface_fold.h
     transitions/shadertransitionmanager.h
