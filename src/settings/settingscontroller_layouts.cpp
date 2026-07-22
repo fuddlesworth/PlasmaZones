@@ -56,28 +56,26 @@ void SettingsController::loadLayoutsAsync()
     // layoutListChanged — see
     // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions) relies on it.
     // It is not a redundant backup for a file watcher.
+    // Arm the gate BEFORE the local reload, not after: loadLayouts() drives the
+    // PhosphorZones::LayoutRegistry::layoutsChanged lambda wired in
+    // settingscontroller.cpp's ctor synchronously, and that lambda's view of the
+    // world is the in-process composite, which carries none of the daemon-side
+    // enrichment (hasSystemOrigin / hiddenFromSelector / defaultOrder /
+    // allow-lists) the reply below brings back. Publishing it first painted
+    // every card without its enrichment for the length of the round trip — a
+    // hidden or auto-assign toggle visibly snapped back before it took — and
+    // made every listing page tear down and rebuild its entire model twice for
+    // one mutation. The lambda holds that view in m_withheldLocalLayouts
+    // instead, and the reply adopts it only if the daemon is unreachable.
+    m_awaitingDaemonLayouts = true;
+    m_withheldLocalLayouts.reset();
     if (m_localLayoutManager) {
         m_localLayoutManager->loadLayouts();
     }
 
-    // Step 1: instant paint from the in-process composite source is handled
-    // by the PhosphorZones::LayoutRegistry::layoutsChanged lambda wired in
-    // settingscontroller.cpp's ctor
-    // (it calls recalcLocalLayouts() + swaps m_layouts from localLayoutPreviews()
-    // and emits layoutsChanged). loadLayouts() above emits that signal
-    // synchronously on every call, so the instant-paint path runs without a
-    // duplicate recalc/emit here.
-
-    // Step 2: async D-Bus call to pick up daemon-side enrichment
-    // (hasSystemOrigin / hiddenFromSelector / defaultOrder / allow-lists)
-    // that the local composite can't know about. On reply the enriched
-    // list replaces m_layouts; if the call errors we keep the local
-    // previews from Step 1 visible rather than blanking the page.
-    // Gate the local-path layoutsChanged emit (see the ctor-wired lambda
-    // on PhosphorZones::LayoutRegistry::layoutsChanged). The reply lambda clears this
-    // unconditionally so any subsequent local-only refresh (daemon down)
-    // emits as usual.
-    m_awaitingDaemonLayouts = true;
+    // Pick up the daemon-side enrichment the local composite can't know about.
+    // On reply the enriched list replaces m_layouts; if the call errors we fall
+    // back to the local view withheld above rather than blanking the page.
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::LayoutRegistry,
                                                    QStringLiteral("getLayoutList")),
@@ -88,21 +86,31 @@ void SettingsController::loadLayoutsAsync()
         // Clear the gate first so any local-path emit that arrives after
         // an error reply (or after a successful one) runs normally.
         m_awaitingDaemonLayouts = false;
+        // Take ownership of whatever the local path held back, whichever way
+        // the reply goes: leaving it engaged would let a later error branch
+        // adopt a view from a round trip that has long since finished.
+        std::optional<QVariantList> withheldLocal;
+        withheldLocal.swap(m_withheldLocalLayouts);
 
         QDBusPendingReply<QStringList> reply = *w;
         if (reply.isError()) {
             qCWarning(lcCore) << "Failed to load layouts (D-Bus):" << reply.error().message()
-                              << "— keeping local manual-layout previews from Step 1.";
+                              << "— falling back to the local manual-layout previews.";
+            // Adopt the withheld local view. It is the only refresh the user
+            // gets on this path, and it is newer than m_layouts by definition:
+            // the reload that produced it is what this call was answering.
+            if (withheldLocal && m_layouts != *withheldLocal) {
+                m_layouts = std::move(*withheldLocal);
+            }
             // Drop any pending select-after-create id so a future successful
             // reload doesn't emit layoutAdded() for a stale id that the user
             // has already navigated away from (or that was deleted from
             // another session).
             m_pendingSelectLayoutId.clear();
-            // Re-emit the local view: the file-watcher emit that ran
-            // while m_awaitingDaemonLayouts was true was suppressed
-            // (see settingscontroller.cpp's connect lambda). Without
-            // this re-emit, an immediate user-visible refresh after a
-            // daemon error waits for the next disk change.
+            // Emit unconditionally, even when the withheld view matched what we
+            // already had: local emits that landed inside the gate window were
+            // held back too (see settingscontroller.cpp's connect lambda), and
+            // without this the page waits for the next disk change to refresh.
             Q_EMIT layoutsChanged();
             return;
         }
