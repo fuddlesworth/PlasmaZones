@@ -55,7 +55,6 @@ return pluau.algorithm {
         supportsSplitRatio = false,
         centerLayout = true,
         supportsMasterCount = false,
-        supportsMinSizes = false,
         defaultMaxWindows = 6,
         minimumWindows = 1,
         zoneNumberDisplay = "all",
@@ -74,23 +73,63 @@ return pluau.algorithm {
         if early then return early end
 
         local gap = ctx.innerGap
+        local minSizes = ctx.minSizes
         local wr = resolveWidthRatio(ctx, area)
         local hr = resolveHeightRatio(ctx)
-        local ch = math.max(pluau.MIN_ZONE_SIZE, math.floor(area.height * hr))
+
+        -- The focused window occupies the spotlight, so the spotlight must
+        -- hold at least the focused window's minimum size (clamped to the
+        -- work area). Resolve the focused index up front; the rail helpers
+        -- below need it too.
+        local f = ctx.focusedIndex
+        if type(f) ~= "number" or f < 0 or f >= count then f = 0 end
+        local fMinW, fMinH = pluau.minSizeAt(minSizes, f)
+
+        local ch = math.max(pluau.MIN_ZONE_SIZE, math.floor(area.height * hr), math.min(fMinH, area.height))
         local cy = pluau.center(area.y, area.height, ch)
 
         if count == 1 then
             local bandW = math.max(pluau.MIN_ZONE_SIZE, math.floor(area.width * wr))
+            bandW = math.min(math.max(bandW, fMinW), area.width)
             local bandX = pluau.center(area.x, area.width, bandW)
             return { { x = bandX, y = cy, width = bandW, height = ch } }
         end
 
+        -- Split the rail windows across the two margins, giving the extra one to
+        -- the right rail when the number of rail windows is odd so the two
+        -- columns stay as balanced as the count allows.
+        local rest = count - 1
+        local rightCount = math.floor((rest + 1) / 2)
+        local leftCount = rest - rightCount
+
+        -- Rail membership in landing order: the placement loop below hands the
+        -- non-focused windows the rail slots in their natural index order,
+        -- right rail first, so railIdx[1..rightCount] land on the right and
+        -- the rest on the left.
+        local railIdx = {}
+        for i = 0, count - 1 do
+            if i ~= f then railIdx[#railIdx + 1] = i end
+        end
+        local function railMaxMinW(from, to)
+            local m = 0
+            for k = from, to do
+                local mw = pluau.minSizeAt(minSizes, railIdx[k])
+                if mw > m then m = mw end
+            end
+            return m
+        end
+        local rightMinW = (rightCount > 0) and railMaxMinW(1, rightCount) or 0
+        local leftMinW = (leftCount > 0) and railMaxMinW(rightCount + 1, rest) or 0
+
         -- Two or more windows: the spotlight stays centered with the other windows
         -- split across rails in both side margins. Clamp the spotlight so each
-        -- margin keeps room for a usable rail strip plus the gap; if even that
-        -- cannot fit, fill the area.
-        local centerW = math.floor(area.width * wr)
-        local maxCenterW = area.width - 2 * (gap + pluau.MIN_ZONE_SIZE)
+        -- margin keeps room for its rail's widest minimum (or the base strip)
+        -- plus the gap; if even that cannot fit, fill the area. When the
+        -- focused minimum and the rail requirement conflict, the rails win and
+        -- the engine's post-layout min-size pass absorbs the residue.
+        local sideNeed = math.max(pluau.MIN_ZONE_SIZE, rightMinW, leftMinW)
+        local centerW = math.max(math.floor(area.width * wr), math.min(fMinW, area.width))
+        local maxCenterW = area.width - 2 * (gap + sideNeed)
         if maxCenterW < pluau.MIN_ZONE_SIZE then
             return pluau.fillArea(area, count)
         end
@@ -101,32 +140,37 @@ return pluau.algorithm {
         local centerX = area.x + sideW
         local centerZone = { x = centerX, y = cy, width = centerW, height = ch }
 
-        -- Split the rail windows across the two margins, giving the extra one to
-        -- the right rail when the number of rail windows is odd so the two
-        -- columns stay as balanced as the count allows.
-        local rest = count - 1
-        local rightCount = math.floor((rest + 1) / 2)
-        local leftCount = rest - rightCount
-
+        -- Rail columns: rows sized with the members' minimum heights so a
+        -- rail window with a tall minimum takes its space from its column
+        -- neighbours instead of spilling over them.
         local slots = {}
+        local function railColumn(x, w, from, to)
+            local n = to - from + 1
+            local mins = {}
+            for k = from, to do
+                local _, mh = pluau.minSizeAt(minSizes, railIdx[k])
+                mins[#mins + 1] = mh
+            end
+            local heights = pluau.distributeWithMinSizes(area.height, n, gap, mins)
+            local y = area.y
+            for k = 1, n do
+                slots[#slots + 1] = { x = x, y = y, width = w, height = heights[k] }
+                y = y + heights[k] + gap
+            end
+        end
         if rightCount > 0 then
             local rightX = centerX + centerW + gap
             local rightW = math.max(pluau.MIN_ZONE_SIZE, area.x + area.width - rightX)
-            local r = pluau.rect(rightX, area.y, rightW, area.height):rows(rightCount, gap)
-            for i = 1, #r do slots[#slots + 1] = r[i] end
+            railColumn(rightX, rightW, 1, rightCount)
         end
         if leftCount > 0 then
             local leftW = math.max(pluau.MIN_ZONE_SIZE, sideW - gap)
-            local l = pluau.rect(area.x, area.y, leftW, area.height):rows(leftCount, gap)
-            for i = 1, #l do slots[#slots + 1] = l[i] end
+            railColumn(area.x, leftW, rightCount + 1, rest)
         end
 
         -- Place the spotlight at the focused index so the host (which fills zones
         -- positionally) lands the focused window in the middle. The remaining
         -- windows take the rail slots in their natural order.
-        local f = ctx.focusedIndex
-        if type(f) ~= "number" or f < 0 or f >= count then f = 0 end
-
         local zones = {}
         local slotIdx = 1
         for i = 1, count do

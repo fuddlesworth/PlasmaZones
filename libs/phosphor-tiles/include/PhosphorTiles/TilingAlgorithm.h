@@ -311,6 +311,23 @@ public:
     virtual bool supportsMinSizes() const noexcept;
 
     /**
+     * @brief Stacking direction for overlap layouts
+     *
+     * Only meaningful when producesOverlappingZones() is true. Declares the
+     * z-order the compositor should impose on the tiled windows so overlap
+     * layouts keep a deterministic stack across retiles:
+     *   - "lastOnTop": z-order follows tiling order, the last tiled index is
+     *     the topmost window (cascade/stair/paper style; new windows append
+     *     to the order, so they arrive on top).
+     *   - "firstOnTop": tiled index 0 is topmost and later indices descend
+     *     underneath (deck-style peeks, where each later card peeks out from
+     *     under the previous one).
+     *
+     * @return "lastOnTop" (default) or "firstOnTop"
+     */
+    virtual QString overlapStacking() const noexcept;
+
+    /**
      * @brief Whether this algorithm maintains persistent state across retiles
      *
      * Memory algorithms (like DwindleMemory) remember per-split ratios and

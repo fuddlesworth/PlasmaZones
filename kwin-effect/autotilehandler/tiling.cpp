@@ -130,6 +130,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         QVector<KWin::EffectWindow*> candidates;
         bool isMonocle = false;
         QString screenId; ///< daemon's TARGET screen for this window (req.screenId)
+        QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
     };
     QVector<Entry> entries;
 
@@ -197,6 +198,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         entry.window = w;
         entry.isMonocle = req.monocle;
         entry.screenId = req.screenId;
+        entry.stacking = req.stacking;
         if (candidates.size() > 1) {
             entry.candidates = candidates;
         }
@@ -255,6 +257,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         QString windowId;
         QString screenId;
         bool isMonocle = false;
+        QString stacking;
     };
     QVector<TileSnap> toApply;
     for (Entry& e : entries) {
@@ -270,7 +273,8 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         // re-tiled). req.screenId is the screen the daemon tiled the window on,
         // and TileRequestEntry::validationError() rejects an empty screenId
         // before it ever reaches `entries`, so it is always present here.
-        toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle});
+        toApply.append(
+            {QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle, e.stacking});
     }
 
     // A TILE window the daemon asked us to tile that we could not resolve to a
@@ -304,6 +308,28 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         newTiledByScreen[s.screenId].insert(s.windowId);
     }
 
+    // Deterministic z-order for overlap layouts. The daemon stamps each entry
+    // of an overlap-algorithm batch with its stacking policy; the batch is in
+    // tiling order, so per screen this yields the bottom-to-top raise order:
+    // tiling order for "lastOnTop" (cascade/stair/paper — last window ends up
+    // topmost), reversed for "firstOnTop" (deck peeks — index 0 topmost).
+    // Non-overlap batches leave this empty and keep the pre-tile stacking.
+    QHash<QString, QVector<QPointer<KWin::EffectWindow>>> overlapStackByScreen;
+    {
+        QHash<QString, QString> stackPolicyByScreen;
+        for (const TileSnap& s : toApply) {
+            if (!s.stacking.isEmpty()) {
+                overlapStackByScreen[s.screenId].append(s.window);
+                stackPolicyByScreen[s.screenId] = s.stacking;
+            }
+        }
+        for (auto it = overlapStackByScreen.begin(); it != overlapStackByScreen.end(); ++it) {
+            if (stackPolicyByScreen.value(it.key()) == QLatin1String("firstOnTop")) {
+                std::reverse(it.value().begin(), it.value().end());
+            }
+        }
+    }
+
     // Bump the per-screen generation for every screen this batch retiles, and
     // capture the bumped values. The staggered apply / onComplete below treat a
     // window as superseded only when ITS screen's generation has advanced past
@@ -314,7 +340,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         genByScreen.insert(it.key(), ++m_autotileStaggerGenByScreen[it.key()]);
     }
 
-    auto onComplete = [this, newTiledByScreen, savedGlobalStack, gen, genByScreen]() {
+    auto onComplete = [this, newTiledByScreen, savedGlobalStack, overlapStackByScreen, gen, genByScreen]() {
         if (m_autotileStaggerGeneration != gen) {
             return;
         }
@@ -383,14 +409,65 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         }
         auto* ws = KWin::Workspace::self();
         if (ws) {
+            // Membership index for the overlap restack: window -> the screen
+            // whose ordered group it belongs to. Resolved at completion time
+            // because QPointers may have gone null since the batch was built.
+            QHash<const KWin::EffectWindow*, QString> overlapMemberScreen;
+            for (auto it = overlapStackByScreen.constBegin(); it != overlapStackByScreen.constEnd(); ++it) {
+                for (const auto& gPtr : it.value()) {
+                    if (gPtr && !gPtr->isDeleted()) {
+                        overlapMemberScreen.insert(gPtr.data(), it.key());
+                    }
+                }
+            }
+
             // Restore the full global stacking order (all screens, all windows).
             // This ensures non-tiled windows (e.g. Settings KCM, windows on
             // other screens) retain their position instead of being buried.
+            //
+            // Overlap-layout groups are the exception: their tiled windows are
+            // raised as one block, in the daemon's declared bottom-to-top
+            // order, at the stack position of the group's lowest pre-tile
+            // member. Restoring the arbitrary pre-tile order for them is
+            // exactly the reported bug (cascade/deck/monocle stacks scrambled
+            // after every retile); substituting the block keeps floats and
+            // other screens' windows interleaved where they were.
+            QSet<const KWin::EffectWindow*> groupRaised;
             for (const auto& wPtr : savedGlobalStack) {
-                if (wPtr && !wPtr->isDeleted()) {
-                    KWin::Window* kw = wPtr->window();
-                    if (kw) {
-                        ws->raiseWindow(kw);
+                if (!wPtr || wPtr->isDeleted()) {
+                    continue;
+                }
+                const auto memberIt = overlapMemberScreen.constFind(wPtr.data());
+                if (memberIt != overlapMemberScreen.constEnd()) {
+                    if (groupRaised.contains(wPtr.data())) {
+                        continue;
+                    }
+                    const auto& group = overlapStackByScreen[memberIt.value()];
+                    for (const auto& gPtr : group) {
+                        if (gPtr && !gPtr->isDeleted()) {
+                            if (KWin::Window* gkw = gPtr->window()) {
+                                ws->raiseWindow(gkw);
+                            }
+                            groupRaised.insert(gPtr.data());
+                        }
+                    }
+                    continue;
+                }
+                KWin::Window* kw = wPtr->window();
+                if (kw) {
+                    ws->raiseWindow(kw);
+                }
+            }
+            // A window can join an overlap batch without having been in the
+            // pre-tile stack snapshot (opened in the same tick). Raise any
+            // group not visited above so it still gets its declared order.
+            for (auto it = overlapStackByScreen.constBegin(); it != overlapStackByScreen.constEnd(); ++it) {
+                for (const auto& gPtr : it.value()) {
+                    if (gPtr && !gPtr->isDeleted() && !groupRaised.contains(gPtr.data())) {
+                        if (KWin::Window* gkw = gPtr->window()) {
+                            ws->raiseWindow(gkw);
+                        }
+                        groupRaised.insert(gPtr.data());
                     }
                 }
             }
@@ -425,6 +502,19 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     if (kw) {
                         ws->raiseWindow(kw);
                     }
+                }
+            }
+
+            // The deterministic overlap restack can bury the active window
+            // mid-stack (e.g. focus sits on a middle cascade window). Lift it
+            // back above its group — the same raise KWin performs on
+            // activation — so the window the user is typing into stays
+            // visible. Non-members are untouched: their position was already
+            // restored by the saved-stack loop.
+            if (KWin::EffectWindow* active = KWin::effects->activeWindow();
+                active && overlapMemberScreen.contains(active)) {
+                if (KWin::Window* kw = active->window()) {
+                    ws->raiseWindow(kw);
                 }
             }
         }

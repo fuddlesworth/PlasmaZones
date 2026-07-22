@@ -4,6 +4,7 @@
 #include <PhosphorTileEngine/NavigationController.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
@@ -113,6 +114,25 @@ void NavigationController::rotateWindowOrder(bool clockwise)
 
     // Rotate the window order
     bool rotated = state->rotateWindows(clockwise);
+
+    // For overlap layouts, rotating exists to bring a different window to the
+    // front of the stack (monocle cycles the visible window, deck cycles the
+    // top card). Geometry alone cannot express that — with identical or
+    // overlapping zones the retile leaves the old window on top — so request
+    // activation of the window that just arrived in the front slot. The
+    // pending focus is emitted AFTER windowsTiled (see applyTiling), landing
+    // the raise on top of the effect's post-tile restack.
+    if (rotated) {
+        const PhosphorTiles::TilingAlgorithm* algo = m_engine->effectiveAlgorithm(screenId);
+        if (algo && algo->producesOverlappingZones()) {
+            const QStringList rotatedOrder = state->tiledWindows();
+            if (!rotatedOrder.isEmpty()) {
+                const bool firstOnTop = algo->overlapStacking() == QLatin1String("firstOnTop");
+                m_engine->requestPostRetileFocus(firstOnTop ? rotatedOrder.first() : rotatedOrder.last());
+            }
+        }
+    }
+
     m_engine->retileAfterOperation(screenId, rotated);
 
     if (rotated) {

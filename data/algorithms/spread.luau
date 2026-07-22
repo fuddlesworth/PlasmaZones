@@ -12,6 +12,7 @@ return pluau.algorithm {
         id = "spread",
         description = "Windows spread evenly across the screen",
         producesOverlappingZones = true,
+        overlapStacking = "lastOnTop",
         supportsMasterCount = false,
         supportsSplitRatio = true,
         defaultSplitRatio = 0.8,

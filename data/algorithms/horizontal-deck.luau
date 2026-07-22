@@ -9,6 +9,7 @@ return pluau.algorithm {
         id = "horizontal-deck",
         description = "Focused window on top. Remaining windows peek from the bottom edge",
         producesOverlappingZones = true,
+        overlapStacking = "firstOnTop",
         supportsMasterCount = false,
         supportsSplitRatio = true,
         defaultSplitRatio = 0.75,

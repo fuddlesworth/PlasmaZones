@@ -9,6 +9,7 @@ return pluau.algorithm {
         id = "deck",
         description = "Focused window takes the left portion. Remaining windows peek from the right edge. Ratio controls focused window width",
         producesOverlappingZones = true,
+        overlapStacking = "firstOnTop",
         supportsMasterCount = false,
         supportsSplitRatio = true,
         defaultSplitRatio = 0.75,

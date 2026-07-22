@@ -563,6 +563,16 @@ public:
     QString effectiveAlgorithmId(const QString& screenId) const;
     PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 
+    /**
+     * @brief Request that a window is activated after the next applyTiling
+     *
+     * Stored in m_pendingFocusWindowId and emitted as activateWindowRequested
+     * AFTER windowsTiled, so the KWin effect's post-tile raise loop runs first
+     * and the activation lands on top of it. Used by operations that change
+     * which window should be frontmost (e.g. rotating an overlap layout).
+     */
+    void requestPostRetileFocus(const QString& windowId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Manual tiling operations
     // ═══════════════════════════════════════════════════════════════════════════

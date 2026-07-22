@@ -104,13 +104,20 @@ private Q_SLOTS:
     void testTileRequestEntryRoundtrip()
     {
         PhosphorProtocol::registerWireTypes();
-        PhosphorProtocol::TileRequestEntry entry{
-            QStringLiteral("konsole|7"), 50,   100,  640, 480, QStringLiteral("{zone-uuid}"),
-            QStringLiteral("screen-0"),  true, false};
+        PhosphorProtocol::TileRequestEntry entry{QStringLiteral("konsole|7"),
+                                                 50,
+                                                 100,
+                                                 640,
+                                                 480,
+                                                 QStringLiteral("{zone-uuid}"),
+                                                 QStringLiteral("screen-0"),
+                                                 true,
+                                                 false,
+                                                 QStringLiteral("lastOnTop")};
 
-        // Verify D-Bus signature: (siiiissbb) = string + 4 ints + 2 strings + 2 bools
+        // Verify D-Bus signature: (siiiissbbs) = string + 4 ints + 2 strings + 2 bools + string
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiissbb)"));
+        QCOMPARE(sig, QStringLiteral("(siiiissbbs)"));
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
@@ -126,12 +133,14 @@ private Q_SLOTS:
         QCOMPARE(entry.screenId, QStringLiteral("screen-0"));
         QCOMPARE(entry.monocle, true);
         QCOMPARE(entry.floating, false);
+        QCOMPARE(entry.stacking, QStringLiteral("lastOnTop"));
 
         // Verify default construction
         PhosphorProtocol::TileRequestEntry defaultEntry;
         QVERIFY(defaultEntry.windowId.isEmpty());
         QCOMPARE(defaultEntry.monocle, false);
         QCOMPARE(defaultEntry.floating, false);
+        QVERIFY(defaultEntry.stacking.isEmpty());
     }
 
     // =================================================================

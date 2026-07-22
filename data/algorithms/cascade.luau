@@ -15,6 +15,7 @@ return pluau.algorithm {
         id = "cascade",
         description = "Overlapping windows in a diagonal cascade",
         producesOverlappingZones = true,
+        overlapStacking = "lastOnTop",
         supportsMasterCount = false,
         supportsSplitRatio = true,
         defaultSplitRatio = 0.15,
