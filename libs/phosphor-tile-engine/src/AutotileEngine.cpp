@@ -1388,6 +1388,19 @@ void AutotileEngine::dropStashedScriptStatesForAlgorithmChange(const QString& sc
     }
 }
 
+// Replaces an older screenStates() accessor that returned a const-ref to a
+// QHash<TilingStateKey, PhosphorTiles::TilingState*> — that accessor leaked
+// mutable PhosphorTiles::TilingState pointers via the const-reference loophole
+// (const on the hash doesn't propagate to the pointed-to values), for a single
+// caller that only needed desktop numbers. Callers that need the raw state map
+// should add a purpose-built query method rather than iterating private state.
+// The m_states map stays private (no public map accessor exists); per-screen
+// lookup is available through tilingStateForScreen(screenId), which returns a
+// (non-const) PhosphorTiles::TilingState* for the read/mutate sites that
+// explicitly key off one screen. That accessor is public, so the restraint on
+// mutating through it is convention only (not enforced by access level or
+// friend): the intended writers are the engine's own call paths and the
+// per-screen config resolver, while tests use it for read-only access.
 QSet<int> AutotileEngine::desktopsWithActiveState() const
 {
     QSet<int> out;
@@ -4589,6 +4602,15 @@ bool AutotileEngine::isKnownScreen(const QString& screenId) const
     return PhosphorScreens::ScreenIdentity::findByIdOrName(screenId) != nullptr;
 }
 
+// PropagateScope rationale: CurrentContext is the passive refresh — only the
+// current desktop/activity's states are written, so a per-desktop tuning on
+// another desktop survives. AllContexts is for a refresh that has just DROPPED
+// the per-key user-tuned flags because the user changed the global value in
+// Settings. The clear spans every key, so the write must too — a clear that
+// outruns the write leaves a state holding a tuned value with no flag protecting
+// it, and the next CurrentContext propagate to run while that state's desktop is
+// current overwrites the user's value out of nowhere. Same clear-scope/
+// write-scope pairing as setGlobalSplitRatio and its master-count twin.
 void AutotileEngine::propagateGlobalSplitRatio(PropagateScope scope)
 {
     // A passive refresh (CurrentContext) propagates only to current

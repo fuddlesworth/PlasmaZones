@@ -23,6 +23,7 @@ set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorTileEngine SHARED
     include/PhosphorTileEngine/AutotileEngine.h
+    include/PhosphorTileEngine/AutotileEngineTypes.h
     include/PhosphorTileEngine/AutotileConfig.h
     include/PhosphorTileEngine/NavigationController.h
     include/PhosphorTileEngine/OverflowManager.h
