@@ -9,7 +9,7 @@
 // this file: the per-window invalidation, the coalescing flush behind it, the border
 // sweep it schedules, and the whole-world invalidation used when the ground moves.
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include <effect/effecthandler.h>
 

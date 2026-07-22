@@ -8,7 +8,7 @@
 // surfacelayers.cpp; the animation shader compile path this mirrors lives in
 // shader_transitions.cpp.
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 #include "shader_internal.h"
 
 #include <PhosphorShaders/ShaderEntryPoint.h>

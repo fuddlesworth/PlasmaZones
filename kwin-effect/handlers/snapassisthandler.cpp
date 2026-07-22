@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "snapassisthandler.h"
-#include "plasmazoneseffect.h"
-#include "kwin_compositor_bridge.h"
-#include "snapassistthumbnailcapture.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/compositorbridge.h"
+#include "compositor/snapassistthumbnailcapture.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>

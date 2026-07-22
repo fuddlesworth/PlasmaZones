@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h> // shaderEffectAppliesToEventPath (peek suppression gate)
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -29,15 +29,15 @@
 #include <QTimer>
 #include <QVarLengthArray>
 
-#include "../autotilehandler.h"
-#include "../compositorclock.h"
-#include "../dragtracker.h"
-#include "../kwin_compositor_bridge.h"
-#include "../navigationhandler.h"
-#include "../screenchangehandler.h"
-#include "../snapassisthandler.h"
-#include "../snaphandler.h"
-#include "../windowanimator.h"
+#include "autotilehandler/autotilehandler.h"
+#include "compositor/compositorclock.h"
+#include "handlers/dragtracker.h"
+#include "compositor/compositorbridge.h"
+#include "handlers/navigationhandler.h"
+#include "handlers/screenchangehandler.h"
+#include "handlers/snapassisthandler.h"
+#include "handlers/snaphandler.h"
+#include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
 

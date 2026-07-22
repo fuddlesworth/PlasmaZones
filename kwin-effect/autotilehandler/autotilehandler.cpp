@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "autotilehandler.h"
-#include "plasmazoneseffect.h"
-#include "windowanimator.h"
-#include "navigationhandler.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/windowanimator.h"
+#include "handlers/navigationhandler.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>

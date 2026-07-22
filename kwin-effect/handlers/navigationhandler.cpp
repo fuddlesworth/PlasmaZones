@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "navigationhandler.h"
-#include "plasmazoneseffect.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>

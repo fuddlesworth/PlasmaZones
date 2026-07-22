@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "deferredwindowcommits.h"
+#include "compositor/deferredwindowcommits.h"
 
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/ZoneTypes.h>

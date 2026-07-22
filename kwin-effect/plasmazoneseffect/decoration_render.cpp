@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include <core/renderviewport.h>
 #include <effect/effecthandler.h>

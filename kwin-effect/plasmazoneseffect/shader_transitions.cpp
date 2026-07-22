@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 #include "shader_internal.h"
 #include "shader_resolve.h"
 #include "window_query.h"
 
-#include "../windowanimator.h"
+#include "compositor/windowanimator.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>

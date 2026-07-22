@@ -52,13 +52,13 @@
 #include <unordered_map>
 #include <vector>
 
-#include "shadertransitionmanager.h"
-#include "desktoptransitionmanager.h"
+#include "transitions/shadertransitionmanager.h"
+#include "transitions/desktoptransitionmanager.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
-#include "plasmazoneseffect/shader_resolve.h"
-#include "plasmazoneseffect/types.h"
+#include "shader_resolve.h"
+#include "types.h"
 
 namespace KWin {
 class SurfaceItem;

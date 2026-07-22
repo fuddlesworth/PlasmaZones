@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "dragtracker.h"
-#include "plasmazoneseffect.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>

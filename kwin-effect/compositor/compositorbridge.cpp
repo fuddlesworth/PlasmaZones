@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "kwin_compositor_bridge.h"
-#include "plasmazoneseffect.h"
+#include "compositorbridge.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <QLoggingCategory>
 

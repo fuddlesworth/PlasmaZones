@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
-#include "../autotilehandler.h"
-#include "../navigationhandler.h"
-#include "../screenchangehandler.h"
-#include "../snapassisthandler.h"
-#include "../snaphandler.h"
-#include "../windowanimator.h"
+#include "autotilehandler/autotilehandler.h"
+#include "handlers/navigationhandler.h"
+#include "handlers/screenchangehandler.h"
+#include "handlers/snapassisthandler.h"
+#include "handlers/snaphandler.h"
+#include "compositor/windowanimator.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>

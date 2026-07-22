@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../autotilehandler.h"
-#include "../navigationhandler.h"
-#include "../plasmazoneseffect.h"
+#include "autotilehandler.h"
+#include "handlers/navigationhandler.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>

@@ -4,10 +4,10 @@
 // Tiling request handling and window centering for AutotileHandler.
 // Part of AutotileHandler — split from autotilehandler.cpp for SRP.
 
-#include "../autotilehandler.h"
-#include "../dragtracker.h"
-#include "../plasmazoneseffect.h"
-#include "../windowanimator.h"
+#include "autotilehandler.h"
+#include "handlers/dragtracker.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/windowanimator.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>

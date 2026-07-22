@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include "shader_internal.h"
 
@@ -29,10 +29,10 @@
 #include <QSet>
 #include <QStringList>
 
-#include "../autotilehandler.h"
-#include "../navigationhandler.h"
-#include "../snapassisthandler.h"
-#include "../snaphandler.h"
+#include "autotilehandler/autotilehandler.h"
+#include "handlers/navigationhandler.h"
+#include "handlers/snapassisthandler.h"
+#include "handlers/snaphandler.h"
 
 namespace PlasmaZones {
 

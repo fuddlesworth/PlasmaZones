@@ -10,7 +10,7 @@
 // decision and the shader clock they share. The fold in surfacelayers.cpp is only
 // ever reached for a window this file has already let through.
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include "shader_internal.h"
 #include "surface_fold.h"

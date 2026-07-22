@@ -10,9 +10,9 @@
 
 #include <effect/effect.h>
 
-#include "dragtracker.h"
-#include "snaphandler.h"
-#include "windowanimator.h"
+#include "handlers/dragtracker.h"
+#include "handlers/snaphandler.h"
+#include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
 

@@ -4,9 +4,9 @@
 // D-Bus signal slot handlers for AutotileHandler.
 // Part of AutotileHandler — split from autotilehandler.cpp for SRP.
 
-#include "../autotilehandler.h"
-#include "../plasmazoneseffect.h"
-#include "../navigationhandler.h"
+#include "autotilehandler.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
+#include "handlers/navigationhandler.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorIdentity/WindowId.h>

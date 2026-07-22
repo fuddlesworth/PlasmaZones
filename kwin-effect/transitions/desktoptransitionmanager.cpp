@@ -3,7 +3,7 @@
 
 #include "desktoptransitionmanager.h"
 
-#include "plasmazoneseffect.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
 #include "shadertransitionmanager.h"
 #include "plasmazoneseffect/shader_internal.h"
 

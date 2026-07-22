@@ -3,9 +3,9 @@
 
 #include "snaphandler.h"
 
-#include "autotilehandler.h"
+#include "autotilehandler/autotilehandler.h"
 #include "dragtracker.h"
-#include "plasmazoneseffect.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
 #include "snapassisthandler.h"
 
 #include <PhosphorIdentity/WindowId.h>
