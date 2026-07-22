@@ -375,22 +375,30 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         // A compositor-only pack (desktop / geometry / move classes) is
         // authored against the kwin classic-GL dialect with no daemon
         // branch: attaching it would fail the strict SPIR-V bake at first
-        // paint and stall the leg. The pickers never offer these on daemon
-        // paths, so reaching here means a hand-edited config — drop the
-        // shader leg and let the opacity/scale legs run.
+        // paint and stall the leg. This is reachable through a picker-legal
+        // config — the picker is permissive on ambiguous rows (e.g. the
+        // `global` root), so a geometry-only pack assigned there cascades to
+        // every OSD/popup leg via resolveShaderWithDefault, which does no
+        // applicability filtering. Routine, so log at debug level only —
+        // drop the shader leg and let the opacity/scale legs run.
         if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(resolvedShaderEff)) {
-            qCWarning(lcSurfaceAnimator) << "runLeg: shader effect" << shaderEffectId << "is compositor-only (appliesTo"
-                                         << resolvedShaderEff.appliesTo << ") — skipping shader leg on daemon surface";
+            qCDebug(lcSurfaceAnimator) << "runLeg: shader effect" << shaderEffectId << "is compositor-only (appliesTo"
+                                       << resolvedShaderEff.appliesTo << ") — skipping shader leg on daemon surface";
             resolvedShaderEff = {};
         }
-        for (const QString& sp : m_shaderRegistry->searchPaths()) {
-            const QString sharedDir = sp + QStringLiteral("/shared");
-            if (QDir(sharedDir).exists()) {
-                animIncludePaths.append(sharedDir);
-                if (resolvedShaderEff.isValid() && resolvedShaderEff.vertexShaderPath.isEmpty()) {
-                    const QString sharedVert = sharedDir + QStringLiteral("/animation.vert");
-                    if (QFile::exists(sharedVert)) {
-                        resolvedShaderEff.vertexShaderPath = sharedVert;
+        // Include paths (and the default-vert fallback) only matter when a
+        // shader leg will actually attach — skip the per-leg filesystem
+        // probes when the effect resolved invalid or was refused above.
+        if (resolvedShaderEff.isValid()) {
+            for (const QString& sp : m_shaderRegistry->searchPaths()) {
+                const QString sharedDir = sp + QStringLiteral("/shared");
+                if (QDir(sharedDir).exists()) {
+                    animIncludePaths.append(sharedDir);
+                    if (resolvedShaderEff.vertexShaderPath.isEmpty()) {
+                        const QString sharedVert = sharedDir + QStringLiteral("/animation.vert");
+                        if (QFile::exists(sharedVert)) {
+                            resolvedShaderEff.vertexShaderPath = sharedVert;
+                        }
                     }
                 }
             }

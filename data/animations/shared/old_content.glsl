@@ -9,8 +9,8 @@
 // card-space uv, mirroring surfaceColor's iAnchorRectInTexture fold + KWin Y-up
 // flip + iWindowOpacity multiply so old and new align and a SetOpacity rule dims
 // both equally through the transition. This lived verbatim in every cross-fade
-// frag (flow / fold / ripple-snap / stretch / window-morph); hoisted here so the
-// fallback logic has one source of truth.
+// frag (flow / fold / phosphor-stream / ripple-snap / stretch / window-morph);
+// hoisted here so the fallback logic has one source of truth.
 //
 // Old-content cross-fades are compositor-only: the packs that include this
 // module are excluded from the daemon's SPIR-V bake entirely, so the sampler

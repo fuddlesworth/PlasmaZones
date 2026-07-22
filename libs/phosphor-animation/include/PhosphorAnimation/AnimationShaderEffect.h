@@ -318,13 +318,16 @@ PHOSPHORANIMATION_EXPORT bool shaderEffectAppliesToEventPath(const AnimationShad
 /// True iff @p effect can ONLY execute on the compositor (kwin-effect)
 /// runtime and never on the daemon's overlay-surface path.
 ///
-/// Every daemon-driven animation surface (OSD, snap-assist popup,
-/// layout-picker, zone-selector, editor/panel legs) is an appearance-class
-/// single-surface event, and a universal pack (empty `appliesTo`) runs
-/// there too. The desktop (two-texture switch/peek), geometry
-/// (iFromRect → iToRect morph) and move (held-drag physics) classes exist
-/// only inside the kwin-effect. So a pack whose declared `appliesTo`
-/// names classes but not `appearance` is provably compositor-only.
+/// Every daemon surface that can take a shader leg at all (the OSD and
+/// popup families — snap-assist, layout-picker, zone-selector, cheatsheet)
+/// is an appearance-class single-surface event, and a universal pack
+/// (empty `appliesTo`) runs there too; the remaining daemon-side families
+/// (editor / panel / widget) carry no shader leg in the first place (see
+/// `eventPathSupportsShaderLeg`). The desktop (two-texture switch/peek),
+/// geometry (iFromRect → iToRect morph) and move (held-drag physics)
+/// classes exist only inside the kwin-effect. So a pack whose declared
+/// `appliesTo` names classes but not `appearance` is provably
+/// compositor-only.
 ///
 /// Consequences carried by this predicate (single source of truth):
 ///   • such packs author their shaders against the classic-GL kwin dialect

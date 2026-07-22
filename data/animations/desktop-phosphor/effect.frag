@@ -92,8 +92,11 @@ vec4 pTransition(vec2 uv, float t) {
     // fallback and the forced direction when it is off. The default (1, 1)
     // keeps the brand's top-left-to-bottom-right diagonal.
     vec2 cfg = vec2(p_dirX, p_dirY);
-    vec2 dir = normalize(((p_followSwitch > 0.5) ? switchDirection(cfg) : cfg)
-                         + vec2(1.0e-6, 0.0));
+    // Zero-direction guard: fall back to the brand diagonal instead of
+    // epsilon-nudging into normalize (tiny opposing components can still
+    // cancel a nudge into NaN — same guard idiom as phosphor-peek).
+    vec2 rawDir = (p_followSwitch > 0.5) ? switchDirection(cfg) : cfg;
+    vec2 dir = dot(rawDir, rawDir) > 1.0e-6 ? normalize(rawDir) : normalize(vec2(1.0, 1.0));
 
     // Feature sizes in graph units, derived from pixels so traces stay
     // hairline and pulses stay compact at any resolution.

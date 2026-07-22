@@ -18,8 +18,9 @@
 //     daemon Qt-RHI path.
 //   • animation/transition packs (--animation, data/animations/*):
 //     AnimationShaderEffect + the animation entry scaffold (pTransition / pIn+pOut)
-//     + paramPreamble; validates effect.frag on the daemon Qt-RHI path. (The
-//     kwin-effect classic-GL branch is not baked — see validateAnimationPack.)
+//     + paramPreamble; validates effect.frag on the daemon Qt-RHI path.
+//     Compositor-only packs get metadata lints only — their kwin classic-GL
+//     source is never baked here (see validateAnimationPack).
 //   • surface/decoration packs (--surface, data/surface/*):
 //     SurfaceShaderEffect + paramPreamble; validates effect.frag, buffer
 //     passes, and the shared vertex stage on the daemon Qt-RHI path — see

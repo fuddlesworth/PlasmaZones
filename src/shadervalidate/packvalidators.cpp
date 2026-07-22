@@ -257,6 +257,24 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                 << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no p_ define)").arg(p.id);
         }
     }
+    // Lint appliesTo tokens from the RAW metadata (fromJson silently drops
+    // unknown tokens with only a runtime journal warning). A typo matters
+    // doubly here: a compositor-only pack whose sole token is misspelled
+    // degrades to universal, escapes the compositor-only skip below, and
+    // fails the daemon stage compile with an opaque GLSL error instead of
+    // a metadata diagnostic.
+    static const QStringList kAnimAppliesToTokens = {QStringLiteral("geometry"), QStringLiteral("appearance"),
+                                                     QStringLiteral("desktop"), QStringLiteral("move")};
+    const QJsonArray declaredAppliesTo = doc.object().value(QLatin1String("appliesTo")).toArray();
+    for (const QJsonValue& v : declaredAppliesTo) {
+        const QString token = v.toString();
+        if (!kAnimAppliesToTokens.contains(token)) {
+            lints << QStringLiteral(
+                         "unknown appliesTo token '%1' (dropped at load; pack treated as universal; "
+                         "valid tokens are geometry/appearance/desktop/move)")
+                         .arg(token.isEmpty() ? QStringLiteral("<non-string>") : token);
+        }
+    }
     // Texture lints mirror parseEffect's parse-time journal warnings. fromJson
     // silently drops these from the in-memory struct, so read the RAW metadata
     // textures array (same as parseEffect) rather than eff.textures.

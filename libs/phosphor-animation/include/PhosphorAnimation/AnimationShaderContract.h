@@ -370,11 +370,14 @@ inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
 /// (`uOldWindow`) into the live new content. Both default to `(0,0,0,0)`
 /// for non-morph transitions (window.open/close/etc.), which a shader can
 /// treat as "no morph". COMPOSITOR PATH ONLY, and deliberately NOT
-/// declared by the canonical shared header: each geometry-morph pack
-/// (flow, fold, ripple-snap, stretch, window-morph) declares the pair
-/// itself inside its own `#ifdef PLASMAZONES_KWIN` block — geometry
-/// events never run on the daemon, and the guard keeps the daemon's
-/// strict SPIR-V bake from ever seeing the loose declarations.
+/// declared by the canonical shared header: geometry-morph packs are
+/// compositor-only (`appliesTo: ["geometry"]`), so each one (flow, fold,
+/// phosphor-stream, ripple-snap, stretch, window-morph) declares the pair
+/// as plain default-block uniforms with no guard — the daemon never
+/// bakes or attaches such packs (`shaderEffectIsCompositorOnly` gates
+/// the warm-bake, SurfaceAnimator, the daemon-target bake tests, and
+/// shadervalidate), so its strict SPIR-V path never sees the loose
+/// declarations.
 inline constexpr const char* kIFromRect = "iFromRect";
 inline constexpr const char* kIToRect = "iToRect";
 
@@ -408,7 +411,8 @@ inline constexpr const char* kIIconRect = "iIconRect";
 /// declared by the canonical header — only the `iHasOldWindow` gate int
 /// is; packs that sample old content opt in via
 /// `data/animations/shared/old_content.glsl`, which declares the sampler
-/// inside its own `#ifdef PLASMAZONES_KWIN` guard.
+/// unguarded: every including pack is compositor-only, excluded from the
+/// daemon's SPIR-V bake entirely via `shaderEffectIsCompositorOnly`.
 inline constexpr const char* kUOldWindow = "uOldWindow";
 
 /// `sampler2D uSurfaceLayer` — COMPOSITOR PATH ONLY. The window's surface

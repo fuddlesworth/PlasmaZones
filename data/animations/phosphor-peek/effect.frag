@@ -133,7 +133,7 @@ vec4 pTransition(vec2 uv, float t) {
     // this return to normalise it: the desktop pass keeps PZ_FINALIZE_COLOR at
     // its identity default, because the capture FBOs already inherit the
     // output's colorDescription and converting again would double-transform
-    // (see the kFinalizeColorBlock note in shader_transitions.cpp).
+    // (see the kFinalizeColorBlock note in shader_textures.cpp).
     //
     // This deliberately diverges from desktop-phosphor and desktop-aretha,
     // which DO clamp their additive glow. Their clamp is the anomaly: on an HDR
