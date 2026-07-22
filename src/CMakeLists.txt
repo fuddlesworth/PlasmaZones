@@ -105,7 +105,15 @@ set(plasmazones_core_SRCS
     config/settingsvaluelabels.cpp
     config/settingsvaluelabels.h
     config/configmigration.h
+    config/configmigration_util.h
+    config/configmigration_v4detail.h
     config/configmigration.cpp
+    config/configmigration_v2.cpp
+    config/configmigration_v3.cpp
+    config/configmigration_v4.cpp
+    config/configmigration_v4rules.cpp
+    config/configmigration_v4finalize.cpp
+    config/configmigration_v5.cpp
     config/colorimporter.cpp
     config/colorimporter.h
     config/updatechecker.cpp
