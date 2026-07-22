@@ -56,8 +56,8 @@ void SettingsController::loadLayoutsAsync()
     // layoutListChanged — see
     // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions) relies on it.
     // It is not a redundant backup for a file watcher.
-    // Count this call in BEFORE the local reload, not after: loadLayouts() drives the
-    // PhosphorZones::LayoutRegistry::layoutsChanged lambda wired in
+    // Count this call in BEFORE the local reload, not after: loadLayouts()
+    // drives the PhosphorZones::LayoutRegistry::layoutsChanged lambda wired in
     // settingscontroller.cpp's ctor synchronously, and that lambda's view of the
     // world is the in-process composite, which carries none of the daemon-side
     // enrichment (hasSystemOrigin / hiddenFromSelector / defaultOrder /
@@ -66,7 +66,8 @@ void SettingsController::loadLayoutsAsync()
     // hidden or auto-assign toggle visibly snapped back before it took — and
     // made every listing page tear down and rebuild its entire model twice for
     // one mutation. The lambda holds that view in m_withheldLocalLayouts
-    // instead, and the reply adopts it only if the daemon is unreachable.
+    // instead, and the last reply in flight adopts it only if the daemon turns
+    // out to be unreachable.
     ++m_pendingDaemonLayoutCalls;
     // Whatever an earlier cycle held back is superseded by the reload below,
     // which re-stashes the freshly-scanned view through the same lambda.
@@ -76,8 +77,9 @@ void SettingsController::loadLayoutsAsync()
     }
 
     // Pick up the daemon-side enrichment the local composite can't know about.
-    // On reply the enriched list replaces m_layouts; if the call errors we fall
-    // back to the local view withheld above rather than blanking the page.
+    // On reply the enriched list replaces m_layouts. If the call errors and no
+    // newer one is in flight, the local view withheld above is adopted rather
+    // than leaving the page as it was before the change.
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::LayoutRegistry,
                                                    QStringLiteral("getLayoutList")),
@@ -96,15 +98,17 @@ void SettingsController::loadLayoutsAsync()
 
         QDBusPendingReply<QStringList> reply = *w;
         if (reply.isError()) {
-            qCWarning(lcCore) << "Failed to load layouts (D-Bus):" << reply.error().message()
-                              << "— falling back to the local manual-layout previews.";
             if (!lastInFlight) {
                 // A newer getLayoutList is still in flight and owns the refresh.
                 // Publishing the withheld local view here would strip the
                 // enrichment off every card for the rest of that round trip,
                 // which is the whole failure this withholding exists to avoid.
+                qCWarning(lcCore) << "Failed to load layouts (D-Bus):" << reply.error().message()
+                                  << "— a newer request is still in flight, leaving the refresh to it.";
                 return;
             }
+            qCWarning(lcCore) << "Failed to load layouts (D-Bus):" << reply.error().message()
+                              << "— falling back to the local manual-layout previews.";
             // Adopt the withheld local view. It is the only refresh the user
             // gets on this path, and it is newer than m_layouts by definition:
             // the reload that produced it is what this call was answering. It

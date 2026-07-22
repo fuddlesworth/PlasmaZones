@@ -126,11 +126,11 @@ Flickable {
             settingsFlickable._contentHeightFloor = 0;
             return;
         }
-        // Still climbing (cards materialise one per step, and a single toggle
-        // triggers two rebuilds because the daemon announces the reload twice).
-        // Restart rather than let a fixed timeout expire mid-rebuild, which
-        // would drop the floor at exactly the collapsed height this exists to
-        // paper over.
+        // Still climbing: the cards materialise a step at a time, and a page can
+        // start a second swap (a filter or sort change landing on the heels of a
+        // model refresh) before the first has finished. Restart rather than let
+        // a fixed timeout expire mid-rebuild, which would drop the floor at
+        // exactly the collapsed height this exists to paper over.
         contentHeightFloorSettle.restart();
     }
 
