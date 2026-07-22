@@ -197,13 +197,14 @@ Item {
                 LayoutThumbnail {
                     id: layoutThumbnail
 
-                    // Safe scale calculation - fit thumbnail within parent bounds
-                    readonly property real safeImplicitWidth: Math.max(1, implicitWidth)
-                    readonly property real safeImplicitHeight: Math.max(1, implicitHeight)
-                    readonly property real safeParentWidth: Math.max(1, parent.width)
-                    readonly property real safeParentHeight: Math.max(1, parent.height)
-
                     anchors.centerIn: parent
+                    // Fit-size the preview box to the available card area
+                    // instead of scale-transforming the whole thumbnail down:
+                    // a scale transform shrinks the name/badge text with the
+                    // zone graphic, making it unreadable in small cards. Fit
+                    // mode resizes only the geometry; text stays natural size.
+                    fitWidth: Math.max(1, parent.width)
+                    fitHeight: Math.max(1, parent.height)
                     layout: root.modelData
                     isSelected: root.isSelected
                     isHovered: root.isHovered
@@ -214,8 +215,6 @@ Item {
                     fontItalic: root.appSettings ? root.appSettings.labelFontItalic : false
                     fontUnderline: root.appSettings ? root.appSettings.labelFontUnderline : false
                     fontStrikeout: root.appSettings ? root.appSettings.labelFontStrikeout : false
-                    transformOrigin: Item.Center
-                    scale: Math.min(1, safeParentWidth / safeImplicitWidth, safeParentHeight / safeImplicitHeight)
 
                     // Hover the preview to read the layout/algorithm description.
                     // Scoped to the thumbnail graphic (not the whole card) so it
