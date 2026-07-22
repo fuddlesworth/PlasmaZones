@@ -475,6 +475,11 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/enginefactory.cpp
     daemon/daemon/start.cpp
     daemon/daemon/signals.cpp
+    daemon/daemon/shader_warmup.cpp
+    daemon/daemon/init_services.cpp
+    daemon/daemon/init_adaptors.cpp
+    daemon/daemon/init_engines.cpp
+    daemon/daemon/lifecycle.cpp
     daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
