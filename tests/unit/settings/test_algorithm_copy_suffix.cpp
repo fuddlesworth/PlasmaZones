@@ -28,7 +28,7 @@
 
 #include "../../../src/config/settings.h"
 #include "core/types/constants.h"
-#include "../../../src/settings/algorithmservice.h"
+#include "settings/services/algorithmservice.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 #include <PhosphorFsLoader/WatchedDirectorySet.h>

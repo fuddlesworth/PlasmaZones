@@ -39,7 +39,7 @@
 #include <PhosphorRules/Rule.h>
 
 #include "config/configmigration.h"
-#include "settings/profilestore.h"
+#include "settings/stores/profilestore.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorRules;

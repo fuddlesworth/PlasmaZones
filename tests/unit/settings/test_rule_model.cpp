@@ -21,7 +21,7 @@
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 
-#include "settings/rulemodel.h"
+#include "settings/rules/rulemodel.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorRules;

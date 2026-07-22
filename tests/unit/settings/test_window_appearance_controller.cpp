@@ -19,7 +19,7 @@
 
 #include <QTest>
 
-#include "settings/windowappearancecontroller.h"
+#include "settings/pages/windowappearancecontroller.h"
 #include "../helpers/StubSettings.h"
 
 using namespace PlasmaZones;

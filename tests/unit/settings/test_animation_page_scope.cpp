@@ -24,7 +24,7 @@
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
-#include "settings/animationpagescope.h"
+#include "settings/pages/animationpagescope.h"
 
 using namespace PlasmaZones;
 using PhosphorAnimationShaders::ShaderProfile;

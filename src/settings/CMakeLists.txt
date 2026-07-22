@@ -18,129 +18,129 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dir
 
 set(plasmazones_settings_SRCS
     main.cpp
-    searchcatalog.h
-    searchcatalog.cpp
-    searchproviders.h
-    searchproviders.cpp
-    registryshaderpreviewbackend.h
-    settingscontroller.h
-    settingscontroller.cpp
+    search/searchcatalog.h
+    search/searchcatalog.cpp
+    search/searchproviders.h
+    search/searchproviders.cpp
+    utils/registryshaderpreviewbackend.h
+    controller/settingscontroller.h
+    controller/settingscontroller.cpp
     # SettingsController's sub-domain methods live in sibling .cpp files
     # compiled into the same target — same class, multiple translation units,
     # no API change. Order matches reading order: construction → lifecycle →
     # page registry → per-domain CRUD.
-    settingscontroller_lifecycle.cpp
-    settingscontroller_pageregistration.cpp
-    settingscontroller_pagetopology.cpp
-    settingscontroller_layouts.cpp
-    settingscontroller_session.cpp
+    controller/settingscontroller_lifecycle.cpp
+    controller/settingscontroller_pageregistration.cpp
+    controller/settingscontroller_pagetopology.cpp
+    controller/settingscontroller_layouts.cpp
+    controller/settingscontroller_session.cpp
     # Per-screen autotile/snapping/zone-selector override wrappers.
-    settingscontroller_perscreen.cpp
-    settingscontroller_ordering.cpp
+    controller/settingscontroller_perscreen.cpp
+    controller/settingscontroller_ordering.cpp
     # Virtual-screen lifecycle methods (getVirtualScreenConfig +
     # apply/remove/stage variants).
-    settingscontroller_virtualscreens.cpp
+    controller/settingscontroller_virtualscreens.cpp
     # D-Bus subscription wiring (wireDaemonSubscriptions + reloadLocal
     # RuleStore).
-    settingscontroller_dbuswire.cpp
+    controller/settingscontroller_dbuswire.cpp
     # Active-page navigation + per-page dirty tracking + external-edit envelope.
-    settingscontroller_pagestate.cpp
+    controller/settingscontroller_pagestate.cpp
     # Per-page Reset/Discard, split from pagestate at the 1150-line ceiling.
-    settingscontroller_pagereset.cpp
+    controller/settingscontroller_pagereset.cpp
     # Page-class predicates + shared-domain key lists both halves need (was an
     # anonymous namespace in pagestate; internal linkage cannot span two TUs).
-    settingscontroller_pagekeys.h
-    settingscontroller_pagekeys.cpp
+    controller/settingscontroller_pagekeys.h
+    controller/settingscontroller_pagekeys.cpp
     # Pure page→root scoping helpers for the animation and decoration domains
     # (root dispatch, prefix match, scoped tree diff), split from pagestate so
     # they unit-test without the whole settings-app object graph.
-    animationpagescope.h
-    animationpagescope.cpp
-    decorationpagescope.h
-    decorationpagescope.cpp
+    pages/animationpagescope.h
+    pages/animationpagescope.cpp
+    pages/decorationpagescope.h
+    pages/decorationpagescope.cpp
     # RAII begin/endExternalEdit wrapper, extracted from settingscontroller.h.
-    externaleditscope.h
-    externaleditscope.cpp
+    services/externaleditscope.h
+    services/externaleditscope.cpp
     # Per-page sub-controllers — hang off SettingsController as child QObjects,
     # exposing the Q_PROPERTY surface for a single settings page each.
-    animationspagecontroller.h
-    animationspagecontroller.cpp
+    pages/animationspagecontroller.h
+    pages/animationspagecontroller.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
     # helpers shared across the four AnimationsPageController TUs. Inline
     # definitions make cross-TU linkage independent of unity-build merging.
-    animations_controller_detail.h
+    pages/animations_controller_detail.h
     # AnimationsPageController shader-leg methods compile into the same
     # target — same class, separate TU, no API change.
-    animationspagecontroller_shaders.cpp
+    pages/animationspagecontroller_shaders.cpp
     # AnimationsPageController override-CRUD methods (userProfilesDir,
     # hasOverride / rawProfile / resolvedProfile / setOverride /
     # clearOverride).
-    animationspagecontroller_overrides.cpp
+    pages/animationspagecontroller_overrides.cpp
     # AnimationsPageController path-discovery helpers, small per-Q_INVOKABLE
     # methods (sectionForPath / eventLabel / parentChain).
-    animationspagecontroller_paths.cpp
+    pages/animationspagecontroller_paths.cpp
     # Shared validate+copy primitive for installing shader packs.
     # Consumed by AnimationsPageController + SnappingShadersPageController.
     # Centralises the symlink-rejection + metadata.json safety checks.
-    shaderpackinstaller.h
-    shaderpackinstaller.cpp
+    services/shaderpackinstaller.h
+    services/shaderpackinstaller.cpp
     # Preset library — a sub-service hosted by AnimationsPageController as a
     # child QObject.
-    animationpresetlibrary.h
-    animationpresetlibrary.cpp
+    stores/animationpresetlibrary.h
+    stores/animationpresetlibrary.cpp
     # Shared set store (motion sets + decoration sets) and the motion-set
     # domain closures that specialise it.
-    shadersetstore.h
-    shadersetstore.cpp
-    motionsetdomain.h
-    motionsetdomain.cpp
-    animationfileutils.h
-    animationfileutils.cpp
+    stores/shadersetstore.h
+    stores/shadersetstore.cpp
+    services/motionsetdomain.h
+    services/motionsetdomain.cpp
+    utils/animationfileutils.h
+    utils/animationfileutils.cpp
     # Settings profiles: persistence/CRUD/inheritance store + its page controller.
-    profilestore.h
-    profilestore.cpp
-    profilestore_diff.cpp
-    profilestore_revert.cpp
-    profilepagecontroller.h
-    profilepagecontroller.cpp
-    editorpagecontroller.h
-    editorpagecontroller.cpp
-    generalpagecontroller.h
-    generalpagecontroller.cpp
-    snappingzonescontroller.h
-    snappingzonescontroller.cpp
+    stores/profilestore.h
+    stores/profilestore.cpp
+    stores/profilestore_diff.cpp
+    stores/profilestore_revert.cpp
+    pages/profilepagecontroller.h
+    pages/profilepagecontroller.cpp
+    pages/editorpagecontroller.h
+    pages/editorpagecontroller.cpp
+    pages/generalpagecontroller.h
+    pages/generalpagecontroller.cpp
+    pages/snappingzonescontroller.h
+    pages/snappingzonescontroller.cpp
     # Slim "Window Appearance" page bounds + baseline-rule-id facade (also
     # carries the unified gap slider bounds now that gaps live on this page).
-    windowappearancecontroller.h
-    windowappearancecontroller.cpp
-    snappingbehaviorcontroller.h
-    snappingbehaviorcontroller.cpp
-    snappingeffectscontroller.h
-    snappingeffectscontroller.cpp
-    snappingshaderspagecontroller.h
-    snappingshaderspagecontroller.cpp
-    snappingzoneselectorcontroller.h
-    snappingzoneselectorcontroller.cpp
+    pages/windowappearancecontroller.h
+    pages/windowappearancecontroller.cpp
+    pages/snappingbehaviorcontroller.h
+    pages/snappingbehaviorcontroller.cpp
+    pages/snappingeffectscontroller.h
+    pages/snappingeffectscontroller.cpp
+    pages/snappingshaderspagecontroller.h
+    pages/snappingshaderspagecontroller.cpp
+    pages/snappingzoneselectorcontroller.h
+    pages/snappingzoneselectorcontroller.cpp
     # Decoration drill-down page — PER-SURFACE chains of decoration shader
     # packs, resolved through a
     # DecorationProfileTree (baseline + walk-up inheritance). Parallel to
     # AnimationsPageController's tree model but with no per-event staging;
     # mutations write straight to the Settings decorationProfileTree.
-    decorationpagecontroller.h
-    decorationpagecontroller.cpp
+    pages/decorationpagecontroller.h
+    pages/decorationpagecontroller.cpp
     # Surface-taxonomy helper (parentChain) in a sibling TU. Same class,
     # separate TU.
-    decorationpagecontroller_paths.cpp
-    decorationpagecontroller_browser.cpp
-    decorationpagecontroller_sets.cpp
+    pages/decorationpagecontroller_paths.cpp
+    pages/decorationpagecontroller_browser.cpp
+    pages/decorationpagecontroller_sets.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
     # helpers. Consumed only by decorationpagecontroller.cpp; kept separate to
     # hold the conversion helpers out of the controller TU.
-    decoration_controller_detail.h
-    tilingalgorithmcontroller.h
-    tilingalgorithmcontroller.cpp
-    tilingbehaviorcontroller.h
-    tilingbehaviorcontroller.cpp
+    pages/decoration_controller_detail.h
+    pages/tilingalgorithmcontroller.h
+    pages/tilingalgorithmcontroller.cpp
+    pages/tilingbehaviorcontroller.h
+    pages/tilingbehaviorcontroller.cpp
     # PhosphorControl integration scaffold. PageAdapter wraps existing
     # plain-QObject page controllers so they can be registered with
     # PhosphorControl::PageRegistry without changing each controller's
@@ -150,54 +150,54 @@ set(plasmazones_settings_SRCS
     # migration onto libs/phosphor-control.
     pageadapter.h
     pageadapter.cpp
-    settingsstagingdomain.h
-    settingsstagingdomain.cpp
+    services/settingsstagingdomain.h
+    services/settingsstagingdomain.cpp
     # Rules page — the unified rule surface. RuleController
     # owns one RuleModel (QAbstractListModel) and talks to the
     # daemon's org.plasmazones.Rules adaptor.
-    rulemodel.h
-    rulemodel.cpp
-    rulecontroller.h
-    rulecontroller.cpp
+    rules/rulemodel.h
+    rules/rulemodel.cpp
+    rules/rulecontroller.h
+    rules/rulecontroller.cpp
     # Read-only / projection methods of RuleController — sections,
     # rulesSnapshot, monitorOverview, ruleScreenIds, author surfaces
     # (matchFields/operatorsForField/actionTypes/defaultPayloadFor),
     # validation entry points. Same class, separate TU, no API change.
-    rulecontroller_views.cpp
+    rules/rulecontroller_views.cpp
     # RuleController label-lookup setters (screen / activity / zone /
     # virtual-desktop / snapping-layout / tiling-algorithm / shader-effect /
     # overlay-shader / decoration-pack) plus the QML curve-label resolver.
     # Thin pass-throughs into RuleModel.
-    rulecontroller_lookups.cpp
+    rules/rulecontroller_lookups.cpp
     # RuleController per-page dirty split + managed-baseline reset/discard.
-    rulecontroller_baseline.cpp
+    rules/rulecontroller_baseline.cpp
     # RuleController authoring metadata + templates — pure read-only helpers.
     # The controller's Q_INVOKABLE entry points (matchFields, operatorsForField,
     # actionTypes, newEmptyRule, ruleTemplates, newRuleFromTemplate) delegate
     # here.
-    ruleauthoring.h
-    ruleauthoring.cpp
-    ruletemplates.h
-    ruletemplates.cpp
+    rules/ruleauthoring.h
+    rules/ruleauthoring.cpp
+    rules/ruletemplates.h
+    rules/ruletemplates.cpp
     # QAbstractItemModel adapter that exposes a rule's match expression
     # to QtQuick.Controls.TreeView for read-only preview. Registered as a
     # QML type via the qt_add_qml_module call below.
-    matchexpressiontreemodel.h
-    matchexpressiontreemodel.cpp
+    rules/matchexpressiontreemodel.h
+    rules/matchexpressiontreemodel.cpp
     # Shared helpers used by multiple sub-controllers.
-    triggerutils.h
-    triggerutils.cpp
-    virtualscreenutils.h
-    virtualscreenutils.cpp
+    utils/triggerutils.h
+    utils/triggerutils.cpp
+    utils/virtualscreenutils.h
+    utils/virtualscreenutils.cpp
     # Service / utility modules extracted from SettingsController.
-    kzonesimporter.h
-    kzonesimporter.cpp
-    stagingservice.h
-    stagingservice.cpp
-    algorithmscaffold.h
-    algorithmscaffold.cpp
-    algorithmservice.h
-    algorithmservice.cpp
+    utils/kzonesimporter.h
+    utils/kzonesimporter.cpp
+    services/stagingservice.h
+    services/stagingservice.cpp
+    services/algorithmscaffold.h
+    services/algorithmscaffold.cpp
+    services/algorithmservice.h
+    services/algorithmservice.cpp
     settingslaunchcontroller.h
     settingslaunchcontroller.cpp
     settingsappadaptor.h
@@ -208,11 +208,11 @@ set(plasmazones_settings_SRCS
     # LayoutPreview ↔ JSON/QVariantMap: provided by plasmazones_core
     # (was duplicated here previously; consolidated to avoid ODR drift).
     # Qt-only utilities (standalone-only, no KDE Framework deps)
-    screenhelper.h
-    screenhelper.cpp
-    screenprovider.h
-    screenprovider.cpp
-    dbusutils.h
+    utils/screenhelper.h
+    utils/screenhelper.cpp
+    utils/screenprovider.h
+    utils/screenprovider.cpp
+    utils/dbusutils.h
 )
 
 add_executable(plasmazones-settings ${plasmazones_settings_SRCS})
@@ -237,6 +237,10 @@ target_include_directories(plasmazones-settings PRIVATE
     ${CMAKE_BINARY_DIR}/generated
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}
+    # qt_add_qml_module's generated type registration includes QML_ELEMENT
+    # headers by bare basename (__has_include(<rulemodel.h>)), so the
+    # directory holding those sources must be an include dir.
+    ${CMAKE_CURRENT_SOURCE_DIR}/rules
 )
 
 # Mark CurvePresets.qml as a QML singleton BEFORE the qt_add_qml_module
@@ -264,15 +268,15 @@ qt_add_qml_module(plasmazones-settings
         # needs the source listed here (separately from the executable's
         # SOURCES above) so the moc-generated qmltyperegistration picks up
         # the macro and emits the type in plasmazones-settings.qmltypes.
-        matchexpressiontreemodel.h
-        matchexpressiontreemodel.cpp
+        rules/matchexpressiontreemodel.h
+        rules/matchexpressiontreemodel.cpp
         # RuleModel — exposed as `RuleModel` (uncreatable) so
         # QML can reference its `Section` enum (e.g.
         # `RuleModel.Animation`) and `Roles` enum (e.g.
         # `RuleModel.SectionRole`) without QML hardcoding the
         # integer values.
-        rulemodel.h
-        rulemodel.cpp
+        rules/rulemodel.h
+        rules/rulemodel.cpp
     QML_FILES
         qml/Main.qml
         qml/ConfirmDialogs.qml

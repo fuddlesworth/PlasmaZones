@@ -22,8 +22,8 @@
 #include "config/settings.h"
 #include "config/configdefaults.h"
 #include "core/types/enums.h"
-#include "settings/snappingbehaviorcontroller.h"
-#include "settings/triggerutils.h"
+#include "settings/pages/snappingbehaviorcontroller.h"
+#include "settings/utils/triggerutils.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;

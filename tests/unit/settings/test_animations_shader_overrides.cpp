@@ -31,7 +31,7 @@
 
 #include "config/settings.h"
 #include "phosphor_i18n.h"
-#include "settings/animationspagecontroller.h"
+#include "settings/pages/animationspagecontroller.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;

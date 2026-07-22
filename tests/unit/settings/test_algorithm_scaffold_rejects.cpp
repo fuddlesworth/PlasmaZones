@@ -19,7 +19,7 @@
 // a pair it should have rewritten yields a copy that silently keeps the
 // template's id and collides with it.
 
-#include "../../../src/settings/algorithmscaffold.h"
+#include "settings/services/algorithmscaffold.h"
 
 #include <QtTest>
 

@@ -46,8 +46,8 @@
 
 #include "../helpers/IsolatedConfigGuard.h"
 #include "config/settings.h"
-#include "settings/animationpagescope.h"
-#include "settings/animationspagecontroller.h"
+#include "settings/pages/animationpagescope.h"
+#include "settings/pages/animationspagecontroller.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;

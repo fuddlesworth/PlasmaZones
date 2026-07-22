@@ -300,7 +300,7 @@ private Q_SLOTS:
     void initTestCase()
     {
         m_qmlDir = QStringLiteral(P_SOURCE_DIR "/src/settings/qml");
-        m_catalog = QStringLiteral(P_SOURCE_DIR "/src/settings/searchcatalog.cpp");
+        m_catalog = QStringLiteral(P_SOURCE_DIR "/src/settings/search/searchcatalog.cpp");
         QVERIFY2(QFileInfo::exists(m_catalog), qPrintable(m_catalog));
         QVERIFY2(QDir(m_qmlDir).exists(), qPrintable(m_qmlDir));
     }
@@ -616,9 +616,9 @@ private Q_SLOTS:
     {
         const QString catalogSrc = stripLineComments(readAll(m_catalog));
         const QString registration =
-            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/settingscontroller_pageregistration.cpp"));
+            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp"));
         const QString topology =
-            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/settingscontroller_pagetopology.cpp"));
+            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp"));
         QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
         QVERIFY2(!topology.isEmpty(), "settingscontroller_pagetopology.cpp unreadable");
 

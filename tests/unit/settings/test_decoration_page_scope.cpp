@@ -19,7 +19,7 @@
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
-#include "settings/decorationpagescope.h"
+#include "settings/pages/decorationpagescope.h"
 
 using namespace PlasmaZones;
 using PhosphorSurfaceShaders::DecorationProfile;

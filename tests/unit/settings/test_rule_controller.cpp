@@ -26,8 +26,8 @@
 #include <QTest>
 #include <QUuid>
 
-#include "settings/rulecontroller.h"
-#include "settings/rulemodel.h"
+#include "settings/rules/rulecontroller.h"
+#include "settings/rules/rulemodel.h"
 
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/RuleAction.h>

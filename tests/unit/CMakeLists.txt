@@ -851,8 +851,8 @@ add_test(NAME test_drag_activation COMMAND test_drag_activation)
 # executable rather than plasmazones_core.
 add_executable(test_snapping_behavior_controller
     settings/test_snapping_behavior_controller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/snappingbehaviorcontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/triggerutils.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/snappingbehaviorcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/utils/triggerutils.cpp
 )
 target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
     PhosphorControl::PhosphorControl)
@@ -871,7 +871,7 @@ add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_c
 # lets its interface carry the transitive PhosphorLayoutApi include it needs.
 add_executable(test_algorithm_scaffold
     settings/test_algorithm_scaffold.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/services/algorithmscaffold.cpp
 )
 target_link_libraries(test_algorithm_scaffold PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 target_compile_definitions(test_algorithm_scaffold PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
@@ -884,8 +884,8 @@ add_test(NAME test_algorithm_scaffold COMMAND test_algorithm_scaffold)
 # plasmazones-settings executable) plus PhosphorTiles for the Luau loader.
 add_executable(test_algorithm_copy_suffix
     settings/test_algorithm_copy_suffix.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/algorithmservice.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/services/algorithmservice.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/services/algorithmscaffold.cpp
 )
 target_link_libraries(test_algorithm_copy_suffix PRIVATE Qt6::Test Qt6::Core plasmazones_core
     PhosphorTiles::PhosphorTiles)
@@ -893,14 +893,14 @@ add_test(NAME test_algorithm_copy_suffix COMMAND test_algorithm_copy_suffix)
 
 add_executable(test_algorithm_scaffold_rejects
     settings/test_algorithm_scaffold_rejects.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/services/algorithmscaffold.cpp
 )
 target_link_libraries(test_algorithm_scaffold_rejects PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 add_test(NAME test_algorithm_scaffold_rejects COMMAND test_algorithm_scaffold_rejects)
 
 add_executable(test_algorithm_blank_scaffold
     settings/test_algorithm_blank_scaffold.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/services/algorithmscaffold.cpp
 )
 target_link_libraries(test_algorithm_blank_scaffold PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 add_test(NAME test_algorithm_blank_scaffold COMMAND test_algorithm_blank_scaffold)
@@ -922,7 +922,7 @@ add_test(NAME test_layoutadaptor_nameclamp COMMAND test_layoutadaptor_nameclamp)
 
 add_executable(test_window_appearance_controller
     settings/test_window_appearance_controller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/windowappearancecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/windowappearancecontroller.cpp
 )
 target_link_libraries(test_window_appearance_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
     PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
@@ -930,7 +930,7 @@ add_test(NAME test_window_appearance_controller COMMAND test_window_appearance_c
 
 add_executable(test_tiling_algorithm_controller
     settings/test_tiling_algorithm_controller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/tilingalgorithmcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/tilingalgorithmcontroller.cpp
 )
 target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
     PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
@@ -941,15 +941,15 @@ add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_con
 # (page controller / motion sets / presets / shader overrides). One list so a
 # new controller source file can't silently miss one of the four.
 set(_animations_ctrl_SRCS
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/shadersetstore.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/motionsetdomain.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_shaders.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_overrides.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_paths.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/stores/animationpresetlibrary.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/stores/shadersetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/services/motionsetdomain.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/utils/animationfileutils.cpp
 )
 
 # Phase 0 of the animation-settings UI rework: AnimationsPageController
@@ -960,7 +960,7 @@ set(_animations_ctrl_SRCS
 # plasmazones-settings executable, not plasmazones_core).
 add_executable(test_animations_page_controller
     settings/test_animations_page_controller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationpagescope.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationpagescope.cpp
     ${_animations_ctrl_SRCS}
 )
 # simpleScopeCoversEverySimplePageCard reads AnimationsSimplePage.qml from the
@@ -1041,13 +1041,13 @@ add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_ov
 # One source list, shared by the page-controller test and the decoration-set
 # test below, so a new controller TU can't silently miss one of the two.
 set(_decoration_ctrl_SRCS
-    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_paths.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_browser.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_sets.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/shadersetstore.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_paths.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_browser.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_sets.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/stores/shadersetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/utils/animationfileutils.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp
 )
 
 # decorationpagecontroller_sets.cpp carries the same GCC-only LTO
@@ -1057,7 +1057,7 @@ set(_decoration_ctrl_SRCS
 # and a Release+LTO build would re-emit the GCC 16 std::optional
 # maybe-uninitialized false positive from the test build.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    set_source_files_properties(${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_sets.cpp PROPERTIES
+    set_source_files_properties(${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_sets.cpp PROPERTIES
         COMPILE_OPTIONS "-fno-lto;-Wno-maybe-uninitialized")
 endif()
 add_executable(test_decorationpagecontroller
@@ -1117,9 +1117,9 @@ add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_valid
 # links only the store itself (no PhosphorConfig::Store needed).
 add_executable(test_profilestore
     settings/test_profilestore.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/profilestore.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/profilestore_diff.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/profilestore_revert.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/stores/profilestore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/stores/profilestore_diff.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/stores/profilestore_revert.cpp
 )
 target_link_libraries(test_profilestore
     PRIVATE
@@ -1138,10 +1138,10 @@ add_test(NAME test_profilestore COMMAND test_profilestore)
 # executable, not plasmazones_core).
 add_executable(test_rule_model
     settings/test_rule_model.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rulemodel.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
     # rulemodel's action summary now shares its boolean polarity phrasing with
     # the editor via RuleAuthoring::boolActionStateLabel.
-    ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
 )
 target_link_libraries(test_rule_model
     PRIVATE
@@ -1154,18 +1154,18 @@ add_test(NAME test_rule_model COMMAND test_rule_model)
 
 add_executable(test_rule_controller
     settings/test_rule_controller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rulemodel.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
     # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
     # author surfaces, validation). The controller's class definition spans
     # this TU and rulecontroller.cpp.
-    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_views.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_views.cpp
     # Label-lookup setters + wiring-completion gate. The controller's class
     # definition spans this TU and rulecontroller.cpp.
-    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_lookups.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_baseline.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/ruletemplates.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
 )
 target_link_libraries(test_rule_controller
     PRIVATE
@@ -1285,7 +1285,7 @@ add_test(NAME test_dbus_layout_service_replies COMMAND test_dbus_layout_service_
 # controller construction needed.
 add_executable(test_decoration_page_scope
     settings/test_decoration_page_scope.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagescope.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagescope.cpp
 )
 
 target_include_directories(test_decoration_page_scope PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -1305,7 +1305,7 @@ add_test(NAME test_decoration_page_scope COMMAND test_decoration_page_scope)
 # tree.
 add_executable(test_animation_page_scope
     settings/test_animation_page_scope.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationpagescope.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationpagescope.cpp
 )
 target_include_directories(test_animation_page_scope PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_animation_page_scope

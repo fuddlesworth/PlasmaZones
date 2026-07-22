@@ -53,7 +53,7 @@
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
-#include "settings/decorationpagecontroller.h"
+#include "settings/pages/decorationpagecontroller.h"
 #include "../helpers/TreeStubSettings.h"
 
 using namespace PlasmaZones;

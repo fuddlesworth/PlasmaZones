@@ -34,7 +34,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-#include "settings/animationspagecontroller.h"
+#include "settings/pages/animationspagecontroller.h"
 
 using namespace PlasmaZones;
 

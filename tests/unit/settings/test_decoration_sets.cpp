@@ -45,8 +45,8 @@
 
 #include "config/configdefaults.h"
 #include "phosphor_i18n.h"
-#include "settings/decorationpagecontroller.h"
-#include "settings/shadersetstore.h"
+#include "settings/pages/decorationpagecontroller.h"
+#include "settings/stores/shadersetstore.h"
 #include "../helpers/DecorationSetHelpers.h"
 #include "../helpers/SetRowHelpers.h"
 #include "../helpers/TreeStubSettings.h"

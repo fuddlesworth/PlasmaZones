@@ -19,7 +19,7 @@
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 
-#include "settings/tilingalgorithmcontroller.h"
+#include "settings/pages/tilingalgorithmcontroller.h"
 #include "../helpers/ScriptedAlgoTestSetup.h"
 #include "../helpers/StubSettings.h"
 

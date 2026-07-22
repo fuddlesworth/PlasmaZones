@@ -50,8 +50,8 @@
 #include <QUrl>
 
 #include "phosphor_i18n.h"
-#include "settings/animationspagecontroller.h"
-#include "settings/shadersetstore.h"
+#include "settings/pages/animationspagecontroller.h"
+#include "settings/stores/shadersetstore.h"
 #include "../helpers/SetRowHelpers.h"
 
 using namespace PlasmaZones;
