@@ -15,7 +15,11 @@ import org.kde.kirigami as Kirigami
  * Animations page, so the spring encode/parse round-trip and the
  * seed/commit guards exist once. Consumers append their own rows below the
  * editor as default children (the General page's sequencing / stagger /
- * minimum-distance rows); the simple page passes none.
+ * minimum-distance rows); the simple page passes none. The timing editor is
+ * the FULL one in both hosts (curve summary, Customize dialog,
+ * Easing/Spring, Duration) even though simple mode trims the per-event cards
+ * below it: the curve is a global choice every card inherits, so simple mode
+ * still needs one place to make it.
  *
  * Timing state is cached per axis (`_lastEasingCurve` vs
  * `_lastSpringOmega`/`_lastSpringZeta`) so toggling Easing ↔ Spring
@@ -29,13 +33,6 @@ SettingsCard {
 
     /// The ISettings object holding the global animation profile.
     required property QtObject cardSettings
-    /// Trims the timing editor to what simple mode exposes, matching the
-    /// AnimationEventCard.simpleTiming the cards below this one use. Without
-    /// it this card would still offer Easing/Spring and the curve editor while
-    /// every card under it hides them: picking Spring here seeds those cards to
-    /// spring, which hides their Duration row, leaving simple mode with no
-    /// reachable timing control at all until the user switches to Advanced.
-    property bool simpleTiming: false
     /// Extra rows appended below the timing editor. Aliased to `children`
     /// rather than `data` so it agrees with the empty-slot collapse below,
     /// which measures visual children: `data` also accepts non-Item objects
@@ -173,7 +170,6 @@ SettingsCard {
 
             Layout.fillWidth: true
             enabled: card.toggleChecked
-            simpleTiming: card.simpleTiming
             // The Global default has no shader leg in this UI — shader
             // overrides live on the per-event and Rules layers.
             shaderLegSupported: false

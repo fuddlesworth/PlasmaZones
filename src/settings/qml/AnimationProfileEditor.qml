@@ -253,7 +253,8 @@ ColumnLayout {
         }
 
         // Simple-mode spring stand-in: with the timing-mode machinery hidden
-        // and a spring profile active (set via the global defaults editor or
+        // and a spring profile active (set in the Global animation defaults
+        // card, which keeps its full editor in simple mode, or on this event
         // in advanced mode), the Duration row below also hides — without this
         // hint the timing section would render silently empty.
         Label {
@@ -261,12 +262,12 @@ ColumnLayout {
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
             visible: root.simpleTiming && root.timingMode === CurvePresets.timingModeSpring
-            // Path-neutral wording. This editor is also hosted by
-            // GlobalTimingDefaultsCard, which is the ROOT of the inheritance
-            // tree and inherits from nothing, so "the inherited spring curve"
-            // was false there. It also has to say how to get out: in simple
-            // mode a stored spring makes duration genuinely unreachable.
-            text: i18n("A spring curve is set, so the duration has no effect. Switch to Advanced in the sidebar to change the curve.")
+            // Path-neutral wording: the spring can come from the Global
+            // defaults card or from an override this event owns, and the
+            // hint has to name a way out of both. The Global card is the
+            // first stop because it is right there on the same page, and
+            // Advanced covers the per-event override the card cannot show.
+            text: i18n("A spring curve is set, so the duration has no effect. Change the curve in Global animation defaults, or switch to Advanced in the sidebar to change it for this event.")
             font.italic: true
             color: Kirigami.Theme.disabledTextColor
             wrapMode: Text.WordWrap
