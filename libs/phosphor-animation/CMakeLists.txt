@@ -184,6 +184,9 @@ set(phosphoranimation_SRCS
 
     # Layer animator (ex phosphor-animation-layer)
     src/surfaceanimator.cpp
+    src/surfaceanimator_shaderattach.cpp
+    src/surfaceanimator_tracks.cpp
+    src/surfaceanimator_tick.cpp
 )
 
 # ===============================================================================
