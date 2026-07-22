@@ -273,6 +273,12 @@ public:
 private:
     ActionRegistry();
     void registerBuiltins();
+    // registerBuiltins() is split across two TUs for file-size; these register
+    // the two descriptor-table halves in order (engine/window-management/
+    // animation/overlay, then per-window appearance/gap/autotile-param).
+    // Defined in ruleaction_builtins_engine.cpp / ruleaction_builtins_appearance.cpp.
+    void registerBuiltinsEngine();
+    void registerBuiltinsAppearance();
 
     QHash<QString, ActionDescriptor> m_descriptors;
 };

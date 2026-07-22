@@ -92,6 +92,9 @@ set(phosphorrules_SRCS
     src/rulelogging.cpp
     src/matchexpression.cpp
     src/ruleaction.cpp
+    src/ruleaction_builtins_p.h
+    src/ruleaction_builtins_engine.cpp
+    src/ruleaction_builtins_appearance.cpp
     src/rule.cpp
     src/ruleset.cpp
     src/ruleevaluator.cpp
