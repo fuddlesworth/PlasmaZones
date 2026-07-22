@@ -30,8 +30,11 @@ PhosphorUi.SettingsAppWindow {
     // against Foo's own scope first, so the binding points the property at
     // itself and it stays undefined (context properties sit at the bottom
     // of the lookup order). Wire such children from these names instead.
-    readonly property var controllerContext: settingsController
-    readonly property var appSettingsContext: appSettings
+    // Same two names every page already uses for the same capture (see
+    // LayoutsPage / GeneralPage / TilingAlgorithmPage…), so there is one
+    // spelling for one idea across the settings tree.
+    readonly property var controllerBridge: settingsController
+    readonly property var settingsBridge: appSettings
     // Pages reach the layout-context popup via window.layoutContextMenu.
     readonly property alias layoutContextMenu: layoutContextMenu
     // GeneralPage's "Reset to Defaults" button reaches the chrome-owned
@@ -669,8 +672,8 @@ PhosphorUi.SettingsAppWindow {
     LayoutContextMenu {
         id: layoutContextMenu
 
-        settingsController: window.controllerContext
-        appSettings: window.appSettingsContext
+        settingsController: window.controllerBridge
+        appSettings: window.settingsBridge
         aspectRatioLabels: window.aspectRatioLabels
     }
 
@@ -739,9 +742,9 @@ PhosphorUi.SettingsAppWindow {
     KeyboardShortcutOverlay {
         parent: window.contentItem
         // `appSettings` is the context property exposed by main.cpp,
-        // reached through window.appSettingsContext because the overlay's
+        // reached through window.settingsBridge because the overlay's
         // own required property of that name shadows the context one.
-        appSettings: window.appSettingsContext
+        appSettings: window.settingsBridge
         shown: window._showShortcuts
         onDismiss: window._showShortcuts = false
     }

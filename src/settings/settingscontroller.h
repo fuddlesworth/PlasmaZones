@@ -986,8 +986,8 @@ private:
     QTimer m_layoutLoadTimer;
     QString m_pendingSelectLayoutId;
 
-    // Holds back the local-path layout view while a D-Bus getLayoutList
-    // round-trip is in flight.
+    // Number of getLayoutList round-trips currently in flight. Non-zero holds
+    // back the local-path layout view.
     //
     // The local composite is built from LayoutPreview, which carries no
     // daemon-side enrichment (hasSystemOrigin / hiddenFromSelector /
@@ -996,21 +996,30 @@ private:
     // toggle visibly reverted on the card that was just toggled, and every
     // listing page rebuilt its whole model twice per mutation.
     //
-    // So loadLayoutsAsync() arms this BEFORE reloading the local registry,
-    // covering both its own synchronous local emit and any that lands between
-    // the dispatch and the reply (a second daemon signal restarts the
+    // So loadLayoutsAsync() increments this BEFORE reloading the local
+    // registry, covering both its own synchronous local emit and any that lands
+    // between the dispatch and the reply (a second daemon signal restarts the
     // scheduleLayoutLoad() debounce, whose loadLayoutsAsync() drives the
-    // registry lambda synchronously). The reply is then the single refresh.
+    // registry lambda synchronously). The replies are then the only refresh.
     //
-    // Cleared at the reply lambda's entry, before any early-return on error, so
-    // the local path resumes emitting when the daemon is unreachable. Startup's
-    // direct loadLayouts() call runs ungated and paints immediately as before.
-    bool m_awaitingDaemonLayouts = false;
-    /// The local view withheld under that gate, kept as the fallback the reply
-    /// adopts when the daemon turns out to be unreachable — otherwise a failed
-    /// round-trip would leave the page painted from before the change. Engaged
-    /// (not merely non-empty) is what marks a withheld view, so a genuine wipe
-    /// to zero layouts is still adopted on error.
+    // A COUNT, not a flag: the debounce is 50 ms and a reply costs the daemon a
+    // full layout rescan, so a burst of mutations readily puts two calls in
+    // flight at once. A flag would be cleared by the first reply while the
+    // second was still pending, reopening exactly the un-enriched-publish window
+    // this exists to close.
+    //
+    // Decremented at the reply lambda's entry, before any early-return on
+    // error, so the local path resumes emitting once the last call settles and
+    // the daemon is unreachable. Startup's direct loadLayouts() call runs
+    // ungated and paints immediately as before.
+    int m_pendingDaemonLayoutCalls = 0;
+    /// The local view withheld under that gate, kept as the fallback the last
+    /// reply adopts when the daemon turns out to be unreachable — otherwise a
+    /// failed round-trip would leave the page painted from before the change.
+    /// Engaged (not merely non-empty) is what marks a withheld view, so a
+    /// genuine wipe to zero layouts is still adopted on error. Any SUCCESSFUL
+    /// reply clears it: enriched data supersedes the local view, and a later
+    /// error in the same burst must not downgrade the page back to it.
     std::optional<QVariantList> m_withheldLocalLayouts;
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.

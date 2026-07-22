@@ -271,19 +271,19 @@ SettingsController::SettingsController(QObject* parent)
     connect(m_localLayoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this]() {
         recalcLocalLayouts();
         QVariantList localLayouts = localLayoutPreviews();
-        // Assign unconditionally: when the user deletes every layout we
-        // want m_layouts to reflect the empty state. Previously this
-        // path guarded on `!localLayouts.isEmpty()`, which left stale
-        // entries in m_layouts after a wipe when the daemon was down.
+        // An empty disk view is published like any other: when the user deletes
+        // every layout we want m_layouts to reflect the empty state. This path
+        // once guarded on `!localLayouts.isEmpty()`, which left stale entries in
+        // m_layouts after a wipe when the daemon was down.
         SettingsController::sortMergedLayoutList(localLayouts);
         // Withhold the local view while a D-Bus getLayoutList call is in
         // flight. It carries no daemon-side enrichment (hasSystemOrigin /
         // hiddenFromSelector / defaultOrder / allow-lists), so publishing it
         // now would drop that off every entry for the length of the round trip
-        // and force a second full model rebuild when the reply lands. The reply
-        // adopts what is held here only if the daemon turns out to be
+        // and force a second full model rebuild when the reply lands. The last
+        // reply adopts what is held here only if the daemon turns out to be
         // unreachable.
-        if (m_awaitingDaemonLayouts) {
+        if (m_pendingDaemonLayoutCalls > 0) {
             m_withheldLocalLayouts = std::move(localLayouts);
             return;
         }

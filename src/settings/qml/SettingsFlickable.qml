@@ -48,10 +48,14 @@ import "SearchAnchorHelpers.js" as SearchAnchors
  * inherits Flickable's whole property surface unchanged. Each
  * consumer is responsible for:
  *
- *   - Binding `contentHeight` (and `contentWidth` if scrolling
+ *   - Binding the content height (and `contentWidth` if scrolling
  *     horizontally — not the typical settings-page case). Without it
  *     `WheelHandler` sees a zero scrollable range and silently
- *     refuses to move.
+ *     refuses to move. A page whose content is a fixed tree binds
+ *     `contentHeight` directly; a listing page that swaps a group model
+ *     binds `naturalContentHeight` instead and calls
+ *     `holdContentHeight()` before each swap, so the rebuild cannot
+ *     throw the scroll position away (see the model-swap scroll guard).
  *   - Avoiding nested Flickable / ListView / TextArea scroll surfaces
  *     unless they are intentionally height-clamped to their content
  *     (the `LayoutsPage.qml` pattern). Nested independent scrollers

@@ -56,7 +56,7 @@ void SettingsController::loadLayoutsAsync()
     // layoutListChanged — see
     // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions) relies on it.
     // It is not a redundant backup for a file watcher.
-    // Arm the gate BEFORE the local reload, not after: loadLayouts() drives the
+    // Count this call in BEFORE the local reload, not after: loadLayouts() drives the
     // PhosphorZones::LayoutRegistry::layoutsChanged lambda wired in
     // settingscontroller.cpp's ctor synchronously, and that lambda's view of the
     // world is the in-process composite, which carries none of the daemon-side
@@ -67,7 +67,9 @@ void SettingsController::loadLayoutsAsync()
     // made every listing page tear down and rebuild its entire model twice for
     // one mutation. The lambda holds that view in m_withheldLocalLayouts
     // instead, and the reply adopts it only if the daemon is unreachable.
-    m_awaitingDaemonLayouts = true;
+    ++m_pendingDaemonLayoutCalls;
+    // Whatever an earlier cycle held back is superseded by the reload below,
+    // which re-stashes the freshly-scanned view through the same lambda.
     m_withheldLocalLayouts.reset();
     if (m_localLayoutManager) {
         m_localLayoutManager->loadLayouts();
@@ -83,22 +85,34 @@ void SettingsController::loadLayoutsAsync()
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
-        // Clear the gate first so any local-path emit that arrives after
-        // an error reply (or after a successful one) runs normally.
-        m_awaitingDaemonLayouts = false;
-        // Take ownership of whatever the local path held back, whichever way
-        // the reply goes: leaving it engaged would let a later error branch
-        // adopt a view from a round trip that has long since finished.
-        std::optional<QVariantList> withheldLocal;
-        withheldLocal.swap(m_withheldLocalLayouts);
+        // Count this reply out first, before any early-return, so the local
+        // path resumes emitting once nothing is in flight. Guarded rather than
+        // a bare decrement: a stray second finished() must not drive the count
+        // negative and un-gate the local path while a call is still pending.
+        if (m_pendingDaemonLayoutCalls > 0) {
+            --m_pendingDaemonLayoutCalls;
+        }
+        const bool lastInFlight = m_pendingDaemonLayoutCalls == 0;
 
         QDBusPendingReply<QStringList> reply = *w;
         if (reply.isError()) {
             qCWarning(lcCore) << "Failed to load layouts (D-Bus):" << reply.error().message()
                               << "— falling back to the local manual-layout previews.";
+            if (!lastInFlight) {
+                // A newer getLayoutList is still in flight and owns the refresh.
+                // Publishing the withheld local view here would strip the
+                // enrichment off every card for the rest of that round trip,
+                // which is the whole failure this withholding exists to avoid.
+                return;
+            }
             // Adopt the withheld local view. It is the only refresh the user
             // gets on this path, and it is newer than m_layouts by definition:
-            // the reload that produced it is what this call was answering.
+            // the reload that produced it is what this call was answering. It
+            // is absent when a successful reply already published enriched data
+            // for this burst, in which case the page is current and there is
+            // nothing to fall back to.
+            std::optional<QVariantList> withheldLocal;
+            withheldLocal.swap(m_withheldLocalLayouts);
             if (withheldLocal && m_layouts != *withheldLocal) {
                 m_layouts = std::move(*withheldLocal);
             }
@@ -114,6 +128,11 @@ void SettingsController::loadLayoutsAsync()
             Q_EMIT layoutsChanged();
             return;
         }
+
+        // Enriched data supersedes anything the local path held back, so a
+        // later error in this burst cannot downgrade the page to the
+        // un-enriched view.
+        m_withheldLocalLayouts.reset();
 
         QVariantList newLayouts;
         const QStringList layoutJsonList = reply.value();
@@ -133,6 +152,13 @@ void SettingsController::loadLayoutsAsync()
         // monitor overview, picker dialogs) to recompute. Skipping
         // the emit also avoids re-firing the pending-select path
         // for an already-loaded id.
+        //
+        // Safe even when a local emit was withheld during the round trip: the
+        // daemon is the authority on the layout list, and every trigger of this
+        // reload is either a daemon broadcast or a mutation that went through
+        // the daemon, so a reply identical to m_layouts means nothing changed
+        // for the user to see. Publishing the withheld view instead would only
+        // repaint the same entries minus their enrichment.
         if (m_layouts != newLayouts) {
             m_layouts = newLayouts;
             Q_EMIT layoutsChanged();

@@ -362,7 +362,7 @@ private:
     /// How the pass an SRB belongs to touches the depth texture.
     ///
     /// Every buffer render target carries the depth texture as its second
-    /// colour attachment (ensureBufferResources), so a buffer pass WRITES it.
+    /// colour attachment (ensureBufferTarget), so a buffer pass WRITES it.
     /// Binding it as a sampled texture in that same pass's SRB is a read and a
     /// write of one texture inside a single render pass, which QRhi rejects
     /// ("Texture ... used with different accesses within the same pass, this is
