@@ -359,8 +359,10 @@ public:
     // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
     // Loads the on-disk layouts via an in-process LayoutRegistry +
     // ZonesLayoutSource so QML preview paths render even when the daemon
-    // is down (early launch, crash). Drives the Step-1 instant paint in
-    // loadLayoutsAsync, which the daemon's enriched reply then replaces.
+    // is down (early launch, crash). Paints directly at startup, before the
+    // first getLayoutList is dispatched. From then on loadLayoutsAsync holds
+    // this view back (m_withheldLocalLayouts) and publishes it only when the
+    // daemon cannot answer, because it lacks the enrichment described below.
     //
     // Returns the projection produced by PlasmaZones::toVariantMap. That is
     // the SAME projection, key for key, that the D-Bus side emits via toJson
@@ -368,7 +370,7 @@ public:
     // What differs is the daemon's LayoutAdaptor::getLayoutList, which adds an
     // enrichment layer on top (hasSystemOrigin / hiddenFromSelector /
     // defaultOrder / allow-lists) from Layout state that LayoutPreview does not
-    // carry. So the list this returns is a strict SUBSET of the Step-2 D-Bus
+    // carry. So the list this returns is a strict SUBSET of the D-Bus
     // list: any consumer reading an enrichment-only key off these previews
     // gets `undefined`, not `false`. See src/common/layoutpreviewserialize.h.
     //
