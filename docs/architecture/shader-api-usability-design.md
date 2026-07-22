@@ -625,7 +625,7 @@ Consequences for Tier 1:
   sites.** The generated param preamble and any generated `main()`/entry wrapper
   must be produced by a shared, runtime-agnostic component (the registry is the
   natural owner) and injected on **both** the RHI path *and* the kwin-effect
-  source-assembly path (`shader_transitions.cpp`), after that path's `#version` /
+  source-assembly path (`shader_textures.cpp`), after that path's `#version` /
   `PLASMAZONES_KWIN` prepend. Treat "emit the generated GLSL" and "splice it into a
   compile" as two steps so both runtimes share step one.
 - **T1.2 validation must bake both branches.** A valid animation shader is one that

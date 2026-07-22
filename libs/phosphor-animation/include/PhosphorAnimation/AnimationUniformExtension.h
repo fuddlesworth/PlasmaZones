@@ -45,8 +45,8 @@ namespace PhosphorAnimation {
 /// declares.
 ///
 /// Cross-runtime parity: the kwin-effect path uses classic GL
-/// `setUniform` lookups for these names (see `paint_pipeline.cpp`
-/// + `shader_transitions.cpp`) — independent of the UBO mechanism,
+/// `setUniform` lookups for these names (see `paint_shader_window.cpp`)
+/// — independent of the UBO mechanism,
 /// works without any extension. Author-side GLSL is identical across
 /// runtimes (the `#ifdef PLASMAZONES_KWIN` branch of
 /// animation_uniforms.glsl declares them as default-block uniforms;

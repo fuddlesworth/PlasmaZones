@@ -395,10 +395,13 @@ inline constexpr const char* kIToRect = "iToRect";
 /// window is painted only during its own output's pass, so a
 /// deformation toward a foreign-output icon clips at that output's
 /// edge. COMPOSITOR PATH ONLY and deliberately NOT declared by the
-/// canonical shared header, exactly like `iFromRect` / `iToRect`: a pack
-/// that reads it declares it inside its own `#ifdef PLASMAZONES_KWIN`
-/// block, keeping the daemon's strict SPIR-V bake away from the loose
-/// declaration.
+/// canonical shared header. Unlike `iFromRect` / `iToRect` (whose
+/// geometry-pack consumers are compositor-only and declare them
+/// unguarded), the packs that read this one (genie, phosphor-siphon)
+/// are appearance-class and DAEMON-CAPABLE, so each declares it inside
+/// its own `#ifdef PLASMAZONES_KWIN` block — that guard is what keeps
+/// the daemon's strict SPIR-V bake of these dual-runtime packs away
+/// from the loose declaration.
 inline constexpr const char* kIIconRect = "iIconRect";
 
 /// `sampler2D uOldWindow` — snapshot of the window's content captured at

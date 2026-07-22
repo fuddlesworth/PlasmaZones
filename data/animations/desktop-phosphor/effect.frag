@@ -218,7 +218,14 @@ vec4 pTransition(vec2 uv, float t) {
     float sparkle = 0.9 + 0.2 * classicHash(floor(uv * res / 2.0)
                                             + floor(float(iFrame) * 0.2));
     vec3 frontCol = fluxGradient(clamp(t * 1.5 - 0.15, 0.0, 1.0));
-    col += frontCol * front * front * clamp(p_glow, 0.0, 2.0) * 0.5 * sparkle;
+    // Fade the rim in over the first 5% of the leg: the band's -0.30 lead
+    // puts the earliest-activating nodes inside it already at t=0, and an
+    // ungated rim pops in on the very first frame against the previously
+    // plain desktop. The settle side needs no gate (front is negligible by
+    // t=1), and a full env gate would extinguish the rim on the last-landing
+    // fronts, so gate the ramp-in only.
+    float frontIn = smoothstep(0.0, 0.05, t);
+    col += frontCol * front * front * frontIn * clamp(p_glow, 0.0, 2.0) * 0.5 * sparkle;
 
     // Additive circuit, gated by the global envelope and dimmed where the
     // incoming desktop has already settled so it never lingers as residue.

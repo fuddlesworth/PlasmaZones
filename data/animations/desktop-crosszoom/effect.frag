@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-FileCopyrightText: gl-transitions contributors
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Desktop Cross Zoom — the outgoing desktop zooms and directional-blurs toward a

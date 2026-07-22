@@ -15,6 +15,7 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
@@ -259,20 +260,26 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     }
     // Lint appliesTo tokens from the RAW metadata (fromJson silently drops
     // unknown tokens with only a runtime journal warning). A typo matters
-    // doubly here: a compositor-only pack whose sole token is misspelled
+    // doubly here: a compositor-only pack whose every token is misspelled
     // degrades to universal, escapes the compositor-only skip below, and
     // fails the daemon stage compile with an opaque GLSL error instead of
-    // a metadata diagnostic.
-    static const QStringList kAnimAppliesToTokens = {QStringLiteral("geometry"), QStringLiteral("appearance"),
-                                                     QStringLiteral("desktop"), QStringLiteral("move")};
-    const QJsonArray declaredAppliesTo = doc.object().value(QLatin1String("appliesTo")).toArray();
-    for (const QJsonValue& v : declaredAppliesTo) {
-        const QString token = v.toString();
-        if (!kAnimAppliesToTokens.contains(token)) {
-            lints << QStringLiteral(
-                         "unknown appliesTo token '%1' (dropped at load; pack treated as universal; "
-                         "valid tokens are geometry/appearance/desktop/move)")
-                         .arg(token.isEmpty() ? QStringLiteral("<non-string>") : token);
+    // a metadata diagnostic. Token handling mirrors fromJson exactly:
+    // trimmed comparison against the ProfilePaths vocabulary constants,
+    // empty / whitespace-only tokens skipped silently.
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        const QStringList animAppliesToTokens = {PP::EventClassGeometry, PP::EventClassAppearance,
+                                                 PP::EventClassDesktop, PP::EventClassMove};
+        const QJsonArray declaredAppliesTo = doc.object().value(QLatin1String("appliesTo")).toArray();
+        for (const QJsonValue& v : declaredAppliesTo) {
+            const QString token = v.toString().trimmed();
+            if (!token.isEmpty() && !animAppliesToTokens.contains(token)) {
+                lints << QStringLiteral(
+                             "unknown appliesTo token '%1' (dropped at load; an appliesTo that "
+                             "validates down to empty makes the pack universal; valid tokens are "
+                             "geometry/appearance/desktop/move)")
+                             .arg(token);
+            }
         }
     }
     // Texture lints mirror parseEffect's parse-time journal warnings. fromJson

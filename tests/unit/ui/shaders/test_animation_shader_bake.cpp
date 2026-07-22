@@ -1,16 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Pins every built-in animation VERTEX shader against
-// `ShaderCompiler::compileFromFile` (qsb / glslang for SPIR-V + GLSL bake
-// targets). Catches the "non-opaque uniforms outside a block" qsb rejection
-// class — the regression that motivated the canonical `animation_uniforms.glsl`
-// UBO — and any future drift that breaks the daemon's overlay-surface execution
-// site. Fragment-stage coverage moved to `test_animation_shader_preamble_bake`,
-// which bakes every effect.frag through the FULL runtime assembly (T1.4/T1.5
-// entry scaffold + T1.1 param preamble + include expansion); a raw
-// compileFromFile here would reject an entry-only pack that defines pTransition
-// / pZone instead of main().
+// Pins the VERTEX shader of every daemon-eligible built-in animation pack
+// against `ShaderCompiler::compileFromFile` (qsb / glslang for SPIR-V + GLSL
+// bake targets). Catches the "non-opaque uniforms outside a block" qsb
+// rejection class — the regression that motivated the canonical
+// `animation_uniforms.glsl` UBO — and any future drift that breaks the
+// daemon's overlay-surface execution site. Compositor-only packs are excluded
+// (their source is kwin classic-GL by design); test_animation_shader_kwin_bake
+// covers them. Fragment-stage coverage moved to
+// `test_animation_shader_preamble_bake`, which bakes each daemon-eligible
+// effect.frag through the FULL runtime assembly (T1.4/T1.5 entry scaffold +
+// T1.1 param preamble + include expansion); a raw compileFromFile here would
+// reject an entry-only pack that defines pTransition / pZone instead of
+// main().
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorRendering/ShaderCompiler.h>

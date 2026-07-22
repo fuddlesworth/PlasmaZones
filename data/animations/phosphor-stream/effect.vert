@@ -34,6 +34,9 @@ uniform vec4 iToRect;
 // ease (0 = still at the old rect, 1 = settled), .w = lane seed.
 layout(location = 1) out vec4 vFlow;
 
+// Deliberately local rather than including noise.glsl: the vertex stage
+// needs exactly one scalar hash, and the frag already carries the full
+// noise module for its own use.
 float laneHash(float n) {
     return fract(sin(n * 127.1 + 311.7) * 43758.5453);
 }

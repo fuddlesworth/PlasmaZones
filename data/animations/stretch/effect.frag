@@ -7,8 +7,8 @@
 // hands each fragment its sampling card uv and the old->new cross-fade
 // through vStretch. This stage samples the window at the card uv,
 // cross-fades the captured old frame into the live content as the move
-// settles (so a resize re-lays correctly), and masks the window's [0, 1]
-// card rect.
+// settles (so a resize re-lays correctly), and masks the window's
+// pad-widened card rect.
 
 // .xy = sampling card uv, .z = old->new cross-fade.
 layout(location = 1) in vec3 vStretch;

@@ -432,7 +432,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // (Type exclusions are handled above and are NOT bypassable here.)
     //
     // `m_shaderManager.animationRuleSet()` admits every rule carrying a
-    // Tag::Effect action (shader_transitions.cpp's `hasTag(type, Tag::Effect)`
+    // Tag::Effect action (shader_config_dbus.cpp's `hasTag(type, Tag::Effect)`
     // loop; the tag assignments in ruleaction.cpp are the authoritative
     // membership list). So a rule
     // whose only action is an appearance or layer override also force-animates

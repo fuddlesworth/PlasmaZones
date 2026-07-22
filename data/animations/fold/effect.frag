@@ -8,7 +8,7 @@
 // old->new cross-fade amount through vFold. This stage samples the window
 // at the card uv, cross-fades the captured old frame into the live content
 // as the move settles (so a resize re-lays correctly), multiplies in the
-// crease shade to sell the fold, and masks the window's [0, 1] card rect.
+// crease shade to sell the fold, and masks the window's pad-widened card rect.
 
 // .xy = sampling card uv, .z = crease shade, .w = old->new cross-fade.
 layout(location = 1) in vec4 vFold;

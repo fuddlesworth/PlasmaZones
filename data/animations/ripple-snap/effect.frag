@@ -8,7 +8,7 @@
 // old->new cross-fade through vRip. This stage samples the window at the
 // card uv, cross-fades the captured old frame into the live content as the
 // move settles (so a resize re-lays correctly), multiplies in the ripple
-// shade, and masks the window's [0, 1] card rect.
+// shade, and masks the window's pad-widened card rect.
 
 // .xy = sampling card uv, .z = ripple shade, .w = old->new cross-fade.
 layout(location = 1) in vec4 vRip;

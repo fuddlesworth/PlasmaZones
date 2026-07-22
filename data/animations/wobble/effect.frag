@@ -4,8 +4,8 @@
 // Wobbly-move fragment shader — plain decorated sampling; all the work
 // happens in the vertex stage's velocity-lag deformation. Samples through
 // surfaceColor() so the full decoration chain (blur pane, border, glow)
-// wobbles with the window as one object, and feathers the card edge so
-// the deformed silhouette stays anti-aliased.
+// wobbles with the window as one object; the composite's own premultiplied
+// alpha provides the anti-aliased silhouette, so no card mask is applied.
 
 vec4 pTransition(vec2 uv, float t) {
     // Sample the decorated composite directly. NO [0,1] card mask: the grid

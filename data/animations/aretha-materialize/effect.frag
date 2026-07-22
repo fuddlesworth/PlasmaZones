@@ -43,7 +43,11 @@ vec4 pTransition(vec2 uv, float t)
     vec2 scaled   = px / hexSize;
     vec2 hex      = hexLocal(scaled);
     float d       = hexDist(hex);
-    vec2 cellId   = floor((scaled - hex) / vec2(1.0, 1.732));
+    // Hash the cell's own center. A floor() of the center over the row pitch
+    // collapses each base-lattice hex and its offset-lattice diagonal
+    // neighbour onto one id, so adjacent pairs would pop and stutter in
+    // lockstep; the raw center is unique per hex.
+    vec2 cellId   = scaled - hex;
     float cellRand = niriHash(cellId);
 
     // ── Per-cell reveal threshold: diagonal data sweep blended with random

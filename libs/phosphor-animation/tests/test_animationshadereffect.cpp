@@ -511,7 +511,7 @@ private Q_SLOTS:
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry"), QStringLiteral("move")})));
         // Default-constructed (invalid) effect: empty appliesTo → not
         // compositor-only, so runLeg's unknown-id resolve stays a plain
-        // no-shader leg rather than tripping the compositor-only warning.
+        // no-shader leg rather than tripping the compositor-only refusal.
         QVERIFY(!shaderEffectIsCompositorOnly(AnimationShaderEffect{}));
     }
 };

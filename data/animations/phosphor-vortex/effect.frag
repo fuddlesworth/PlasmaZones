@@ -93,7 +93,10 @@ vec4 pTransition(vec2 uv, float t) {
 
     // Continuous rotation for as long as the effect is alive — iFrame is
     // monotonic through the whole held leg, so the plasma keeps swirling
-    // however long the drag holds still.
+    // however long the drag holds still. Frame-keyed spin is refresh-rate
+    // dependent (a 144 Hz display swirls 2.4x faster than 60 Hz); accepted:
+    // the swirl is decorative, has no timeline to keep, and iDate.w (the
+    // rate-independent alternative) wraps at midnight.
     float spin = float(iFrame) * 0.03 * clamp(p_spin, 0.0, 3.0);
     float streaks = clamp(p_streaks, 0.0, 1.0);
 

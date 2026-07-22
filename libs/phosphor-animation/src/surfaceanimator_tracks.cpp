@@ -124,6 +124,7 @@ void SurfaceAnimator::Private::teardownShaderLeg(PhosphorLayer::Surface* surface
         track.shaderAnchor.clear();
         track.foundExplicitAnchor = false;
         track.shaderEffectId.clear();
+        track.fboExtentKindPtr.reset();
         return;
     }
 
@@ -230,10 +231,11 @@ void SurfaceAnimator::Private::destroyPendingReuseFor(PhosphorLayer::Surface* su
     }
 }
 
-/// Single-(surface, target) variant. Used by runLeg's null-target
-/// path: target is null, so iterate every (surface, *) anyway.
-/// Used by teardownShaderLeg-driven reuse claim: caller has
-/// already moved fields out, so we just erase.
+/// Single-(surface, target) variant. Sole caller: runLeg's
+/// non-shader-leg branch, which drops this target's parked reuse
+/// stash when the superseding leg carries no shader (a stale
+/// parked ShaderEffect must not outlive a leg that will never
+/// reclaim it).
 void SurfaceAnimator::Private::destroyPendingReuseForKey(const TrackKey& key)
 {
     const auto it = m_pendingReuse.find(key);

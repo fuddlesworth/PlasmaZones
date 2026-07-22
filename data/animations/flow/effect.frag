@@ -7,7 +7,7 @@
 // each fragment its card uv and arrival ease through vFlow. This stage
 // just samples the window at that card uv, cross-fading the captured old
 // frame (uOldWindow) into the live new content (surfaceColor) as each
-// region settles, and masks everything outside the window's [0, 1] card
+// region settles, and masks everything outside the window's pad-widened card
 // rect (the grid covers the whole output, but only the window is drawn).
 //
 // Old and new are sampled at the SAME card uv, so each shows at its own

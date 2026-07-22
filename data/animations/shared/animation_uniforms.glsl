@@ -36,7 +36,7 @@
 // also differs: the kwin path multiplies `position` by
 // `modelViewProjectionMatrix`, the daemon emits clip-space directly.
 // See `kKwinDefaultVertexSource` in
-// `kwin-effect/plasmazoneseffect/shader_transitions.cpp` and
+// `kwin-effect/plasmazoneseffect/shader_textures.cpp` and
 // `kDefaultVertexShaderSource` in
 // `libs/phosphor-rendering/src/shadereffect.cpp`.
 //
@@ -514,7 +514,7 @@ vec2 resolutionSafe() {
 // guarded default below is identity.
 //
 // The kwin-effect WINDOW-animation path overrides it before this header
-// is included: shader_transitions.cpp splices KWin's colormanagement.glsl
+// is included: shader_textures.cpp splices KWin's colormanagement.glsl
 // plus `#define PZ_FINALIZE_COLOR(c) pzFinalizeColor(c)` right after
 // `#version`, converting the shader's sRGB output into the output's
 // blending space. Installing a shader via OffscreenEffect::setShader

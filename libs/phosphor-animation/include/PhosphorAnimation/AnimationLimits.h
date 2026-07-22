@@ -26,7 +26,7 @@
  *    read that slot: `resolveEventMotionProfile` owns it and feeds both
  *    the animator leg and the shader leg from one read and one clamp,
  *  - `PlasmaZonesEffect::resolveEventMotionProfile`
- *    (`shader_transitions.cpp`), which bounds the motion cascade's
+ *    (`shader_config_dbus.cpp`), which bounds the motion cascade's
  *    resolved DURATION at the source,
  *  - `ShaderInternal::resolveTransitionLifetimeMs`
  *    (`kwin-effect/plasmazoneseffect/shader_internal.h`), which bounds a

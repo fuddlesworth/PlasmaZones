@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-FileCopyrightText: gl-transitions contributors
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Desktop Cube — the outgoing and incoming desktops rotate past each other as
@@ -52,7 +53,7 @@ vec4 pTransition(vec2 uv, float tRaw) {
     // At the exact endpoints one face is zero-width, so its skew divides by zero
     // and yields inf/NaN coords. That is intentional (canonical GL-Transitions
     // "cube"): the inf face fails pz_cube_inBounds and the other, full-width face
-    // is checked first and drawn, so no black frame results.
+    // passes its check and is drawn, so no black frame results.
     vec2 fromP = pz_cube_xskew((p - vec2(t, 0.0)) / vec2(1.0 - t, 1.0), 1.0 - mix(t, 0.0, p_persp), 0.0);
     vec2 toP = pz_cube_xskew(p / vec2(t, 1.0), mix(pow(t, 2.0), 1.0, p_persp), 1.0);
     if (pz_cube_inBounds(fromP)) {
