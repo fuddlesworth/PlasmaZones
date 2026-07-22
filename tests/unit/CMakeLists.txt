@@ -88,9 +88,22 @@ add_test(NAME test_wts_dirty_mask COMMAND test_wts_dirty_mask)
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - SnapEngine Tests
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_snap_engine core/snap/test_snap_engine.cpp)
+add_executable(test_snap_engine core/snap/test_snap_engine.cpp helpers/SnapEngineTestFixture.h)
 target_link_libraries(test_snap_engine PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_engine COMMAND test_snap_engine)
+
+# Restore-resolution half of the SnapEngine suite (capture placement, window
+# restore, fallback unfloat geometry, snap-to-empty gating). The fixture header
+# is listed as a source so AUTOMOC scans its Q_OBJECT classes.
+add_executable(test_snap_engine_restore core/snap/test_snap_engine_restore.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_engine_restore PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_engine_restore COMMAND test_snap_engine_restore)
+
+# Exclusion half of the SnapEngine suite (exclude wiring, size exclusion,
+# entry-zone crossing).
+add_executable(test_snap_engine_exclude core/snap/test_snap_engine_exclude.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_engine_exclude PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_engine_exclude COMMAND test_snap_engine_exclude)
 
 # End-to-end per-monitor snap acceptance (Discussion #724): cross-monitor unfloat
 # determinism, threaded-screen authority, per-screen independence, migration completeness.
@@ -348,6 +361,8 @@ p_add_test(test_configdefaults config/test_configdefaults.cpp)
 p_add_test(test_configbackend_json config/test_configbackend_json.cpp)
 
 p_add_test(test_configmigration config/migrations/test_configmigration.cpp)
+p_add_test(test_migration_v1_animation config/migrations/test_migration_v1_animation.cpp)
+p_add_test(test_layoutsettings_relocation config/migrations/test_layoutsettings_relocation.cpp)
 
 # Binds the schema's declared choices to their user-facing labels.
 add_executable(test_settingsvaluelabels config/settings/test_settingsvaluelabels.cpp)
@@ -361,6 +376,18 @@ add_executable(test_migration_v3_to_v4 config/migrations/test_migration_v3_to_v4
 target_link_libraries(test_migration_v3_to_v4
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
 add_test(NAME test_migration_v3_to_v4 COMMAND test_migration_v3_to_v4)
+
+# v3 → v4 animation app-rule and animation-exclusion folds.
+add_executable(test_migration_v3_to_v4_animations config/migrations/test_migration_v3_to_v4_animations.cpp)
+target_link_libraries(test_migration_v3_to_v4_animations
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v3_to_v4_animations COMMAND test_migration_v3_to_v4_animations)
+
+# v3 → v4 snapping-exclusion and zone-rename folds.
+add_executable(test_migration_v3_to_v4_exclusions config/migrations/test_migration_v3_to_v4_exclusions.cpp)
+target_link_libraries(test_migration_v3_to_v4_exclusions
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v3_to_v4_exclusions COMMAND test_migration_v3_to_v4_exclusions)
 
 # v4 → v5 per-mode appearance + gaps → unified Windows/Gaps config-group migration.
 add_executable(test_migration_v4_to_v5 config/migrations/test_migration_v4_to_v5.cpp)
@@ -446,6 +473,11 @@ p_add_test(test_layout_zones core/layout/test_layout_zones.cpp)
 p_add_test(test_layoutmanager_persistence core/layout/test_layoutmanager_persistence.cpp)
 p_add_test(test_layoutmanager_cycling core/layout/test_layoutmanager_cycling.cpp)
 p_add_test(test_layoutmanager_assignment core/layout/test_layoutmanager_assignment.cpp)
+p_add_test(test_layoutmanager_default_synthesis core/layout/test_layoutmanager_default_synthesis.cpp)
+# The shared fixture header holds a Q_OBJECT base class; AUTOMOC only scans
+# headers listed as target sources, so both targets must list it explicitly.
+target_sources(test_layoutmanager_assignment PRIVATE core/layout/LayoutManagerAssignmentFixture.h)
+target_sources(test_layoutmanager_default_synthesis PRIVATE core/layout/LayoutManagerAssignmentFixture.h)
 p_add_test(test_layout_registry_cache core/layout/test_layout_registry_cache.cpp)
 
 # The editor's save payload is schema-gated at the D-Bus boundary, so the shape
@@ -470,6 +502,13 @@ add_executable(test_rule_cascade_fidelity core/test_rule_cascade_fidelity.cpp)
 target_link_libraries(test_rule_cascade_fidelity
     PRIVATE Qt6::Test Qt6::Core PhosphorRules::PhosphorRules PhosphorZones::PhosphorZones plasmazones_core)
 add_test(NAME test_rule_cascade_fidelity COMMAND test_rule_cascade_fidelity)
+
+# Context-domain half of the cascade proof (gaps, orientation, active layout,
+# tiling params, overlay, lock, per-mode gap rules).
+add_executable(test_rule_cascade_context core/test_rule_cascade_context.cpp)
+target_link_libraries(test_rule_cascade_context
+    PRIVATE Qt6::Test Qt6::Core PhosphorRules::PhosphorRules PhosphorZones::PhosphorZones plasmazones_core)
+add_test(NAME test_rule_cascade_context COMMAND test_rule_cascade_context)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Virtual Screen Tests (ID utilities, data model, PhosphorScreens::ScreenManager)
@@ -1179,6 +1218,31 @@ target_link_libraries(test_rule_controller
         plasmazones_core
 )
 add_test(NAME test_rule_controller COMMAND test_rule_controller)
+
+# Overview/vocabulary half of the controller suite (monitorOverview projections,
+# vocabulary tokens, templates, action metadata). Same source set as
+# test_rule_controller; the controller's class definition spans several TUs.
+add_executable(test_rule_controller_overview
+    settings/rules/test_rule_controller_overview.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_views.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
+)
+target_link_libraries(test_rule_controller_overview
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        PhosphorRules::PhosphorRules
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_rule_controller_overview COMMAND test_rule_controller_overview)
 
 # Validation methods on D-Bus struct types - pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,
