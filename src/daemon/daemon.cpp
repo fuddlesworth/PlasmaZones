@@ -2067,10 +2067,12 @@ bool Daemon::init()
 
     // Retry D-Bus service registration with exponential backoff.
     // Synchronous retry is required here because init() runs before QGuiApplication::exec(),
-    // so QTimer-based async approaches won't fire. Delays are kept short (700ms total max).
+    // so QTimer-based async approaches won't fire. Delays are kept short (300ms total max).
     constexpr int maxRetries = 3;
-    constexpr int baseDelayMs = 100; // 100ms, 200ms, 400ms exponential backoff
-    // Worst-case blocking: 100 + 200 + 400 = 700 ms on the GUI thread.
+    constexpr int baseDelayMs = 100; // backoff sleeps 100ms then 200ms
+    // Worst-case blocking: 100 + 200 = 300 ms on the GUI thread. The third
+    // attempt does not sleep — the `attempt < maxRetries - 1` gate below skips
+    // the final (would-be 400ms) delay and returns instead.
     // init() runs before QGuiApplication::exec(), so QTimer-based async
     // approaches don't fire — synchronous sleep is the only retry path
     // available here. The retry is bounded by `maxRetries`, and a bus

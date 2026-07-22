@@ -343,7 +343,7 @@ private Q_SLOTS:
         // written inline beside one of those anchors is a real gate that a
         // page-only glob never sees.
         const QStringList files = QDir(m_qmlDir).entryList({QStringLiteral("*.qml")}, QDir::Files);
-        // 154 files today. The floor sits just under that: this glob is the
+        // 155 files today. The floor sits well under that: this glob is the
         // test's whole input, so a directory move or a filter typo that halved
         // it must fail rather than quietly narrow the sweep.
         QVERIFY2(files.size() > 140,
