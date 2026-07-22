@@ -37,8 +37,6 @@ vec3 fluxGradient(float t) {
     return c;
 }
 
-#ifdef PLASMAZONES_KWIN
-
 // Distance from p to segment ab.
 float sdSegment(vec2 p, vec2 a, vec2 b) {
     vec2 pa = p - a;
@@ -79,10 +77,7 @@ float nodeActivation(vec2 nodePos, vec2 dir, vec2 extent) {
     return 0.02 + proj * 0.61 + stagger * 0.14;
 }
 
-#endif // PLASMAZONES_KWIN
-
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     // ── Graph space: aspect-corrected uv scaled by circuit density, same
     // construction as phosphor-flux's signal-graph layer. ──
     vec2 res = resolutionSafe();
@@ -230,7 +225,4 @@ vec4 pTransition(vec2 uv, float t) {
     // Two opaque desktops blended stay opaque — the pass draws with blending
     // off and replaces the screen, so alpha is a constant 1.
     return vec4(clamp(col, 0.0, 1.0), 1.0);
-#else
-    return vec4(0.0);
-#endif
 }

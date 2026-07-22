@@ -14,7 +14,6 @@
 #include <desktop_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     float tt = clamp(t, 0.0, 1.0);
     float e = smoothstep(0.0, 1.0, tt);
 
@@ -73,9 +72,4 @@ vec4 pTransition(vec2 uv, float t) {
     // and converting again would double-transform (see the kFinalizeColorBlock
     // note in shader_transitions.cpp). What this returns is written out as-is.
     return vec4(col, 1.0);
-#else
-    // Desktop transitions are compositor-only; the daemon never runs them.
-    // Return transparent so the pack still bakes for the daemon target.
-    return vec4(0.0);
-#endif
 }

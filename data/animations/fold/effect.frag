@@ -10,18 +10,13 @@
 // as the move settles (so a resize re-lays correctly), multiplies in the
 // crease shade to sell the fold, and masks the window's [0, 1] card rect.
 
-#ifdef PLASMAZONES_KWIN
 // .xy = sampling card uv, .z = crease shade, .w = old->new cross-fade.
 layout(location = 1) in vec4 vFold;
-#endif
-
-#include <anchor_remap.glsl>
 
 // uOldWindow + oldColor(): the shared captured-old-frame sampler.
 #include <old_content.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     vec2 cuv = vFold.xy;
     float shade = clamp(vFold.z, 0.0, 1.0);
     float fade = clamp(vFold.w, 0.0, 1.0);
@@ -45,7 +40,4 @@ vec4 pTransition(vec2 uv, float t) {
     // shade. Inputs are premultiplied, so a straight mix and a scalar
     // multiply are both correct on premultiplied colour.
     return mix(oldC, newC, fade) * shade * mask;
-#else
-    return surfaceColor(anchorRemap(uv));
-#endif
 }

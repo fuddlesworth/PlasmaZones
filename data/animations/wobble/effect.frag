@@ -7,17 +7,11 @@
 // wobbles with the window as one object, and feathers the card edge so
 // the deformed silhouette stays anti-aliased.
 
-#include <anchor_remap.glsl>
-
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     // Sample the decorated composite directly. NO [0,1] card mask: the grid
     // now extends past the frame into the decoration halo band (cuv < 0 or
     // > 1 there), and the composite's own premultiplied alpha is the correct
     // silhouette — including the soft halo edge. A mask clipped to [0,1]
     // would cut the glow / shadow / fireflies margin off at the frame.
     return surfaceColor(uv);
-#else
-    return surfaceColor(anchorRemap(uv));
-#endif
 }

@@ -28,7 +28,6 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 // Geometry-morph endpoints (logical-screen px, x/y/w/h), pushed by the
 // kwin-effect paint pipeline for any shader that declares them.
@@ -37,10 +36,8 @@ uniform vec4 iToRect;
 // Per-vertex flow handed to the fragment: .xy = card uv, .z = arrival
 // ease (0 = still at the old rect, 1 = settled at the destination).
 layout(location = 1) out vec3 vFlow;
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     // apply() emits the grid texcoords as card uv, but KWin's window-quad
     // texcoord convention is Y-flipped on upload (the same reason the
     // single-quad surface path probes handedness), so re-apply the
@@ -85,11 +82,4 @@ void main() {
     vTexCoord = cuv;
     vFlow = vec3(cuv, e);
     gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the geometry flow is compositor-only. Pass
-    // the quad through so the shader still bakes (and is harmless if ever
-    // run on the daemon path). Mirrors window-morph's daemon branch.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }

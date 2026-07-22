@@ -25,7 +25,6 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 // Geometry-morph endpoints (logical-screen px, x/y/w/h), pushed by the
 // kwin-effect paint pipeline for any shader that declares them.
@@ -38,10 +37,8 @@ layout(location = 1) out vec4 vFlow;
 float laneHash(float n) {
     return fract(sin(n * 127.1 + 311.7) * 43758.5453);
 }
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     // Card uv with y = 0 at the window top (KWin Y-flips window-quad
     // texcoords on upload; re-apply the flip, same as flow).
     vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
@@ -91,10 +88,4 @@ void main() {
     vTexCoord = cuv;
     vFlow = vec4(cuv, e, lh);
     gl_Position = modelViewProjectionMatrix * vec4(position + delta, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the geometry stream is compositor-only. Pass
-    // the quad through so the shader still bakes — mirrors flow's branch.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }

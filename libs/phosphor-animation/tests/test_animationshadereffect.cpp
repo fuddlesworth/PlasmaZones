@@ -481,6 +481,39 @@ private Q_SLOTS:
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopPeek));
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::Desktop));
     }
+
+    /// Compositor-only classification: a pack whose declared classes never
+    /// include `appearance` can only execute in the kwin-effect — the daemon
+    /// skips its warm bake and SurfaceAnimator refuses to attach it. A
+    /// universal pack (empty appliesTo) and any pack declaring `appearance`
+    /// remain daemon-capable.
+    void testShaderEffectIsCompositorOnly()
+    {
+        using PhosphorAnimationShaders::shaderEffectIsCompositorOnly;
+
+        auto effectWith = [](std::initializer_list<QString> classes) {
+            AnimationShaderEffect e;
+            e.id = QStringLiteral("probe");
+            e.fragmentShaderPath = QStringLiteral("effect.frag");
+            e.appliesTo = QStringList(classes);
+            return e;
+        };
+
+        // Universal → daemon-capable.
+        QVERIFY(!shaderEffectIsCompositorOnly(effectWith({})));
+        // Appearance in any combination → daemon-capable.
+        QVERIFY(!shaderEffectIsCompositorOnly(effectWith({QStringLiteral("appearance")})));
+        QVERIFY(!shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry"), QStringLiteral("appearance")})));
+        // Each compositor-only class alone, and combined, → compositor-only.
+        QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("desktop")})));
+        QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry")})));
+        QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("move")})));
+        QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry"), QStringLiteral("move")})));
+        // Default-constructed (invalid) effect: empty appliesTo → not
+        // compositor-only, so runLeg's unknown-id resolve stays a plain
+        // no-shader leg rather than tripping the compositor-only warning.
+        QVERIFY(!shaderEffectIsCompositorOnly(AnimationShaderEffect{}));
+    }
 };
 
 QTEST_MAIN(TestAnimationShaderEffect)

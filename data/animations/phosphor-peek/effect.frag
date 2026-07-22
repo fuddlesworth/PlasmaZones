@@ -39,7 +39,6 @@ vec3 fluxGradient(float t) {
 }
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     float tt = clamp(t, 0.0, 1.0);
     vec2 res = resolutionSafe();
     float aspect = res.x / max(res.y, 1.0);
@@ -141,9 +140,4 @@ vec4 pTransition(vec2 uv, float t) {
     // output it crushes capture values the blend never created. Do not "restore"
     // it here for consistency.
     return vec4(col, 1.0);
-#else
-    // Desktop transitions are compositor-only; the daemon never runs them.
-    // Return transparent so the pack still bakes for the daemon target.
-    return vec4(0.0);
-#endif
 }

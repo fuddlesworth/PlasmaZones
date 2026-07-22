@@ -681,7 +681,7 @@ add_test(NAME test_zone_uniform_extension COMMAND test_zone_uniform_extension)
 # breaking the daemon's overlay-surface animation path. Pinned by the
 # canonical UBO declaration in data/animations/shared/animation_uniforms.glsl.
 add_executable(test_animation_shader_bake ui/shaders/test_animation_shader_bake.cpp)
-target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorRendering::PhosphorRendering)
+target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering)
 target_compile_definitions(test_animation_shader_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_bake COMMAND test_animation_shader_bake)
 

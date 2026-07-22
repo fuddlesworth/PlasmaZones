@@ -11,7 +11,6 @@
 #include <noise.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     float n = classicHash(floor(uv * max(p_scale, 1.0)));
     float soft = max(p_softness, 1.0e-3);
     // Pad progress by the fade width so every speckle is fully outgoing at t=0
@@ -21,7 +20,4 @@ vec4 pTransition(vec2 uv, float t) {
     float p = t * (1.0 + 2.0 * soft) - soft;
     float a = smoothstep(n - soft, n + soft, p);
     return crossFade(uv, a);
-#else
-    return vec4(0.0);
-#endif
 }

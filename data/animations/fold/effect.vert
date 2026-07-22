@@ -24,17 +24,14 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
 // Per-vertex data for the fragment: .xy = sampling card uv, .z = crease
 // shade (1 = lit ridge, < 1 = shadowed valley), .w = old->new cross-fade.
 layout(location = 1) out vec4 vFold;
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     const float PI = 3.14159265358979;
     const float FOLDS = 5.0;      // crease count along the travel axis
     const float COMPRESS = 0.35;  // how far the accordion pulls in at full fold
@@ -114,10 +111,4 @@ void main() {
     vTexCoord = cuv;
     vFold = vec4(cuv, shade, ease);
     gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the fold is compositor-only. Pass the quad
-    // through so the shader still bakes and is harmless if ever run.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }

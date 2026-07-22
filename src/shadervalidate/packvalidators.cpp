@@ -187,9 +187,11 @@ int validatePack(const QString& packDir, QTextStream& out)
 // The kwin-effect classic-GL path (`#define PLASMAZONES_KWIN`, default-block
 // uniforms) is NOT baked here: QShaderBaker compiles Vulkan-dialect GLSL and
 // rejects default-block uniforms, so the kwin branch needs a separate
-// OpenGL-target compiler. The PLASMAZONES_KWIN uniform plumbing lives entirely
-// in the shared animation_uniforms.glsl — identical for every pack — while each
-// pack's authored body is fully covered by the daemon bake here.
+// OpenGL-target compiler. Compositor-only packs (desktop / geometry / move
+// classes — see shaderEffectIsCompositorOnly) are authored against that kwin
+// dialect directly and never run on the daemon, so only their metadata is
+// linted here; their compile coverage is test_animation_shader_kwin_bake.
+// Daemon-capable packs get the full stage compile below.
 int validateAnimationPack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();
@@ -284,7 +286,12 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     }
 
     // ── stage compile (reproduce the daemon runtime fragment assembly) ──
-    if (QFile::exists(eff.fragmentShaderPath)) {
+    // Skipped for compositor-only packs: their source is kwin classic-GL
+    // (default-block uniforms, unbound samplers) that the strict SPIR-V
+    // target rejects by design, and the daemon never loads them.
+    if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
+        out << "  " << fragLabel.leftJustified(14) << "SKIP (compositor-only pack; kwin-path GLSL)\n";
+    } else if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
             out << "  " << fragLabel.leftJustified(14) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";

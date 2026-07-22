@@ -8,7 +8,6 @@
 #include <desktop_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     // Sweep direction follows the actual switch when p_followSwitch is on; the
     // configured p_dirX / p_dirY vector is the fallback / override.
     vec2 cfg = vec2(p_dirX, p_dirY);
@@ -25,7 +24,4 @@ vec4 pTransition(vec2 uv, float t) {
     // proj < sweep -> already wiped to the incoming desktop.
     float fromSide = smoothstep(sweep - soft, sweep + soft, proj);
     return mix(getToColor(uv), getFromColor(uv), fromSide);
-#else
-    return vec4(0.0);
-#endif
 }

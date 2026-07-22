@@ -8,7 +8,6 @@
 // persp/unzoom/reflection/floating uniforms map to the p_* params.
 #include <desktop_transition.glsl>
 
-#ifdef PLASMAZONES_KWIN
 vec2 pz_cube_project(vec2 p) {
     return p * vec2(1.0, -1.2) + vec2(0.0, -p_floating / 100.0);
 }
@@ -37,10 +36,8 @@ vec2 pz_cube_xskew(vec2 p, float persp, float center) {
                 * vec2(0.5 / distance(center, 0.5) * (center < 0.5 ? 1.0 : -1.0), 1.0)
             + vec2(center < 0.5 ? 0.0 : 1.0, 0.0));
 }
-#endif // PLASMAZONES_KWIN
 
 vec4 pTransition(vec2 uv, float tRaw) {
-#ifdef PLASMAZONES_KWIN
     // Clamp the timeline. iTime is NOT bounded to [0,1] — an overshooting curve
     // (spring, back, elastic) delivers its overshoot — and this transform has hard
     // [0,1] assumptions in three places: pow(t, 2.0) is undefined for t < 0 and
@@ -64,7 +61,4 @@ vec4 pTransition(vec2 uv, float tRaw) {
         return getToColor(toP);
     }
     return pz_cube_bgColor(fromP, toP);
-#else
-    return vec4(0.0);
-#endif
 }

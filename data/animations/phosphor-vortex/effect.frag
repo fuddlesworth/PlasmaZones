@@ -56,7 +56,6 @@ float pingPong(float x) {
 // Full turn; the shared headers define no TAU on the KWin path.
 const float kTau = 6.28318530718;
 
-#ifdef PLASMAZONES_KWIN
 // Fade a card-space sample to zero as it approaches the edge of the texture
 // it actually resolves into (the padded surface layer when one is active,
 // the expanded uTexture0 otherwise). Displaced taps past that extent would
@@ -68,10 +67,8 @@ float texelInsideMask(vec2 uv) {
            * (vec2(1.0) - smoothstep(vec2(0.996), vec2(1.0), tc));
     return e.x * e.y;
 }
-#endif
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     vec2 auv = anchorRemap(uv);
 
     // Dissolve IS the leg progress: 0→1 at grab, pinned 1 while held,
@@ -193,10 +190,4 @@ vec4 pTransition(vec2 uv, float t) {
 
     outC.rgb = clamp(outC.rgb, 0.0, 1.0);
     return outC;
-#else
-    // Daemon RHI bake target: the vortex is compositor-only (held-move
-    // uniforms never populate here). Pass the surface through so the shader
-    // still bakes — mirrors wobble's daemon branch.
-    return surfaceColor(anchorRemap(uv));
-#endif
 }

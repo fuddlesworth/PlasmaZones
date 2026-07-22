@@ -315,6 +315,29 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
 /// so the policy has a single source of truth.
 PHOSPHORANIMATION_EXPORT bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const QString& path);
 
+/// True iff @p effect can ONLY execute on the compositor (kwin-effect)
+/// runtime and never on the daemon's overlay-surface path.
+///
+/// Every daemon-driven animation surface (OSD, snap-assist popup,
+/// layout-picker, zone-selector, editor/panel legs) is an appearance-class
+/// single-surface event, and a universal pack (empty `appliesTo`) runs
+/// there too. The desktop (two-texture switch/peek), geometry
+/// (iFromRect → iToRect morph) and move (held-drag physics) classes exist
+/// only inside the kwin-effect. So a pack whose declared `appliesTo`
+/// names classes but not `appearance` is provably compositor-only.
+///
+/// Consequences carried by this predicate (single source of truth):
+///   • such packs author their shaders against the classic-GL kwin dialect
+///     directly (default-block uniforms, unguarded — no
+///     `#ifdef PLASMAZONES_KWIN` branching);
+///   • the daemon never warm-bakes them and `SurfaceAnimator` refuses to
+///     attach them (their source no longer compiles on the strict SPIR-V
+///     qsb target);
+///   • daemon-target bake tests and `plasmazones-shadervalidate` skip
+///     them — kwin-path compile coverage lives in
+///     `test_animation_shader_kwin_bake`.
+PHOSPHORANIMATION_EXPORT bool shaderEffectIsCompositorOnly(const AnimationShaderEffect& effect);
+
 } // namespace PhosphorAnimationShaders
 
 // Mark TextureSlot as relocatable so QList can move-construct entries

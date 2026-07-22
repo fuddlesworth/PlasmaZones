@@ -12,14 +12,14 @@
 // frag (flow / fold / ripple-snap / stretch / window-morph); hoisted here so the
 // fallback logic has one source of truth.
 //
-// Daemon builds define no PLASMAZONES_KWIN, so this whole unit compiles away —
-// the daemon transition paths never sample old content. Include AFTER the
+// Old-content cross-fades are compositor-only: the packs that include this
+// module are excluded from the daemon's SPIR-V bake entirely, so the sampler
+// is declared unguarded. Include AFTER the
 // animation uniform block so iHasOldWindow / iAnchorRectInTexture / iWindowOpacity
 // and surfaceColor() are in scope.
 #ifndef PLASMAZONES_OLD_CONTENT_GLSL
 #define PLASMAZONES_OLD_CONTENT_GLSL
 
-#ifdef PLASMAZONES_KWIN
 uniform sampler2D uOldWindow;
 
 vec4 oldColor(vec2 uv) {
@@ -34,6 +34,5 @@ vec4 oldColor(vec2 uv) {
     vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
     return texture(uOldWindow, vec2(t.x, 1.0 - t.y)) * iWindowOpacity;
 }
-#endif // PLASMAZONES_KWIN
 
 #endif // PLASMAZONES_OLD_CONTENT_GLSL

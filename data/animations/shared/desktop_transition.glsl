@@ -28,18 +28,14 @@
 // that route and need no clamp of their own. Either way is fine; what is NOT
 // fine is a pack that only holds its endpoints for t exactly 0 and 1.
 //
-// Desktop transitions only ever run in the kwin-effect. The samplers live in
-// the PLASMAZONES_KWIN branch only, mirroring old_content.glsl's uOldWindow:
-// KWin's GLShader binds them by uniform location + glActiveTexture, so no
-// layout(binding) qualifier is needed. The daemon UBO target compiles through a
-// strict SPIR-V path that rejects binding-less samplers, so this whole unit
-// compiles away there — a desktop pack's frag must keep its getFromColor /
-// getToColor calls inside its own PLASMAZONES_KWIN guard (see desktop-fade).
+// Desktop transitions only ever run in the kwin-effect, and compositor-only
+// packs are excluded from the daemon's SPIR-V bake entirely, so the samplers
+// are declared unguarded: KWin's GLShader binds them by uniform location +
+// glActiveTexture, so no layout(binding) qualifier is needed.
 // Include AFTER the animation uniform block.
 #ifndef PLASMAZONES_DESKTOP_TRANSITION_GLSL
 #define PLASMAZONES_DESKTOP_TRANSITION_GLSL
 
-#ifdef PLASMAZONES_KWIN
 uniform sampler2D uFromDesktop;
 uniform sampler2D uToDesktop;
 
@@ -84,6 +80,5 @@ vec4 getToColor(vec2 uv) {
 vec4 crossFade(vec2 uv, float t) {
     return mix(getFromColor(uv), getToColor(uv), t);
 }
-#endif // PLASMAZONES_KWIN
 
 #endif // PLASMAZONES_DESKTOP_TRANSITION_GLSL

@@ -12,11 +12,14 @@
 // compileFromFile here would reject an entry-only pack that defines pTransition
 // / pZone instead of main().
 
+#include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorRendering/ShaderCompiler.h>
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTest>
 
 class TestAnimationShaderBake : public QObject
@@ -38,6 +41,19 @@ private Q_SLOTS:
         for (const QString& sub : subdirs) {
             if (sub == QLatin1String("shared")) {
                 continue; // shared/ holds the canonical UBO include + default vert, not a pack
+            }
+            // Compositor-only packs (desktop / geometry / move classes) are
+            // authored against the kwin classic-GL dialect with no daemon
+            // branch — the strict SPIR-V target rejects their default-block
+            // uniforms by design. Their compile coverage is
+            // test_animation_shader_kwin_bake.
+            QFile meta(animationsDir + QLatin1Char('/') + sub + QStringLiteral("/metadata.json"));
+            if (meta.open(QIODevice::ReadOnly)) {
+                const auto eff = PhosphorAnimationShaders::AnimationShaderEffect::fromJson(
+                    QJsonDocument::fromJson(meta.readAll()).object());
+                if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
+                    continue;
+                }
             }
             // Fragment-stage bake coverage lives in
             // test_animation_shader_preamble_bake (full runtime assembly). Here

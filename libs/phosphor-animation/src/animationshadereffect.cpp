@@ -455,4 +455,14 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     return effect.appliesTo.contains(cls);
 }
 
+bool shaderEffectIsCompositorOnly(const AnimationShaderEffect& effect)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    // Universal packs (no declared constraint) run on every single-surface
+    // path, daemon overlays included. A constrained pack reaches the daemon
+    // only through the appearance class — desktop / geometry / move events
+    // exist solely inside the kwin-effect.
+    return !effect.appliesTo.isEmpty() && !effect.appliesTo.contains(PP::EventClassAppearance);
+}
+
 } // namespace PhosphorAnimationShaders

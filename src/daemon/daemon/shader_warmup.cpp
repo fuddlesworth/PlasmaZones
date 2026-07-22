@@ -589,6 +589,14 @@ void Daemon::setupShaderWarmBakes()
             if (!info.isValid() || info.fragmentShaderPath.isEmpty() || !QFile::exists(info.fragmentShaderPath)) {
                 return;
             }
+            // Compositor-only packs (desktop / geometry / move classes, no
+            // appearance) are authored against the kwin classic-GL dialect
+            // with no daemon branch — their source does not compile on the
+            // strict SPIR-V qsb target, and the daemon never runs them, so
+            // warming them would only log a bake failure per pack per scan.
+            if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(info)) {
+                return;
+            }
             PhosphorAnimationShaders::AnimationShaderRegistry* reg = registryPtr.data();
             if (!reg) {
                 return;

@@ -22,7 +22,6 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 
 // Cubic Bernstein basis for a Bezier patch parameter in [0,1].
@@ -49,10 +48,8 @@ vec2 sampleMesh(float s, float t) {
     }
     return acc;
 }
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     // Card uv with y = 0 at the window top (KWin Y-flips window-quad
     // texcoords on upload; re-apply the flip, same as the flow pack). The
     // lattice rows run top (row 0) to bottom, so cuv indexes it directly.
@@ -73,10 +70,4 @@ void main() {
 
     vTexCoord = cuv;
     gl_Position = modelViewProjectionMatrix * vec4(position + lag, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the deformation is compositor-only. Pass the
-    // quad through so the shader still bakes — mirrors flow's daemon branch.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }

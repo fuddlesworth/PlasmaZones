@@ -21,7 +21,6 @@
 #include <noise.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     // Hex cell identity in constant screen pixels (independent of resolution).
     float hexSize  = max(p_hexSize, 6.0);
     vec2  px       = uv * resolutionSafe();
@@ -87,7 +86,4 @@ vec4 pTransition(vec2 uv, float t) {
     // Two opaque desktops blended stay opaque — the pass draws with blending
     // off and replaces the screen, so alpha is a constant 1.
     return vec4(clamp(col, 0.0, 1.0), 1.0);
-#else
-    return vec4(0.0);
-#endif
 }

@@ -24,17 +24,14 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
 // Per-vertex data for the fragment: .xy = sampling card uv, .z = ripple
 // shade, .w = old->new cross-fade.
 layout(location = 1) out vec4 vRip;
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     const float TWO_PI = 6.28318530718;
     const float IMPACT = 0.4;          // fraction of the leg spent travelling
     const float SPEED = 1.6;           // wavefront speed across the window
@@ -87,10 +84,4 @@ void main() {
     vTexCoord = cuv;
     vRip = vec4(cuv, shade, teE);
     gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the ripple is compositor-only. Pass the quad
-    // through so the shader still bakes and is harmless if ever run.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }

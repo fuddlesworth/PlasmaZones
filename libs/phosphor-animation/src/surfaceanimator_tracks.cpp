@@ -372,6 +372,17 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     QStringList animIncludePaths;
     if (!shaderEffectId.isEmpty() && m_shaderRegistry) {
         resolvedShaderEff = m_shaderRegistry->effect(shaderEffectId);
+        // A compositor-only pack (desktop / geometry / move classes) is
+        // authored against the kwin classic-GL dialect with no daemon
+        // branch: attaching it would fail the strict SPIR-V bake at first
+        // paint and stall the leg. The pickers never offer these on daemon
+        // paths, so reaching here means a hand-edited config — drop the
+        // shader leg and let the opacity/scale legs run.
+        if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(resolvedShaderEff)) {
+            qCWarning(lcSurfaceAnimator) << "runLeg: shader effect" << shaderEffectId << "is compositor-only (appliesTo"
+                                         << resolvedShaderEff.appliesTo << ") — skipping shader leg on daemon surface";
+            resolvedShaderEff = {};
+        }
         for (const QString& sp : m_shaderRegistry->searchPaths()) {
             const QString sharedDir = sp + QStringLiteral("/shared");
             if (QDir(sharedDir).exists()) {

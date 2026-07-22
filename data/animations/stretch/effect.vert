@@ -27,7 +27,6 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
@@ -45,10 +44,8 @@ float backOut(float x) {
     float xm = x - 1.0;
     return 1.0 + c3 * xm * xm * xm + c1 * xm * xm;
 }
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     const float PI = 3.14159265358979;
     const float SPREAD = 0.45;  // how far trailing verts lag the leading edge
     const float SQUASH = 0.16;  // perpendicular thinning at peak motion
@@ -100,10 +97,4 @@ void main() {
     vTexCoord = cuv;
     vStretch = vec3(cuv, clamp(eC, 0.0, 1.0));
     gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the stretch is compositor-only. Pass the
-    // quad through so the shader still bakes and is harmless if ever run.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }

@@ -13,20 +13,15 @@
 // Old and new are sampled at the SAME card uv, so each shows at its own
 // native aspect — no non-uniform stretch.
 
-#ifdef PLASMAZONES_KWIN
 // .xy = card uv within the destination rect, .z = arrival ease (0 = old
 // rect, 1 = settled). Interpolated from effect.vert across the grid.
 // iFromRect / iToRect are consumed in the vertex stage.
 layout(location = 1) in vec3 vFlow;
-#endif
-
-#include <anchor_remap.glsl>
 
 // uOldWindow + oldColor(): the shared captured-old-frame sampler.
 #include <old_content.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     vec2 cuv = vFlow.xy;
     float e = clamp(vFlow.z, 0.0, 1.0);
 
@@ -50,9 +45,4 @@ vec4 pTransition(vec2 uv, float t) {
     // Cross-fade old -> new as each region arrives. Inputs are
     // premultiplied (KWin FBO storage); a straight mix is correct.
     return mix(oldC, newC, e) * mask;
-#else
-    // Daemon path: flow is compositor-only. Render the surface unchanged
-    // so the shader bakes for the daemon target and is harmless if run.
-    return surfaceColor(anchorRemap(uv));
-#endif
 }

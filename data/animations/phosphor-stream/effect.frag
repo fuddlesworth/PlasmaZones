@@ -14,13 +14,10 @@
 // Old and new content are sampled at the SAME card uv and cross-faded by
 // arrival ease (flow's contract), so each shows at its own native aspect.
 
-#ifdef PLASMAZONES_KWIN
 // .xy = card uv within the destination rect, .z = arrival ease, .w = lane
 // seed. Interpolated from effect.vert across the grid.
 layout(location = 1) in vec4 vFlow;
-#endif
 
-#include <anchor_remap.glsl>
 #include <noise.glsl>
 
 // uOldWindow + oldColor(): the shared captured-old-frame sampler.
@@ -40,7 +37,6 @@ vec3 fluxGradient(float t) {
 }
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     vec2 cuv = vFlow.xy;
     float e = clamp(vFlow.z, 0.0, 1.0);
     float lane = vFlow.w;
@@ -97,9 +93,4 @@ vec4 pTransition(vec2 uv, float t) {
 
     col.rgb = clamp(col.rgb, 0.0, 1.0);
     return col * mask;
-#else
-    // Daemon path: the stream is compositor-only. Render the surface
-    // unchanged so the shader bakes for the daemon target.
-    return surfaceColor(anchorRemap(uv));
-#endif
 }
