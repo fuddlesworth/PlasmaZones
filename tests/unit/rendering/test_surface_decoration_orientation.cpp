@@ -21,7 +21,12 @@
  * reacts to the new window with D-Bus calls to org.plasmazones, whose
  * activation service file spawns the installed plasmazonesd (and from there
  * the daemon can launch plasmazones-settings) — processes a test run must
- * never leave behind. CI containers have the inverse problem: a display and
+ * never leave behind. SpawnedServiceReaper below enforces that: it snapshots
+ * which PlasmaZones well-known bus names were already owned before the run
+ * and, after qExec, stops exactly the services the run activated — a daemon
+ * the developer already had running is never touched, and repeated opted-in
+ * runs cannot pile up stray processes. CI containers have the inverse
+ * problem: a display and
  * a GL context exist, so every environment gate passes, but the shader
  * pipeline never becomes ready and the grab stays a uniform placeholder,
  * failing the assert without testing anything. So the live run requires
@@ -32,21 +37,29 @@
  * only declared on the flip's actual signature (blue on top).
  */
 
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusReply>
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QImage>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
+#include <QProcess>
 #include <QQmlContext>
 #include <QQuickView>
 #include <QtQml/qqml.h>
 #include <QSGRendererInterface>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
 
+#include <signal.h>
+
 #include <utility>
 
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
 #include "daemon/rendering/surfaceshaderitem.h"
@@ -54,6 +67,65 @@
 using PhosphorSurfaceShaders::SurfaceShaderRegistry;
 
 namespace {
+
+// Tears down the processes a live-session run can indirectly spawn: mapping
+// a real window makes the installed KWin effect D-Bus-activate the installed
+// plasmazonesd, and the daemon in turn can launch plasmazones-settings and
+// the editor. Constructed BEFORE any window maps, it snapshots which of those
+// well-known names already had an owner; reap() then stops only the services
+// that appeared during the run, so a daemon the developer had running before
+// the test is never touched.
+class SpawnedServiceReaper
+{
+public:
+    SpawnedServiceReaper()
+    {
+        const QDBusConnectionInterface* iface = QDBusConnection::sessionBus().interface();
+        if (!iface)
+            return;
+        for (const QString& name : watchedNames()) {
+            if (iface->isServiceRegistered(name))
+                m_preexisting.insert(name);
+        }
+    }
+
+    void reap() const
+    {
+        QDBusConnectionInterface* iface = QDBusConnection::sessionBus().interface();
+        if (!iface)
+            return;
+        for (const QString& name : watchedNames()) {
+            if (m_preexisting.contains(name) || !iface->isServiceRegistered(name))
+                continue;
+            if (name == QLatin1String(PhosphorProtocol::Service::Name)) {
+                // Bus activation routes through the systemd user unit
+                // (SystemdService=plasmazones.service in the activation
+                // file); stop it there so systemd records a clean stop
+                // instead of a unit killed by a stray SIGTERM.
+                QProcess::execute(
+                    QStringLiteral("systemctl"),
+                    {QStringLiteral("--user"), QStringLiteral("stop"), QStringLiteral("plasmazones.service")});
+                if (!iface->isServiceRegistered(name))
+                    continue;
+                // Fall through: the daemon was bus-activated without systemd
+                // (or the stop failed) — terminate the name's owner directly.
+            }
+            const QDBusReply<uint> pid = iface->servicePid(name);
+            if (pid.isValid() && pid.value() > 0)
+                ::kill(static_cast<pid_t>(pid.value()), SIGTERM);
+        }
+    }
+
+private:
+    static QStringList watchedNames()
+    {
+        return {QString(PhosphorProtocol::Service::Name),
+                QString(PhosphorProtocol::Service::Apps::Settings::ServiceName),
+                QString(PhosphorProtocol::Service::Apps::Editor::ServiceName)};
+    }
+
+    QSet<QString> m_preexisting;
+};
 
 // Minimal replica of SurfaceDecoration.qml's capture + stage fold: gradient
 // card -> hideSource snapshot -> stage 0 (border) -> tap -> stage 1 (shadow).
@@ -314,9 +386,19 @@ int main(int argc, char** argv)
     // Same manual registration the daemon performs in main.cpp — the type
     // lives in plasmazones_rendering, no qt_add_qml_module target exists.
     qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZones", 1, 0, "SurfaceShaderItem");
+    // Snapshot the session bus before any window maps so the reaper can tell
+    // which PlasmaZones services THIS run activates (header comment, OPT-IN
+    // paragraph).
+    const SpawnedServiceReaper reaper;
     TestSurfaceDecorationOrientation tc;
     QTEST_SET_MAIN_SOURCE_PATH
-    return QTest::qExec(&tc, argc, argv);
+    const int rc = QTest::qExec(&tc, argc, argv);
+    // The KWin effect's activation call is asynchronous — it can still be in
+    // flight when the last test window closes. Let the bus settle so a
+    // just-spawned daemon is visible to the reaper instead of leaking.
+    QTest::qWait(1000);
+    reaper.reap();
+    return rc;
 }
 
 #include "test_surface_decoration_orientation.moc"
