@@ -76,9 +76,10 @@ void main() {
     vec2 toPos = iToRect.xy + cuv * iToRect.zw;
     vec2 displaced = position + (screenPos - toPos);
 
-    // Darken-only: brightening a premultiplied sample (scaling RGB and
-    // alpha together) would push alpha past 1.0 in the FBO, so cap at 1.0
-    // and let the troughs darken.
+    // Fade-only: brightening a premultiplied sample (scaling RGB and
+    // alpha together) would push alpha past 1.0 in the FBO, so cap at
+    // 1.0; the sub-1 side is the coverage fade the frag applies to the
+    // troughs (see effect.frag).
     float shade = clamp(1.0 + wave * SHADE, 0.6, 1.0);
 
     vTexCoord = cuv;

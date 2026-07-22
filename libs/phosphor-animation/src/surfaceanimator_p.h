@@ -211,6 +211,11 @@ public:
         int pendingLegs = 0;
         bool shaderExclusive = false; ///< Shader replaces motion legs
         qreal targetOpacity = 1.0; ///< Snapped on completion when shaderExclusive
+        /// Install stamp from m_nextTrackGeneration. runLeg's post-write
+        /// re-find compares it so a slot REPLACED by a re-entrant
+        /// beginShow/beginHide (not merely erased) is never adopted by
+        /// the outer, superseded leg.
+        quint64 generation = 0;
         ISurfaceAnimator::CompletionCallback onComplete;
         /// Per-leg `iFrame` counter pushed to the shader item by
         /// `pushDynamicShaderUniforms`. Resets to 0 on each fresh attach
@@ -315,6 +320,10 @@ public:
     /// auto-disconnect) exactly one slot per surface. Map entries are
     /// removed when the surface dies (slot self-removes its own key).
     QHash<PhosphorLayer::Surface*, QMetaObject::Connection> m_destroyedConnections;
+    /// Monotonic source for Track::generation install stamps (see the
+    /// Track field's doc); never reset, starts at 1 so a default-
+    /// constructed Track (generation 0) can never match a live leg.
+    quint64 m_nextTrackGeneration = 1;
     /// Graveyard for AVs whose final tick fired legCompleted from
     /// inside their own spec.onComplete (AnimatedValue.h:547 forbids
     /// destroying *this from a spec callback). Drained at the start

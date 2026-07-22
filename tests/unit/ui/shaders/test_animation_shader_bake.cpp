@@ -61,7 +61,7 @@ private Q_SLOTS:
             // Fragment-stage bake coverage lives in
             // test_animation_shader_preamble_bake (full runtime assembly). Here
             // we only cover the vertex stage.
-            // Also bake the optional vertex shader. Per the AnimationShaderEffect
+            // Bake the pack's vertex shader if it ships one. Per the AnimationShaderEffect
             // contract, packs that ship their own `effect.vert` must compile under
             // the same UBO contract as the fragment side. Without this row the
             // first vert-driven effect to land would only get bake coverage by

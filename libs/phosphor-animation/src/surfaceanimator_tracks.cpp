@@ -560,8 +560,18 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     // cancel(surface). With the slot installed first, that cancel
     // erases cleanly (no AVs to park yet) and the post-write
     // re-find below detects the erasure and bails.
+    // Stamp this leg's slot generation so the re-find below can tell
+    // "my slot was erased" from "my slot was erased AND a re-entrant
+    // beginShow/beginHide installed a fresh one" — adopting a nested
+    // leg's slot would overwrite its AVs and leak its shader pieces.
+    const quint64 legGeneration = m_nextTrackGeneration++;
+    // Wire the surface-destroyed sweep for every animated surface, not
+    // just ones that park shader pieces — a surface deleted mid-flight
+    // must drop its Track (and park its AVs) regardless of leg kind.
+    connectSurfaceCleanup(surface);
     {
         Track& slot = m_tracks[TrackKey{surface, target}];
+        slot.generation = legGeneration;
         slot.opacity.reset();
         slot.scale.reset();
         // Reset shader-leg state explicitly — a non-shader leg
@@ -618,13 +628,16 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     // re-entered cancel() — bail per the cancellation contract.
     {
         auto it = m_tracks.find(TrackKey{surface, target});
-        if (it == m_tracks.end()) {
+        if (it == m_tracks.end() || it->second.generation != legGeneration) {
             // The setOpacity/setScale chain above re-entered cancel() and
-            // erased the slot. Any shader pieces claimed from m_pendingReuse
-            // earlier in this call live only in locals now — tracked by
-            // neither m_tracks nor m_pendingReuse — so wind them down before
-            // bailing or they sit dormant on the anchor holding their FBO
-            // until surface destruction.
+            // erased the slot — or additionally re-entered beginShow/
+            // beginHide, whose nested runLeg installed a FRESH slot (the
+            // generation mismatch): that slot belongs to the nested leg
+            // and must not be adopted. Any shader pieces claimed from
+            // m_pendingReuse earlier in this call live only in locals now
+            // — tracked by neither m_tracks nor m_pendingReuse — so wind
+            // them down before bailing or they sit dormant on the anchor
+            // holding their FBO until surface destruction.
             if (reusedShaderItem || reusedShaderSource) {
                 PendingReuseShader transient;
                 transient.shaderItem = reusedShaderItem;
@@ -935,12 +948,15 @@ void SurfaceAnimator::Private::legCompleted(PhosphorLayer::Surface* surface, QQu
     if (it->second.pendingLegs > 0) {
         return;
     }
-    // Shader-exclusive hide: the surface stayed at full opacity while
-    // the shader ran. Now snap to the terminal opacity (0.0 for hide)
-    // so the surface actually disappears.
-    if (it->second.shaderExclusive && it->second.target) {
-        it->second.target->setOpacity(it->second.targetOpacity);
-    }
+    // Capture the shader-exclusive terminal snap, then RETIRE the entry
+    // before performing it: setOpacity fires QML changed signals
+    // synchronously, and a consumer binding can re-enter cancel(surface)
+    // — with the entry still in m_tracks that cancel would park its AVs
+    // and erase the node under our iterator (the same hazard runLeg's
+    // re-find guards against). With the entry already erased, a
+    // re-entrant cancel finds nothing and is a no-op.
+    const QPointer<QQuickItem> snapTarget = it->second.shaderExclusive ? it->second.target : QPointer<QQuickItem>();
+    const qreal snapOpacity = it->second.targetOpacity;
 
     // Move the callback + AnimatedValues out before erase so:
     //   1. m_tracks.erase doesn't drop the std::function we're
@@ -956,6 +972,13 @@ void SurfaceAnimator::Private::legCompleted(PhosphorLayer::Surface* surface, QQu
     }
     teardownShaderLeg(surface, it->second);
     m_tracks.erase(it);
+
+    // Shader-exclusive hide: the surface stayed at full opacity while
+    // the shader ran. Now snap to the terminal opacity (0.0 for hide)
+    // so the surface actually disappears.
+    if (snapTarget) {
+        snapTarget->setOpacity(snapOpacity);
+    }
     if (onComplete) {
         onComplete();
     }

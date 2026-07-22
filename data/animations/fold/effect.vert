@@ -28,7 +28,8 @@ uniform mat4 modelViewProjectionMatrix;
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
 // Per-vertex data for the fragment: .xy = sampling card uv, .z = crease
-// shade (1 = lit ridge, < 1 = shadowed valley), .w = old->new cross-fade.
+// shade (1 = lit ridge, < 1 = shadowed valley, applied as a coverage
+// fade — see effect.frag), .w = old->new cross-fade.
 layout(location = 1) out vec4 vFold;
 
 void main() {
@@ -104,8 +105,8 @@ void main() {
     vec2 toPos = iToRect.xy + cuv * iToRect.zw;
     vec2 displaced = position + (screenPos - toPos);
 
-    // Crease shade: ridges toward the viewer stay lit, valleys darken with
-    // fold depth.
+    // Crease shade: ridges toward the viewer stay lit, valleys fade toward
+    // the backdrop with fold depth (a coverage fade — see effect.frag).
     float shade = 1.0 - f * SHADE * (0.5 - saw);
 
     vTexCoord = cuv;

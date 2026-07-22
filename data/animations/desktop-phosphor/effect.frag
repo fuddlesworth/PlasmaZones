@@ -63,7 +63,8 @@ vec2 graphNodePos(vec2 cell) {
 // old fixed * 0.7071 was sized for the diagonal only: an axis-aligned switch
 // (the common left/right case under p_followSwitch) compressed proj to
 // [0.15, 0.85], so the first node lit at t ≈ 0.12 and the flood was done by
-// t ≈ 0.79 — the same dead head/tail phosphor-peek had, which an ease-out
+// t ≈ 0.89 worst-case (same basis as the 0.98 budget figure below) — the
+// same dead head/tail phosphor-peek had, which an ease-out
 // progress curve stretches into a visible hang on a settled screen. The
 // activation window's budget [0.02, 0.77] is sized against the flood: the
 // slowest pixel clears at a_max + (0.12 + 1.13) / floodSpeed ≈ 0.98, so the
