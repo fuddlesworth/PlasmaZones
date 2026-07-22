@@ -49,9 +49,12 @@ AnimationEventCardList {
     // The shared GlobalTimingDefaultsCard (curve summary + Customize,
     // Easing/Spring, Duration), the same component the advanced General page
     // hosts — without that page's sequencing / stagger / minimum-distance
-    // rows, which it appends as its own children. The editor drives the
-    // Global profile every card below inherits from; a per-card Duration
-    // overrides it for that event group.
+    // rows, which it appends as its own children. It keeps its FULL timing
+    // editor here even though the cards below are trimmed: the curve is
+    // chosen once, globally, and every grouped card inherits it, so this is
+    // the one place simple mode needs it. The editor drives the Global
+    // profile every card below inherits from; a per-card Duration overrides
+    // it for that event group.
     headerComponent: Component {
         ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
@@ -60,9 +63,6 @@ AnimationEventCardList {
                 Layout.fillWidth: true
                 cardSettings: simplePage.globalSettings
                 collapsible: false
-                // Match the cards below: simple mode is duration-only, so the
-                // Global card must not be the one place Spring can be chosen.
-                simpleTiming: simplePage.simpleTiming
             }
 
             // The same animation window filter the advanced General page
