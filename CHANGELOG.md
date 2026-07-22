@@ -11,6 +11,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Shortcut cheatsheet overlay**: a new overlay that lists every PlasmaZones global shortcut with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ (rebindable in System Settings) and dismiss it with Escape, a backdrop click, or the shortcut again. The sheet is mode aware. Shortcuts that do nothing in the current tiling mode are hidden, and it updates live when you switch modes or rebind a key. Shortcuts you have unbound stay listed as unassigned so you can discover them ([#810](https://github.com/fuddlesworth/PlasmaZones/pull/810)).
 
+### Fixed
+
+- **The layout right-click menu works again**: right-clicking a layout and choosing "Set as Default" or "Hide from Zone Selector" did nothing, because the menu never received the settings it needed to act on ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+- **Editing a layout no longer scrolls the page back to the top**: hiding a layout, changing its auto-assign, or picking an aspect ratio while scrolled down threw the Layouts page back to the top. The page now holds its position while the cards rebuild. The Shaders pages keep their position across a group or sort change for the same reason ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+- **Layout cards no longer flicker when you change one**: toggling a layout's visibility or auto-assign briefly redrew every card without its badges, and the one you just changed snapped back before it took. Each change now refreshes the list once, with everything in place ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+- **Overlay shaders with a depth buffer render cleanly**: the Neon City and Voxel Terrain overlays asked the graphics driver to read and write the same depth texture in one drawing pass, which it refused ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+
 ## [3.2.7] - 2026-07-21
 
 ### Fixed
