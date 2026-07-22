@@ -330,14 +330,14 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_windowAnimator->removeAnimation(w);
 
     // Same value as closingWindowId above: the windowId cache isn't dropped
-    // until later in this slot (m_windowIdCache.remove near the end), so a
+    // until later in this slot (m_idCaches.windowIdCache.remove near the end), so a
     // second getWindowId(w) would just re-hit the cache. Reuse the local.
     const QString& closedWindowId = closingWindowId;
     const QString closedScreenId = getWindowScreenId(w);
 
     // Clean up snap-mode minimize tracking
     m_snapHandler->removeMinimizeFloated(closedWindowId);
-    m_dragFloatedWindowIds.remove(closedWindowId);
+    m_dragActivation.floatedWindowIds.remove(closedWindowId);
 
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus).
     // Genuine destruction also drops any desktop-move geometry stash —
@@ -392,8 +392,8 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // frozen mapping for the animation's lifetime; endShaderTransition and
     // the windowDeleted backstop both re-scrub on teardown.
     if (!m_shaderManager.hasTransition(w)) {
-        m_windowIdCache.remove(w);
-        m_windowIdReverse.remove(closedWindowId);
+        m_idCaches.windowIdCache.remove(w);
+        m_idCaches.windowIdReverse.remove(closedWindowId);
     }
     m_trackedScreenPerWindow.remove(w);
     m_restoreSuppress.remove(w);
@@ -600,8 +600,8 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowByIdExact(const QString& window
     if (windowId.isEmpty()) {
         return nullptr;
     }
-    const auto it = m_windowIdReverse.constFind(windowId);
-    if (it != m_windowIdReverse.constEnd() && it.value() && !it.value()->isDeleted()) {
+    const auto it = m_idCaches.windowIdReverse.constFind(windowId);
+    if (it != m_idCaches.windowIdReverse.constEnd() && it.value() && !it.value()->isDeleted()) {
         return it.value();
     }
     return nullptr;

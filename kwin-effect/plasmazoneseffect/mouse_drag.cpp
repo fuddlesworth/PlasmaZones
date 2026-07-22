@@ -117,7 +117,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
         if (effectiveScreenId != m_lastEffectiveScreenId) {
             m_lastEffectiveScreenId = effectiveScreenId;
             m_lastCursorOutput = connectorName;
-            if (m_daemonServiceRegistered) {
+            if (m_daemonGate.serviceRegistered) {
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("cursorScreenChanged"),
                     {effectiveScreenId});

@@ -158,7 +158,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // (<PhosphorIdentity/VirtualScreenId.h>) — the same predicate used by
         // autotilehandler/tiling.cpp.
         connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
-            if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_virtualScreensReady) {
+            if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_daemonGate.virtualScreensReady) {
                 return;
             }
             // Suppress crossing detection while the daemon is moving this window in response
@@ -166,7 +166,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // pre-rotation regions when the geometry change fires synchronously from
             // applyWindowGeometry, so getWindowScreenId would resolve the new position against
             // stale boundaries and report a phantom crossing.
-            if (m_inDaemonGeometryApply) {
+            if (m_daemonGate.inGeometryApply) {
                 return;
             }
             const QString newScreenId = getWindowScreenId(safeW);

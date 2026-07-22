@@ -295,7 +295,7 @@ void PlasmaZonesEffect::connectDragTracker()
             // whether to restore the pre-autotile size: a window that was
             // already floating is just being moved and must keep its current
             // user-chosen size, not snap back to the stale pre-autotile rect.
-            m_dragStartedFloating = isWindowFloating(windowId);
+            m_dragActivation.startedFloating = isWindowFloating(windowId);
 
             // Note: `cursor.drag` is intentionally NOT wired here. The
             // OffscreenEffect pipeline operates on window content; firing
@@ -330,8 +330,8 @@ void PlasmaZonesEffect::connectDragTracker()
             // Bump the per-drag generation and capture the value so the
             // async reply below can detect a stale reply (drag ended
             // before reply arrived, or a new drag started in the gap).
-            ++m_dragGeneration;
-            const quint64 capturedDragGeneration = m_dragGeneration;
+            ++m_dragActivation.generation;
+            const quint64 capturedDragGeneration = m_dragActivation.generation;
             const QString startScreenId = getWindowScreenId(w);
             const QRect frame = geometry.toRect();
             auto* beginWatcher = new QDBusPendingCallWatcher(
@@ -362,9 +362,10 @@ void PlasmaZonesEffect::connectDragTracker()
                     // for has already ended (or a new drag started in the
                     // interim) — writing the captured policy now would
                     // bleed it into the active drag's state.
-                    if (m_dragGeneration != capturedDragGeneration) {
+                    if (m_dragActivation.generation != capturedDragGeneration) {
                         qCInfo(lcEffect) << "beginDrag reply discarded: drag generation" << capturedDragGeneration
-                                         << "is stale (current=" << m_dragGeneration << ") for" << capturedWindowId;
+                                         << "is stale (current=" << m_dragActivation.generation << ") for"
+                                         << capturedWindowId;
                         return;
                     }
                     m_currentDragPolicy = policy;
@@ -390,9 +391,9 @@ void PlasmaZonesEffect::connectDragTracker()
                         // and reply.
                         if (safeW && !safeW->isDeleted() && m_currentDragPolicy.immediateFloatOnStart
                             && !isWindowFloating(capturedWindowId)
-                            && !m_dragFloatedWindowIds.contains(capturedWindowId)) {
+                            && !m_dragActivation.floatedWindowIds.contains(capturedWindowId)) {
                             m_autotileHandler->handleDragToFloat(safeW, capturedWindowId, /*immediate=*/true);
-                            m_dragFloatedWindowIds.insert(capturedWindowId);
+                            m_dragActivation.floatedWindowIds.insert(capturedWindowId);
                         }
                     }
                 });
@@ -428,12 +429,12 @@ void PlasmaZonesEffect::connectDragTracker()
                     // setWindowFloatingForScreen call at drop) is skipped in
                     // slotApplyGeometryRequested — the window should stay
                     // where the user drops it, not snap back to a stored rect.
-                    m_dragFloatedWindowIds.insert(windowId);
+                    m_dragActivation.floatedWindowIds.insert(windowId);
                 }
                 return;
             }
             m_dragBypassedForAutotile = false;
-            m_dragActivationDetected = false;
+            m_dragActivation.detected = false;
 
             // beginDrag already initialized daemon-side snap-drag state
             // (called internally from the adaptor). The effect only needs
@@ -505,7 +506,7 @@ void PlasmaZonesEffect::connectDragTracker()
                 // float→tile toggle overwrites the stored pre-tile rect with
                 // the stale tile zone — permanently corrupting the restore
                 // target (#bug: zed/firefox/plasmazones-settings resize issues).
-                m_dragFloatedWindowIds.remove(windowId);
+                m_dragActivation.floatedWindowIds.remove(windowId);
 
                 // Single entry point for drag-end dispatch. The
                 // daemon owns the decision; callEndDrag sends endDrag and
@@ -526,13 +527,13 @@ void PlasmaZonesEffect::connectDragTracker()
                 // would leave the captured generation equal to the current
                 // value, the reply would pass the guard, and write its
                 // policy + retroactive autotile float into stale state.
-                ++m_dragGeneration;
+                ++m_dragActivation.generation;
 
                 // Clear drag state for the next session.
                 m_currentDragPolicy = PhosphorProtocol::DragPolicy{};
                 m_dragBypassedForAutotile = false;
                 m_dragBypassScreenId.clear();
-                m_dragActivationDetected = false;
+                m_dragActivation.detected = false;
             });
 }
 
@@ -706,9 +707,9 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this, [this](KWin::EffectWindow* w) {
         endShaderTransition(w);
         m_windowAnimator->removeAnimation(w);
-        if (m_windowIdCache.contains(w)) {
-            const QString cachedId = m_windowIdCache.take(w);
-            m_windowIdReverse.remove(cachedId);
+        if (m_idCaches.windowIdCache.contains(w)) {
+            const QString cachedId = m_idCaches.windowIdCache.take(w);
+            m_idCaches.windowIdReverse.remove(cachedId);
             // Free the border entry AND its multipass FBO targets keyed by this
             // window id. Normally removeWindowDecoration (run from slotWindowClosed)
             // already cleared both; the explicit call here is defence-in-depth
@@ -802,7 +803,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     if (auto* ws = KWin::Workspace::self()) {
         connect(ws, &KWin::Workspace::outputOrderChanged, this, [this]() {
             auto* workspace = KWin::Workspace::self();
-            if (workspace && m_daemonServiceRegistered) {
+            if (workspace && m_daemonGate.serviceRegistered) {
                 const auto outputs = workspace->outputOrder();
                 if (!outputs.isEmpty()) {
                     PhosphorProtocol::ClientHelpers::fireAndForget(
@@ -841,7 +842,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // (connector names may be reassigned, physical screen geometry changes invalidate
     // virtual screen absolute geometry)
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, [this]() {
-        m_screenIdCache.clear();
+        m_idCaches.screenIdCache.clear();
         m_lastEffectiveScreenId.clear();
     });
 }
@@ -930,7 +931,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QString> reply = *w;
-            if (reply.isValid() && !m_daemonServiceRegistered) {
+            if (reply.isValid() && !m_daemonGate.serviceRegistered) {
                 // Daemon responded — it's fully operational.
                 // Trigger the same ready flow as the daemonReady signal.
                 slotDaemonReady();
@@ -940,7 +941,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
 
     // Connect to daemon's daemonReady signal — emitted at the end of Daemon::start()
     // after all initialization is complete and the daemon can process D-Bus messages.
-    // This is the safe point to set m_daemonServiceRegistered and create QDBusInterfaces.
+    // This is the safe point to set m_daemonGate.serviceRegistered and create QDBusInterfaces.
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                           PhosphorProtocol::Service::Interface::LayoutRegistry,
                                           QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
@@ -958,7 +959,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration, this);
     connect(serviceWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon service unregistered";
-        m_daemonServiceRegistered = false;
+        m_daemonGate.serviceRegistered = false;
         // Release the idle latch. m_sessionIdle is daemon-pushed state whose ONLY
         // route back to false is a sessionIdleChanged(false) broadcast — and a
         // restarted daemon arms a fresh ext-idle-notify-v1 notification on a seat
@@ -977,7 +978,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // resolving against stale virtual-screen boundaries during the gap
         // between unregistration and the next daemon's fetch. continueDaemonReady
         // setup re-clears and refetches on bringup; this closes the gap before it.
-        m_virtualScreensReady = false;
+        m_daemonGate.virtualScreensReady = false;
         // The stale floating-window set is dropped further down in this same
         // handler (clearAllFloatingState beside clearAllZoneState, paired with
         // the rule-cache invalidation) — no separate clear here.
@@ -990,9 +991,9 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // re-trigger slotDaemonReady. The effect would sit idle
         // indefinitely. Resetting here keeps the gate authoritative
         // across daemon restarts.
-        m_bridgeRegistrationInFlight = false;
-        m_daemonReadyRestoresDone = false;
-        m_daemonReadyWindowStateProcessed = false;
+        m_daemonGate.bridgeRegistrationInFlight = false;
+        m_daemonGate.readyRestoresDone = false;
+        m_daemonGate.readyWindowStateProcessed = false;
         m_snapHandler->clearRestoreCache();
         // Reset the rules-subscription gate so the next daemon's
         // `rulesChanged` broadcasts can be re-subscribed. Without this,
@@ -1013,7 +1014,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
                                                  QString(PhosphorProtocol::Service::ObjectPath),
                                                  QString(PhosphorProtocol::Service::Interface::Rules),
                                                  QStringLiteral("rulesChanged"), this, SLOT(slotRulesChanged()));
-        m_rulesSubscribed = false;
+        m_daemonGate.rulesSubscribed = false;
         // Release any pending first-frame open suppression. Without the
         // daemon there is no `resolveWindowRestore` reply coming and no
         // autotile reposition either, so the suppression entry would just
@@ -1076,7 +1077,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon registered: waiting for daemonReady signal";
 
-        // DO NOT set m_daemonServiceRegistered = true here.
+        // DO NOT set m_daemonGate.serviceRegistered = true here.
         // The daemon registers its D-Bus service name in init(), BEFORE start()
         // runs heavy initialization and BEFORE the event loop begins. Keep the
         // flag false until the daemon's own daemonReady signal fires (end of
@@ -1095,7 +1096,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     });
 
     // NOTE: daemon state sync (floating windows, cached settings) is NOT done
-    // here. m_daemonServiceRegistered is false at this point (set only by
+    // here. m_daemonGate.serviceRegistered is false at this point (set only by
     // slotDaemonReady), so any ensureInterface() call would bail out immediately.
     // All daemon state sync is deferred to slotDaemonReady().
 

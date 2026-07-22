@@ -75,6 +75,9 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/mesh_sim.cpp
     plasmazoneseffect/mesh_sim.h
     plasmazoneseffect/paint_pipeline.cpp
+    plasmazoneseffect/paint_shader_window.cpp
+    plasmazoneseffect/paint_capture.cpp
+    plasmazoneseffect/paint_internal.h
     plasmazoneseffect/shader_transitions.cpp
     plasmazoneseffect/shader_config_dbus.cpp
     plasmazoneseffect/shader_textures.cpp

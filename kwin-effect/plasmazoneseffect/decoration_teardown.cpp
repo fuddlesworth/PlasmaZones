@@ -36,7 +36,7 @@ KWin::EffectWindow* PlasmaZonesEffect::resolveDecorationTarget(const QString& wi
         target = nullptr; // a fuzzy appId fallback resolved a SIBLING; not ours
     }
     if (!target) {
-        target = m_windowIdReverse.value(windowId);
+        target = m_idCaches.windowIdReverse.value(windowId);
     }
     return target ? target : hint;
 }
@@ -234,7 +234,7 @@ void PlasmaZonesEffect::clearAllDecorations()
     // backstop.
     const QStringList ids = m_windowDecorations.keys();
     for (const QString& windowId : ids) {
-        if (KWin::EffectWindow* w = m_windowIdReverse.value(windowId)) {
+        if (KWin::EffectWindow* w = m_idCaches.windowIdReverse.value(windowId)) {
             if (m_shaderManager.findTransition(w)) {
                 continue;
             }

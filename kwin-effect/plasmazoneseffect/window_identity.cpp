@@ -35,8 +35,8 @@ QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
     // Cache hit: the composite is frozen at first observation for the
     // window's lifetime so daemon maps keyed by windowId stay stable even
     // when an Electron/CEF app mutates its class mid-session.
-    auto cacheIt = m_windowIdCache.constFind(w);
-    if (cacheIt != m_windowIdCache.constEnd()) {
+    auto cacheIt = m_idCaches.windowIdCache.constFind(w);
+    if (cacheIt != m_idCaches.windowIdCache.constEnd()) {
         return cacheIt.value();
     }
 
@@ -47,8 +47,8 @@ QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
     const QString instanceId = window->internalId().toString(QUuid::WithoutBraces);
     const QString appId = getWindowAppId(w);
     const QString result = ::PhosphorIdentity::WindowId::buildCompositeId(appId, instanceId);
-    m_windowIdCache.insert(w, result);
-    m_windowIdReverse.insert(result, const_cast<KWin::EffectWindow*>(w));
+    m_idCaches.windowIdCache.insert(w, result);
+    m_idCaches.windowIdReverse.insert(result, const_cast<KWin::EffectWindow*>(w));
     return result;
 }
 
@@ -90,7 +90,7 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
     // when the WindowTracking service is missing. The bringup path re-pushes
     // metadata for every live window in continueDaemonReadySetup() once the
     // bridge is registered, so deferring here loses nothing.
-    if (!m_daemonServiceRegistered) {
+    if (!m_daemonGate.serviceRegistered) {
         return;
     }
     const QString instanceId = getWindowInstanceId(w);

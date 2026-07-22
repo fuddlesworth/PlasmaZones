@@ -715,7 +715,7 @@ void PlasmaZonesEffect::updateAllDecorations()
         if (revisited.contains(wid)) {
             continue;
         }
-        KWin::EffectWindow* w = m_windowIdReverse.value(wid);
+        KWin::EffectWindow* w = m_idCaches.windowIdReverse.value(wid);
         if (w && m_shaderManager.findTransition(w)) {
             continue;
         }

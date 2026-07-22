@@ -122,7 +122,7 @@ void ScreenChangeHandler::applyScreenGeometryChange()
     // Always refresh virtual screen definitions — physical screen geometry
     // (including position) changed, so virtual screen absolute coordinates
     // need recalculation from the daemon.
-    if (m_effect->m_daemonServiceRegistered) {
+    if (m_effect->m_daemonGate.serviceRegistered) {
         m_effect->fetchAllVirtualScreenConfigs();
     }
 
@@ -130,7 +130,7 @@ void ScreenChangeHandler::applyScreenGeometryChange()
         // Even when physical size is unchanged, virtual screen split ratio changes
         // require window repositioning. Only proceed if VS configs exist; otherwise
         // there's nothing to reposition.
-        if (!m_effect->m_daemonServiceRegistered || m_effect->m_virtualScreenDefs.isEmpty()) {
+        if (!m_effect->m_daemonGate.serviceRegistered || m_effect->m_virtualScreenDefs.isEmpty()) {
             qCDebug(lcScreenChange) << "Screen size unchanged, no VS configs — skipping window repositioning";
             return;
         }
@@ -347,7 +347,7 @@ void ScreenChangeHandler::scheduleClientAreaReport()
 
 void ScreenChangeHandler::reportClientArea()
 {
-    if (!m_effect->m_daemonServiceRegistered) {
+    if (!m_effect->m_daemonGate.serviceRegistered) {
         // Bridge not registered yet — continueDaemonReadySetup() re-schedules
         // a report once it is, so dropping this one loses nothing.
         return;

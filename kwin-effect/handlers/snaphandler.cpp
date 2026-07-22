@@ -757,7 +757,7 @@ void SnapHandler::slotPendingRestoresAvailable()
     // session, skip — both signals fire during restart, and the second round
     // of moveResize() calls would disrupt the stacking order that the first
     // round carefully preserves via activateWindow(previouslyActive).
-    if (m_effect->m_daemonReadyRestoresDone) {
+    if (m_effect->m_daemonGate.readyRestoresDone) {
         qCInfo(lcEffect) << "Pending restores: already handled by slotDaemonReady, skipping";
         return;
     }

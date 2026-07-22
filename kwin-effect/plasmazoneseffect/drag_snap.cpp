@@ -649,7 +649,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
             m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
         }
         m_dragBypassedForAutotile = false;
-        m_dragActivationDetected = false;
+        m_dragActivation.detected = false;
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);
             m_keyboardGrabbed = true;

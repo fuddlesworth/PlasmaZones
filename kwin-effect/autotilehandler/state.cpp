@@ -138,7 +138,7 @@ void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     }
     m_preAutotileGeometries[screenId][windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
-    if (m_effect->m_daemonServiceRegistered) {
+    if (m_effect->m_daemonGate.serviceRegistered) {
         // overwrite=knownFreeFloating: only the window-opened spawn paths
         // (the sole callers passing true) may clobber a persisted daemon
         // entry — the spawn frame IS the authoritative free-floating
@@ -194,9 +194,9 @@ void AutotileHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const Q
         // Suppress the VS-crossing detectors across the synchronous
         // frameGeometryChanged this apply emits — same rationale as the
         // local-bucket restore path in slotScreensChanged.
-        m_effect->m_inDaemonGeometryApply = true;
+        m_effect->m_daemonGate.inGeometryApply = true;
         const auto geomGuard = qScopeGuard([this] {
-            m_effect->m_inDaemonGeometryApply = false;
+            m_effect->m_daemonGate.inGeometryApply = false;
         });
         // Clear any lingering KWin maximize flag first or KWin re-asserts
         // the maximize-area rect and defeats the restore (discussion #461).

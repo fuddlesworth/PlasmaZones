@@ -225,9 +225,9 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     // same-screen restore is not mistaken for a virtual-
                     // screen crossing — the genuine retile path guards the
                     // same way (tiling.cpp).
-                    m_effect->m_inDaemonGeometryApply = true;
+                    m_effect->m_daemonGate.inGeometryApply = true;
                     const auto geomGuard = qScopeGuard([this] {
-                        m_effect->m_inDaemonGeometryApply = false;
+                        m_effect->m_daemonGate.inGeometryApply = false;
                     });
                     // Clear any lingering KWin maximize flag before restoring
                     // the pre-autotile geometry: a still-maximized window
@@ -494,7 +494,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 }
                 const QString windowId = m_effect->getWindowId(w);
                 saveAndRecordPreAutotileGeometry(windowId, screenId, w, w->frameGeometry());
-                if (m_effect->isWindowFloating(windowId) && m_effect->m_daemonServiceRegistered) {
+                if (m_effect->isWindowFloating(windowId) && m_effect->m_daemonGate.serviceRegistered) {
                     // Correct for maximize/fullscreen, the same correction
                     // saveAndRecordPreAutotileGeometry applies internally: a
                     // floating-but-maximized window's frame is the full monitor, which
@@ -723,7 +723,7 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
             qCInfo(lcEffect) << "Autotile: window minimized (after debounce), floating:" << windowId << "on"
                              << screenId;
 
-            if (m_effect->m_daemonServiceRegistered) {
+            if (m_effect->m_daemonGate.serviceRegistered) {
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
                     QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
@@ -809,7 +809,7 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         qCInfo(lcEffect) << "Autotile: window unminimized, unfloating (after animation grace):" << windowId << "on"
                          << currentScreenId;
 
-        if (m_effect->m_daemonServiceRegistered) {
+        if (m_effect->m_daemonGate.serviceRegistered) {
             PhosphorProtocol::ClientHelpers::fireAndForget(
                 m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
                 QStringLiteral("setWindowFloatingForScreen"), {windowId, currentScreenId, false},
@@ -837,7 +837,7 @@ void AutotileHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, boo
     const QString screenId = m_effect->getWindowScreenId(w);
     qCInfo(lcEffect) << "Monocle window manually unmaximized:" << windowId << "- floating";
 
-    if (m_effect->m_daemonServiceRegistered) {
+    if (m_effect->m_daemonGate.serviceRegistered) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("setWindowFloatingForScreen"),
                                                        {windowId, screenId, true},

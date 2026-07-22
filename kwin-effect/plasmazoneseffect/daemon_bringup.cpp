@@ -49,21 +49,21 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 void PlasmaZonesEffect::slotDaemonReady()
 {
-    if (m_daemonServiceRegistered) {
+    if (m_daemonGate.serviceRegistered) {
         return; // Already ready — idempotent guard
     }
-    if (m_bridgeRegistrationInFlight) {
+    if (m_daemonGate.bridgeRegistrationInFlight) {
         // A registerBridge async call is already pending. The Introspect-
         // probe path (effect ctor, lifecycle.cpp) and the daemonReady D-Bus
         // signal can both fire slotDaemonReady before the FIRST registerBridge reply
-        // sets m_daemonServiceRegistered. Without this gate, a daemon
+        // sets m_daemonGate.serviceRegistered. Without this gate, a daemon
         // racing its own readiness signal against an Introspect probe
         // would receive TWO registerBridge calls in flight, then both
         // replies would call continueDaemonReadySetup() — duplicate state
         // re-push. Idempotent? Mostly. Worth the fragility? No.
         return;
     }
-    m_bridgeRegistrationInFlight = true;
+    m_daemonGate.bridgeRegistrationInFlight = true;
 
     qCInfo(lcEffect) << "daemon ready: registering bridge before re-pushing state";
 
@@ -86,10 +86,10 @@ void PlasmaZonesEffect::slotDaemonReady()
         w->deleteLater();
         // Clear the in-flight flag on EVERY return path (success, error,
         // rejection, version mismatch) so a subsequent slotDaemonReady
-        // can retry. m_daemonServiceRegistered remains the long-lived
-        // success gate; m_bridgeRegistrationInFlight only covers the
+        // can retry. m_daemonGate.serviceRegistered remains the long-lived
+        // success gate; m_daemonGate.bridgeRegistrationInFlight only covers the
         // narrow window between the call leaving and its reply arriving.
-        m_bridgeRegistrationInFlight = false;
+        m_daemonGate.bridgeRegistrationInFlight = false;
         QDBusPendingReply<PhosphorProtocol::BridgeRegistrationResult> reply = *w;
         if (reply.isError()) {
             qCWarning(lcEffect) << "registerBridge call failed:" << reply.error().message()
@@ -122,7 +122,7 @@ void PlasmaZonesEffect::slotDaemonReady()
         }
         qCInfo(lcEffect) << "Bridge registered: daemon apiVersion=" << result.apiVersion
                          << "session=" << result.sessionId;
-        m_daemonServiceRegistered = true;
+        m_daemonGate.serviceRegistered = true;
         continueDaemonReadySetup();
     });
 }
@@ -134,7 +134,7 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
 
     // Re-push metadata for every live window. KWin's class/desktop/caption
     // change signals fired during session restore are swallowed by
-    // pushWindowMetadata's m_daemonServiceRegistered gate, so the daemon's
+    // pushWindowMetadata's m_daemonGate.serviceRegistered gate, so the daemon's
     // WindowRegistry is empty when the bridge first comes up. Walk the
     // stacking order once and re-emit setWindowMetadata so any consumer
     // querying the registry from a subsequent windowOpened / settings-load
@@ -239,7 +239,7 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // Clear ready flag immediately to close the race window where stale virtual
     // screen state from the previous daemon cycle is used before the new fetch
     // completes.
-    m_virtualScreensReady = false;
+    m_daemonGate.virtualScreensReady = false;
     fetchAllVirtualScreenConfigs();
 
     // Re-sync floating windows (async, no QDBusInterface needed).
@@ -295,13 +295,13 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // settingsChanged broadcast, and QDBusConnection::connect accepts duplicate
     // subscriptions silently — re-subscribing on each broadcast would grow the
     // connection set unbounded across the effect's lifetime.
-    if (!m_rulesSubscribed) {
+    if (!m_daemonGate.rulesSubscribed) {
         const bool ok = QDBusConnection::sessionBus().connect(
             QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
             QString(PhosphorProtocol::Service::Interface::Rules), QStringLiteral("rulesChanged"), this,
             SLOT(slotRulesChanged()));
         if (ok) {
-            m_rulesSubscribed = true;
+            m_daemonGate.rulesSubscribed = true;
         } else {
             qCWarning(lcEffect) << "Failed to subscribe to Rules.rulesChanged — will retry on next bringup";
         }
@@ -322,10 +322,10 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
 
 void PlasmaZonesEffect::processDaemonReadyWindowState()
 {
-    if (m_daemonReadyWindowStateProcessed) {
+    if (m_daemonGate.readyWindowStateProcessed) {
         return;
     }
-    m_daemonReadyWindowStateProcessed = true;
+    m_daemonGate.readyWindowStateProcessed = true;
 
     // Delegate autotile re-initialization to handler.
     // Snapshot the active window so the autotile raise loop can re-activate it
@@ -402,7 +402,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
 
     // Restore snap state for all untracked windows.
     // pendingRestoresAvailable may have fired BEFORE daemonReady, causing
-    // slotPendingRestoresAvailable to bail out (m_daemonServiceRegistered was false).
+    // slotPendingRestoresAvailable to bail out (m_daemonGate.serviceRegistered was false).
     // Now that the daemon is confirmed ready, retry the restore flow using raw
     // QDBusMessage (no QDBusInterface) to avoid synchronous introspection.
     {
@@ -415,7 +415,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
 
             QDBusPendingReply<QStringList> reply = *w;
             if (!reply.isValid()) {
-                // Leave m_daemonReadyRestoresDone false: `finished` fires for
+                // Leave m_daemonGate.readyRestoresDone false: `finished` fires for
                 // ERROR replies too, and latching the guard on a failed
                 // getSnappedWindows would permanently disable the
                 // slotPendingRestoresAvailable fallback for the session.
@@ -426,7 +426,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             // Guard: prevent slotPendingRestoresAvailable from double-processing
             // the same windows. Set only on a VALID reply so a failed call
             // keeps the fallback alive.
-            m_daemonReadyRestoresDone = true;
+            m_daemonGate.readyRestoresDone = true;
 
             // Re-drive per-window chrome (snap border / hidden title bar,
             // autotile border) for windows the daemon already considers managed.
@@ -564,7 +564,7 @@ bool PlasmaZonesEffect::anyLocalTriggerHeld() const
 
 bool PlasmaZonesEffect::detectActivationAndGrab()
 {
-    if (m_dragActivationDetected) {
+    if (m_dragActivation.detected) {
         return true;
     }
     // Autotile drag-insert toggle mode also forces activation so the daemon
@@ -578,7 +578,7 @@ bool PlasmaZonesEffect::detectActivationAndGrab()
     // user tapped, then released, the activation trigger).
     if (anyLocalTriggerHeld() || m_cachedToggleActivation || m_cachedAutotileDragInsertToggle
         || m_cachedZoneSpanToggleMode) {
-        m_dragActivationDetected = true;
+        m_dragActivation.detected = true;
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);
             m_keyboardGrabbed = true;
