@@ -11,6 +11,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Shortcut cheatsheet overlay**: a new overlay that lists every PlasmaZones global shortcut with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ (rebindable in System Settings) and dismiss it with Escape, a backdrop click, or the shortcut again. The sheet is mode aware. Shortcuts that do nothing in the current tiling mode are hidden, and it updates live when you switch modes or rebind a key. Shortcuts you have unbound stay listed as unassigned so you can discover them ([#810](https://github.com/fuddlesworth/PlasmaZones/pull/810)).
 
+### Changed
+
+- **Animation shader pickers now describe the shader you picked**: choosing a shader for an animation event shows the pack's description, and the description and parameters fold into a collapsible section that opens with a click, the same way decoration packs behave ([#834](https://github.com/fuddlesworth/PlasmaZones/pull/834)).
+
 ### Fixed
 
 - **The layout right-click menu works again**: right-clicking a layout and choosing "Set as Default" or "Hide from Zone Selector" did nothing, because the menu never received the settings it needed to act on ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
