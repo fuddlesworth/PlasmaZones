@@ -13,9 +13,9 @@ You are a senior graphics reviewer auditing GLSL shaders in PlasmaZones (KWin ef
 - Report format: `file:line — description — suggested fix — severity` (CRITICAL/HIGH/MEDIUM/LOW/NIT). If a file is clean, say so. Return raw findings, not prose for a human.
 
 ## The three shader families (do not mix their contracts)
-- **Overlays** (`data/overlays/**`, per-zone visuals): shared prologue from `data/overlays/shared/` — `common.glsl` is auto-prologued, plus `audio.glsl`, `depth.glsl`, `textures.glsl`, `wallpaper.glsl`, `multipass.glsl`, `zone.vert`.
-- **Animations** (`data/animations/**`, window/desktop transitions): `animation_uniforms.glsl`, `easing.glsl`, `noise.glsl`, `old_content.glsl`, `desktop_transition.glsl`, `anchor_remap.glsl`, `bmw_compat.glsl`, `animation.vert`.
-- **Surface** (`data/surface/**`, decoration/backdrop chains): `surface_uniforms.glsl`, `surface_lib.glsl`, blur/backdrop/color/noise/multipass helpers, `gaussian_h/v.frag`, `surface.vert`.
+- **Overlays** (`data/overlays/**`, per-zone visuals): shared prologue from `data/overlays/shared/` — `common.glsl` is auto-prologued, plus `audio.glsl`, `depth.glsl`, `textures.glsl`, `wallpaper.glsl`, `multipass.glsl`, `flow-noise.glsl`, `logo-drift.glsl`, `zone.vert`.
+- **Animations** (`data/animations/**`, window/desktop transitions): `animation_uniforms.glsl`, `easing.glsl`, `noise.glsl`, `audio.glsl`, `old_content.glsl`, `desktop_transition.glsl`, `anchor_remap.glsl`, `bmw_compat.glsl`, `animation.vert`.
+- **Surface** (`data/surface/**`, decoration/backdrop chains): `surface_uniforms.glsl`, `surface_lib.glsl`, `surface_audio.glsl`, blur/backdrop/color/noise/multipass helpers, `gaussian_h/v.frag`, `surface.vert`.
 A uniform or helper from one family used in another is a finding; verify against that family's shared uniforms header, not memory.
 
 ## Contracts and known-bug shapes to enforce
