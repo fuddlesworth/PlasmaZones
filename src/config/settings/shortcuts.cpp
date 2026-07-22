@@ -62,6 +62,14 @@ P_STORE_GET(QString, swapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey
 P_STORE_SET_STRING(setSwapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey, swapWindowUpShortcutChanged)
 P_STORE_GET(QString, swapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, QString)
 P_STORE_SET_STRING(setSwapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, swapWindowDownShortcutChanged)
+P_STORE_GET(QString, spanWindowLeftShortcut, shortcutsGlobalGroup, spanWindowLeftKey, QString)
+P_STORE_SET_STRING(setSpanWindowLeftShortcut, shortcutsGlobalGroup, spanWindowLeftKey, spanWindowLeftShortcutChanged)
+P_STORE_GET(QString, spanWindowRightShortcut, shortcutsGlobalGroup, spanWindowRightKey, QString)
+P_STORE_SET_STRING(setSpanWindowRightShortcut, shortcutsGlobalGroup, spanWindowRightKey, spanWindowRightShortcutChanged)
+P_STORE_GET(QString, spanWindowUpShortcut, shortcutsGlobalGroup, spanWindowUpKey, QString)
+P_STORE_SET_STRING(setSpanWindowUpShortcut, shortcutsGlobalGroup, spanWindowUpKey, spanWindowUpShortcutChanged)
+P_STORE_GET(QString, spanWindowDownShortcut, shortcutsGlobalGroup, spanWindowDownKey, QString)
+P_STORE_SET_STRING(setSpanWindowDownShortcut, shortcutsGlobalGroup, spanWindowDownKey, spanWindowDownShortcutChanged)
 
 P_STORE_GET(QString, rotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey, QString)
 P_STORE_SET_STRING(setRotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey,

@@ -7,7 +7,9 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorProtocol/NavigationTypes.h>
 
+#include <QRect>
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 
@@ -23,6 +25,26 @@ namespace PhosphorSnapEngine {
 
 class ISettings;
 class IZoneAdjacencyResolver;
+
+/// Result of a span (grow/shrink) target computation. Resolver-local rather
+/// than a PhosphorProtocol type: span is driven only by the daemon's shortcut
+/// path and never crosses D-Bus, so the zone list can stay a QStringList.
+struct SpanTargetResult
+{
+    bool success = false;
+    QString reason;
+    /// The window's full NEW span set, primary zone first. On a grow this is
+    /// the old set plus every zone the extension band swept up; on a shrink
+    /// it is the old set minus the retracted edge band.
+    QStringList zoneIds;
+    /// Union rect of the new span's zone geometries.
+    QRect geometry;
+    /// Primary zone before the change (empty when the window was unsnapped).
+    QString sourceZoneId;
+    QString screenName;
+    /// true when the span grew into new zone(s), false when it retracted.
+    bool grew = false;
+};
 
 /// The edge a neighbour surface is entered from when crossing in @p direction:
 /// crossing "right" lands on the neighbour's LEFT edge, "down" on its TOP, etc.
@@ -122,6 +144,24 @@ public:
 
     PhosphorProtocol::MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction,
                                                               const QString& screenId);
+
+    /**
+     * @brief Compute the new zone span when the user grows/shrinks toward @p direction.
+     *
+     * One shortcut quad drives both operations: when zone(s) exist beyond the
+     * span's @p direction edge, the span GROWS into them (the extension band
+     * sweeps up every zone between the old edge and the picked neighbour's far
+     * edge, so growing a full-height span into a column of stacked zones takes
+     * the whole column). When nothing lies that way, the span SHRINKS instead
+     * by dropping the member band on the opposite edge (pressing left after
+     * growing right undoes the grow). An unsnapped window snaps into the edge
+     * zone in @p direction, mirroring getMoveTargetForWindow. A single-zone
+     * span with nothing to grow into fails with "no_adjacent_zone".
+     *
+     * Span never crosses outputs or desktops — a span is a set of zones on one
+     * screen's layout, so the boundary is a hard stop, not a handoff.
+     */
+    SpanTargetResult getSpanTargetForWindow(const QString& windowId, const QString& direction, const QString& screenId);
 
     PhosphorProtocol::FocusTargetResult getFocusTargetForWindow(const QString& windowId, const QString& direction,
                                                                 const QString& screenId);

@@ -791,6 +791,27 @@ public:
     {
         return QStringLiteral("Meta+Ctrl+Alt+Down");
     }
+    // Span (grow/shrink the zone span). Ctrl+Alt+Arrows: the only remaining
+    // arrow chord free in both stock Plasma 6 and our own directional
+    // families (Meta+Arrows quick tile, Meta+Shift screen move, Meta+Ctrl
+    // desktop switch, Meta+Ctrl+Shift window-to-desktop, Meta+Alt KWin
+    // switch-window). Non-Meta chords have precedent in focusZone below.
+    static QString spanWindowLeftShortcut()
+    {
+        return QStringLiteral("Ctrl+Alt+Left");
+    }
+    static QString spanWindowRightShortcut()
+    {
+        return QStringLiteral("Ctrl+Alt+Right");
+    }
+    static QString spanWindowUpShortcut()
+    {
+        return QStringLiteral("Ctrl+Alt+Up");
+    }
+    static QString spanWindowDownShortcut()
+    {
+        return QStringLiteral("Ctrl+Alt+Down");
+    }
     static QString focusZoneLeftShortcut()
     {
         return QStringLiteral("Alt+Shift+Left");

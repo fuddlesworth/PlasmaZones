@@ -592,6 +592,7 @@ target_compile_definitions(test_per_screen_config PRIVATE "P_SOURCE_DIR=\"${PROJ
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_navigation_controller autotile/navigation/test_navigation_controller.cpp)
 p_add_test(test_snap_cross_surface snap/test_snap_cross_surface.cpp)
+p_add_test(test_span_targets snap/test_span_targets.cpp)
 p_add_test(test_snap_state_class_mutation snap/test_snap_state_class_mutation.cpp)
 
 # Cross-surface navigation exercises cross-output handoff, which needs real

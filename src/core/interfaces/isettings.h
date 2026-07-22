@@ -547,6 +547,12 @@ Q_SIGNALS:
     void swapWindowUpShortcutChanged();
     void swapWindowDownShortcutChanged();
 
+    // Span Window Shortcuts
+    void spanWindowLeftShortcutChanged();
+    void spanWindowRightShortcutChanged();
+    void spanWindowUpShortcutChanged();
+    void spanWindowDownShortcutChanged();
+
     // Snap to PhosphorZones::Zone by Number Shortcuts
     void snapToZone1ShortcutChanged();
     void snapToZone2ShortcutChanged();

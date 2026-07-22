@@ -544,6 +544,10 @@ public:
     P_CONFIG_KEY(swapWindowRightKey, "SwapWindowRight")
     P_CONFIG_KEY(swapWindowUpKey, "SwapWindowUp")
     P_CONFIG_KEY(swapWindowDownKey, "SwapWindowDown")
+    P_CONFIG_KEY(spanWindowLeftKey, "SpanWindowLeft")
+    P_CONFIG_KEY(spanWindowRightKey, "SpanWindowRight")
+    P_CONFIG_KEY(spanWindowUpKey, "SpanWindowUp")
+    P_CONFIG_KEY(spanWindowDownKey, "SpanWindowDown")
 
     // Parameterized — uses the pattern accessor to avoid duplication.
     // 1..9 mirrors snapToZoneN() in the enum surface.

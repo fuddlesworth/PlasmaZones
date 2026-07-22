@@ -570,6 +570,9 @@ void Daemon::connectShortcutSignals()
     connect(m_shortcutManager.get(), &ShortcutManager::moveWindowRequested, this, [this](NavigationDirection d) {
         handleMove(d);
     });
+    connect(m_shortcutManager.get(), &ShortcutManager::spanWindowRequested, this, [this](NavigationDirection d) {
+        handleSpan(d);
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::focusZoneRequested, this, [this](NavigationDirection d) {
         handleFocus(d);
     });

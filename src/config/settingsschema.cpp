@@ -489,6 +489,10 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::swapWindowRightKey(), CD::swapWindowRightShortcut());
     addShortcut(globals, CD::swapWindowUpKey(), CD::swapWindowUpShortcut());
     addShortcut(globals, CD::swapWindowDownKey(), CD::swapWindowDownShortcut());
+    addShortcut(globals, CD::spanWindowLeftKey(), CD::spanWindowLeftShortcut());
+    addShortcut(globals, CD::spanWindowRightKey(), CD::spanWindowRightShortcut());
+    addShortcut(globals, CD::spanWindowUpKey(), CD::spanWindowUpShortcut());
+    addShortcut(globals, CD::spanWindowDownKey(), CD::spanWindowDownShortcut());
     const QString snapToZoneDefaults[9] = {
         CD::snapToZone1Shortcut(), CD::snapToZone2Shortcut(), CD::snapToZone3Shortcut(),
         CD::snapToZone4Shortcut(), CD::snapToZone5Shortcut(), CD::snapToZone6Shortcut(),

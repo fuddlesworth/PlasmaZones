@@ -69,6 +69,10 @@ constexpr auto kIdIncreaseMasterCount = "increase_master_count";
 constexpr auto kIdDecreaseMasterCount = "decrease_master_count";
 constexpr auto kIdRetile = "retile";
 constexpr auto kIdToggleCheatsheet = "toggle_cheatsheet";
+constexpr auto kIdSpanWindowLeft = "span_window_left";
+constexpr auto kIdSpanWindowRight = "span_window_right";
+constexpr auto kIdSpanWindowUp = "span_window_up";
+constexpr auto kIdSpanWindowDown = "span_window_down";
 
 QString quickLayoutId(int slotZeroBased)
 {
@@ -141,6 +145,28 @@ const StaticEntry kStaticEntries[] = {
      QT_TRANSLATE_NOOP("plasmazones", "Move Window Down"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->moveWindowRequested(NavigationDirection::Down);
+     }},
+
+    // ─── Span window (grow/shrink the zone span) ───────────────────────────
+    {kIdSpanWindowLeft, &ConfigDefaults::spanWindowLeftShortcut, &Settings::spanWindowLeftShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Span Window Left"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->spanWindowRequested(NavigationDirection::Left);
+     }},
+    {kIdSpanWindowRight, &ConfigDefaults::spanWindowRightShortcut, &Settings::spanWindowRightShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Span Window Right"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->spanWindowRequested(NavigationDirection::Right);
+     }},
+    {kIdSpanWindowUp, &ConfigDefaults::spanWindowUpShortcut, &Settings::spanWindowUpShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Span Window Up"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->spanWindowRequested(NavigationDirection::Up);
+     }},
+    {kIdSpanWindowDown, &ConfigDefaults::spanWindowDownShortcut, &Settings::spanWindowDownShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Span Window Down"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->spanWindowRequested(NavigationDirection::Down);
      }},
 
     // ─── Focus zone ────────────────────────────────────────────────────────
@@ -416,6 +442,11 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdSwapWindowRight, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
         add(kIdSwapWindowUp, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
         add(kIdSwapWindowDown, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        // Span grows/shrinks a multi-zone snap — a hard no-op off snapping.
+        add(kIdSpanWindowLeft, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
+        add(kIdSpanWindowRight, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
+        add(kIdSpanWindowUp, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
+        add(kIdSpanWindowDown, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
         add(kIdRotateWindowsCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
             QT_TRANSLATE_NOOP("plasmazones", "Rotate Clockwise"));
         add(kIdRotateWindowsCCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
@@ -787,6 +818,11 @@ QVariantList ShortcutManager::cheatsheetModel() const
           QString::fromLatin1(kIdSwapWindowUp), QString::fromLatin1(kIdSwapWindowDown)},
          arrowTokens,
          PhosphorI18n::tr("Swap Window"),
+         arrowsTail},
+        {{QString::fromLatin1(kIdSpanWindowLeft), QString::fromLatin1(kIdSpanWindowRight),
+          QString::fromLatin1(kIdSpanWindowUp), QString::fromLatin1(kIdSpanWindowDown)},
+         arrowTokens,
+         PhosphorI18n::tr("Span Window"),
          arrowsTail},
         {{QString::fromLatin1(kIdSwapVirtualScreenLeft), QString::fromLatin1(kIdSwapVirtualScreenRight),
           QString::fromLatin1(kIdSwapVirtualScreenUp), QString::fromLatin1(kIdSwapVirtualScreenDown)},

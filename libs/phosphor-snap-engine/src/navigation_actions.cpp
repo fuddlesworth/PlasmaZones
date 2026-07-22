@@ -350,6 +350,51 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
                                   result.screenName, false);
 }
 
+void SnapEngine::spanFocusedInDirection(const QString& direction, const NavigationContext& ctx)
+{
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::spanFocusedInDirection:" << direction;
+    if (!m_windowTracker) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("span"), QStringLiteral("engine_unavailable"), QString(),
+                                  QString(), ctx.screenId);
+        return;
+    }
+    if (direction.isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("span"), QStringLiteral("invalid_direction"), QString(),
+                                  QString(), ctx.screenId);
+        return;
+    }
+    auto* resolver = ensureTargetResolver(QStringLiteral("span"));
+    if (!resolver) {
+        return;
+    }
+    const QString windowId = effectiveWindowId(ctx, m_navState);
+    if (windowId.isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("span"), QStringLiteral("no_window"), QString(), QString(),
+                                  ctx.screenId);
+        return;
+    }
+    if (isWindowExcludedForAction(windowId, QStringLiteral("span"), ctx.screenId)) {
+        return;
+    }
+    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
+    const SpanTargetResult result = resolver->getSpanTargetForWindow(windowId, direction, screenId);
+    if (!result.success) {
+        // Unlike move, a span boundary is a hard stop — a span is a set of
+        // zones on ONE screen's layout, so there's no cross-output or
+        // cross-desktop continuation. The resolver already emitted feedback.
+        return;
+    }
+    if (!result.geometry.isValid() || result.zoneIds.isEmpty()) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "SnapEngine::spanFocusedInDirection: invalid span result from resolver";
+        return;
+    }
+    commitMultiZoneSnap(windowId, result.zoneIds, result.screenName);
+    m_windowTracker->recordSnapIntent(windowId, true);
+    Q_EMIT applyGeometryRequested(windowId, result.geometry.x(), result.geometry.y(), result.geometry.width(),
+                                  result.geometry.height(), result.zoneIds.first(), result.screenName, false);
+}
+
 bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId)
 {
     if (!m_crossSurfaceResolver || !m_globals) {

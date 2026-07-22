@@ -29,7 +29,7 @@ Item {
 
     // ── Data properties ───────────────────────────────────────────────────
     property bool success: true
-    property string action: "" // one of the tokens handled by messageText(): "rotate", "move", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "algorithm", "swap_vs", "rotate_vs"
+    property string action: "" // one of the tokens handled by messageText(): "rotate", "move", "span", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "algorithm", "swap_vs", "rotate_vs"
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/unfloated)
     property var zones: []
     property var highlightedZoneIds: [] // Zone IDs involved (target zones)
@@ -63,7 +63,7 @@ Item {
     readonly property string messageText: {
         if (!success) {
             // Failure messages
-            if (action === "move" || action === "focus") {
+            if (action === "move" || action === "focus" || action === "span") {
                 return i18n("No zone in that direction");
             } else if (action === "push") {
                 return i18n("No empty zone available");
@@ -109,6 +109,16 @@ Item {
                 return moveArrow + " " + i18n("Zone %1", targetZoneNumber);
 
             return moveArrow + " " + i18n("Moved");
+        } else if (action === "span") {
+            // reason format: "grow:right" or "shrink:left"
+            var spanArrow = directionArrow(reason);
+            if (reason.indexOf("grow") === 0) {
+                if (targetZoneNumber > 0)
+                    return spanArrow + " " + i18n("Extended into zone %1", targetZoneNumber);
+
+                return spanArrow + " " + i18n("Span extended");
+            }
+            return spanArrow + " " + i18n("Span reduced");
         } else if (action === "focus") {
             var focusArrow = directionArrow(reason);
             if (targetZoneNumber > 0)

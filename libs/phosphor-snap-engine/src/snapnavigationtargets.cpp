@@ -344,6 +344,239 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
     return moveResult(true, QString(), targetZoneId, geo, currentZoneId, effectiveScreenId);
 }
 
+namespace {
+
+/// Signed 1-D interval overlap of two rects on the axis PERPENDICULAR to the
+/// travel axis. Positive means the rects are genuinely side-by-side for a
+/// horizontal/vertical grow; zero or negative means corner/diagonal only.
+int perpendicularOverlap(const QRect& a, const QRect& b, bool horizontal)
+{
+    if (horizontal) {
+        return qMin(a.y() + a.height(), b.y() + b.height()) - qMax(a.y(), b.y());
+    }
+    return qMin(a.x() + a.width(), b.x() + b.width()) - qMax(a.x(), b.x());
+}
+
+/// Low/high coordinate of @p r on the travel axis, half-open (hi = lo + size)
+/// so edge math avoids QRect's inclusive right()/bottom() off-by-one.
+int travelLo(const QRect& r, bool horizontal)
+{
+    return horizontal ? r.x() : r.y();
+}
+int travelHi(const QRect& r, bool horizontal)
+{
+    return horizontal ? r.x() + r.width() : r.y() + r.height();
+}
+
+/// Zone rects rounded from relative geometry can disagree by a pixel; edges
+/// within this tolerance count as the same edge for shrink-band membership.
+constexpr int kSpanEdgeTolerancePx = 2;
+
+} // anonymous namespace
+
+SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QString& windowId, const QString& direction,
+                                                                      const QString& screenId)
+{
+    SpanTargetResult result;
+    result.screenName = screenId;
+    if (!checkWindowId(windowId)) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getSpanTargetForWindow - empty window ID";
+        result.reason = QStringLiteral("invalid_window");
+        return result;
+    }
+    const bool horizontal = (direction == QLatin1String("left") || direction == QLatin1String("right"));
+    const bool vertical = (direction == QLatin1String("up") || direction == QLatin1String("down"));
+    if (!horizontal && !vertical) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot span - invalid direction" << direction;
+        emitFeedback(false, QStringLiteral("span"), QStringLiteral("invalid_direction"), QString(), QString(),
+                     screenId);
+        result.reason = QStringLiteral("invalid_direction");
+        return result;
+    }
+    // Travel toward increasing coordinate? (screen space: y grows downward)
+    const bool positive = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+
+    QStringList currentZones = m_service->zonesForWindow(windowId);
+
+    // Trust stored screen for snapped windows — see getMoveTargetForWindow comment.
+    QString effectiveScreenId = screenId;
+    if (!currentZones.isEmpty()) {
+        const QString storedScreen = m_service->screenForWindow(windowId);
+        if (isStoredScreenValid(m_service->screenManager(), storedScreen)) {
+            effectiveScreenId = storedScreen;
+        }
+    }
+    result.screenName = effectiveScreenId;
+
+    // Member rects. A stale member whose zone no longer resolves (layout
+    // switched under the span) is dropped from the working set rather than
+    // carried forward as a dead id.
+    QVector<QPair<QString, QRect>> members;
+    for (const QString& zoneId : std::as_const(currentZones)) {
+        const QRect geo = m_service->zoneGeometry(zoneId, effectiveScreenId);
+        if (geo.isValid()) {
+            members.append({zoneId, geo});
+        }
+    }
+
+    if (members.isEmpty()) {
+        // Unsnapped (or fully stale) — mirror move's entry behaviour: snap
+        // into the edge zone in the pressed direction.
+        if (!m_zoneAdjacency) {
+            result.reason = QStringLiteral("no_zone_detection");
+            return result;
+        }
+        const QString entryZone = m_zoneAdjacency->getFirstZoneInDirection(direction, effectiveScreenId);
+        if (entryZone.isEmpty()) {
+            emitFeedback(false, QStringLiteral("span"), QStringLiteral("no_zones"), QString(), QString(),
+                         effectiveScreenId);
+            result.reason = QStringLiteral("no_zones");
+            return result;
+        }
+        const QRect geo = m_service->zoneGeometry(entryZone, effectiveScreenId);
+        if (!geo.isValid()) {
+            emitFeedback(false, QStringLiteral("span"), QStringLiteral("geometry_error"), QString(), entryZone,
+                         effectiveScreenId);
+            result.reason = QStringLiteral("geometry_error");
+            return result;
+        }
+        result.success = true;
+        result.grew = true;
+        result.zoneIds = QStringList{entryZone};
+        result.geometry = geo;
+        emitFeedback(true, QStringLiteral("span"), QStringLiteral("grow:") + direction, QString(), entryZone,
+                     effectiveScreenId);
+        return result;
+    }
+
+    QRect unionRect = members.first().second;
+    for (const auto& m : std::as_const(members)) {
+        unionRect = unionRect.united(m.second);
+    }
+    result.sourceZoneId = members.first().first;
+
+    // Candidate rects: every non-member zone of this screen's layout.
+    auto* layout = m_layoutManager->resolveLayoutForScreen(effectiveScreenId);
+    if (!layout) {
+        emitFeedback(false, QStringLiteral("span"), QStringLiteral("no_active_layout"), result.sourceZoneId, QString(),
+                     effectiveScreenId);
+        result.reason = QStringLiteral("no_active_layout");
+        return result;
+    }
+    QVector<QPair<QString, QRect>> candidates;
+    const auto layoutZones = layout->zones();
+    for (PhosphorZones::Zone* zone : layoutZones) {
+        const QString zoneId = zone->id().toString();
+        if (currentZones.contains(zoneId)) {
+            continue;
+        }
+        const QRect geo = m_service->zoneGeometry(zoneId, effectiveScreenId);
+        if (geo.isValid()) {
+            candidates.append({zoneId, geo});
+        }
+    }
+
+    // ── Grow: nearest candidate extending past the span's leading edge ──────
+    // A candidate qualifies when it genuinely enlarges the union toward
+    // @p direction (its far edge lies beyond the union's) and it sits
+    // side-by-side with the union (positive perpendicular overlap — a
+    // diagonal zone is not a grow target). Nearest edge gap wins, clamped to
+    // zero so overlapping-zone layouts tie at the edge and break by
+    // perpendicular centre distance — the same ranking the shared
+    // directionalNeighbor raycast uses.
+    const int uLo = travelLo(unionRect, horizontal);
+    const int uHi = travelHi(unionRect, horizontal);
+    const int uPerpCenter = horizontal ? unionRect.center().y() : unionRect.center().x();
+    int bestIndex = -1;
+    int bestGap = 0;
+    int bestPerp = 0;
+    for (int i = 0; i < candidates.size(); ++i) {
+        const QRect& r = candidates[i].second;
+        if (perpendicularOverlap(unionRect, r, horizontal) <= 0) {
+            continue;
+        }
+        const bool extends = positive ? (travelHi(r, horizontal) > uHi) : (travelLo(r, horizontal) < uLo);
+        if (!extends) {
+            continue;
+        }
+        const int gap = positive ? qMax(0, travelLo(r, horizontal) - uHi) : qMax(0, uLo - travelHi(r, horizontal));
+        const int perp = qAbs((horizontal ? r.center().y() : r.center().x()) - uPerpCenter);
+        if (bestIndex < 0 || gap < bestGap || (gap == bestGap && perp < bestPerp)) {
+            bestIndex = i;
+            bestGap = gap;
+            bestPerp = perp;
+        }
+    }
+
+    if (bestIndex >= 0) {
+        // Extension band: from the union's old leading edge to the picked
+        // neighbour's far edge, spanning the union's perpendicular extent.
+        // Every candidate the band overlaps joins the span, so growing a
+        // full-height span into a column of stacked zones takes the whole
+        // column instead of leaving an L-shaped set whose bounding rect
+        // covers zones that were never added.
+        const QRect& winner = candidates[bestIndex].second;
+        const int newEdge = positive ? travelHi(winner, horizontal) : travelLo(winner, horizontal);
+        QRect band;
+        if (horizontal) {
+            band = positive ? QRect(uHi, unionRect.y(), newEdge - uHi, unionRect.height())
+                            : QRect(newEdge, unionRect.y(), uLo - newEdge, unionRect.height());
+        } else {
+            band = positive ? QRect(unionRect.x(), uHi, unionRect.width(), newEdge - uHi)
+                            : QRect(unionRect.x(), newEdge, unionRect.width(), uLo - newEdge);
+        }
+        result.zoneIds = currentZones;
+        QRect newUnion = unionRect;
+        for (const auto& [candidateId, candidateRect] : std::as_const(candidates)) {
+            if (!band.intersected(candidateRect).isEmpty()) {
+                result.zoneIds.append(candidateId);
+                newUnion = newUnion.united(candidateRect);
+            }
+        }
+        result.success = true;
+        result.grew = true;
+        result.geometry = newUnion;
+        emitFeedback(true, QStringLiteral("span"), QStringLiteral("grow:") + direction, result.sourceZoneId,
+                     candidates[bestIndex].first, effectiveScreenId);
+        return result;
+    }
+
+    // ── Shrink: nothing to grow into, so retract the opposite edge ──────────
+    // Pressing toward a boundary undoes the last grow away from it: the
+    // trailing-edge member band (the zones whose far edge forms the union's
+    // edge opposite to @p direction) drops out. A span that is a single band
+    // along this axis has nothing to retract and reports the boundary.
+    if (members.size() > 1) {
+        QStringList kept;
+        QRect keptUnion;
+        QString removedZoneId;
+        for (const auto& [memberId, memberRect] : std::as_const(members)) {
+            const bool inTrailingBand = positive ? (travelLo(memberRect, horizontal) <= uLo + kSpanEdgeTolerancePx)
+                                                 : (travelHi(memberRect, horizontal) >= uHi - kSpanEdgeTolerancePx);
+            if (inTrailingBand) {
+                removedZoneId = memberId;
+                continue;
+            }
+            kept.append(memberId);
+            keptUnion = keptUnion.isNull() ? memberRect : keptUnion.united(memberRect);
+        }
+        if (!kept.isEmpty()) {
+            result.success = true;
+            result.grew = false;
+            result.zoneIds = kept;
+            result.geometry = keptUnion;
+            emitFeedback(true, QStringLiteral("span"), QStringLiteral("shrink:") + direction, result.sourceZoneId,
+                         removedZoneId, effectiveScreenId);
+            return result;
+        }
+    }
+
+    emitFeedback(false, QStringLiteral("span"), QStringLiteral("no_adjacent_zone"), result.sourceZoneId, QString(),
+                 effectiveScreenId);
+    result.reason = QStringLiteral("no_adjacent_zone");
+    return result;
+}
+
 PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QString& windowId,
                                                                                           const QString& direction,
                                                                                           const QString& screenId)

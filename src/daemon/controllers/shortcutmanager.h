@@ -105,6 +105,7 @@ Q_SIGNALS:
     void quickLayoutRequested(int number);
 
     void moveWindowRequested(NavigationDirection direction);
+    void spanWindowRequested(NavigationDirection direction);
     void focusZoneRequested(NavigationDirection direction);
     void pushToEmptyZoneRequested();
     void restoreWindowSizeRequested();

@@ -421,6 +421,7 @@ private:
     void handleRotate(bool clockwise);
     void handleFloat();
     void handleMove(NavigationDirection direction);
+    void handleSpan(NavigationDirection direction);
     void handleFocus(NavigationDirection direction);
     void handlePush();
     void handleRestore();

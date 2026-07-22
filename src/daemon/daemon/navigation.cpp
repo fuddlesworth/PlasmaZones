@@ -181,6 +181,25 @@ void Daemon::handleMove(NavigationDirection direction)
     nav->moveFocusedInDirection(dirStr, ctx);
 }
 
+void Daemon::handleSpan(NavigationDirection direction)
+{
+    NavigationContext ctx;
+    auto* nav =
+        navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Span");
+    if (!nav) {
+        return;
+    }
+    const QString dirStr = navigationDirectionToString(direction);
+    if (dirStr.isEmpty()) {
+        qCWarning(lcDaemon) << "Unknown span navigation direction:" << static_cast<int>(direction);
+        return;
+    }
+    if (isFocusedContextGated(ctx.screenId)) {
+        return;
+    }
+    nav->spanFocusedInDirection(dirStr, ctx);
+}
+
 void Daemon::handleFocus(NavigationDirection direction)
 {
     NavigationContext ctx;
