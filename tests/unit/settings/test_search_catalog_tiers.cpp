@@ -487,7 +487,10 @@ private Q_SLOTS:
             QVERIFY2(blockEnd > cardAt,
                      qPrintable(QStringLiteral("unbalanced %1 block in %2").arg(sharedCard, hostFile)));
             const QString block = src.mid(cardAt, blockEnd - cardAt);
-            QVERIFY2(block.contains(QLatin1String("advancedOnly: true")),
+            // Whitespace-tolerant like declaresAdvancedGate, so a reformat
+            // (`advancedOnly:  true`) doesn't spuriously fail only this check.
+            static const QRegularExpression kGate(QStringLiteral("\\badvancedOnly\\s*:\\s*true"));
+            QVERIFY2(block.contains(kGate),
                      qPrintable(QStringLiteral("%1 hosts %2 but no longer gates it advancedOnly — "
                                                "crossFileAdvanced() would silently over-hide its anchors")
                                     .arg(hostFile, sharedCard)));

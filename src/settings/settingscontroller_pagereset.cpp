@@ -134,19 +134,15 @@ bool SettingsController::pageSupportsReset(const QString& page) const
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
 {
-    // Every resettable page is discardable, PLUS the parent categories: discardPage
-    // has a parent-category branch that walks the group's discardable leaves (the
-    // sidebar's section-disable confirm calls it with "snapping" / "tiling"), and
-    // Reset has no equivalent. This predicate has to describe what discardPage
-    // accepts or the two disagree about the same page.
-    //
-    // Parent ids DO reach the kebab: Main.qml passes activeDirtyScope, which
-    // hoists a condensed page to the group it is the sole visible row for, so
-    // "snapping" / "tiling" / "animations" arrive here routinely. The group
-    // branch in discardPage is the intended handler for them. It is likewise
-    // safe for discardPage's own child walk below — every pageGroupChildren
-    // value holds leaf ids only, so a child can never re-match the group case.
-    return pageSupportsReset(page) || pageGroupChildren().contains(page);
+    // Discard accepts exactly what Reset does: every resettable leaf PLUS the
+    // parent categories. Both resetPage and discardPage now have a
+    // parent-category branch (the sidebar's section-disable confirm and the
+    // simple-mode kebab pass "snapping" / "tiling" / "animations" via
+    // activeDirtyScope), and pageSupportsReset already returns true for every
+    // pageGroupChildren() key, so the two predicates are identical. Kept as its
+    // own function for call-site clarity and so a leaf that ever becomes
+    // discardable-but-not-resettable has an obvious place to diverge.
+    return pageSupportsReset(page);
 }
 
 void SettingsController::resetPage(const QString& page)
@@ -162,7 +158,7 @@ void SettingsController::resetPage(const QString& page)
     //
     // The WHOLE branch order below matches isPageDirty and discardPage, not just
     // this first test: manifest, backing pages, ordering, shortcuts, virtual
-    // screens, animation, decoration. Any page matching two branches must reach
+    // screens, animation, decoration, parent-category group. Any page matching two branches must reach
     // the same one in all three, so the three are written to be diffed against
     // each other. Add a branch to one, add it in the same position in the others.
     {
@@ -425,13 +421,16 @@ void SettingsController::resetPage(const QString& page)
     // the hidden advanced siblings the rail badge aggregates, or Reset visibly
     // no-ops against a still-badged group. Condensed simple children are skipped:
     // they own no keys and would only re-reset their backing pages, always
-    // siblings already in this same set (the guard discardPage uses too).
+    // siblings already in this same set (the guard discardPage uses too). A child
+    // that is itself a group is skipped for the same release-build reason the
+    // backing-page branch skips a backing key: pageGroupChildren() values are leaf
+    // ids only today, but a future nested group would otherwise recurse forever.
     const auto& groups = pageGroupChildren();
     const auto git = groups.constFind(page);
     if (git != groups.constEnd()) {
         const DirtyEmitScope batch(*this);
         for (const QString& child : *git) {
-            if (pageSupportsReset(child) && !simplePageBackingPages().contains(child))
+            if (pageSupportsReset(child) && !simplePageBackingPages().contains(child) && !groups.contains(child))
                 resetPage(child);
         }
         return;
@@ -651,10 +650,13 @@ void SettingsController::discardPage(const QString& page)
     // confirm exists to prevent. Non-discardable children (e.g. shaders browser)
     // return false and are skipped, as are the condensed simple pages — they
     // own no keys and would only re-discard their backing pages, which are
-    // always siblings in this same set.
+    // always siblings in this same set. A child that is itself a group is
+    // skipped for the same release-build reason the backing-page branch skips a
+    // backing key: values are leaf ids today, but a future nested group would
+    // otherwise recurse forever.
     const DirtyEmitScope batch(*this);
     for (const QString& child : *git) {
-        if (pageSupportsDiscard(child) && !simplePageBackingPages().contains(child))
+        if (pageSupportsDiscard(child) && !simplePageBackingPages().contains(child) && !groups.contains(child))
             discardPage(child);
     }
 }

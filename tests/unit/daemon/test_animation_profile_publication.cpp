@@ -50,7 +50,6 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorFsLoader/DirectoryLoader.h>
 
 #include "../../../src/config/settings.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -269,13 +268,17 @@ private Q_SLOTS:
     /// `duration` must still animate the settings-derived fields it leaves unset
     /// (minDistance, …), and repeated settings edits must keep propagating.
     ///
-    /// Mirrors `publishActiveAnimationProfile`'s loader-owned branch: the merge
-    /// base is the loader's RAW parsed JSON (cached once), NOT the registry's
-    /// current entry — which is the previous tick's already-merged result. Merge
-    /// from that merged entry and every field is set after tick one, so the
-    /// second settings edit reads back its own prior output and the slider
-    /// silently stops moving until the daemon restarts. This test would pass a
-    /// merge-from-cached-raw and fail a merge-from-registry-entry.
+    /// Same "minimal shape" approach as the invariants above: it exercises the
+    /// registry/loader PRIMITIVES the daemon's `publishActiveAnimationProfile`
+    /// merge relies on — `resolve()` returning the loader's exact parsed JSON,
+    /// `registerProfile(path, profile, loaderTag)` re-registering under the
+    /// loader tag, and repeated re-registration propagating each new value
+    /// through `resolve()`. It does NOT construct a Daemon or call
+    /// publishActiveAnimationProfile (see the file header), so it cannot by
+    /// itself catch a daemon rewrite that merged from `resolve()` instead of the
+    /// `m_rawJsonProfiles` cache; its `mergePublish` lambda models that intended
+    /// behaviour (merge base is the cached raw, never the previous tick's merged
+    /// entry) and proves the primitives support it without freezing.
     void testDurationOnlyGlobalJsonMergesSettingsAndKeepsPropagating()
     {
         IsolatedConfigGuard guard;

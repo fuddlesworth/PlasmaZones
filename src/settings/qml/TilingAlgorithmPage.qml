@@ -14,19 +14,18 @@ SettingsFlickable {
     readonly property int algorithmPreviewWidth: Kirigami.Units.gridUnit * 18
     readonly property int algorithmPreviewHeight: Kirigami.Units.gridUnit * 10
     // Per-screen override helper (shared app-wide scope, bound below).
-    // m-13: Cache the availableAlgorithms PROPERTY (read, not call — it is both a
+    // Cache the availableAlgorithms PROPERTY (read, not call — it is both a
     // Q_PROPERTY and a same-named Q_INVOKABLE, so the `()` form errors with
-    // "is not a function"). Refreshed via the Connections below on its NOTIFY.
+    // "is not a function"). Its NOTIFY-backed binding self-refreshes when the
+    // list changes (e.g. a .luau reload), so no imperative refresh is needed.
     property var _cachedAlgos: settingsController.availableAlgorithms || []
-    // Root-qualified handle for the `appSettings` ISettings context property.
-    // Children here set their OWN `appSettings` (PerScreenOverrideHelper, and the
-    // LayoutComboBox now nested inside AlgorithmPreviewCard), which SHADOWS the
-    // context property inside a handler attached to that child — a bare
-    // `appSettings.defaultAutotileAlgorithm` there hits a nonexistent property on
-    // the controller and silently drops the change. Read/write through
-    // `root.appSettingsObj` so it always targets ISettings, from any scope.
-    readonly property var appSettingsObj: appSettings
-    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettingsObj.defaultAutotileAlgorithm)
+    // `appSettings` is the ISettings context property (set app-wide via
+    // rootContext); read it directly. Handlers here are attached to page-scope
+    // objects and to AlgorithmPreviewCard (which declares no `appSettings`), so
+    // the bare name resolves to the context property — the children that DO set
+    // their own `appSettings` (PerScreenOverrideHelper, the LayoutComboBox nested
+    // inside AlgorithmPreviewCard) are never in an ancestor binding's scope chain.
+    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.defaultAutotileAlgorithm)
     // Working algorithm for the whole page (preview, custom-param controls,
     // capability lookups). Driven imperatively rather than bound to
     // algorithmCombo.currentValue: that value transiently resets to the first
@@ -131,14 +130,6 @@ SettingsFlickable {
     contentHeight: content.implicitHeight
     clip: true
 
-    Connections {
-        function onAvailableAlgorithmsChanged() {
-            root._cachedAlgos = settingsController.availableAlgorithms || [];
-        }
-
-        target: settingsController
-    }
-
     PerScreenOverrideHelper {
         id: psHelper
 
@@ -199,7 +190,7 @@ SettingsFlickable {
                             return masterRatioSlider.slider.value;
 
                         const catalogRatio = AlgoCaps.defaultSplitRatio(root.algoCapabilities);
-                        return catalogRatio !== undefined ? catalogRatio : root.appSettingsObj.autotileSplitRatio;
+                        return catalogRatio !== undefined ? catalogRatio : appSettings.autotileSplitRatio;
                     }
                     supportsMasterCount: root.algoSupportsMasterCount
                     masterCount: masterCountSlider.slider.value
@@ -208,16 +199,14 @@ SettingsFlickable {
                     onAlgorithmActivated: selectedId => {
                         // An empty id means the combo's model rebuilt under the
                         // selection — fall back to the persisted global default.
-                        const algoId = selectedId === "" ? root.appSettingsObj.defaultAutotileAlgorithm : selectedId;
+                        const algoId = selectedId === "" ? appSettings.defaultAutotileAlgorithm : selectedId;
                         // Drive the page off the user's pick immediately, then
-                        // persist. Both go through root.appSettingsObj — NOT the
-                        // bare `appSettings`, which LayoutComboBox shadows with the
-                        // controller (see appSettingsObj above).
-                        // Resetting global max-windows / split-ratio / master-count
-                        // here would clobber a sibling algorithm's per-algorithm slot.
+                        // persist. Only the Algorithm key is written; resetting
+                        // global max-windows / split-ratio / master-count here
+                        // would clobber a sibling algorithm's per-algorithm slot.
                         root.selectedAlgorithm = algoId;
                         root.writeSetting("Algorithm", algoId, function (v) {
-                            root.appSettingsObj.defaultAutotileAlgorithm = v;
+                            appSettings.defaultAutotileAlgorithm = v;
                         });
                     }
                 }
@@ -237,7 +226,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileMaxWindowsMin
                         to: root.settingsBridge.autotileMaxWindowsMax
                         stepSize: 1
-                        value: root.settingValue("MaxWindows", root.liveAlgoSettings.maxWindows !== undefined ? root.liveAlgoSettings.maxWindows : root.appSettingsObj.autotileMaxWindows)
+                        value: root.settingValue("MaxWindows", root.liveAlgoSettings.maxWindows !== undefined ? root.liveAlgoSettings.maxWindows : appSettings.autotileMaxWindows)
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }
@@ -269,7 +258,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileSplitRatioMin
                         to: root.settingsBridge.autotileSplitRatioMax
                         stepSize: 0.05
-                        value: root.settingValue("SplitRatio", root.liveAlgoSettings.splitRatio !== undefined ? root.liveAlgoSettings.splitRatio : root.appSettingsObj.autotileSplitRatio)
+                        value: root.settingValue("SplitRatio", root.liveAlgoSettings.splitRatio !== undefined ? root.liveAlgoSettings.splitRatio : appSettings.autotileSplitRatio)
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
@@ -293,13 +282,13 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileSplitRatioStepMin
                         to: root.settingsBridge.autotileSplitRatioStepMax
                         stepSize: 0.01
-                        value: root.settingValue("SplitRatioStep", root.appSettingsObj.autotileSplitRatioStep)
+                        value: root.settingValue("SplitRatioStep", appSettings.autotileSplitRatioStep)
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
                         onMoved: value => {
                             root.writeSetting("SplitRatioStep", value, function (v) {
-                                root.appSettingsObj.autotileSplitRatioStep = v;
+                                appSettings.autotileSplitRatioStep = v;
                             });
                         }
                     }
@@ -322,7 +311,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileMasterCountMin
                         to: root.settingsBridge.autotileMasterCountMax
                         stepSize: 1
-                        value: root.settingValue("MasterCount", root.liveAlgoSettings.masterCount !== undefined ? root.liveAlgoSettings.masterCount : root.appSettingsObj.autotileMasterCount)
+                        value: root.settingValue("MasterCount", root.liveAlgoSettings.masterCount !== undefined ? root.liveAlgoSettings.masterCount : appSettings.autotileMasterCount)
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }

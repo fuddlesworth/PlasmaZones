@@ -42,22 +42,20 @@ SettingsFlickable {
     readonly property int algorithmPreviewWidth: Kirigami.Units.gridUnit * 18
     readonly property int algorithmPreviewHeight: Kirigami.Units.gridUnit * 10
     // Cache the availableAlgorithms PROPERTY (read, not call — it is both a
-    // Q_PROPERTY and a same-named Q_INVOKABLE, so the `()` form errors).
-    // Refreshed via the Connections below on its NOTIFY.
+    // Q_PROPERTY and a same-named Q_INVOKABLE, so the `()` form errors). Its
+    // NOTIFY-backed binding self-refreshes when the list changes, so no
+    // imperative refresh is needed.
     property var _cachedAlgos: settingsController.availableAlgorithms || []
-    // Root-qualified handle for the `appSettings` ISettings context property.
-    // Several children here set their OWN `appSettings` (PerScreenOverrideHelper,
-    // and the LayoutComboBox now nested inside AlgorithmPreviewCard), which
-    // shadows the bare name inside a handler attached to that child — a bare
-    // `appSettings.defaultAutotileAlgorithm` there would read settingsController,
-    // which has no such property. Reaching the ISettings object as
-    // `root.appSettingsObj` is shadow-immune from any scope (same handle on
-    // TilingAlgorithmPage).
-    readonly property var appSettingsObj: appSettings
+    // `appSettings` is the ISettings context property (set app-wide via
+    // rootContext); read it directly. Handlers here are attached to page-scope
+    // objects and to AlgorithmPreviewCard (which declares no `appSettings`), so
+    // the bare name resolves to the context property — children that DO set their
+    // own `appSettings` (PerScreenOverrideHelper, the LayoutComboBox nested in
+    // AlgorithmPreviewCard) are never in an ancestor binding's scope chain.
     // Working algorithm for preview/capability lookups. Imperative for the
     // same reason as on TilingAlgorithmPage: the combo's currentValue
     // transiently resets while its model rebuilds after a Save.
-    property string selectedAlgorithm: root.appSettingsObj.defaultAutotileAlgorithm
+    property string selectedAlgorithm: appSettings.defaultAutotileAlgorithm
 
     readonly property var algoCapabilities: AlgoCaps.capabilitiesFor(root._cachedAlgos, root.selectedAlgorithm)
     readonly property bool algoSupportsSplitRatio: AlgoCaps.supportsSplitRatio(algoCapabilities)
@@ -93,7 +91,7 @@ SettingsFlickable {
             root._perScreenRevision++;
         }
 
-        target: root.appSettingsObj
+        target: appSettings
     }
 
     function _seedFromAlgorithm() {
@@ -134,25 +132,17 @@ SettingsFlickable {
                 root._seedFromAlgorithm();
         }
 
-        target: root.appSettingsObj
+        target: appSettings
     }
 
     // External edits (a Discard, a profile switch, a rule apply) move the
     // persisted default under us — follow it.
     Connections {
         function onDefaultAutotileAlgorithmChanged() {
-            root.selectedAlgorithm = root.appSettingsObj.defaultAutotileAlgorithm;
+            root.selectedAlgorithm = appSettings.defaultAutotileAlgorithm;
         }
 
-        target: root.appSettingsObj
-    }
-
-    Connections {
-        function onAvailableAlgorithmsChanged() {
-            root._cachedAlgos = settingsController.availableAlgorithms || [];
-        }
-
-        target: settingsController
+        target: appSettings
     }
 
     contentHeight: content.implicitHeight
@@ -190,7 +180,7 @@ SettingsFlickable {
                 // instead of live slider handles, and with no window-count
                 // caption, since this page leads with the picker itself.
                 //
-                // masterCount reads root.appSettingsObj because the controller
+                // masterCount reads appSettings because the controller
                 // has no autotileMasterCount of its own.
                 AlgorithmPreviewCard {
                     Layout.fillWidth: true
@@ -199,7 +189,7 @@ SettingsFlickable {
                     searchAnchor: "simpleAlgorithm"
                     algorithmId: root.selectedAlgorithm
                     description: AlgoCaps.description(root.algoCapabilities)
-                    currentAlgorithmId: root.appSettingsObj.defaultAutotileAlgorithm
+                    currentAlgorithmId: appSettings.defaultAutotileAlgorithm
                     windowCount: maxWindowsSlider.slider.value
                     // An algorithm with no ratio control of its own draws at the
                     // ratio the catalog declares for it. An algorithm the
@@ -211,18 +201,18 @@ SettingsFlickable {
                             return masterRatioSlider.slider.value;
 
                         const catalogRatio = AlgoCaps.defaultSplitRatio(root.algoCapabilities);
-                        return catalogRatio !== undefined ? catalogRatio : root.appSettingsObj.autotileSplitRatio;
+                        return catalogRatio !== undefined ? catalogRatio : appSettings.autotileSplitRatio;
                     }
                     supportsMasterCount: AlgoCaps.supportsMasterCount(root.algoCapabilities)
-                    masterCount: root.algoSettings.masterCount !== undefined ? root.algoSettings.masterCount : root.appSettingsObj.autotileMasterCount
+                    masterCount: root.algoSettings.masterCount !== undefined ? root.algoSettings.masterCount : appSettings.autotileMasterCount
                     customParams: root.previewCustomParams
                     zoneNumberDisplay: AlgoCaps.zoneNumberDisplay(root.algoCapabilities)
                     onAlgorithmActivated: selectedId => {
                         // An empty id means the combo's model rebuilt under the
                         // selection — fall back to the persisted default.
-                        const algoId = selectedId === "" ? root.appSettingsObj.defaultAutotileAlgorithm : selectedId;
+                        const algoId = selectedId === "" ? appSettings.defaultAutotileAlgorithm : selectedId;
                         root.selectedAlgorithm = algoId;
-                        root.appSettingsObj.defaultAutotileAlgorithm = algoId;
+                        appSettings.defaultAutotileAlgorithm = algoId;
                     }
                 }
 
@@ -243,7 +233,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileSplitRatioMin
                         to: root.settingsBridge.autotileSplitRatioMax
                         stepSize: 0.05
-                        value: root.algoSettings.splitRatio !== undefined ? root.algoSettings.splitRatio : root.appSettingsObj.autotileSplitRatio
+                        value: root.algoSettings.splitRatio !== undefined ? root.algoSettings.splitRatio : appSettings.autotileSplitRatio
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
@@ -281,7 +271,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileMaxWindowsMin
                         to: root.settingsBridge.autotileMaxWindowsMax
                         stepSize: 1
-                        value: root.algoSettings.maxWindows !== undefined ? root.algoSettings.maxWindows : root.appSettingsObj.autotileMaxWindows
+                        value: root.algoSettings.maxWindows !== undefined ? root.algoSettings.maxWindows : appSettings.autotileMaxWindows
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }

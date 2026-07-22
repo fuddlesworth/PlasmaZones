@@ -323,13 +323,14 @@ Item {
             const paths = root._writePaths;
             for (var i = 0; i < paths.length; ++i) {
                 // Skip paths with no shader leg, mirroring the toggle-off guard
-                // (_anyWritePathSupportsShaderLeg). Writing a shader override to a
-                // path that cannot host one would strand that mirror permanently
-                // divergent on the shader axis and latch the divergence banner
-                // with no control able to clear it. A no-op for the current
-                // mirror set (both window.appearance legs support shaders); it
-                // guards a future set that mixes supporting and non-supporting
-                // paths.
+                // (_anyWritePathSupportsShaderLeg). setShaderOverride already
+                // rejects such a path, so this only avoids a known no-op call and
+                // its qCWarning. The divergence-latch it would otherwise cause on
+                // a mixed mirror set is prevented in _storedStateKey, which omits
+                // the shader axis for non-supporting paths — the two guards
+                // together keep the banner off for a set mixing supporting and
+                // non-supporting paths. A no-op for the current mirror set (both
+                // window.appearance legs support shaders).
                 if (!settingsController.animationsPage.supportsShaderLeg(paths[i]))
                     continue;
                 settingsController.animationsPage.setShaderOverride(paths[i], effectId, params);
@@ -505,8 +506,18 @@ Item {
     function _storedStateKey(path) {
         const cached = root._pathProfiles[path];
         const profile = cached || settingsController.animationsPage.rawProfile(path) || ({});
-        const cachedShader = root._pathShaderProfiles[path];
-        const shader = cachedShader || settingsController.animationsPage.rawShaderProfile(path) || ({});
+        // Shader axis only for paths that can actually host a shader leg. A
+        // non-supporting path always stores {} (the controller rejects a shader
+        // write to it, and _setShaderOverrideOnAll skips it), so comparing its
+        // permanently-empty shader against a supporting path's real one would
+        // latch the divergence banner over an axis no control could ever
+        // converge. For the current all-supporting mirror set this is a no-op;
+        // it only matters for a future set mixing supporting and non-supporting
+        // paths. Non-supporting paths contribute a constant {} so they never
+        // diverge on this axis.
+        const shaderComparable = settingsController.animationsPage.supportsShaderLeg(path);
+        const cachedShader = shaderComparable ? root._pathShaderProfiles[path] : undefined;
+        const shader = shaderComparable ? (cachedShader || settingsController.animationsPage.rawShaderProfile(path) || ({})) : ({});
         // Divergence is measured on exactly what this card WRITES to every
         // path: duration (commitOverride -> _setOverrideMerged) and the whole
         // shader leg (_setShaderOverrideOnAll, reached from the picker, the

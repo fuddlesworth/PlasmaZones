@@ -2508,7 +2508,7 @@ void Daemon::stop()
     // daemon, and theoretically observable in production on a
     // configure-reload cycle. ProfileLoader's destructor issues its
     // own `clearOwner(kPlasmaZonesUserProfilesOwnerTag)` so the
-    // process-global PhosphorProfileRegistry shed those entries here.
+    // per-daemon `m_profileRegistry` value member sheds those entries here.
     m_profileLoader.reset();
     m_curveLoader.reset();
     m_shaderBakePool.clear();
