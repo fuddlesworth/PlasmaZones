@@ -29,8 +29,8 @@
 #include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
@@ -40,7 +40,7 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 // Stub Settings
 // =========================================================================
 
-#include "../helpers/StubSettings.h"
+#include "helpers/StubSettings.h"
 
 using StubSettingsBridge = StubSettings;
 

@@ -31,8 +31,8 @@
 #include <PhosphorAnimation/ProfileTree.h>
 
 #include "dbus/settingsadaptor/settingsadaptor.h"
-#include "../helpers/StubSettings.h"
-#include "../helpers/IsolatedConfigGuard.h"
+#include "helpers/StubSettings.h"
+#include "helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;

@@ -35,7 +35,7 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 
-#include "../../../src/editor/services/DBusLayoutService.h"
+#include "editor/services/DBusLayoutService.h"
 
 // =========================================================================
 // Stub LayoutRegistry. Only the two methods under test are exposed, and each

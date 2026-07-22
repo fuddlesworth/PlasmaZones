@@ -19,7 +19,7 @@
 #include <PhosphorProtocol/WindowMarshalling.h>
 
 #include <PhosphorTileEngine/AutotileEngine.h>
-#include "../helpers/AutotileTestHelpers.h"
+#include "helpers/AutotileTestHelpers.h"
 #include <PhosphorScreens/Manager.h>
 #include "dbus/autotileadaptor/autotileadaptor.h"
 

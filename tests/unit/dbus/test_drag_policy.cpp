@@ -32,10 +32,10 @@
 
 #include <PhosphorContext/IContextResolver.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
-#include "../helpers/AutotileTestHelpers.h"
+#include "helpers/AutotileTestHelpers.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 
-#include "../helpers/StubSettings.h"
+#include "helpers/StubSettings.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;

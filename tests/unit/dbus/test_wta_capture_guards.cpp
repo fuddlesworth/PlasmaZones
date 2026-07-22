@@ -33,10 +33,10 @@
 #include "FakeScreenProvider.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
-#include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/LayoutRegistryTestHelpers.h"
-#include "../helpers/StubSettings.h"
-#include "../helpers/StubZoneDetector.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/StubSettings.h"
+#include "helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;

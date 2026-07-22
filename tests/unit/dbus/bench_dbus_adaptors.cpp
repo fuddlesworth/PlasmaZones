@@ -39,9 +39,9 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
 #include <PhosphorZones/Zone.h>
-#include "../helpers/StubSettings.h"
-#include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/StubSettings.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;

@@ -19,8 +19,8 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
-#include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
 
 #include <QtTest>
 

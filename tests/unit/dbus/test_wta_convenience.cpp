@@ -38,8 +38,8 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include "config/configdefaults.h"
 #include <QUuid>
-#include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
@@ -49,7 +49,7 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 // Stub Settings
 // =========================================================================
 
-#include "../helpers/StubSettings.h"
+#include "helpers/StubSettings.h"
 
 using StubSettingsConvenience = StubSettings;
 

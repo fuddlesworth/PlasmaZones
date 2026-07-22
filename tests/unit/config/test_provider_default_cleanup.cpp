@@ -28,9 +28,9 @@
 #include <QTest>
 #include <QUuid>
 
-#include "../../../src/config/configdefaults.h"
-#include "../../../src/config/configmigration.h"
-#include "../helpers/IsolatedConfigGuard.h"
+#include "config/configdefaults.h"
+#include "config/configmigration.h"
+#include "helpers/IsolatedConfigGuard.h"
 
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/Rule.h>

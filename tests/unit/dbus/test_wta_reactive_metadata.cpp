@@ -48,9 +48,9 @@
 #include <QTemporaryDir>
 #include <QUuid>
 
-#include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/LayoutRegistryTestHelpers.h"
-#include "../helpers/StubSettings.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/StubSettings.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
