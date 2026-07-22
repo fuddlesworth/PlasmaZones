@@ -620,9 +620,13 @@ SettingsFlickable {
                         // Responsive columns: fit as many cards as the minimum
                         // card width allows, then stretch each card to fill the
                         // row evenly so there's no dead gap on the right edge.
+                        // The width must be floored: a fractional card width
+                        // accumulates float error in Flow's x positions, and a
+                        // sub-pixel overshoot wraps the last card of every row,
+                        // leaving a full empty slot on the right.
                         readonly property real _minCardWidth: Kirigami.Units.gridUnit * 13
                         readonly property int _columns: Math.max(1, Math.floor((width + spacing) / (_minCardWidth + spacing)))
-                        readonly property real _cardWidth: (width - spacing * (_columns - 1)) / _columns
+                        readonly property real _cardWidth: Math.floor((width - spacing * (_columns - 1)) / _columns)
 
                         Repeater {
                             model: modelData.items

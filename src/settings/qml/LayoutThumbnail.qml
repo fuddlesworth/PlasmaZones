@@ -71,10 +71,24 @@ Item {
             return refAR > 0 ? refAR : fallbackAspectRatio;
         }
     }
+    // Opt-in fit sizing: when both are set (> 0) the preview box derives its
+    // height from the given bounds instead of the fixed default, so the zone
+    // graphic resizes with the host card while the label/badge text keeps its
+    // natural pixel size. Hosts that previously shrank the whole thumbnail
+    // with a scale transform (which also shrank the text into illegibility)
+    // should use this instead.
+    property real fitWidth: 0
+    property real fitHeight: 0
+    readonly property bool _fitMode: fitWidth > 0 && fitHeight > 0
+    // The tallest preview that fits both bounds once the side padding and
+    // vertical chrome are reserved. The width-derived bound divides by the
+    // aspect ratio; the min/max width clamp below can only make the box
+    // narrower than this budget, never wider, so the fit stays conservative.
+    readonly property real _fitBaseHeight: Math.max(Kirigami.Units.gridUnit * 3, Math.min(fitHeight - _verticalChrome, (fitWidth - _sidePadding * 2) / Math.max(0.1, layoutAspectRatio)))
     // Preview-box sizing. Height is the fixed side for every class, so a
     // portrait ratio (< 1) simply yields a narrower width, which the
     // min/max clamp below keeps usable.
-    property real baseHeight: Kirigami.Units.gridUnit * 9
+    property real baseHeight: _fitMode ? _fitBaseHeight : Kirigami.Units.gridUnit * 9
     readonly property real calculatedWidth: baseHeight * layoutAspectRatio
     property real minThumbnailWidth: Kirigami.Units.gridUnit * 5 // Narrower min for portrait
     property real maxThumbnailWidth: Kirigami.Units.gridUnit * 26 // Wider max for super-ultrawide

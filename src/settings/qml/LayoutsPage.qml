@@ -444,8 +444,12 @@ SettingsFlickable {
                         // Responsive columns: fit as many cards as the minimum
                         // card width allows, then stretch each to fill the row
                         // evenly so there's no dead gap on the right edge.
+                        // The width must be floored: a fractional card width
+                        // accumulates float error in Flow's x positions, and a
+                        // sub-pixel overshoot wraps the last card of every row,
+                        // leaving a full empty slot on the right.
                         readonly property int _columns: Math.max(1, Math.floor((width + spacing) / (root.minCardWidth + spacing)))
-                        readonly property real _cardWidth: (width - spacing * (_columns - 1)) / _columns
+                        readonly property real _cardWidth: Math.floor((width - spacing * (_columns - 1)) / _columns)
 
                         Repeater {
                             model: groupCard.modelData.items
@@ -454,7 +458,12 @@ SettingsFlickable {
                                 appSettings: root.settingsBridge
                                 settingsController: root.controllerBridge
                                 cellWidth: cardFlow._cardWidth
-                                cellHeight: root.cardHeight
+                                // Height tracks the stretched width so cards keep
+                                // the same proportions at every window size and
+                                // the fit-sized preview grows with them, instead
+                                // of a fixed height capping the preview no matter
+                                // how wide the card gets.
+                                cellHeight: cardFlow._cardWidth * (root.cardHeight / root.minCardWidth)
                                 viewMode: root.viewMode
                                 isSelected: String(modelData.id) === root.selectedLayoutId
                                 // When LayoutsPage is hosted outside Main.qml
