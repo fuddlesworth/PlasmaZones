@@ -13,9 +13,9 @@
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
-#include "../../core/geometryutils.h"
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "core/utils/geometryutils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include "../../dbus/layoutadaptor.h"
 #include "../../dbus/settingsadaptor.h"
 #include "../../dbus/shaderadaptor.h"
@@ -31,7 +31,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
-#include "../../core/shaderregistry.h"
+#include "core/interfaces/shaderregistry.h"
 #include "../../config/settingsconfigstore.h"
 #include <PhosphorZones/ZoneDetector.h>
 #include <QProcess>

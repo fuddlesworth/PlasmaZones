@@ -10,9 +10,9 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../core/crosssurfaceresolver.h"
-#include "../core/isettings.h"
-#include "../core/screenmoderouter.h"
+#include "core/resolve/crosssurfaceresolver.h"
+#include "core/interfaces/isettings.h"
+#include "core/resolve/screenmoderouter.h"
 
 namespace PlasmaZones {
 

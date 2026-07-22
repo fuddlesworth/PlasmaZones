@@ -15,8 +15,8 @@
 #include <QVariantMap>
 #include <QtCore/qnamespace.h>
 
-#include "../core/constants.h"
-#include "../core/enums.h"
+#include "core/types/constants.h"
+#include "core/types/enums.h"
 #include "configkeys.h"
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for

@@ -11,7 +11,7 @@
 // layer-shell surfaces).
 
 #include "plasmazones_export.h"
-#include "dmabufthumbnail.h"
+#include "core/types/dmabufthumbnail.h"
 
 #include <PhosphorProtocol/ZoneTypes.h>
 

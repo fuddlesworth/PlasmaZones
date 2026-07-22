@@ -26,7 +26,7 @@
 #include <QUuid>
 #include <QSignalSpy>
 
-#include "../../../src/core/utils.h"
+#include "core/utils/utils.h"
 
 /**
  * @brief Mock/stub implementation of WindowTrackingAdaptor logic for isolated testing

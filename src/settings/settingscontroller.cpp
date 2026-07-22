@@ -23,11 +23,11 @@
 #include "../common/layoutpreviewserialize.h"
 #include "../common/screenidresolver.h"
 #include "../common/layoutbundlebuilder.h"
-#include "../core/constants.h"
-#include "../core/geometryutils.h"
+#include "core/types/constants.h"
+#include "core/utils/geometryutils.h"
 #include <PhosphorZones/LayoutComputeService.h>
-#include "../core/logging.h"
-#include "../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include "../phosphor_i18n.h"
 #include "dbusutils.h"
 #include "pageadapter.h"
@@ -42,7 +42,7 @@
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorRules/RuleStoreWatcher.h>
 
-#include "../core/shaderregistry.h"
+#include "core/interfaces/shaderregistry.h"
 #include "snappingshaderspagecontroller.h"
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>

@@ -7,8 +7,8 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorScreens/Manager.h>

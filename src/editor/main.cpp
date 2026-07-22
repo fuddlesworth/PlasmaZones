@@ -3,17 +3,17 @@
 
 #include "EditorController.h"
 #include "EditorLaunchController.h"
-#include "../core/animationbootstrap.h"
-#include "../core/constants.h"
-#include "../core/logging.h"
+#include "core/resolve/animationbootstrap.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 #include <PhosphorWayland/LayerShellPluginLoader.h>
 #include <PhosphorWayland/LayerSurface.h>
 #include <PhosphorScreens/Resolver.h>
-#include "../core/single_instance_service.h"
-#include "../core/translationloader.h"
+#include "core/platform/singleinstanceservice.h"
+#include "core/utils/translationloader.h"
 #include "../config/configdefaults.h"
 #include "version.h"
 #include "../daemon/rendering/zoneshaderitem.h"

@@ -3,7 +3,7 @@
 
 #include "windowappearancecontroller.h"
 
-#include "../core/isettings.h"
+#include "core/interfaces/isettings.h"
 
 #include <PhosphorEngine/PerScreenKeys.h>
 

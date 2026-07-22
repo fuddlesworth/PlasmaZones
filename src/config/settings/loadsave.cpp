@@ -3,7 +3,7 @@
 
 #include "../settings.h"
 #include "../configdefaults.h"
-#include "../../core/logging.h"
+#include "core/platform/logging.h"
 
 namespace PlasmaZones {
 

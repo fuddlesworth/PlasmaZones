@@ -9,8 +9,8 @@
 #include "decorationpagecontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../core/isettings.h"
-#include "../core/logging.h"
+#include "core/interfaces/isettings.h"
+#include "core/platform/logging.h"
 #include "../phosphor_i18n.h"
 #include "shaderpackinstaller.h"
 

@@ -15,8 +15,8 @@
 #include "decorationpagecontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../core/isettings.h"
-#include "../core/logging.h"
+#include "core/interfaces/isettings.h"
+#include "core/platform/logging.h"
 #include "shadersetstore.h"
 
 #include <PhosphorSurface/DecorationProfile.h>

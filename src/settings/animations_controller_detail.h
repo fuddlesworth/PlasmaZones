@@ -10,7 +10,7 @@
 // TUs get their own copy without relying on unity-build TU merging for cross-TU
 // linkage.
 
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 #include "animationfileutils.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>

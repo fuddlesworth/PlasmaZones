@@ -7,9 +7,9 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "config/configdefaults.h"
 
-#include "core/constants.h"
+#include "core/types/constants.h"
 #include <PhosphorTiles/AutotileConstants.h>
-#include "core/logging.h"
+#include "core/platform/logging.h"
 
 namespace PlasmaZones {
 

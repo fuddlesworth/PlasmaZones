@@ -6,11 +6,11 @@
 // lives in settingsadaptor_batch.cpp (same class, no API change).
 
 #include "settingsadaptor.h"
-#include "../core/interfaces.h"
-#include "../core/dbusvariantutils.h"
+#include "core/interfaces/interfaces.h"
+#include "core/utils/dbusvariantutils.h"
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
-#include "../core/logging.h"
-#include "../core/shaderregistry.h"
+#include "core/platform/logging.h"
+#include "core/interfaces/shaderregistry.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QDBusVariant>

@@ -3,14 +3,14 @@
 
 #include "screenprovider.h"
 #include "dbusutils.h"
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 #include <QDBusConnection>
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScreen>
-#include "../core/constants.h"
-#include "../core/isettings.h"
+#include "core/types/constants.h"
+#include "core/interfaces/isettings.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScreens/ScreenIdentity.h>

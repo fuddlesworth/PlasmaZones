@@ -25,7 +25,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 
 #include "FakeScreenProvider.h"
-#include "core/crosssurfaceresolver.h"
+#include "core/resolve/crosssurfaceresolver.h"
 
 #include "../helpers/AutotileFakes.h"
 #include "../helpers/AutotileTestHelpers.h"

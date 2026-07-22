@@ -9,7 +9,7 @@
 
 #include <QTest>
 
-#include "core/unifiedlayoutlist.h"
+#include "core/utils/unifiedlayoutlist.h"
 
 #include "../helpers/StubSettings.h"
 

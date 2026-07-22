@@ -9,8 +9,8 @@
 #include "../helpers/ShaderDbusQueries.h"
 #include "../helpers/SettingsDbusQueries.h"
 #include "../../config/configdefaults.h"
-#include "../../core/shaderregistry.h"
-#include "../../core/logging.h"
+#include "core/interfaces/shaderregistry.h"
+#include "core/platform/logging.h"
 #include "../../shaderpreview/shaderpreviewcontroller.h"
 
 #include "phosphor_i18n.h"

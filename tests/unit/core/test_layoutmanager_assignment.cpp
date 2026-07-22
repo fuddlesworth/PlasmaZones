@@ -26,7 +26,7 @@
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleStore.h>
-#include "core/constants.h"
+#include "core/types/constants.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/LayoutRegistryTestHelpers.h"

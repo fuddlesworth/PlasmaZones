@@ -3,8 +3,8 @@
 
 #include "unifiedlayoutlist.h"
 
-#include "constants.h"
-#include "interfaces.h"
+#include "core/types/constants.h"
+#include "core/interfaces/interfaces.h"
 #include "phosphor_i18n.h"
 #include "utils.h"
 

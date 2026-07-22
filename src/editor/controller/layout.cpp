@@ -6,14 +6,14 @@
 #include "../services/ZoneManager.h"
 #include "../undo/UndoController.h"
 #include "../helpers/ShaderDbusQueries.h"
-#include "../../core/constants.h"
+#include "core/types/constants.h"
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include "../../core/shaderregistry.h"
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "core/interfaces/shaderregistry.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 
 #include "phosphor_i18n.h"

@@ -6,7 +6,7 @@
 #include "ruleauthoring.h"
 #include "ruletemplates.h"
 
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 #include "../phosphor_i18n.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>

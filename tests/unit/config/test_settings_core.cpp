@@ -32,7 +32,7 @@
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
-#include "../../../src/core/constants.h"
+#include "core/types/constants.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;

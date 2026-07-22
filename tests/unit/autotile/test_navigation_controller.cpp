@@ -8,7 +8,7 @@
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
-#include "core/constants.h"
+#include "core/types/constants.h"
 
 #include "../helpers/AutotileTestHelpers.h"
 

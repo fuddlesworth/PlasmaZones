@@ -21,7 +21,7 @@
 
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/config/settings.h"
-#include "../../../src/core/settings_interfaces.h"
+#include "core/interfaces/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 #include <PhosphorRules/ContextRuleBridge.h>

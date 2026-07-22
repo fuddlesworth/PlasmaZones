@@ -23,7 +23,7 @@
 #include "settingscontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 
 #include <PhosphorControl/PageRegistry.h>
 

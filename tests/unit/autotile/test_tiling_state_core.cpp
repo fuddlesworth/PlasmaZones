@@ -8,7 +8,7 @@
 
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/TilingState.h>
-#include "core/constants.h"
+#include "core/types/constants.h"
 #include "config/configdefaults.h"
 
 using namespace PlasmaZones;

@@ -5,8 +5,8 @@
 #include <QList>
 #include <QRectF>
 
-#include "core/spatialadjacency.h"
-#include "core/utils.h"
+#include "core/types/spatialadjacency.h"
+#include "core/utils/utils.h"
 
 #include <PhosphorScreens/Swapper.h>
 

@@ -13,7 +13,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
-#include "core/constants.h"
+#include "core/types/constants.h"
 #include "config/settings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/ScriptedAlgoTestSetup.h"

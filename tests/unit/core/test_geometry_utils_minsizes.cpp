@@ -21,8 +21,8 @@
 #include <QVector>
 #include <QSize>
 
-#include "core/geometryutils.h"
-#include "core/constants.h"
+#include "core/utils/geometryutils.h"
+#include "core/types/constants.h"
 
 using namespace PlasmaZones;
 

@@ -14,9 +14,9 @@
 #include <QQuickWindow>
 #include <QSize>
 #include "../config/configbackends.h"
-#include "../core/constants.h"
+#include "core/types/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 #include "undo/UndoController.h"
 #include "../shaderpreview/ishaderpreviewbackend.h"
 

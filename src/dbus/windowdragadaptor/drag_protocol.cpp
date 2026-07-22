@@ -12,11 +12,11 @@
 
 #include "../windowdragadaptor.h"
 #include "../windowtrackingadaptor.h"
-#include "../../core/interfaces.h"
+#include "core/interfaces/interfaces.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../../core/settings_interfaces.h"
-#include "../../core/logging.h"
+#include "core/interfaces/settings_interfaces.h"
+#include "core/platform/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <QGuiApplication>
 #include <QTimer>

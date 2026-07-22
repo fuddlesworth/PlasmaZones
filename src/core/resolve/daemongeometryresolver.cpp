@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemongeometryresolver.h"
-#include "geometryutils.h"
-#include "isettings.h"
+#include "core/utils/geometryutils.h"
+#include "core/interfaces/isettings.h"
 #include <PhosphorEngine/IGeometrySettings.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorZones/AssignmentEntry.h>

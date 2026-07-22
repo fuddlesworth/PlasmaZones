@@ -25,68 +25,68 @@ add_subdirectory(shared)
 # Core library sources
 set(plasmazones_core_SRCS
     phosphor_qml_i18n.h
-    core/constants.h
-    core/baselinecleanup.h
-    core/logging.h
-    core/logging.cpp
-    core/translationloader.h
-    core/translationloader.cpp
-    core/animationbootstrap.h
-    core/animationbootstrap.cpp
+    core/types/constants.h
+    core/types/baselinecleanup.h
+    core/platform/logging.h
+    core/platform/logging.cpp
+    core/utils/translationloader.h
+    core/utils/translationloader.cpp
+    core/resolve/animationbootstrap.h
+    core/resolve/animationbootstrap.cpp
     # wallpaperprovider moved to PhosphorShaders
-    core/enums.h
-    core/interfaces.h
-    core/interfaces.cpp
+    core/types/enums.h
+    core/interfaces/interfaces.h
+    core/interfaces/interfaces.cpp
     # ilayoutmanager / izonedetector shims removed - consumers include
     # <PhosphorZones/ILayoutManager.h> / <PhosphorZones/IZoneDetector.h>
     # directly.
-    core/ioverlayservice.h
-    core/isettings.h
-    core/settings_interfaces.h
-    core/types.h
-    core/utils.h
-    core/utils.cpp
-    core/daemongeometryresolver.h
-    core/daemongeometryresolver.cpp
-    core/platform.cpp
-    core/platform.h
-    core/geometryutils.cpp
-    core/geometryutils.h
-    core/spatialadjacency.h
+    core/interfaces/ioverlayservice.h
+    core/interfaces/isettings.h
+    core/interfaces/settings_interfaces.h
+    core/types/types.h
+    core/utils/utils.h
+    core/utils/utils.cpp
+    core/resolve/daemongeometryresolver.h
+    core/resolve/daemongeometryresolver.cpp
+    core/platform/platform.cpp
+    core/platform/platform.h
+    core/utils/geometryutils.cpp
+    core/utils/geometryutils.h
+    core/types/spatialadjacency.h
     # virtualscreenswapper.{h,cpp} lifted to libs/phosphor-screens/Swapper.h -
     # callers include <PhosphorScreens/Swapper.h> directly.
-    core/screenmoderouter.cpp
-    core/screenmoderouter.h
-    core/crosssurfaceresolver.cpp
-    core/crosssurfaceresolver.h
-    core/dbusvariantutils.cpp
-    core/dbusvariantutils.h
+    core/resolve/screenmoderouter.cpp
+    core/resolve/screenmoderouter.h
+    core/resolve/crosssurfaceresolver.cpp
+    core/resolve/crosssurfaceresolver.h
+    core/utils/dbusvariantutils.cpp
+    core/utils/dbusvariantutils.h
     # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutRegistry,
     # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ -
     # consumers include <PhosphorZones/...> directly and construct the registry
     # with a borrowed PhosphorRules::RuleStore* + the
     # "plasmazones/layouts" subdir inline.
-    core/unifiedlayoutlist.cpp
-    core/unifiedlayoutlist.h
+    core/utils/unifiedlayoutlist.cpp
+    core/utils/unifiedlayoutlist.h
     common/layoutpreviewserialize.cpp
     common/layoutpreviewserialize.h
     common/screenidresolver.cpp
     common/screenidresolver.h
     common/layoutbundlebuilder.cpp
     common/layoutbundlebuilder.h
-    core/supportreport.cpp
-    core/supportreport.h
+    core/platform/supportreport.cpp
+    core/platform/supportreport.h
     # layersurface moved to PhosphorWayland; shaderregistry/params moved to PhosphorShaders
-    core/single_instance_service.cpp
-    core/single_instance_service.h
+    core/platform/singleinstanceservice.cpp
+    core/platform/singleinstanceservice.h
     # screen_resolver.{h,cpp} and screenmanager.{h,cpp} + screenmanager/
     # lifted to libs/phosphor-screens. Daemon consumers take
     # PhosphorScreens::ScreenManager* via constructor injection -
     # no service-locator intermediary.
-    core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
+    core/interfaces/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
     # shaderregistry.cpp + shaderincluderesolver moved to PhosphorShaders
-    core/modifierutils.cpp
-    core/modifierutils.h
+    core/utils/modifierutils.cpp
+    core/utils/modifierutils.h
     config/settings.cpp
     config/settings/loadsave.cpp
     config/settings/setters.cpp

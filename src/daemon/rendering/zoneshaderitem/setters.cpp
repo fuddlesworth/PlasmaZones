@@ -3,8 +3,8 @@
 
 #include "../zoneshaderitem.h"
 
-#include "../../../core/constants.h"
-#include "../../../core/logging.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
 
 #include <QMutexLocker>
 

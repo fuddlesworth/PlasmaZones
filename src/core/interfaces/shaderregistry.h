@@ -13,7 +13,7 @@
 
 #include <PhosphorShaders/ShaderRegistry.h>
 
-#include "../config/configdefaults.h"
+#include "config/configdefaults.h"
 #include "plasmazones_export.h"
 
 #include <QDesktopServices>

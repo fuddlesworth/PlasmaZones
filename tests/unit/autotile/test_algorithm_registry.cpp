@@ -11,7 +11,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
-#include "core/constants.h"
+#include "core/types/constants.h"
 
 #include "../helpers/ScriptedAlgoTestSetup.h"
 #include "../helpers/TilingTestHelpers.h"

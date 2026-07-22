@@ -24,7 +24,7 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
-#include "core/screenmoderouter.h"
+#include "core/resolve/screenmoderouter.h"
 #include "../helpers/AutotileTestHelpers.h"
 #include "../helpers/LayoutRegistryTestHelpers.h"
 #include <PhosphorSnapEngine/SnapEngine.h>

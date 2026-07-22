@@ -8,7 +8,7 @@
 
 #include "motionsetdomain.h"
 
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 #include "animationfileutils.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>

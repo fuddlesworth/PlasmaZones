@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "settings_interfaces.h"
+#include "core/interfaces/settings_interfaces.h"
 #include "constants.h"
 #include <QRect>
 #include <QScreen>

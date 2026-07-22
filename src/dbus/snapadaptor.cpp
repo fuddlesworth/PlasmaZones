@@ -4,7 +4,7 @@
 #include "snapadaptor.h"
 #include "windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include "core/logging.h"
+#include "core/platform/logging.h"
 
 namespace PlasmaZones {
 

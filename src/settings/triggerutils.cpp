@@ -4,8 +4,8 @@
 #include "triggerutils.h"
 
 #include "../config/configdefaults.h"
-#include "../core/enums.h"
-#include "../core/modifierutils.h"
+#include "core/types/enums.h"
+#include "core/utils/modifierutils.h"
 
 namespace PlasmaZones::TriggerUtils {
 

@@ -27,8 +27,8 @@
 
 #include <PhosphorWayland/LayerSurface.h>
 #include "qml_property_names.h"
-#include "../../core/logging.h"
-#include "../../core/enums.h"
+#include "core/platform/logging.h"
+#include "core/types/enums.h"
 
 namespace PlasmaZones {
 using PhosphorWayland::LayerSurface;

@@ -15,8 +15,8 @@
 #include "../config/updatechecker.h"
 #include "../common/daemoncontroller.h"
 #include "screenhelper.h"
-#include "../core/constants.h"
-#include "../core/enums.h"
+#include "core/types/constants.h"
+#include "core/types/enums.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
 

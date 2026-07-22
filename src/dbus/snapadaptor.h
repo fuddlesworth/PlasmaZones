@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include "core/types.h"
+#include "core/types/types.h"
 #include <PhosphorProtocol/NavigationMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <QDBusAbstractAdaptor>

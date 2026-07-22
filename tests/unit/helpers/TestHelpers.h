@@ -7,7 +7,7 @@
 #include <QString>
 #include <QLatin1String>
 
-#include "core/constants.h"
+#include "core/types/constants.h"
 
 namespace PlasmaZones {
 namespace TestHelpers {

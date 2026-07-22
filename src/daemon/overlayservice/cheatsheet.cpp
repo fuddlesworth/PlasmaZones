@@ -11,7 +11,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
-#include "../../core/logging.h"
+#include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
 #include "phosphor_roles.h"
 

@@ -4,8 +4,8 @@
 #pragma once
 
 #include "../config/configdefaults.h"
-#include "../core/cavaoptions.h"
-#include "../core/settings_interfaces.h"
+#include "core/types/cavaoptions.h"
+#include "core/interfaces/settings_interfaces.h"
 #include "../shaderpreview/ishaderpreviewbackend.h"
 
 #include <PhosphorShaders/ShaderRegistry.h>

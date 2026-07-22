@@ -16,7 +16,7 @@
 
 #include "settingscontroller.h"
 
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 
 #include <QDebug>
 

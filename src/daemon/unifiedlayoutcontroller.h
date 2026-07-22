@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../core/unifiedlayoutlist.h"
+#include "core/utils/unifiedlayoutlist.h"
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <QObject>
 #include <QPointer>

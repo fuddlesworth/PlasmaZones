@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "dmabuffencewaiter.h"
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 
 #include <QSocketNotifier>
 #include <QTimer>

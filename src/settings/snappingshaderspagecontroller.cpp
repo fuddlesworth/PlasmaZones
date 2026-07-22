@@ -3,8 +3,8 @@
 
 #include "snappingshaderspagecontroller.h"
 
-#include "../core/logging.h"
-#include "../core/shaderregistry.h"
+#include "core/platform/logging.h"
+#include "core/interfaces/shaderregistry.h"
 #include "../shaderpreview/shaderpreviewcontroller.h"
 #include "shaderpackinstaller.h"
 

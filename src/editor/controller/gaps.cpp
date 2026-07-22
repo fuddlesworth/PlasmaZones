@@ -10,10 +10,10 @@
 #include "../undo/commands/UpdateFixedGeometryCommand.h"
 #include "../helpers/SettingsDbusQueries.h"
 #include "../../config/configdefaults.h"
-#include "../../core/constants.h"
-#include "../../core/logging.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
-#include "../../core/utils.h"
+#include "core/utils/utils.h"
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <QDBusConnection>

@@ -21,7 +21,7 @@
 
 #include "config/settings.h"
 #include "config/configdefaults.h"
-#include "core/enums.h"
+#include "core/types/enums.h"
 #include "settings/snappingbehaviorcontroller.h"
 #include "settings/triggerutils.h"
 #include "../helpers/IsolatedConfigGuard.h"

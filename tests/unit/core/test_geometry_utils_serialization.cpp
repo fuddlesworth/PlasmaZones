@@ -22,8 +22,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-#include "core/geometryutils.h"
-#include "core/types.h"
+#include "core/utils/geometryutils.h"
+#include "core/types/types.h"
 
 using namespace PlasmaZones;
 

@@ -13,7 +13,7 @@
 // them and leave a lone high surrogate that serializes as U+FFFD, which is a
 // name the user never typed reaching disk.
 
-#include "../../../src/core/constants.h"
+#include "core/types/constants.h"
 
 #include "dbus/layoutadaptor.h"
 #include <PhosphorZones/Layout.h>

@@ -3,13 +3,13 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
-#include "../../core/logging.h"
+#include "core/platform/logging.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorScreens/Manager.h>
-#include "../../core/utils.h"
+#include "core/utils/utils.h"
 #include <QQuickWindow>
 #include <QScreen>
 #include <QSet>
@@ -32,7 +32,7 @@
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
 
-#include "../../core/isettings.h"
+#include "core/interfaces/isettings.h"
 
 #include <QUrl>
 

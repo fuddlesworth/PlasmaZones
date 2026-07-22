@@ -15,7 +15,7 @@
 
 #include <QTemporaryDir>
 
-#include "core/constants.h"
+#include "core/types/constants.h"
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutSettingsStore.h>

@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "constants.h"
+#include "core/types/constants.h"
 #include "plasmazones_export.h"
-#include "types.h"
+#include "core/types/types.h"
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorProtocol/ZoneTypes.h>

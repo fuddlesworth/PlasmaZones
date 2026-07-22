@@ -4,7 +4,7 @@
 #pragma once
 
 #include "config/configdefaults.h"
-#include "core/interfaces.h"
+#include "core/interfaces/interfaces.h"
 
 #include <PhosphorSnapEngine/ISnapSettings.h>
 

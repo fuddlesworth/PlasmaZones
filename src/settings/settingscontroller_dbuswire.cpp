@@ -22,7 +22,7 @@
 
 #include "settingscontroller.h"
 
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 #include "dbusutils.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>

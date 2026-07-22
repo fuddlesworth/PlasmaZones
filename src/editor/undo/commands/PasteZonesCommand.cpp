@@ -3,7 +3,7 @@
 
 #include "PasteZonesCommand.h"
 #include "../../services/ZoneManager.h"
-#include "../../../core/constants.h"
+#include "core/types/constants.h"
 #include "phosphor_i18n.h"
 
 using namespace PlasmaZones;

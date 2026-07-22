@@ -11,9 +11,9 @@
 // SettingsController multi-TU split, e.g. settingscontroller_pagestate.cpp).
 
 #include "settingsadaptor.h"
-#include "../core/interfaces.h"
-#include "../core/dbusvariantutils.h"
-#include "../core/logging.h"
+#include "core/interfaces/interfaces.h"
+#include "core/utils/dbusvariantutils.h"
+#include "core/platform/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <QDBusVariant>
 #include <QMetaMethod>

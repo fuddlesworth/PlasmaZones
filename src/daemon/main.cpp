@@ -5,9 +5,9 @@
 
 #include "../config/configdefaults.h"
 #include "../config/configmigration.h"
-#include "../core/constants.h"
-#include "../core/logging.h"
-#include "../core/translationloader.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
+#include "core/utils/translationloader.h"
 #include "phosphor_i18n.h"
 #include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneshaderitem.h"

@@ -12,7 +12,7 @@
 
 #include "rulecontroller.h"
 
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>

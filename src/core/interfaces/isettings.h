@@ -12,7 +12,7 @@
 // (see PhosphorZones::ZoneDetector::setAdjacentThreshold for the pattern).
 
 #include "plasmazones_export.h"
-#include "enums.h"
+#include "core/types/enums.h"
 #include "settings_interfaces.h"
 
 #include <QColor>

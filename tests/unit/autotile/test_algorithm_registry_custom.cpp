@@ -8,7 +8,7 @@
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
-#include "core/constants.h"
+#include "core/types/constants.h"
 
 #include <QVariantMap>
 

@@ -6,10 +6,10 @@
 #include <optional>
 
 #include "overlay_helpers.h"
-#include "../../core/settings_interfaces.h"
-#include "../../core/interfaces.h"
-#include "../../core/shaderregistry.h"
-#include "../../core/utils.h"
+#include "core/interfaces/settings_interfaces.h"
+#include "core/interfaces/interfaces.h"
+#include "core/interfaces/shaderregistry.h"
+#include "core/utils/utils.h"
 #include "../config/configdefaults.h"
 
 #include <PhosphorLayer/Role.h>

@@ -12,9 +12,9 @@
 
 #include "../common/layoutpreviewserialize.h"
 #include "../config/configdefaults.h"
-#include "../core/geometryutils.h"
-#include "../core/logging.h"
-#include "../core/utils.h"
+#include "core/utils/geometryutils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include "../phosphor_i18n.h"
 #include "dbusutils.h"
 

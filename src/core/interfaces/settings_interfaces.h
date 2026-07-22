@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include "enums.h"
+#include "core/types/enums.h"
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorEngine/IGeometrySettings.h>
 #include <PhosphorZones/AssignmentEntry.h>

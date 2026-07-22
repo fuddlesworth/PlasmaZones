@@ -4,7 +4,7 @@
 #include "editorpagecontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../core/isettings.h"
+#include "core/interfaces/isettings.h"
 
 namespace PlasmaZones {
 

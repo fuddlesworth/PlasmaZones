@@ -12,7 +12,7 @@
 #include <QTest>
 
 #include "../../../src/config/configdefaults.h"
-#include "../../../src/core/settings_interfaces.h" // ZoneSelectorConfig struct tripwire
+#include "core/interfaces/settings_interfaces.h" // ZoneSelectorConfig struct tripwire
 
 using namespace PlasmaZones;
 

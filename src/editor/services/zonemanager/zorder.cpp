@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../ZoneManager.h"
-#include "../../../core/constants.h"
-#include "../../../core/logging.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
 #include <PhosphorZones/Zone.h>
 
 #include <QtMath>

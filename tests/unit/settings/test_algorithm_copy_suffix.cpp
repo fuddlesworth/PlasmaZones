@@ -27,7 +27,7 @@
 #include <QTranslator>
 
 #include "../../../src/config/settings.h"
-#include "../../../src/core/constants.h"
+#include "core/types/constants.h"
 #include "../../../src/settings/algorithmservice.h"
 #include "../helpers/IsolatedConfigGuard.h"
 

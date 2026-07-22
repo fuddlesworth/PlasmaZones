@@ -9,8 +9,8 @@
 #include <QRect>
 #include <QHash>
 #include <QString>
-#include "../../core/constants.h"
-#include "../../core/utils.h"
+#include "core/types/constants.h"
+#include "core/utils/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorEngine/PlacementEngineBase.h>

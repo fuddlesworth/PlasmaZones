@@ -4,9 +4,9 @@
 #include "animationspagecontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../core/animationshadersupportedpaths.h"
-#include "../core/isettings.h"
-#include "../core/logging.h"
+#include "core/types/animationshadersupportedpaths.h"
+#include "core/interfaces/isettings.h"
+#include "core/platform/logging.h"
 #include "../phosphor_i18n.h"
 #include "animationfileutils.h"
 #include "animationpresetlibrary.h"

@@ -23,7 +23,7 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include "FakeScreenProvider.h"
-#include "core/interfaces.h"
+#include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>

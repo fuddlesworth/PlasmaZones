@@ -3,7 +3,7 @@
 
 #include "generalpagecontroller.h"
 
-#include "../core/isettings.h"
+#include "core/interfaces/isettings.h"
 
 namespace PlasmaZones {
 

@@ -6,7 +6,7 @@
 #include "dbusutils.h"
 #include "virtualscreenutils.h"
 #include "../config/settings.h"
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorScreens/ScreenIdentity.h>

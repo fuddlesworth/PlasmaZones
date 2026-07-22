@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../config/configdefaults.h"
+#include "config/configdefaults.h"
 
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleSet.h>

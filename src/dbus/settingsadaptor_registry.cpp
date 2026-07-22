@@ -14,7 +14,7 @@
 // otherwise unchanged by the split itself.
 
 #include "settingsadaptor.h"
-#include "../core/interfaces.h"
+#include "core/interfaces/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>

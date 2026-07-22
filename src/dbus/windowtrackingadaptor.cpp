@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
-#include "../core/daemongeometryresolver.h"
+#include "core/resolve/daemongeometryresolver.h"
 #include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include "windowtrackingadaptor/persistenceworker.h"
@@ -11,17 +11,17 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "../config/configbackends.h"
-#include "../core/interfaces.h"
+#include "core/interfaces/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../core/logging.h"
-#include "../core/screenmoderouter.h"
-#include "../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/resolve/screenmoderouter.h"
+#include "core/utils/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../core/types.h"
+#include "core/types/types.h"
 #include <PhosphorEngine/WindowRegistry.h>
 // Complete type required where ~WindowTrackingAdaptor destroys the
 // unique_ptr<RuleEvaluator> member (m_ruleEvaluator).

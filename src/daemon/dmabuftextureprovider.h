@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../core/dmabufthumbnail.h"
+#include "core/types/dmabufthumbnail.h"
 
 #include <QHash>
 #include <QMutex>

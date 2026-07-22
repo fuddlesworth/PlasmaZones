@@ -11,7 +11,7 @@
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include "core/constants.h"
+#include "core/types/constants.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;

@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../core/animationbootstrap.h"
-#include "../core/logging.h"
-#include "../core/single_instance_service.h"
-#include "../core/translationloader.h"
+#include "core/resolve/animationbootstrap.h"
+#include "core/platform/logging.h"
+#include "core/platform/singleinstanceservice.h"
+#include "core/utils/translationloader.h"
 #include "../config/configmigration.h"
 #include "settingscontroller.h"
 #include "settingslaunchcontroller.h"
@@ -20,7 +20,7 @@
 
 #include <PhosphorControl/SearchController.h>
 
-#include "../core/constants.h"
+#include "core/types/constants.h"
 #include "../daemon/rendering/zoneshaderitem.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 

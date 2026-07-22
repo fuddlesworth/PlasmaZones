@@ -5,7 +5,7 @@
 
 #include "../config/configkeys.h"
 #include "../config/settingsvaluelabels.h"
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 #include "../phosphor_i18n.h"
 
 #include <QCryptographicHash>

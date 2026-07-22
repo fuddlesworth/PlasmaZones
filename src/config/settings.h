@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "../core/constants.h"
-#include "../core/interfaces.h"
+#include "core/types/constants.h"
+#include "core/interfaces/interfaces.h"
 #include "configbackends.h"
 #include "configdefaults.h"
 

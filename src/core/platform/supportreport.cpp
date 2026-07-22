@@ -8,7 +8,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "version.h"
-#include "../config/configdefaults.h"
+#include "config/configdefaults.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 
 #include <QCoreApplication>

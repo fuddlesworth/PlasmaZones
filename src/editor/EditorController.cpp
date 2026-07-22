@@ -16,11 +16,11 @@
 #include "helpers/ZoneSerialization.h"
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorRules/RuleStoreWatcher.h>
-#include "../core/geometryutils.h"
+#include "core/utils/geometryutils.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/LayoutComputeService.h>
-#include "../core/logging.h"
-#include "../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include "../shaderpreview/shaderpreviewcontroller.h"
 
 #include <PhosphorZones/Layout.h>

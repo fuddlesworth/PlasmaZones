@@ -4,7 +4,7 @@
 #include "snappingzonescontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../core/isettings.h"
+#include "core/interfaces/isettings.h"
 #include "../phosphor_i18n.h"
 
 #include <QFile>

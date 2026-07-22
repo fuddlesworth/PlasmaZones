@@ -5,7 +5,7 @@
 
 #include "decoration_controller_detail.h"
 
-#include "../core/isettings.h"
+#include "core/interfaces/isettings.h"
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>

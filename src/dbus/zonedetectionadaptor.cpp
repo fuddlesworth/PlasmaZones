@@ -3,15 +3,15 @@
 
 #include "zonedetectionadaptor.h"
 #include "dbushelpers.h"
-#include "../core/interfaces.h"
+#include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/Zone.h>
-#include "../core/geometryutils.h"
-#include "../core/logging.h"
-#include "../core/spatialadjacency.h"
+#include "core/utils/geometryutils.h"
+#include "core/platform/logging.h"
+#include "core/types/spatialadjacency.h"
 #include <PhosphorGeometry/DirectionalNeighbor.h>
-#include "../core/utils.h"
+#include "core/utils/utils.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <limits>

@@ -4,7 +4,7 @@
 #include "tilingbehaviorcontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../core/isettings.h"
+#include "core/interfaces/isettings.h"
 #include "triggerutils.h"
 
 namespace PlasmaZones {

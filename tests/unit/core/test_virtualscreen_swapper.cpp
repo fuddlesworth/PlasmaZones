@@ -20,7 +20,7 @@
 #include <QTest>
 #include <QSignalSpy>
 
-#include "core/utils.h"
+#include "core/utils/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorScreens/Swapper.h>
 #include "config/settings.h"

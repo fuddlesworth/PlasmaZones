@@ -5,7 +5,7 @@
 #include <QSignalSpy>
 
 #include <PhosphorTiles/TilingState.h>
-#include "core/constants.h"
+#include "core/types/constants.h"
 
 using namespace PlasmaZones;
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "screenhelper.h"
-#include "../core/isettings.h"
+#include "core/interfaces/isettings.h"
 #include "screenprovider.h"
 
 namespace PlasmaZones {

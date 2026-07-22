@@ -53,7 +53,7 @@
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/SettingsFetchScraper.h"
 #include "config/settings.h"
-#include "core/shaderregistry.h"
+#include "core/interfaces/shaderregistry.h"
 #include "dbus/settingsadaptor.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>

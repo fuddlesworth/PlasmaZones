@@ -9,10 +9,10 @@
 #include "perscreenresolver.h"
 #include "settingsschema.h"
 
-#include "../core/animationshadersupportedpaths.h"
-#include "../core/constants.h"
-#include "../core/logging.h"
-#include "../core/utils.h"
+#include "core/types/animationshadersupportedpaths.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorConfig/JsonBackend.h>

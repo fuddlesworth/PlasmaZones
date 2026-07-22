@@ -9,10 +9,10 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "../core/logging.h"
-#include "../core/geometryutils.h"
+#include "core/platform/logging.h"
+#include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
-#include "../core/supportreport.h"
+#include "core/platform/supportreport.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 

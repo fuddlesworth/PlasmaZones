@@ -23,7 +23,7 @@
 #include <PhosphorTiles/TilingState.h>
 
 #include "FakeScreenProvider.h"
-#include "core/crosssurfaceresolver.h"
+#include "core/resolve/crosssurfaceresolver.h"
 
 #include "../helpers/AutotileTestHelpers.h"
 #include "../helpers/ScriptedAlgoTestSetup.h"

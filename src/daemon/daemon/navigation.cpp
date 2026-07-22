@@ -10,10 +10,10 @@
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include "../../core/constants.h"
-#include "../../core/logging.h"
-#include "../../core/screenmoderouter.h"
-#include "../../core/utils.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
+#include "core/resolve/screenmoderouter.h"
+#include "core/utils/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>

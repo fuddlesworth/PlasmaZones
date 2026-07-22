@@ -11,8 +11,8 @@
 #include "../windowtrackingadaptor.h"
 
 #include "../zonedetectionadaptor.h"
-#include "core/isettings.h"
-#include "core/logging.h"
+#include "core/interfaces/isettings.h"
+#include "core/platform/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>

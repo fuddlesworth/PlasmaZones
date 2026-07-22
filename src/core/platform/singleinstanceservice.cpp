@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "single_instance_service.h"
+#include "singleinstanceservice.h"
 
 #include "logging.h"
 

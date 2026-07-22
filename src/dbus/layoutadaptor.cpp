@@ -3,14 +3,14 @@
 
 #include "layoutadaptor.h"
 #include "dbushelpers.h"
-#include "../core/interfaces.h"
+#include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutFactory.h>
 #include <PhosphorZones/Zone.h>
-#include "../core/constants.h"
+#include "core/types/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
 #include "../common/layoutpreviewserialize.h"
-#include "../core/unifiedlayoutlist.h"
+#include "core/utils/unifiedlayoutlist.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
@@ -20,10 +20,10 @@
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
-#include "../core/logging.h"
-#include "../core/shaderregistry.h"
+#include "core/platform/logging.h"
+#include "core/interfaces/shaderregistry.h"
 #include <PhosphorScreens/Manager.h>
-#include "../core/utils.h"
+#include "core/utils/utils.h"
 
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
 #include <PhosphorLayoutApi/AspectRatioClass.h>

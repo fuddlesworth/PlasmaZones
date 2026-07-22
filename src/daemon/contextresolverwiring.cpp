@@ -3,9 +3,9 @@
 
 #include "contextresolverwiring.h"
 
-#include "../core/isettings.h"
-#include "../core/screenmoderouter.h"
-#include "../core/utils.h"
+#include "core/interfaces/isettings.h"
+#include "core/resolve/screenmoderouter.h"
+#include "core/utils/utils.h"
 
 #include <PhosphorZones/LayoutRegistry.h>
 

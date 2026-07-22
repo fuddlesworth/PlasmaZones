@@ -10,11 +10,11 @@
 
 #include <QQuickItem>
 #include <PhosphorSurfaces/SurfaceManager.h>
-#include "../../core/logging.h"
+#include "core/platform/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "../../core/utils.h"
-#include "../../core/shaderregistry.h"
+#include "core/utils/utils.h"
+#include "core/interfaces/shaderregistry.h"
 #include "../rendering/zonelabeltexturebuilder.h"
 #include "phosphor_roles.h"
 

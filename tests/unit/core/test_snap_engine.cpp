@@ -21,7 +21,7 @@
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleSet.h>
 #include "config/configbackends.h"
-#include "core/interfaces.h"
+#include "core/interfaces/interfaces.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;

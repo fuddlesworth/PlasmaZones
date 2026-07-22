@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "dmabufglimport.h"
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 
 // epoxy provides the EGL/GL entry points (eglCreateImageKHR,
 // glEGLImageTargetTexture2DOES, the EGL_EXT_image_dma_buf_import tokens) and

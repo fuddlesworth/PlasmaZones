@@ -26,9 +26,9 @@
 
 #include "../config/configdefaults.h"
 #include "../config/configmigration.h"
-#include "../core/logging.h"
-#include "../core/settings_interfaces.h"
-#include "../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/interfaces/settings_interfaces.h"
+#include "core/utils/utils.h"
 #include "../phosphor_i18n.h"
 #include "dbusutils.h"
 #include "kzonesimporter.h"

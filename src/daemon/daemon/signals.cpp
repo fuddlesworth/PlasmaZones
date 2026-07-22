@@ -12,10 +12,10 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
-#include "../../core/logging.h"
-#include "../../core/constants.h"
-#include "../../core/screenmoderouter.h"
-#include "../../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/types/constants.h"
+#include "core/resolve/screenmoderouter.h"
+#include "core/utils/utils.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include "../../dbus/layoutadaptor.h"
 #include "../../dbus/settingsadaptor.h"

@@ -7,8 +7,8 @@
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
-#include "interfaces.h"
-#include "constants.h"
+#include "core/interfaces/interfaces.h"
+#include "core/types/constants.h"
 #include <PhosphorEngine/GapResolution.h>
 #include <PhosphorEngine/IGeometrySettings.h>
 #include <PhosphorEngine/PerScreenKeys.h>

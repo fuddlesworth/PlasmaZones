@@ -4,8 +4,8 @@
 #include "../settings.h"
 #include "../configbackends.h"
 #include "../configdefaults.h"
-#include "../../core/constants.h"
-#include "../../core/logging.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/ScreenIdentity.h>

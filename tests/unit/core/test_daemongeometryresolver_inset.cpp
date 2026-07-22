@@ -13,7 +13,7 @@
 
 #include <QtTest/QtTest>
 
-#include "../../../src/core/daemongeometryresolver.h"
+#include "core/resolve/daemongeometryresolver.h"
 #include "../helpers/StubSettings.h"
 
 using namespace PlasmaZones;

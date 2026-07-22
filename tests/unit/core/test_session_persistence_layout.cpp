@@ -11,7 +11,7 @@
 #include <QJsonObject>
 #include <QUuid>
 
-#include "../../../src/core/utils.h"
+#include "core/utils/utils.h"
 
 /// Mock with layout and desktop validation for restore logic testing
 class MockLayoutPersistence : public QObject

@@ -3,7 +3,7 @@
 
 #include "shaderpackinstaller.h"
 
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 #include "../phosphor_i18n.h"
 
 #include <QAtomicInteger>

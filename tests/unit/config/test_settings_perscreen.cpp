@@ -23,8 +23,8 @@
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
-#include "../../../src/core/constants.h"
-#include "../../../src/core/settings_interfaces.h"
+#include "core/types/constants.h"
+#include "core/interfaces/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorIdentity/VirtualScreenId.h>

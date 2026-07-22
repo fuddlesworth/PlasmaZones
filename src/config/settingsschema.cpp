@@ -8,7 +8,7 @@
 #include "configdefaults.h"
 #include "configmigration.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
-#include "../core/enums.h"
+#include "core/types/enums.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorSurface/DecorationProfileTree.h>

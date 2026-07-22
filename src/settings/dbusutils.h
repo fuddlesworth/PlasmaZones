@@ -7,7 +7,7 @@
 #include <QDBusMessage>
 #include <QDBusMetaType>
 #include <QDBusPendingCall>
-#include "../core/constants.h"
+#include "core/types/constants.h"
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 

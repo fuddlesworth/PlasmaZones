@@ -10,10 +10,10 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorScreens/Manager.h>
 #include "../config/settings.h"
-#include "../core/constants.h"
+#include "core/types/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../core/logging.h"
-#include "../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>

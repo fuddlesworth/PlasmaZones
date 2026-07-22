@@ -4,10 +4,10 @@
 #include "zoneselectorcontroller.h"
 #include <PhosphorZones/Zone.h>
 #include "../common/layoutpreviewserialize.h"
-#include "../core/constants.h"
+#include "core/types/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
-#include "../core/unifiedlayoutlist.h"
-#include "../core/utils.h"
+#include "core/utils/unifiedlayoutlist.h"
+#include "core/utils/utils.h"
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorScreens/Manager.h>
 #include "overlayservice/internal.h"
@@ -15,7 +15,7 @@
 #include <QQuickItem>
 #include <QScreen>
 #include <QUuid>
-#include "../core/logging.h"
+#include "core/platform/logging.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
