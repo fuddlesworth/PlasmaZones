@@ -146,6 +146,16 @@ PhosphorUi.SettingsAppWindow {
             window.showToast(named ? i18n("Could not reach the PlasmaZones service, so %1 was left unchanged.", title) : i18n("Could not reach the PlasmaZones service, so this page was left unchanged."));
         }
 
+        // discardPage reconciles value-based when a revert refuses, so the page
+        // stays badged with no other word. It refuses for only one reason (an
+        // override file still being written), so there is no daemon-unreachable
+        // branch to distinguish here.
+        function onPageDiscardFailed(page, reason) {
+            const title = settingsController.app.registry.pageData(page).title || "";
+            const named = title.length > 0;
+            window.showToast(named ? i18n("Some settings on %1 are still being saved, so they were left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so they were left unchanged. Try again in a moment."));
+        }
+
         target: settingsController
     }
 
@@ -299,9 +309,9 @@ PhosphorUi.SettingsAppWindow {
                 // "on" until the daemon actually stops. Turning OFF kills tiling
                 // + snapping for the whole session, so confirm first; turning ON
                 // applies immediately.
-                // Routes through the root-level daemonStopConfirm (declared
-                // beside the other inline confirm dialogs) so the page-nav
-                // shortcut guard can see its `visible` state.
+                // Routes through confirmDialogs.daemonStop (a root-level dialog
+                // in ConfirmDialogs.qml) so the page-nav shortcut guard can see
+                // its `visible` state.
                 onToggled: function (newValue) {
                     if (newValue)
                         settingsController.daemonController.setEnabled(true);
@@ -341,13 +351,12 @@ PhosphorUi.SettingsAppWindow {
                 id: pageActionsButton
 
                 // Re-evaluates on activePageChanged and on a mode flip, via
-                // activeDirtyScope's NOTIFY. Discard is queried against the
-                // SCOPE the menu item acts on, not the page: on a condensed
-                // page those differ, and gating the button on the narrower id
-                // would hide the only control that can clear what the rail's
-                // badge is reporting. Reset stays on activePage because it
-                // acts on activePage.
-                visible: settingsController.pageSupportsReset(settingsController.activePage) || settingsController.pageSupportsDiscard(settingsController.activeDirtyScope)
+                // activeDirtyScope's NOTIFY. Both items are queried against the
+                // SCOPE they act on, not the page: on a condensed page those
+                // differ, and gating the button on the narrower id would hide
+                // the controls that clear what the rail's badge reports. Reset
+                // and Discard both act on activeDirtyScope now.
+                visible: settingsController.pageSupportsReset(settingsController.activeDirtyScope) || settingsController.pageSupportsDiscard(settingsController.activeDirtyScope)
                 icon.name: "overflow-menu"
                 display: AbstractButton.IconOnly
                 text: i18n("Page actions")
@@ -670,7 +679,13 @@ PhosphorUi.SettingsAppWindow {
             text: i18n("Reset page to defaults")
             Accessible.name: text
             icon.name: "document-revert"
-            visible: settingsController.pageSupportsReset(settingsController.activePage)
+            // Queried against activeDirtyScope, matching Discard below and the
+            // resetPage(activeDirtyScope) call the confirm dialog makes: on a
+            // condensed simple page the scope is the whole feature area, and
+            // asking the narrower id would hide Reset in simple mode entirely
+            // (the scope is a group id no leaf branch of pageSupportsReset
+            // accepts). In advanced mode the scope equals the active page.
+            visible: settingsController.pageSupportsReset(settingsController.activeDirtyScope)
             // Disabled while a global Save/Discard batch is in flight: a
             // per-page reset mid-batch could race the async revert (e.g.
             // the animation controller's async file restore) and leave a

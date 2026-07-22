@@ -435,6 +435,65 @@ private Q_SLOTS:
                                 .arg(unaccounted.join(QStringLiteral(", ")))));
     }
 
+    void crossFileAdvancedGatesAreStillPresentInTheHostQml()
+    {
+        // crossFileAdvanced() is hand-maintained: it asserts certain shared-card
+        // anchors are advanced because the HOSTING page tiers the card (the
+        // anchor lives in the card, the `advancedOnly: true` on the host's
+        // instantiation of it), a gate the per-file parser cannot see. Nothing
+        // else ties that claim back to the QML, so deleting the gate from the
+        // host would silently let the catalogue keep hiding a now-simple-
+        // reachable setting with the suite still green. Pin it: every hosting
+        // instantiation named in the map must still carry the gate.
+        //
+        // Today the sole cross-file case is WindowAppearancePage hosting
+        // WindowFilterCard; host pages are derived from the map, not hardcoded,
+        // so a future cross-file entry is covered automatically.
+        QVERIFY(!crossFileAdvanced().isEmpty());
+        const QString sharedCard = QStringLiteral("WindowFilterCard");
+
+        QSet<QString> hostPageIds;
+        for (const QString& pair : crossFileAdvanced())
+            hostPageIds.insert(pair.section(QLatin1Char('/'), 0, 0));
+
+        for (const QString& pageId : hostPageIds) {
+            QString hostFile;
+            for (auto it = qmlFileToPageId().cbegin(); it != qmlFileToPageId().cend(); ++it) {
+                if (it.value() == pageId) {
+                    hostFile = it.key();
+                    break;
+                }
+            }
+            QVERIFY2(!hostFile.isEmpty(),
+                     qPrintable(QStringLiteral("no QML file maps to cross-file host page %1").arg(pageId)));
+
+            const QString src = stripComments(readAll(m_qmlDir + QLatin1Char('/') + hostFile));
+            // Brace-match the shared-card instantiation and assert THAT block
+            // carries advancedOnly: true. A bare contains() on the whole file is
+            // insufficient — the host declares many other advanced gates that
+            // would mask this one's removal.
+            const int cardAt = src.indexOf(sharedCard + QLatin1String(" {"));
+            QVERIFY2(cardAt >= 0, qPrintable(QStringLiteral("%1 no longer instantiates %2").arg(hostFile, sharedCard)));
+            int depth = 0;
+            int blockEnd = -1;
+            for (int i = src.indexOf(QLatin1Char('{'), cardAt); i >= 0 && i < src.size(); ++i) {
+                if (src.at(i) == QLatin1Char('{')) {
+                    ++depth;
+                } else if (src.at(i) == QLatin1Char('}') && --depth == 0) {
+                    blockEnd = i;
+                    break;
+                }
+            }
+            QVERIFY2(blockEnd > cardAt,
+                     qPrintable(QStringLiteral("unbalanced %1 block in %2").arg(sharedCard, hostFile)));
+            const QString block = src.mid(cardAt, blockEnd - cardAt);
+            QVERIFY2(block.contains(QLatin1String("advancedOnly: true")),
+                     qPrintable(QStringLiteral("%1 hosts %2 but no longer gates it advancedOnly — "
+                                               "crossFileAdvanced() would silently over-hide its anchors")
+                                    .arg(hostFile, sharedCard)));
+        }
+    }
+
     void catalogueTiersMatchTheQml()
     {
         const QString catalogSrc = stripLineComments(readAll(m_catalog));

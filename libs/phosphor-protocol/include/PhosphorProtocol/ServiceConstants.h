@@ -19,7 +19,11 @@ inline constexpr QLatin1String ObjectPath("/PlasmaZones");
 /// Quick-layout slots are numbered 1..QuickLayoutSlotCount. Protocol-level
 /// because the daemon validates the bound on the D-Bus boundary while the
 /// settings app walks it in its Quick Shortcuts reset loop, and the two live
-/// in different trees. Kept here so the validation and the loop cannot drift.
+/// in different trees. Kept here so those two cannot drift. Note the
+/// LayoutManager backend in phosphor-zones (layoutregistry.cpp) enforces the
+/// same 1..9 bound with its own literal: it deliberately does not depend on
+/// phosphor-protocol, so that site is not covered by this constant and must be
+/// updated in step by hand if the count ever changes.
 inline constexpr int QuickLayoutSlotCount = 9;
 
 namespace Interface {

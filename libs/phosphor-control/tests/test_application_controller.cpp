@@ -901,10 +901,21 @@ private Q_SLOTS:
         QVERIFY(!app.isDiscarding());
         QVERIFY(app.isApplying());
 
+        // A second page that is STILL DIRTY at the refused-sync moment, so the
+        // refusal is observable. `a` was already cleaned by the in-flight async
+        // apply, so its applyCount can't move regardless; `b` is registered clean
+        // (the async batch dispatched above snapshotted only `a`) and dirtied
+        // here. If the sync-reentry guard were removed, applyAll would iterate the
+        // dirty set and apply `b` — the guard makes it bail whole instead.
+        auto* b = new StubPage(QStringLiteral("b"));
+        app.registerPage(b, {}, QStringLiteral("B"), QUrl());
+        b->setDirty(true);
+
         // Same in reverse: sync applyAll while apply is in flight
         // should refuse without crashing.
         app.applyAll(); // refused, no-op
         QVERIFY(app.isApplying());
+        QCOMPARE(b->applyCount, 0); // refusal pinned: the guard bailed before applying b
 
         // Let the timeout fire so the test cleans up.
         QVERIFY(applyCompleteSpy.wait(2000));

@@ -72,11 +72,13 @@ Item {
 
     Connections {
         function onAvailableAlgorithmsChanged() {
-            root._cachedAlgos = root.appSettings.availableAlgorithms || [];
-            // The zones come from a Q_INVOKABLE with no NOTIFY of its own, so
-            // nothing else re-runs it when a .luau is edited and the registry
-            // reloads under an unchanged algorithmId. Without this the drawn
-            // layout stays at the previous revision.
+            // _cachedAlgos self-refreshes through its NOTIFY-backed binding, so
+            // there is nothing to reassign here (a bare `_cachedAlgos = …` would
+            // sever that binding). Only the preview needs a nudge: the zones come
+            // from a Q_INVOKABLE with no NOTIFY of its own, so nothing else
+            // re-runs it when a .luau is edited and the registry reloads under an
+            // unchanged algorithmId. Without this the drawn layout stays at the
+            // previous revision.
             recalcTimer.restart();
         }
 

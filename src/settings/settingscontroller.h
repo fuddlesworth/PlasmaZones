@@ -672,34 +672,30 @@ Q_SIGNALS:
     void algorithmOperationFailed(const QString& reason);
     void layoutOperationFailed(const QString& reason);
     /// Emitted when exportAllSettings / importAllSettings gives up, and on the
-    /// partial-success path where the import landed but the animation pages
-    /// still hold pre-import snapshots. Both functions also return a bool, but
-    /// no caller sequences on it: the General page uses it only to gate a
-    /// success toast, because a refused path, a file that vanished, and a file
-    /// that is not settings at all are the same `false` and want different
-    /// words. This signal carries those words and is the only failure channel.
-    /// The partial path returns `false` for the same reason: the toast surface
-    /// replaces whatever is in flight, so a `true` there would let the caller's
-    /// success toast overwrite the reason emitted a moment earlier.
+    /// partial-success path (import landed but animation pages still hold
+    /// pre-import snapshots). Both return a bool too, but no caller sequences on
+    /// it: a refused path, a vanished file, and a non-settings file are one
+    /// `false` wanting different words, which only this signal carries.
     void settingsTransferFailed(const QString& reason);
     /// Emitted when `resetPage` refuses. resetPage returns void and stages
     /// nothing on that path, so without this the page reconciles CLEAN and the
-    /// refusal is indistinguishable from a page that was already at its
-    /// defaults.
-    ///
-    /// Two branches emit it, and they fail for unrelated reasons, so the shell
-    /// cannot use one sentence for both:
+    /// refusal is indistinguishable from a page already at its defaults. Two
+    /// branches emit it for unrelated reasons the shell must word differently:
     ///   * `ReasonDaemonUnreachable` — a value resetPage must READ first is
     ///     unavailable, currently the daemon's quick-layout slot map.
     ///   * `ReasonOverridesNotCleared` — a WRITE was refused: an animation or
-    ///     decoration override could not be cleared, because an async discard
-    ///     still owns the snapshot map or a file could not be removed. The
-    ///     daemon is fine on this path.
-    ///
-    /// @p reason is one of the Reason* constants above, NOT user-facing
-    /// text: the wording is user-facing and this tree wires i18n in QML rather
-    /// than C++, so the shell supplies the words and branches on the token.
+    ///     decoration override could not be cleared (an async discard still owns
+    ///     the snapshot map, or a file could not be removed). The daemon is fine.
+    /// @p reason is one of the Reason* constants above, NOT user-facing text:
+    /// the shell wires i18n in QML and branches on the token.
     void pageResetFailed(const QString& page, const QString& reason);
+    /// Emitted when `discardPage` refuses — the Discard analogue of
+    /// pageResetFailed. The animation branch reconciles value-based, so a
+    /// refused revert leaves the page BADGED with no other word. The only
+    /// refusal is a WRITE that could not complete, so `reason` is always
+    /// `ReasonOverridesNotCleared`; the branch checks `asyncRevertInFlight()`
+    /// first so a benign refusal during a global async discard never emits.
+    void pageDiscardFailed(const QString& page, const QString& reason);
     /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
     /// fails at the daemon — QML can surface the reason in a toast so the
     /// user knows the change wasn't saved.

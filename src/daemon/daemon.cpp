@@ -525,15 +525,16 @@ void Daemon::publishActiveAnimationProfile()
     // re-publishing identical values on every settingsChanged signal
     // is a cheap no-op on the hot path.
     //
-    // User-wins at the registry level: if the ProfileLoader has a
-    // user-authored JSON file at a settings-driven path, we skip the
-    // direct publish so their owner-tagged entry wins. On JSON delete,
-    // the loader emits profilesChanged, this function re-runs, and the
-    // settings-default path is restored.
+    // User-wins at the registry level: if the ProfileLoader owns a
+    // user-authored JSON file at a settings-driven path, its set fields
+    // win and its UNSET fields merge from the user's settings (never from
+    // library defaults) — see the per-path ownership + merge logic below.
+    // On JSON delete, the loader emits profilesChanged, this function
+    // re-runs, and the settings-default path is restored.
     //
-    // This runs on the settings-slider hot path (~30 Hz during drag),
-    // so O(1) `hasPath` is used instead of `entries()` which copies
-    // and sorts the full tracked set on every tick.
+    // This runs on the settings-slider hot path (~30 Hz during drag), so
+    // ownership is resolved with an O(1) `ownerOf()` lookup rather than
+    // `entries()`, which copies and sorts the full tracked set every tick.
     auto& reg = m_profileRegistry;
 
     const Profile settingsProfile = m_settings->animationProfile();

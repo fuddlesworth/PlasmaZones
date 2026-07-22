@@ -264,6 +264,82 @@ private Q_SLOTS:
         QVERIFY(postLoaderResolved.has_value());
         QCOMPARE(postLoaderResolved->effectiveDuration(), 425.0);
     }
+
+    /// Invariant 4 (the freeze regression): a user `Global.json` that sets ONLY
+    /// `duration` must still animate the settings-derived fields it leaves unset
+    /// (minDistance, …), and repeated settings edits must keep propagating.
+    ///
+    /// Mirrors `publishActiveAnimationProfile`'s loader-owned branch: the merge
+    /// base is the loader's RAW parsed JSON (cached once), NOT the registry's
+    /// current entry — which is the previous tick's already-merged result. Merge
+    /// from that merged entry and every field is set after tick one, so the
+    /// second settings edit reads back its own prior output and the slider
+    /// silently stops moving until the daemon restarts. This test would pass a
+    /// merge-from-cached-raw and fail a merge-from-registry-entry.
+    void testDurationOnlyGlobalJsonMergesSettingsAndKeepsPropagating()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        auto& registry = m_registry;
+
+        // Settings carries a distinctive, populated minDistance.
+        Profile settingsProfile = settings.animationProfile();
+        settingsProfile.minDistance = 111;
+        settings.setAnimationProfile(settingsProfile);
+
+        // A user Global.json that sets ONLY duration (no prior direct-owned
+        // entry, so the loader genuinely OWNS the path).
+        const QString profileDir = guard.dataPath() + QStringLiteral("/plasmazones/profiles");
+        QVERIFY(QDir().mkpath(profileDir));
+        writeFile(profileDir + QStringLiteral("/global.json"), QStringLiteral(R"({
+            "name": "global",
+            "duration": 999
+        })"));
+
+        CurveRegistry curveRegistry;
+        ProfileLoader profileLoader(m_registry, curveRegistry, kLoaderOwnerTag);
+        QCOMPARE(profileLoader.loadFromDirectory(profileDir), 1);
+        QCOMPARE(registry.ownerOf(ProfilePaths::Global), kLoaderOwnerTag);
+
+        // The loader's parsed JSON is the raw snapshot: duration set, minDistance
+        // unset. Cache it exactly as the daemon caches m_rawJsonProfiles.
+        const auto rawOpt = registry.resolve(ProfilePaths::Global);
+        QVERIFY(rawOpt.has_value());
+        QVERIFY(rawOpt->duration.has_value());
+        QVERIFY(!rawOpt->minDistance.has_value());
+        const Profile raw = *rawOpt;
+
+        // Loader-owned merge: unset fields fall back to Settings, re-registered
+        // under the LOADER's tag. Merge base is the CACHED raw, never
+        // registry.resolve() (which would return the previous merged tick).
+        auto mergePublish = [&]() {
+            const Profile s = settings.animationProfile();
+            Profile merged = raw;
+            if (!merged.duration.has_value())
+                merged.duration = s.duration;
+            if (!merged.minDistance.has_value())
+                merged.minDistance = s.minDistance;
+            registry.registerProfile(ProfilePaths::Global, merged, kLoaderOwnerTag);
+        };
+
+        mergePublish();
+        const auto m1 = registry.resolve(ProfilePaths::Global);
+        QVERIFY(m1.has_value());
+        QCOMPARE(m1->effectiveDuration(), 999.0); // JSON wins the field it set
+        QVERIFY(m1->minDistance.has_value());
+        QCOMPARE(*m1->minDistance, 111); // Settings fills the unset field
+
+        // A later settings edit must still flow through — this is the freeze.
+        Profile edited = settings.animationProfile();
+        edited.minDistance = 222;
+        settings.setAnimationProfile(edited);
+        mergePublish();
+        const auto m2 = registry.resolve(ProfilePaths::Global);
+        QVERIFY(m2.has_value());
+        QCOMPARE(*m2->minDistance, 222); // new value propagates
+        QCOMPARE(m2->effectiveDuration(), 999.0); // JSON duration still wins
+    }
 };
 
 QTEST_MAIN(TestAnimationProfilePublication)

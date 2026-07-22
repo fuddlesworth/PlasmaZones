@@ -564,6 +564,10 @@ private Q_SLOTS:
         e2.counterpartId = QStringLiteral("a");
         QVERIFY(reg.registerPage(std::move(e2)));
 
+        // Bind to the branch, not just the bool — a future refactor that tripped
+        // a different branch would otherwise keep this green (see the four-shapes
+        // block).
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("is not navigable")));
         QVERIFY(!reg.validateCounterparts());
     }
 
@@ -600,7 +604,9 @@ private Q_SLOTS:
         QVERIFY(reg.registerPage(std::move(e2)));
 
         // ...but its SimpleOnly parent hides it in advanced mode, which is the
-        // mode `a` disappears in.
+        // mode `a` disappears in. Pin the reachability branch specifically, so a
+        // refactor that trips a different branch can't leave this green.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("unreachable in the mode that hides")));
         QVERIFY(!reg.validateCounterparts());
     }
 

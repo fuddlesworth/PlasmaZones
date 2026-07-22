@@ -65,7 +65,12 @@ Item {
                 icon.name: "document-revert"
                 onTriggered: {
                     resetPageConfirmDialog.close();
-                    settingsController.resetPage(settingsController.activePage);
+                    // activeDirtyScope, not activePage: on a condensed simple
+                    // page the scope hoists to the whole feature area, so Reset
+                    // clears exactly what the rail badge aggregates — symmetric
+                    // with Discard just below. In advanced mode the scope equals
+                    // the active page and this is unchanged.
+                    settingsController.resetPage(settingsController.activeDirtyScope);
                 }
             },
             Kirigami.Action {

@@ -59,7 +59,12 @@ public:
         e.pageId = QStringLiteral("rules");
         e.anchor = QStringLiteral("rule:abc");
         e.title = QStringLiteral("Steam");
-        e.subtitle = QStringLiteral("Rules");
+        // Deliberately DISTINCT from the auto-derived subtitle for pageId
+        // "rules": that page is top-level and titled "Rules", so an auto-derive
+        // would produce exactly "Rules". A provider subtitle equal to the
+        // derive can't tell "respected" from "overwritten" apart, which is the
+        // whole point of providerSubtitleRespectedWhenSet.
+        e.subtitle = QStringLiteral("12 active rules");
         return {e};
     }
 };
@@ -539,12 +544,14 @@ private Q_SLOTS:
     void providerSubtitleRespectedWhenSet()
     {
         // A provider-supplied subtitle (e.g. a rule's match summary) is
-        // never overwritten by the auto-derive.
+        // never overwritten by the auto-derive. The stub's subtitle is chosen
+        // to differ from the path auto-derive ("Rules") so this can fail if the
+        // respect branch is removed.
         SearchController sc(m_app.get());
         StubProvider provider;
         sc.registerProvider(&provider);
         sc.setQuery(QStringLiteral("steam"));
-        QCOMPARE(subtitleForTitle(sc, QStringLiteral("Steam")), QStringLiteral("Rules"));
+        QCOMPARE(subtitleForTitle(sc, QStringLiteral("Steam")), QStringLiteral("12 active rules"));
     }
 
     void registerProviderDedupes()

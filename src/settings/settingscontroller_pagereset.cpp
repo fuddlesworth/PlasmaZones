@@ -118,9 +118,18 @@ bool SettingsController::pageSupportsReset(const QString& page) const
     // and custom script params. "Reset this page" in simple mode therefore
     // means "reset this whole feature area", which is the honest reading of a
     // page that IS the feature area in that mode.
+    //
+    // Parent categories too, PLUS the leaves — mirroring pageSupportsDiscard.
+    // Reset is invoked with activeDirtyScope (Main.qml / ConfirmDialogs), which
+    // hoists a condensed page to its group, so "snapping" / "tiling" arrive here
+    // and resetPage has a parent-category branch that resets the group's
+    // resettable leaves. Without this the kebab's Reset item would hide in
+    // simple mode (the scope is a group id no leaf branch accepts) and the badge
+    // the group carries could never be cleared by Reset.
     return pageOwnedConfigKeys().contains(page) || simplePageBackingPages().contains(page)
         || orderingPageKind(page) != OrderingPageKind::None || isShortcutsPage(page)
-        || page == QLatin1String("virtualscreens") || isAnimationPage(page) || isDecorationPage(page);
+        || page == QLatin1String("virtualscreens") || isAnimationPage(page) || isDecorationPage(page)
+        || pageGroupChildren().contains(page);
 }
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
@@ -408,11 +417,30 @@ void SettingsController::resetPage(const QString& page)
         return;
     }
 
-    // Manifest-owned pages and the condensed simple pages were handled at the
-    // top of this function; anything reaching here matched no manifest entry,
-    // no backing-page delegation, and no ordering / shortcut / virtual-screen /
-    // shared-domain branch, so there is nothing to reset.
-    qCWarning(PlasmaZones::lcCore) << "resetPage: no config manifest for page" << page;
+    // Parent category (e.g. "snapping" / "tiling"): reset every resettable leaf
+    // beneath it, mirroring discardPage's parent-category branch. Reset is
+    // invoked with activeDirtyScope, which in advanced mode equals activePage (a
+    // leaf, handled above) but in simple mode hoists a condensed page to its
+    // group — so "snapping" / "tiling" / "animations" arrive here and must reset
+    // the hidden advanced siblings the rail badge aggregates, or Reset visibly
+    // no-ops against a still-badged group. Condensed simple children are skipped:
+    // they own no keys and would only re-reset their backing pages, always
+    // siblings already in this same set (the guard discardPage uses too).
+    const auto& groups = pageGroupChildren();
+    const auto git = groups.constFind(page);
+    if (git != groups.constEnd()) {
+        const DirtyEmitScope batch(*this);
+        for (const QString& child : *git) {
+            if (pageSupportsReset(child) && !simplePageBackingPages().contains(child))
+                resetPage(child);
+        }
+        return;
+    }
+
+    // Anything reaching here matched no manifest entry, no backing-page
+    // delegation, no ordering / shortcut / virtual-screen / shared-domain
+    // branch, and no child group, so there is nothing to reset.
+    qCWarning(PlasmaZones::lcCore) << "resetPage: no config manifest or child group for page" << page;
 }
 
 void SettingsController::discardPage(const QString& page)
@@ -519,13 +547,24 @@ void SettingsController::discardPage(const QString& page)
         // reconcile below, which reads the dirty state the discard just
         // produced. Letting it run to the end of the `if` would leave
         // suppression up across the reconcile.
+        // Set when a revert refuses OUTRIGHT (returns false) and no async
+        // discard worker owns the snapshot map — i.e. a genuine failure a retry
+        // could fix, not the benign "the global async discard already took the
+        // restore" case revertPending()/revertPendingUnder() document. Mirrors
+        // resetPage's `failed`/pageResetFailed pairing so a refused Discard is
+        // not silent (the value-based reconcile leaves the page badged, and
+        // without a word the user reads that as "Discard did nothing").
+        bool failed = false;
         {
             const ScopedFlag loadingScope(m_loading);
             if (scope.kind == AnimationPageScope::ConfigOnly) {
                 m_settings.discardKeys(animationGeneralConfigKeys());
             } else if (scope.kind == AnimationPageScope::EventSubtree) {
-                if (m_animationsPage != nullptr)
-                    m_animationsPage->revertPendingUnder(animationScopedBuiltInPaths(scope));
+                if (m_animationsPage != nullptr
+                    && !m_animationsPage->revertPendingUnder(animationScopedBuiltInPaths(scope))
+                    && !m_animationsPage->asyncRevertInFlight()) {
+                    failed = true;
+                }
                 // Shader tree: restore only this scope's paths to their baseline value
                 // (re-add / change / remove), leaving the other surfaces' staged
                 // edits. Covered by the scope opened above.
@@ -542,8 +581,10 @@ void SettingsController::discardPage(const QString& page)
                     m_settings.discardKeys(animationGeneralConfigKeys());
             } else {
                 // WholeTree library leaf.
-                if (m_animationsPage != nullptr)
-                    m_animationsPage->revertPending();
+                if (m_animationsPage != nullptr && !m_animationsPage->revertPending()
+                    && !m_animationsPage->asyncRevertInFlight()) {
+                    failed = true;
+                }
                 m_settings.discardKeys(animationConfigKeys());
             }
         }
@@ -553,6 +594,9 @@ void SettingsController::discardPage(const QString& page)
         // revertPendingUnder can refuse mid-async or retain a failed restore.
         // Batched: one emission at most.
         reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
+        if (failed) {
+            Q_EMIT pageDiscardFailed(page, QString(ReasonOverridesNotCleared));
+        }
         return;
     }
 

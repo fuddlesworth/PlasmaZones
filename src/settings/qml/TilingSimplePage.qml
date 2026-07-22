@@ -26,11 +26,14 @@ import "AlgorithmCapabilities.js" as AlgoCaps
  * page's global path — never the flat global SplitRatio, which would
  * clobber sibling algorithms' slots).
  *
- * A per-monitor override authored in advanced mode still WINS over anything
- * edited here, because the override shadows the global slot this page writes.
- * Simple mode has no scope chip to express that, so the card leads with an
- * inline message whenever any monitor carries an Algorithm-subdomain override,
- * and the user is pointed at advanced mode to inspect or drop it.
+ * A per-monitor override authored in advanced mode WINS over anything edited
+ * here, by design: an override is meant to take precedence over the global
+ * slot this page writes. Simple mode is deliberately global-scope only (no
+ * scope chip), so per-control feedback is not expressible; instead the card
+ * leads with an inline message whenever any monitor carries an
+ * Algorithm-subdomain override, pointing the user at advanced mode to inspect
+ * or drop it. That card-level notice is the right granularity for a page that
+ * has no per-monitor concept to annotate.
  */
 SettingsFlickable {
     id: root
@@ -42,10 +45,14 @@ SettingsFlickable {
     // Q_PROPERTY and a same-named Q_INVOKABLE, so the `()` form errors).
     // Refreshed via the Connections below on its NOTIFY.
     property var _cachedAlgos: settingsController.availableAlgorithms || []
-    // The ISettings context property captured at page scope: LayoutComboBox
-    // declares its own `appSettings: settingsController`, which SHADOWS the
-    // context property inside the combo's handlers (same trap as on
-    // TilingAlgorithmPage — see appSettingsObj there).
+    // Root-qualified handle for the `appSettings` ISettings context property.
+    // Several children here set their OWN `appSettings` (PerScreenOverrideHelper,
+    // and the LayoutComboBox now nested inside AlgorithmPreviewCard), which
+    // shadows the bare name inside a handler attached to that child — a bare
+    // `appSettings.defaultAutotileAlgorithm` there would read settingsController,
+    // which has no such property. Reaching the ISettings object as
+    // `root.appSettingsObj` is shadow-immune from any scope (same handle on
+    // TilingAlgorithmPage).
     readonly property var appSettingsObj: appSettings
     // Working algorithm for preview/capability lookups. Imperative for the
     // same reason as on TilingAlgorithmPage: the combo's currentValue

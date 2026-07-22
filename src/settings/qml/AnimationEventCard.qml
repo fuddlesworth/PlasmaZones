@@ -321,8 +321,19 @@ Item {
         root._committingShader = true;
         try {
             const paths = root._writePaths;
-            for (var i = 0; i < paths.length; ++i)
+            for (var i = 0; i < paths.length; ++i) {
+                // Skip paths with no shader leg, mirroring the toggle-off guard
+                // (_anyWritePathSupportsShaderLeg). Writing a shader override to a
+                // path that cannot host one would strand that mirror permanently
+                // divergent on the shader axis and latch the divergence banner
+                // with no control able to clear it. A no-op for the current
+                // mirror set (both window.appearance legs support shaders); it
+                // guards a future set that mixes supporting and non-supporting
+                // paths.
+                if (!settingsController.animationsPage.supportsShaderLeg(paths[i]))
+                    continue;
                 settingsController.animationsPage.setShaderOverride(paths[i], effectId, params);
+            }
         } finally {
             // Same try/finally reasoning as _setOverrideMerged: QML has no
             // RAII, and a latched flag here would stop the card tracking
@@ -989,7 +1000,7 @@ Item {
                 // divergence count in both places under-stated the reach of the
                 // next write. Both counts are two or more whenever the banner
                 // is visible, so a singular plural form here would never render.
-                text: i18n("%1 of the events this card controls are set differently right now, and it shows only one of them. The next change you make to the timing or the shader here applies to all %2 of them.", root._divergentPathCount, root._writePaths.length)
+                text: i18n("%1 of the events this card controls hold different values right now, and it shows only one of them. The next change you make to the timing or the shader here applies to all %2 of them.", root._divergentPathCount, root._writePaths.length)
             }
 
             Label {

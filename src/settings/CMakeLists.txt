@@ -344,6 +344,7 @@ qt_add_qml_module(plasmazones-settings
         qml/MatchLeafEditor.qml
         qml/ActionListEditor.qml
         qml/ActionRow.qml
+        qml/ActionParamEditors.qml
         qml/StockAnimationConflictChip.qml
         qml/AboutPage.qml
         qml/WhatsNewPage.qml

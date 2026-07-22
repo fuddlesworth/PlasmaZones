@@ -510,8 +510,9 @@ namespace {
 int visibleNavigableCount(const PhosphorControl::PageRegistry& registry, const QString& parentId, int limit,
                           int depth = 0)
 {
-    // The tree is four levels deep at most; the bound just makes a malformed
-    // registry terminate instead of spinning.
+    // The real tree is four levels deep at most; 8 is deliberate slack (2x) so
+    // the bound never trips on a valid registry and only makes a malformed or
+    // cyclic one terminate instead of spinning.
     if (depth > 8) {
         return limit;
     }

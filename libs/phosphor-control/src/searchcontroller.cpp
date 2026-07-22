@@ -267,7 +267,11 @@ QVector<SearchEntry> SearchController::buildIndex()
             // each keystroke-adjacent invalidate. The DROP is still
             // re-evaluated every rebuild, so a page registered later rescues
             // its entries normally.
-            const QString offender = e.pageId + QLatin1Char('\0') + e.title;
+            // Join with the ASCII unit separator (0x1f): a printable-safe
+            // delimiter that cannot occur in a kebab page id or a translated
+            // title, so distinct (pageId, title) pairs never collide — unlike an
+            // embedded NUL, which is a fragile idiom for a map key.
+            const QString offender = e.pageId + QLatin1Char('\x1f') + e.title;
             if (!m_warnedEntryKeys.contains(offender)) {
                 m_warnedEntryKeys.insert(offender);
                 qWarning() << "SearchController: dropping search entry" << e.title << "— its pageId" << e.pageId

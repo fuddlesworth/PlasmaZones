@@ -471,6 +471,10 @@ Item {
                 // One that sizes from its parent instead (anchors.fill,
                 // height: parent.height) reports 0 here, and the whole body
                 // silently renders at zero height with no error to explain it.
+                // No runtime warning guards this: 0 is ALSO the legitimate
+                // all-rows-hidden height described above, so a warn-on-zero would
+                // fire for every empty card. The rule is a contract on the
+                // caller — give the contentItem an intrinsic implicitHeight.
                 implicitHeight: root.contentItem && root.contentItem.implicitHeight > 0 ? root.contentItem.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
             }
 

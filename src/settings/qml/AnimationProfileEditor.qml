@@ -277,8 +277,12 @@ ColumnLayout {
             title: i18n("Duration")
 
             SettingsSlider {
-                from: 50
-                to: 2000
+                // Bound to the single source of truth (ConfigDefaults, exposed
+                // as CONSTANT props) rather than the literal 50 / 2000 — those
+                // are PhosphorAnimation::Limits::Min/MaxAnimationDurationMs and
+                // must not be re-typed here where they can silently drift.
+                from: settingsController.generalPage.animationDurationMin
+                to: settingsController.generalPage.animationDurationMax
                 stepSize: 10
                 valueSuffix: " ms"
                 Accessible.name: i18n("Animation duration")

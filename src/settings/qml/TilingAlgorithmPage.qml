@@ -18,12 +18,13 @@ SettingsFlickable {
     // Q_PROPERTY and a same-named Q_INVOKABLE, so the `()` form errors with
     // "is not a function"). Refreshed via the Connections below on its NOTIFY.
     property var _cachedAlgos: settingsController.availableAlgorithms || []
-    // The ISettings object (the `appSettings` context property), captured at page
-    // scope. LayoutComboBox declares its own `appSettings: settingsController`,
-    // which SHADOWS the context property inside the combo's onActivated — writing
-    // the BARE `appSettings.defaultAutotileAlgorithm` there hit a nonexistent property on
-    // the controller and silently dropped every algorithm change. Read/write the
-    // algorithm through this reference so it always targets ISettings.
+    // Root-qualified handle for the `appSettings` ISettings context property.
+    // Children here set their OWN `appSettings` (PerScreenOverrideHelper, and the
+    // LayoutComboBox now nested inside AlgorithmPreviewCard), which SHADOWS the
+    // context property inside a handler attached to that child — a bare
+    // `appSettings.defaultAutotileAlgorithm` there hits a nonexistent property on
+    // the controller and silently drops the change. Read/write through
+    // `root.appSettingsObj` so it always targets ISettings, from any scope.
     readonly property var appSettingsObj: appSettings
     readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettingsObj.defaultAutotileAlgorithm)
     // Working algorithm for the whole page (preview, custom-param controls,
