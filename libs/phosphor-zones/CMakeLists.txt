@@ -104,6 +104,7 @@ set(phosphorzones_SRCS
     src/interfaces.cpp
     src/layoutregistry.cpp
     src/layoutregistry_assignments.cpp
+    src/layoutregistry_contextresolve.cpp
     src/layoutregistry_batch.cpp
     src/layoutregistry_rulehelpers.cpp
     src/layoutregistry_overrides.cpp
