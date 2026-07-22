@@ -23,6 +23,15 @@ PhosphorUi.SettingsAppWindow {
     id: window
 
     // ── Public API used by per-page QML files ───────────────────────
+    // The `settingsController` / `appSettings` context properties from
+    // main.cpp, re-exposed under distinct names. A child that declares a
+    // required property of the SAME name cannot be wired with
+    // `Foo { appSettings: appSettings }`: the right-hand side resolves
+    // against Foo's own scope first, so the binding points the property at
+    // itself and it stays undefined (context properties sit at the bottom
+    // of the lookup order). Wire such children from these names instead.
+    readonly property var controllerContext: settingsController
+    readonly property var appSettingsContext: appSettings
     // Pages reach the layout-context popup via window.layoutContextMenu.
     readonly property alias layoutContextMenu: layoutContextMenu
     // GeneralPage's "Reset to Defaults" button reaches the chrome-owned
@@ -660,8 +669,8 @@ PhosphorUi.SettingsAppWindow {
     LayoutContextMenu {
         id: layoutContextMenu
 
-        settingsController: settingsController
-        appSettings: appSettings
+        settingsController: window.controllerContext
+        appSettings: window.appSettingsContext
         aspectRatioLabels: window.aspectRatioLabels
     }
 
@@ -729,10 +738,10 @@ PhosphorUi.SettingsAppWindow {
     // ── Keyboard-shortcut overlay ───────────────────────────────────
     KeyboardShortcutOverlay {
         parent: window.contentItem
-        // `appSettings` is the context property exposed by main.cpp;
-        // pass it explicitly through the new required property so the
-        // overlay no longer relies on the implicit context-name match.
-        appSettings: appSettings
+        // `appSettings` is the context property exposed by main.cpp,
+        // reached through window.appSettingsContext because the overlay's
+        // own required property of that name shadows the context one.
+        appSettings: window.appSettingsContext
         shown: window._showShortcuts
         onDismiss: window._showShortcuts = false
     }
