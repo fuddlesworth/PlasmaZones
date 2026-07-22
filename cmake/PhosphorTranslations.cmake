@@ -22,7 +22,7 @@ set(PLASMAZONESD_I18N_SOURCES
     ${CMAKE_SOURCE_DIR}/src/daemon/daemon/osd.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/overlayservice.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/shortcutmanager.cpp
-    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor.cpp
+    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/windowdragadaptor.cpp
     ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/drag.cpp
 )
 file(GLOB PLASMAZONESD_AUTOTILE_SOURCES

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "snapadaptor.h"
-#include "windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "core/platform/logging.h"
 

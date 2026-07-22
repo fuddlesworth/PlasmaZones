@@ -17,14 +17,14 @@
 #include "core/resolve/screenmoderouter.h"
 #include "core/utils/utils.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
-#include "../../dbus/layoutadaptor.h"
-#include "../../dbus/settingsadaptor.h"
-#include "../../dbus/windowtrackingadaptor.h"
-#include "../../dbus/zonedetectionadaptor.h"
+#include "dbus/layoutadaptor/layoutadaptor.h"
+#include "dbus/settingsadaptor/settingsadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/zonedetectionadaptor.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
-#include "../../dbus/windowdragadaptor.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>

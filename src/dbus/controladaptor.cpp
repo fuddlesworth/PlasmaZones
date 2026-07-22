@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "controladaptor.h"
-#include "snapadaptor.h"
-#include "windowtrackingadaptor.h"
-#include "layoutadaptor.h"
+#include "dbus/snapadaptor/snapadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/layoutadaptor/layoutadaptor.h"
 #include "compositorbridgeadaptor.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>

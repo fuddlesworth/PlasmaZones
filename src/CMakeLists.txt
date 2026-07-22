@@ -111,14 +111,14 @@ set(plasmazones_core_SRCS
     config/updatechecker.cpp
     config/updatechecker.h
     dbus/dbushelpers.cpp
-    dbus/layoutadaptor.cpp
+    dbus/layoutadaptor/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp
     dbus/layoutadaptor/editor.cpp
-    dbus/layoutadaptor.h
-    dbus/settingsadaptor.cpp
-    dbus/settingsadaptor_batch.cpp
-    dbus/settingsadaptor_registry.cpp
-    dbus/settingsadaptor.h
+    dbus/layoutadaptor/layoutadaptor.h
+    dbus/settingsadaptor/settingsadaptor.cpp
+    dbus/settingsadaptor/settingsadaptor_batch.cpp
+    dbus/settingsadaptor/settingsadaptor_registry.cpp
+    dbus/settingsadaptor/settingsadaptor.h
     dbus/shaderadaptor.cpp
     dbus/shaderadaptor.h
     dbus/compositorbridgeadaptor.cpp
@@ -132,7 +132,7 @@ set(plasmazones_core_SRCS
     dbus/ruleadaptor.cpp
     dbus/ruleadaptor.h
     # snapnavigationtargets moved to libs/phosphor-snap-engine/
-    dbus/windowtrackingadaptor.cpp
+    dbus/windowtrackingadaptor/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
     dbus/windowtrackingadaptor/navigation.cpp
     dbus/windowtrackingadaptor/float.cpp
@@ -142,23 +142,23 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/persistenceworker.h
     dbus/windowtrackingadaptor/snaprestore.cpp
     dbus/windowtrackingadaptor/convenience.cpp
-    dbus/windowtrackingadaptor.h
+    dbus/windowtrackingadaptor/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
-    dbus/windowdragadaptor.cpp
+    dbus/windowdragadaptor/windowdragadaptor.cpp
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
     dbus/windowdragadaptor/dragactivation.cpp
     dbus/windowdragadaptor/dragactivation.h
-    dbus/windowdragadaptor.h
-    dbus/autotileadaptor.cpp
+    dbus/windowdragadaptor/windowdragadaptor.h
+    dbus/autotileadaptor/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
-    dbus/autotileadaptor.h
-    dbus/snapadaptor.cpp
+    dbus/autotileadaptor/autotileadaptor.h
+    dbus/snapadaptor/snapadaptor.cpp
     dbus/snapadaptor/commit.cpp
     dbus/snapadaptor/snaprestore.cpp
     dbus/snapadaptor/navigation.cpp
-    dbus/snapadaptor.h
+    dbus/snapadaptor/snapadaptor.h
     # TilingAlgorithm, TilingState, SplitTree, AlgorithmRegistry, scripted-algo
     # machinery live in libs/phosphor-tiles/. Consumers include canonical
     # <PhosphorTiles/...> headers directly; no forwarding shims remain.

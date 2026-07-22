@@ -33,7 +33,7 @@
 #include <PhosphorContext/IContextResolver.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
-#include "dbus/windowdragadaptor.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
 
 #include "../helpers/StubSettings.h"
 

@@ -4,7 +4,7 @@
 #include "autotileadaptor.h"
 
 #include "core/platform/logging.h"
-#include "windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>

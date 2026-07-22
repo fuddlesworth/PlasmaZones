@@ -7,9 +7,9 @@
 #include <QScreen>
 #include <cmath>
 #include "phosphor_i18n.h"
-#include "../config/configdefaults.h"
+#include "config/configdefaults.h"
 #include <PhosphorShortcuts/IAdhocRegistrar.h>
-#include "windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "core/interfaces/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
@@ -22,7 +22,7 @@
 #include "core/utils/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/types/constants.h"
-#include "../config/settings.h"
+#include "config/settings.h"
 #include <PhosphorContext/ContextHandle.h>
 #include <PhosphorContext/IContextResolver.h>
 #include <PhosphorEngine/EngineTypes.h>

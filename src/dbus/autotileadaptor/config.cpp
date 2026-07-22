@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../autotileadaptor.h"
+#include "autotileadaptor.h"
 
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTileEngine/AutotileEngine.h>

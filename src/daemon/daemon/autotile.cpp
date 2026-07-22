@@ -16,8 +16,8 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorContext/ContextResolver.h>
 #include "../../config/settings.h"
-#include "../../dbus/layoutadaptor.h"
-#include "../../dbus/windowtrackingadaptor.h"
+#include "dbus/layoutadaptor/layoutadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>

@@ -8,9 +8,9 @@
 // restore predicates, and the shared OSD navigation path.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-#include "../windowtrackingadaptor.h"
+#include "windowtrackingadaptor.h"
 
-#include "../zonedetectionadaptor.h"
+#include "dbus/zonedetectionadaptor.h"
 #include "core/interfaces/isettings.h"
 #include "core/platform/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>

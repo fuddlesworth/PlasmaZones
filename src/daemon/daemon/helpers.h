@@ -10,7 +10,7 @@
 #include <QScreen>
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
-#include "../../dbus/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 

@@ -10,8 +10,8 @@
 // state machine doesn't need to be rewritten. They're no longer exposed
 // on the D-Bus surface.
 
-#include "../windowdragadaptor.h"
-#include "../windowtrackingadaptor.h"
+#include "windowdragadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "core/interfaces/interfaces.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>

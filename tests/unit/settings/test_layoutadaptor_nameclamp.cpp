@@ -15,7 +15,7 @@
 
 #include "core/types/constants.h"
 
-#include "dbus/layoutadaptor.h"
+#include "dbus/layoutadaptor/layoutadaptor.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 

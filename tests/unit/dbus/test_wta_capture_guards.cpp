@@ -31,7 +31,7 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "FakeScreenProvider.h"
-#include "dbus/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/LayoutRegistryTestHelpers.h"

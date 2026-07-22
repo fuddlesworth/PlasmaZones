@@ -21,7 +21,7 @@
 
 #include "dbus/compositorbridgeadaptor.h"
 #include "dbus/controladaptor.h"
-#include "dbus/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>

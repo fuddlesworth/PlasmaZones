@@ -18,8 +18,8 @@
 // that includes settings.h — which is not a guarantee, it is a coincidence of chunking.
 #include "../../config/settings.h"
 #include "core/interfaces/isettings.h"
-#include "../../dbus/compositorbridgeadaptor.h"
-#include "../../dbus/settingsadaptor.h"
+#include "dbus/compositorbridgeadaptor.h"
+#include "dbus/settingsadaptor/settingsadaptor.h"
 
 #include <PhosphorServiceIdle/IdleService.h>
 

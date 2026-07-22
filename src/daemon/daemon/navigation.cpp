@@ -17,8 +17,8 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../../dbus/snapadaptor.h"
-#include "../../dbus/windowtrackingadaptor.h"
+#include "dbus/snapadaptor/snapadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>

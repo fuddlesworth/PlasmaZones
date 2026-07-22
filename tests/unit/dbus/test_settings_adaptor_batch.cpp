@@ -30,7 +30,7 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ProfileTree.h>
 
-#include "dbus/settingsadaptor.h"
+#include "dbus/settingsadaptor/settingsadaptor.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 

@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../windowdragadaptor.h"
+#include "windowdragadaptor.h"
 #include "dragactivation.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
-#include "../../config/configdefaults.h"
+#include "config/configdefaults.h"
 #include "core/types/enums.h"
-#include "../windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "core/interfaces/interfaces.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>

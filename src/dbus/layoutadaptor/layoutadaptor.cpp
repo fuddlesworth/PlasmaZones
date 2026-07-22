@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "layoutadaptor.h"
-#include "dbushelpers.h"
+#include "dbus/dbushelpers.h"
 #include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutFactory.h>
 #include <PhosphorZones/Zone.h>
 #include "core/types/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
-#include "../common/layoutpreviewserialize.h"
+#include "common/layoutpreviewserialize.h"
 #include "core/utils/unifiedlayoutlist.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>

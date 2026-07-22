@@ -9,7 +9,7 @@
 //   isWindowFloating, queryWindowFloating, setWindowFloating (WTS delegate),
 //   getFloatingWindows, applyGeometryForFloat, setWindowFloatingForScreen.
 
-#include "../windowtrackingadaptor.h"
+#include "windowtrackingadaptor.h"
 #include "core/interfaces/interfaces.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"

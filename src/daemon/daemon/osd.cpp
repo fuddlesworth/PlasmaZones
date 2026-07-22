@@ -4,6 +4,7 @@
 #include "../daemon.h"
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "core/resolve/screenmoderouter.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -16,7 +17,7 @@
 #include <PhosphorZones/ZoneDetector.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/IPlacementState.h>
-#include "../../dbus/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "helpers.h"
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>

@@ -5,12 +5,12 @@
 #include "core/resolve/daemongeometryresolver.h"
 #include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
-#include "windowtrackingadaptor/persistenceworker.h"
-#include "zonedetectionadaptor.h"
+#include "persistenceworker.h"
+#include "dbus/zonedetectionadaptor.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include "../config/configbackends.h"
+#include "config/configbackends.h"
 #include "core/interfaces/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
