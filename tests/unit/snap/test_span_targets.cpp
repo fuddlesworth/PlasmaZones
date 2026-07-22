@@ -269,6 +269,12 @@ private Q_SLOTS:
     void singleZoneAtBoundary_reportsNoAdjacentZone();
     void horizontalBoundary_onVerticalStack_doesNotShrink();
     void unsnapped_snapsIntoEdgeZone();
+    void staleMembers_fallBackToEdgeZone();
+    void gapBearingLayout_growsAcrossGap();
+    void diagonalOnlyCandidate_doesNotGrow();
+    void overlappingCandidate_beatsDistantZone();
+    void invalidDirection_reportsInvalidDirection();
+    void emptyWindowId_reportsInvalidWindow();
 };
 
 void TestSpanTargets::grow_right_addsAdjacentZoneOnly()
@@ -406,6 +412,102 @@ void TestSpanTargets::unsnapped_snapsIntoEdgeZone()
     QVERIFY(result.grew);
     QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[1]}));
     QCOMPARE(result.geometry, QRect(960, 0, 960, 540));
+}
+
+void TestSpanTargets::staleMembers_fallBackToEdgeZone()
+{
+    // A span whose stored zone ids no longer resolve to valid geometry (the
+    // layout changed underneath it) must not carry the dead ids forward. A
+    // fully stale span behaves like an unsnapped window and snaps into the
+    // edge zone in the pressed direction.
+    SpanFixture f(quadrants());
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {QStringLiteral("{dead-zone-id}")};
+    f.adj.firstInDir[key(QStringLiteral("right"), kScreen)] = f.zoneIds[1];
+
+    auto resolver = f.makeResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
+
+    QVERIFY(result.success);
+    QVERIFY(result.grew);
+    QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[1]}));
+    QVERIFY(!result.zoneIds.contains(QStringLiteral("{dead-zone-id}")));
+}
+
+void TestSpanTargets::gapBearingLayout_growsAcrossGap()
+{
+    // Two columns separated by a real gap (77px, well past the 2px edge
+    // tolerance): grow must still find the neighbour across the gap.
+    SpanFixture f({QRectF(0.0, 0.0, 0.48, 1.0), QRectF(0.52, 0.0, 0.48, 1.0)});
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
+
+    auto resolver = f.makeResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
+
+    QVERIFY(result.success);
+    QVERIFY(result.grew);
+    QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[0], f.zoneIds[1]}));
+    QCOMPARE(result.geometry, QRect(0, 0, 1920, 1080));
+}
+
+void TestSpanTargets::diagonalOnlyCandidate_doesNotGrow()
+{
+    // The only zone to the right is diagonal (no perpendicular overlap with
+    // the span): it is not a grow target, so the press reports the boundary
+    // instead of producing a diagonal span.
+    SpanFixture f({QRectF(0.0, 0.0, 0.5, 0.5), QRectF(0.5, 0.5, 0.5, 0.5)});
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
+
+    auto resolver = f.makeResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
+
+    QVERIFY(!result.success);
+    QCOMPARE(result.reason, QStringLiteral("no_adjacent_zone"));
+}
+
+void TestSpanTargets::overlappingCandidate_beatsDistantZone()
+{
+    // Overlapping-zone layout: candidate B overlaps the member and extends
+    // past its right edge (gap clamps to 0); candidate C sits further right
+    // with a real gap. B must win, and the extension band (member edge to
+    // B's far edge) must not sweep up C, whose rect only touches the band.
+    SpanFixture f({QRectF(0.0, 0.0, 0.5, 1.0), QRectF(0.4, 0.0, 0.3, 1.0), QRectF(0.7, 0.0, 0.3, 1.0)});
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
+
+    auto resolver = f.makeResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
+
+    QVERIFY(result.success);
+    QVERIFY(result.grew);
+    QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[0], f.zoneIds[1]}));
+    QCOMPARE(result.geometry, QRect(0, 0, 1344, 1080));
+}
+
+void TestSpanTargets::invalidDirection_reportsInvalidDirection()
+{
+    SpanFixture f(quadrants());
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
+
+    auto resolver = f.makeResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("diagonal"), kScreen);
+
+    QVERIFY(!result.success);
+    QCOMPARE(result.reason, QStringLiteral("invalid_direction"));
+}
+
+void TestSpanTargets::emptyWindowId_reportsInvalidWindow()
+{
+    SpanFixture f(quadrants());
+
+    auto resolver = f.makeResolver();
+    const SpanTargetResult result = resolver.getSpanTargetForWindow(QString(), QStringLiteral("right"), kScreen);
+
+    QVERIFY(!result.success);
+    QCOMPARE(result.reason, QStringLiteral("invalid_window"));
 }
 
 QTEST_MAIN(TestSpanTargets)

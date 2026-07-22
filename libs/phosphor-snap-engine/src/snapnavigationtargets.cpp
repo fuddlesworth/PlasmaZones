@@ -444,7 +444,9 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
         result.grew = true;
         result.zoneIds = QStringList{entryZone};
         result.geometry = geo;
-        emitFeedback(true, QStringLiteral("span"), QStringLiteral("grow:") + direction, QString(), entryZone,
+        // "snap:", not "grow:" — this is an initial snap of an unsnapped
+        // window, and the OSD words it as a snap rather than an extension.
+        emitFeedback(true, QStringLiteral("span"), QStringLiteral("snap:") + direction, QString(), entryZone,
                      effectiveScreenId);
         return result;
     }
@@ -515,6 +517,17 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
         // full-height span into a column of stacked zones takes the whole
         // column instead of leaving an L-shaped set whose bounding rect
         // covers zones that were never added.
+        //
+        // Bounding-rect semantics: the applied geometry is the union of the
+        // member rects, matching multiZoneGeometry everywhere else in the
+        // codebase. When an added zone extends past the band's perpendicular
+        // extent (irregular or overlapping layouts), the union can therefore
+        // overlap zones that are not in the set — inherent to bounding-rect
+        // spans, and identical to what a drag multi-zone snap of the same
+        // set would produce. The band is deliberately NOT iterated to a
+        // fixpoint: flood-filling would swallow overlapping zones the user
+        // never aimed at (see ZoneDetector::detectMultiZone's matching
+        // choice for the drag path).
         const QRect& winner = candidates[bestIndex].second;
         const int newEdge = positive ? travelHi(winner, horizontal) : travelLo(winner, horizontal);
         QRect band;
@@ -525,7 +538,13 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
             band = positive ? QRect(unionRect.x(), uHi, unionRect.width(), newEdge - uHi)
                             : QRect(unionRect.x(), newEdge, unionRect.width(), uLo - newEdge);
         }
-        result.zoneIds = currentZones;
+        // Base the new set on the validated members, not raw currentZones —
+        // a stale id the member pass dropped must not be re-included (it
+        // could even become the primary zone the commit keys off).
+        result.zoneIds.clear();
+        for (const auto& m : std::as_const(members)) {
+            result.zoneIds.append(m.first);
+        }
         QRect newUnion = unionRect;
         for (const auto& [candidateId, candidateRect] : std::as_const(candidates)) {
             if (!band.intersected(candidateRect).isEmpty()) {

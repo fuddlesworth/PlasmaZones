@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Keyboard zone spanning**: new Span Window shortcuts (Ctrl+Alt+Arrows) grow the focused window's snap into the adjacent zone in that direction, the keyboard counterpart of spanning zones with a drag. Pressing back toward the window shrinks it again, and growing into a column of stacked zones takes the whole column so the window stays rectangular ([#93](https://github.com/fuddlesworth/PlasmaZones/discussions/93)).
+- **Keyboard zone spanning**: new Span Window shortcuts (Ctrl+Alt+Arrows) grow the focused window's snap into the adjacent zone in that direction, the keyboard counterpart of spanning zones with a drag. Pressing back toward the window shrinks it again, and growing into a column of stacked zones takes the whole column so the window stays rectangular ([#93](https://github.com/fuddlesworth/PlasmaZones/discussions/93), [#838](https://github.com/fuddlesworth/PlasmaZones/pull/838)).
 - **Shortcut cheatsheet overlay**: a new overlay that lists every PlasmaZones global shortcut with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ (rebindable in System Settings) and dismiss it with Escape, a backdrop click, or the shortcut again. The sheet is mode aware. Shortcuts that do nothing in the current tiling mode are hidden, and it updates live when you switch modes or rebind a key. Shortcuts you have unbound stay listed as unassigned so you can discover them ([#810](https://github.com/fuddlesworth/PlasmaZones/pull/810)).
 
 ### Changed
@@ -1715,6 +1715,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[3.3.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.7...v3.3.0
 [3.2.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.6...v3.2.7
 [3.2.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.5...v3.2.6
 [3.2.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.4...v3.2.5

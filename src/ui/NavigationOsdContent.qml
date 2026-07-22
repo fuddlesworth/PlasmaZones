@@ -63,6 +63,11 @@ Item {
     readonly property string messageText: {
         if (!success) {
             // Failure messages
+            if (reason === "excluded") {
+                // Shared by move/focus/swap/push/snap/span: the focused window
+                // is excluded by a rule or below the minimum size.
+                return i18n("This window is excluded from tiling");
+            }
             if (action === "move" || action === "focus" || action === "span") {
                 return i18n("No zone in that direction");
             } else if (action === "push") {
@@ -110,13 +115,20 @@ Item {
 
             return moveArrow + " " + i18n("Moved");
         } else if (action === "span") {
-            // reason format: "grow:right" or "shrink:left"
+            // reason format: "grow:right", "shrink:left", or "snap:right"
+            // (the last one when span snapped a previously unsnapped window)
             var spanArrow = directionArrow(reason);
             if (reason.indexOf("grow") === 0) {
                 if (targetZoneNumber > 0)
                     return spanArrow + " " + i18n("Extended into zone %1", targetZoneNumber);
 
                 return spanArrow + " " + i18n("Span extended");
+            }
+            if (reason.indexOf("snap") === 0) {
+                if (targetZoneNumber > 0)
+                    return spanArrow + " " + i18n("Snapped: Zone %1", targetZoneNumber);
+
+                return spanArrow + " " + i18n("Snapped");
             }
             return spanArrow + " " + i18n("Span reduced");
         } else if (action === "focus") {

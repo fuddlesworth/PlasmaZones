@@ -778,6 +778,12 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_STRING("swapWindowUpShortcut", swapWindowUpShortcut, setSwapWindowUpShortcut)
         REGISTER_CONCRETE_STRING("swapWindowDownShortcut", swapWindowDownShortcut, setSwapWindowDownShortcut)
 
+        // Span window shortcuts
+        REGISTER_CONCRETE_STRING("spanWindowLeftShortcut", spanWindowLeftShortcut, setSpanWindowLeftShortcut)
+        REGISTER_CONCRETE_STRING("spanWindowRightShortcut", spanWindowRightShortcut, setSpanWindowRightShortcut)
+        REGISTER_CONCRETE_STRING("spanWindowUpShortcut", spanWindowUpShortcut, setSpanWindowUpShortcut)
+        REGISTER_CONCRETE_STRING("spanWindowDownShortcut", spanWindowDownShortcut, setSpanWindowDownShortcut)
+
         // Snap to zone by number shortcuts
         REGISTER_CONCRETE_STRING("snapToZone1Shortcut", snapToZone1Shortcut, setSnapToZone1Shortcut)
         REGISTER_CONCRETE_STRING("snapToZone2Shortcut", snapToZone2Shortcut, setSnapToZone2Shortcut)

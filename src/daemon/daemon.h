@@ -1073,6 +1073,10 @@ private:
     QElapsedTimer m_rotateDebounce;
     QElapsedTimer m_floatDebounce;
     QElapsedTimer m_cycleLayoutDebounce;
+    // Span is not monotonic: at the layout boundary a grow press flips into
+    // a shrink of the opposite edge, so keyboard auto-repeat on a held key
+    // would grow to the edge and then eat the window down to a single zone.
+    QElapsedTimer m_spanDebounce;
     // Shared debounce for VS swap/rotate. Each fire commits a config change
     // through Settings and kicks a refresh → resnap cascade — cheap per call
     // but pile-up-prone under keyboard auto-repeat, same rationale as

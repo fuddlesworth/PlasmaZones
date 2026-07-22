@@ -183,6 +183,15 @@ void Daemon::handleMove(NavigationDirection direction)
 
 void Daemon::handleSpan(NavigationDirection direction)
 {
+    // Debounce keyboard auto-repeat. Unlike move, span is not monotonic:
+    // once the grow direction hits the layout boundary the same keypress
+    // shrinks the opposite edge, so a held key would grow to the edge and
+    // then collapse the span back to a single zone.
+    if (m_spanDebounce.isValid() && m_spanDebounce.elapsed() < kShortcutDebounceMs) {
+        return;
+    }
+    m_spanDebounce.restart();
+
     NavigationContext ctx;
     auto* nav =
         navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Span");
