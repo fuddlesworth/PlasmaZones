@@ -29,6 +29,8 @@ add_library(PhosphorPlacement SHARED
     src/navigation.cpp
     src/resnap.cpp
     src/lifecycle.cpp
+    src/virtualscreenmigration.cpp
+    src/placementvalidation_p.h
     src/snap.cpp
     src/placementlogging.h
     src/placementlogging.cpp
