@@ -360,9 +360,9 @@ public:
     // Loads the on-disk layouts via an in-process LayoutRegistry +
     // ZonesLayoutSource so QML preview paths render even when the daemon
     // is down (early launch, crash). Paints directly at startup, before the
-    // first getLayoutList is dispatched. From then on loadLayoutsAsync holds
-    // this view back (m_withheldLocalLayouts) and publishes it only when the
-    // daemon cannot answer, because it lacks the enrichment described below.
+    // first getLayoutList goes out; after that loadLayoutsAsync holds it back
+    // (m_withheldLocalLayouts) and publishes it only when the daemon cannot
+    // answer, because it lacks the enrichment described below.
     //
     // Returns the projection produced by PlasmaZones::toVariantMap. That is
     // the SAME projection, key for key, that the D-Bus side emits via toJson
@@ -988,40 +988,28 @@ private:
     QTimer m_layoutLoadTimer;
     QString m_pendingSelectLayoutId;
 
-    // Number of getLayoutList round-trips currently in flight. Non-zero holds
-    // back the local-path layout view.
-    //
-    // The local composite is built from LayoutPreview, which carries no
+    // Number of getLayoutList round-trips in flight. Non-zero holds back the
+    // local-path layout view, which is built from LayoutPreview and carries no
     // daemon-side enrichment (hasSystemOrigin / hiddenFromSelector /
-    // defaultOrder / allow-lists). Publishing it mid-flight would strip that
-    // enrichment off every entry until the reply lands, so a hidden/auto-assign
-    // toggle visibly reverted on the card that was just toggled, and every
-    // listing page rebuilt its whole model twice per mutation.
+    // defaultOrder / allow-lists). Publishing it mid-flight stripped that off
+    // every entry for the length of the round trip, so a hidden/auto-assign
+    // toggle visibly reverted on the card just toggled and every listing page
+    // rebuilt its whole model twice per mutation.
     //
-    // So loadLayoutsAsync() increments this BEFORE reloading the local
-    // registry, covering both its own synchronous local emit and any that lands
-    // between the dispatch and the reply (a second daemon signal restarts the
-    // scheduleLayoutLoad() debounce, whose loadLayoutsAsync() drives the
-    // registry lambda synchronously). The replies are then the only refresh.
-    //
-    // A COUNT, not a flag: the debounce is 50 ms and a reply costs the daemon a
-    // full layout rescan, so a burst of mutations readily puts two calls in
-    // flight at once. A flag would be cleared by the first reply while the
-    // second was still pending, reopening exactly the un-enriched-publish window
-    // this exists to close.
-    //
-    // Decremented at the reply lambda's entry, before any early-return on
-    // error, so the local path resumes emitting once the last call settles and
-    // the daemon is unreachable. Startup's direct loadLayouts() call runs
-    // ungated and paints immediately as before.
+    // loadLayoutsAsync() increments it BEFORE reloading the local registry, so
+    // the gate covers that reload's synchronous emit as well as any landing
+    // before the reply. A COUNT, not a flag: the debounce is 50 ms and a reply
+    // costs the daemon a full rescan, so a burst readily puts two calls in
+    // flight, and a flag would be cleared by the first reply while the second
+    // was still pending. Decremented at the reply lambda's entry, ahead of any
+    // early-return. Startup's direct loadLayouts() runs ungated.
     int m_pendingDaemonLayoutCalls = 0;
-    /// The local view withheld under that gate, kept as the fallback the last
-    /// reply adopts when the daemon turns out to be unreachable — otherwise a
-    /// failed round-trip would leave the page painted from before the change.
-    /// Engaged (not merely non-empty) is what marks a withheld view, so a
-    /// genuine wipe to zero layouts is still adopted on error. Any SUCCESSFUL
-    /// reply clears it: enriched data supersedes the local view, and a later
-    /// error in the same burst must not downgrade the page back to it.
+    /// The local view withheld under that gate, adopted by the last reply when
+    /// the daemon turns out to be unreachable, so a failed round trip does not
+    /// leave the page painted from before the change. Engaged (not merely
+    /// non-empty) marks a withheld view, so a genuine wipe to zero layouts is
+    /// still adopted. Any SUCCESSFUL reply clears it: enriched data supersedes
+    /// it, and a later error must not downgrade the page back to it.
     std::optional<QVariantList> m_withheldLocalLayouts;
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.
