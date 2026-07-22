@@ -310,6 +310,7 @@ PlasmaZones.wiki/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/code-audit/
+!.claude/settings.json
 .mcp.json
 claude-flow.config.json
 .swarm/
