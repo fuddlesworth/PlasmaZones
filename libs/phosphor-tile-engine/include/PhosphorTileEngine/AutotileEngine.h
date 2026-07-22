@@ -14,6 +14,7 @@
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorTiles/TilingState.h>
 #include <QHash>
+#include <QJsonObject>
 #include <QObject>
 #include <QRect>
 #include <QSet>
@@ -1244,15 +1245,6 @@ private:
     }
 
     /**
-     * @brief Get PhosphorTiles::TilingState for an explicit key (bypasses current desktop/activity)
-     *
-     * Creates the state if it doesn't exist. Used by loadState() to restore states
-     * for arbitrary desktop/activity combinations without temporarily mutating
-     * m_context's current desktop/activity.
-     */
-    PhosphorTiles::TilingState* stateForKey(const PhosphorEngine::TilingStateKey& key);
-
-    /**
      * @brief Which states a global propagate writes.
      *
      * CurrentContext is the passive refresh: only the current desktop/activity's
@@ -1489,6 +1481,126 @@ private:
     // autotile persistence is per-window, not per-desktop ratio/count).
     QSet<PhosphorEngine::TilingStateKey> m_userTunedSplitRatio;
     QSet<PhosphorEngine::TilingStateKey> m_userTunedMasterCount;
+
+    // Script-state bags rescued from TilingStates that a teardown destroys, so a
+    // re-created state for the same key can pick its bag back up. Toggling
+    // autotile off destroys the current context's state outright (see
+    // setAutotileScreens), taking with it the only copy of an opaque bag the
+    // algorithm's script authored — e.g. an aligned grid's column fractions from
+    // a manual resize. Toggling back on then lays out from scratch, which reads
+    // to the user as their adjustments being thrown away.
+    //
+    // Tagged with the EFFECTIVE algorithm id at harvest time, and handed back
+    // only when that still matches, because TilingStateKey does not include the
+    // algorithm. That tag is what preserves the invariant the wipe sites enforce
+    // for live states: bags never cross algorithms. A tag mismatch refuses
+    // rather than migrates; script state has no cross-algorithm meaning.
+    //
+    // Algorithm-change sites DO drop entries, but only through the resolver,
+    // which is the only holder of a trustworthy reading. Deriving "did this
+    // screen's algorithm move" from the in-memory override map cannot work at
+    // these moments: a toggle-off has already dropped that map, so a screen
+    // pinned to its own algorithm reads as following the global one, and
+    // dropping on that reading erases the bag the teardown just rescued. That
+    // failure has been produced twice. The resolver's remembered "built under"
+    // id is what answers it instead, so both the global switch
+    // (applyGlobalAlgorithmChange) and per-screen changes go through
+    // wipeStateBagsOnEffectiveAlgorithmChange rather than dropping inline. The
+    // per-key tag then adjudicates lazily at the moment a state takes a bag,
+    // which is the second line of defence rather than the only one.
+    //
+    // Four unconditional drops exist, none of them an algorithm comparison. Two
+    // are screen-id-scoped: orphaned virtual screens in setAutotileScreens, and
+    // that same method's purge of screens no longer connected. The other two key
+    // on the part of the context that died rather than on the screen, in
+    // pruneStatesForDesktop and pruneStatesForActivities.
+    //
+    // Entries are reclaimed by a harvest that finds an EMPTY bag, which erases
+    // rather than inserts (see stashScriptState). That is also what stops a bag
+    // a live wipe cleared from being shadowed by a stale entry and handed back.
+    //
+    // One gap is known and accepted: an entry only dies on a switch away from
+    // its algorithm if some teardown happens to harvest the emptied state while
+    // the other algorithm is live — with no teardown, the entry outlives the
+    // switch. It stays unreachable behind the tag until then, so this costs
+    // memory rather than correctness.
+    //
+    // Within-session only: nothing writes it to disk, so a daemon restart still
+    // starts from a clean layout.
+    // The split tree rides along because it is the same kind of thing: per-context
+    // state holding the user's manual resizes, in its per-node ratios rather than
+    // in an opaque bag. Losing it on a toggle rebuilt a uniform layout, which is
+    // the same complaint the bag's loss produced.
+    //
+    // The tree moves in and out whole, and there is no serialization to move it
+    // through: this is a rescue across a teardown, entirely within one session,
+    // so a JSON round trip would buy nothing and could only lose. The tree's
+    // serializer used to impose depth, node-count and ratio-clamping caps, which
+    // are bounds for untrusted on-disk input rather than for a tree the engine
+    // owned a moment ago. It was removed with the rest of the state
+    // serialization once nothing persisted a TilingState.
+    //
+    // Owning a unique_ptr makes the entry move-only, which is why the stash is a
+    // std::unordered_map: Qt's containers are implicitly shared and require
+    // copyable values, so this cannot be a QHash.
+    //
+    // The tree is NOT governed by the algorithm tag. Bags never cross algorithms,
+    // but trees deliberately do carry between two MEMORY algorithms — that is the
+    // live rule (wipeStateBagsOnEffectiveAlgorithmChange clears a tree only when
+    // the incoming algorithm lacks memory), and a stashed tree follows it.
+    struct StashedScriptState
+    {
+        QJsonObject scriptState;
+        std::unique_ptr<PhosphorTiles::SplitTree> splitTree;
+        QString algorithmId;
+    };
+    std::unordered_map<PhosphorEngine::TilingStateKey, StashedScriptState> m_scriptStateStash;
+
+    /// Rescue @p state's script-state bag and split tree into m_scriptStateStash
+    /// under @p key, tagged with the screen's CURRENT effective algorithm. Takes
+    /// a mutable state because the tree is MOVED out of it — the state is being
+    /// destroyed, so nothing else will read it. Call before the state is
+    /// destroyed and before any override drop that would change what "effective"
+    /// resolves to. An EMPTY bag erases the key's entry instead of
+    /// inserting: the state is the truth for its key, so emptiness must not be
+    /// shadowed by something stashed earlier.
+    void stashScriptState(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state);
+
+    /// Hand a stashed bag to @p state for @p key, if one is held and its
+    /// algorithm tag matches what the screen currently resolves to. Purely
+    /// read-only: the entry is left in the stash either way. Callers pass either
+    /// a freshly created state (the state factory in tilingStateForScreen) or, on
+    /// the autotile re-enable path, an existing state whose bag applyPerScreenConfig has just
+    /// wiped — in that case the stashed bag overwrites what the state holds,
+    /// which is the point. A mismatch is NOT proof the bag is dead, only that
+    /// the resolver may not be authoritative yet, so it must not erase.
+    void restoreStashedScriptState(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state);
+
+    /// Hand @p state back its stashed split tree, if one is held and it still
+    /// describes @p state's tiled windows exactly.
+    ///
+    /// Deliberately NOT called from the state factory like the bag is. A bag is
+    /// window-agnostic, so it can be handed to an empty state; a tree's leaves ARE
+    /// window ids, and syncTreeInsert is not idempotent, so installing one before
+    /// the windows are re-added would duplicate every leaf as they arrive. This
+    /// runs at retile time instead, once the window set is whole again.
+    ///
+    /// The leaf-set check is the guard for everything that happened while the
+    /// state was gone: a window closed, or a new one opened, leaves the tree
+    /// describing a layout that no longer exists, and it is dropped rather than
+    /// reconciled. Rebuilding it from window order would restore the topology
+    /// while silently resetting the ratios the tree exists to carry.
+    void restoreStashedSplitTree(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state,
+                                 const PhosphorTiles::TilingAlgorithm* algo);
+
+    /// Drop @p screenId's stashed bags that were written under an algorithm other
+    /// than @p newAlgorithmId, because the screen has genuinely moved to it.
+    /// Tag-aware and therefore safe to call eagerly, unlike a blanket per-screen
+    /// drop: entries belonging to the incoming algorithm survive. Call ONLY where
+    /// the change is real — the resolver's remembered id is what establishes
+    /// that, and calling this on a teardown-window reading destroyed exactly the
+    /// bags this stash exists to keep.
+    void dropStashedScriptStatesForAlgorithmChange(const QString& screenId, const QString& newAlgorithmId);
 
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
 

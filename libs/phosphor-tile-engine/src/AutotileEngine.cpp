@@ -372,13 +372,30 @@ void AutotileEngine::connectSignals()
                             orphanedVsIds.insert(sid);
                             releaseScreenStateForTeardown(sid, state, releasedWindows,
                                                           /*drainOverflow=*/false);
-                            m_configResolver->removeOverridesForScreen(sid);
+                            // forgetScreen, not removeOverridesForScreen: this id
+                            // is never reused, so remembering the algorithm it
+                            // was on would strand a string for the session.
+                            m_configResolver->forgetScreen(sid);
                             m_userTunedSplitRatio.remove(key);
                             m_userTunedMasterCount.remove(key);
                         });
                     for (const QString& sid : std::as_const(orphanedVsIds)) {
                         m_overflow.takeForScreen(sid);
                     }
+                    // Drop stashed bags for every orphaned VS id. Driven off the
+                    // same predicate the removal used rather than off
+                    // orphanedVsIds, because that set is built inside the removal
+                    // callback and so only holds ids that still had a live state.
+                    // A VS toggled off earlier has no state, would be missing from
+                    // it, and its bag is exactly the "sits in the stash forever"
+                    // case this exists to prevent: the id is gone for good and is
+                    // never reused, so nothing will ever harvest or match it again.
+                    std::erase_if(m_scriptStateStash, [&](const auto& entry) {
+                        const QString& sid = entry.first.screenId;
+                        return PhosphorIdentity::VirtualScreenId::isVirtual(sid)
+                            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(sid) == physicalScreenId
+                            && !newVsSet.contains(sid);
+                    });
                     for (const QString& windowId : std::as_const(releasedWindows)) {
                         m_states.removeWindow(windowId);
                     }
@@ -642,6 +659,21 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
                         } else {
                             m_userTunedMasterCount.remove(newKey);
                         }
+                        // A bag stashed under oldKey belongs to the layout that is
+                        // moving, so it moves too, on the same terms as the tuned
+                        // flags above. Leaving it behind would mean the layout and
+                        // its script state part ways: restore never consumes an
+                        // entry, so oldKey would keep a bag describing windows that
+                        // now live at newKey, ready to be handed to whatever state
+                        // is built there next. Safe to move because the tag is
+                        // resolved per screen and both keys share a screenId.
+                        if (auto oldIt = m_scriptStateStash.find(oldKey); oldIt != m_scriptStateStash.end()) {
+                            StashedScriptState moved = std::move(oldIt->second);
+                            m_scriptStateStash.erase(oldIt);
+                            m_scriptStateStash.insert_or_assign(newKey, std::move(moved));
+                        } else {
+                            m_scriptStateStash.erase(newKey);
+                        }
 
                         // Update window-to-key mapping
                         m_states.rekeyWindows(oldKey, newKey);
@@ -713,7 +745,29 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // tilingStateForScreen() creates the PhosphorTiles::TilingState lazily, so windows that arrive
     // shortly after (via KWin effect re-notification) have a state ready.
     for (const QString& screenId : added) {
-        tilingStateForScreen(screenId);
+        PhosphorTiles::TilingState* const addedState = tilingStateForScreen(screenId);
+        // Hand back a bag rescued when this screen was toggled off. The state
+        // factory attempts this too, for a context re-created later (a desktop
+        // switch back to where the toggle happened), but the factory alone is not
+        // enough on the re-enable path: the daemon applies per-screen config
+        // BEFORE re-activating screens, and applyPerScreenConfig both creates the
+        // state and then wipes its bag. That wipe compares against a resolver that
+        // no longer remembers this screen's algorithm — the toggle-off dropped the
+        // in-memory override — so it reads global -> override and clears a bag it
+        // should not have. Re-applying here, after that wipe, is what makes the
+        // round trip survive.
+        //
+        // ONLY into an empty bag, because unlike the factories this can be handed
+        // a state that was never torn down. Toggling off while another desktop is
+        // current tears down only that context, so this screen's state here may
+        // still be live and holding adjustments made AFTER the stashed entry was
+        // written — restore does not consume, so that entry outlives its own
+        // re-enable. Writing over a live bag would revert the user's newer layout
+        // to an older copy of itself. An empty bag means either a fresh state or
+        // the wipe described above, which are exactly the cases this is for.
+        if (addedState && addedState->scriptState().isEmpty()) {
+            restoreStashedScriptState(currentKeyForScreen(screenId), addedState);
+        }
         // Skip retile if windows are expected to arrive shortly (pending initial
         // order from seedAutotileOrderForScreen). The KWin effect sends windowOpened
         // D-Bus calls after receiving autotileScreensChanged, and each insertWindow
@@ -805,6 +859,12 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                 && key.activity == m_context.currentActivity() && removed.contains(key.screenId);
         },
         [&](const TilingStateKey& key, PhosphorTiles::TilingState* state) {
+            // Rescue the script-state bag BEFORE the state dies and before the
+            // override drop below moves the screen's effective algorithm. A
+            // re-enable recreates this key and picks the bag back up, so a
+            // toggle-off/on round trip keeps the user's manual tile adjustments
+            // instead of laying out from scratch.
+            stashScriptState(key, state);
             releaseScreenStateForTeardown(key.screenId, state, releasedWindows);
             // Toggle-off drops only the resolver's IN-MEMORY overrides (they are
             // re-derived from settings on re-enable); the persisted per-screen
@@ -844,6 +904,20 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     for (const QString& screenId : removed) {
         m_context.removeScreen(screenId);
     }
+
+    // Drop stashed bags belonging to screens that are no longer connected. They
+    // can never be harvested or matched again, so without this a monitor
+    // unplugged for good leaves its bag behind for the session. Gated on
+    // isKnownScreen and deliberately NOT on autotile membership: a screen the
+    // user merely toggled OUT of autotile is still connected and keeping its bag
+    // is the entire point of the stash.
+    std::erase_if(m_scriptStateStash, [this](const auto& entry) {
+        return !isKnownScreen(entry.first.screenId);
+    });
+    // The remembered "built under" id is bookkeeping for those same bags, so it
+    // is retired on the same event. Left behind it would be the stale "old" side
+    // of a comparison for an id that is never coming back.
+    m_configResolver->forgetRememberedAlgorithmsForUnknownScreens();
 
     // Clear any pending deferred retiles and retry state for removed screens
     for (auto pit = m_pendingRetileScreens.begin(); pit != m_pendingRetileScreens.end();) {
@@ -1012,6 +1086,11 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // observable window where m_algorithmId disagreed with the value
     // being persisted.
     m_algorithmEverSet = true;
+    // The outgoing global id, captured before the assignment below. The state
+    // clear further down needs it to tell a screen that FOLLOWED the old global
+    // from one pinned to its own algorithm, and by then m_algorithmId is the
+    // incoming id and can no longer answer that.
+    const QString previousAlgorithmId = m_algorithmId;
     m_algorithmId = newId;
     m_config->algorithmId = newId;
 
@@ -1067,16 +1146,13 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // consistent state (no stale trees from the old algorithm). Safe because
     // this point is reached only when the algorithm id changed (early return
     // above), so every non-overridden state's effective algorithm changed.
-    const bool clearSplitTrees = newAlgo && !newAlgo->supportsMemory();
-    for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
-        if (!it.value() || hasAlgoOverride(it.key().screenId)) {
-            continue;
-        }
-        if (clearSplitTrees) {
-            it.value()->clearSplitTree();
-        }
-        it.value()->setScriptState({});
-    }
+    // The resolver owns this: it is the same wipe a per-screen effective change
+    // runs, and it is the only place that knows what each screen's states were
+    // BUILT UNDER. Deriving that here from hasAlgoOverride cannot work — a
+    // toggle-off has already dropped the in-memory override, so a screen pinned
+    // by persisted settings reads as a follower and its rescued bag is destroyed
+    // one step after the teardown saved it.
+    m_configResolver->applyGlobalAlgorithmChange(previousAlgorithmId, m_algorithmId);
 
     Q_EMIT algorithmChanged(m_algorithmId);
 
@@ -1147,29 +1223,164 @@ PhosphorTiles::TilingState* AutotileEngine::tilingStateForScreen(const QString& 
         // Initialize with config defaults
         state->setMasterCount(m_config->masterCount);
         state->setSplitRatio(m_config->splitRatio);
+        // Recover a bag a teardown rescued for this key, when it was written by
+        // the algorithm still in effect. Usually a no-op — the stash is empty
+        // unless this key was torn down earlier in the session.
+        restoreStashedScriptState(key, state);
         return state;
     });
 }
 
-PhosphorTiles::TilingState* AutotileEngine::stateForKey(const TilingStateKey& key)
+void AutotileEngine::stashScriptState(const TilingStateKey& key, PhosphorTiles::TilingState* state)
 {
-    if (key.screenId.isEmpty()) {
-        return nullptr;
+    if (!state) {
+        return;
     }
+    const QJsonObject bag = state->scriptState();
+    // Moves the tree out of the dying state rather than copying it: nothing else
+    // will use it, and SplitTree is move-only by design.
+    std::unique_ptr<PhosphorTiles::SplitTree> tree =
+        state->splitTree() && !state->splitTree()->isEmpty() ? state->takeSplitTree() : nullptr;
+    if (bag.isEmpty() && !tree) {
+        // The state IS the truth for this key, so having neither erases any entry
+        // stashed earlier rather than leaving it to shadow the emptiness. That is
+        // what stops a wiped bag coming back: an algorithm switch clears the live
+        // state, and without this erase a stale entry from a previous teardown
+        // would still be sitting there, tagged with the algorithm the user has now
+        // switched back to, ready to be handed to the next state.
+        m_scriptStateStash.erase(key);
+        return;
+    }
+    // The screen's effective algorithm RIGHT NOW is the one whose script wrote
+    // this bag, which is why every caller harvests before dropping per-screen
+    // overrides — after the drop, effectiveAlgorithmId() has already fallen back
+    // to the global algorithm and would mislabel the bag.
+    m_scriptStateStash.insert_or_assign(
+        key, StashedScriptState{bag, std::move(tree), m_configResolver->effectiveAlgorithmId(key.screenId)});
+}
 
-    return m_states.forKey(key, [&]() -> PhosphorTiles::TilingState* {
-        // Reject unknown screens (same validation as tilingStateForScreen)
-        if (!isKnownScreen(key.screenId)) {
-            qCWarning(PhosphorTileEngine::lcTileEngine)
-                << "AutotileEngine::stateForKey: unknown screen" << key.screenId;
-            return nullptr;
+void AutotileEngine::restoreStashedScriptState(const TilingStateKey& key, PhosphorTiles::TilingState* state)
+{
+    if (!state) {
+        return;
+    }
+    const auto it = m_scriptStateStash.find(key);
+    if (it == m_scriptStateStash.end()) {
+        return;
+    }
+    const QString effectiveId = m_configResolver->effectiveAlgorithmId(key.screenId);
+    if (it->second.algorithmId != effectiveId) {
+        // Refuse, but do NOT erase. This is the only thing enforcing "bags never
+        // cross algorithms" for stashed state, and it has to stay purely
+        // read-only, because a mismatch here does not prove the bag is dead — it
+        // may only mean the resolver is not authoritative yet.
+        //
+        // Concretely: this runs from a find-or-CREATE factory with many callers,
+        // and Daemon::updateAutotileScreens seeds window order for added screens
+        // BEFORE its applyPerScreenConfig loop reinstates per-screen overrides.
+        // Seeding materialises the state whenever it resolves a non-empty order.
+        // In that window a screen pinned to its own algorithm resolves to the
+        // GLOBAL one, so the tag mismatches for a bag that is about to become
+        // valid again a few statements later. Erasing on that reading destroyed
+        // the rescued bag on exactly the screens the stash exists for.
+        //
+        // Nothing accumulates as a result: a genuinely dead entry is cleared by
+        // the next teardown of its key, whose harvest sees the state's empty bag
+        // and erases (see stashScriptState).
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "Not restoring stashed script state for" << key.screenId << "desktop" << key.desktop << "activity"
+            << key.activity << "- stashed under" << it->second.algorithmId << "but screen currently resolves to"
+            << effectiveId;
+        return;
+    }
+    // An entry can hold a tree and no bag, once an algorithm change has cleared
+    // the bag but left a tree the incoming memory algorithm still owns. Writing
+    // the empty bag through would clear a live one for no reason.
+    if (it->second.scriptState.isEmpty()) {
+        return;
+    }
+    // Left in the stash on a match too, so a transient lookup that materialises a
+    // state and then discards it (updateStickyScreenPins takes and deletes
+    // exactly such a state) cannot consume the bag with the state nobody kept.
+    state->setScriptState(it->second.scriptState);
+}
+
+void AutotileEngine::restoreStashedSplitTree(const TilingStateKey& key, PhosphorTiles::TilingState* state,
+                                             const PhosphorTiles::TilingAlgorithm* algo)
+{
+    // Only memory algorithms own a tree at all, so there is nothing to hand back
+    // to any other kind. Note this deliberately does NOT skip a state that
+    // already holds a tree — see the replace-rather-than-fill note below, which
+    // is why the bag's "a live one is always newer" rule does not apply here.
+    if (!state || !algo || !algo->supportsMemory()) {
+        return;
+    }
+    const auto it = m_scriptStateStash.find(key);
+    if (it == m_scriptStateStash.end() || !it->second.splitTree) {
+        return;
+    }
+    const PhosphorTiles::SplitTree* const tree = it->second.splitTree.get();
+    // The tree must describe THIS state's tiled windows, no more and no less.
+    // Anything else means the window set moved while the state was gone, and a
+    // tree that disagrees with the order would make the next syncTreeInsert
+    // index against a layout that is not there.
+    const QStringList leaves = tree->leafOrder();
+    const QStringList tiled = state->tiledWindows();
+    if (leaves.size() != tiled.size()
+        || QSet<QString>(leaves.begin(), leaves.end()) != QSet<QString>(tiled.begin(), tiled.end())) {
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "Not restoring stashed split tree for" << key.screenId << "desktop" << key.desktop << "- describes"
+            << leaves.size() << "windows but the state holds" << tiled.size();
+        return;
+    }
+    // Replaces rather than fills a gap. TilingState::addWindow lazily creates a
+    // tree as each window is re-added, so by now the state always holds a
+    // freshly-built one carrying uniform default ratios — that regenerated tree
+    // IS the layout reset this restore exists to undo.
+    state->setSplitTree(std::move(it->second.splitTree));
+    // One-shot, unlike the bag, and structurally so: the move above leaves the
+    // entry's pointer null, so a later retile takes the early return. That
+    // matters because this runs on EVERY retile — a tree left readable would be
+    // re-applied over the user's next resize and pin the layout to the rescued
+    // one. The bag's restore is deliberately non-consuming instead, because a
+    // mismatched tag there may only mean the resolver is not authoritative yet;
+    // there is no such ambiguity for a tree.
+    //
+    // The erase below is housekeeping, not the one-shot: it drops an entry that
+    // now holds neither a bag nor a tree.
+    if (it->second.scriptState.isEmpty()) {
+        m_scriptStateStash.erase(it);
+    }
+}
+
+void AutotileEngine::dropStashedScriptStatesForAlgorithmChange(const QString& screenId, const QString& newAlgorithmId)
+{
+    // Mirrors what the live wipe does to a state on the same change: the bag
+    // always goes, the tree only when the incoming algorithm has no memory to
+    // carry it. Two memory algorithms genuinely share a tree, so dropping it
+    // here would lose a layout the live path would have kept.
+    auto* registry = algorithmRegistry();
+    PhosphorTiles::TilingAlgorithm* const newAlgo = registry ? registry->algorithm(newAlgorithmId) : nullptr;
+    const bool keepTrees = newAlgo && newAlgo->supportsMemory();
+    for (auto it = m_scriptStateStash.begin(); it != m_scriptStateStash.end();) {
+        if (it->first.screenId != screenId || it->second.algorithmId == newAlgorithmId) {
+            ++it;
+            continue;
         }
-
-        auto* state = new PhosphorTiles::TilingState(key.screenId, this);
-        state->setMasterCount(m_config->masterCount);
-        state->setSplitRatio(m_config->splitRatio);
-        return state;
-    });
+        it->second.scriptState = QJsonObject{};
+        if (!keepTrees) {
+            it->second.splitTree.reset();
+        }
+        // A surviving tree now belongs to the incoming algorithm, so retag —
+        // otherwise the next change would compare against the algorithm that
+        // wrote a bag which is no longer there.
+        it->second.algorithmId = newAlgorithmId;
+        if (it->second.scriptState.isEmpty() && !it->second.splitTree) {
+            it = m_scriptStateStash.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 QSet<int> AutotileEngine::desktopsWithActiveState() const
@@ -1203,6 +1414,12 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
     m_states.removeWindowsIf([&](const QString&, const TilingStateKey& key) {
         return key.desktop == removedDesktop;
     });
+    // Stashed bags for the dead desktop go with it. Desktop NUMBERS are reused
+    // after a renumber, so leaving them would hand a recreated key someone
+    // else's layout.
+    std::erase_if(m_scriptStateStash, [&](const auto& entry) {
+        return entry.first.desktop == removedDesktop;
+    });
     // Clear the sticky-pin override and the per-output virtual-desktop map (#648)
     // for entries referencing the removed desktop — a screen pinned to a
     // now-deleted desktop number must drop the entry; the effect re-reports the
@@ -1231,6 +1448,9 @@ void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities
     // Clean up reverse-map entries that reference pruned activities
     m_states.removeWindowsIf([&](const QString&, const TilingStateKey& key) {
         return !key.activity.isEmpty() && !valid.contains(key.activity);
+    });
+    std::erase_if(m_scriptStateStash, [&](const auto& entry) {
+        return !entry.first.activity.isEmpty() && !valid.contains(entry.first.activity);
     });
     if (pruned > 0) {
         qCInfo(PhosphorTileEngine::lcTileEngine) << "Pruned" << pruned << "TilingStates for removed activities";
@@ -2992,9 +3212,9 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
     }
 
     // Tier A — tree/memory algorithms reflow gap-free by adjusting the split
-    // ratio of the ancestor split that owns each moved edge. These persist the
-    // adjustment in the SplitTree (serialized with the state), not state.splitRatio,
-    // so they are intentionally outside the m_userTunedSplitRatio mechanism — no
+    // ratio of the ancestor split that owns each moved edge. These keep the
+    // adjustment in the SplitTree, not state.splitRatio, so they are
+    // intentionally outside the m_userTunedSplitRatio mechanism — no
     // noteSplitRatioUserTuned here.
     if (algo->supportsMemory()) {
         if (applyTreeResizeReflow(state, windowId, oldFrame, newFrame, resolvedScreen)) {
@@ -3637,6 +3857,13 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
             }
         }
     }
+
+    // Before the algorithm gets a chance to build a fresh tree: a toggle-off
+    // rescued the old one, and prepareTilingState would otherwise replace the
+    // user's manual splits with uniform defaults. Runs here rather than at state
+    // creation because it needs the re-added windows to check against, and no-ops
+    // unless the tree still matches them.
+    restoreStashedSplitTree(currentKeyForScreen(screenId), state, algo);
 
     // Let memory-based algorithms prepare their state (e.g., lazily create a PhosphorTiles::SplitTree)
     // before calculateZones(). Virtual dispatch avoids concrete type casts here.

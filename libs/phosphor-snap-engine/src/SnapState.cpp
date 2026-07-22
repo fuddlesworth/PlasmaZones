@@ -3,8 +3,6 @@
 
 #include <PhosphorSnapEngine/SnapState.h>
 
-#include <QJsonArray>
-
 namespace PhosphorSnapEngine {
 
 SnapState::SnapState(const QString& screenId, QObject* parent)
@@ -95,73 +93,6 @@ QString SnapState::placementIdForWindow(const QString& rawWindowId) const
         return {};
     }
     return it->first();
-}
-
-QJsonObject SnapState::toJson() const
-{
-    QJsonObject obj;
-    obj[QLatin1String("screenId")] = m_screenId;
-
-    QJsonObject zones;
-    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-        QJsonArray arr;
-        for (const QString& z : it.value()) {
-            arr.append(z);
-        }
-        zones[it.key()] = arr;
-    }
-    obj[QLatin1String("zoneAssignments")] = zones;
-
-    QJsonArray floating;
-    for (const QString& w : m_floatingWindows) {
-        floating.append(w);
-    }
-    obj[QLatin1String("floatingWindows")] = floating;
-
-    QJsonObject preFloat;
-    for (auto it = m_preFloatZoneAssignments.constBegin(); it != m_preFloatZoneAssignments.constEnd(); ++it) {
-        QJsonArray arr;
-        for (const QString& z : it.value()) {
-            arr.append(z);
-        }
-        preFloat[it.key()] = arr;
-    }
-    obj[QLatin1String("preFloatZones")] = preFloat;
-
-    QJsonObject screens;
-    for (auto it = m_windowScreenAssignments.constBegin(); it != m_windowScreenAssignments.constEnd(); ++it) {
-        screens[it.key()] = it.value();
-    }
-    obj[QLatin1String("screenAssignments")] = screens;
-
-    QJsonObject desktops;
-    for (auto it = m_windowDesktopAssignments.constBegin(); it != m_windowDesktopAssignments.constEnd(); ++it) {
-        desktops[it.key()] = it.value();
-    }
-    obj[QLatin1String("desktopAssignments")] = desktops;
-
-    QJsonObject preFloatScreens;
-    for (auto it = m_preFloatScreenAssignments.constBegin(); it != m_preFloatScreenAssignments.constEnd(); ++it) {
-        preFloatScreens[it.key()] = it.value();
-    }
-    obj[QLatin1String("preFloatScreens")] = preFloatScreens;
-
-    QJsonObject lastUsed;
-    lastUsed[QLatin1String("zoneId")] = m_lastUsedZoneId;
-    lastUsed[QLatin1String("screenId")] = m_lastUsedScreenId;
-    lastUsed[QLatin1String("class")] = m_lastUsedZoneClass;
-    lastUsed[QLatin1String("desktop")] = m_lastUsedDesktop;
-    obj[QLatin1String("lastUsedZone")] = lastUsed;
-
-    QStringList sortedUserSnapped(m_userSnappedClasses.begin(), m_userSnappedClasses.end());
-    sortedUserSnapped.sort();
-    QJsonArray userSnapped;
-    for (const QString& c : sortedUserSnapped) {
-        userSnapped.append(c);
-    }
-    obj[QLatin1String("userSnappedClasses")] = userSnapped;
-
-    return obj;
 }
 
 // ── Zone Assignment CRUD ────────────────────────────────────────────────────
@@ -708,97 +639,6 @@ int SnapState::pruneStaleAssignments(const QSet<QString>& rawAliveWindowIds)
         Q_EMIT stateChanged();
     }
     return pruned;
-}
-
-// ── Deserialization ─────────────────────────────────────────────────────────
-
-SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
-{
-    const QString screenId = json.value(QLatin1String("screenId")).toString();
-    auto* state = new SnapState(screenId, parent);
-
-    const QJsonObject zones = json.value(QLatin1String("zoneAssignments")).toObject();
-    for (auto it = zones.constBegin(); it != zones.constEnd(); ++it) {
-        if (it.key().isEmpty()) {
-            continue;
-        }
-        QStringList ids;
-        const QJsonArray arr = it->toArray();
-        for (const auto& v : arr) {
-            const QString zoneId = v.toString();
-            if (!zoneId.isEmpty()) {
-                ids.append(zoneId);
-            }
-        }
-        if (!ids.isEmpty()) {
-            state->m_windowZoneAssignments[it.key()] = ids;
-        }
-    }
-
-    const QJsonArray floating = json.value(QLatin1String("floatingWindows")).toArray();
-    for (const auto& v : floating) {
-        const QString wId = v.toString();
-        if (!wId.isEmpty()) {
-            state->m_floatingWindows.insert(wId);
-        }
-    }
-
-    const QJsonObject preFloat = json.value(QLatin1String("preFloatZones")).toObject();
-    for (auto it = preFloat.constBegin(); it != preFloat.constEnd(); ++it) {
-        if (it.key().isEmpty()) {
-            continue;
-        }
-        QStringList ids;
-        const QJsonArray arr = it->toArray();
-        for (const auto& v : arr) {
-            const QString zoneId = v.toString();
-            if (!zoneId.isEmpty()) {
-                ids.append(zoneId);
-            }
-        }
-        if (!ids.isEmpty()) {
-            state->m_preFloatZoneAssignments[it.key()] = ids;
-        }
-    }
-
-    const QJsonObject screens = json.value(QLatin1String("screenAssignments")).toObject();
-    for (auto it = screens.constBegin(); it != screens.constEnd(); ++it) {
-        if (!it.key().isEmpty()) {
-            state->m_windowScreenAssignments[it.key()] = it->toString();
-        }
-    }
-
-    const QJsonObject desktops = json.value(QLatin1String("desktopAssignments")).toObject();
-    for (auto it = desktops.constBegin(); it != desktops.constEnd(); ++it) {
-        if (!it.key().isEmpty()) {
-            state->m_windowDesktopAssignments[it.key()] = it->toInt();
-        }
-    }
-
-    const QJsonObject preFloatScreens = json.value(QLatin1String("preFloatScreens")).toObject();
-    for (auto it = preFloatScreens.constBegin(); it != preFloatScreens.constEnd(); ++it) {
-        if (!it.key().isEmpty()) {
-            state->m_preFloatScreenAssignments[it.key()] = it->toString();
-        }
-    }
-
-    const QJsonObject lastUsed = json.value(QLatin1String("lastUsedZone")).toObject();
-    // Route through restoreLastUsedZone so a non-empty restored zone also stamps
-    // m_lastUsedSeq (recency). A direct field write would leave seq == 0, making
-    // snapRepresentativeLastUsed's cross-store tiebreak iteration-order-dependent.
-    state->restoreLastUsedZone(
-        lastUsed.value(QLatin1String("zoneId")).toString(), lastUsed.value(QLatin1String("screenId")).toString(),
-        lastUsed.value(QLatin1String("class")).toString(), lastUsed.value(QLatin1String("desktop")).toInt());
-
-    const QJsonArray userSnapped = json.value(QLatin1String("userSnappedClasses")).toArray();
-    for (const auto& v : userSnapped) {
-        const QString c = v.toString();
-        if (!c.isEmpty()) {
-            state->m_userSnappedClasses.insert(c);
-        }
-    }
-
-    return state;
 }
 
 } // namespace PhosphorSnapEngine

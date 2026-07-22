@@ -256,11 +256,21 @@ add_test(NAME test_autotile_virtual COMMAND test_autotile_virtual)
 target_compile_definitions(test_autotile_virtual PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# autotile/ - Autotile Engine Extended Tests (startup, float, algoswitch, overflow)
+# autotile/ - Autotile Engine Extended Tests (startup, float, algoswitch,
+#             script-state stash, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_autotile_ext_startup_float autotile/test_autotile_ext_startup_float.cpp)
 p_add_test(test_autotile_ext_algoswitch autotile/test_autotile_ext_algoswitch.cpp)
 target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_autotile_script_state_stash autotile/test_autotile_script_state_stash.cpp)
+target_compile_definitions(test_autotile_script_state_stash PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+# The split-tree case needs a screen with real geometry: the restore hangs off
+# recalculateLayout, which bails before it without one. Same fake provider
+# test_autotile_virtual uses.
+target_sources(test_autotile_script_state_stash
+               PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_autotile_script_state_stash
+               PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
 p_add_test(test_autotile_ext_overflow autotile/test_autotile_ext_overflow.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -268,7 +278,7 @@ p_add_test(test_autotile_ext_overflow autotile/test_autotile_ext_overflow.cpp)
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_tiling_state_windows autotile/test_tiling_state_windows.cpp)
 p_add_test(test_tiling_state_config autotile/test_tiling_state_config.cpp)
-p_add_test(test_tiling_state_serial autotile/test_tiling_state_serial.cpp)
+p_add_test(test_tiling_state_core autotile/test_tiling_state_core.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Overflow Manager Tests
