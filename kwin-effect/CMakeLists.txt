@@ -64,7 +64,9 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/window_query.h
     plasmazoneseffect/screens.cpp
     plasmazoneseffect/window_lifecycle.cpp
+    plasmazoneseffect/window_connections.cpp
     plasmazoneseffect/daemon_bringup.cpp
+    plasmazoneseffect/daemon_settings.cpp
     plasmazoneseffect/daemon_apply.cpp
     plasmazoneseffect/rule_invalidation.cpp
     plasmazoneseffect/drag_snap.cpp
