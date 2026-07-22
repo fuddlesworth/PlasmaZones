@@ -271,25 +271,27 @@ SettingsController::SettingsController(QObject* parent)
     connect(m_localLayoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this]() {
         recalcLocalLayouts();
         QVariantList localLayouts = localLayoutPreviews();
-        // Assign unconditionally: when the user deletes every layout we
-        // want m_layouts to reflect the empty state. Previously this
-        // path guarded on `!localLayouts.isEmpty()`, which left stale
-        // entries in m_layouts after a wipe when the daemon was down.
+        // An empty disk view is published like any other: when the user deletes
+        // every layout we want m_layouts to reflect the empty state. This path
+        // once guarded on `!localLayouts.isEmpty()`, which left stale entries in
+        // m_layouts after a wipe when the daemon was down.
         SettingsController::sortMergedLayoutList(localLayouts);
-        // Skip when the disk view matches what we already have — a daemon
-        // save batch fires a reload per layout write, and identical
-        // payloads would re-emit the model on each one.
-        const bool actuallyChanged = m_layouts != localLayouts;
-        if (actuallyChanged) {
-            m_layouts = std::move(localLayouts);
+        // Withhold the local view while a D-Bus getLayoutList call is in
+        // flight. It carries no daemon-side enrichment (hasSystemOrigin /
+        // hiddenFromSelector / defaultOrder / allow-lists), so publishing it
+        // now would drop that off every entry for the length of the round trip
+        // and force a second full model rebuild when the reply lands. The last
+        // reply adopts what is held here only if the daemon turns out to be
+        // unreachable.
+        if (m_pendingDaemonLayoutCalls > 0) {
+            m_withheldLocalLayouts = std::move(localLayouts);
+            return;
         }
-        // Suppress the local-path emit while a D-Bus getLayoutList
-        // call is in flight — the async reply lambda will emit once
-        // it replaces m_layouts with the daemon-enriched view. If the
-        // daemon is unreachable or the call errors, the gate is
-        // cleared in the reply lambda's head and subsequent local
-        // emits run normally (fallback behaviour).
-        if (actuallyChanged && !m_awaitingDaemonLayouts) {
+        // Skip when the disk view matches what we already have — a daemon save
+        // batch fires a reload per layout write, and identical payloads would
+        // re-emit the model on each one.
+        if (m_layouts != localLayouts) {
+            m_layouts = std::move(localLayouts);
             Q_EMIT layoutsChanged();
         }
     });

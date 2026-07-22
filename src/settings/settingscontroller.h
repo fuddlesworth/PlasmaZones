@@ -359,8 +359,10 @@ public:
     // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
     // Loads the on-disk layouts via an in-process LayoutRegistry +
     // ZonesLayoutSource so QML preview paths render even when the daemon
-    // is down (early launch, crash). Drives the Step-1 instant paint in
-    // loadLayoutsAsync, which the daemon's enriched reply then replaces.
+    // is down (early launch, crash). Paints directly at startup, before the
+    // first getLayoutList goes out; after that loadLayoutsAsync holds it back
+    // (m_withheldLocalLayouts) and publishes it only when the daemon cannot
+    // answer, because it lacks the enrichment described below.
     //
     // Returns the projection produced by PlasmaZones::toVariantMap. That is
     // the SAME projection, key for key, that the D-Bus side emits via toJson
@@ -368,7 +370,7 @@ public:
     // What differs is the daemon's LayoutAdaptor::getLayoutList, which adds an
     // enrichment layer on top (hasSystemOrigin / hiddenFromSelector /
     // defaultOrder / allow-lists) from Layout state that LayoutPreview does not
-    // carry. So the list this returns is a strict SUBSET of the Step-2 D-Bus
+    // carry. So the list this returns is a strict SUBSET of the D-Bus
     // list: any consumer reading an enrichment-only key off these previews
     // gets `undefined`, not `false`. See src/common/layoutpreviewserialize.h.
     //
@@ -986,27 +988,29 @@ private:
     QTimer m_layoutLoadTimer;
     QString m_pendingSelectLayoutId;
 
-    // Suppresses the local-path layoutsChanged emit while a D-Bus
-    // getLayoutList round-trip is in flight.
+    // Number of getLayoutList round-trips in flight. Non-zero holds back the
+    // local-path layout view, which is built from LayoutPreview and carries no
+    // daemon-side enrichment (hasSystemOrigin / hiddenFromSelector /
+    // defaultOrder / allow-lists). Publishing it mid-flight stripped that off
+    // every entry for the length of the round trip, so a hidden/auto-assign
+    // toggle visibly reverted on the card just toggled and every listing page
+    // rebuilt its whole model twice per mutation.
     //
-    // This does NOT collapse loadLayoutsAsync()'s own two emits: that call
-    // reloads the local manager (emitting synchronously through the
-    // PhosphorZones::LayoutRegistry::layoutsChanged lambda) BEFORE this gate is
-    // set, and the reply lambda emits again with the daemon-enriched list. That
-    // pair is the deliberate Step-1 instant-paint / Step-2 enrichment design.
-    //
-    // What the gate suppresses is a local emit that lands BETWEEN the dispatch
-    // and the reply. A second daemon layout signal arriving in that window
-    // restarts the scheduleLayoutLoad() debounce, and its loadLayoutsAsync()
-    // calls loadLayouts() on the local registry, which drives that lambda
-    // synchronously. Ungated it would repaint the page from the un-enriched
-    // local composite only for the in-flight reply to immediately replace it.
-    // Set true right before the D-Bus asyncCall dispatch;
-    // cleared at the reply lambda's entry (before any early-return on error, so
-    // the local fallback emit resumes if the daemon is unreachable). Only
-    // relevant when the daemon is available — when the D-Bus call errors out, the
-    // local path's emit remains the authoritative refresh.
-    bool m_awaitingDaemonLayouts = false;
+    // loadLayoutsAsync() increments it BEFORE reloading the local registry, so
+    // the gate covers that reload's synchronous emit as well as any landing
+    // before the reply. A COUNT, not a flag: the debounce is 50 ms and a reply
+    // costs the daemon a full rescan, so a burst readily puts two calls in
+    // flight, and a flag would be cleared by the first reply while the second
+    // was still pending. Decremented at the reply lambda's entry, ahead of any
+    // early-return. Startup's direct loadLayouts() runs ungated.
+    int m_pendingDaemonLayoutCalls = 0;
+    /// The local view withheld under that gate, adopted by the last reply when
+    /// the daemon turns out to be unreachable, so a failed round trip does not
+    /// leave the page painted from before the change. Engaged (not merely
+    /// non-empty) marks a withheld view, so a genuine wipe to zero layouts is
+    /// still adopted. Any SUCCESSFUL reply clears it: enriched data supersedes
+    /// it, and a later error must not downgrade the page back to it.
+    std::optional<QVariantList> m_withheldLocalLayouts;
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.
     // PhosphorZones::LayoutRegistry opens its own assignments backend + scans the standard

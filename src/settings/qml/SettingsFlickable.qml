@@ -48,10 +48,14 @@ import "SearchAnchorHelpers.js" as SearchAnchors
  * inherits Flickable's whole property surface unchanged. Each
  * consumer is responsible for:
  *
- *   - Binding `contentHeight` (and `contentWidth` if scrolling
+ *   - Binding the content height (and `contentWidth` if scrolling
  *     horizontally — not the typical settings-page case). Without it
  *     `WheelHandler` sees a zero scrollable range and silently
- *     refuses to move.
+ *     refuses to move. A page whose content is a fixed tree binds
+ *     `contentHeight` directly; a listing page that swaps a group model
+ *     binds `naturalContentHeight` instead and calls
+ *     `holdContentHeight()` before each swap, so the rebuild cannot
+ *     throw the scroll position away (see the model-swap scroll guard).
  *   - Avoiding nested Flickable / ListView / TextArea scroll surfaces
  *     unless they are intentionally height-clamped to their content
  *     (the `LayoutsPage.qml` pattern). Nested independent scrollers
@@ -81,6 +85,66 @@ Flickable {
     /// (every settings page sets `clip: true`). Without it the topmost card's
     /// top border never fully shows on hover.
     topMargin: Kirigami.Units.smallSpacing
+
+    // ── Model-swap scroll guard ──────────────────────────────────────────
+    // A listing page that swaps its group model (LayoutsPage.rebuildModel and
+    // friends) destroys every card delegate and rebuilds them over the
+    // following frames. For that window the page's natural height collapses to
+    // the chrome alone — measured on the Layouts page: 4091 → 671 with a 694 px
+    // viewport — so Flickable sees nothing scrollable, clamps `contentY` to the
+    // top, and the cards then re-materialise around a scroll offset that is
+    // gone for good. Any edit made while scrolled down (toggling a layout's
+    // zone-selector visibility, auto-assign, aspect ratio…) threw the user back
+    // to the top of the page.
+    //
+    // Consumers opt in by setting `naturalContentHeight` instead of
+    // `contentHeight` and calling `holdContentHeight()` immediately before the
+    // model swap. The floor keeps the scrollable range alive across the gap, so
+    // there is nothing to clamp and the offset survives untouched.
+    //
+    // Pages that bind `contentHeight` directly are unaffected — that assignment
+    // simply replaces the binding below.
+    property real naturalContentHeight: 0
+    /// Lower bound held over an in-flight rebuild. Zero means no hold.
+    property real _contentHeightFloor: 0
+
+    contentHeight: Math.max(settingsFlickable.naturalContentHeight, settingsFlickable._contentHeightFloor)
+
+    function holdContentHeight() {
+        settingsFlickable._contentHeightFloor = settingsFlickable.contentHeight;
+        contentHeightFloorSettle.restart();
+    }
+
+    onNaturalContentHeightChanged: {
+        if (settingsFlickable._contentHeightFloor <= 0)
+            return;
+        // Rebuilt to at least the height we were holding — the hold has done
+        // its job and must end now, or a page that genuinely grew would be
+        // capped for the rest of the settle window.
+        if (settingsFlickable.naturalContentHeight >= settingsFlickable._contentHeightFloor) {
+            contentHeightFloorSettle.stop();
+            settingsFlickable._contentHeightFloor = 0;
+            return;
+        }
+        // Still climbing: the cards materialise a step at a time, and a page can
+        // start a second swap (a filter or sort change landing on the heels of a
+        // model refresh) before the first has finished. Restart rather than let
+        // a fixed timeout expire mid-rebuild, which would drop the floor at
+        // exactly the collapsed height this exists to paper over.
+        contentHeightFloorSettle.restart();
+    }
+
+    // Ends a hold whose rebuild finished genuinely shorter than before (a
+    // layout deleted, a filter narrowed). Without it the page would keep the
+    // old height as dead scrollable space forever. Restarted on every height
+    // step, so the interval only has to outlast the gap between two steps, not
+    // the whole rebuild.
+    Timer {
+        id: contentHeightFloorSettle
+
+        interval: Kirigami.Units.shortDuration
+        onTriggered: settingsFlickable._contentHeightFloor = 0
+    }
 
     // ── Deep-link reveal (global search / `--setting`) ───────────────────
     // Rows and cards self-register here by anchor id (see SettingsRow /

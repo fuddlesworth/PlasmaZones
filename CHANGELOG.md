@@ -11,6 +11,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Shortcut cheatsheet overlay**: a new overlay that lists every PlasmaZones global shortcut with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ (rebindable in System Settings) and dismiss it with Escape, a backdrop click, or the shortcut again. The sheet is mode aware. Shortcuts that do nothing in the current tiling mode are hidden, and it updates live when you switch modes or rebind a key. Shortcuts you have unbound stay listed as unassigned so you can discover them ([#810](https://github.com/fuddlesworth/PlasmaZones/pull/810)).
 
+### Fixed
+
+- **The layout right-click menu works again**: right-clicking a layout and choosing "Set as Default" or "Hide from Zone Selector" did nothing, because the menu never received the settings it needed to act on ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+- **Editing a layout no longer scrolls the page back to the top**: hiding a layout, changing its auto-assign, or picking an aspect ratio while scrolled down threw the Layouts page back to the top. The page now holds its position while the cards rebuild. The Shaders pages keep their position across a group or sort change for the same reason ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+- **Layout cards no longer flicker when you change one**: toggling a layout's visibility or auto-assign briefly redrew every card without its badges, and the one you just changed snapped back before it took. Each change now refreshes the list once, with everything in place ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+- **Overlay shaders with a depth buffer render cleanly**: the Neon City and Voxel Terrain overlays asked the graphics driver to read and write the same depth texture in one drawing pass, which it refused ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+
 ## [3.2.7] - 2026-07-21
 
 ### Fixed
@@ -1703,6 +1710,13 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[3.2.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.6...v3.2.7
+[3.2.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.5...v3.2.6
+[3.2.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.4...v3.2.5
+[3.2.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.3...v3.2.4
+[3.2.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.2...v3.2.3
+[3.2.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.1...v3.2.2
+[3.2.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.3...v3.2.0
 [3.1.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.2...v3.1.3
 [3.1.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.1...v3.1.2
@@ -1726,6 +1740,12 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [3.0.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v3.0.0
+[2.8.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v2.8.8
+[2.8.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.6...v2.8.7
+[2.8.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.5...v2.8.6
+[2.8.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.4...v2.8.5
+[2.8.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.3...v2.8.4
+[2.8.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.2...v2.8.3
 [2.8.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.1...v2.8.2
 [2.8.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.1...v2.8.0
