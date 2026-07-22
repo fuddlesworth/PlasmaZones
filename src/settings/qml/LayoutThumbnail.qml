@@ -84,7 +84,11 @@ Item {
     // vertical chrome are reserved. The width-derived bound divides by the
     // aspect ratio; the min/max width clamp below can only make the box
     // narrower than this budget, never wider, so the fit stays conservative.
-    readonly property real _fitBaseHeight: Math.max(Kirigami.Units.gridUnit * 3, Math.min(fitHeight - _verticalChrome, (fitWidth - _sidePadding * 2) / Math.max(0.1, layoutAspectRatio)))
+    // The lower bound only guards against degenerate (zero/negative) budgets
+    // during layout; it must stay below every realistic budget or the box
+    // overflows the very bounds it is meant to fit (a gridUnit*3 floor already
+    // exceeds the 32:9 width budget at minimum card width).
+    readonly property real _fitBaseHeight: Math.max(Kirigami.Units.gridUnit, Math.min(fitHeight - _verticalChrome, (fitWidth - _sidePadding * 2) / Math.max(0.1, layoutAspectRatio)))
     // Preview-box sizing. Height is the fixed side for every class, so a
     // portrait ratio (< 1) simply yields a narrower width, which the
     // min/max clamp below keeps usable.

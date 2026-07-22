@@ -31,6 +31,10 @@ SettingsFlickable {
     // explicitly to LayoutGridDelegate (whose own `settingsController` property
     // would otherwise shadow the context name inside the delegate's bindings).
     readonly property var controllerBridge: settingsController
+    // Minimum card size. The grid fits as many columns as minCardWidth allows
+    // and stretches the cards to fill the row; each card's height then scales
+    // with its stretched width at the cardHeight:minCardWidth ratio, so these
+    // two set the minimum size AND the fixed aspect of every card.
     readonly property real cardHeight: Kirigami.Units.gridUnit * 12
     readonly property real minCardWidth: Kirigami.Units.gridUnit * 14
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms

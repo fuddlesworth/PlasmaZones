@@ -601,8 +601,8 @@ SettingsFlickable {
                     spacing: Kirigami.Units.smallSpacing
 
                     // Cards in a Flow wrap to the next row when out of
-                    // horizontal space — 3-4 cards per row at typical
-                    // settings-window widths. The inner delegate declares its
+                    // horizontal space — as many per row as the minimum card
+                    // width below allows. The inner delegate declares its
                     // own `required property var modelData` so the section
                     // delegate's identically-named `modelData` doesn't shadow
                     // the Repeater's auto-injection.
