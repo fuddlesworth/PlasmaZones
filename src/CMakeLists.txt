@@ -91,6 +91,14 @@ set(plasmazones_core_SRCS
     config/settings/loadsave.cpp
     config/settings/setters.cpp
     config/settings/perscreen.cpp
+    config/settings/animationprofile.cpp
+    config/settings/profiletrees.cpp
+    config/settings/disable.cpp
+    config/settings/uienums.cpp
+    config/settings/triggers.cpp
+    config/settings/systemcolors.cpp
+    config/settings/storescalars.cpp
+    config/settings/shortcuts.cpp
     config/settings.h
     config/configdefaults.cpp
     config/configbackends.h
