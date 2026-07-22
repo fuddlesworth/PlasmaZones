@@ -1710,6 +1710,13 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[3.2.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.6...v3.2.7
+[3.2.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.5...v3.2.6
+[3.2.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.4...v3.2.5
+[3.2.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.3...v3.2.4
+[3.2.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.2...v3.2.3
+[3.2.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.1...v3.2.2
+[3.2.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.3...v3.2.0
 [3.1.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.2...v3.1.3
 [3.1.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.1...v3.1.2
@@ -1733,6 +1740,12 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [3.0.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v3.0.0
+[2.8.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v2.8.8
+[2.8.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.6...v2.8.7
+[2.8.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.5...v2.8.6
+[2.8.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.4...v2.8.5
+[2.8.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.3...v2.8.4
+[2.8.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.2...v2.8.3
 [2.8.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.1...v2.8.2
 [2.8.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.1...v2.8.0
