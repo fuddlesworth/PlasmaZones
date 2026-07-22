@@ -71,7 +71,8 @@ ColumnLayout {
     /// consume a shader leg (e.g. `panel.slideIn`).
     property bool shaderLegSupported: true
     /// Whether to render the timing section (curve / duration). The
-    /// per-event card hides it when its master override toggle is off.
+    /// per-event card shows it while the timing editor is engaged: a
+    /// direct override exists, or the card's toggle latched it open.
     property bool showTimingSection: true
     /// Simple-mode trim: hide the timing-mode machinery (curve summary +
     /// Customize dialog entry, Easing/Spring discriminator) and keep only
@@ -281,7 +282,11 @@ ColumnLayout {
                     visible: root.showOverrideStatus
                     spacing: Kirigami.Units.smallSpacing
 
+                    // fillWidth so the elide actually engages on a long
+                    // translation; the revert link then sits at the row's
+                    // trailing edge.
                     Label {
+                        Layout.fillWidth: true
                         text: root.curveOverridden ? i18n("Overridden for this event") : i18n("Following the inherited value")
                         font: Kirigami.Theme.smallFont
                         color: Kirigami.Theme.disabledTextColor
@@ -294,10 +299,6 @@ ColumnLayout {
                         font: Kirigami.Theme.smallFont
                         Accessible.name: i18n("Revert curve to inherited")
                         onClicked: root.curveRevertRequested()
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
                     }
                 }
             }
@@ -392,9 +393,14 @@ ColumnLayout {
 
         // Escape hatch for a pinned duration: without it the only way
         // to unpin one field is the card's Override toggle, which
-        // clears BOTH fields and the shader leg with it.
+        // clears BOTH fields and the shader leg with it. Deliberately
+        // NOT gated on easing mode: a pinned duration under an
+        // inherited spring is inert but still stored, and it silently
+        // re-applies the moment the spring goes away upstream, so the
+        // way out has to stay reachable while the Duration row itself
+        // is hidden.
         RowLayout {
-            visible: root.showOverrideStatus && root.durationOverridden && root.timingMode === CurvePresets.timingModeEasing
+            visible: root.showOverrideStatus && root.durationOverridden
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing

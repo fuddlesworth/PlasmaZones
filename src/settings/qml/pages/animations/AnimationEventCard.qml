@@ -194,9 +194,9 @@ Item {
     // Global until the page is rebuilt — visible on the simple page, where the
     // Global card and the cards inheriting from it share one screen.
     Connections {
-        // Route through _reseedFromInherited (cache bump plus, for an
-        // override-OFF card only, the one chain walk the "Current:" label was
-        // going to trigger anyway) rather than a full refreshFromTree, which
+        // Route through _reseedFromInherited (cache bump plus, for a card
+        // not owning both timing fields, the one chain walk the "Current:"
+        // label was going to trigger anyway) rather than a full refreshFromTree, which
         // would re-create the very N-round-trip storm _inheritRev exists to
         // prevent: this fires at slider rate while the Global duration is
         // dragged, and every built card would pay six file opens per tick.
@@ -380,11 +380,12 @@ Item {
     /// (see motionsetdomain.cpp), and a card that overwrote the whole map
     /// would silently drop them the moment the user nudged Duration.
     ///
-    /// `curveFromCommit` is the curve the user can actually see and edit, so
-    /// it travels to every path. Pass `undefined` when the card shows no
-    /// curve control: each path then keeps its OWN curve, so a path that owns
-    /// one has it preserved and a path that inherits stays inheriting. The
-    /// card must not decide a curve on the user's behalf.
+    /// `curveFromCommit` is a curve the user has actually edited, so it
+    /// travels to every path. Pass `undefined` whenever the user did not
+    /// edit the curve (a duration commit, or simple mode where no curve
+    /// control exists): each path then keeps its OWN curve, so a path that
+    /// owns one has it preserved and a path that inherits stays inheriting.
+    /// The card must not decide a curve on the user's behalf.
     function _setOverrideMerged(profile, curveFromCommit) {
         // Suppress the per-write refresh: setOverride emits overrideChanged
         // synchronously, so without this an N-path card pays N refreshes per
@@ -689,8 +690,8 @@ Item {
             // resolved spring ignores. CurvePresets.parseSpring supplies the
             // values the engine will actually play, so the controls, the
             // thumbnail and the "Current:" line all describe the same spring,
-            // and flipping Override on commits that spring rather than a
-            // fabricated "spring:<stale>,<stale>".
+            // and a curve edit commits that spring rather than a fabricated
+            // "spring:<stale>,<stale>".
             const s = CurvePresets.parseSpring(curve);
             root.currentTimingMode = CurvePresets.timingModeSpring;
             root.currentSpringOmega = s.omega;
@@ -744,19 +745,19 @@ Item {
         var hasShaderParams = Boolean(rawShader && rawShader.parameters && Object.keys(rawShader.parameters).length > 0);
         var hasShader = hasShaderEffect || hasShaderParams;
         root.overrideEnabled = Boolean(hasRaw) || hasShader;
-        // Effective values feed the controls. When override is off the
-        // controls preview "what would happen if you turned it on" =
-        // the resolved profile from the parent chain. When on, the
-        // raw fields decide.
-        var effective = hasRaw ? raw : resolved;
-        // Timing MODE follows the curve that actually applies, which is not
-        // always the one on this card's own override. A duration edit commits
-        // duration WITHOUT a curve (see commitDurationOverride) precisely so
-        // the curve keeps inheriting, so `effective.curve` is absent while an
-        // inherited spring still governs. Reading only `effective` would force
-        // Easing and draw a Duration slider that a resolved spring ignores,
-        // while suppressing the hint that explains why. Duration still comes
-        // from `effective` below — only the mode falls back.
+        // Effective values feed the controls. With no direct override the
+        // controls preview the resolved profile from the parent chain.
+        // Overrides are per field, so a direct override decides only the
+        // fields it actually holds and the resolved chain fills the rest —
+        // a curve-only override (a duration revert, or a curve edit on a
+        // path with no prior override) must NOT reset the Duration slider
+        // to the library default while the caption beside it says the
+        // duration is inherited.
+        var effective = hasRaw ? Object.assign({}, resolved, raw) : resolved;
+        // The resolved curve still travels as the explicit fallback: the
+        // merge above fills a missing raw curve from `resolved`, but a raw
+        // curve that is present-yet-empty would survive the merge, and
+        // _applyEffective's non-empty check then needs somewhere to fall.
         root._applyEffective(effective, resolved.curve);
         // Cache each write path's stored profile on both axes, for
         // _setOverrideMerged and _storedStateKey. This runs on every
@@ -1006,101 +1007,29 @@ Item {
         contentItem: ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
 
-            // ── Inheritance info ──────────────────────────────────────
-            Kirigami.InlineMessage {
+            // ── Inheritance banners + "Current:" line ─────────────────
+            // Presentation-only stack, split into its own component to
+            // keep this card within the project file-size ceiling. Every
+            // value is fed from the card's derived state; the shadowing
+            // warning's one action is emitted back.
+            AnimationEventCardBanners {
                 Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                Layout.rightMargin: Kirigami.Units.largeSpacing
-                type: Kirigami.MessageType.Information
-                // Parent nodes show the fan-out note whenever the timing
-                // editor is open (override present or just latched for
-                // editing); leaves show the inheritance breadcrumb until a
-                // direct override exists.
-                visible: root.isParentNode ? (root.overrideEnabled || root._editingTiming) : !root.overrideEnabled
-                text: {
-                    if (root.isParentNode)
-                        return i18n("Settings here apply to all child events unless individually overridden.");
-
-                    var chain = root.parentChainText();
-                    if (chain.length > 0)
-                        return i18n("Inheriting from: %1", chain);
-
-                    return i18n("Using library defaults");
-                }
-            }
-
-            // ── Shadowing-children warning (parent-node cards only) ───
-            // ShaderProfileTree::resolve walks parent → leaf and overlays
-            // each level's `effectId` if engaged; deeper leaves win. So
-            // a stale per-leg override from an earlier session (e.g. an
-            // old "Layout Picker — Show = dissolve" left over after the
-            // user switches to a parent "All Popups = morph") silently
-            // overrides the parent at runtime — even though the parent
-            // card visually shows "morph" and the user never sees the
-            // shadowing leaf. Surface it explicitly with one-click
-            // remediation; without the button, the only fix is to find
-            // each shadowing leaf manually and clear its override.
-            Kirigami.InlineMessage {
-                Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                Layout.rightMargin: Kirigami.Units.largeSpacing
-                type: Kirigami.MessageType.Warning
-                visible: root.isParentNode && root._shadowingChildrenCount > 0
-                text: i18np("%n descendant event has a shader override that shadows this parent.", "%n descendant events have shader overrides that shadow this parent.", root._shadowingChildrenCount)
-                actions: [
-                    Kirigami.Action {
-                        text: i18n("Clear shadowing children")
-                        icon.name: "edit-clear-all"
-                        onTriggered: {
-                            root._clearShaderOverrideDescendantsOnAll();
-                        }
-                    }
-                ]
-            }
-
-            // ── Mirror divergence warning (mirrored cards only) ───────
-            // This card writes every mirror path but reads only the primary,
-            // so a mirror given its own value elsewhere is not shown by any
-            // control here and the next edit replaces it. Warn before that
-            // happens rather than after.
-            Kirigami.InlineMessage {
-                Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                Layout.rightMargin: Kirigami.Units.largeSpacing
-                type: Kirigami.MessageType.Warning
-                visible: root._mirrorsDiverged
-                // Names both axes _storedStateKey compares, because both have a
-                // group writer. Naming only the timing left the banner lit with
-                // no explanation after a shader-only divergence.
-                //
-                // Two different counts, because the two clauses name two
-                // different sets. The first is _divergentPathCount, the
-                // diverging mirrors plus the primary they differ from, so a
-                // card with several mirrors names only the ones actually out of
-                // step. The second is _writePaths.length, because both group
-                // writers loop every write path: the converging edit rewrites
-                // the mirrors that already agreed as well. Reporting the
-                // divergence count in both places under-stated the reach of the
-                // next write. Both counts are two or more whenever the banner
-                // is visible, so a singular plural form here would never render.
-                text: i18n("%1 of the events this card controls hold different values right now, and it shows only one of them. The next change you make to the timing or the shader here applies to all %2 of them.", root._divergentPathCount, root._writePaths.length)
-            }
-
-            Label {
-                Layout.fillWidth: true
-                // Inset to match the rows / banners in this card instead of
-                // hugging the left edge.
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                Layout.rightMargin: Kirigami.Units.largeSpacing
-                visible: !root.overrideEnabled
-                text: i18n("Current: %1", root.inheritSummaryText())
-                font.italic: true
-                color: Kirigami.Theme.disabledTextColor
+                isParentNode: root.isParentNode
+                overrideActive: root.overrideEnabled
+                editingTiming: root._editingTiming
+                shadowingChildrenCount: root._shadowingChildrenCount
+                mirrorsDiverged: root._mirrorsDiverged
+                divergentPathCount: root._divergentPathCount
+                writePathCount: root._writePaths.length
+                parentChain: root.parentChainText()
+                inheritSummary: root.inheritSummaryText()
+                onClearShadowingRequested: root._clearShaderOverrideDescendantsOnAll()
             }
 
             // Section visibility splits the per-axis behaviour the
             // inline layout used to encode: the timing section only
-            // surfaces when the master override toggle is on, while
+            // surfaces while the timing editor is engaged (a direct
+            // override exists, or the toggle latched it open), while
             // the shader section is visible whenever the event
             // supports a shader leg (independent of the timing
             // override — picking a shader doesn't require enabling
