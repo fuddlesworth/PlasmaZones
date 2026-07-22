@@ -8,15 +8,21 @@
 
 // Umbrella header — pulls in every public type so consumers can
 // `#include <PhosphorControl/PhosphorControl.h>` and get the
-// whole framework's surface at once (ApplicationController,
+// whole framework's surface at once: the core (ApplicationController,
 // PageController, StagingDomain, PageRegistry, DBusBridge,
-// LocalizedContext). Single-class headers remain available for
-// callers that want to limit what they bring in.
+// LocalizedContext) plus the search / sidebar layer (ISearchProvider,
+// SearchController, SearchEntry, SearchRanker, SidebarRows). Single-class
+// headers remain available for callers that want to limit what they bring in.
 #include "PhosphorControl/ApplicationController.h"
 #include "PhosphorControl/DBusBridge.h"
+#include "PhosphorControl/ISearchProvider.h"
 #include "PhosphorControl/LocalizedContext.h"
 #include "PhosphorControl/PageController.h"
 #include "PhosphorControl/PageRegistry.h"
+#include "PhosphorControl/SearchController.h"
+#include "PhosphorControl/SearchEntry.h"
+#include "PhosphorControl/SearchRanker.h"
+#include "PhosphorControl/SidebarRows.h"
 #include "PhosphorControl/StagingDomain.h"
 
 namespace PhosphorControl {

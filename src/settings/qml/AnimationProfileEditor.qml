@@ -72,14 +72,16 @@ ColumnLayout {
     /// Whether to render the timing section (curve / duration). The
     /// per-event card hides it when its master override toggle is off.
     property bool showTimingSection: true
-    /// Bumped externally on `shaderEffectsChanged` so this editor's
-    /// consumer-fed picker / schema bindings re-evaluate when a pack is
-    /// dropped / removed mid-session.
-    property int registryRevision: 0
+    /// Simple-mode trim: hide the timing-mode machinery (curve summary +
+    /// Customize dialog entry, Easing/Spring discriminator) and keep only
+    /// the Duration slider alongside the shader picker + parameters. The
+    /// stored profile keeps whatever curve/mode it already has.
+    property bool simpleTiming: false
     /// Picker model — the consumer hands in
     /// `availableShaderEffects()` (or a registry-tick-bound
     /// equivalent) so the picker stays reactive without this editor
-    /// having to subscribe.
+    /// having to subscribe. Reactivity is entirely the consumer's:
+    /// re-assigning this property is what re-evaluates the picker.
     property var availableShaders: []
     /// Parameter schema for the currently-picked shader — the consumer
     /// hands in `shaderParameters(shaderEffectId)` (registry-tick-bound)
@@ -126,17 +128,7 @@ ColumnLayout {
     /// snapshot the effect at user-action time and skip late writes
     /// against a stale effect.
     signal shaderParamWriteRequested(string effectId, string paramId, var value)
-    /// Lock toolbar affordances. The editor self-updates
-    /// `lockedShaderParams` before emitting these — consumers only need
-    /// to subscribe if they want to persist the lock state somewhere
-    /// (the per-event card writes to controller; the global-defaults page
-    /// leaves locking off). Both signals fire AFTER the editor's own
-    /// state mutation, so a consumer reading `lockedShaderParams` in
-    /// the handler sees the post-toggle map.
-    signal lockToggleRequested(string paramId, bool locked)
-    signal lockAllToggleRequested(bool locked)
-    /// Randomize all params. Same self-update contract as the lock
-    /// signals: the editor rolls a new map (honouring the lock set)
+    /// Randomize all params. The editor rolls a new map (honouring the lock set)
     /// and assigns it to `shaderParams` BEFORE emitting. The signal
     /// payload carries the rolled map so a consumer that wants to
     /// persist (per-event card → controller) doesn't have to re-read
@@ -184,6 +176,7 @@ ColumnLayout {
 
         // Curve summary row: thumbnail + description + Customize…
         RowLayout {
+            visible: !root.simpleTiming
             Layout.fillWidth: true
             // Inset the curve-summary row (thumbnail + description + Customize…)
             // to match the SettingsRows below, which self-inset by largeSpacing.
@@ -232,10 +225,13 @@ ColumnLayout {
             }
         }
 
-        SettingsSeparator {}
+        SettingsSeparator {
+            visible: !root.simpleTiming
+        }
 
         // Timing mode — Easing vs Spring discriminator.
         SettingsRow {
+            visible: !root.simpleTiming
             title: i18n("Timing mode")
 
             WideComboBox {
@@ -249,9 +245,31 @@ ColumnLayout {
             }
         }
 
-        // Duration (easing only — spring derives its own settle time).
+        // Duration (easing only — spring derives its own settle time). The
+        // separator leads the row, so it hides with the timing-mode chrome
+        // in simple mode — a section must not open with a divider.
         SettingsSeparator {
-            visible: root.timingMode === CurvePresets.timingModeEasing
+            visible: root.timingMode === CurvePresets.timingModeEasing && !root.simpleTiming
+        }
+
+        // Simple-mode spring stand-in: with the timing-mode machinery hidden
+        // and a spring profile active (set via the global defaults editor or
+        // in advanced mode), the Duration row below also hides — without this
+        // hint the timing section would render silently empty.
+        Label {
+            Layout.fillWidth: true
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
+            visible: root.simpleTiming && root.timingMode === CurvePresets.timingModeSpring
+            // Path-neutral wording. This editor is also hosted by
+            // GlobalTimingDefaultsCard, which is the ROOT of the inheritance
+            // tree and inherits from nothing, so "the inherited spring curve"
+            // was false there. It also has to say how to get out: in simple
+            // mode a stored spring makes duration genuinely unreachable.
+            text: i18n("A spring curve is set, so the duration has no effect. Switch to Advanced in the sidebar to change the curve.")
+            font.italic: true
+            color: Kirigami.Theme.disabledTextColor
+            wrapMode: Text.WordWrap
         }
 
         SettingsRow {
@@ -259,8 +277,12 @@ ColumnLayout {
             title: i18n("Duration")
 
             SettingsSlider {
-                from: 50
-                to: 2000
+                // Bound to the single source of truth (ConfigDefaults, exposed
+                // as CONSTANT props) rather than the literal 50 / 2000 — those
+                // are PhosphorAnimation::Limits::Min/MaxAnimationDurationMs and
+                // must not be re-typed here where they can silently drift.
+                from: settingsController.generalPage.animationDurationMin
+                to: settingsController.generalPage.animationDurationMax
                 stepSize: 10
                 valueSuffix: " ms"
                 Accessible.name: i18n("Animation duration")
@@ -287,15 +309,14 @@ ColumnLayout {
         PZCommon.CategoryMenuButton {
             id: shaderPicker
 
-            // `availableShaders` is supplied by the consumer; bumping
-            // `registryRevision` is how reactivity is communicated.
-            readonly property var _effectModel: {
-                void (root.registryRevision);
-                return root.availableShaders;
-            }
-
-            Layout.fillWidth: true
-            items: _effectModel
+            // SettingsRow lays its default children out in a plain Row
+            // positioner, so Layout.* attached properties are inert here —
+            // size explicitly or the button sits at implicit width.
+            width: Kirigami.Units.gridUnit * 16
+            // Bound straight to the consumer's property. The consumer owns the
+            // registry-tick dependency and re-assigns this on every bump, so an
+            // extra tick read here would only double the invalidation.
+            items: root.availableShaders
             currentId: root.shaderEffectId
             noneId: ""
             includeNoneEntry: true
@@ -335,17 +356,12 @@ ColumnLayout {
         compact: true
         // The shared editor owns the lock map (aliased onto
         // `lockedShaderParams`) and hosts the colour dialog, so only the
-        // value-write and randomize signals need handling here. The lock
-        // signals are re-emitted for API parity; current consumers ignore
-        // them (lock state is working-state only).
+        // value-write and randomize signals need handling here. Lock state is
+        // working-state only and is not re-emitted: no consumer persists it,
+        // and forwarding signals nothing listens to only invites the next
+        // reader to hunt for the handler that does.
         onValueChanged: function (effectId, paramId, value) {
             root.shaderParamWriteRequested(effectId, paramId, value);
-        }
-        onLockToggled: function (paramId, locked) {
-            root.lockToggleRequested(paramId, locked);
-        }
-        onLockAllRequested: function (locked) {
-            root.lockAllToggleRequested(locked);
         }
         onRandomizeRequested: function (rolled) {
             // Stage the rolled map so the UI updates before the consumer's

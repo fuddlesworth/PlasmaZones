@@ -66,9 +66,9 @@ Item {
     ///
     /// Set true at the START of the expand and false at the END of the collapse,
     /// so the rows are measurable for every frame the height is non-zero. The rows
-    /// hide themselves when disabled (SettingsRow binds `visible: enabled`), so a
-    /// value derived from the ramp would drop them out of the layout while the
-    /// card was still visibly sliding.
+    /// hide themselves when disabled (SettingsRow's `visible:` binding starts with
+    /// `enabled`), so a value derived from the ramp would drop them out of the
+    /// layout while the card was still visibly sliding.
     property bool _bodyLive: true
     /// How far open the body is: 0 shut, 1 fully open. The collapse animates
     /// THIS, and the body's height stays a live binding on it times the content's
@@ -76,25 +76,48 @@ Item {
     ///
     /// Animating the height directly cannot work. The animation samples its
     /// target when it starts, and a layout re-measure is asynchronous, so a body
-    /// whose size changed while the card was shut (SettingsRow hides itself via
-    /// `visible: enabled`, so any master toggle does exactly that) would animate
+    /// whose size changed while the card was shut (SettingsRow hides itself when
+    /// disabled, so any master toggle does exactly that) would animate
     /// to a stale height and snap at the end. A live binding tracks the settle
     /// instead, whenever it lands.
     property real _expandProgress: 1
     // Header enable toggle
     property bool showToggle: false
+
+    /// Whether the master toggle also gates the card BODY. True for an
+    /// ordinary enable/disable card, where the rows configure the thing the
+    /// toggle turns on. Set false when the card hosts controls that are
+    /// deliberately independent of the toggle: the body gate disables AND
+    /// hides every row (SettingsRow's `visible` leads with `enabled`), so
+    /// leaving it on makes those controls unreachable until the user flips a
+    /// toggle that has nothing to do with them.
+    property bool gateBodyOnToggle: true
     property bool toggleChecked: false
     /// Deep-link reveal anchor id for this card (section-level target). Empty
     /// = not addressable. See SettingsFlickable.revealAnchor.
     property string searchAnchor: ""
+    /// When true this whole card belongs to advanced mode only: it collapses
+    /// out of the page while the settings app is in simple mode. Mirrors
+    /// SettingsRow.advancedOnly; a consumer's own `visible:` binding
+    /// overrides it.
+    property bool advancedOnly: false
+    visible: !advancedOnly || settingsController.advancedMode
     /// Stable type marker so a contained SettingsRow can identify its hosting
     /// card by walking up the parent chain (used to expand the card on reveal).
     readonly property bool isSettingsCard: true
+
+    /// How long this card's expand actually takes, resolved rather than
+    /// assumed. PhosphorMotionAnimation can apply a global speed multiplier on
+    /// top of durationOverride, so a consumer that waits a hardcoded Kirigami
+    /// duration before measuring the card can measure it half-open. The reveal
+    /// path in SettingsFlickable sizes its settle timer from this.
+    readonly property int expandDurationMs: expandMotion.duration
     /// Opacity applied to the card body when the master toggle is off. Kept
     /// high enough that muted content stays legible — the disabled palette
     /// already greys the text, so a low opacity on top compounds into an
     /// unreadable wash. Note SettingsRows and SettingsSeparators hide themselves
-    /// when disabled (their `visible: enabled`), so a row-only body collapses
+    /// when disabled (their `visible:` binding leads with `enabled`), so a
+    /// row-only body collapses
     /// away entirely; cards with non-row content (editors, custom items) keep
     /// that content visibly muted by this opacity.
     readonly property real disabledContentOpacity: 0.85
@@ -168,12 +191,12 @@ Item {
     function _registerSearchAnchor() {
         var pg = SearchAnchors.pageFor(root);
         if (pg)
-            pg.registerSearchAnchor(root.searchAnchor, root, root);
+            pg.registerSearchAnchor(root.searchAnchor, root);
     }
     function _unregisterSearchAnchor() {
         var pg = SearchAnchors.pageFor(root);
         if (pg)
-            pg.unregisterSearchAnchor(root.searchAnchor);
+            pg.unregisterSearchAnchor(root.searchAnchor, root);
     }
     Layout.fillWidth: true
     implicitHeight: cardBg.height
@@ -192,7 +215,13 @@ Item {
     // replacement or a return to null can detach it — the loader hosts
     // exactly one header at a time.
     property Item _customHeader: null
-    // Handle custom header reparenting
+    // Handle custom header reparenting. What the LOADER shows is not decided
+    // here: headerLoader.sourceComponent is bound to `root.header !== null`
+    // below, which already expresses both cases (a custom header empties the
+    // loader, a return to null restores the default heading). Assigning it
+    // imperatively from this handler would sever that binding on the first
+    // header change and leave the same intent expressed twice, only one of
+    // which is still live.
     onHeaderChanged: {
         if (_customHeader && _customHeader !== header) {
             // Detach the previous custom header. The caller created it, so
@@ -206,12 +235,7 @@ Item {
             header.width = Qt.binding(function () {
                 return headerLoader.width;
             });
-            headerLoader.sourceComponent = null;
             _customHeader = header;
-        } else {
-            // Header returned to null — restore the default headerText header
-            // the initial declarative binding provided before it was nulled.
-            headerLoader.sourceComponent = defaultHeaderComponent;
         }
     }
 
@@ -427,18 +451,31 @@ Item {
             // Disabling the body takes them out of the focus chain, and the header
             // carries the keyboard affordance in their place.
             //
-            // Disabling also hides the rows, because SettingsRow binds
-            // `visible: enabled`, and a hidden row stops contributing to the
+            // Disabling also hides the rows, because SettingsRow's `visible:`
+            // binding leads with `enabled`, and a hidden row stops contributing to the
             // layout's implicit height. That re-measure is asynchronous, which is
             // why _bodyLive is set on the way OPEN before the ramp starts and
             // dropped on the way SHUT only once the ramp has finished.
-            enabled: (root.showToggle ? root.toggleChecked : true) && root._bodyLive
+            enabled: (root.showToggle && root.gateBodyOnToggle ? root.toggleChecked : true) && root._bodyLive
 
             Item {
                 id: contentColumn
 
                 width: parent.width
-                implicitHeight: root.contentItem ? root.contentItem.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
+                // Padding only when there is a body to pad. A card whose rows
+                // are all hidden (every row advancedOnly in simple mode, or
+                // gated off by a master toggle) would otherwise reserve a dead
+                // strip under its header.
+                //
+                // A contentItem must therefore derive its OWN implicitHeight.
+                // One that sizes from its parent instead (anchors.fill,
+                // height: parent.height) reports 0 here, and the whole body
+                // silently renders at zero height with no error to explain it.
+                // No runtime warning guards this: 0 is ALSO the legitimate
+                // all-rows-hidden height described above, so a warn-on-zero would
+                // fire for every empty card. The rule is a contract on the
+                // caller — give the contentItem an intrinsic implicitHeight.
+                implicitHeight: root.contentItem && root.contentItem.implicitHeight > 0 ? root.contentItem.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
             }
 
             // Only the progress is animated. Height and opacity are both bound to
@@ -466,6 +503,8 @@ Item {
                 id: expandAnim
 
                 PhosphorMotionAnimation {
+                    id: expandMotion
+
                     target: root
                     properties: "_expandProgress"
                     to: 1

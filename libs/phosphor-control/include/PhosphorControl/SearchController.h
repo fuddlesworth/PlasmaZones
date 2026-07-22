@@ -8,6 +8,8 @@
 
 #include <QHash>
 #include <QObject>
+#include <QPointer>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -29,8 +31,10 @@ class ISearchProvider;
  *     addEntry(); dynamic content (rules/shaders/…) via registerProvider().
  *
  * QML binds `query` (the search field) and `results` (a ListView). Each result
- * map carries `title`, `subtitle`, `icon`, `kind`, `pageId`, `anchor`, and
- * `address` — selecting one calls `SettingsController::navigateTo(address)`.
+ * map carries `title`, `subtitle`, `icon`, `kind`, `pageId`, `anchor`,
+ * `address` and `actionId` — selecting one calls
+ * `SettingsController::navigateTo(address)`, except for Kind::Action results,
+ * which are dispatched by `actionId` instead.
  * `suggestion` holds a "did you mean …" title, populated only when a non-empty
  * query yields zero results.
  *
@@ -81,15 +85,29 @@ Q_SIGNALS:
 
 private:
     void recompute();
-    QVector<SearchEntry> buildIndex() const;
+    QVector<SearchEntry> buildIndex();
 
-    ApplicationController* m_app = nullptr;
+    QPointer<ApplicationController> m_app = nullptr;
     QString m_query;
     int m_limit = 24;
 
     QHash<QString, QStringList> m_pageKeywords;
     QVector<SearchEntry> m_staticEntries;
     QVector<ISearchProvider*> m_providers;
+
+    /// Entries already reported as living on an unregistered / non-navigable
+    /// page, keyed by (pageId, title), so the drop warning is emitted once per
+    /// offending ENTRY rather than once per index rebuild. Keyed per entry
+    /// rather than per pageId because one bad id is typically shared by a whole
+    /// card's worth of anchors, and naming only the first leaves the rest
+    /// silent once it is fixed.
+    ///
+    /// Bounded by the count of distinct offending entries. For the static
+    /// catalogue that is a fixed authoring set. A dynamic provider that keeps
+    /// re-emitting entries with new titles against one persistently-bad pageId
+    /// could grow it unboundedly over a very long session, which is a
+    /// misbehaving-provider case, not a runtime path any in-tree provider hits.
+    QSet<QString> m_warnedEntryKeys;
 
     bool m_indexDirty = true;
     QVector<SearchEntry> m_index;

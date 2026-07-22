@@ -42,21 +42,6 @@ SettingsFlickable {
         return typeof curveStr === "string" && curveStr.indexOf("spring:") === 0;
     }
 
-    function parseSpring(curveStr) {
-        // `|| fallback` coerces falsy values to the fallback — but
-        // `0` is falsy in JS, and zeta = 0 is a semantically valid
-        // value (undamped oscillator). Test `isFinite` instead so
-        // a user-saved `spring:12,0` preset round-trips correctly
-        // rather than silently snapping to critically-damped (zeta = 1).
-        var parts = curveStr.substring(7).split(",");
-        var omega = parseFloat(parts[0]);
-        var zeta = parseFloat(parts[1]);
-        return {
-            "omega": isFinite(omega) ? omega : 12,
-            "zeta": isFinite(zeta) ? zeta : 1
-        };
-    }
-
     // Filter user presets by easing/spring AND keep the preset name +
     // payload in one entry the QML rows can bind to without further
     // shuffling.
@@ -300,7 +285,7 @@ SettingsFlickable {
                         id: row
 
                         required property var modelData
-                        readonly property var _spring: root.parseSpring(modelData.curve)
+                        readonly property var _spring: CurvePresets.parseSpring(modelData.curve)
 
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.largeSpacing

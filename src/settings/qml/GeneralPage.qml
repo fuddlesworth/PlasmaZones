@@ -106,6 +106,9 @@ SettingsFlickable {
             headerText: i18n("Shader Effects")
             searchAnchor: "shaderEffects"
             collapsible: true
+            // Advanced-only: shader frame-rate tuning is a fine-grained
+            // performance knob most users never touch.
+            advancedOnly: true
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -116,6 +119,7 @@ SettingsFlickable {
                     description: i18n("Target refresh rate for shader animations")
 
                     SettingsSlider {
+                        accessibleName: i18n("Frame rate")
                         from: root.effectsBridge.shaderFrameRateMin
                         to: root.effectsBridge.shaderFrameRateMax
                         value: appSettings.shaderFrameRate
@@ -132,10 +136,12 @@ SettingsFlickable {
         // =====================================================================
         // AUDIO SPECTRUM CARD
         // =====================================================================
-        // The full CAVA analysis parameter set (Shaders.Audio). Every row
-        // below the enable switch is gated on the toggle + cava presence; the
-        // values feed both runtimes (daemon overlays and the KWin effect) plus
-        // the editor's shader preview.
+        // The enable switch and the bar count (Shaders.Audio), the part of CAVA
+        // simple mode keeps. Both rows are gated on the toggle plus cava
+        // presence, and the values feed both runtimes (daemon overlays and the
+        // KWin effect) plus the editor's shader preview. The remaining analysis
+        // knobs (smoothing, gain, cutoffs, channels, filters, backend/source)
+        // are advanced depth and live in the Audio Analysis card below.
         SettingsCard {
             headerText: i18n("Audio Spectrum")
             searchAnchor: "audioSpectrum"
@@ -170,15 +176,19 @@ SettingsFlickable {
                     visible: !root.effectsBridge.cavaAvailable
                 }
 
-                // One gate for the whole knob stack: disabling this container
-                // propagates to every child, and SettingsRow/SettingsSeparator
-                // bind `visible: enabled`, so rows AND separators collapse
-                // together when the toggle is off (per-row gates left the
-                // separators behind as orphaned divider lines).
+                // One gate per knob stack: disabling a container propagates to
+                // every child, and SettingsRow/SettingsSeparator lead their
+                // `visible:` binding with `enabled`, so rows AND separators
+                // collapse together when the toggle is off (per-row gates left
+                // the separators behind as orphaned divider lines).
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
                     enabled: audioVizSwitch.checked && root.effectsBridge.cavaAvailable
+                    // Hide as well as disable: the rows collapse themselves
+                    // via `visible: enabled`, but a visible zero-height
+                    // container still costs the parent a spacing slot.
+                    visible: audioVizSwitch.checked && root.effectsBridge.cavaAvailable
 
                     SettingsSeparator {}
 
@@ -188,6 +198,7 @@ SettingsFlickable {
                         description: i18n("Number of frequency bands in the audio visualization")
 
                         SettingsSlider {
+                            accessibleName: i18n("Spectrum bars")
                             from: root.effectsBridge.audioSpectrumBarCountMin
                             to: root.effectsBridge.audioSpectrumBarCountMax
                             stepSize: 2
@@ -199,220 +210,253 @@ SettingsFlickable {
                             }
                         }
                     }
+                }
+            }
+        }
 
-                    SettingsSeparator {}
+        // =====================================================================
+        // AUDIO ANALYSIS CARD (advanced)
+        // =====================================================================
+        // The rest of the CAVA analysis parameter set, in its own card so one
+        // advancedOnly flag governs the whole block instead of every row
+        // carrying its own. The card is gated on the same enable switch and
+        // cava presence as the bar-count stack above, and is hidden as well as
+        // disabled for the same reason that stack is: a header-only card the
+        // user cannot expand still costs the page a largeSpacing slot.
+        //
+        // The advancedOnly term inside `visible` is required, not redundant. A
+        // consumer `visible:` binding REPLACES SettingsCard's own
+        // `visible: !advancedOnly || settingsController.advancedMode`, so
+        // omitting it would put the card back in simple mode.
+        SettingsCard {
+            headerText: i18n("Audio Analysis")
+            searchAnchor: "audioAnalysis"
+            collapsible: true
+            advancedOnly: true
+            visible: (!advancedOnly || settingsController.advancedMode) && audioVizSwitch.checked && root.effectsBridge.cavaAvailable
 
-                    SettingsRow {
-                        title: i18n("Noise reduction")
-                        searchAnchor: "audioNoiseReduction"
-                        description: i18n("How smoothly the bars respond. Higher values are slower and calmer while lower values are fast and twitchy.")
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
 
-                        SettingsSlider {
-                            from: root.effectsBridge.audioNoiseReductionMin
-                            to: root.effectsBridge.audioNoiseReductionMax
-                            value: appSettings.audioNoiseReduction
-                            valueSuffix: ""
-                            labelWidth: Kirigami.Units.gridUnit * 4
-                            onMoved: value => {
-                                return appSettings.audioNoiseReduction = Math.round(value);
-                            }
+                SettingsRow {
+                    title: i18n("Noise reduction")
+                    searchAnchor: "audioNoiseReduction"
+                    description: i18n("How smoothly the bars respond. Higher values are slower and calmer while lower values are fast and twitchy.")
+
+                    SettingsSlider {
+                        accessibleName: i18n("Noise reduction")
+                        from: root.effectsBridge.audioNoiseReductionMin
+                        to: root.effectsBridge.audioNoiseReductionMax
+                        value: appSettings.audioNoiseReduction
+                        valueSuffix: ""
+                        labelWidth: Kirigami.Units.gridUnit * 4
+                        onMoved: value => {
+                            return appSettings.audioNoiseReduction = Math.round(value);
                         }
                     }
+                }
 
-                    SettingsRow {
-                        title: i18n("Extra smoothing")
-                        searchAnchor: "audioExtraSmoothing"
-                        description: i18n("Additional smoothing applied on top of noise reduction")
+                SettingsRow {
+                    title: i18n("Extra smoothing")
+                    searchAnchor: "audioExtraSmoothing"
+                    description: i18n("Additional smoothing applied on top of noise reduction")
 
-                        SettingsSlider {
-                            from: root.effectsBridge.audioExtraSmoothingMin
-                            to: root.effectsBridge.audioExtraSmoothingMax
-                            value: appSettings.audioExtraSmoothing
-                            valueSuffix: "%"
-                            labelWidth: Kirigami.Units.gridUnit * 4
-                            onMoved: value => {
-                                return appSettings.audioExtraSmoothing = Math.round(value);
-                            }
+                    SettingsSlider {
+                        accessibleName: i18n("Extra smoothing")
+                        from: root.effectsBridge.audioExtraSmoothingMin
+                        to: root.effectsBridge.audioExtraSmoothingMax
+                        value: appSettings.audioExtraSmoothing
+                        valueSuffix: "%"
+                        labelWidth: Kirigami.Units.gridUnit * 4
+                        onMoved: value => {
+                            return appSettings.audioExtraSmoothing = Math.round(value);
                         }
                     }
+                }
 
-                    SettingsSeparator {}
+                SettingsSeparator {}
 
-                    SettingsRow {
-                        title: i18n("Automatic gain")
-                        searchAnchor: "audioAutosens"
-                        description: i18n("Continuously adjusts sensitivity so the bars fill the available range")
+                SettingsRow {
+                    title: i18n("Automatic gain")
+                    searchAnchor: "audioAutosens"
+                    description: i18n("Continuously adjusts sensitivity so the bars fill the available range")
 
-                        SettingsSwitch {
-                            id: audioAutosensSwitch
+                    SettingsSwitch {
+                        id: audioAutosensSwitch
 
-                            checked: appSettings.audioAutosens
-                            accessibleName: i18n("Automatic gain")
-                            onToggled: function (newValue) {
-                                appSettings.audioAutosens = newValue;
-                            }
+                        checked: appSettings.audioAutosens
+                        accessibleName: i18n("Automatic gain")
+                        onToggled: function (newValue) {
+                            appSettings.audioAutosens = newValue;
                         }
                     }
+                }
 
-                    SettingsRow {
-                        title: i18n("Sensitivity")
-                        searchAnchor: "audioSensitivity"
-                        description: audioAutosensSwitch.checked ? i18n("Starting gain that automatic gain adapts from") : i18n("Fixed gain applied to the audio signal")
+                SettingsRow {
+                    title: i18n("Sensitivity")
+                    searchAnchor: "audioSensitivity"
+                    description: audioAutosensSwitch.checked ? i18n("Starting gain that automatic gain adapts from") : i18n("Fixed gain applied to the audio signal")
 
-                        SettingsSlider {
-                            from: root.effectsBridge.audioSensitivityMin
-                            to: root.effectsBridge.audioSensitivityMax
-                            value: appSettings.audioSensitivity
-                            valueSuffix: "%"
-                            labelWidth: Kirigami.Units.gridUnit * 4
-                            onMoved: value => {
-                                return appSettings.audioSensitivity = Math.round(value);
-                            }
+                    SettingsSlider {
+                        accessibleName: i18n("Sensitivity")
+                        from: root.effectsBridge.audioSensitivityMin
+                        to: root.effectsBridge.audioSensitivityMax
+                        value: appSettings.audioSensitivity
+                        valueSuffix: "%"
+                        labelWidth: Kirigami.Units.gridUnit * 4
+                        onMoved: value => {
+                            return appSettings.audioSensitivity = Math.round(value);
                         }
                     }
+                }
 
-                    SettingsSeparator {}
+                SettingsSeparator {}
 
-                    SettingsRow {
-                        title: i18n("Lowest frequency")
-                        searchAnchor: "audioLowerCutoff"
-                        description: i18n("Sounds below this frequency are ignored")
+                SettingsRow {
+                    title: i18n("Lowest frequency")
+                    searchAnchor: "audioLowerCutoff"
+                    description: i18n("Sounds below this frequency are ignored")
 
-                        SettingsSlider {
-                            from: root.effectsBridge.audioLowerCutoffHzMin
-                            to: root.effectsBridge.audioLowerCutoffHzMax
-                            value: appSettings.audioLowerCutoffHz
-                            valueSuffix: " Hz"
-                            labelWidth: Kirigami.Units.gridUnit * 4
-                            onMoved: value => {
-                                return appSettings.audioLowerCutoffHz = Math.round(value);
-                            }
+                    SettingsSlider {
+                        accessibleName: i18n("Lowest frequency")
+                        from: root.effectsBridge.audioLowerCutoffHzMin
+                        to: root.effectsBridge.audioLowerCutoffHzMax
+                        value: appSettings.audioLowerCutoffHz
+                        valueSuffix: " Hz"
+                        labelWidth: Kirigami.Units.gridUnit * 4
+                        onMoved: value => {
+                            return appSettings.audioLowerCutoffHz = Math.round(value);
                         }
                     }
+                }
 
-                    SettingsRow {
-                        title: i18n("Highest frequency")
-                        searchAnchor: "audioHigherCutoff"
-                        description: i18n("Sounds above this frequency are ignored")
+                SettingsRow {
+                    title: i18n("Highest frequency")
+                    searchAnchor: "audioHigherCutoff"
+                    description: i18n("Sounds above this frequency are ignored")
 
-                        SettingsSlider {
-                            from: root.effectsBridge.audioHigherCutoffHzMin
-                            to: root.effectsBridge.audioHigherCutoffHzMax
-                            value: appSettings.audioHigherCutoffHz
-                            valueSuffix: " Hz"
-                            labelWidth: Kirigami.Units.gridUnit * 4
-                            onMoved: value => {
-                                return appSettings.audioHigherCutoffHz = Math.round(value);
-                            }
+                    SettingsSlider {
+                        accessibleName: i18n("Highest frequency")
+                        from: root.effectsBridge.audioHigherCutoffHzMin
+                        to: root.effectsBridge.audioHigherCutoffHzMax
+                        value: appSettings.audioHigherCutoffHz
+                        valueSuffix: " Hz"
+                        labelWidth: Kirigami.Units.gridUnit * 4
+                        onMoved: value => {
+                            return appSettings.audioHigherCutoffHz = Math.round(value);
                         }
                     }
+                }
 
-                    SettingsSeparator {}
+                SettingsSeparator {}
 
-                    SettingsRow {
-                        title: i18n("Channels")
-                        searchAnchor: "audioChannelMode"
-                        description: i18n("Stereo shows left and right bars side by side. Mono collapses to one set of bars.")
+                SettingsRow {
+                    title: i18n("Channels")
+                    searchAnchor: "audioChannelMode"
+                    description: i18n("Stereo shows left and right bars side by side. Mono collapses to one set of bars.")
 
-                        WideComboBox {
-                            Accessible.name: i18n("Channels")
-                            textRole: "text"
-                            valueRole: "value"
-                            model: settingsController.valueOptions("Shaders.Audio", "ChannelMode")
-                            // A binding, not a JS assignment: see
-                            // renderingBackendCombo above.
-                            currentIndex: Math.max(0, indexOfValue(appSettings.audioChannelMode))
-                            onActivated: appSettings.audioChannelMode = currentValue
+                    WideComboBox {
+                        Accessible.name: i18n("Channels")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: settingsController.valueOptions("Shaders.Audio", "ChannelMode")
+                        // A binding, not a JS assignment: see
+                        // renderingBackendCombo above.
+                        currentIndex: Math.max(0, indexOfValue(appSettings.audioChannelMode))
+                        onActivated: appSettings.audioChannelMode = currentValue
+                    }
+                }
+
+                SettingsRow {
+                    title: i18n("Reverse bar order")
+                    searchAnchor: "audioReverse"
+                    description: i18n("Flip the frequency order of the bars")
+
+                    SettingsSwitch {
+                        checked: appSettings.audioReverse
+                        accessibleName: i18n("Reverse bar order")
+                        onToggled: function (newValue) {
+                            appSettings.audioReverse = newValue;
                         }
                     }
+                }
 
-                    SettingsRow {
-                        title: i18n("Reverse bar order")
-                        searchAnchor: "audioReverse"
-                        description: i18n("Flip the frequency order of the bars")
+                SettingsSeparator {}
 
-                        SettingsSwitch {
-                            checked: appSettings.audioReverse
-                            accessibleName: i18n("Reverse bar order")
-                            onToggled: function (newValue) {
-                                appSettings.audioReverse = newValue;
-                            }
+                SettingsRow {
+                    title: i18n("Monstercat filter")
+                    searchAnchor: "audioMonstercat"
+                    description: i18n("Spreads each bar into its neighbors for a smoother outline")
+
+                    SettingsSwitch {
+                        checked: appSettings.audioMonstercat
+                        accessibleName: i18n("Monstercat filter")
+                        onToggled: function (newValue) {
+                            appSettings.audioMonstercat = newValue;
                         }
                     }
+                }
 
-                    SettingsSeparator {}
+                SettingsRow {
+                    title: i18n("Wave filter")
+                    searchAnchor: "audioWaves"
+                    description: i18n("Rounds the spectrum into soft waves")
 
-                    SettingsRow {
-                        title: i18n("Monstercat filter")
-                        searchAnchor: "audioMonstercat"
-                        description: i18n("Spreads each bar into its neighbors for a smoother outline")
-
-                        SettingsSwitch {
-                            checked: appSettings.audioMonstercat
-                            accessibleName: i18n("Monstercat filter")
-                            onToggled: function (newValue) {
-                                appSettings.audioMonstercat = newValue;
-                            }
+                    SettingsSwitch {
+                        checked: appSettings.audioWaves
+                        accessibleName: i18n("Wave filter")
+                        onToggled: function (newValue) {
+                            appSettings.audioWaves = newValue;
                         }
                     }
+                }
 
-                    SettingsRow {
-                        title: i18n("Wave filter")
-                        searchAnchor: "audioWaves"
-                        description: i18n("Rounds the spectrum into soft waves")
+                SettingsSeparator {}
 
-                        SettingsSwitch {
-                            checked: appSettings.audioWaves
-                            accessibleName: i18n("Wave filter")
-                            onToggled: function (newValue) {
-                                appSettings.audioWaves = newValue;
-                            }
-                        }
+                SettingsRow {
+                    title: i18n("Audio backend")
+                    searchAnchor: "audioInputMethod"
+                    description: i18n("Leave on Automatic unless capture fails with the detected backend")
+
+                    WideComboBox {
+                        Accessible.name: i18n("Audio backend")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: settingsController.valueOptions("Shaders.Audio", "InputMethod")
+                        // A binding, not a JS assignment: see
+                        // renderingBackendCombo above.
+                        currentIndex: Math.max(0, indexOfValue(appSettings.audioInputMethod))
+                        onActivated: appSettings.audioInputMethod = currentValue
                     }
+                }
 
-                    SettingsSeparator {}
+                SettingsRow {
+                    title: i18n("Audio source")
+                    searchAnchor: "audioInputSource"
+                    description: i18n("Capture device or monitor source. Keep \"auto\" to follow the default output.")
 
-                    SettingsRow {
-                        title: i18n("Audio backend")
-                        searchAnchor: "audioInputMethod"
-                        description: i18n("Leave on Automatic unless capture fails with the detected backend")
+                    TextField {
+                        id: audioSourceField
 
-                        WideComboBox {
-                            Accessible.name: i18n("Audio backend")
-                            textRole: "text"
-                            valueRole: "value"
-                            model: settingsController.valueOptions("Shaders.Audio", "InputMethod")
-                            // A binding, not a JS assignment: see
-                            // renderingBackendCombo above.
-                            currentIndex: Math.max(0, indexOfValue(appSettings.audioInputMethod))
-                            onActivated: appSettings.audioInputMethod = currentValue
-                        }
-                    }
+                        // SettingsRow lays its default children out in a
+                        // plain Row positioner, so Layout.* attached
+                        // properties are ignored here — set the width
+                        // directly or the field renders at implicit width.
+                        width: Kirigami.Units.gridUnit * 12
+                        Accessible.name: i18n("Audio source")
+                        onEditingFinished: appSettings.audioInputSource = text
 
-                    SettingsRow {
-                        title: i18n("Audio source")
-                        searchAnchor: "audioInputSource"
-                        description: i18n("Capture device or monitor source. Keep \"auto\" to follow the default output.")
-
-                        TextField {
-                            id: audioSourceField
-
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 12
-                            Accessible.name: i18n("Audio source")
-                            onEditingFinished: appSettings.audioInputSource = text
-
-                            // Defer host-driven updates while the user is
-                            // typing. A plain `text:` binding re-fires on every
-                            // audioInputSourceChanged, focused or not, so it
-                            // overwrote the edit in progress before the focus
-                            // guard was ever consulted — the guard only started
-                            // working once an unfocused change had severed the
-                            // binding it was meant to hold back.
-                            Binding on text {
-                                value: appSettings.audioInputSource
-                                when: !audioSourceField.activeFocus
-                                restoreMode: Binding.RestoreNone
-                            }
+                        // Defer host-driven updates while the user is
+                        // typing. A plain `text:` binding re-fires on every
+                        // audioInputSourceChanged, focused or not, so it
+                        // overwrote the edit in progress before the focus
+                        // guard was ever consulted — the guard only started
+                        // working once an unfocused change had severed the
+                        // binding it was meant to hold back.
+                        Binding on text {
+                            value: appSettings.audioInputSource
+                            when: !audioSourceField.activeFocus
+                            restoreMode: Binding.RestoreNone
                         }
                     }
                 }

@@ -3,8 +3,10 @@
 .pragma library
 
 // Shared parent-chain walks for the search-reveal registry, used by every
-// component that registers a searchAnchor (SettingsRow, SettingsCard,
-// RuleSectionList, AnimationEventCardList).
+// component that registers a searchAnchor and by SettingsFlickable itself,
+// which owns the registry. Deliberately not enumerated: the list was wrong in
+// both directions (it named RuleSectionList, which does not import this, and
+// omitted half the real importers).
 
 // The page's reveal registry: the first ancestor exposing registerSearchAnchor
 // (a SettingsFlickable). Returns null if none is found.
@@ -19,15 +21,18 @@ function pageFor(item) {
     return null;
 }
 
-// The hosting SettingsCard (carries isSettingsCard === true), so a contained
-// row can ask the card to expand on reveal. Returns null if none is found.
-function cardFor(item) {
+// Every SettingsCard ancestor, nearest first. A reveal must expand ALL of them:
+// expanding only the nearest leaves the row invisible when an outer card is
+// also collapsed, and the reveal then falls back to the top of the page for a
+// reason nothing on screen explains.
+function cardChainFor(item) {
+    var chain = [];
     var p = item ? item.parent : null;
     while (p) {
         if (p.isSettingsCard === true)
-            return p;
+            chain.push(p);
 
         p = p.parent;
     }
-    return null;
+    return chain;
 }

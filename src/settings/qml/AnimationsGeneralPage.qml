@@ -18,146 +18,21 @@ import org.kde.kirigami as Kirigami
  * `Settings::animationProfile` Q_PROPERTYs the legacy General > Animations
  * card has always used.
  *
- * Timing-mode toggle mirrors PR #291's per-event card: writing a
- * `"spring:omega,zeta"` string into `animationEasingCurve` flips the
- * Global profile to spring physics (the curve string itself is the
- * discriminator — `Settings::animationProfile` parses both forms via
- * `CurveRegistry`). The `_lastEasingCurve` / `_lastSpringOmega/Zeta`
- * state preserves each axis across mode toggles so previewing Spring
- * doesn't permanently lose the user's easing curve.
+ * The enable toggle and the curve / timing-mode / duration editor live in
+ * the shared GlobalTimingDefaultsCard (also hosted by the simple-mode
+ * Animations page), which owns the spring-string encode/parse round-trip
+ * and the per-axis caching that preserves an easing curve across a Spring
+ * preview. This page adds the sequencing, stagger and minimum-distance rows
+ * to that card as default children, plus the animation window filter below
+ * it.
  */
 SettingsFlickable {
     id: page
 
     readonly property QtObject appSettings: settingsController.settings
-    // ── Timing-mode state ───────────────────────────────────────────────
-    // Computed from the live `animationEasingCurve` string: the "spring:"
-    // prefix is the on-disk discriminator. Defining this as a binding
-    // means an external write (e.g. from the Presets page's
-    // applyAsDefault) flips the toggle without imperative refresh.
-    readonly property string _springPrefix: "spring:"
-    readonly property bool _isSpring: page._isSpringCurve(page.appSettings.animationEasingCurve)
-    readonly property int _currentTimingMode: _isSpring ? CurvePresets.timingModeSpring : CurvePresets.timingModeEasing
-    // Last-seen values per axis. When the user toggles the timing-mode
-    // combo we write a fresh curve string from these, preserving the
-    // other axis's value across the round trip. Initialized below from
-    // the saved curve and kept in sync via Connections.
-    property string _lastEasingCurve: CurvePresets.defaultEasingCurve
-    property real _lastSpringOmega: CurvePresets.defaultSpringOmega
-    property real _lastSpringZeta: CurvePresets.defaultSpringZeta
-
-    function _isSpringCurve(curveStr) {
-        return typeof curveStr === "string" && curveStr.indexOf(page._springPrefix) === 0;
-    }
-
-    function _parseSpring(curveStr) {
-        var parts = curveStr.substring(page._springPrefix.length).split(",");
-        var w = parseFloat(parts[0]);
-        var z = parseFloat(parts[1]);
-        return {
-            "omega": isFinite(w) ? w : CurvePresets.defaultSpringOmega,
-            "zeta": isFinite(z) ? z : CurvePresets.defaultSpringZeta
-        };
-    }
-
-    // Refresh the cached easing/spring values from whichever axis the
-    // current curve string describes. Called once on load and whenever
-    // `animationEasingCurve` changes externally.
-    function _syncCachedValues() {
-        var c = page.appSettings.animationEasingCurve;
-        if (typeof c !== "string")
-            return;
-
-        if (page._isSpringCurve(c)) {
-            var s = page._parseSpring(c);
-            page._lastSpringOmega = s.omega;
-            page._lastSpringZeta = s.zeta;
-        } else if (c.length > 0) {
-            page._lastEasingCurve = c;
-        }
-    }
-
-    function _writeSpring(omega, zeta) {
-        var omegaRounded = parseFloat(omega.toFixed(2));
-        var zetaRounded = parseFloat(zeta.toFixed(2));
-        var encoded = page._springPrefix + omegaRounded + "," + zetaRounded;
-        // No-op-guard before mutating cache so a re-selection of the
-        // already-active mode/values doesn't churn bindings even though
-        // the underlying setter would no-op.
-        if (page.appSettings.animationEasingCurve === encoded)
-            return;
-
-        // Cache the ROUNDED values — the encoded string is the canonical
-        // on-disk form (2-decimal precision), so caching the raw inputs
-        // would briefly leave `_lastSpringOmega` / `_lastSpringZeta` a
-        // sub-precision tick off the value the next reload sees, until
-        // `_syncCachedValues()` re-parses the encoded string.
-        page._lastSpringOmega = omegaRounded;
-        page._lastSpringZeta = zetaRounded;
-        page.appSettings.animationEasingCurve = encoded;
-    }
-
-    function _writeEasing(curveStr) {
-        if (page.appSettings.animationEasingCurve === curveStr)
-            return;
-
-        page._lastEasingCurve = curveStr;
-        page.appSettings.animationEasingCurve = curveStr;
-    }
-
-    // ── Shared curve/timing editor ↔ Settings-driven Global profile ─────
-    // The card now drives curve + duration through the same
-    // AnimationProfileEditor the per-event override cards use, instead of an
-    // inline bezier canvas. The editor owns its working state; we seed it from
-    // the saved profile and commit its changes back. Set while WE are writing
-    // so the change-signal handlers below don't re-seed the editor mid-edit.
-    property bool _committingEditor: false
-
-    // Push the saved profile into the editor. Property assignment doesn't emit
-    // the editor's valueChanged, so this never re-enters _commitEditor().
-    function _seedEditor() {
-        editor.timingMode = page._currentTimingMode;
-        editor.easingCurve = page._lastEasingCurve;
-        editor.springOmega = page._lastSpringOmega;
-        editor.springZeta = page._lastSpringZeta;
-        editor.duration = page.appSettings.animationDuration;
-    }
-
-    // Commit the editor's working state back to the Global profile.
-    function _commitEditor() {
-        page._committingEditor = true;
-        if (editor.timingMode === CurvePresets.timingModeSpring)
-            page._writeSpring(editor.springOmega, editor.springZeta);
-        else
-            page._writeEasing(editor.easingCurve);
-        if (page.appSettings.animationDuration !== editor.duration)
-            page.appSettings.animationDuration = editor.duration;
-        page._committingEditor = false;
-    }
 
     contentHeight: content.implicitHeight
     clip: true
-    Component.onCompleted: {
-        page._syncCachedValues();
-        page._seedEditor();
-    }
-
-    Connections {
-        function onAnimationEasingCurveChanged() {
-            page._syncCachedValues();
-            // Don't re-seed while WE'RE the writer — the editor already holds
-            // the committed value, and re-seeding mid-edit (e.g. during a
-            // duration drag) would fight the live control.
-            if (!page._committingEditor)
-                page._seedEditor();
-        }
-        function onAnimationDurationChanged() {
-            if (!page._committingEditor)
-                page._seedEditor();
-        }
-
-        target: page.appSettings
-    }
 
     ColumnLayout {
         id: content
@@ -168,138 +43,103 @@ SettingsFlickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
-            text: i18n("These defaults apply to every animation event unless a sub-page (Window, Zone, OSD, etc.) defines its own override.")
+            // Kirigami.InlineMessage defaults to hidden; opt in explicitly.
+            visible: true
+            text: i18n("These defaults apply to every animation event unless a sub-page (Windows, OSDs, Desktops, etc.) defines its own override.")
         }
 
-        SettingsCard {
-            // ── Mode-agnostic behaviour ───────────────────────────────
-            // These rows used to live inside EasingSettings; pulled
-            // out so they remain visible (and editable) in spring
-            // mode — they configure how the daemon sequences and
-            // gates animations regardless of the timing curve.
-
-            id: animationsCard
+        GlobalTimingDefaultsCard {
+            id: defaultsCard
 
             Layout.fillWidth: true
-            headerText: i18n("Global animation defaults")
-            searchAnchor: "globalAnimationDefaults"
-            showToggle: true
-            toggleChecked: page.appSettings.animationsEnabled
+            cardSettings: page.appSettings
             collapsible: true
-            onToggleClicked: function (checked) {
-                page.appSettings.animationsEnabled = checked;
+
+            SettingsSeparator {}
+
+            SettingsRow {
+                title: i18n("Multiple windows")
+                searchAnchor: "multipleWindows"
+                description: i18n("How to animate when moving several windows at once")
+
+                WideComboBox {
+                    id: sequenceModeCombo
+
+                    Accessible.name: i18n("Multiple windows")
+                    enabled: defaultsCard.toggleChecked
+                    model: [i18n("All at once"), i18n("One by one")]
+                    onActivated: index => {
+                        page.appSettings.animationSequenceMode = index;
+                    }
+
+                    // Guarded Binding so a user activation can't sever the
+                    // binding and a config change keeps refreshing the
+                    // control. RestoreNone + the popup gate keeps an open
+                    // dropdown from being clobbered mid-selection.
+                    Binding on currentIndex {
+                        value: page.appSettings.animationSequenceMode
+                        when: !sequenceModeCombo.popup.visible
+                        restoreMode: Binding.RestoreNone
+                    }
+                }
             }
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.largeSpacing
+            SettingsRow {
+                visible: page.appSettings.animationSequenceMode === 1
+                title: i18n("Stagger delay")
+                searchAnchor: "staggerDelay"
+                description: i18n("Pause between each window's animation start")
 
-                // ── Curve / timing editor ─────────────────────────────────
-                // Compact curve summary (thumbnail + "Customize…" → dialog) plus
-                // the timing-mode and duration rows — the same
-                // AnimationProfileEditor the per-event override cards use. This
-                // replaces the large inline bezier canvas, which read as a
-                // confusing "advanced editor" sitting on the defaults page. The
-                // editor is seeded from / committed to the Settings-driven Global
-                // profile (animationEasingCurve / animationDuration) via
-                // _seedEditor() / _commitEditor().
-                AnimationProfileEditor {
-                    id: editor
-
-                    Layout.fillWidth: true
-                    enabled: animationsCard.toggleChecked
-                    // The Global default has no shader leg in this UI — shader
-                    // overrides live on the per-event and Rules layers.
-                    shaderLegSupported: false
-                    eventLabel: i18n("Global animation defaults")
-                    onValueChanged: page._commitEditor()
-                }
-
-                SettingsSeparator {}
-
-                SettingsRow {
-                    title: i18n("Multiple windows")
-                    searchAnchor: "multipleWindows"
-                    description: i18n("How to animate when moving several windows at once")
-
-                    WideComboBox {
-                        id: sequenceModeCombo
-
-                        Accessible.name: i18n("Multiple windows")
-                        enabled: animationsCard.toggleChecked
-                        model: [i18n("All at once"), i18n("One by one")]
-                        onActivated: index => {
-                            page.appSettings.animationSequenceMode = index;
-                        }
-
-                        // Guarded Binding so a user activation can't sever the
-                        // binding and a config change keeps refreshing the
-                        // control. RestoreNone + the popup gate keeps an open
-                        // dropdown from being clobbered mid-selection.
-                        Binding on currentIndex {
-                            value: page.appSettings.animationSequenceMode
-                            when: !sequenceModeCombo.popup.visible
-                            restoreMode: Binding.RestoreNone
-                        }
+                SettingsSlider {
+                    accessibleName: i18n("Stagger delay")
+                    enabled: defaultsCard.toggleChecked
+                    from: settingsController.generalPage.animationStaggerIntervalMin
+                    to: settingsController.generalPage.animationStaggerIntervalMax
+                    stepSize: 10
+                    value: page.appSettings.animationStaggerInterval
+                    valueSuffix: " ms"
+                    labelWidth: Kirigami.Units.gridUnit * 4
+                    onMoved: value => {
+                        page.appSettings.animationStaggerInterval = Math.round(value);
                     }
                 }
+            }
 
-                SettingsRow {
-                    visible: page.appSettings.animationSequenceMode === 1
-                    title: i18n("Stagger delay")
-                    searchAnchor: "staggerDelay"
-                    description: i18n("Pause between each window's animation start")
+            SettingsSeparator {}
 
-                    SettingsSlider {
-                        accessibleName: i18n("Stagger delay")
-                        enabled: animationsCard.toggleChecked
-                        from: settingsController.generalPage.animationStaggerIntervalMin
-                        to: settingsController.generalPage.animationStaggerIntervalMax
-                        stepSize: 10
-                        value: page.appSettings.animationStaggerInterval
-                        valueSuffix: " ms"
-                        labelWidth: Kirigami.Units.gridUnit * 4
-                        onMoved: value => {
-                            page.appSettings.animationStaggerInterval = Math.round(value);
-                        }
+            SettingsRow {
+                title: i18n("Minimum distance")
+                searchAnchor: "minimumDistance"
+                description: page.appSettings.animationMinDistance === 0 ? i18n("Always animates with no distance threshold") : i18n("Skip animation when geometry changes less than this")
+
+                SettingsSpinBox {
+                    id: minDistanceSpin
+
+                    accessibleName: i18n("Minimum distance")
+                    enabled: defaultsCard.toggleChecked
+                    from: settingsController.generalPage.animationMinDistanceMin
+                    to: settingsController.generalPage.animationMinDistanceMax
+                    stepSize: 5
+                    // Feed value through a guarded Binding so a config change
+                    // keeps refreshing the control: a plain `value:` binding is
+                    // destroyed by SettingsSpinBox's own edit echo after the
+                    // first edit. RestoreNone + the focus gate keeps a live edit
+                    // from being clobbered.
+                    Binding on value {
+                        value: page.appSettings.animationMinDistance
+                        when: !minDistanceSpin.editing
+                        restoreMode: Binding.RestoreNone
                     }
-                }
-
-                SettingsSeparator {}
-
-                SettingsRow {
-                    title: i18n("Minimum distance")
-                    searchAnchor: "minimumDistance"
-                    description: page.appSettings.animationMinDistance === 0 ? i18n("Always animates with no distance threshold") : i18n("Skip animation when geometry changes less than this")
-
-                    SettingsSpinBox {
-                        id: minDistanceSpin
-
-                        accessibleName: i18n("Minimum distance")
-                        enabled: animationsCard.toggleChecked
-                        from: settingsController.generalPage.animationMinDistanceMin
-                        to: settingsController.generalPage.animationMinDistanceMax
-                        stepSize: 5
-                        // Feed value through a guarded Binding so a config change
-                        // keeps refreshing the control: a plain `value:` binding is
-                        // destroyed by SettingsSpinBox's own edit echo after the
-                        // first edit. RestoreNone + the focus gate keeps a live edit
-                        // from being clobbered.
-                        Binding on value {
-                            value: page.appSettings.animationMinDistance
-                            when: !minDistanceSpin.editing
-                            restoreMode: Binding.RestoreNone
-                        }
-                        // Match the "zero = disabled, otherwise px" treatment used
-                        // by the Minimum window width / height spinboxes below so
-                        // the user sees a consistent "Off" / "%1 px" rendering
-                        // across every threshold-with-disable spinbox on the page.
-                        unitText: ""
-                        onValueModified: value => {
-                            page.appSettings.animationMinDistance = value;
-                        }
-                        textFromValue: function (value) {
-                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
-                        }
+                    // Match the "zero = disabled, otherwise px" treatment used
+                    // by the Minimum window width / height spinboxes below so
+                    // the user sees a consistent "Off" / "%1 px" rendering
+                    // across every threshold-with-disable spinbox on the page.
+                    unitText: ""
+                    onValueModified: value => {
+                        page.appSettings.animationMinDistance = value;
+                    }
+                    textFromValue: function (value) {
+                        return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
                     }
                 }
             }
@@ -310,67 +150,10 @@ SettingsFlickable {
         // animation at all. Relocated here from the old Animations App
         // Rules page — these are global config toggles, not per-window
         // rules, so they belong on the General page. Per-window
-        // overrides now live on the unified Rules page.
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            type: Kirigami.MessageType.Information
-            text: i18n("Filtered windows are not animated. Use a Rule to keep a specific application animated even when a filter would exclude it.")
-        }
-
-        WindowFilterCard {
-            Layout.fillWidth: true
-
-            excludeTransient: page.appSettings.animationExcludeTransientWindows
-            transientDescription: i18n("Skip animations for dialogs, popups, tooltips, and dropdown menus")
-            transientAccessibleName: i18n("Exclude transient windows from animations")
-            onExcludeTransientToggled: value => {
-                page.appSettings.animationExcludeTransientWindows = value;
-            }
-
-            // Animations-only extra row: exclude notifications / OSDs. Supplies
-            // its own leading separator so it composes under the transient row.
-            insertAfterTransient: Component {
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    SettingsSeparator {}
-
-                    SettingsRow {
-                        title: i18n("Exclude notifications and OSDs")
-                        searchAnchor: "excludeNotificationsAndOsds"
-                        description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
-
-                        SettingsSwitch {
-                            checked: page.appSettings.animationExcludeNotificationsAndOsd
-                            accessibleName: i18n("Exclude notifications and on-screen displays from animations")
-                            onToggled: function (newValue) {
-                                page.appSettings.animationExcludeNotificationsAndOsd = newValue;
-                            }
-                        }
-                    }
-                }
-            }
-
-            minWidth: page.appSettings.animationMinimumWindowWidth
-            minWidthFrom: settingsController.generalPage.animationMinimumWindowWidthMin
-            minWidthTo: settingsController.generalPage.animationMinimumWindowWidthMax
-            minWidthDescription: i18n("Windows narrower than this will not animate")
-            minWidthDisabledDescription: i18n("Disabled. No width threshold.")
-            minWidthAccessibleName: i18n("Minimum window width for animations")
-            onMinWidthModified: value => {
-                page.appSettings.animationMinimumWindowWidth = value;
-            }
-
-            minHeight: page.appSettings.animationMinimumWindowHeight
-            minHeightFrom: settingsController.generalPage.animationMinimumWindowHeightMin
-            minHeightTo: settingsController.generalPage.animationMinimumWindowHeightMax
-            minHeightDescription: i18n("Windows shorter than this will not animate")
-            minHeightDisabledDescription: i18n("Disabled. No height threshold.")
-            minHeightAccessibleName: i18n("Minimum window height for animations")
-            onMinHeightModified: value => {
-                page.appSettings.animationMinimumWindowHeight = value;
-            }
+        // overrides now live on the unified Rules page. The card carries its
+        // own explainer banner, so both hosts get it from one declaration.
+        AnimationWindowFilterCard {
+            cardSettings: page.appSettings
         }
     }
 }

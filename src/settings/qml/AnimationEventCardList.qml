@@ -28,18 +28,31 @@ import "SearchAnchorHelpers.js" as SearchAnchors
  *       Accessible.name: i18n("Window animation events")
  *       headerText: i18n("…optional orientation banner…")
  *       eventModel: [ { eventPath, eventLabel, isParentNode }, ... ]
+ *       simpleTiming: true                       // optional, see below
+ *       headerComponent: Component { ... }       // optional, rendered BELOW headerText
  *   }
  */
 SettingsFlickable {
     id: page
 
     /// Ordered list of `{ eventPath: string, eventLabel: string,
-    /// isParentNode: bool }` — one AnimationEventCard per entry, in order.
+    /// isParentNode: bool, mirrorPaths?: [string] }` — one
+    /// AnimationEventCard per entry, in order. `mirrorPaths` is optional
+    /// and makes the card write its edits to those extra paths as well
+    /// (see AnimationEventCard.mirrorPaths).
     property var eventModel: []
     /// Optional orientation banner rendered above the cards. Empty = none.
     /// Pages with an "All" cascade parent use it for a short inheritance
     /// explainer, mirroring the decoration surface pages.
     property string headerText: ""
+    /// Optional Component instantiated above the event cards (below the
+    /// banner) — lets a consumer lead with page-level controls (e.g. the
+    /// simple-mode enable + speed card) while the event cards themselves
+    /// stay the shared per-event surface.
+    property Component headerComponent: null
+    /// Forwarded to every card: hide the timing-mode machinery, keeping
+    /// duration + shader + parameters (the simple-mode card shape).
+    property bool simpleTiming: false
 
     // Build-ahead margin above/below the visible viewport so a card is
     // built slightly before it scrolls into view — keeps a fast flick from
@@ -70,6 +83,13 @@ SettingsFlickable {
             type: Kirigami.MessageType.Information
             visible: page.headerText.length > 0
             text: page.headerText
+        }
+
+        Loader {
+            Layout.fillWidth: true
+            active: page.headerComponent !== null
+            visible: active
+            sourceComponent: page.headerComponent
         }
 
         Repeater {
@@ -155,19 +175,33 @@ SettingsFlickable {
                 // check once layout has positioned this Loader, so the
                 // viewport test sees the real slot position. Later re-checks
                 // come from onYChanged / the page Connections below.
+
+                /// Exactly what was handed to registerSearchAnchor, so
+                /// Component.onDestruction unregisters the SAME object rather
+                /// than recomputing an identity that can diverge. A mismatch
+                /// fails the registry's identity check silently, leaking the
+                /// entry and blocking re-registration for the page's lifetime.
+                property Item _registeredAnchorItem: null
+
                 Component.onCompleted: {
                     Qt.callLater(cardLoader._checkInView);
                     // Defer registration like SettingsRow does: the parent
                     // chain up to the page only settles after construction.
-                    // Register the Loader itself (card arg null) so reveal
-                    // scrolls + pulses; the card builds as it scrolls in.
+                    // Register the Loader itself so a reveal can scroll + pulse
+                    // before the card exists; onLoaded re-registers the card.
                     Qt.callLater(function () {
-                        if (!cardLoader.searchable)
+                        // The delegate can be destroyed before this coalesced
+                        // call runs (fast page switching, eventModel
+                        // reassignment), leaving cardLoader null — the same
+                        // guard _checkInView carries for the same reason.
+                        if (!cardLoader || !cardLoader.searchable)
                             return;
 
                         var pg = SearchAnchors.pageFor(cardLoader);
-                        if (pg)
-                            pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader, null);
+                        if (pg) {
+                            cardLoader._registeredAnchorItem = cardLoader;
+                            pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader);
+                        }
                     });
                 }
                 Component.onDestruction: {
@@ -176,20 +210,31 @@ SettingsFlickable {
 
                     var pg = SearchAnchors.pageFor(cardLoader);
                     if (pg)
-                        pg.unregisterSearchAnchor(cardLoader.searchAnchor);
+                        pg.unregisterSearchAnchor(cardLoader.searchAnchor, cardLoader._registeredAnchorItem);
                 }
-                // Once the card is built, re-register the anchor WITH its
-                // SettingsCard so revealAnchor can expand a collapsed card
-                // before scrolling (the initial registration passes a null
-                // card because the card doesn't exist until it scrolls in).
+                // Once the card is built, re-register the anchor against the
+                // card ITSELF rather than this Loader. revealAnchor expands a
+                // collapsed card by walking UP from the registered item
+                // (SearchAnchorHelpers.cardChainFor), and the SettingsCard is a
+                // DESCENDANT of the Loader, so a Loader-registered anchor has
+                // no card anywhere on its chain: a deep link scrolled to and
+                // pulsed a card that stayed collapsed. Registering the card
+                // makes it the head of its own chain, which the reveal seeds
+                // explicitly for card-level anchors.
+                //
+                // The pre-build registration below still uses the Loader,
+                // because until the card exists the Loader is the only thing
+                // with a position to scroll to.
                 onLoaded: {
                     if (!cardLoader.searchable)
                         return;
 
                     var pg = SearchAnchors.pageFor(cardLoader);
                     var built = cardLoader.item as AnimationEventCard;
-                    if (pg && built)
-                        pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader, built.settingsCard);
+                    if (pg && built && built.settingsCard) {
+                        cardLoader._registeredAnchorItem = built.settingsCard;
+                        pg.registerSearchAnchor(cardLoader.searchAnchor, built.settingsCard);
+                    }
                 }
 
                 Connections {
@@ -210,6 +255,10 @@ SettingsFlickable {
                     eventLabel: cardLoader.modelData.eventLabel
                     isParentNode: cardLoader.modelData.isParentNode === true
                     collapsible: true
+                    simpleTiming: page.simpleTiming
+                    // Optional per-entry write-mirrors, so one card can
+                    // drive a group of analogous events.
+                    mirrorPaths: cardLoader.modelData.mirrorPaths || []
                 }
             }
         }

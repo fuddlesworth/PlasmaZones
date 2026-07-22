@@ -35,13 +35,18 @@
 #include <QJsonObject>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorAnimation/Spring.h>
+
+#include <QRegularExpression>
 
 #include "../helpers/IsolatedConfigGuard.h"
 #include "config/settings.h"
+#include "settings/animationpagescope.h"
 #include "settings/animationspagecontroller.h"
 
 using namespace PlasmaZones;
@@ -103,11 +108,20 @@ private Q_SLOTS:
         QCOMPARE(c.springZetaMin(), 0.1);
         QCOMPARE(c.springZetaMax(), 4.0);
 
-        // The slider band stays inside the engine's accepted clamp range.
-        QVERIFY(c.springOmegaMin() >= 0.1);
-        QVERIFY(c.springOmegaMax() <= 200.0);
-        QVERIFY(c.springZetaMin() >= 0.0);
-        QVERIFY(c.springZetaMax() <= 10.0);
+        // The slider band stays inside the engine's accepted clamp range. The
+        // clamp bounds are not exported as named constants — they are literals
+        // inside Spring::fromString — so they are read back OUT of the engine
+        // by parsing values far outside any plausible band and seeing where it
+        // pins them. Comparing against hand-copied 0.1 / 200 / 0 / 10 literals
+        // would have compared the slider band to nothing at all, since the
+        // QCOMPAREs above already pin the same four accessors to literals.
+        using PhosphorAnimation::Spring;
+        const Spring floors = Spring::fromString(QStringLiteral("spring:-1e9,-1e9"));
+        const Spring ceilings = Spring::fromString(QStringLiteral("spring:1e9,1e9"));
+        QVERIFY2(c.springOmegaMin() >= floors.omega, "slider omega floor is below the engine clamp");
+        QVERIFY2(c.springOmegaMax() <= ceilings.omega, "slider omega ceiling is above the engine clamp");
+        QVERIFY2(c.springZetaMin() >= floors.zeta, "slider zeta floor is below the engine clamp");
+        QVERIFY2(c.springZetaMax() <= ceilings.zeta, "slider zeta ceiling is above the engine clamp");
     }
 
     // ─── Path discovery ───────────────────────────────────────────────────
@@ -204,6 +218,88 @@ private Q_SLOTS:
         QVERIFY(foundEditorSnapIn);
         QVERIFY2(editorCategoryFlag, "'editor' should be flagged as a category: it has children");
         QVERIFY2(!editorSnapInCategoryFlag, "'editor.snapIn' is a leaf: not a category");
+    }
+
+    // ─── Simple-page scope contract ───────────────────────────────────────
+
+    /// Every event card on AnimationsSimplePage.qml must fall inside the
+    /// `animations-simple` scope in animationpagescope.cpp. That scope drives
+    /// the page's Reset, Discard and dirty walk, so a card whose path is not
+    /// under one of the scope's roots is silently exempt from all three: the
+    /// user edits it, the page reports itself clean, and Reset leaves it set.
+    ///
+    /// Mirror paths are held to the same contract. A mirror receives every
+    /// write the primary does (AnimationEventCard's group writers loop
+    /// `_writePaths`), so it is exactly as dependent on the scope's roots: a
+    /// mirror declared outside them would be edited by the page, reported clean
+    /// by it, and survive its Reset.
+    ///
+    /// The two lists were previously held together by a comment alone. This
+    /// reads the QML as TEXT (no Qt Quick engine, no page construction) and
+    /// pulls the eventPath and mirrorPaths literals straight out of the
+    /// eventModel, so adding a card or a mirror there without widening the
+    /// scope fails here.
+    ///
+    /// Scope limit, stated plainly: the parse sees `"eventPath": "…"` and
+    /// `"mirrorPaths": [ … ]` string literals only. A path that came from a JS
+    /// expression or a property reference would not be seen, and the page has
+    /// never used one. The count guards below are what stop a rewrite in that
+    /// style from turning this into a test that asserts nothing.
+    void simpleScopeCoversEverySimplePageCard()
+    {
+        const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/AnimationsSimplePage.qml");
+        const QString src = readFile(qmlPath);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
+
+        static const QRegularExpression re(QStringLiteral("\"eventPath\"\\s*:\\s*\"([^\"]+)\""));
+        QStringList cardPaths;
+        auto it = re.globalMatch(src);
+        while (it.hasNext())
+            cardPaths.append(it.next().captured(1));
+
+        // The page hosts five grouped cards today. A drop below that means the
+        // regex or the file stopped matching rather than that a card was
+        // removed, and the loop below would then pass vacuously.
+        QVERIFY2(cardPaths.size() >= 5,
+                 qPrintable(QStringLiteral("parsed only %1 eventPath literals from AnimationsSimplePage.qml")
+                                .arg(cardPaths.size())));
+
+        // Mirrors: pull each `"mirrorPaths": [...]` array body, then the string
+        // literals inside it. Checked against the same scope and reported
+        // through the same list as the primaries, since the consequence of an
+        // out-of-scope mirror is identical.
+        static const QRegularExpression mirrorArrayRe(QStringLiteral("\"mirrorPaths\"\\s*:\\s*\\[([^\\]]*)\\]"));
+        static const QRegularExpression mirrorEntryRe(QStringLiteral("\"([^\"]+)\""));
+        QStringList mirrorPaths;
+        auto arrayIt = mirrorArrayRe.globalMatch(src);
+        while (arrayIt.hasNext()) {
+            const QString body = arrayIt.next().captured(1);
+            auto entryIt = mirrorEntryRe.globalMatch(body);
+            while (entryIt.hasNext())
+                mirrorPaths.append(entryIt.next().captured(1));
+        }
+
+        // One mirror on the page today (the combined opened & closed card). Its
+        // own non-vacuity floor, so a rewrite that stopped matching mirrors
+        // fails here rather than silently checking the primaries alone.
+        QVERIFY2(mirrorPaths.size() >= 1,
+                 qPrintable(QStringLiteral("parsed only %1 mirrorPaths literals from AnimationsSimplePage.qml")
+                                .arg(mirrorPaths.size())));
+        cardPaths.append(mirrorPaths);
+
+        const AnimationPageScope scope = animationPageScope(QStringLiteral("animations-simple"));
+        QCOMPARE(scope.kind, AnimationPageScope::EventSubtree);
+        // Collected rather than QVERIFY'd per row: a QVERIFY failure aborts the
+        // slot, so the first out-of-scope card would hide every other one and
+        // widening the scope would turn into a one-at-a-time hunt.
+        QStringList outOfScope;
+        for (const QString& path : cardPaths) {
+            if (!animationPathInScope(path, scope))
+                outOfScope.append(path);
+        }
+        QVERIFY2(outOfScope.isEmpty(),
+                 qPrintable(QStringLiteral("simple-page cards outside the animations-simple scope: ")
+                            + outOfScope.join(QLatin1String(", "))));
     }
 
     // ─── Override CRUD ────────────────────────────────────────────────────
@@ -405,6 +501,74 @@ private Q_SLOTS:
     }
 
     // ─── Effective resolution ─────────────────────────────────────────────
+
+    void resolvedProfileSeedsTheRootFromGlobalSettings()
+    {
+        // The Global settings seed sits at the ROOT of the inheritance chain,
+        // below every user-authored profile. Every other resolvedProfile test
+        // constructs the controller with no ISettings, so the seed is skipped
+        // entirely and the suite stayed green through the whole of it.
+        //
+        // All FIVE seeded fields are asserted, not just minDistance. The seed
+        // was written once for duration+curve alone and had to be widened when
+        // the other three were found resolving to library defaults while the
+        // daemon animated with the user's value; a test that pinned one field
+        // would let any of the other four be dropped again silently. duration
+        // and curve in particular are exactly what the simple page's lead
+        // GlobalTimingDefaultsCard drives.
+        IsolatedConfigGuard guard;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        Settings s;
+        s.setAnimationDuration(275);
+        s.setAnimationEasingCurve(QStringLiteral("0.10,0.20,0.30,0.40"));
+        s.setAnimationMinDistance(123);
+        s.setAnimationSequenceMode(int(PhosphorAnimation::SequenceMode::Cascade));
+        s.setAnimationStaggerInterval(55);
+        AnimationsPageController c(nullptr, &s);
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Every value above must differ from the library default it would fall
+        // back to, or the assertions below would pass with the seed deleted.
+        // Asserted rather than assumed: a later change to a Default* constant
+        // could quietly turn one of these rows into a tautology.
+        using P = PhosphorAnimation::Profile;
+        QVERIFY(s.animationDuration() != int(P::DefaultDuration));
+        QVERIFY(s.animationEasingCurve() != PhosphorAnimation::Easing().toString());
+        QVERIFY(s.animationMinDistance() != P::DefaultMinDistance);
+        QVERIFY(s.animationSequenceMode() != int(P::DefaultSequenceMode));
+        QVERIFY(s.animationStaggerInterval() != P::DefaultStaggerInterval);
+
+        // No override anywhere on the chain: each settings value reaches the
+        // leaf instead of the library default. Compared against the Settings
+        // getter rather than the literal written above so a setter-side clamp
+        // or canonicalisation cannot turn a real mismatch into a test failure
+        // that says nothing about the seed.
+        const QVariantMap seeded = c.resolvedProfile(QStringLiteral("editor.snapIn"));
+        QCOMPARE(seeded.value(QStringLiteral("duration")).toInt(), s.animationDuration());
+        QCOMPARE(seeded.value(QStringLiteral("curve")).toString(), s.animationEasingCurve());
+        QCOMPARE(seeded.value(QStringLiteral("minDistance")).toInt(), s.animationMinDistance());
+        QCOMPARE(seeded.value(QStringLiteral("sequenceMode")).toInt(), s.animationSequenceMode());
+        QCOMPARE(seeded.value(QStringLiteral("staggerInterval")).toInt(), s.animationStaggerInterval());
+
+        // A real override at the leaf still wins for EVERY seeded field: the
+        // seed is LOWEST precedence, so mergeMissingFields must never
+        // overwrite it. Each value differs from both the settings value above
+        // and the library default.
+        c.setOverride(QStringLiteral("editor.snapIn"),
+                      QVariantMap{{QStringLiteral("duration"), 611},
+                                  {QStringLiteral("curve"), QStringLiteral("spring:14.0,0.6")},
+                                  {QStringLiteral("minDistance"), 7},
+                                  {QStringLiteral("sequenceMode"), int(PhosphorAnimation::SequenceMode::AllAtOnce)},
+                                  {QStringLiteral("staggerInterval"), 91}});
+        const QVariantMap overridden = c.resolvedProfile(QStringLiteral("editor.snapIn"));
+        QCOMPARE(overridden.value(QStringLiteral("duration")).toInt(), 611);
+        QCOMPARE(overridden.value(QStringLiteral("curve")).toString(), QStringLiteral("spring:14.0,0.6"));
+        QCOMPARE(overridden.value(QStringLiteral("minDistance")).toInt(), 7);
+        QCOMPARE(overridden.value(QStringLiteral("sequenceMode")).toInt(),
+                 int(PhosphorAnimation::SequenceMode::AllAtOnce));
+        QCOMPARE(overridden.value(QStringLiteral("staggerInterval")).toInt(), 91);
+    }
 
     void resolvedProfile_unsetReturnsLibraryDefaults()
     {

@@ -305,7 +305,6 @@ ColumnLayout {
     // empty and the button always shows its placeholder.
     SettingsRow {
         id: addPackRow
-        Layout.fillWidth: true
         visible: root.showAddRow
         title: i18n("Add decoration pack")
         // Hoisted: the add-pack candidate list is scanned once per change of
@@ -317,7 +316,16 @@ ColumnLayout {
         description: _addable.length > 0 ? i18n("Stack another pack onto this surface's chain") : i18n("All installed packs are already in the chain")
 
         PZCommon.CategoryMenuButton {
-            Layout.fillWidth: true
+            // SettingsRow lays its default children out in a plain Row
+            // positioner, so Layout.* attached properties are inert here —
+            // size explicitly or the button sits at implicit width. Clamped to
+            // the same 45% of the row that SettingsRow caps its control slot
+            // at: the Row neither clips nor shrinks its children, so a fixed
+            // 16 grid units overhangs the right margin on a narrow window.
+            // The cap is relative to SettingsRow's INNER layout, which is
+            // inset by largeSpacing on each side — measuring the outer width
+            // would still overhang by 0.45 * 2 * largeSpacing.
+            width: Math.min(Kirigami.Units.gridUnit * 16, Math.max(0, (addPackRow.width - Kirigami.Units.largeSpacing * 2) * 0.45))
             enabled: addPackRow._addable.length > 0
             items: addPackRow._addable
             currentId: ""

@@ -10,12 +10,26 @@
 #include <QDebug>
 #include <QScopeGuard>
 
+#include <algorithm>
+
 namespace PhosphorControl {
 
 ApplicationController::ApplicationController(QObject* parent)
     : QObject(parent)
     , m_registry(new PageRegistry(this))
 {
+    // canGoBack/canGoForward are computed from the tier, not just from stack
+    // emptiness, so a mode flip (or a per-entry restamp) can change them
+    // without any navigation happening. Nothing else re-evaluates them, which
+    // would leave the chrome's Back/Forward `enabled` bindings frozen at their
+    // pre-flip value.
+    //
+    // Unconditional emit, matching this signal's documented "may have flipped"
+    // contract: it is the NOTIFY for two COMPUTED properties, so a redundant
+    // emit costs one binding re-evaluation rather than asserting a change that
+    // did not happen. The navigation paths that CAN cheaply diff before/after
+    // still do (setCurrentPageId, stepHistory).
+    connect(m_registry, &PageRegistry::visibleSetChanged, this, &ApplicationController::historyChanged);
 }
 
 ApplicationController::~ApplicationController() = default;
@@ -59,19 +73,30 @@ void ApplicationController::setCurrentPageId(const QString& id)
     // driven by goBack/goForward manage the stacks themselves and set
     // m_navigatingHistory to skip this. The startup transition (empty →
     // first page) records nothing — there is no page to go back to.
-    const bool couldGoBack = canGoBack();
-    const bool couldGoForward = canGoForward();
+    // Computed only when they will be read. Each is an any_of over up to
+    // MaxHistoryEntries entries with an ancestor-chain resolve apiece, and
+    // during a history step the diff below is suppressed, so computing them
+    // there would be two full scans thrown away per step. Captured BEFORE the
+    // stacks are mutated and before m_currentPageId moves, since canGoBack
+    // depends on both.
+    bool couldGoBack = false;
+    bool couldGoForward = false;
     if (!m_navigatingHistory) {
+        couldGoBack = canGoBack();
+        couldGoForward = canGoForward();
         if (!m_currentPageId.isEmpty()) {
             m_backHistory.append(m_currentPageId);
-            if (m_backHistory.size() > kMaxHistoryEntries) {
+            if (m_backHistory.size() > MaxHistoryEntries) {
                 m_backHistory.removeFirst();
             }
         }
         m_forwardHistory.clear();
     }
     m_currentPageId = id;
-    if (canGoBack() != couldGoBack || canGoForward() != couldGoForward) {
+    // Suppressed during a history step: stepHistory brackets the whole move
+    // with its own before/after diff, and canGoBack now depends on
+    // m_currentPageId, so letting this one fire too would double-emit.
+    if (!m_navigatingHistory && (canGoBack() != couldGoBack || canGoForward() != couldGoForward)) {
         Q_EMIT historyChanged();
     }
     // Discard a stale deep-link reveal anchor when navigation moves to a
@@ -89,8 +114,23 @@ void ApplicationController::setPendingAnchor(const QString& pageId, const QStrin
     if (pageId.isEmpty() || anchor.isEmpty()) {
         return;
     }
+    // Arming the latch for a page that does not exist leaves a request no
+    // takePendingAnchor can ever match, and the resulting silence is
+    // indistinguishable from "the page had no such anchor". A deep link naming
+    // a page that was renamed or never registered is a caller bug; say so here
+    // rather than degrade quietly, matching setCurrentPageId's unknown-page
+    // warning.
+    if (!m_registry->hasPage(pageId)) {
+        qWarning() << "ApplicationController::setPendingAnchor: no registered page" << pageId
+                   << "— dropping deep-link anchor" << anchor;
+        return;
+    }
     m_pendingAnchorPage = pageId;
     m_pendingAnchor = anchor;
+    // Unconditional emit, deliberately against the emit-on-change rule:
+    // this is a consume-once latch, not a value. Re-arming the SAME deep
+    // link must re-fire PageHost's reveal, which a changed-guard would
+    // swallow.
     Q_EMIT pendingAnchorChanged();
 }
 
@@ -109,7 +149,8 @@ QString ApplicationController::takePendingAnchor(const QString& pageId)
 
 void ApplicationController::registerPage(PageController* page, const QString& parentId, const QString& title,
                                          const QUrl& qmlSource, const QString& iconSource, bool isCollapsible,
-                                         bool hasDividerAfter)
+                                         bool hasDividerAfter, PageRegistry::PageVisibility visibility,
+                                         const QString& counterpartId)
 {
     if (!page) {
         qWarning() << "ApplicationController::registerPage: null page";
@@ -135,6 +176,8 @@ void ApplicationController::registerPage(PageController* page, const QString& pa
     entry.controller = page;
     entry.isCollapsible = isCollapsible;
     entry.hasDividerAfter = hasDividerAfter;
+    entry.visibility = visibility;
+    entry.counterpartId = counterpartId;
     // Reparent ONLY when registration is accepted — otherwise a
     // caller who built a null-parented page and held it on the
     // stack/heap would lose ownership to us on rejection (empty id,
@@ -220,7 +263,7 @@ void ApplicationController::applyAll()
     // Iterating the live list would invalidate the outer iterators.
     //
     // m_inTransaction suppresses the inner per-domain recomputeDirty
-    // walks (A15 followup) so the transaction is O(N) instead of O(N²).
+    // walks so the transaction is O(N) instead of O(N²).
     // The trailing recomputeDirty() with the flag cleared emits the
     // single net dirtyChanged for the whole batch.
     const QList<QPointer<StagingDomain>> snapshot = m_domains;
@@ -294,14 +337,26 @@ namespace {
 struct NavigableState
 {
     QStringList ids;
-    int currentIdx = -1;
+    // qsizetype, matching QStringList::size(): the index is assigned straight
+    // from ids.size() and compared against it, and PageRegistry's own index
+    // map made the same choice to keep the narrowing out of the build.
+    qsizetype currentIdx = -1;
 };
 
 NavigableState collectNavigable(const PageRegistry* registry, const QString& currentPageId)
 {
     NavigableState out;
-    for (const auto& e : registry->allPages()) {
+    // By reference: this runs on every gotoNextPage / gotoPreviousPage and only
+    // reads, so allPages()'s deep copy of the whole catalogue was pure waste.
+    for (const auto& e : registry->allPagesRef()) {
         if (e.qmlSource.isEmpty()) {
+            continue;
+        }
+        // Keyboard next/prev must honour the same simple/advanced filter
+        // as the sidebar — otherwise it walks onto pages the rail hides.
+        // The current page is kept even if filtered (a transient state
+        // during a mode flip) so the cursor position stays meaningful.
+        if (!registry->pageAllowedInCurrentMode(e.id) && e.id != currentPageId) {
             continue;
         }
         if (e.id == currentPageId) {
@@ -319,9 +374,15 @@ QString ApplicationController::gotoPreviousPage()
     if (state.ids.isEmpty()) {
         return QString();
     }
-    const int next = state.currentIdx <= 0 ? state.ids.size() - 1 : state.currentIdx - 1;
+    const qsizetype next = state.currentIdx <= 0 ? state.ids.size() - 1 : state.currentIdx - 1;
     setCurrentPageId(state.ids.at(next));
-    return state.ids.at(next);
+    // Report where we LANDED, not what we asked for. setCurrentPageId can be
+    // re-entered during its own currentPageIdChanged emit (the app's bridge
+    // calls setActivePage, whose mode gate may redirect and snap this back), so
+    // on unwind m_currentPageId can differ from the request. Callers use the
+    // return value to sync their own state — making that true by construction
+    // beats relying on the two predicates agreeing.
+    return m_currentPageId;
 }
 
 QString ApplicationController::gotoNextPage()
@@ -330,92 +391,151 @@ QString ApplicationController::gotoNextPage()
     if (state.ids.isEmpty()) {
         return QString();
     }
-    const int next = state.currentIdx < 0 || state.currentIdx == state.ids.size() - 1 ? 0 : state.currentIdx + 1;
+    const qsizetype next = state.currentIdx < 0 || state.currentIdx == state.ids.size() - 1 ? 0 : state.currentIdx + 1;
     setCurrentPageId(state.ids.at(next));
-    return state.ids.at(next);
+    // Landed, not requested — see gotoPreviousPage.
+    return m_currentPageId;
+}
+
+bool ApplicationController::isUsableHistoryEntry(const QString& id) const
+{
+    // The COMPLETE predicate stepHistory skips on, current-page clause
+    // included. An ordinary revisit (A → B → A) leaves the current page on the
+    // back stack, so omitting that clause let canGoBack() report true while
+    // goBack() drained the stack and returned empty — the dead Back button and
+    // swallowed Alt+Left this pair exists to prevent.
+    //
+    // Including it makes canGoBack depend on m_currentPageId, which would let
+    // setCurrentPageId's own before/after diff fire a second historyChanged
+    // from inside stepHistory. That is why setCurrentPageId suppresses its
+    // diff-emit while m_navigatingHistory is set: stepHistory's outer diff
+    // already brackets the whole step (both stacks are mutated before it
+    // navigates), so one emit per step is both correct and sufficient.
+    return id != m_currentPageId && m_registry->hasPage(id) && m_registry->pageAllowedInCurrentMode(id);
 }
 
 bool ApplicationController::canGoBack() const
 {
-    return !m_backHistory.isEmpty();
+    // Answers "will goBack() actually move", not "is the stack non-empty".
+    // stepHistory skips entries that are unregistered or hidden by the current
+    // tier, so a bare emptiness check disagrees with it whenever EVERY entry is
+    // hidden — reachable by visiting only advanced pages, then entering simple
+    // mode. Two things break on that divergence, both in the chrome: the Back
+    // button renders enabled and does nothing when clicked, and
+    // Keys.onShortcutOverride claims Alt+Left on this flag, so the key is
+    // consumed out of the shortcut map and then swallowed by a goBack() that
+    // returns empty. That is precisely the "only claim a key when the direction
+    // has somewhere to go" contract the chrome documents.
+    return std::any_of(m_backHistory.cbegin(), m_backHistory.cend(), [this](const QString& id) {
+        return isUsableHistoryEntry(id);
+    });
 }
 
 bool ApplicationController::canGoForward() const
 {
-    return !m_forwardHistory.isEmpty();
+    // Symmetric with canGoBack — same predicate, same rationale.
+    return std::any_of(m_forwardHistory.cbegin(), m_forwardHistory.cend(), [this](const QString& id) {
+        return isUsableHistoryEntry(id);
+    });
+}
+
+// One step along the recorded trail: pop the newest entry from @p from, push
+// the page being left onto @p to, and navigate. goBack and goForward differ
+// only in which stack is which. The skip predicate is isUsableHistoryEntry,
+// shared with canGoBack/canGoForward so the capability flags cannot promise a
+// move this loop then declines to make.
+QString ApplicationController::stepHistory(QStringList& from, QStringList& to)
+{
+    const bool couldGoBack = canGoBack();
+    const bool couldGoForward = canGoForward();
+    QString landed;
+    while (!from.isEmpty()) {
+        const QString target = from.takeLast();
+        // Drop stale entries: the page was unregistered after being
+        // visited, the entry duplicates the current page (defensive —
+        // setCurrentPageId's same-id early-return means recording never
+        // produces one, but a subclass override could), or the entry is
+        // hidden by the current simple/advanced tier.
+        //
+        // The tier check is about landing somewhere honest, NOT about
+        // stack integrity: an app mode gate reacting to
+        // currentPageIdChanged runs NESTED inside the setCurrentPageId
+        // below, i.e. still inside the m_navigatingHistory window, so its
+        // redirect is correctly suppressed from re-recording. What breaks
+        // without this clause is the user-visible contract — the step would
+        // return the hidden id it "went to" while the gate silently bounced
+        // the user to a third page, so the button appears to teleport and
+        // the returned id no longer matches currentPageId.
+        if (!isUsableHistoryEntry(target)) {
+            continue;
+        }
+        if (!m_currentPageId.isEmpty()) {
+            to.append(m_currentPageId);
+        }
+        // m_navigatingHistory suppresses the recording branch in
+        // setCurrentPageId — a history move must not push onto the origin
+        // stack again or clear the trail it just extended.
+        // Scope-guarded: setCurrentPageId synchronously emits
+        // currentPageIdChanged into app code that may redirect (see the notes
+        // above). If that throws, a bare reset would never run and the flag
+        // would latch true for this object's lifetime — every later navigation
+        // silently stops recording, leaving a permanently dead Back button with
+        // no diagnostic. recomputeDirty in this TU guards the same hazard.
+        m_navigatingHistory = true;
+        auto navGuard = qScopeGuard([this]() {
+            m_navigatingHistory = false;
+        });
+        setCurrentPageId(target);
+        // Read back rather than assuming `target`: setCurrentPageId can be
+        // re-entered during its own emit and redirected by the app's mode gate.
+        landed = m_currentPageId;
+        break;
+    }
+    if (canGoBack() != couldGoBack || canGoForward() != couldGoForward) {
+        Q_EMIT historyChanged();
+    }
+    return landed;
 }
 
 QString ApplicationController::goBack()
 {
-    const bool couldGoBack = canGoBack();
-    const bool couldGoForward = canGoForward();
-    QString landed;
-    while (!m_backHistory.isEmpty()) {
-        const QString target = m_backHistory.takeLast();
-        // Drop stale entries: the page was unregistered after being
-        // visited, or the entry duplicates the current page (defensive —
-        // setCurrentPageId's same-id early-return means recording never
-        // produces one, but a subclass override could).
-        if (target == m_currentPageId || !m_registry->hasPage(target)) {
-            continue;
-        }
-        if (!m_currentPageId.isEmpty()) {
-            m_forwardHistory.append(m_currentPageId);
-        }
-        // m_navigatingHistory suppresses the recording branch in
-        // setCurrentPageId — a history move must not push onto the back
-        // stack again or clear the forward trail it just extended.
-        m_navigatingHistory = true;
-        setCurrentPageId(target);
-        m_navigatingHistory = false;
-        landed = target;
-        break;
-    }
-    if (canGoBack() != couldGoBack || canGoForward() != couldGoForward) {
-        Q_EMIT historyChanged();
-    }
-    return landed;
+    return stepHistory(m_backHistory, m_forwardHistory);
 }
 
 QString ApplicationController::goForward()
 {
-    const bool couldGoBack = canGoBack();
-    const bool couldGoForward = canGoForward();
-    QString landed;
-    while (!m_forwardHistory.isEmpty()) {
-        const QString target = m_forwardHistory.takeLast();
-        // Same stale-entry policy as goBack.
-        if (target == m_currentPageId || !m_registry->hasPage(target)) {
-            continue;
+    return stepHistory(m_forwardHistory, m_backHistory);
+}
+
+QStringList ApplicationController::dirtyPageIds() const
+{
+    QStringList ids;
+    // By reference, and reading entry.controller directly: the entry already
+    // holds the QPointer, so controller(entry.id) was a second hash lookup for
+    // a pointer in hand. QPointer::data() is null exactly when controller()
+    // would have returned null (both go through the same guarded pointer), so
+    // the null check below is unchanged.
+    for (const PageRegistry::Entry& entry : m_registry->allPagesRef()) {
+        const PageController* ctrl = entry.controller.data();
+        if (ctrl != nullptr && ctrl->isDirty()) {
+            ids.append(entry.id);
         }
-        if (!m_currentPageId.isEmpty()) {
-            m_backHistory.append(m_currentPageId);
-        }
-        m_navigatingHistory = true;
-        setCurrentPageId(target);
-        m_navigatingHistory = false;
-        landed = target;
-        break;
     }
-    if (canGoBack() != couldGoBack || canGoForward() != couldGoForward) {
-        Q_EMIT historyChanged();
-    }
-    return landed;
+    return ids;
 }
 
 QStringList ApplicationController::parentChainFor(const QString& id) const
 {
-    // Nesting-depth cap. 32 hops is well above any realistic sidebar
-    // nesting (typical settings apps cap at 3-4 levels). PageRegistry::
-    // registerPage refuses an entry whose parentId isn't already
-    // registered, which makes registry-internal cycles structurally
-    // impossible — so this cap is purely a nesting-depth limit.
-    constexpr int kMaxParentChainHops = 32;
-
+    // Nesting-depth cap, shared with PageRegistry's reachability walk so the
+    // two cannot drift. 32 hops is well above any realistic sidebar nesting
+    // (typical settings apps cap at 3-4 levels). PageRegistry::registerPage
+    // refuses an entry whose parentId isn't already registered, which makes
+    // registry-internal cycles structurally impossible — so this cap is purely
+    // a nesting-depth limit.
     QStringList chain;
     QString cursor = id;
-    // Walk parent links upward; cap at kMaxParentChainHops to bound depth.
-    for (int i = 0; i < kMaxParentChainHops; ++i) {
+    // Walk parent links upward; cap at PageRegistry::MaxParentChainHops.
+    for (int i = 0; i < PageRegistry::MaxParentChainHops; ++i) {
         if (!m_registry->hasPage(cursor)) {
             // Unknown id is a legitimate query path (QML probing during
             // bootstrap before pages are registered). Return whatever
@@ -423,7 +543,10 @@ QStringList ApplicationController::parentChainFor(const QString& id) const
             // is reserved for actual depth-exceeded cases.
             return chain;
         }
-        const QString parent = m_registry->entry(cursor).parentId;
+        // parentIdOf, not entry(): the walk needs one field per hop, and
+        // entry() returns a full Entry copy (four QStrings, a QUrl and a
+        // QPointer) to be discarded immediately.
+        const QString parent = m_registry->parentIdOf(cursor);
         if (parent.isEmpty()) {
             return chain;
         }
@@ -434,7 +557,7 @@ QStringList ApplicationController::parentChainFor(const QString& id) const
     // indicates the parent chain is nested deeper than the cap allows.
     // Warn so the bug surfaces instead of silently producing a truncated
     // chain.
-    qWarning() << "ApplicationController::parentChainFor: page nested deeper than" << kMaxParentChainHops
+    qWarning() << "ApplicationController::parentChainFor: page nested deeper than" << PageRegistry::MaxParentChainHops
                << "levels walking up from id" << id;
     return chain;
 }

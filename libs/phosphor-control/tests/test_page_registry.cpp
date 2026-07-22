@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 #include <QUrl>
@@ -50,6 +51,54 @@ private:
     bool m_dirty = false;
 };
 
+// ── Simple/advanced visibility surface ─────────────────────────────
+// Registers one Always leaf, one AdvancedOnly leaf, one SimpleOnly leaf
+// (counterpart pair), and a virtual category whose only leaf is
+// AdvancedOnly — the fixture for the tier filter, the empty-category
+// auto-hide, pageAllowedInCurrentMode, and firstVisibleLeafId.
+// Returns false at the first rejected registration so callers can
+// QVERIFY it: QTEST_FAIL_ACTION is a bare `return`, which would only exit
+// this helper and let the caller keep asserting against a half-built
+// registry.
+bool buildTieredRegistry(PageRegistry& reg)
+{
+    using PV = PageRegistry::PageVisibility;
+    auto* always = new StubPage(QStringLiteral("home"), &reg);
+    if (!reg.registerPage(
+            {QStringLiteral("home"), {}, QStringLiteral("Home"), {}, QUrl(QStringLiteral("qrc:/Home.qml")), always}))
+        return false;
+
+    auto* simple = new StubPage(QStringLiteral("easy"), &reg);
+    PageRegistry::Entry simpleEntry{
+        QStringLiteral("easy"), {}, QStringLiteral("Easy"), {}, QUrl(QStringLiteral("qrc:/Easy.qml")), simple};
+    simpleEntry.visibility = PV::SimpleOnly;
+    simpleEntry.counterpartId = QStringLiteral("full");
+    if (!reg.registerPage(std::move(simpleEntry)))
+        return false;
+
+    auto* full = new StubPage(QStringLiteral("full"), &reg);
+    PageRegistry::Entry fullEntry{
+        QStringLiteral("full"), {}, QStringLiteral("Full"), {}, QUrl(QStringLiteral("qrc:/Full.qml")), full};
+    fullEntry.visibility = PV::AdvancedOnly;
+    fullEntry.counterpartId = QStringLiteral("easy");
+    if (!reg.registerPage(std::move(fullEntry)))
+        return false;
+
+    auto* cat = new StubPage(QStringLiteral("cat"), &reg);
+    if (!reg.registerPage({QStringLiteral("cat"), {}, QStringLiteral("Category"), {}, QUrl(), cat}))
+        return false;
+    auto* deep = new StubPage(QStringLiteral("cat.deep"), &reg);
+    PageRegistry::Entry deepEntry{QStringLiteral("cat.deep"),
+                                  QStringLiteral("cat"),
+                                  QStringLiteral("Deep"),
+                                  {},
+                                  QUrl(QStringLiteral("qrc:/Deep.qml")),
+                                  deep};
+    deepEntry.visibility = PV::AdvancedOnly;
+    if (!reg.registerPage(std::move(deepEntry)))
+        return false;
+    return true;
+}
 } // namespace
 
 class TestPageRegistry : public QObject
@@ -140,8 +189,17 @@ private Q_SLOTS:
                           childB});
         reg.registerPage({QStringLiteral("anim"), {}, QStringLiteral("Animations"), {}, QUrl(), other});
 
-        const auto children = reg.childPages(QStringLiteral("snap"));
-        QCOMPARE(children.size(), 2);
+        // Registration order WITHIN a parent is the sidebar render order, so
+        // pin the ids in order rather than the count: the per-parent buckets
+        // of the m_childrenByParent index are order-carrying, and a
+        // regression that reversed or sorted one would ship green against a
+        // size check. "behavior" before "appearance" is deliberately not
+        // alphabetical, so a sort would show up here.
+        QStringList childIds;
+        for (const auto& child : reg.childPages(QStringLiteral("snap"))) {
+            childIds << child.id;
+        }
+        QCOMPARE(childIds, (QStringList{QStringLiteral("snap.behavior"), QStringLiteral("snap.appearance")}));
         QCOMPARE(reg.topLevelPages().size(), 2);
     }
 
@@ -211,17 +269,20 @@ private Q_SLOTS:
 
         // Round-trip through both the C++ Entry accessor and the
         // QML-facing QVariantMap. Both must surface the flag —
-        // Sidebar.qml reads via pageData() / childPagesData().
+        // The QML serialization contract, exercised here because no in-tree
+        // consumer calls these two any more (see the header).
         QVERIFY(reg.entry(QStringLiteral("p1")).hasDividerAfter);
         QCOMPARE(reg.pageData(QStringLiteral("p1")).value(QStringLiteral("hasDividerAfter")).toBool(), true);
     }
 
     void allPagesDataReturnsFlatList()
     {
-        // allPagesData feeds the lib's apply-on-close failure toast
-        // (SettingsAppWindow.collectDirtyPageIds) — must enumerate
-        // every registered page in insertion order so consumers can
-        // iterate without first walking topLevel + child layers.
+        // allPagesData is a retained, out-of-tree-only exported accessor now
+        // (the in-tree apply-on-close toast builds from
+        // ApplicationController::dirtyPageIds()). This still guards its
+        // serialization contract: it must enumerate every registered page in
+        // insertion order so consumers can iterate without first walking
+        // topLevel + child layers.
         PageRegistry reg;
         auto* a = new StubPage(QStringLiteral("a"), &reg);
         auto* b = new StubPage(QStringLiteral("a.b"), &reg);
@@ -239,9 +300,11 @@ private Q_SLOTS:
 
     void qmlAccessorsCoverEverything()
     {
-        // topLevelPagesData / childPagesData / pageData are the three
-        // Q_INVOKABLE accessors Sidebar.qml + Breadcrumbs.qml drive
-        // their Repeaters from. They must surface every entry field.
+        // The QML serialization contract for all three Q_INVOKABLE
+        // accessors. pageData is live (PageHost.qml); topLevelPagesData
+        // and childPagesData are retained API with no in-tree consumer
+        // (see the header), so this test is what keeps their key set
+        // from rotting. They must surface every entry field.
         PageRegistry reg;
         auto* p = new StubPage(QStringLiteral("p"), &reg);
         auto* c = new StubPage(QStringLiteral("p.c"), &reg);
@@ -262,6 +325,407 @@ private Q_SLOTS:
         QCOMPARE(leaf.value(QStringLiteral("isCollapsible")).toBool(), true);
         QCOMPARE(leaf.value(QStringLiteral("hasDividerAfter")).toBool(), true);
         QCOMPARE(leaf.value(QStringLiteral("hasQmlSource")).toBool(), true);
+    }
+
+    void parentIdOfAnswersAllThreeShapes()
+    {
+        // parentIdOf is the one-field read that replaced copying a whole Entry
+        // per hop in the upward parent walk. Its two empty-string cases —
+        // unknown id, and a top-level page — are indistinguishable by return
+        // value, so both have to be named here or neither is pinned.
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+
+        QCOMPARE(reg.parentIdOf(QStringLiteral("cat.deep")), QStringLiteral("cat"));
+
+        // Assert existence first: a bare QCOMPARE against an empty string
+        // would also pass on a fixture where the page was never registered.
+        QVERIFY(reg.hasPage(QStringLiteral("home")));
+        QCOMPARE(reg.parentIdOf(QStringLiteral("home")), QString());
+
+        QVERIFY(!reg.hasPage(QStringLiteral("no-such-page")));
+        QCOMPARE(reg.parentIdOf(QStringLiteral("no-such-page")), QString());
+    }
+
+    void allPagesRefTracksTheCatalogue()
+    {
+        // The by-reference catalogue walk must expose the same set allPages()
+        // deep-copies, and a re-fetched reference must see a page registered
+        // later (the header forbids holding one ACROSS a registration, not
+        // fetching a fresh one after).
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+        QCOMPARE(reg.allPagesRef().size(), reg.allPages().size());
+        const qsizetype before = reg.allPagesRef().size();
+
+        auto* late = new StubPage(QStringLiteral("late"), &reg);
+        QVERIFY(reg.registerPage(
+            {QStringLiteral("late"), {}, QStringLiteral("Late"), {}, QUrl(QStringLiteral("qrc:/Late.qml")), late}));
+        QCOMPARE(reg.allPagesRef().size(), before + 1);
+        QCOMPARE(reg.allPagesRef().last().id, QStringLiteral("late"));
+    }
+
+    void tierFilterFollowsShowAdvanced()
+    {
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+
+        // Registry default is show-everything-advanced: SimpleOnly hidden.
+        QVERIFY(reg.showAdvanced());
+        auto ids = [](const QVariantList& rows) {
+            QStringList out;
+            for (const auto& row : rows)
+                out << row.toMap().value(QStringLiteral("id")).toString();
+            return out;
+        };
+        QCOMPARE(ids(reg.topLevelPagesData()),
+                 (QStringList{QStringLiteral("home"), QStringLiteral("full"), QStringLiteral("cat")}));
+
+        QSignalSpy spy(&reg, &PageRegistry::showAdvancedChanged);
+        reg.setShowAdvanced(false);
+        QCOMPARE(spy.count(), 1);
+        // Simple mode: AdvancedOnly leaves drop out, the SimpleOnly leaf
+        // appears, and the category auto-hides because its only leaf is
+        // filtered (empty-virtual-category rule).
+        QCOMPARE(ids(reg.topLevelPagesData()), (QStringList{QStringLiteral("home"), QStringLiteral("easy")}));
+        QVERIFY(reg.childPagesData(QStringLiteral("cat")).isEmpty());
+        // Unchanged value must not re-emit.
+        reg.setShowAdvanced(false);
+        QCOMPARE(spy.count(), 1);
+        // The unfiltered accessors keep resolving hidden pages (a shown or
+        // dirty page must always resolve).
+        QVERIFY(!reg.pageData(QStringLiteral("full")).isEmpty());
+        QVERIFY(reg.controller(QStringLiteral("full")) != nullptr);
+    }
+
+    void pageAllowedInCurrentModeIsATierFilterOnly()
+    {
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+
+        reg.setShowAdvanced(false);
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("home")));
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("easy")));
+        QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("full")));
+        // Unknown ids express no opinion — existence is hasPage's job.
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("no-such-page")));
+
+        reg.setShowAdvanced(true);
+        QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("easy")));
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("full")));
+    }
+
+    void firstVisibleLeafFollowsMode()
+    {
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+
+        // Root search skips whatever the mode hides, in registration order.
+        reg.setShowAdvanced(true);
+        QCOMPARE(reg.firstVisibleLeafId(QString()), QStringLiteral("home"));
+        QCOMPARE(reg.firstVisibleLeafId(QStringLiteral("cat")), QStringLiteral("cat.deep"));
+
+        reg.setShowAdvanced(false);
+        // The category's only leaf is advanced-only: nothing to land on.
+        QCOMPARE(reg.firstVisibleLeafId(QStringLiteral("cat")), QString());
+        QCOMPARE(reg.firstVisibleLeafId(QString()), QStringLiteral("home"));
+    }
+
+    void counterpartIdIsStoredVerbatim()
+    {
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+        QCOMPARE(reg.entry(QStringLiteral("easy")).counterpartId, QStringLiteral("full"));
+        QCOMPARE(reg.entry(QStringLiteral("full")).counterpartId, QStringLiteral("easy"));
+        // Assert the page EXISTS before asserting its counterpart is empty:
+        // entry() returns a default-constructed Entry for an unknown id, so
+        // the bare QCOMPARE would also pass on a broken fixture.
+        QVERIFY(reg.hasPage(QStringLiteral("home")));
+        QCOMPARE(reg.entry(QStringLiteral("home")).counterpartId, QString());
+    }
+
+    void validateCounterpartsAcceptsAReciprocalPair()
+    {
+        // The fixture's easy ↔ full pair is reciprocal and opposite-tier,
+        // which is the shape every real counterpart declaration must have.
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+        QVERIFY(reg.validateCounterparts());
+    }
+
+    // Four of the six broken shapes; the other two have their own tests below
+    // (they need multi-entry fixtures that do not fit this block form).
+    //
+    // Each block trips ONE branch of validateCounterparts. The function
+    // returns a single bool for all six, so a QVERIFY(!ok) alone cannot tell
+    // which branch fired — a fixture usually trips several as collateral, and
+    // pass-6 mutation testing found two branches whose deletion left this
+    // green. QTest::ignoreMessage binds the assertion to the specific warning:
+    // it FAILS the test if the named message is not emitted, which is exactly
+    // the per-branch isolation the bool cannot give.
+    void validateCounterpartsRejectsFourBrokenShapes()
+    {
+        using PV = PageRegistry::PageVisibility;
+
+        // Counterpart names a page that was never registered. Nothing else in
+        // the stack checks this: the mode gate just falls back, so the typo is
+        // indistinguishable from correct operation without this warning.
+        {
+            PageRegistry reg;
+            auto* p = new StubPage(QStringLiteral("a"), &reg);
+            PageRegistry::Entry e{
+                QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p};
+            e.visibility = PV::SimpleOnly;
+            e.counterpartId = QStringLiteral("typo");
+            QVERIFY(reg.registerPage(std::move(e)));
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("which is not registered")));
+            QVERIFY(!reg.validateCounterparts());
+        }
+
+        // Self-reference: flipping mode would redirect to the page just hidden.
+        {
+            PageRegistry reg;
+            auto* p = new StubPage(QStringLiteral("a"), &reg);
+            PageRegistry::Entry e{
+                QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p};
+            e.visibility = PV::SimpleOnly;
+            e.counterpartId = QStringLiteral("a");
+            QVERIFY(reg.registerPage(std::move(e)));
+            QTest::ignoreMessage(QtWarningMsg,
+                                 QRegularExpression(QStringLiteral("declares itself as its own counterpart")));
+            QVERIFY(!reg.validateCounterparts());
+        }
+
+        // Same tier on both sides: the counterpart is hidden in exactly the
+        // mode the redirect is trying to escape to.
+        {
+            PageRegistry reg;
+            auto* p1 = new StubPage(QStringLiteral("a"), &reg);
+            PageRegistry::Entry e1{
+                QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p1};
+            e1.visibility = PV::SimpleOnly;
+            e1.counterpartId = QStringLiteral("b");
+            QVERIFY(reg.registerPage(std::move(e1)));
+
+            auto* p2 = new StubPage(QStringLiteral("b"), &reg);
+            PageRegistry::Entry e2{
+                QStringLiteral("b"), {}, QStringLiteral("B"), {}, QUrl(QStringLiteral("qrc:/B.qml")), p2};
+            e2.visibility = PV::SimpleOnly;
+            QVERIFY(reg.registerPage(std::move(e2)));
+
+            // `b` names nobody, so reciprocity fires too and is consumed
+            // first (it is checked before the tier block). Both must be named
+            // or ignoreMessage fails on the unconsumed one.
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("must point back at each other")));
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("share a visibility tier")));
+            QVERIFY(!reg.validateCounterparts());
+        }
+
+        // One-way declaration: `a` points at `b`, but `b` names nobody. The
+        // OUTBOUND flip off `a` redirects correctly, so this shape looks
+        // healthy from the side anyone would test by hand — it is the RETURN
+        // flip off `b` that silently lands on the app fallback instead of `a`.
+        {
+            PageRegistry reg;
+            auto* p1 = new StubPage(QStringLiteral("a"), &reg);
+            PageRegistry::Entry e1{
+                QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p1};
+            e1.visibility = PV::SimpleOnly;
+            e1.counterpartId = QStringLiteral("b");
+            QVERIFY(reg.registerPage(std::move(e1)));
+
+            auto* p2 = new StubPage(QStringLiteral("b"), &reg);
+            PageRegistry::Entry e2{
+                QStringLiteral("b"), {}, QStringLiteral("B"), {}, QUrl(QStringLiteral("qrc:/B.qml")), p2};
+            e2.visibility = PV::AdvancedOnly; // opposite tier, so only reciprocity is at fault
+            QVERIFY(reg.registerPage(std::move(e2)));
+
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("must point back at each other")));
+            QVERIFY(!reg.validateCounterparts());
+        }
+    }
+
+    void validateCounterpartsRejectsANonNavigableCounterpart()
+    {
+        // A counterpart with no QML of its own is a CATEGORY. The mode gate
+        // would redirect onto a page with no body — the same silent
+        // degradation the validator exists to catch, one level down.
+        using PV = PageRegistry::PageVisibility;
+        PageRegistry reg;
+        auto* p1 = new StubPage(QStringLiteral("a"), &reg);
+        PageRegistry::Entry e1{
+            QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p1};
+        e1.visibility = PV::SimpleOnly;
+        e1.counterpartId = QStringLiteral("cat");
+        QVERIFY(reg.registerPage(std::move(e1)));
+
+        auto* p2 = new StubPage(QStringLiteral("cat"), &reg);
+        // No qmlSource — a virtual category.
+        PageRegistry::Entry e2{QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}, QUrl(), p2};
+        e2.visibility = PV::AdvancedOnly;
+        e2.counterpartId = QStringLiteral("a");
+        QVERIFY(reg.registerPage(std::move(e2)));
+
+        // Bind to the branch, not just the bool — a future refactor that tripped
+        // a different branch would otherwise keep this green (see the four-shapes
+        // block).
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("is not navigable")));
+        QVERIFY(!reg.validateCounterparts());
+    }
+
+    void validateCounterpartsRejectsACounterpartHiddenByItsAncestor()
+    {
+        // Opposite tiers are necessary but NOT sufficient: a counterpart whose
+        // own tier is right but whose ANCESTOR the mode filters out is still
+        // unreachable, so the redirect falls back anyway. This is the branch
+        // that distinguishes the reachability walk from a plain tier compare.
+        using PV = PageRegistry::PageVisibility;
+        PageRegistry reg;
+        auto* p1 = new StubPage(QStringLiteral("a"), &reg);
+        PageRegistry::Entry e1{
+            QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), p1};
+        e1.visibility = PV::SimpleOnly;
+        e1.counterpartId = QStringLiteral("cat.leaf");
+        QVERIFY(reg.registerPage(std::move(e1)));
+
+        // Category hidden in the mode that hides `a` (advanced).
+        auto* pc = new StubPage(QStringLiteral("cat"), &reg);
+        PageRegistry::Entry cat{QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}, QUrl(), pc};
+        cat.visibility = PV::SimpleOnly;
+        QVERIFY(reg.registerPage(std::move(cat)));
+
+        auto* p2 = new StubPage(QStringLiteral("cat.leaf"), &reg);
+        PageRegistry::Entry e2{QStringLiteral("cat.leaf"),
+                               QStringLiteral("cat"),
+                               QStringLiteral("Leaf"),
+                               {},
+                               QUrl(QStringLiteral("qrc:/L.qml")),
+                               p2};
+        e2.visibility = PV::AdvancedOnly; // own tier is right...
+        e2.counterpartId = QStringLiteral("a");
+        QVERIFY(reg.registerPage(std::move(e2)));
+
+        // ...but its SimpleOnly parent hides it in advanced mode, which is the
+        // mode `a` disappears in. Pin the reachability branch specifically, so a
+        // refactor that trips a different branch can't leave this green.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("unreachable in the mode that hides")));
+        QVERIFY(!reg.validateCounterparts());
+    }
+
+    void reachabilityFailsClosedOnAnUnresolvableAncestorChain()
+    {
+        // pageAllowedInCurrentMode answers for search, keyboard next/prev and
+        // the mode gate. If it cannot verify a page's ancestry it must say
+        // "hidden": claiming visible would offer a row the rail cannot draw.
+        // The registry rejects unknown parents, so the only way to reach the
+        // guard is a chain deeper than the hop cap.
+        PageRegistry reg;
+        QString parent;
+        for (int i = 0; i < 40; ++i) {
+            const QString id = QStringLiteral("n%1").arg(i);
+            auto* p = new StubPage(id, &reg);
+            PageRegistry::Entry e{id, parent, id, {}, QUrl(QStringLiteral("qrc:/N.qml")), p};
+            QVERIFY(reg.registerPage(std::move(e)));
+            parent = id;
+        }
+        // Shallow entries still resolve normally.
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("n0")));
+        // Pin the BOUNDARY, not just a value either side of it: n31 is 31 hops
+        // from the root and still resolves, n32 is the first to exceed the
+        // 32-hop cap. Asserting only a far-past-the-cap id would stay green if
+        // the constant moved.
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("n31")));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("could not resolve the ancestor chain")));
+        QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("n32")));
+    }
+
+    void reachabilityFollowsTheAncestorChain()
+    {
+        // A page whose OWN tier passes but whose parent category is filtered
+        // out has no sidebar row and no drill path to it. Answering "allowed"
+        // for it would let search, keyboard next/prev and the mode gate land
+        // the user somewhere they cannot navigate back from.
+        using PV = PageRegistry::PageVisibility;
+        PageRegistry reg;
+
+        auto* cat = new StubPage(QStringLiteral("adv-cat"), &reg);
+        PageRegistry::Entry catEntry{QStringLiteral("adv-cat"), {}, QStringLiteral("Advanced"), {}, QUrl(), cat};
+        catEntry.visibility = PV::AdvancedOnly;
+        QVERIFY(reg.registerPage(std::move(catEntry)));
+
+        // Child is Always — its own tier passes in BOTH modes.
+        auto* leaf = new StubPage(QStringLiteral("adv-cat.leaf"), &reg);
+        QVERIFY(reg.registerPage({QStringLiteral("adv-cat.leaf"),
+                                  QStringLiteral("adv-cat"),
+                                  QStringLiteral("Leaf"),
+                                  {},
+                                  QUrl(QStringLiteral("qrc:/Leaf.qml")),
+                                  leaf}));
+
+        reg.setShowAdvanced(true);
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("adv-cat.leaf")));
+
+        reg.setShowAdvanced(false);
+        // Own tier still says Always; the hidden ancestor is what makes it
+        // unreachable. Before the ancestor walk this returned true.
+        QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("adv-cat.leaf")));
+    }
+
+    void setPageVisibilityReclassifiesLate()
+    {
+        // Registration-time declaration is the canonical path; this pins the
+        // late-reclassification escape hatch the API keeps for dynamic apps.
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+        reg.setShowAdvanced(false);
+        QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("full")));
+        reg.setPageVisibility(QStringLiteral("full"), PageRegistry::PageVisibility::Always);
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("full")));
+        // Unknown id: warn-and-ignore, no crash. The warning is the pinned
+        // half — ignoreMessage fails the test if it stops being emitted, so a
+        // silent swallow cannot pass here as "no crash".
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("setPageVisibility: unknown page id .*no-such-page")));
+        reg.setPageVisibility(QStringLiteral("no-such-page"), PageRegistry::PageVisibility::SimpleOnly);
+    }
+
+    void restampAnnouncesTheVisibleSetWithoutFakingAModeFlip()
+    {
+        // showAdvancedChanged is the showAdvanced Q_PROPERTY's NOTIFY, so it
+        // must fire ONLY for a real mode flip; a per-entry restamp announces
+        // itself on visibleSetChanged instead. Without the split, every
+        // binding on the property re-evaluates and any consumer reading it as
+        // "the user switched modes" acts on a change that never happened.
+        PageRegistry reg;
+        QVERIFY(buildTieredRegistry(reg));
+
+        QSignalSpy modeSpy(&reg, &PageRegistry::showAdvancedChanged);
+        QSignalSpy visibleSpy(&reg, &PageRegistry::visibleSetChanged);
+
+        // A genuine mode flip announces both: the property really did change,
+        // and so did the visible set.
+        reg.setShowAdvanced(false);
+        QCOMPARE(modeSpy.count(), 1);
+        QCOMPARE(visibleSpy.count(), 1);
+
+        // A restamp changes the visible set but NOT the mode.
+        reg.setPageVisibility(QStringLiteral("full"), PageRegistry::PageVisibility::Always);
+        QCOMPARE(modeSpy.count(), 1);
+        QCOMPARE(visibleSpy.count(), 2);
+
+        // Restamping to the tier it already has is a no-op — no spurious
+        // rebuild for consumers caching a filtered view.
+        reg.setPageVisibility(QStringLiteral("full"), PageRegistry::PageVisibility::Always);
+        QCOMPARE(visibleSpy.count(), 2);
+
+        // An unknown id is warn-and-ignore, not an announcement. Pinning the
+        // warning as well as the silence keeps both halves of that contract
+        // under test: the signal counts alone stay green if the warn is dropped.
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("setPageVisibility: unknown page id .*no-such-page")));
+        reg.setPageVisibility(QStringLiteral("no-such-page"), PageRegistry::PageVisibility::SimpleOnly);
+        QCOMPARE(modeSpy.count(), 1);
+        QCOMPARE(visibleSpy.count(), 2);
     }
 };
 

@@ -2,13 +2,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Static sidebar parent/child topology accessors for SettingsController:
-//   * parentPageRedirects()  — virtual-parent id → first-leaf id (D-Bus / CLI
-//     / Q_INVOKABLE page selection).
 //   * pageGroupChildren()    — parent id → set of leaf child ids (dirtiness
 //     propagation up collapsed categories).
 //   * pageOwnedConfigKeys()  — leaf id → (group, key) manifest (per-page
 //     Reset / Discard).
 //   * validPageNames()       — the set of navigable leaf page ids.
+//   * simplePageBackingPages() — condensed simple page id → the advanced leaf
+//     ids whose settings it re-hosts (dirty/reset delegation).
+//
+// Virtual-parent → leaf resolution and the simple/advanced tiering both
+// derive from the live PageRegistry now (resolveToLeaf in the sibling
+// _pagestate.cpp; per-page tiers declared at registration in
+// _pageregistration.cpp) — there is no static redirect table or simple-mode
+// allowlist to keep in sync.
 //
 // All methods here are members of PlasmaZones::SettingsController. Same class
 // as the sibling settingscontroller_pageregistration.cpp, separate translation
@@ -17,6 +23,9 @@
 #include "settingscontroller.h"
 
 #include "../config/configdefaults.h"
+#include "../core/logging.h"
+
+#include <PhosphorControl/PageRegistry.h>
 
 #include <QHash>
 #include <QSet>
@@ -25,64 +34,20 @@
 
 namespace PlasmaZones {
 
-const QHash<QString, QString>& SettingsController::parentPageRedirects()
-{
-    // Parent sidebar categories have no QML component — resolve them to their
-    // first child so D-Bus / CLI / Q_INVOKABLE callers get a sensible result.
-    // Includes both top-level parents AND mid-level virtual parents
-    // (`animations-transitions`, `animations-motion`, `animations-library`) so
-    // any of those names passed via `--page` or D-Bus lands on a real leaf
-    // instead of triggering the generic "Unknown settings page" warning.
-    static const QHash<QString, QString> redirects{
-        {QStringLiteral("display"), QStringLiteral("virtualscreens")},
-        // "appearance" is the inline-collapsible parent of the Animations and
-        // Decoration trees; land on its first child's first leaf.
-        {QStringLiteral("appearance"), QStringLiteral("animations-general")},
-        // "placement" is the inline-collapsible parent of snapping/tiling; it
-        // has no page of its own, so a --page=placement / D-Bus call lands on
-        // the first leaf of its first child (snapping → snapping-overlay-behavior).
-        {QStringLiteral("placement"), QStringLiteral("snapping-overlay-behavior")},
-        {QStringLiteral("snapping"), QStringLiteral("snapping-overlay-behavior")},
-        // Tiling's first child is the Window category → its first leaf is Behavior.
-        {QStringLiteral("tiling"), QStringLiteral("tiling-behavior")},
-        {QStringLiteral("animations"), QStringLiteral("animations-general")},
-        {QStringLiteral("animations-transitions"), QStringLiteral("animations-windows")},
-        {QStringLiteral("animations-motion"), QStringLiteral("animations-window-motion")},
-        {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
-        {QStringLiteral("decorations"), QStringLiteral("window-appearance")},
-        {QStringLiteral("decorations-surfaces"), QStringLiteral("decorations-windows")},
-        {QStringLiteral("decorations-library"), QStringLiteral("decorations-sets")},
-        // The "rules" parent virtual retired when Rules promoted
-        // to a top-level entry; no redirect needed because there is no
-        // longer a parent id to land on.
-        // The *-cat virtual headers (registered as collapsible category
-        // entries in buildApplicationController() in the sibling
-        // _pageregistration.cpp) are real entries
-        // in the framework PageRegistry — without an explicit redirect,
-        // anything that drives setCurrentPageId("snapping-overlay-cat")
-        // would land on a page id that isn't in validPageNames() and
-        // m_activePage would diverge from m_app->currentPageId(). Map
-        // each *-cat to its first leaf so the active-page state stays
-        // coherent regardless of how the id was reached.
-        {QStringLiteral("snapping-overlay-cat"), QStringLiteral("snapping-overlay-behavior")},
-        {QStringLiteral("snapping-config-cat"), QStringLiteral("snapping-ordering")},
-        {QStringLiteral("tiling-config-cat"), QStringLiteral("tiling-ordering")},
-    };
-    return redirects;
-}
-
 const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
 {
     // Single source of truth: parent name → set of leaf child page
     // names. Used by `isPageDirty` to propagate dirty state from a
-    // leaf to any group it belongs to. Covers parents at every level:
-    // top-level categories (placement / display / animations) AND the
-    // mid-level virtual parents nested beneath them (snapping / tiling
-    // under placement; animations-transitions / animations-motion /
-    // animations-library; the *-cat headers) whose children don't share
-    // their name prefix — the
-    // explicit set sidesteps the asymmetry between prefix-walk and
-    // direct membership lookup.
+    // leaf to any group it belongs to. Covers parents at every level, fifteen
+    // in all. Top-level categories: placement, display, appearance. Mid-level
+    // virtual parents nested beneath them: snapping and tiling under placement;
+    // animations and decorations under appearance; animations-transitions,
+    // animations-motion and animations-library under animations;
+    // decorations-surfaces and decorations-library under decorations. Then the
+    // three *-cat collapsible headers (snapping-overlay-cat,
+    // snapping-config-cat, tiling-config-cat). Their children don't share their
+    // name prefix, so the explicit set sidesteps the asymmetry between a
+    // prefix-walk and a direct membership lookup.
     //
     // The "animations" entry is built at static-init by unioning the
     // virtual sub-buckets (`animations-transitions`, `animations-motion`,
@@ -110,7 +75,8 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kAnimationsLibraryChildren{QStringLiteral("animations-presets"),
                                                           QStringLiteral("animations-motionsets"),
                                                           QStringLiteral("animations-shaders")};
-    static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-general")};
+    static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-simple"),
+                                                         QStringLiteral("animations-general")};
     static const QSet<QString> kAnimationsAllLeaves = kAnimationsDirectChildren + kAnimationsTransitionsChildren
         + kAnimationsMotionChildren + kAnimationsLibraryChildren;
     // Decoration drill-down — Surfaces / Library sub-buckets, mirroring
@@ -147,6 +113,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // category split) — folded directly into the parent sets below. The window
     // border / title-bar appearance moved to the shared top-level Window
     // Appearance page, so Snapping → Window is just the Behavior leaf now.
+    static const QString kSnappingSimple = QStringLiteral("snapping-simple");
     static const QString kSnappingZoneSelector = QStringLiteral("snapping-zoneselector");
     static const QString kSnappingWindowBehavior = QStringLiteral("snapping-window-behavior");
     static const QSet<QString> kSnappingConfigChildren{
@@ -155,11 +122,12 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("snapping-shaders"),
     };
     static const QSet<QString> kSnappingAllLeaves = kSnappingOverlayChildren
-        + QSet<QString>{kSnappingZoneSelector, kSnappingWindowBehavior} + kSnappingConfigChildren;
+        + QSet<QString>{kSnappingSimple, kSnappingZoneSelector, kSnappingWindowBehavior} + kSnappingConfigChildren;
     // Window (Behavior) and Algorithm are standalone top leaves under "tiling"
     // (no category), so they fold directly into the tiling/placement parent
     // sets below. The window border / title-bar appearance moved to the shared
     // top-level Window Appearance page.
+    static const QString kTilingSimple = QStringLiteral("tiling-simple");
     static const QString kTilingBehavior = QStringLiteral("tiling-behavior");
     static const QString kTilingAlgorithm = QStringLiteral("tiling-algorithm");
     static const QSet<QString> kTilingConfigChildren{
@@ -167,7 +135,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("tiling-shortcuts"),
     };
     static const QSet<QString> kTilingAllLeaves =
-        QSet<QString>{kTilingBehavior, kTilingAlgorithm} + kTilingConfigChildren;
+        QSet<QString>{kTilingSimple, kTilingBehavior, kTilingAlgorithm} + kTilingConfigChildren;
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
@@ -230,7 +198,11 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // revert through their own machinery (the special-case branches in
     // reset/discardPage), not because Reset/Discard is unsupported —
     // pageSupportsReset returns true for everything except the read/browse pages
-    // with no revertible config state. The Windows appearance page IS
+    // with no revertible config state. The condensed SimpleOnly pages
+    // (tiling-simple / snapping-simple) are also deliberately absent: they
+    // surface keys OWNED by their backing advanced pages, so listing them here
+    // would break the one-owner invariant — their dirty/Reset/Discard delegate
+    // through simplePageBackingPages() instead. The Windows appearance page IS
     // config-backed (Windows.* + Gaps.*), so it lists its owned keys here.
     using CD = ConfigDefaults;
     static const QHash<QString, Settings::ConfigKeyList> manifest{
@@ -424,6 +396,56 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     return manifest;
 }
 
+const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
+{
+    // The condensed SimpleOnly pages host cards whose config keys are owned
+    // by the advanced pages listed here. snapping-simple surfaces the drag
+    // triggers and the zone-span card from Overlay → Behavior, plus Snap
+    // Assist, the whole window-handling card and focus from Window →
+    // Behavior. tiling-simple surfaces the algorithm picker and its
+    // per-algorithm slots from Algorithm, plus the whole window-handling
+    // card (placement, drag and overflow behaviour, sticky handling, smart
+    // gaps, restore-on-login) and focus from Window. They deliberately have NO pageOwnedConfigKeys
+    // entry — the one-owner invariant there forbids listing a key twice —
+    // so dirtiness, Reset, and Discard delegate through this map instead.
+    // animations-simple is absent: it rides the shared animation staging
+    // domain like every other animation leaf.
+    //
+    // INVARIANT — this map must be ACYCLIC, one level deep: no backing VALUE
+    // may itself be a backing KEY. resetPage and discardPage delegate a simple
+    // page to its backing pages by recursing on themselves, so a value that is
+    // also a key would recurse forever and blow the stack. The values are
+    // advanced leaves and the keys are condensed simple pages, which is why
+    // the two sets are disjoint today, but nothing about the declaration
+    // enforces that on its own.
+    static const QHash<QString, QStringList> backing{
+        {QStringLiteral("snapping-simple"),
+         {QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-window-behavior")}},
+        {QStringLiteral("tiling-simple"), {QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm")}},
+    };
+    // Checked once at first call, in debug AND release: the assert names the
+    // offending page for a developer, and resetPage / discardPage additionally
+    // skip any such value so a release build breaks the recursion instead of
+    // overflowing the stack.
+    static const bool acyclic = [] {
+        for (auto it = backing.constBegin(); it != backing.constEnd(); ++it) {
+            for (const QString& value : it.value()) {
+                if (backing.contains(value)) {
+                    qCWarning(PlasmaZones::lcCore)
+                        << "simplePageBackingPages: backing page" << value << "of" << it.key()
+                        << "is itself a backing key — the delegation recursion would not terminate";
+                    return false;
+                }
+            }
+        }
+        return true;
+    }();
+    Q_ASSERT_X(acyclic, "SettingsController::simplePageBackingPages",
+               "A backing page is itself a backing key; the Reset/Discard delegation would recurse forever.");
+    Q_UNUSED(acyclic)
+    return backing;
+}
+
 const QSet<QString>& SettingsController::validPageNames()
 {
     // Keep in sync with the `regPage` / `regVirtual` registrations in
@@ -437,12 +459,14 @@ const QSet<QString>& SettingsController::validPageNames()
     static const QSet<QString> pages{
         QStringLiteral("overview"),
         QStringLiteral("layouts"),
+        QStringLiteral("snapping-simple"),
         QStringLiteral("snapping-overlay-behavior"),
         QStringLiteral("snapping-overlay-appearance"),
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-window-behavior"),
         QStringLiteral("snapping-shaders"),
         QStringLiteral("snapping-shortcuts"),
+        QStringLiteral("tiling-simple"),
         QStringLiteral("tiling-behavior"),
         QStringLiteral("tiling-algorithm"),
         QStringLiteral("tiling-shortcuts"),
@@ -460,6 +484,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("general"),
         QStringLiteral("about"),
         QStringLiteral("virtualscreens"),
+        QStringLiteral("animations-simple"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),
         QStringLiteral("animations-osds"),
@@ -475,6 +500,77 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("animations-shaders"),
     };
     return pages;
+}
+
+namespace {
+
+// Visible pages under `parentId` that the rail can render as a row of their
+// own (a non-empty qmlSource), counted only up to `limit` so the caller can ask
+// "more than one?" without walking a whole subtree.
+int visibleNavigableCount(const PhosphorControl::PageRegistry& registry, const QString& parentId, int limit,
+                          int depth = 0)
+{
+    // The real tree is four levels deep at most; 8 is deliberate slack (2x) so
+    // the bound never trips on a valid registry and only makes a malformed or
+    // cyclic one terminate instead of spinning.
+    if (depth > 8) {
+        return limit;
+    }
+    int n = 0;
+    const auto children = registry.visibleChildPages(parentId);
+    for (const PhosphorControl::PageRegistry::Entry& child : children) {
+        if (!child.qmlSource.isEmpty()) {
+            ++n;
+        }
+        if (n >= limit) {
+            return n;
+        }
+        n += visibleNavigableCount(registry, child.id, limit - n, depth + 1);
+        if (n >= limit) {
+            return n;
+        }
+    }
+    return n;
+}
+
+} // namespace
+
+QString SettingsController::activeDirtyScope() const
+{
+    return dirtyScopeFor(m_activePage);
+}
+
+QString SettingsController::dirtyScopeFor(const QString& pageId) const
+{
+    if (m_app == nullptr || m_app->registry() == nullptr || !m_app->registry()->hasPage(pageId)) {
+        return pageId;
+    }
+    const PhosphorControl::PageRegistry& registry = *m_app->registry();
+    // Only a CONDENSED surface hoists. A page that exists in both modes speaks
+    // for itself in both, so widening its scope would badge it for edits it
+    // cannot show and its own Reset/Discard cannot reach — which is the defect
+    // this function exists to remove, not to relocate. `layouts` is the case
+    // that proves it: in simple mode it is the only visible row under
+    // `display` (virtualscreens is AdvancedOnly), so an ungated walk would
+    // badge Layouts for staged virtual-screen edits it has no control over.
+    if (registry.entry(pageId).visibility != PhosphorControl::PageRegistry::PageVisibility::SimpleOnly) {
+        return pageId;
+    }
+    QString scope = pageId;
+    for (int hop = 0; hop < 8; ++hop) {
+        const QString parent = registry.parentIdOf(scope);
+        // Only ids pageGroupChildren knows aggregate a subtree. isPageDirty and
+        // discardPage both dispatch on that map, so stopping here keeps the
+        // scope to something they can actually act on.
+        if (parent.isEmpty() || !pageGroupChildren().contains(parent)) {
+            break;
+        }
+        if (visibleNavigableCount(registry, parent, 2) != 1) {
+            break;
+        }
+        scope = parent;
+    }
+    return scope;
 }
 
 } // namespace PlasmaZones

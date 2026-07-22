@@ -63,21 +63,35 @@ Item {
     // callLater so the subtree is attached before the parent-chain walk; mirrors
     // RuleSectionList's per-row registration. No-op when hosted outside a
     // SettingsFlickable (pageFor returns null).
+    // The key this delegate registered under, captured at registration time.
+    // Deregistration must NOT re-read modelData: during a model reset the
+    // delegate's modelData detaches before Component.onDestruction runs, so a
+    // guard on it skips the unregister entirely and leaves the page's anchor
+    // map pointing at a destroyed Item — the same leak the guard was meant to
+    // prevent. Caching the id makes the two halves symmetric by construction.
+    property string _anchorId: ""
+
     Component.onCompleted: Qt.callLater(function () {
         // The coalesced callback can fire after this delegate has been
         // destroyed (model churn during fast filtering/reloads); the dying
         // context resolves ids to undefined/null. Bail before dereferencing
         // rather than throwing — same guard as LayoutComboBox._doRebuild.
-        if (typeof root === "undefined" || !root)
+        if (typeof root === "undefined" || !root || !root.modelData)
+            return;
+        var pg = SearchAnchors.pageFor(root);
+        if (pg) {
+            root._anchorId = "layout:" + root.modelData.id;
+            pg.registerSearchAnchor(root._anchorId, root);
+        }
+    })
+    Component.onDestruction: {
+        // Empty means registration never happened (no hosting page, or the
+        // delegate died before the callLater ran), so there is nothing to shed.
+        if (root._anchorId.length === 0)
             return;
         var pg = SearchAnchors.pageFor(root);
         if (pg)
-            pg.registerSearchAnchor("layout:" + root.modelData.id, root, SearchAnchors.cardFor(root));
-    })
-    Component.onDestruction: {
-        var pg = SearchAnchors.pageFor(root);
-        if (pg)
-            pg.unregisterSearchAnchor("layout:" + root.modelData.id);
+            pg.unregisterSearchAnchor(root._anchorId, root);
     }
 
     Accessible.name: modelData.displayName || i18n("Unnamed Layout")
@@ -338,7 +352,7 @@ Item {
                                 return i18n("Auto-assign is forced on for all layouts by the global setting (Snapping → Behavior → Window Handling). Turn that off to control this layout individually.");
 
                             if (perLayoutAuto)
-                                return i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.");
+                                return i18n("Auto-assign is on, so new windows fill empty zones. Click to disable.");
 
                             return i18n("Click to auto-assign new windows to empty zones");
                         }

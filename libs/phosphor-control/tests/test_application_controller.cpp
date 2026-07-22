@@ -14,6 +14,7 @@
 
 using PhosphorControl::ApplicationController;
 using PhosphorControl::PageController;
+using PhosphorControl::PageRegistry;
 using PhosphorControl::StagingDomain;
 
 // A named namespace (not anonymous) so these helpers have external
@@ -179,6 +180,32 @@ class TestApplicationController : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void dirtyPageIdsListsOnlyDirtyControllers()
+    {
+        // The QML close flow reads this to name the pages that refused their
+        // commit. It used to be a QML walk calling ctrl.isDirty(), which is
+        // NOT Q_INVOKABLE (StagingDomain exposes it only via the `dirty`
+        // property), so it threw on the first controller and the
+        // applyOnCloseFailed emit never happened. The lib has no QML test
+        // harness, so nothing caught it — hence this test on the C++ side.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* b = new StubPage(QStringLiteral("b"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        app.registerPage(b, {}, QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+
+        QVERIFY(app.dirtyPageIds().isEmpty());
+
+        b->setDirty(true);
+        QCOMPARE(app.dirtyPageIds(), QStringList{QStringLiteral("b")});
+
+        a->setDirty(true);
+        QCOMPARE(app.dirtyPageIds(), (QStringList{QStringLiteral("a"), QStringLiteral("b")}));
+
+        b->setDirty(false);
+        QCOMPARE(app.dirtyPageIds(), QStringList{QStringLiteral("a")});
+    }
+
     void startsClean()
     {
         ApplicationController app;
@@ -327,10 +354,16 @@ private Q_SLOTS:
         ApplicationController app;
         app.registerPage(new StubPage(QStringLiteral("a")), {}, QStringLiteral("A"), QUrl());
 
+        // Pin the no-op via the emit, not the return value: an empty anchor
+        // stored (guard removed) would still make takePendingAnchor return "",
+        // so .isEmpty() alone cannot tell rejection from an empty store. A
+        // rejecting setPendingAnchor never reaches its pendingAnchorChanged emit.
+        QSignalSpy spy(&app, &ApplicationController::pendingAnchorChanged);
         app.setPendingAnchor(QStringLiteral("a"), QString()); // empty anchor → no-op
         QVERIFY(app.takePendingAnchor(QStringLiteral("a")).isEmpty());
         app.setPendingAnchor(QString(), QStringLiteral("x")); // empty page → no-op
         QVERIFY(app.takePendingAnchor(QString()).isEmpty());
+        QCOMPARE(spy.count(), 0);
     }
 
     void registryIsAccessibleViaProperty()
@@ -376,6 +409,68 @@ private Q_SLOTS:
         QCOMPARE(app.currentPageId(), QStringLiteral("b"));
         QCOMPARE(app.gotoNextPage(), QStringLiteral("c"));
         QCOMPARE(app.gotoNextPage(), QStringLiteral("a")); // wraps
+    }
+
+    void gotoNextSkipsModeHiddenPages()
+    {
+        // Keyboard next/prev honours the same simple/advanced filter as the
+        // sidebar. Without it the walk steps onto a page the rail hides, which
+        // the user cannot get back to by the same route they arrived.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* adv = new StubPage(QStringLiteral("adv"));
+        auto* b = new StubPage(QStringLiteral("b"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        app.registerPage(adv, {}, QStringLiteral("Adv"), QUrl(QStringLiteral("qrc:/Adv.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+        app.registerPage(b, {}, QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+
+        // Advanced mode (the registry default): the advanced page is a normal
+        // stop on the walk.
+        app.setCurrentPageId(QStringLiteral("a"));
+        QCOMPARE(app.gotoNextPage(), QStringLiteral("adv"));
+
+        // Simple mode: the same step jumps straight over it.
+        app.registry()->setShowAdvanced(false);
+        app.setCurrentPageId(QStringLiteral("a"));
+        QCOMPARE(app.gotoNextPage(), QStringLiteral("b"));
+    }
+
+    void gotoNextKeepsAModeHiddenCurrentPageInTheWalk()
+    {
+        // The current page is deliberately kept in the navigable list even
+        // when the active tier filters it (a transient state during a mode
+        // flip), so the cursor keeps its position instead of collapsing to
+        // "not found" and restarting the walk from the top.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* adv = new StubPage(QStringLiteral("adv"));
+        auto* b = new StubPage(QStringLiteral("b"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        app.registerPage(adv, {}, QStringLiteral("Adv"), QUrl(QStringLiteral("qrc:/Adv.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+        app.registerPage(b, {}, QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+
+        app.registry()->setShowAdvanced(false);
+        app.setCurrentPageId(QStringLiteral("adv"));
+        // Held its slot between "a" and "b": forward lands on "b", not back on
+        // "a" (which is where a lost cursor would restart).
+        QCOMPARE(app.gotoNextPage(), QStringLiteral("b"));
+
+        // Same from the other direction, on a fresh controller so this is not
+        // reading the state the step above left behind.
+        ApplicationController back;
+        auto* a2 = new StubPage(QStringLiteral("a"));
+        auto* adv2 = new StubPage(QStringLiteral("adv"));
+        auto* b2 = new StubPage(QStringLiteral("b"));
+        back.registerPage(a2, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        back.registerPage(adv2, {}, QStringLiteral("Adv"), QUrl(QStringLiteral("qrc:/Adv.qml")), QString(), false,
+                          false, PageRegistry::PageVisibility::AdvancedOnly);
+        back.registerPage(b2, {}, QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+
+        back.registry()->setShowAdvanced(false);
+        back.setCurrentPageId(QStringLiteral("adv"));
+        QCOMPARE(back.gotoPreviousPage(), QStringLiteral("a"));
     }
 
     void gotoPreviousWrapsBackward()
@@ -812,10 +907,21 @@ private Q_SLOTS:
         QVERIFY(!app.isDiscarding());
         QVERIFY(app.isApplying());
 
+        // A second page that is STILL DIRTY at the refused-sync moment, so the
+        // refusal is observable. `a` was already cleaned by the in-flight async
+        // apply, so its applyCount can't move regardless; `b` is registered clean
+        // (the async batch dispatched above snapshotted only `a`) and dirtied
+        // here. If the sync-reentry guard were removed, applyAll would iterate the
+        // dirty set and apply `b` — the guard makes it bail whole instead.
+        auto* b = new StubPage(QStringLiteral("b"));
+        app.registerPage(b, {}, QStringLiteral("B"), QUrl());
+        b->setDirty(true);
+
         // Same in reverse: sync applyAll while apply is in flight
         // should refuse without crashing.
         app.applyAll(); // refused, no-op
         QVERIFY(app.isApplying());
+        QCOMPARE(b->applyCount, 0); // refusal pinned: the guard bailed before applying b
 
         // Let the timeout fire so the test cleans up.
         QVERIFY(applyCompleteSpy.wait(2000));

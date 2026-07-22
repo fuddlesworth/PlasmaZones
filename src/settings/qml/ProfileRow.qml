@@ -56,16 +56,31 @@ ExpandableRowDelegate {
     // rule and layout rows register theirs (ReorderableColumn's anchorPrefix).
     // callLater because the row is not yet parented into the page when
     // Component.onCompleted runs, and pageFor walks the parent chain.
+    // The key this row registered under, captured at registration time.
+    // profileId reads modelData.id, and during a model reset modelData detaches
+    // before Component.onDestruction runs — reading it there throws a TypeError
+    // that aborts the handler and leaks the registration, leaving the page's
+    // anchor map pointing at a destroyed row. Same cached-id shape as
+    // LayoutGridDelegate.
+    property string _anchorId: ""
+
     Component.onCompleted: Qt.callLater(function () {
+        if (typeof row === "undefined" || !row || !row.modelData)
+            return;
         const page = SearchAnchors.pageFor(row);
-        if (page)
-            page.registerSearchAnchor("profile:" + row.profileId, row, SearchAnchors.cardFor(row));
+        if (page) {
+            row._anchorId = "profile:" + row.profileId;
+            page.registerSearchAnchor(row._anchorId, row);
+        }
     })
 
     Component.onDestruction: {
+        // Empty means registration never happened, so there is nothing to shed.
+        if (row._anchorId.length === 0)
+            return;
         const page = SearchAnchors.pageFor(row);
         if (page)
-            page.unregisterSearchAnchor("profile:" + row.profileId);
+            page.unregisterSearchAnchor(row._anchorId, row);
     }
 
     // Depth indent: a leading guide so nesting reads at a glance.

@@ -9,8 +9,10 @@ function(phosphorcontrol_add_test name)
     # links Qt6::Gui in its INTERFACE) AND by Qt6::Quick via the
     # lib's QML target chain, so we don't need it explicitly. The
     # tests run under QT_QPA_PLATFORM=offscreen so the platform
-    # plugin loads without a display, but no test creates a
-    # QGuiApplication — they're all QObject-based fixtures.
+    # plugin loads without a display. QTEST_MAIN builds a QGuiApplication
+    # here (Gui is linked, so it is the QT_GUI_LIB variant), which is
+    # exactly why a platform plugin is needed; no test creates its own
+    # application object or touches widgets.
     target_link_libraries(${name}
         PRIVATE
             PhosphorControl::PhosphorControl
@@ -34,3 +36,4 @@ phosphorcontrol_add_test(test_localized_context)
 phosphorcontrol_add_test(test_dbus_bridge)
 phosphorcontrol_add_test(test_search_ranker)
 phosphorcontrol_add_test(test_search_controller)
+phosphorcontrol_add_test(test_sidebar_rows)

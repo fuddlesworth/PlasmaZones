@@ -20,8 +20,6 @@ import org.phosphor.control
  * independent.
  */
 RowLayout {
-    //* Ordered ancestors → current. Each entry is a page-data dict.
-
     id: root
 
     required property ApplicationController controller
@@ -31,25 +29,59 @@ RowLayout {
      *  middle ellipsis so both ends (parent context + leaf name) stay
      *  readable. Consumers can override for tighter or wider chrome. */
     property real maxSegmentWidth: Kirigami.Units.gridUnit * 20
-    //  Cycle guard EXTENDS ApplicationController::parentChainFor's
-    //  kMaxParentChainHops with a seen-set: the C++ guard catches an
-    //  N-hop cycle after 32 hops + warns; the QML guard breaks on
-    //  first repeat. A misregistered page with `parentId == own id`
+    /** Mirror of Sidebar.flattenTree: when the rail renders the page tree
+     *  as one flat list, a deep parent-chain crumb trail contradicts it
+     *  (the user never navigated through those levels). In flat mode the
+     *  trail is just the current page, using the same title override map
+     *  the flat rail applies. */
+    property bool flattenTree: false
+    /** Flat-mode display-title overrides, page id → title (see
+     *  Sidebar.flatTitleOverrides). Consulted only while flattenTree. */
+    property var flatTitleOverrides: ({})
+    //  Cycle guard EXTENDS PageRegistry::MaxParentChainHops (which
+    //  ApplicationController::parentChainFor walks against) with a seen-set:
+    //  the C++ guard catches an N-hop cycle after that many hops + warns; the
+    //  QML guard breaks on first repeat. A misregistered page with `parentId == own id`
     //  (or two pages mutually parenting each other) would otherwise
     //  freeze the UI thread on first render.
-    readonly property int _maxParentChainHops: 32
-    // Bumped whenever the registry emits pageRegistered — gives the
+    //  Bound to the C++ constant rather than re-typing 32 here, so a change to
+    //  the cap cannot leave this walk truncating chains the C++ side accepts.
+    readonly property int _maxParentChainHops: root.controller.registry.maxParentChainHops
+    // Bumped whenever the registry emits pageRegistered or visibleSetChanged
+    // — gives the
     // `segments` binding below a dependency to track so a late-registered
     // page whose id matches `currentPageId` (or any ancestor on the
-    // chain) refreshes the rendered crumb trail. Without this, the
-    // binding only re-evaluates when `currentPageId` changes and a
-    // post-registration ancestor title update would never reach QML.
+    // chain) refreshes the rendered crumb trail, and so a per-entry
+    // setPageVisibility restamp reaches the `targetId` binding, which walks
+    // the tier-filtered tree. Without this, the bindings only re-evaluate
+    // when `currentPageId` changes and a post-registration ancestor title
+    // update would never reach QML.
     property int _registryTick: 0
+
+    // Flat-title resolution shared with the rail. Holds no state of its own —
+    // it exists purely so flatPageData() has a registry to look through.
+    SidebarRows {
+        id: titleResolver
+
+        registry: root.controller.registry
+    }
+
+    //* Ordered ancestors → current. Each entry is a page-data dict.
     readonly property var segments: {
         // Touch _registryTick so the binding declares its dependency on
         // post-registration updates. The value isn't read meaningfully
         // — it's the change-notify that matters.
         void root._registryTick;
+        if (root.flattenTree) {
+            // Resolved through the SAME C++ the flat rail uses, so the crumb
+            // and the row it names can never disagree. Re-implementing the
+            // override lookup here in JS meant two copies of one rule, and the
+            // copy the lib cannot unit-test (no QML harness) was this one.
+            const leaf = titleResolver.flatPageData(root.controller.currentPageId, root.flatTitleOverrides);
+            if (!leaf || !leaf.id)
+                return [];
+            return [leaf];
+        }
         const out = [];
         // Object.create(null) gives a prototype-less map, so page ids
         // matching built-in property names ("constructor", "toString",
@@ -76,12 +108,48 @@ RowLayout {
 
     spacing: Kirigami.Units.smallSpacing
 
+    function _bumpRegistryTick() {
+        root._registryTick = root._registryTick + 1;
+    }
+
     Connections {
+        // Coalesced, matching the rail: startup fires one registerPage per
+        // page (~55), and `segments` returns a FRESH array each evaluation, so
+        // an uncoalesced bump tears down and rebuilds every crumb delegate —
+        // including its recursive firstVisibleLeafId binding — once per
+        // registration. Qt.callLater collapses the batch into one rebuild.
         function onPageRegistered() {
-            root._registryTick = root._registryTick + 1;
+            Qt.callLater(root._bumpRegistryTick);
+        }
+        // firstVisibleLeafId walks the TIER-FILTERED tree, so an ancestor
+        // crumb's target changes when the visible set changes, not only when a
+        // page is registered. The live producer is the simple/advanced master
+        // flip (setShowAdvanced); a per-entry setPageVisibility restamp reaches
+        // the same signal, so lib consumers driving visibility that way are
+        // covered too. Without this, targetId keeps pointing at a leaf the
+        // current mode hides. Discrete event, not a batch — bumped
+        // synchronously.
+        function onVisibleSetChanged() {
+            root._bumpRegistryTick();
         }
 
         target: root.controller.registry
+    }
+
+    // Covers a consumer assigning or rebinding `Breadcrumbs.controller` after
+    // this component is built, which swaps the registry underneath
+    // `titleResolver`. `_maxParentChainHops` is a property binding and
+    // re-evaluates on its own, but `segments` reads flatPageData(), a
+    // Q_INVOKABLE that registers no dependency, so without this bump the trail
+    // stays resolved against the old registry. Mirrors the rail's own
+    // registry-swap hook in Sidebar.qml. Coalesced for the same reason the
+    // pageRegistered bump is.
+    Connections {
+        function onRegistryChanged() {
+            Qt.callLater(root._bumpRegistryTick);
+        }
+
+        target: titleResolver
     }
 
     Repeater {
@@ -93,7 +161,25 @@ RowLayout {
             required property int index
             required property var modelData
             readonly property bool isLast: index === root.segments.length - 1
-            readonly property bool clickable: !isLast
+            // Where this crumb actually navigates. An ancestor crumb is
+            // frequently a virtual category with no page of its own (registered
+            // with an empty qmlSource); assigning its id to currentPageId
+            // passes the registry's hasPage() check and then renders an empty
+            // body, so route those to the category's first visible leaf
+            // instead. Empty when the segment is the current page, or when a
+            // category has no visible leaf under it in the current mode — those
+            // stay inert rather than navigating into a blank viewport.
+            readonly property string targetId: {
+                // Same invalidation dependency as `segments`: firstVisibleLeafId
+                // is a Q_INVOKABLE and registers none of its own.
+                void root._registryTick;
+                if (isLast)
+                    return "";
+                if (modelData.hasQmlSource)
+                    return modelData.id;
+                return root.controller.registry.firstVisibleLeafId(modelData.id);
+            }
+            readonly property bool clickable: targetId.length > 0
 
             spacing: Kirigami.Units.smallSpacing
 
@@ -114,14 +200,11 @@ RowLayout {
                 // blocks and any future change had to be made thrice.
                 function _activate() {
                     if (segmentRow.clickable)
-                        root.controller.currentPageId = segmentRow.modelData.id;
+                        root.controller.currentPageId = segmentRow.targetId;
                 }
 
-                // Long localised crumbs (e.g. "Mostrar configuración
-                // avanzada de personalización") would otherwise overflow the
-                // breadcrumb bar — clamp to the consumer-controllable
-                // maxSegmentWidth budget and elide with a middle ellipsis so
-                // both ends (parent context + leaf name) stay readable.
+                // Clamped to the maxSegmentWidth budget, see its docstring on
+                // root for why.
                 Layout.preferredWidth: Math.min(segmentLabel.implicitWidth, root.maxSegmentWidth)
                 Layout.preferredHeight: segmentLabel.implicitHeight
                 activeFocusOnTab: segmentRow.clickable
@@ -153,6 +236,10 @@ RowLayout {
                     id: segmentLabel
 
                     anchors.fill: parent
+                    // The wrapper Item supplies Accessible.name/role for the
+                    // crumb; leaving this Label in the tree makes a screen
+                    // reader announce each crumb twice.
+                    Accessible.ignored: true
                     text: segmentRow.modelData.title
                     elide: Text.ElideMiddle
                     opacity: segmentRow.clickable && (segmentMouse.containsMouse || segmentItem.activeFocus) ? 0.8 : 0.5
@@ -166,7 +253,7 @@ RowLayout {
                     hoverEnabled: segmentRow.clickable
                     enabled: segmentRow.clickable
                     cursorShape: segmentRow.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: root.controller.currentPageId = segmentRow.modelData.id
+                    onClicked: segmentItem._activate()
                 }
             }
 
@@ -178,6 +265,9 @@ RowLayout {
                 // freedesktop icon theme.
                 text: "›"
                 opacity: 0.5
+                // Decorative: a screen reader should read the crumbs, not
+                // the glyph between them.
+                Accessible.ignored: true
             }
         }
     }

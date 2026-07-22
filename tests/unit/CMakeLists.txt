@@ -950,7 +950,13 @@ set(_animations_ctrl_SRCS
 # plasmazones-settings executable, not plasmazones_core).
 add_executable(test_animations_page_controller
     settings/test_animations_page_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationpagescope.cpp
     ${_animations_ctrl_SRCS}
+)
+# simpleScopeCoversEverySimplePageCard reads AnimationsSimplePage.qml from the
+# source tree to prove the C++ scope roots still cover every card the page hosts.
+target_compile_definitions(test_animations_page_controller
+    PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\""
 )
 target_link_libraries(test_animations_page_controller
     PRIVATE
@@ -1271,6 +1277,7 @@ add_executable(test_decoration_page_scope
     settings/test_decoration_page_scope.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/decorationpagescope.cpp
 )
+
 target_include_directories(test_decoration_page_scope PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_decoration_page_scope
     PRIVATE
@@ -1280,6 +1287,40 @@ target_link_libraries(test_decoration_page_scope
         PhosphorSurface::PhosphorSurface
 )
 add_test(NAME test_decoration_page_scope COMMAND test_decoration_page_scope)
+
+# Animation page→event-root scoping — the same split, same rationale (pure
+# QString + ShaderProfileTree, no controller construction). Pins the one
+# include/exclude carve-out in the taxonomy (Window Motion vs Dragging), and
+# that the condensed simple page scopes to its own cards rather than the whole
+# tree.
+add_executable(test_animation_page_scope
+    settings/test_animation_page_scope.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationpagescope.cpp
+)
+target_include_directories(test_animation_page_scope PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_animation_page_scope
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+)
+add_test(NAME test_animation_page_scope COMMAND test_animation_page_scope)
+
+# Search-catalogue advanced-only flags vs the QML that declares the tier. Reads
+# both trees as TEXT (no Qt Quick engine, no page construction), so it needs
+# only the source dir — see the file comment for why the flag has to be
+# mirrored at all.
+add_executable(test_search_catalog_tiers
+    settings/test_search_catalog_tiers.cpp
+)
+target_compile_definitions(test_search_catalog_tiers PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_search_catalog_tiers
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+)
+add_test(NAME test_search_catalog_tiers COMMAND test_search_catalog_tiers)
 
 # GPU-gated orientation guard for the per-render-target NDC Y-flip: renders a
 # two-stage surface-decoration chain (border + shadow via ShaderEffectSource

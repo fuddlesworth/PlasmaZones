@@ -6,6 +6,7 @@ import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
+import "AlgorithmCapabilities.js" as AlgoCaps
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -41,7 +42,27 @@ Kirigami.Dialog {
     // and as a binding it keeps following it across screens rather than
     // sampling once on open.
     readonly property real screenAspectRatio: WizardUtils.clampedScreenAspectRatio(dialogContent.Screen.width, dialogContent.Screen.height)
-    readonly property var baseTemplates: [
+    // Which bundled algorithms the wizard offers as a starting point, the
+    // wizard-facing name for each, and a short fallback description. This is a
+    // curated subset: data/algorithms ships far more than these, and putting
+    // all of them in a three-column grid would run a Luau tile pass per card on
+    // open. The curation and the naming are the wizard's own.
+    //
+    // Each card prefers the algorithm catalog's description so the wizard and
+    // the catalog cannot drift, and falls back to `desc` when the catalog has
+    // no answer, which is the case before availableAlgorithms populates and
+    // whenever the daemon is not up. A label is not a capability flag: showing
+    // the curated prose is better than showing an unlabelled card, and a
+    // description that lags the catalog cannot make anything behave wrongly.
+    // "blank" is the one card with no catalog entry at all, because it is not
+    // an algorithm, it is an empty skeleton the wizard writes itself.
+    //
+    // This array is a stable literal and is the grid's model directly. Deriving
+    // the model from availableAlgorithms instead would hand the Repeater a new
+    // array identity on every catalog reload, rebuilding all nine delegates and
+    // re-running eight Luau tile passes, which is the cost the curation exists
+    // to avoid.
+    readonly property var _curatedTemplates: [
         {
             "name": i18n("Blank"),
             "id": "blank",
@@ -88,13 +109,15 @@ Kirigami.Dialog {
             "desc": i18n("Focused window on the left with the rest peeking from the right edge")
         }
     ]
-    // Resolve selected template data for step 2
+    // Resolve selected template data for step 2. Only `name` and `id` are read
+    // from this, so it resolves against the curated list rather than any
+    // catalog-merged copy.
     readonly property var selectedTemplate: {
-        for (let i = 0; i < baseTemplates.length; i++) {
-            if (baseTemplates[i].id === root.baseTemplate)
-                return baseTemplates[i];
+        for (let i = 0; i < root._curatedTemplates.length; i++) {
+            if (root._curatedTemplates[i].id === root.baseTemplate)
+                return root._curatedTemplates[i];
         }
-        return baseTemplates[0];
+        return root._curatedTemplates[0];
     }
 
     function selectTemplate(templateData) {
@@ -166,15 +189,22 @@ Kirigami.Dialog {
                     rowSpacing: Kirigami.Units.mediumSpacing
 
                     Repeater {
-                        model: root.baseTemplates
+                        model: root._curatedTemplates
 
                         delegate: WizardTemplateCard {
                             id: templateDelegate
 
                             required property var modelData
 
+                            /// The catalog's description for this template, or
+                            /// the curated fallback when the catalog is silent.
+                            /// Resolved per delegate so a catalog reload
+                            /// re-evaluates one binding rather than rebuilding
+                            /// the whole grid.
+                            readonly property string _catalogDesc: AlgoCaps.description(AlgoCaps.capabilitiesFor(root.controller ? root.controller.availableAlgorithms : [], templateDelegate.modelData.id))
+
                             templateName: templateDelegate.modelData.name
-                            templateDesc: templateDelegate.modelData.desc
+                            templateDesc: templateDelegate._catalogDesc !== "" ? templateDelegate._catalogDesc : templateDelegate.modelData.desc
                             selected: root.baseTemplate === templateDelegate.modelData.id
                             onClicked: root.selectTemplate(templateDelegate.modelData)
                             onDoubleClicked: {
@@ -196,7 +226,6 @@ Kirigami.Dialog {
                                 // may never open.
                                 algorithmId: (root.opened && templateDelegate.modelData.id !== "blank") ? templateDelegate.modelData.id : ""
                                 windowCount: 4
-                                showLabel: false
                                 appSettings: root.controller
                             }
 
@@ -250,7 +279,6 @@ Kirigami.Dialog {
                         algorithmId: (root.opened && root.baseTemplate !== "blank") ? root.baseTemplate : ""
                         appSettings: root.controller
                         windowCount: 6
-                        showLabel: false
                     }
 
                     ColumnLayout {

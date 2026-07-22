@@ -45,9 +45,17 @@ set(plasmazones_settings_SRCS
     settingscontroller_dbuswire.cpp
     # Active-page navigation + per-page dirty tracking + external-edit envelope.
     settingscontroller_pagestate.cpp
-    # Pure decoration page→root scoping helpers (root dispatch, prefix match,
-    # root-scoped tree diff), split from pagestate so they unit-test without
-    # the whole settings-app object graph.
+    # Per-page Reset/Discard, split from pagestate at the 1150-line ceiling.
+    settingscontroller_pagereset.cpp
+    # Page-class predicates + shared-domain key lists both halves need (was an
+    # anonymous namespace in pagestate; internal linkage cannot span two TUs).
+    settingscontroller_pagekeys.h
+    settingscontroller_pagekeys.cpp
+    # Pure page→root scoping helpers for the animation and decoration domains
+    # (root dispatch, prefix match, scoped tree diff), split from pagestate so
+    # they unit-test without the whole settings-app object graph.
+    animationpagescope.h
+    animationpagescope.cpp
     decorationpagescope.h
     decorationpagescope.cpp
     # RAII begin/endExternalEdit wrapper, extracted from settingscontroller.h.
@@ -267,6 +275,7 @@ qt_add_qml_module(plasmazones-settings
         rulemodel.cpp
     QML_FILES
         qml/Main.qml
+        qml/ConfirmDialogs.qml
         qml/Toast.qml
         qml/KeyboardShortcutOverlay.qml
         qml/GlobalSearchField.qml
@@ -281,6 +290,16 @@ qt_add_qml_module(plasmazones-settings
         qml/SnappingWindowBehaviorPage.qml
         qml/TilingBehaviorPage.qml
         qml/TilingAlgorithmPage.qml
+        qml/TilingSimplePage.qml
+        qml/SnappingSimplePage.qml
+        qml/GlobalTimingDefaultsCard.qml
+        qml/AnimationWindowFilterCard.qml
+        qml/SnappingWindowHandlingCard.qml
+        qml/SnappingFocusCard.qml
+        qml/SnappingZoneSpanCard.qml
+        qml/SnappingDragTriggerRow.qml
+        qml/TilingWindowHandlingCard.qml
+        qml/TilingFocusCard.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which
         # also hosts the unified inner/outer gap controls.
         qml/WindowAppearancePage.qml
@@ -325,6 +344,7 @@ qt_add_qml_module(plasmazones-settings
         qml/MatchLeafEditor.qml
         qml/ActionListEditor.qml
         qml/ActionRow.qml
+        qml/ActionParamEditors.qml
         qml/StockAnimationConflictChip.qml
         qml/AboutPage.qml
         qml/WhatsNewPage.qml
@@ -343,6 +363,7 @@ qt_add_qml_module(plasmazones-settings
         qml/ModifierAndMouseCheckBoxes.qml
         qml/PositionPicker.qml
         qml/AlgorithmPreview.qml
+        qml/AlgorithmPreviewCard.qml
         qml/LayoutThumbnail.qml
         qml/PerScreenOverrideHelper.qml
         qml/DisplayMap.qml
@@ -380,6 +401,7 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationsSidePanelsPage.qml
         qml/AnimationsWidgetsPage.qml
         qml/AnimationsGeneralPage.qml
+        qml/AnimationsSimplePage.qml
         qml/AnimationsMotionSetsPage.qml
         qml/AnimationsPresetsPage.qml
         qml/AnimationsShadersPage.qml
@@ -439,6 +461,7 @@ qt_add_qml_module(plasmazones-settings
         qml/SettingsRow.qml
         qml/SettingsSeparator.qml
         qml/SettingsFlickable.qml
+        qml/AlgorithmCapabilities.js
         qml/SearchAnchorHelpers.js
         qml/SettingsButtonGroup.qml
         qml/ColorSwatchRow.qml

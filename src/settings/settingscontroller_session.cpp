@@ -32,6 +32,7 @@
 #include "../phosphor_i18n.h"
 #include "dbusutils.h"
 #include "kzonesimporter.h"
+#include "settingscontroller_pagekeys.h"
 #include "virtualscreenutils.h"
 
 #include <PhosphorLayoutApi/LayoutId.h>
@@ -123,7 +124,7 @@ QString SettingsController::urlToLocalFile(const QUrl& url) const
 
 QString SettingsController::getQuickLayoutSlot(int slotNumber) const
 {
-    if (slotNumber < 1 || slotNumber > 9)
+    if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
         return {};
     QString staged;
     if (m_staging.stagedSnappingQuickSlot(slotNumber, staged))
@@ -138,7 +139,7 @@ QString SettingsController::getQuickLayoutSlot(int slotNumber) const
 
 void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
 {
-    if (slotNumber < 1 || slotNumber > 9)
+    if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
         return;
     m_staging.stageSnappingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);
@@ -146,7 +147,7 @@ void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layou
 
 QString SettingsController::getQuickLayoutShortcut(int slotNumber) const
 {
-    if (slotNumber < 1 || slotNumber > 9)
+    if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
         return {};
     // Return the default shortcut string -- the standalone cannot query KGlobalAccel
     // since it doesn't link KF6::GlobalAccel. The shortcut is Meta+Alt+N.
@@ -155,7 +156,7 @@ QString SettingsController::getQuickLayoutShortcut(int slotNumber) const
 
 QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
 {
-    if (slotNumber < 1 || slotNumber > 9)
+    if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
         return {};
     QString staged;
     if (m_staging.stagedTilingQuickSlot(slotNumber, staged))
@@ -171,7 +172,7 @@ QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
 
 void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
 {
-    if (slotNumber < 1 || slotNumber > 9)
+    if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
         return;
     m_staging.stageTilingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);
@@ -743,44 +744,47 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // m_animationsPage::pendingChangesChanged and
         // m_rulesPage::dirtyChanged connect lambdas in
         // settingscontroller.cpp) early-return when m_loading is true.
-        m_loading = true;
-        m_settings.load();
-        // Page controllers with their own on-disk staging surfaces
-        // (animations / rules) must reload too — m_settings.load()
-        // only refreshes settings.json-backed state. Without these the
-        // imported config disagrees with what the page controllers still
-        // hold in their in-memory snapshots.
-        // Refused means an async discard still owns the snapshot map, so the
-        // page is still holding pre-edit content for files the import just
-        // rewrote. Do not force the session clean in that case: the import did
-        // not fully land, so leave whatever dirty state the session already
-        // carried rather than declaring it settled. (This only withholds the
-        // clear; setNeedsSave(false) never marks anything dirty, and a later
-        // Discard on the animation pages is gated by hasPendingChanges(), not
-        // by m_dirtyPages membership.)
-        const bool animationsReverted = !m_animationsPage || m_animationsPage->revertPending();
-        if (!animationsReverted) {
-            qCWarning(lcConfig) << "importConfig: animation snapshots are still staged after the revert (a discard is "
-                                   "in flight, or a restore failed)";
-            // The settings on disk are the imported ones, but the animation
-            // page still holds pre-import snapshots. That is a partial result
-            // the user has to know about: without this the import reports plain
-            // success while the page shows something else.
-            Q_EMIT settingsTransferFailed(
-                PhosphorI18n::tr("Your settings were imported, but the animation pages still show the old ones. "
-                                 "Reopen the settings window to see the imported values."));
-            // Report not-fully-landed. The bool's only job is gating the General
-            // page's success toast (see the settingsTransferFailed doc), and the
-            // toast surface replaces whatever is in flight. Returning true here
-            // would let the caller overwrite the reason just emitted, inside the
-            // same JS statement, so the user would only ever read "Settings
-            // imported" on the one path that exists to say otherwise.
-            ok = false;
+        bool animationsReverted = false;
+        {
+            const ScopedFlag loadingScope(m_loading);
+            m_settings.load();
+            // Page controllers with their own on-disk staging surfaces
+            // (animations / rules) must reload too — m_settings.load()
+            // only refreshes settings.json-backed state. Without these the
+            // imported config disagrees with what the page controllers still
+            // hold in their in-memory snapshots.
+            // Refused means an async discard still owns the snapshot map, so the
+            // page is still holding pre-edit content for files the import just
+            // rewrote. Do not force the session clean in that case: the import did
+            // not fully land, so leave whatever dirty state the session already
+            // carried rather than declaring it settled. (This only withholds the
+            // clear; setNeedsSave(false) never marks anything dirty, and a later
+            // Discard on the animation pages is gated by hasPendingChanges(), not
+            // by m_dirtyPages membership.)
+            animationsReverted = !m_animationsPage || m_animationsPage->revertPending();
+            if (!animationsReverted) {
+                qCWarning(lcConfig)
+                    << "importConfig: animation snapshots are still staged after the revert (a discard is "
+                       "in flight, or a restore failed)";
+                // The settings on disk are the imported ones, but the animation
+                // page still holds pre-import snapshots. That is a partial result
+                // the user has to know about: without this the import reports plain
+                // success while the page shows something else.
+                Q_EMIT settingsTransferFailed(
+                    PhosphorI18n::tr("Your settings were imported, but the animation pages still show the old ones. "
+                                     "Reopen the settings window to see the imported values."));
+                // Report not-fully-landed. The bool's only job is gating the General
+                // page's success toast (see the settingsTransferFailed doc), and the
+                // toast surface replaces whatever is in flight. Returning true here
+                // would let the caller overwrite the reason just emitted, inside the
+                // same JS statement, so the user would only ever read "Settings
+                // imported" on the one path that exists to say otherwise.
+                ok = false;
+            }
+            if (m_rulesPage) {
+                m_rulesPage->revert();
+            }
         }
-        if (m_rulesPage) {
-            m_rulesPage->revert();
-        }
-        m_loading = false;
         DaemonDBus::notifyReload();
         if (animationsReverted) {
             setNeedsSave(false);

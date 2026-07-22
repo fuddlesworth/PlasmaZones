@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import "AlgorithmCapabilities.js" as AlgoCaps
 
 SettingsFlickable {
     id: root
@@ -13,18 +14,18 @@ SettingsFlickable {
     readonly property int algorithmPreviewWidth: Kirigami.Units.gridUnit * 18
     readonly property int algorithmPreviewHeight: Kirigami.Units.gridUnit * 10
     // Per-screen override helper (shared app-wide scope, bound below).
-    // m-13: Cache the availableAlgorithms PROPERTY (read, not call — it is both a
+    // Cache the availableAlgorithms PROPERTY (read, not call — it is both a
     // Q_PROPERTY and a same-named Q_INVOKABLE, so the `()` form errors with
-    // "is not a function"). Refreshed via the Connections below on its NOTIFY.
+    // "is not a function"). Its NOTIFY-backed binding self-refreshes when the
+    // list changes (e.g. a .luau reload), so no imperative refresh is needed.
     property var _cachedAlgos: settingsController.availableAlgorithms || []
-    // The ISettings object (the `appSettings` context property), captured at page
-    // scope. LayoutComboBox declares its own `appSettings: settingsController`,
-    // which SHADOWS the context property inside the combo's onActivated — writing
-    // `appSettings.defaultAutotileAlgorithm` there hit a nonexistent property on
-    // the controller and silently dropped every algorithm change. Read/write the
-    // algorithm through this reference so it always targets ISettings.
-    readonly property var appSettingsObj: appSettings
-    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettingsObj.defaultAutotileAlgorithm)
+    // `appSettings` is the ISettings context property (set app-wide via
+    // rootContext); read it directly. Handlers here are attached to page-scope
+    // objects and to AlgorithmPreviewCard (which declares no `appSettings`), so
+    // the bare name resolves to the context property — the children that DO set
+    // their own `appSettings` (PerScreenOverrideHelper, the LayoutComboBox nested
+    // inside AlgorithmPreviewCard) are never in an ancestor binding's scope chain.
+    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.defaultAutotileAlgorithm)
     // Working algorithm for the whole page (preview, custom-param controls,
     // capability lookups). Driven imperatively rather than bound to
     // algorithmCombo.currentValue: that value transiently resets to the first
@@ -38,18 +39,10 @@ SettingsFlickable {
 
     onEffectiveAlgorithmChanged: root.selectedAlgorithm = root.effectiveAlgorithm
     // Data-driven algorithm capabilities (lookup from cached availableAlgorithms by ID)
-    readonly property var algoCapabilities: {
-        const algos = root._cachedAlgos;
-        const algoId = root.selectedAlgorithm;
-        for (let i = 0; i < algos.length; i++) {
-            if (algos[i].id === algoId)
-                return algos[i];
-        }
-        return null;
-    }
-    readonly property bool algoSupportsSplitRatio: algoCapabilities ? (algoCapabilities.supportsSplitRatio === true) : false
-    readonly property bool algoSupportsMasterCount: algoCapabilities ? (algoCapabilities.supportsMasterCount === true) : false
-    readonly property bool algoSupportsCustomParams: algoCapabilities ? (algoCapabilities.supportsCustomParams === true) : false
+    readonly property var algoCapabilities: AlgoCaps.capabilitiesFor(root._cachedAlgos, root.selectedAlgorithm)
+    readonly property bool algoSupportsSplitRatio: AlgoCaps.supportsSplitRatio(algoCapabilities)
+    readonly property bool algoSupportsMasterCount: AlgoCaps.supportsMasterCount(algoCapabilities)
+    readonly property bool algoSupportsCustomParams: AlgoCaps.supportsCustomParams(algoCapabilities)
     // Custom param definitions for the selected algorithm.  The binding only
     // depends on algoSupportsCustomParams / selectedAlgorithm.  Because
     // customParamsForAlgorithm() is a Q_INVOKABLE (not a Q_PROPERTY with
@@ -119,10 +112,12 @@ SettingsFlickable {
         _seedLiveAlgoSettings();
     }
 
-    // Whether the algorithm uses a center layout (ratio/count labels say "Center" instead of "Master").
-    // Check capabilities map first (for future extensibility via scripted algorithm metadata),
-    // falling back to hardcoded IDs for built-in algorithms. See PR #256 / M13.
-    readonly property bool algoCenterLayout: algoCapabilities ? (algoCapabilities.centerLayout === true) : (root.selectedAlgorithm === "three-column" || root.selectedAlgorithm === "centered-master")
+    // Whether the algorithm uses a center layout (ratio/count labels say
+    // "Center" instead of "Master"). Read straight from the catalog — the
+    // hardcoded "three-column || centered-master" fallback this used to carry
+    // was both duplicated on the simple page and unreachable, since
+    // algorithmservice.cpp sets centerLayout unconditionally.
+    readonly property bool algoCenterLayout: AlgoCaps.centerLayout(algoCapabilities)
 
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);
@@ -134,14 +129,6 @@ SettingsFlickable {
 
     contentHeight: content.implicitHeight
     clip: true
-
-    Connections {
-        function onAvailableAlgorithmsChanged() {
-            root._cachedAlgos = settingsController.availableAlgorithms || [];
-        }
-
-        target: settingsController
-    }
 
     PerScreenOverrideHelper {
         id: psHelper
@@ -178,108 +165,49 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                // Live preview - centered at top
-                Item {
+                // Preview, description and picker — the shared block, also
+                // hosted by TilingSimplePage. Every layout input the user can
+                // edit feeds the preview from the live slider handle, so the
+                // diagram updates as the user drags any of them (master ratio
+                // and master count included, not just max windows). The
+                // "Max N windows" caption also tracks the windows slider.
+                AlgorithmPreviewCard {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.algorithmPreviewHeight + Kirigami.Units.gridUnit * 1.5
+                    previewWidth: root.algorithmPreviewWidth
+                    previewHeight: root.algorithmPreviewHeight
+                    algorithmId: root.selectedAlgorithm
+                    description: AlgoCaps.description(root.algoCapabilities)
+                    currentAlgorithmId: root.effectiveAlgorithm
+                    captionText: i18np("Max %n window", "Max %n windows", previewWindowSlider.slider.value)
+                    windowCount: previewWindowSlider.slider.value
+                    // An algorithm with no ratio control of its own draws at the
+                    // ratio the catalog declares for it. An algorithm the
+                    // catalog does not describe at all yields undefined there,
+                    // which must not reach this `real` property, so fall back to
+                    // the user's configured global ratio rather than a literal.
+                    splitRatio: {
+                        if (root.algoSupportsSplitRatio)
+                            return masterRatioSlider.slider.value;
 
-                    // Preview container
-                    Item {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
-                        width: root.algorithmPreviewWidth
-                        height: root.algorithmPreviewHeight
-
-                        Rectangle {
-                            anchors.fill: parent
-                            color: Kirigami.Theme.backgroundColor
-                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-                            border.width: 1
-                            radius: Kirigami.Units.smallSpacing
-
-                            AlgorithmPreview {
-                                anchors.fill: parent
-                                anchors.margins: Kirigami.Units.smallSpacing
-                                appSettings: settingsController
-                                showLabel: false
-                                algorithmId: root.selectedAlgorithm
-                                algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
-                                // Every layout input the user can edit feeds the preview
-                                // from the live slider handle, so the diagram updates as the
-                                // user drags any of them (master ratio and master count
-                                // included, not just max windows). The "Max N windows"
-                                // caption below also tracks the windows slider.
-                                windowCount: previewWindowSlider.slider.value
-                                splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : (root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
-                                masterCount: root.algoSupportsMasterCount ? masterCountSlider.slider.value : 0
-                                customParams: root.liveCustomParams
-                                zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
-                            }
-                        }
-
-                        // Window count label below preview
-                        Label {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: parent.bottom
-                            anchors.topMargin: Kirigami.Units.smallSpacing
-                            text: i18np("Max %n window", "Max %n windows", previewWindowSlider.slider.value)
-                            font: Kirigami.Theme.fixedWidthFont
-                            opacity: 0.7
-                        }
+                        const catalogRatio = AlgoCaps.defaultSplitRatio(root.algoCapabilities);
+                        return catalogRatio !== undefined ? catalogRatio : appSettings.autotileSplitRatio;
                     }
-                }
-
-                // Algorithm description (from script metadata)
-                Label {
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: root.algorithmPreviewWidth
-                    Layout.alignment: Qt.AlignHCenter
-                    text: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
-                    visible: text !== ""
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WordWrap
-                    opacity: 0.7
-                    font: Kirigami.Theme.smallFont
-                }
-
-                // Algorithm selection - uses LayoutComboBox with preview thumbnails
-                ColumnLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: Kirigami.Units.smallSpacing
-                    // Constant cap (not bound to parent.width) — binding a layout
-                    // child's max width to its enclosing layout's width feeds the
-                    // child size back into the same layout pass (recursive rearrange).
-                    Layout.maximumWidth: Kirigami.Units.gridUnit * 25
-
-                    LayoutComboBox {
-                        id: algorithmCombo
-
-                        Layout.alignment: Qt.AlignHCenter
-                        Layout.fillWidth: true
-                        Accessible.name: i18n("Tiling algorithm")
-                        appSettings: settingsController
-                        showPreview: true
-                        layoutFilter: 1 // Autotile algorithms only
-                        showNoneOption: false
-                        currentLayoutId: "autotile:" + root.effectiveAlgorithm
-                        onActivated: {
-                            // Extract algorithm ID from autotile: prefixed value
-                            let selectedId = algorithmCombo.currentValue;
-                            if (selectedId === "")
-                                selectedId = root.appSettingsObj.defaultAutotileAlgorithm;
-                            else if (selectedId.startsWith("autotile:"))
-                                selectedId = selectedId.substring(9);
-                            // Drive the page off the user's pick immediately, then
-                            // persist. Both go through root.appSettingsObj — NOT the
-                            // bare `appSettings`, which the combo shadows with the
-                            // controller in this scope (see appSettingsObj above).
-                            // Resetting global max-windows / split-ratio / master-count
-                            // here would clobber a sibling algorithm's per-algorithm slot.
-                            root.selectedAlgorithm = selectedId;
-                            root.writeSetting("Algorithm", selectedId, function (v) {
-                                root.appSettingsObj.defaultAutotileAlgorithm = v;
-                            });
-                        }
+                    supportsMasterCount: root.algoSupportsMasterCount
+                    masterCount: masterCountSlider.slider.value
+                    customParams: root.liveCustomParams
+                    zoneNumberDisplay: AlgoCaps.zoneNumberDisplay(root.algoCapabilities)
+                    onAlgorithmActivated: selectedId => {
+                        // An empty id means the combo's model rebuilt under the
+                        // selection — fall back to the persisted global default.
+                        const algoId = selectedId === "" ? appSettings.defaultAutotileAlgorithm : selectedId;
+                        // Drive the page off the user's pick immediately, then
+                        // persist. Only the Algorithm key is written; resetting
+                        // global max-windows / split-ratio / master-count here
+                        // would clobber a sibling algorithm's per-algorithm slot.
+                        root.selectedAlgorithm = algoId;
+                        root.writeSetting("Algorithm", algoId, function (v) {
+                            appSettings.defaultAutotileAlgorithm = v;
+                        });
                     }
                 }
 
@@ -311,7 +239,8 @@ SettingsFlickable {
                     }
                 }
 
-                // Algorithm-specific settings (master-stack, three-column, centered-master)
+                // Ratio and count rows, shown only when the catalog says the
+                // algorithm exposes them.
                 SettingsSeparator {
                     visible: root.algoSupportsSplitRatio || root.algoSupportsMasterCount
                 }
@@ -440,7 +369,6 @@ SettingsFlickable {
                         SettingsSeparator {}
 
                         SettingsRow {
-                            Layout.fillWidth: true
                             title: paramLabel
                             description: paramDescription
 

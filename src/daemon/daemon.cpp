@@ -446,6 +446,11 @@ void Daemon::setupAnimationProfiles()
         requestAnimationProfilePublish();
     });
     connect(m_profileLoader.get(), &ProfileLoader::profilesChanged, this, [this]() {
+        // The loader has replaced its owned entries, so the cached raw JSON
+        // profiles are stale. Drop them before republishing; the publish
+        // re-snapshots from the registry, which holds the freshly parsed
+        // entries at this point.
+        m_rawJsonProfiles.clear();
         requestAnimationProfilePublish();
     });
     connect(m_curveLoader.get(), &CurveLoader::curvesChanged, this, [this]() {
@@ -520,20 +525,98 @@ void Daemon::publishActiveAnimationProfile()
     // re-publishing identical values on every settingsChanged signal
     // is a cheap no-op on the hot path.
     //
-    // User-wins at the registry level: if the ProfileLoader has a
-    // user-authored JSON file at a settings-driven path, we skip the
-    // direct publish so their owner-tagged entry wins. On JSON delete,
-    // the loader emits profilesChanged, this function re-runs, and the
-    // settings-default path is restored.
+    // User-wins at the registry level: if the ProfileLoader owns a
+    // user-authored JSON file at a settings-driven path, its set fields
+    // win and its UNSET fields merge from the user's settings (never from
+    // library defaults) — see the per-path ownership + merge logic below.
+    // On JSON delete, the loader emits profilesChanged, this function
+    // re-runs, and the settings-default path is restored.
     //
-    // This runs on the settings-slider hot path (~30 Hz during drag),
-    // so O(1) `hasPath` is used instead of `entries()` which copies
-    // and sorts the full tracked set on every tick.
+    // This runs on the settings-slider hot path (~30 Hz during drag), so
+    // ownership is resolved with an O(1) `ownerOf()` lookup rather than
+    // `entries()`, which copies and sorts the full tracked set every tick.
     auto& reg = m_profileRegistry;
 
     const Profile settingsProfile = m_settings->animationProfile();
     for (const QString* path : kSettingsDrivenProfilePaths) {
-        if (m_profileLoader && m_profileLoader->hasPath(*path)) {
+        // OWNERSHIP, not existence. hasPath() asks the loader's own bookkeeping
+        // whether it parsed a file for this path. That stays true even when the
+        // registry entry is something else entirely — including this function's
+        // OWN untagged publish from a previous tick. Merging over that is
+        // self-poisoning: the settings profile has every field engaged, so
+        // nothing falls back, the entry freezes, and every later slider move is
+        // silently dropped until the daemon restarts.
+        //
+        // Two ways in, both previously live. A registry/loader disagreement,
+        // and — with no invariant violated at all — a user dropping a
+        // Global.json into a session that already published untagged, where
+        // reloadFromOwner's "direct owner always wins" rule makes the loader
+        // skip the path while still emitting profilesChanged.
+        //
+        // ownerOf() answers the question that actually matters: is this entry
+        // the loader's parsed JSON? Only then is it a valid merge base.
+        //
+        // Resolved ONCE per path: the tag is needed again at the re-register
+        // below, and this is a ~30 Hz path where each ownerOf() is a locked
+        // lookup.
+        const QString pathOwner = reg.ownerOf(*path);
+        const bool loaderOwnsPath = m_profileLoader && pathOwner == m_profileLoader->ownerTag();
+        if (loaderOwnsPath) {
+            // A user JSON owns this path, but its unset fields must still fall
+            // back to the user's settings rather than to library defaults.
+            // Skipping wholesale left a Global.json that set only `duration`
+            // animating minDistance / sequenceMode / staggerInterval / curve at
+            // built-in defaults, while the settings app resolved them from
+            // ISettings and showed the user's values.
+            //
+            // Merge from a cached RAW snapshot taken once per loader reload,
+            // never from the registry's current entry — that is the merged
+            // result of the previous tick, and reading it back is the freeze
+            // described above.
+            auto rawIt = m_rawJsonProfiles.constFind(*path);
+            if (rawIt == m_rawJsonProfiles.constEnd()) {
+                const auto owned = reg.resolve(*path);
+                if (!owned.has_value()) {
+                    // ownerOf() named the loader, so the entry exists by
+                    // construction. Belt and braces.
+                    //
+                    // Republished under the LOADER's tag, not untagged. An
+                    // untagged entry is a direct-owner entry, and
+                    // reloadFromOwner's "direct owner always wins" rule then
+                    // makes the loader skip this path on every later rescan —
+                    // the user's JSON would be silently discarded for the rest
+                    // of the session, which is exactly what the ownership check
+                    // above exists to prevent.
+                    qCWarning(lcCore) << "animation profile publish: registry reports loader ownership of" << *path
+                                      << "but has no entry — publishing settings defaults instead";
+                    reg.registerProfile(*path, settingsProfile, pathOwner);
+                    continue;
+                }
+                rawIt = m_rawJsonProfiles.insert(*path, *owned);
+            }
+
+            Profile mergedProfile = rawIt.value();
+            if (!mergedProfile.duration.has_value())
+                mergedProfile.duration = settingsProfile.duration;
+            if (!mergedProfile.curve)
+                mergedProfile.curve = settingsProfile.curve;
+            if (!mergedProfile.minDistance.has_value())
+                mergedProfile.minDistance = settingsProfile.minDistance;
+            if (!mergedProfile.sequenceMode.has_value())
+                mergedProfile.sequenceMode = settingsProfile.sequenceMode;
+            if (!mergedProfile.staggerInterval.has_value())
+                mergedProfile.staggerInterval = settingsProfile.staggerInterval;
+            if (!mergedProfile.presetName.has_value())
+                mergedProfile.presetName = settingsProfile.presetName;
+            // Under the JSON's own owner tag, so the loader's next
+            // reloadFromOwner still replaces it.
+            //
+            // No pre-check: registerProfile already compares BOTH value and
+            // owner before inserting or emitting, so a guard here would be
+            // dead, would cost an extra locked resolve() call on a ~30 Hz
+            // path, and — comparing value only — would miss an owner-only
+            // difference that registerProfile does correct.
+            reg.registerProfile(*path, mergedProfile, pathOwner);
             continue;
         }
         reg.registerProfile(*path, settingsProfile);
@@ -1984,10 +2067,12 @@ bool Daemon::init()
 
     // Retry D-Bus service registration with exponential backoff.
     // Synchronous retry is required here because init() runs before QGuiApplication::exec(),
-    // so QTimer-based async approaches won't fire. Delays are kept short (700ms total max).
+    // so QTimer-based async approaches won't fire. Delays are kept short (300ms total max).
     constexpr int maxRetries = 3;
-    constexpr int baseDelayMs = 100; // 100ms, 200ms, 400ms exponential backoff
-    // Worst-case blocking: 100 + 200 + 400 = 700 ms on the GUI thread.
+    constexpr int baseDelayMs = 100; // backoff sleeps 100ms then 200ms
+    // Worst-case blocking: 100 + 200 = 300 ms on the GUI thread. The third
+    // attempt does not sleep — the `attempt < maxRetries - 1` gate below skips
+    // the final (would-be 400ms) delay and returns instead.
     // init() runs before QGuiApplication::exec(), so QTimer-based async
     // approaches don't fire — synchronous sleep is the only retry path
     // available here. The retry is bounded by `maxRetries`, and a bus
@@ -2377,32 +2462,37 @@ void Daemon::stop()
         return;
     }
 
-    // Tear down the daemon-owned PhosphorProfileRegistry entries this
-    // Daemon published so a later Daemon reconstruction (tests, or a
-    // live reconfigure that tears down and rebuilds the daemon in
-    // place) starts from a registry owning none of our entries. Mirrors
-    // the narrow-clear policy in `setupAnimationProfiles()` — a
-    // wholesale `clear()` would also evict any other consumer's
-    // entries if they happened to register before us.
+    // stop() deliberately does NOT unregister the settings-driven entries
+    // (`Global`, …), shed the shell-family-seed partition, or clear the
+    // low-precedence owner tag. `m_profileRegistry` is a value member, so it
+    // dies with the Daemon and no later Daemon can inherit its contents —
+    // there is no shared registry to leave polluted. The only way another
+    // consumer ever reached it was the QML static default pointer, and that is
+    // nulled above, before this gate.
     //
-    // The two partitions we publish under:
+    // Shedding them here would be actively wrong. All three are re-established
+    // only from `setupAnimationProfiles()`, which runs from the CONSTRUCTOR:
+    // neither `init()` nor `start()` calls it. A stop()→start() cycle on the
+    // same instance is supported (see the re-publish of the three QML statics
+    // and the idle re-arm in `start()`), and shedding them would bring it back
+    // with an empty seed partition and an empty low-precedence tag —
+    // `resolveWithInheritance` degrades to a single-layer walk and every shell
+    // `PhosphorMotionAnimation { profile: … }` resolves against nothing.
+    // Leaving them in place is what makes the cycle come back whole.
     //
-    //   - Settings-driven direct entries (`Global`, …): registered by
-    //     `publishActiveAnimationProfile` under the direct-owner tag.
-    //     Unregister each path here.
-    //   - Loader-owned user-JSON entries (tagged
-    //     `kPlasmaZonesUserProfilesOwnerTag`): we explicitly reset
-    //     `m_profileLoader` and `m_curveLoader` here so the loader
-    //     destructors run NOW (issuing their own `clearOwner(ownerTag)`
-    //     and tearing down the QFileSystemWatchers) rather than at
-    //     `~Daemon` body where they'd fire path-change signals into a
-    //     half-destroyed object during member destruction order.
-    {
-        auto& profileRegistry = m_profileRegistry;
-        for (const QString* path : kSettingsDrivenProfilePaths) {
-            profileRegistry.unregisterProfile(*path);
-        }
-    }
+    // The one partition stop() still sheds is the loader-owned user-JSON
+    // partition (tagged `kPlasmaZonesUserProfilesOwnerTag`), and only as a side
+    // effect of the loader teardown below: `m_profileLoader` / `m_curveLoader`
+    // are reset so their destructors run NOW (issuing their own
+    // `clearOwner(ownerTag)` and tearing down the QFileSystemWatchers) rather
+    // than in the `~Daemon` body, where they would fire path-change signals
+    // into a half-destroyed object. The user-JSON entries are optional
+    // overrides on top of the seeds, so losing them across a cycle only drops
+    // the user's authored tweaks, not the shell's ability to resolve — and the
+    // seeds that remain keep inheritance working. The raw-JSON snapshot is
+    // cleared with them, since it mirrors exactly the entries those destructors
+    // drop.
+    m_rawJsonProfiles.clear();
 
     // Stop the publish coalescing trampoline before resetting the
     // loaders — the timer is a member QTimer, so its `timeout` slot
@@ -2420,7 +2510,7 @@ void Daemon::stop()
     // daemon, and theoretically observable in production on a
     // configure-reload cycle. ProfileLoader's destructor issues its
     // own `clearOwner(kPlasmaZonesUserProfilesOwnerTag)` so the
-    // process-global PhosphorProfileRegistry shed those entries here.
+    // per-daemon `m_profileRegistry` value member sheds those entries here.
     m_profileLoader.reset();
     m_curveLoader.reset();
     m_shaderBakePool.clear();

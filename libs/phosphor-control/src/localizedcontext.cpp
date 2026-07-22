@@ -14,7 +14,7 @@ namespace {
 // large value (e.g. 1000) would mask a caller bug that synthesises unique
 // disambiguations per binding. Once the cache fills, cachedDisambiguation
 // falls back to per-call encoding rather than evicting.
-constexpr int kMaxDisambiguationCacheEntries = 128;
+constexpr int MaxDisambiguationCacheEntries = 128;
 // Same rationale for the source-text cache used by i18n*(). QML text
 // bindings reuse a stable set of source strings — caching the UTF-8
 // encoding once per source string avoids the per-binding toUtf8 cost
@@ -23,7 +23,7 @@ constexpr int kMaxDisambiguationCacheEntries = 128;
 // larger (every translatable string in the UI) while still bounding
 // memory against the pathological case where a caller synthesises
 // unique strings per binding.
-constexpr int kMaxSourceTextCacheEntries = 256;
+constexpr int MaxSourceTextCacheEntries = 256;
 } // namespace
 
 LocalizedContext::LocalizedContext(QObject* parent)
@@ -104,7 +104,7 @@ QByteArray LocalizedContext::cachedDisambiguation(const QString& context) const
     if (it != m_disambiguationCache.constEnd()) {
         return it.value();
     }
-    if (m_disambiguationCache.size() >= kMaxDisambiguationCacheEntries) {
+    if (m_disambiguationCache.size() >= MaxDisambiguationCacheEntries) {
         // Don't grow without bound — a caller synthesising unique keys
         // per binding would silently leak memory. Encode without
         // caching. Warn once so the misuse pattern is debuggable:
@@ -112,7 +112,7 @@ QByteArray LocalizedContext::cachedDisambiguation(const QString& context) const
         // performance cliff matters but should never be invisible.
         if (!m_disambiguationCacheFullWarned) {
             m_disambiguationCacheFullWarned = true;
-            qWarning() << "LocalizedContext: disambiguation cache full at" << kMaxDisambiguationCacheEntries
+            qWarning() << "LocalizedContext: disambiguation cache full at" << MaxDisambiguationCacheEntries
                        << "entries — falling back to uncached UTF-8 encoding for new contexts. Likely caller bug: "
                           "synthesising unique disambiguations per binding.";
         }
@@ -130,16 +130,16 @@ QByteArray LocalizedContext::cachedSourceText(const QString& text) const
     // QCoreApplication::translate(). QML rebinds run the encoding
     // again on every retranslate sweep (e.g. language change), so the
     // cost compounds. Cache the encoding keyed by source QString;
-    // bounded to kMaxSourceTextCacheEntries so a caller synthesising
+    // bounded to MaxSourceTextCacheEntries so a caller synthesising
     // unique strings per binding doesn't leak memory.
     const auto it = m_sourceTextCache.constFind(text);
     if (it != m_sourceTextCache.constEnd()) {
         return it.value();
     }
-    if (m_sourceTextCache.size() >= kMaxSourceTextCacheEntries) {
+    if (m_sourceTextCache.size() >= MaxSourceTextCacheEntries) {
         if (!m_sourceTextCacheFullWarned) {
             m_sourceTextCacheFullWarned = true;
-            qWarning() << "LocalizedContext: source-text cache full at" << kMaxSourceTextCacheEntries
+            qWarning() << "LocalizedContext: source-text cache full at" << MaxSourceTextCacheEntries
                        << "entries — falling back to uncached UTF-8 encoding for new source strings. Likely caller "
                           "bug: synthesising unique strings per binding.";
         }

@@ -15,13 +15,12 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  * Vertical layout:
  *
  *   ┌─────────────────────────┐
- *   │ SearchField  (sticky)   │
- *   ├─────────────────────────┤
- *   ┌─────────────────────────┐
  *   │ headerContent (sticky)  │
  *   ├─────────────────────────┤
- *   │ Back button (when drilled)
- *   │ ListView (scrollable)   │
+ *   │ SearchField  (sticky)   │
+ *   ├─────────────────────────┤
+ *   │ Back button (drilled)   │  ← scrolls with the list,
+ *   │ ListView (scrollable)   │    not a sticky band
  *   │ — rows drill / toggle / │
  *   │   navigate as below     │
  *   ├─────────────────────────┤
@@ -37,6 +36,10 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  *     rows in/out via ListView add/remove Transitions.
  *   - Navigable leaves (entry has a qmlSource) — taps set
  *     controller.currentPageId.
+ *   - FLAT mode (`flattenTree`, see below) overrides all three: every
+ *     visible navigable page renders at depth 0, category headers are not
+ *     emitted, and drillInto / drillOut early-return. A reader of the three
+ *     modes above will not otherwise learn a fourth one supersedes them.
  *
  * Slots for consumers:
  *
@@ -98,6 +101,87 @@ ColumnLayout {
      *  stays visible in the icon-only rail and receives the live value;
      *  one that does not is hidden there. */
     property Component headerContent: null
+
+    /** Prefix stamped onto the synthetic pageId of a divider row. Shared by
+     *  both producers (the flat and tree walkers) and the navigation guard
+     *  that refuses to route such a row into the controller — a rename that
+     *  reached only the producers would send a divider straight to
+     *  `currentPageId`, so all three read it from here. */
+    readonly property string _dividerPrefix: rowBuilder.dividerPrefix()
+    /** When true the sidebar renders the visible page tree as ONE flat
+     *  list: every visible navigable page at depth 0 in registration
+     *  order, no category headers, no indentation, no drill-downs.
+     *  Section dividers still honour `hasDividerAfter`, but only on
+     *  TOP-LEVEL entries — a top-level flag fires after the last row its
+     *  subtree emitted; leaf-level flags are ignored, since they are tuned
+     *  for the tree rail's within-category rhythm. Intended for a
+     *  pared-down mode (e.g. an app's simple mode) where the filtered
+     *  tree is small enough that hierarchy is pure friction; the full
+     *  tree UI returns when the flag goes false. Drill state resets on
+     *  entry so a mode flip never strands the rail inside a scope. */
+    property bool flattenTree: false
+    /** Flat-mode display-title overrides, page id → title. Lets the app
+     *  rename a row whose registered (tree-context) title reads wrong
+     *  without its ancestors — e.g. a "General" leaf under a category
+     *  header that no longer shows. Consulted only while `flattenTree`
+     *  is true. */
+    property var flatTitleOverrides: ({})
+    /** Bumped on pageRegistered / visibleSetChanged. Bindings that read the
+     *  registry through a Q_INVOKABLE (which registers no dependency of its
+     *  own) touch this so they re-evaluate when the catalogue or the visible
+     *  set changes. `_refreshModel` covers the ListModel; this covers
+     *  everything outside it. */
+    property int _registryTick: 0
+
+    /// Invalidate every binding that reads the registry through a Q_INVOKABLE.
+    /// Those register no dependency of their own, so they need this to touch.
+    function _bumpRegistryTick() {
+        root._registryTick = root._registryTick + 1;
+    }
+
+    /// Cancel an in-flight drill cross-fade. Its ScriptAction would otherwise
+    /// re-apply pendingParentId AFTER a reset, and the stale scope resurfaces.
+    /// The animation drives listColumn.opacity and nothing re-asserts it (no
+    /// declarative binding), so stopping mid-fade would strand the rail
+    /// translucent — restore it here rather than in onStopped, because
+    /// restart() stops internally and snapping to 1 there would flash on every
+    /// rapid re-drill.
+    function _cancelDrill() {
+        if (!drillAnimation.running)
+            return;
+        drillAnimation.stop();
+        drillAnimation.pendingParentId = "";
+        listColumn.opacity = 1;
+    }
+
+    onFlattenTreeChanged: {
+        if (root.flattenTree) {
+            root._cancelDrill();
+            root.currentParentId = "";
+        }
+        // Suppress per-row Transitions across BOTH the synchronous refresh
+        // the currentParentId reset triggers and the deferred one below, so
+        // a mode swap lands in one frame instead of accordioning every row.
+        //
+        // Set AFTER the drill cancel above: stop() emits stopped()
+        // synchronously, and that handler clears this flag — setting it
+        // first would leave the swap unsuppressed. Setting it after the
+        // currentParentId ASSIGNMENT is still sound even though that
+        // assignment refreshes the model synchronously: ListView only
+        // accumulates the change set and schedules a polish, so the
+        // Transitions' `enabled` bindings are not read until the later
+        // layout pass, by which time this flag is up. Do not "fix" the
+        // order. Applies in BOTH
+        // directions; the flat→tree flip rebuilds the whole tree and
+        // accordions harder than the flat direction. Released by the same
+        // timer the initial fill uses.
+        root._suppressAccordion = true;
+        suppressAccordionTimer.restart();
+        // Deferred: the initial binding assignment can fire during
+        // component creation, before the list model object exists.
+        Qt.callLater(root._refreshModel);
+    }
+
     /** Suppress per-row add/remove animations while the whole list is
      *  cross-fading on drill-in/out. */
     property bool _suppressAccordion: false
@@ -107,6 +191,12 @@ ColumnLayout {
     readonly property real navRowHeight: Kirigami.Units.gridUnit * 2.5
 
     function drillInto(parentId) {
+        // Flat mode has no scopes: _visibleItems ignores currentParentId
+        // there, so a consumer-driven drill would run the cross-fade and
+        // raise the Back button above an unchanged flat list.
+        if (root.flattenTree)
+            return;
+
         // Short-circuit on either the already-displayed scope OR a
         // drill already in flight targeting the same parent — without
         // the second check, a double-click on a drill row would
@@ -123,6 +213,10 @@ ColumnLayout {
     }
 
     function drillOut() {
+        // Symmetric with drillInto: nothing to drill out of in flat mode.
+        if (root.flattenTree)
+            return;
+
         if (root.currentParentId === "")
             return;
 
@@ -149,225 +243,39 @@ ColumnLayout {
         root.expandedCategories = next;
     }
 
+    // Own-property guarded so the default-expanded semantics survive a
+    // consumer that assigned a plain `{}` literal to the public
+    // expandedCategories property (the docstring invites external writes,
+    // and only toggleCategory's clone preserves the prototype-less form).
+    // Without the guard an id colliding with an Object.prototype name would
+    // read the inherited builtin, which is `!== false`, i.e. accidentally
+    // correct here — but the same map keyed the other way is not, so keep
+    // the read honest.
     function _isExpanded(id) {
+        if (!Object.prototype.hasOwnProperty.call(root.expandedCategories, id))
+            return true;
         return root.expandedCategories[id] !== false;
     }
 
-    function _scopeChildren(parentId) {
-        return root.controller.registry.childPagesData(parentId);
-    }
+    // The three rail walks (flat / tree / search) live in C++ —
+    // PhosphorControl::SidebarRows — so they are unit-testable without a Qt
+    // Quick engine or a built page tree, and so the per-row registry lookups
+    // stay off the QML/JS boundary. This file keeps the genuinely view-side
+    // work: the incremental ListModel diff below, the drill animation, and the
+    // expand state that feeds in here.
+    //
+    // The ROW ROLE CONTRACT (pageId / title / iconSource / hasQmlSource plus
+    // the underscore-prefixed layout hints) is documented on SidebarRows and
+    // is unchanged — renaming a role is still a breaking change for consumer
+    // trailingDelegates.
+    SidebarRows {
+        id: rowBuilder
 
-    function _hasChildren(parentId) {
-        return root.controller.registry.childPagesData(parentId).length > 0;
+        registry: root.controller.registry
     }
-
-    // Defence in depth against a misregistered page graph that
-    // names itself as its own ancestor (parent ↔ self cycle, or a
-    // longer ring). Without these caps a search keystroke would
-    // freeze the UI thread infinitely-recursing through the cycle.
-    // Mirrors the same guard pattern Breadcrumbs.qml uses for the
-    // current-page → root walk; the constant here is intentionally
-    // larger (64 vs Breadcrumbs' 32) because the sidebar walk
-    // descends a tree (depth scales with nesting) while Breadcrumbs
-    // walks a single parent chain (length bounded by hierarchy
-    // depth). The C++ side keeps Breadcrumbs in lockstep at 32 hops
-    // (`kMaxParentChainHops`); the sidebar's value is QML-internal.
-    readonly property int _maxWalkDepth: 64
 
     function _visibleItems() {
-        // NOTE: every row dict here uses `pageId` (not `id`) for the
-        // model-role name. The delegate (SidebarRow.qml) consumes it
-        // as `required property string pageId` — `id` would shadow
-        // the QML id: directive and trips up qmlformat's parser.
-        //
-        // CONSUMER ROLE CONTRACT
-        // ──────────────────────
-        // Roles emitted here are the public model schema the trailing
-        // delegate consumes via its `modelData.<role>` reads. Naming
-        // conventions:
-        //   - `pageId`, `title`, `iconSource`, `hasQmlSource` — plain
-        //     camelCase, the page identity surface.
-        //   - `_depth`, `_isCollapsibleHeader`, `_isDrillParent`,
-        //     `_isExpanded`, `_isDivider` — underscore-prefixed
-        //     LAYOUT/STATE hints. The prefix signals "treat as
-        //     view-internal detail" (don't store, don't compute
-        //     derived values from), but they're part of the public
-        //     model contract because the consumer's trailingDelegate
-        //     must read them to render badges / active stripes
-        //     correctly. Renaming any of these is a BREAKING change
-        //     for downstream consumers (Phosphor Main.qml etc.).
-        if (root.searchText.length === 0) {
-            const out = [];
-            // Flat seen-set tracks every visited page id (parent AND
-            // child) so a misregistered tree where the same id appears
-            // as a sibling under multiple parents — or as both parent
-            // AND child of itself one level apart — can't drive
-            // infinite recursion. A parent-id-only guard would miss
-            // sibling-level duplicates because each parent walk
-            // starts with its own seen-marker for itself only.
-            const seen = new Set();
-            const walk = function walk(parentId, depth, kids) {
-                if (depth > root._maxWalkDepth)
-                    return;
-                for (let i = 0; i < kids.length; ++i) {
-                    const child = kids[i];
-                    // Skip duplicate child ids — a malformed registry
-                    // can list the same page twice under one parent,
-                    // or under multiple parents that both appear in
-                    // the current scope; without this guard the
-                    // delegate's required-property bindings see two
-                    // rows with identical pageIds and ListView's
-                    // diff against visibleModel goes sideways. Every
-                    // EMITTED id is marked here (the root is marked
-                    // before the first call), which also covers the
-                    // self-loop / cross-parent recursion cases the old
-                    // entry-guard caught — an already-seen id is never
-                    // emitted, so it is never recursed into either.
-                    if (seen.has(child.id))
-                        continue;
-                    seen.add(child.id);
-
-                    // Single _scopeChildren call per child — used for
-                    // the hasChildren predicate AND (when expanded)
-                    // the recursion. Two `childPagesData(child.id)`
-                    // hits per render row was wasted work.
-                    const childKids = root._scopeChildren(child.id);
-                    const childHasChildren = childKids.length > 0;
-                    const collapsible = child.isCollapsible === true && childHasChildren;
-                    out.push({
-                        "pageId": child.id,
-                        "title": child.title,
-                        "iconSource": child.iconSource,
-                        "hasQmlSource": child.hasQmlSource === true,
-                        "_depth": depth,
-                        "_isCollapsibleHeader": collapsible,
-                        "_isDrillParent": !collapsible && childHasChildren,
-                        "_isExpanded": collapsible && root._isExpanded(child.id),
-                        "_isDivider": false
-                    });
-                    if (collapsible && root._isExpanded(child.id))
-                        walk(child.id, depth + 1, childKids);
-
-                    // Section divider — synthetic row pushed immediately
-                    // after an entry that requested `hasDividerAfter`.
-                    // Suppressed in search mode because dividers carry
-                    // no match metadata and would break the flat result
-                    // list's reading order. The pageId includes parentId +
-                    // child.id so it stays unique even with identical
-                    // labels under different parents.
-                    if (child.hasDividerAfter === true)
-                        out.push({
-                            "pageId": "__divider__" + parentId + "/" + child.id,
-                            "title": "",
-                            "iconSource": "",
-                            "hasQmlSource": false,
-                            "_depth": depth,
-                            "_isCollapsibleHeader": false,
-                            "_isDrillParent": false,
-                            "_isExpanded": false,
-                            "_isDivider": true
-                        });
-                }
-            };
-            seen.add(root.currentParentId);
-            walk(root.currentParentId, 0, root._scopeChildren(root.currentParentId));
-            return out;
-        }
-        const needle = root.searchText.toLowerCase();
-        const matches = [];
-        // Same flat seen-set semantics as the no-search branch above:
-        // catches sibling-level dupes and self-referencing children
-        // that a parent-id-only guard would miss.
-        const seen = new Set();
-        // Recursively walk down from a parent until a navigable
-        // (hasQmlSource) descendant is found — used to route a
-        // category-title search match to its first reachable leaf so
-        // category-only parents (no qmlSource of their own) are not
-        // unreachable through search.
-        const findFirstNavigable = function findFirstNavigable(parentId, depth) {
-            if (depth > root._maxWalkDepth)
-                return null;
-            const kids = root._scopeChildren(parentId);
-            for (let i = 0; i < kids.length; ++i) {
-                const child = kids[i];
-                if (child.hasQmlSource)
-                    return child;
-                if (root._hasChildren(child.id)) {
-                    const desc = findFirstNavigable(child.id, depth + 1);
-                    if (desc)
-                        return desc;
-                }
-            }
-            return null;
-        };
-        const collect = function collect(parentId, breadcrumb, depth) {
-            if (depth > root._maxWalkDepth)
-                return;
-            const kids = root._scopeChildren(parentId);
-            for (let i = 0; i < kids.length; ++i) {
-                const child = kids[i];
-                // Sibling-level / self-loop dupe guard (mirrors the
-                // no-search branch above): every VISITED id is marked
-                // here, the scope root before the first call, so an
-                // already-seen id is neither matched again nor
-                // recursed into.
-                if (seen.has(child.id))
-                    continue;
-                seen.add(child.id);
-
-                // Fetch the child's children ONCE — _hasChildren below would
-                // have called childPagesData(child.id) and the recursion into
-                // collect() then re-calls _scopeChildren(child.id) on the next
-                // iteration. Two registry hits per recursion step is wasted
-                // work on a search-keystroke hot path. Mirrors the no-search
-                // branch's `grandKids` optimisation.
-                const grandKids = root._scopeChildren(child.id);
-                const grand = grandKids.length > 0;
-                const childBreadcrumb = breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title;
-                // Always recurse so descendants can match.
-                if (grand)
-                    collect(child.id, childBreadcrumb, depth + 1);
-
-                const matchesNeedle = childBreadcrumb.toLowerCase().indexOf(needle) >= 0;
-                if (child.hasQmlSource) {
-                    if (matchesNeedle)
-                        matches.push({
-                            "pageId": child.id,
-                            "title": childBreadcrumb,
-                            "iconSource": child.iconSource,
-                            "hasQmlSource": true,
-                            "_depth": 0,
-                            "_isCollapsibleHeader": false,
-                            "_isDrillParent": false,
-                            "_isExpanded": false,
-                            "_isDivider": false
-                        });
-                } else if (matchesNeedle && grand) {
-                    // Category-only parent (no qmlSource of its own)
-                    // whose title matches — route the user to its
-                    // first navigable descendant so they land
-                    // somewhere useful. Falls through silently if
-                    // the whole subtree is non-navigable.
-                    const landing = findFirstNavigable(child.id, depth + 1);
-                    if (landing) {
-                        matches.push({
-                            "pageId": landing.id,
-                            "title": childBreadcrumb,
-                            "iconSource": landing.iconSource,
-                            "hasQmlSource": true,
-                            "_depth": 0,
-                            "_isCollapsibleHeader": false,
-                            "_isDrillParent": false,
-                            "_isExpanded": false,
-                            "_isDivider": false
-                        });
-                    }
-                }
-            }
-        };
-        seen.add(root.currentParentId);
-        collect(root.currentParentId, "", 0);
-        return matches;
+        return rowBuilder.build(root.flattenTree, root.searchText, root.currentParentId, root.expandedCategories, root.flatTitleOverrides);
     }
 
     // Deep-equal the 9 known role values between a model row and the
@@ -426,6 +334,15 @@ ColumnLayout {
     onCurrentParentIdChanged: _refreshModel()
     onExpandedCategoriesChanged: _refreshModel()
     onSearchTextChanged: _refreshModel()
+    // The rail's rows are built imperatively, so every input to
+    // _visibleItems needs its own refresh hook. Without this one a new
+    // override map (e.g. the app re-evaluating its i18n() titles on a
+    // language change) would re-title the breadcrumb, which reads the same
+    // map through a declarative binding, while the rail kept the old text.
+    onFlatTitleOverridesChanged: {
+        if (root.flattenTree)
+            _refreshModel();
+    }
     Component.onCompleted: {
         // Suppress per-row add Transitions for the initial fill so the
         // sidebar doesn't visibly accordion-expand every top-level row
@@ -441,32 +358,112 @@ ColumnLayout {
         // land without animation. Steady-state additions trigger
         // through Connections.onPageRegistered below, after this
         // timer fires.
-        suppressAccordionTimer.start();
+        suppressAccordionTimer.restart();
     }
 
     Timer {
         id: suppressAccordionTimer
         interval: Kirigami.Units.shortDuration
         repeat: false
-        onTriggered: root._suppressAccordion = false
+        // Never release the flag mid-drill: a mode flip restarts this timer,
+        // and the drill that follows re-arms the flag via onStarted — but
+        // this pending fire would then clear it while the cross-fade is
+        // still running, letting the ScriptAction's scope change rebuild the
+        // rows unsuppressed. The animation's own onStopped is the release in
+        // that case.
+        onTriggered: {
+            if (!drillAnimation.running)
+                root._suppressAccordion = false;
+        }
     }
 
+    // Late-registered pages need to appear in the rail without a restart. The
+    // registry's pageRegistered signal fires once per registerPage() call, and
+    // startup makes ~55 of them back to back — each would otherwise walk the
+    // whole registry (flat mode emits from the root unconditionally) and run
+    // the model diff, whose fallback branch is a forward scan with a
+    // ListModel.get() per probe. Coalesce through Qt.callLater, which collapses
+    // repeat calls to the same function within one event-loop pass into a
+    // single invocation, so a registration batch costs one rebuild. Also covers
+    // async catalog warm-up (plugin loading, dynamic registration).
+    // Covers a consumer assigning or rebinding `Sidebar.controller` after
+    // this component is built, which re-evaluates the `registry` binding and
+    // re-fills a rail that SidebarRows::build had returned empty for.
+    //
+    // It does NOT cover a controller present from the start:
+    // ApplicationController::registry is CONSTANT, so that binding emits its
+    // one registryChanged during the creation pass, before Connections
+    // attaches at componentComplete. The synchronous fill in
+    // Component.onCompleted covers that case, and it runs after creation so
+    // the registry is already there. The C++ side deliberately tolerates a
+    // null/destroyed registry (see the QPointer note on SidebarRows), so the
+    // QML needs matching tolerance either way.
     Connections {
-        function onCurrentPageIdChanged() {
-            root._refreshModel();
+        function onRegistryChanged() {
+            Qt.callLater(root._refreshModel);
         }
 
-        target: root.controller
+        target: rowBuilder
     }
 
-    // Late-registered pages need to appear in the rail without a
-    // restart. The registry's pageRegistered signal fires once per
-    // registerPage() call; refreshing on each is cheap (the model
-    // diff keeps the visible delegates stable) and covers async
-    // catalog warm-up flows (plugin loading, dynamic registration).
     Connections {
+        // Both halves coalesced: startup fires one registerPage per page
+        // (~55), and a synchronous bump re-evaluates every binding that reads
+        // the registry through a Q_INVOKABLE once per registration. Matches
+        // Breadcrumbs, which defers the identical bump for the identical
+        // signal.
         function onPageRegistered() {
-            root._refreshModel();
+            Qt.callLater(root._bumpRegistryTick);
+            Qt.callLater(root._refreshModel);
+        }
+
+        // The rail is built from the registry's tier-filtered tree accessors,
+        // so it rebuilds whenever the visible set changes. The live producer is
+        // the simple/advanced master flip (setShowAdvanced); a lib consumer
+        // driving visibility per entry through setPageVisibility reaches the
+        // same signal and is covered too. Bound to visibleSetChanged rather
+        // than showAdvancedChanged, which fires only for the master flip and
+        // would leave a restamped entry stale in the rail while search (the
+        // other tier-filtering consumer) had already rebuilt.
+        function onVisibleSetChanged() {
+            root._bumpRegistryTick();
+            // A restamp can hide the very parent we are drilled into, or hide
+            // every navigable page UNDER it while leaving the parent itself
+            // visible. visibleChildPages filters only the children, so the
+            // rail would keep rendering a scope the mode has abolished, or
+            // collapse to a lone Back button over an empty list.
+            // onFlattenTreeChanged already resets drill state for exactly this
+            // reason on a mode flip; this is the same hazard reached through a
+            // per-entry restamp. rowBuilder decides which of those applies —
+            // it is the same walk build() uses to decide whether to OFFER the
+            // category at all, so the rail cannot disagree with its own rows.
+            //
+            // The scope under evaluation is the animation's TARGET while a
+            // drill cross-fade is in flight: currentParentId still holds the
+            // old scope until the sequence's ScriptAction lands.
+            const scope = drillAnimation.running ? drillAnimation.pendingParentId : root.currentParentId;
+            if (scope !== "" && rowBuilder.resolveDrillScope(scope) === "") {
+                // An involuntary reset rebuilds the whole rail (every child
+                // row out, every top-level row in), so suppress the per-row
+                // Transitions the same way the mode flip does. Without it a
+                // restamp accordions every row for a change the user did not
+                // make.
+                root._cancelDrill();
+                root._suppressAccordion = true;
+                suppressAccordionTimer.restart();
+                // The assignment refreshes through onCurrentParentIdChanged,
+                // but ONLY when it is a real value change. A restamp landing
+                // mid-drill-IN from the top level has currentParentId still ""
+                // (the scope under evaluation is the animation's pending id),
+                // so this assignment is a no-op and nothing would rebuild the
+                // rail for the new visible set. Defer a refresh unconditionally
+                // and let Qt.callLater coalesce it with the synchronous one
+                // when the assignment did change the value.
+                root.currentParentId = "";
+                Qt.callLater(root._refreshModel);
+            } else {
+                root._refreshModel();
+            }
         }
 
         target: root.controller.registry
@@ -612,7 +609,15 @@ ColumnLayout {
                 compact: root.compact
                 // Show the parent category name (e.g. "‹ Snapping"); pageData()
                 // returns an empty map for an unknown/empty id, so guard to "".
-                title: root.currentParentId !== "" ? (root.controller.registry.pageData(root.currentParentId).title || "") : ""
+                // _registryTick: pageData() is a Q_INVOKABLE and registers no
+                // binding dependency, so a parent registered or re-titled after
+                // the rail drilled in would keep a stale label. _refreshModel
+                // rebuilds the ListModel but never touches this binding. Same
+                // mechanism Breadcrumbs uses, for the same reason.
+                title: {
+                    void root._registryTick;
+                    return root.currentParentId !== "" ? (root.controller.registry.pageData(root.currentParentId).title || "") : "";
+                }
                 onBackClicked: root.drillOut()
             }
 
@@ -700,7 +705,7 @@ ColumnLayout {
                         // already guards via `_isDivider`, but the signal
                         // itself stays open to programmatic invocation;
                         // defending here keeps the contract honest.
-                        if (!pid.startsWith("__divider__"))
+                        if (!pid.startsWith(root._dividerPrefix))
                             root.controller.currentPageId = pid;
                     }
                     onCategoryToggleRequested: pid => root.toggleCategory(pid)

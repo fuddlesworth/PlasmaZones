@@ -92,6 +92,14 @@ class SettingsController : public QObject
     Q_PROPERTY(bool needsSave READ needsSave NOTIFY dirtyPagesChanged)
     Q_PROPERTY(QStringList dirtyPages READ dirtyPages NOTIFY dirtyPagesChanged)
     Q_PROPERTY(bool daemonRunning READ daemonRunning NOTIFY daemonRunningChanged)
+    // Simple/advanced UI mode. Runtime state only — persistence lives in the
+    // QML layer (a QtCore.Settings block in Main.qml, the same mechanism the
+    // filter/sort chrome uses), which pushes the restored value in at startup
+    // and writes user flips back out. The setter mirrors the value into the
+    // page registry (which filters the sidebar) and redirects away from a
+    // page the new mode can't show. Pages bind card/row `visible:` to this.
+    Q_PROPERTY(bool advancedMode READ advancedMode WRITE setAdvancedMode NOTIFY advancedModeChanged)
+    Q_PROPERTY(QString activeDirtyScope READ activeDirtyScope NOTIFY activeDirtyScopeChanged)
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
     Q_PROPERTY(DaemonController* daemonController READ daemonController CONSTANT)
     Q_PROPERTY(UpdateChecker* updateChecker READ updateChecker CONSTANT)
@@ -179,7 +187,20 @@ public:
     Q_INVOKABLE void navigateTo(const QString& address);
 
     static const QSet<QString>& validPageNames();
-    static const QHash<QString, QString>& parentPageRedirects();
+    /// Resolve a page address to a navigable leaf id. Valid leaf names and
+    /// unregistered ids pass through untouched; a registered virtual node
+    /// (category parent, *-cat header) resolves to its first leaf visible
+    /// under the CURRENT simple/advanced mode, falling back to its first
+    /// leaf regardless of mode (the caller's mode gate then redirects) when
+    /// the whole subtree is hidden. Derived from the live registry topology
+    /// and the active mode instead of a hand-synced static table.
+    QString resolveToLeaf(const QString& page) const;
+    /// Condensed SimpleOnly page id → the advanced pages whose config keys
+    /// it surfaces. These pages own no keys of their own, so their dirty
+    /// state, Reset, and Discard all delegate to the backing pages (see
+    /// isPageDirty / resetPage / discardPage), and a backing page's
+    /// reconcile cascades to them (reconcilePageDirty).
+    static const QHash<QString, QStringList>& simplePageBackingPages();
     /// Parent name → set of leaf child page names. Covers the top-level sidebar
     /// categories AND the mid-level virtual parents nested beneath them (among
     /// them snapping / tiling under placement, and the animations-* parents
@@ -200,8 +221,9 @@ public:
     /// which stays correct across a per-page Discard/Reset. The ordering,
     /// shortcuts, virtual-screens, animation and decoration pages are
     /// value-based too, each against its own staged state rather than the
-    /// manifest. Only a page in none of those groups falls back to the
-    /// m_dirtyPages membership set.
+    /// manifest, and the condensed simple pages (@ref simplePageBackingPages)
+    /// answer with the union of their backing pages. Only a page in none of
+    /// those groups falls back to the m_dirtyPages membership set.
     Q_INVOKABLE bool isPageDirty(const QString& page) const;
 
     // ── Per-page Reset / Discard (kebab menu in the breadcrumb row) ──────────
@@ -209,27 +231,45 @@ public:
     /// defaults — this includes the Windows appearance page, whose Windows.* /
     /// Gaps.* keys are plain config), the ordering pages (drop the custom order),
     /// the shortcuts pages (unassign every quick slot), the virtual screens page
-    /// (unsplit every monitor), and the animation pages (clear overrides + reset
-    /// animation keys).
+    /// (unsplit every monitor), the animation pages (clear overrides + reset
+    /// animation keys), the decoration pages (clear their surface root), and the
+    /// condensed simple pages (delegate to their backing pages).
     Q_INVOKABLE bool pageSupportsReset(const QString& page) const;
 
-    /// True when @p page can discard its own unsaved edits. Currently every page
-    /// that supports reset also supports discard, so this mirrors
-    /// pageSupportsReset. Kept as a separate query so the kebab can show the two
-    /// items independently if the sets ever diverge.
+    /// True when @p page can discard its own unsaved edits: every page
+    /// pageSupportsReset accepts, plus the parent categories, which discardPage
+    /// handles by walking their discardable leaves and Reset has no equivalent
+    /// for. Kept as a separate query so the kebab can show the two items
+    /// independently.
     Q_INVOKABLE bool pageSupportsDiscard(const QString& page) const;
+    /// The id whose dirty state @p pageId REPRESENTS, which for a condensed
+    /// `SimpleOnly` page is the group it stands in for, so a badge covers the
+    /// subtree's hidden leaves and its Discard can reach them. A page shown in
+    /// both modes returns itself. Full walk and the `layouts`/`display` case
+    /// that gates it: dirtyScopeFor in settingscontroller_pagetopology.cpp.
+    Q_INVOKABLE QString dirtyScopeFor(const QString& pageId) const;
+    /// `dirtyScopeFor(activePage)` as a NOTIFYing property. QML must bind this,
+    /// not call the invokable directly: the invokable does not re-evaluate on a
+    /// mode flip that leaves `activePage` in place, which stranded the page
+    /// kebab's Discard scope on the pre-flip value.
+    QString activeDirtyScope() const;
 
     /// Reset every config key owned by @p page to its schema default, staged
     /// for the user to Save or Discard (never persisted here). Manifest pages
     /// (including Windows appearance) reset their keys; the ordering / shortcuts /
-    /// virtual-screens / animation pages reset through their own staged machinery.
+    /// virtual-screens / animation / decoration pages reset through their own
+    /// staged machinery; a condensed simple page delegates to each backing page,
+    /// which resets those pages' FULL key sets (wider than the subset the simple
+    /// page shows — see the rationale at the pageSupportsReset definition).
     /// No-op only for a page with none of those.
     Q_INVOKABLE void resetPage(const QString& page);
 
     /// Revert every config key owned by @p page to the committed baseline,
     /// dropping that page's unsaved edits while leaving other pages untouched.
-    /// Handles the same special pages as resetPage, plus parent categories
-    /// (discards every discardable child leaf). No-op only for a page with
+    /// Handles the same special pages as resetPage (condensed simple pages
+    /// included, with the same widened scope), plus parent categories
+    /// (discards every discardable child leaf, skipping the simple pages whose
+    /// backing pages are siblings in that set). No-op only for a page with
     /// neither a manifest entry, a special-case branch, nor a child group.
     Q_INVOKABLE void discardPage(const QString& page);
 
@@ -259,6 +299,12 @@ public:
     {
         return m_daemonController.isRunning();
     }
+
+    bool advancedMode() const
+    {
+        return m_advancedMode;
+    }
+    void setAdvancedMode(bool advanced);
 
     Settings* settings()
     {
@@ -595,6 +641,12 @@ public:
     Q_INVOKABLE void defaults();
     Q_INVOKABLE void launchEditor();
 
+    /// Why a `resetPage` refused, carried by `pageResetFailed`. These are
+    /// stable tokens the shell branches on to pick wording, not user-facing
+    /// text: i18n lives in QML in this tree.
+    static constexpr QLatin1String ReasonDaemonUnreachable{"daemon-unreachable"};
+    static constexpr QLatin1String ReasonOverridesNotCleared{"overrides-not-cleared"};
+
 Q_SIGNALS:
     void activePageChanged();
     void dirtyPagesChanged();
@@ -608,6 +660,11 @@ Q_SIGNALS:
     /// window otherwise.
     void savingFinished();
     void daemonRunningChanged();
+    void advancedModeChanged();
+    /// Emitted whenever `activeDirtyScope` may have moved: the active page
+    /// changed, or the mode flip changed which pages are visible and therefore
+    /// whether the active one is still the sole representative of its group.
+    void activeDirtyScopeChanged();
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
     void availableAlgorithmsChanged();
@@ -615,16 +672,30 @@ Q_SIGNALS:
     void algorithmOperationFailed(const QString& reason);
     void layoutOperationFailed(const QString& reason);
     /// Emitted when exportAllSettings / importAllSettings gives up, and on the
-    /// partial-success path where the import landed but the animation pages
-    /// still hold pre-import snapshots. Both functions also return a bool, but
-    /// no caller sequences on it: the General page uses it only to gate a
-    /// success toast, because a refused path, a file that vanished, and a file
-    /// that is not settings at all are the same `false` and want different
-    /// words. This signal carries those words and is the only failure channel.
-    /// The partial path returns `false` for the same reason: the toast surface
-    /// replaces whatever is in flight, so a `true` there would let the caller's
-    /// success toast overwrite the reason emitted a moment earlier.
+    /// partial-success path (import landed but animation pages still hold
+    /// pre-import snapshots). Both return a bool too, but no caller sequences on
+    /// it: a refused path, a vanished file, and a non-settings file are one
+    /// `false` wanting different words, which only this signal carries.
     void settingsTransferFailed(const QString& reason);
+    /// Emitted when `resetPage` refuses. resetPage returns void and stages
+    /// nothing on that path, so without this the page reconciles CLEAN and the
+    /// refusal is indistinguishable from a page already at its defaults. Two
+    /// branches emit it for unrelated reasons the shell must word differently:
+    ///   * `ReasonDaemonUnreachable` — a value resetPage must READ first is
+    ///     unavailable, currently the daemon's quick-layout slot map.
+    ///   * `ReasonOverridesNotCleared` — a WRITE was refused: an animation or
+    ///     decoration override could not be cleared (an async discard still owns
+    ///     the snapshot map, or a file could not be removed). The daemon is fine.
+    /// @p reason is one of the Reason* constants above, NOT user-facing text:
+    /// the shell wires i18n in QML and branches on the token.
+    void pageResetFailed(const QString& page, const QString& reason);
+    /// Emitted when `discardPage` refuses — the Discard analogue of
+    /// pageResetFailed. The animation branch reconciles value-based, so a
+    /// refused revert leaves the page BADGED with no other word. The only
+    /// refusal is a WRITE that could not complete, so `reason` is always
+    /// `ReasonOverridesNotCleared`; the branch checks `asyncRevertInFlight()`
+    /// first so a benign refusal during a global async discard never emits.
+    void pageDiscardFailed(const QString& page, const QString& reason);
     /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
     /// fails at the daemon — QML can surface the reason in a toast so the
     /// user knows the change wasn't saved.
@@ -724,8 +795,61 @@ private:
     // (isPageDirty) after a per-page Reset/Discard, emitting dirtyPagesChanged
     // when it flips so the footer's global needsSave stays consistent. Used for
     // any page whose isPageDirty is value-based — manifest, ordering, shortcuts,
-    // and animation pages.
+    // animation and decoration pages.
+    //
+    // ALSO cascades to any condensed simple page backed by @p page (see
+    // simplePageBackingPages): reverting a backing page must clear the stale
+    // entry on the simple leaf the edit was attributed to while the user was
+    // in simple mode. Both syncs share one dirtyPagesChanged emit.
     void reconcilePageDirty(const QString& page);
+    /// Set @p page's m_dirtyPages membership to @p dirty, returning whether the
+    /// membership actually flipped. The one place a SINGLE page's membership is
+    /// written: the reconcile helpers, setNeedsSave, and the Reset/Discard
+    /// branches that own their own staged state all go through this, so
+    /// insert/remove and "did anything change" can never drift apart. Does not
+    /// emit — the caller owns the batching.
+    ///
+    /// Whole-set operations are the exception and do not route through it:
+    /// setNeedsSave(false) clears the set outright, and load() replaces it with
+    /// the full page set. Neither is a per-page decision, and both compare the
+    /// whole set before emitting.
+    bool syncDirtyMembership(const QString& page, bool dirty);
+    /// RAII batch window for the above: defers dirtyPagesChanged for the
+    /// enclosing scope so a delegated Reset/Discard that walks several backing
+    /// pages emits one NOTIFY instead of one per page. Nestable — only the
+    /// outermost scope fires, and only if something actually flipped.
+    ///
+    /// DEFINED HERE, not in a .cpp. It is constructed from
+    /// settingscontroller_pagereset.cpp,
+    /// so an out-of-line definition made the latter a non-compiling
+    /// translation unit that only linked because CMAKE_UNITY_BUILD happened to
+    /// merge the two files into one batch. Adding sources ahead of them in the
+    /// CMake list could split the batch and break the build with no source
+    /// change. Same rationale as the inline definitions in
+    /// animations_controller_detail.h.
+    class DirtyEmitScope
+    {
+    public:
+        explicit DirtyEmitScope(SettingsController& c)
+            : m_c(c)
+        {
+            ++m_c.m_dirtyEmitDepth;
+        }
+        ~DirtyEmitScope()
+        {
+            if (--m_c.m_dirtyEmitDepth == 0 && m_c.m_dirtyEmitPending) {
+                m_c.m_dirtyEmitPending = false;
+                Q_EMIT m_c.dirtyPagesChanged();
+            }
+        }
+        Q_DISABLE_COPY_MOVE(DirtyEmitScope)
+
+    private:
+        SettingsController& m_c;
+    };
+    /// Emit dirtyPagesChanged, or record it as pending when a DirtyEmitScope
+    /// is open.
+    void emitDirtyPagesChanged();
     // Batched variant for shared-domain groups (animation / decoration leaves):
     // reconciles every listed page but emits dirtyPagesChanged at most once,
     // matching the discard paths' single-emit discipline.
@@ -822,8 +946,22 @@ private:
     QString m_lastSeenWhatsNewVersion;
     QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;
+    /// Simple/advanced UI mode. THE single source of the default: false
+    /// (simple) so a brand-new user lands in the pared-down rail. The QML
+    /// QtCore.Settings block in Main.qml derives its no-stored-value default
+    /// from this at startup and restores the remembered choice for returning
+    /// users; buildApplicationController seeds the registry's showAdvanced
+    /// from it before the first sidebar build.
+    bool m_advancedMode = false;
     QString m_activePage = QStringLiteral("overview");
     QSet<QString> m_dirtyPages;
+    /// Depth counter for deferred dirtyPagesChanged emission. While > 0 the
+    /// reconcile helpers mutate m_dirtyPages but record the NOTIFY in
+    /// m_dirtyEmitPending instead of firing it, so a delegated Reset/Discard
+    /// that walks several backing pages still emits once — the same
+    /// single-emit discipline reconcilePagesDirty gives shared-domain groups.
+    int m_dirtyEmitDepth = 0;
+    bool m_dirtyEmitPending = false;
     /// Stack of external-edit page ids — `setNeedsSave(true)` targets
     /// `top()` instead of `m_activePage`. Nesting-aware so an inner
     /// begin/end pair restores the outer target on pop rather than

@@ -43,7 +43,11 @@ QtObject {
     readonly property int defaultDurationMs: 150
     readonly property string defaultEasingCurve: "0.33,1.00,0.68,1.00"
     readonly property real defaultSpringOmega: 12
-    readonly property real defaultSpringZeta: 1
+    // Mirrors `PhosphorAnimation::Spring`'s member initialisers (Spring.h:
+    // omega = 12.0, zeta = 0.8), which are what `Spring::fromString` returns
+    // for any input it cannot parse. Any QML path that falls back to these
+    // must describe the spring the engine will actually play.
+    readonly property real defaultSpringZeta: 0.8
     // ── Easing curve presets (style + direction matrix) ─────────────
     readonly property var easingStyles: [
         {
@@ -298,6 +302,47 @@ QtObject {
         return i18n("Custom");
     }
 
+    /// Decode a `spring:omega,zeta` wire string into `{ omega, zeta }`.
+    /// Single source of truth for every QML site that reads a spring wire
+    /// value, so none can disagree about a malformed one.
+    ///
+    /// All-or-nothing, mirroring `PhosphorAnimation::Spring::fromString`
+    /// (libs/phosphor-animation/src/spring.cpp): on ANY parse failure it
+    /// returns a default-constructed `Spring(defaultSpringOmega,
+    /// defaultSpringZeta)` wholesale rather than salvaging the half that
+    /// parsed. Per-component salvage (`isFinite(w) ? w : default`) is wrong
+    /// here: for a hand-edited "spring:14,abc" it would report omega=14 while
+    /// the engine actually plays omega=12, so one card would describe an
+    /// inherited spring differently from another. A non-spring or unparseable
+    /// string yields the engine defaults too.
+    ///
+    /// Finite but out-of-range halves (e.g. "spring:500,0.8") are returned
+    /// as-is, NOT clamped to the engine's play-time qBound. That is deliberate
+    /// and matches the documented validity boundary (animationspagecontroller.h,
+    /// springBounds_areUsableSubsetOfEngineClamp): the engine clamp, not this
+    /// parse, is where an out-of-band hand-edit is normalised.
+    function parseSpring(curve) {
+        if (typeof curve !== "string" || curve.indexOf("spring:") !== 0)
+            return ({
+                    "omega": defaultSpringOmega,
+                    "zeta": defaultSpringZeta
+                });
+
+        var parts = curve.substring(7).split(",");
+        var omega = parseFloat(parts[0]);
+        var zeta = parseFloat(parts[1]);
+        if (isFinite(omega) && isFinite(zeta))
+            return ({
+                    "omega": omega,
+                    "zeta": zeta
+                });
+
+        return ({
+                "omega": defaultSpringOmega,
+                "zeta": defaultSpringZeta
+            });
+    }
+
     /// Friendly label for ANY stored curve wire value, including the
     /// `spring:omega,zeta` form. Single source of truth for the name shown
     /// both in the rule editor's curve button (ActionRow) and the rule-list
@@ -305,16 +350,8 @@ QtObject {
     /// values defer to curveDisplayName; springs format as "Spring (ω, ζ)".
     function curveLabel(curve) {
         if (curve && curve.indexOf("spring:") === 0) {
-            var parts = curve.substring(7).split(",");
-            var omega = parseFloat(parts[0]);
-            var zeta = parseFloat(parts[1]);
-            if (!isFinite(omega))
-                omega = defaultSpringOmega;
-
-            if (!isFinite(zeta))
-                zeta = defaultSpringZeta;
-
-            return i18n("Spring (%1, %2)", omega.toFixed(2), zeta.toFixed(2));
+            var s = parseSpring(curve);
+            return i18n("Spring (%1, %2)", s.omega.toFixed(2), s.zeta.toFixed(2));
         }
         return curveDisplayName(curve);
     }

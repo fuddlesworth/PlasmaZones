@@ -54,6 +54,26 @@ struct SearchEntry
     QString icon;
     /// Extra synonyms / search terms (translated). Not displayed.
     QStringList keywords;
+    /// True when the target row/card is only rendered in advanced mode, on a
+    /// page that itself shows in BOTH modes. The registry's page-level tier
+    /// cannot express this: the host page is visible, so without this flag a
+    /// simple-mode search offers a result that reveals nothing. Producers set
+    /// it to mirror the row's own advanced-only declaration.
+    bool advancedOnly = false;
+
+    /// Search-folded copies of the matched fields, filled by
+    /// SearchRanker::prefold. EMPTY means "not prefolded" and the ranker folds
+    /// on the fly, so an entry built without prefolding still matches
+    /// correctly, just slower.
+    ///
+    /// These exist because folding is the ranker's dominant cost: matching one
+    /// entry folds its title, its subtitle and every keyword, so a keystroke
+    /// over a ~350-entry catalogue averaging ~4 keywords ran ~2000 Unicode NFD
+    /// walks. The index is already cached behind a dirty flag, so that work
+    /// was being repeated on immutable data.
+    QString foldedTitle;
+    QString foldedSubtitle;
+    QStringList foldedKeywords;
 
     /// The navigable address consumed by SettingsController::navigateTo, which
     /// splits on the FIRST '#'. Page ids must therefore not contain '#' (they

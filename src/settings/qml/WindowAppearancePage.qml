@@ -37,6 +37,14 @@ SettingsFlickable {
     // The title-bar scope row is only meaningful while title bars are hidden.
     readonly property bool hideTitleBarsOn: root.ctl.hideWindowTitleBars
 
+    // Simple/advanced split on this page: simple mode keeps the everyday
+    // decoration controls (border on/off + width/radius/colour, hide title
+    // bars, gaps); the power surfaces (the per-window "Apply to" scope pickers
+    // for border, title bar and opacity+tint, focus-fade timing, window
+    // filtering, the performance card) declare `advancedOnly: true` on their
+    // card or row. Note the opacity+tint card itself stays in simple mode; only
+    // its scope picker and the separator beside it are advanced.
+
     // "Apply to" scope options for the border / title-bar / opacity values, in
     // the order the schema declares them. The three keys share one token set,
     // so one lookup serves all three pickers.
@@ -63,6 +71,16 @@ SettingsFlickable {
             return Math.round(v * 255).toString(16).padStart(2, '0');
         }
         return ("#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b)).toUpperCase();
+    }
+
+    // The tint colour is always stored opaque. The opacity-tint shader ignores
+    // the colour's own alpha and uses the tint strength slider as the sole
+    // control, so storing a translucent colour would silently discard
+    // information the user thought they set. Scaling the wash by both was the
+    // double-apply the shader was changed to avoid, so do not reintroduce it
+    // here by storing alpha.
+    function colorToOpaqueHex(c) {
+        return "#FF" + root.colorToHex(c).slice(3);
     }
 
     // Scope-aware gap values for the Gaps card. gapValue() reads C++ state (the
@@ -167,14 +185,13 @@ SettingsFlickable {
                 }
 
                 SettingsRow {
-                    visible: root.borderVisible
+                    advancedOnly: true
+                    enabled: root.borderVisible
                     title: i18n("Apply to")
                     searchAnchor: "borderScope"
                     description: i18n("Which windows get a border")
 
                     WideComboBox {
-                        id: borderScopeCombo
-
                         Accessible.name: i18n("Apply borders to")
                         textRole: "text"
                         model: root.scopeOptions
@@ -184,7 +201,8 @@ SettingsFlickable {
                 }
 
                 SettingsSeparator {
-                    visible: root.borderVisible
+                    advancedOnly: true
+                    enabled: root.borderVisible
                 }
 
                 SettingsRow {
@@ -353,14 +371,15 @@ SettingsFlickable {
                 }
 
                 SettingsRow {
-                    visible: root.opacityTintVisible
+                    // Same treatment as the border / title-bar scope rows:
+                    // the per-window "Apply to" picker is advanced depth.
+                    advancedOnly: true
+                    enabled: root.opacityTintVisible
                     title: i18n("Apply to")
                     searchAnchor: "opacityTintScope"
                     description: i18n("Which windows are faded and tinted")
 
                     WideComboBox {
-                        id: opacityTintScopeCombo
-
                         Accessible.name: i18n("Apply opacity and tint to")
                         textRole: "text"
                         model: root.scopeOptions
@@ -370,7 +389,10 @@ SettingsFlickable {
                 }
 
                 SettingsSeparator {
-                    visible: root.opacityTintVisible
+                    // Pairs with the advanced "Apply to" row above: in simple
+                    // mode the card leads straight with the Opacity slider.
+                    advancedOnly: true
+                    enabled: root.opacityTintVisible
                 }
 
                 SettingsRow {
@@ -486,18 +508,18 @@ SettingsFlickable {
                 }
 
                 SettingsSeparator {
-                    visible: root.hideTitleBarsOn
+                    advancedOnly: true
+                    enabled: root.hideTitleBarsOn
                 }
 
                 SettingsRow {
-                    visible: root.hideTitleBarsOn
+                    advancedOnly: true
+                    enabled: root.hideTitleBarsOn
                     title: i18n("Apply to")
                     searchAnchor: "hideTitleBarsScope"
                     description: i18n("Which windows lose their title bar")
 
                     WideComboBox {
-                        id: titleBarScopeCombo
-
                         Accessible.name: i18n("Hide title bars on")
                         textRole: "text"
                         model: root.scopeOptions
@@ -506,9 +528,12 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {}
+                SettingsSeparator {
+                    advancedOnly: true
+                }
 
                 SettingsRow {
+                    advancedOnly: true
                     title: i18n("Focus fade duration")
                     searchAnchor: "focusFadeDuration"
                     description: i18n("How long decorations take to fade between focused and unfocused. Zero switches instantly.")
@@ -539,6 +564,8 @@ SettingsFlickable {
         // =================================================================
         WindowFilterCard {
             Layout.fillWidth: true
+            // Advanced-only: which windows get decorated is a power filter.
+            advancedOnly: true
 
             excludeTransient: appSettings.decorationExcludeTransientWindows
             transientDescription: i18n("Skip borders for dialogs, popups, and menus")
@@ -627,6 +654,8 @@ SettingsFlickable {
             Layout.fillWidth: true
             headerText: i18n("Performance")
             searchAnchor: "decorationPerformance"
+            // Advanced-only: decoration animation power tuning.
+            advancedOnly: true
             collapsible: true
 
             contentItem: ColumnLayout {
@@ -707,8 +736,9 @@ SettingsFlickable {
     ColorDialog {
         id: tintColorDialog
 
-        options: ColorDialog.ShowAlphaChannel
+        // No alpha channel here. Tint strength already controls how strongly
+        // the wash lands, and the shader ignores the colour's own alpha.
         title: i18n("Choose Tint Color")
-        onAccepted: root.ctl.windowTintColor = root.colorToHex(selectedColor)
+        onAccepted: root.ctl.windowTintColor = root.colorToOpaqueHex(selectedColor)
     }
 }

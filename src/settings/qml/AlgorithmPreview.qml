@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
+import "AlgorithmCapabilities.js" as AlgoCaps
 
 /**
  * @brief Visual preview of autotiling algorithm layouts
@@ -29,15 +30,6 @@ Item {
     // input, on equal footing with windowCount / splitRatio / masterCount: a
     // change re-runs the C++ preview through the same recalc path.
     property var customParams: ({})
-    // Color customization (passed through to ZonePreview). The defaults track
-    // the shared zone-color pipeline (ZoneColorDefaults resolves the user's
-    // effective zone colors, the same values the daemon pushes into its live
-    // overlays). Fidelity is base-color-only: the binding below re-applies a
-    // fixed 0.9 border alpha, and fill opacity comes from ZonePreview's
-    // activeOpacity, so a custom alpha in the effective colors is not
-    // reproduced here.
-    property color windowColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
-    property color windowBorder: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
     // Computed zones, rendered by ZonePreview. Recomputed by recalcTimer, which
     // throttles to ~60fps so several input changes in one frame coalesce into a
     // single C++ call.
@@ -48,31 +40,18 @@ Item {
     // to the property value and errors with "is not a function". The property has
     // a NOTIFY, so the Connections below refresh this cache when the list changes.
     property var _cachedAlgos: root.appSettings ? (root.appSettings.availableAlgorithms || []) : []
-    // Computed once at the root level (not per-delegate) to avoid N redundant
-    // C++ calls inside the Repeater delegate.
-    readonly property bool _currentAlgoSupportsMasterCount: {
-        var algos = root._cachedAlgos;
-        for (var i = 0; i < algos.length; i++) {
-            if (algos[i].id === root.algorithmId && algos[i].supportsMasterCount)
-                return true;
-        }
-        return false;
-    }
-    readonly property bool _currentAlgoProducesOverlappingZones: {
-        var algos = root._cachedAlgos;
-        for (var i = 0; i < algos.length; i++) {
-            if (algos[i].id === root.algorithmId && algos[i].producesOverlappingZones)
-                return true;
-        }
-        return false;
-    }
-    // Algorithm display name (avoids hardcoded switch statement)
-    property string algorithmName: ""
-    // Algorithm name label (hidden when used inside the Tiling tab's algorithm section
-    // where the name is already shown alongside the combo box)
-    property bool showLabel: true
-
+    // Resolved once at the root level (not per-delegate) so the Repeater's
+    // delegates share one catalog scan instead of repeating it N times.
+    readonly property var _currentAlgoCapabilities: AlgoCaps.capabilitiesFor(root._cachedAlgos, root.algorithmId)
+    readonly property bool _currentAlgoSupportsMasterCount: AlgoCaps.supportsMasterCount(root._currentAlgoCapabilities)
+    readonly property bool _currentAlgoProducesOverlappingZones: AlgoCaps.producesOverlappingZones(root._currentAlgoCapabilities)
     function recalcZones() {
+        // The host may not have resolved its controller yet, and
+        // Component.onCompleted starts the timer unconditionally.
+        if (!root.appSettings) {
+            root.zones = [];
+            return;
+        }
         if (root.algorithmId !== "") {
             root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount, root.customParams);
             // Retry once if a stale watchdog interrupt caused empty results —
@@ -93,7 +72,14 @@ Item {
 
     Connections {
         function onAvailableAlgorithmsChanged() {
-            root._cachedAlgos = root.appSettings.availableAlgorithms || [];
+            // _cachedAlgos self-refreshes through its NOTIFY-backed binding, so
+            // there is nothing to reassign here (a bare `_cachedAlgos = …` would
+            // sever that binding). Only the preview needs a nudge: the zones come
+            // from a Q_INVOKABLE with no NOTIFY of its own, so nothing else
+            // re-runs it when a .luau is edited and the registry reloads under an
+            // unchanged algorithmId. Without this the drawn layout stays at the
+            // previous revision.
+            recalcTimer.restart();
         }
 
         target: root.appSettings
@@ -116,23 +102,19 @@ Item {
         showZoneNumbers: true
         zoneNumberDisplay: root.zoneNumberDisplay
         producesOverlappingZones: root._currentAlgoProducesOverlappingZones
-        highlightColor: root.windowColor
-        borderColor: Qt.rgba(root.windowBorder.r, root.windowBorder.g, root.windowBorder.b, 0.9)
+        // Straight from the shared zone-color pipeline (ZoneColorDefaults
+        // resolves the user's effective zone colors, the same values the daemon
+        // pushes into its live overlays). Fidelity is base-color-only: the
+        // border alpha is re-applied at a fixed 0.9 and fill opacity comes from
+        // ZonePreview's activeOpacity, so a custom alpha in the effective
+        // colors is not reproduced here.
+        highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+        borderColor: Qt.rgba(QFZCommon.ZoneColorDefaults.previewZoneBorderColor.r, QFZCommon.ZoneColorDefaults.previewZoneBorderColor.g, QFZCommon.ZoneColorDefaults.previewZoneBorderColor.b, 0.9)
         zonePadding: 1
         edgeGap: 0
         minZoneSize: 4
         showMasterDot: root._currentAlgoSupportsMasterCount && root.algorithmId !== ""
         masterCount: root.masterCount
         animationDuration: 0
-    }
-
-    Label {
-        visible: root.showLabel
-        anchors.bottom: parent.bottom
-        anchors.right: parent.right
-        anchors.margins: Math.round(Kirigami.Units.smallSpacing / 2)
-        text: root.algorithmName || root.algorithmId
-        font: Kirigami.Theme.smallFont
-        opacity: 0.5
     }
 }

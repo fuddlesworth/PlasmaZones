@@ -54,8 +54,8 @@ DBusBridge::DBusBridge(DBusEndpoint endpoint, QObject* parent)
     // syncTimeoutMs is always a usable value.
     if (m_endpoint.syncTimeoutMs <= 0) {
         qWarning() << "PhosphorControl::DBusBridge: non-positive syncTimeoutMs" << m_endpoint.syncTimeoutMs
-                   << "— clamping to default" << kDefaultSyncTimeoutMs << "ms";
-        m_endpoint.syncTimeoutMs = kDefaultSyncTimeoutMs;
+                   << "— clamping to default" << DefaultSyncTimeoutMs << "ms";
+        m_endpoint.syncTimeoutMs = DefaultSyncTimeoutMs;
     }
     // Surface programmer errors (forgot to fill in the endpoint) at the
     // construction site rather than via N per-call warnings later. Empty
@@ -151,9 +151,9 @@ void DBusBridge::asyncCallOn(const QString& interfaceName, const QString& method
     // problem. Fire once on first breach (>= cap, not just == cap, so
     // a burst that steps over the boundary still trips it) and latch
     // so a steady-state near-cap doesn't re-warn on every call.
-    constexpr int kPendingWatcherSoftCapWarn = 128;
+    constexpr int PendingWatcherSoftCapWarn = 128;
     ++m_outstandingAsyncCalls;
-    if (!m_softCapWarned && m_outstandingAsyncCalls >= kPendingWatcherSoftCapWarn) {
+    if (!m_softCapWarned && m_outstandingAsyncCalls >= PendingWatcherSoftCapWarn) {
         m_softCapWarned = true;
         qWarning() << "PhosphorControl::DBusBridge::asyncCallOn: pending-watcher count reached"
                    << m_outstandingAsyncCalls
