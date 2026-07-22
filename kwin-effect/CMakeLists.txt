@@ -47,6 +47,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/plasmazoneseffect.cpp
     plasmazoneseffect/plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
+    plasmazoneseffect/lifecycle_wiring.cpp
     plasmazoneseffect/decoration_appearance.cpp
     plasmazoneseffect/decorations.cpp
     plasmazoneseffect/decoration_teardown.cpp
@@ -64,7 +65,9 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/window_query.h
     plasmazoneseffect/screens.cpp
     plasmazoneseffect/window_lifecycle.cpp
+    plasmazoneseffect/window_connections.cpp
     plasmazoneseffect/daemon_bringup.cpp
+    plasmazoneseffect/daemon_settings.cpp
     plasmazoneseffect/daemon_apply.cpp
     plasmazoneseffect/rule_invalidation.cpp
     plasmazoneseffect/drag_snap.cpp
@@ -72,13 +75,19 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/mesh_sim.cpp
     plasmazoneseffect/mesh_sim.h
     plasmazoneseffect/paint_pipeline.cpp
+    plasmazoneseffect/paint_shader_window.cpp
+    plasmazoneseffect/paint_capture.cpp
+    plasmazoneseffect/paint_internal.h
     plasmazoneseffect/shader_transitions.cpp
+    plasmazoneseffect/shader_config_dbus.cpp
+    plasmazoneseffect/shader_textures.cpp
     plasmazoneseffect/surface_compile.cpp
     plasmazoneseffect/shader_resolve.cpp
     plasmazoneseffect/shader_resolve.h
     plasmazoneseffect/shader_internal.h
     plasmazoneseffect/surface_types.h
     plasmazoneseffect/transition_types.h
+    plasmazoneseffect/effect_state.h
     plasmazoneseffect/types.h
     plasmazoneseffect/surface_fold.h
     transitions/shadertransitionmanager.h

@@ -30,15 +30,15 @@ Kirigami.Dialog {
         if (!root.editorController)
             return;
 
-        zonePaddingOverrideCheck.checked = root.editorController.hasZonePaddingOverride;
-        zonePaddingSpin.value = root.editorController.hasZonePaddingOverride ? root.editorController.zonePadding : root.editorController.globalZonePadding;
-        outerGapOverrideCheck.checked = root.editorController.hasOuterGapOverride;
-        outerGapSpin.value = root.editorController.hasOuterGapOverride ? root.editorController.outerGap : root.editorController.globalOuterGap;
-        perSideOverrideCheck.checked = root.editorController.usePerSideOuterGap;
-        perSideTopSpin.value = root.editorController.outerGapTop >= 0 ? root.editorController.outerGapTop : root.editorController.globalOuterGapTop;
-        perSideBottomSpin.value = root.editorController.outerGapBottom >= 0 ? root.editorController.outerGapBottom : root.editorController.globalOuterGapBottom;
-        perSideLeftSpin.value = root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft;
-        perSideRightSpin.value = root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight;
+        zonePaddingOverrideCheck.checked = root.editorController.gaps.hasZonePaddingOverride;
+        zonePaddingSpin.value = root.editorController.gaps.hasZonePaddingOverride ? root.editorController.gaps.zonePadding : root.editorController.gaps.globalZonePadding;
+        outerGapOverrideCheck.checked = root.editorController.gaps.hasOuterGapOverride;
+        outerGapSpin.value = root.editorController.gaps.hasOuterGapOverride ? root.editorController.gaps.outerGap : root.editorController.gaps.globalOuterGap;
+        perSideOverrideCheck.checked = root.editorController.gaps.usePerSideOuterGap;
+        perSideTopSpin.value = root.editorController.gaps.outerGapTop >= 0 ? root.editorController.gaps.outerGapTop : root.editorController.gaps.globalOuterGapTop;
+        perSideBottomSpin.value = root.editorController.gaps.outerGapBottom >= 0 ? root.editorController.gaps.outerGapBottom : root.editorController.gaps.globalOuterGapBottom;
+        perSideLeftSpin.value = root.editorController.gaps.outerGapLeft >= 0 ? root.editorController.gaps.outerGapLeft : root.editorController.gaps.globalOuterGapLeft;
+        perSideRightSpin.value = root.editorController.gaps.outerGapRight >= 0 ? root.editorController.gaps.outerGapRight : root.editorController.gaps.globalOuterGapRight;
         fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
         // aspectRatioCombo's declarative `currentIndex` binding dies the first
         // time the user activates the combo (QQC2), so this imperative re-sync
@@ -52,44 +52,44 @@ Kirigami.Dialog {
     // Sync UI state when values change externally (undo/redo, load layout)
     Connections {
         function onZonePaddingChanged() {
-            zonePaddingOverrideCheck.checked = root.editorController.hasZonePaddingOverride;
-            zonePaddingSpin.value = root.editorController.hasZonePaddingOverride ? root.editorController.zonePadding : root.editorController.globalZonePadding;
+            zonePaddingOverrideCheck.checked = root.editorController.gaps.hasZonePaddingOverride;
+            zonePaddingSpin.value = root.editorController.gaps.hasZonePaddingOverride ? root.editorController.gaps.zonePadding : root.editorController.gaps.globalZonePadding;
         }
 
         function onOuterGapChanged() {
-            outerGapOverrideCheck.checked = root.editorController.hasOuterGapOverride;
-            outerGapSpin.value = root.editorController.hasOuterGapOverride ? root.editorController.outerGap : root.editorController.globalOuterGap;
-            perSideOverrideCheck.checked = root.editorController.usePerSideOuterGap;
-            perSideTopSpin.value = root.editorController.outerGapTop >= 0 ? root.editorController.outerGapTop : root.editorController.globalOuterGapTop;
-            perSideBottomSpin.value = root.editorController.outerGapBottom >= 0 ? root.editorController.outerGapBottom : root.editorController.globalOuterGapBottom;
-            perSideLeftSpin.value = root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft;
-            perSideRightSpin.value = root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight;
+            outerGapOverrideCheck.checked = root.editorController.gaps.hasOuterGapOverride;
+            outerGapSpin.value = root.editorController.gaps.hasOuterGapOverride ? root.editorController.gaps.outerGap : root.editorController.gaps.globalOuterGap;
+            perSideOverrideCheck.checked = root.editorController.gaps.usePerSideOuterGap;
+            perSideTopSpin.value = root.editorController.gaps.outerGapTop >= 0 ? root.editorController.gaps.outerGapTop : root.editorController.gaps.globalOuterGapTop;
+            perSideBottomSpin.value = root.editorController.gaps.outerGapBottom >= 0 ? root.editorController.gaps.outerGapBottom : root.editorController.gaps.globalOuterGapBottom;
+            perSideLeftSpin.value = root.editorController.gaps.outerGapLeft >= 0 ? root.editorController.gaps.outerGapLeft : root.editorController.gaps.globalOuterGapLeft;
+            perSideRightSpin.value = root.editorController.gaps.outerGapRight >= 0 ? root.editorController.gaps.outerGapRight : root.editorController.gaps.globalOuterGapRight;
         }
 
         function onGlobalZonePaddingChanged() {
-            if (!root.editorController.hasZonePaddingOverride)
-                zonePaddingSpin.value = root.editorController.globalZonePadding;
+            if (!root.editorController.gaps.hasZonePaddingOverride)
+                zonePaddingSpin.value = root.editorController.gaps.globalZonePadding;
         }
 
         function onGlobalOuterGapChanged() {
-            if (!root.editorController.hasOuterGapOverride)
-                outerGapSpin.value = root.editorController.globalOuterGap;
+            if (!root.editorController.gaps.hasOuterGapOverride)
+                outerGapSpin.value = root.editorController.gaps.globalOuterGap;
 
             // Each side is tested on its own stored value, matching onOpened and
             // onOuterGapChanged. A single any-side test would be wrong here: a
             // partial override would leave stale globals on the sides it does not
             // cover, and would overwrite the stored values on the sides it does.
-            if (root.editorController.outerGapTop < 0)
-                perSideTopSpin.value = root.editorController.globalOuterGapTop;
+            if (root.editorController.gaps.outerGapTop < 0)
+                perSideTopSpin.value = root.editorController.gaps.globalOuterGapTop;
 
-            if (root.editorController.outerGapBottom < 0)
-                perSideBottomSpin.value = root.editorController.globalOuterGapBottom;
+            if (root.editorController.gaps.outerGapBottom < 0)
+                perSideBottomSpin.value = root.editorController.gaps.globalOuterGapBottom;
 
-            if (root.editorController.outerGapLeft < 0)
-                perSideLeftSpin.value = root.editorController.globalOuterGapLeft;
+            if (root.editorController.gaps.outerGapLeft < 0)
+                perSideLeftSpin.value = root.editorController.gaps.globalOuterGapLeft;
 
-            if (root.editorController.outerGapRight < 0)
-                perSideRightSpin.value = root.editorController.globalOuterGapRight;
+            if (root.editorController.gaps.outerGapRight < 0)
+                perSideRightSpin.value = root.editorController.gaps.globalOuterGapRight;
         }
 
         function onOverlayDisplayModeChanged() {
@@ -165,14 +165,14 @@ Kirigami.Dialog {
                     id: zonePaddingOverrideCheck
 
                     text: i18nc("@option:check", "Zone Padding")
-                    checked: root.editorController ? root.editorController.hasZonePaddingOverride : false
+                    checked: root.editorController ? root.editorController.gaps.hasZonePaddingOverride : false
                     Layout.fillWidth: true
                     onToggled: {
                         if (root.editorController) {
                             if (checked)
-                                root.editorController.zonePadding = root.editorController.globalZonePadding;
+                                root.editorController.gaps.zonePadding = root.editorController.gaps.globalZonePadding;
                             else
-                                root.editorController.clearZonePaddingOverride();
+                                root.editorController.gaps.clearZonePaddingOverride();
                         }
                     }
                 }
@@ -182,13 +182,13 @@ Kirigami.Dialog {
 
                     from: 0
                     to: 100
-                    value: root.editorController ? root.editorController.globalZonePadding : 0
+                    value: root.editorController ? root.editorController.gaps.globalZonePadding : 0
                     enabled: zonePaddingOverrideCheck.checked
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 6
                     Accessible.name: i18nc("@label", "Zone padding value")
                     onValueModified: {
                         if (root.editorController && zonePaddingOverrideCheck.checked)
-                            root.editorController.zonePadding = value;
+                            root.editorController.gaps.zonePadding = value;
                     }
                 }
 
@@ -203,14 +203,14 @@ Kirigami.Dialog {
                     id: outerGapOverrideCheck
 
                     text: i18nc("@option:check", "Edge Gap")
-                    checked: root.editorController ? root.editorController.hasOuterGapOverride : false
+                    checked: root.editorController ? root.editorController.gaps.hasOuterGapOverride : false
                     Layout.fillWidth: true
                     onToggled: {
                         if (root.editorController) {
                             if (checked)
-                                root.editorController.outerGap = root.editorController.globalOuterGap;
+                                root.editorController.gaps.outerGap = root.editorController.gaps.globalOuterGap;
                             else
-                                root.editorController.clearOuterGapOverride();
+                                root.editorController.gaps.clearOuterGapOverride();
                         }
                     }
                 }
@@ -220,13 +220,13 @@ Kirigami.Dialog {
 
                     from: 0
                     to: 100
-                    value: root.editorController ? root.editorController.globalOuterGap : 0
+                    value: root.editorController ? root.editorController.gaps.globalOuterGap : 0
                     enabled: outerGapOverrideCheck.checked
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 6
                     Accessible.name: i18nc("@label", "Edge gap value")
                     onValueModified: {
                         if (root.editorController && outerGapOverrideCheck.checked)
-                            root.editorController.outerGap = value;
+                            root.editorController.gaps.outerGap = value;
                     }
                 }
 
@@ -242,26 +242,26 @@ Kirigami.Dialog {
                 id: perSideOverrideCheck
 
                 text: i18nc("@option:check", "Set per side")
-                checked: root.editorController ? root.editorController.usePerSideOuterGap : false
+                checked: root.editorController ? root.editorController.gaps.usePerSideOuterGap : false
                 enabled: outerGapOverrideCheck.checked
                 Layout.leftMargin: Kirigami.Units.largeSpacing * 2
                 onToggled: {
                     if (root.editorController) {
-                        root.editorController.usePerSideOuterGap = checked;
+                        root.editorController.gaps.usePerSideOuterGap = checked;
                         if (checked) {
                             // Initialize per-side values from uniform gap if not set
-                            let uniformGap = root.editorController.outerGap >= 0 ? root.editorController.outerGap : root.editorController.globalOuterGap;
-                            if (root.editorController.outerGapTop < 0)
-                                root.editorController.outerGapTop = uniformGap;
+                            let uniformGap = root.editorController.gaps.outerGap >= 0 ? root.editorController.gaps.outerGap : root.editorController.gaps.globalOuterGap;
+                            if (root.editorController.gaps.outerGapTop < 0)
+                                root.editorController.gaps.outerGapTop = uniformGap;
 
-                            if (root.editorController.outerGapBottom < 0)
-                                root.editorController.outerGapBottom = uniformGap;
+                            if (root.editorController.gaps.outerGapBottom < 0)
+                                root.editorController.gaps.outerGapBottom = uniformGap;
 
-                            if (root.editorController.outerGapLeft < 0)
-                                root.editorController.outerGapLeft = uniformGap;
+                            if (root.editorController.gaps.outerGapLeft < 0)
+                                root.editorController.gaps.outerGapLeft = uniformGap;
 
-                            if (root.editorController.outerGapRight < 0)
-                                root.editorController.outerGapRight = uniformGap;
+                            if (root.editorController.gaps.outerGapRight < 0)
+                                root.editorController.gaps.outerGapRight = uniformGap;
                         }
                     }
                 }
@@ -283,12 +283,12 @@ Kirigami.Dialog {
 
                     from: 0
                     to: 100
-                    value: root.editorController ? (root.editorController.outerGapTop >= 0 ? root.editorController.outerGapTop : root.editorController.globalOuterGapTop) : 0
+                    value: root.editorController ? (root.editorController.gaps.outerGapTop >= 0 ? root.editorController.gaps.outerGapTop : root.editorController.gaps.globalOuterGapTop) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Top edge gap override")
                     onValueModified: {
                         if (root.editorController)
-                            root.editorController.outerGapTop = value;
+                            root.editorController.gaps.outerGapTop = value;
                     }
                 }
 
@@ -305,12 +305,12 @@ Kirigami.Dialog {
 
                     from: 0
                     to: 100
-                    value: root.editorController ? (root.editorController.outerGapBottom >= 0 ? root.editorController.outerGapBottom : root.editorController.globalOuterGapBottom) : 0
+                    value: root.editorController ? (root.editorController.gaps.outerGapBottom >= 0 ? root.editorController.gaps.outerGapBottom : root.editorController.gaps.globalOuterGapBottom) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Bottom edge gap override")
                     onValueModified: {
                         if (root.editorController)
-                            root.editorController.outerGapBottom = value;
+                            root.editorController.gaps.outerGapBottom = value;
                     }
                 }
 
@@ -327,12 +327,12 @@ Kirigami.Dialog {
 
                     from: 0
                     to: 100
-                    value: root.editorController ? (root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft) : 0
+                    value: root.editorController ? (root.editorController.gaps.outerGapLeft >= 0 ? root.editorController.gaps.outerGapLeft : root.editorController.gaps.globalOuterGapLeft) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Left edge gap override")
                     onValueModified: {
                         if (root.editorController)
-                            root.editorController.outerGapLeft = value;
+                            root.editorController.gaps.outerGapLeft = value;
                     }
                 }
 
@@ -349,12 +349,12 @@ Kirigami.Dialog {
 
                     from: 0
                     to: 100
-                    value: root.editorController ? (root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight) : 0
+                    value: root.editorController ? (root.editorController.gaps.outerGapRight >= 0 ? root.editorController.gaps.outerGapRight : root.editorController.gaps.globalOuterGapRight) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Right edge gap override")
                     onValueModified: {
                         if (root.editorController)
-                            root.editorController.outerGapRight = value;
+                            root.editorController.gaps.outerGapRight = value;
                     }
                 }
 

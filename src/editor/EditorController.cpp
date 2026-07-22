@@ -3,6 +3,7 @@
 
 #include "EditorController.h"
 
+#include "EditorGapsModel.h"
 #include "../config/configbackends.h"
 #include "../config/configdefaults.h"
 #include "services/ILayoutService.h"
@@ -41,6 +42,7 @@ EditorController::EditorController(QObject* parent)
     , m_snappingService(new SnappingService(this))
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
+    , m_gaps(new EditorGapsModel(this, this))
     , m_localRuleStore(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath()))
     , m_localRuleStoreWatcher(std::make_unique<PhosphorRules::RuleStoreWatcher>(*m_localRuleStore))
     , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(),

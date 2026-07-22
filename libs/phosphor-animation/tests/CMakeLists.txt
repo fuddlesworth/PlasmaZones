@@ -111,6 +111,11 @@ pas_add_test(pas_test_shaderprofile test_shaderprofile.cpp)
 pas_add_test(pas_test_shaderprofiletree test_shaderprofiletree.cpp)
 pas_add_test(pas_test_animationshaderregistry test_animationshaderregistry.cpp)
 
+# Shader-parameter translation contract, split out of the registry test
+# above. Pure translateAnimationParams / slot-key logic with no filesystem
+# scan, so it uses the core pa_add_test harness (no PhosphorFsLoader link).
+pa_add_test(pa_test_shaderparamtranslation test_shaderparamtranslation.cpp)
+
 # Integration test against the actual data/animations/ packs.
 pas_add_test(pas_test_builtin_effects test_builtin_effects.cpp)
 target_compile_definitions(pas_test_builtin_effects PRIVATE

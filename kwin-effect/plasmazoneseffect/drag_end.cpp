@@ -53,8 +53,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // successive drag starts before this endDrag reply lands (the daemon may
     // take up to EndDragTimeoutMs), reading the member there would see the
     // wrong drag's state. Capturing a local is the same staleness guard the
-    // beginDrag reply gets from m_dragGeneration.
-    const bool startedFloating = m_dragStartedFloating;
+    // beginDrag reply gets from m_dragActivation.generation.
+    const bool startedFloating = m_dragActivation.startedFloating;
 
     // qRound the cursor coords (not truncation): the hot-path updateDragCursor
     // stream rounds, so on fractional-scale outputs the release coordinate the
@@ -174,7 +174,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // Now floating — flips the Mode / IsSnapped / IsFloating rule
                     // fields; re-resolve now instead of waiting for the broadcast.
                     invalidateRuleCacheForStateChange(windowId);
-                    // Note: m_dragFloatedWindowIds is intentionally NOT re-set here.
+                    // Note: m_dragActivation.floatedWindowIds is intentionally NOT re-set here.
                     // See dragStopped handler — the marker is cleared at drag end
                     // because the daemon's drag-end float path (setWindowFloat →
                     // windowFloatingStateSynced) never emits applyGeometryForFloat,

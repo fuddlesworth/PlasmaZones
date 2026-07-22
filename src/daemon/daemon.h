@@ -300,6 +300,14 @@ private:
     void setupAnimationShaderEffects();
     void setupSurfaceShaderEffects();
 
+    // init() phase methods, run in order from the thin init() (daemon.cpp); the
+    // order is load-bearing. Defined across daemon/init_*.cpp + shader_warmup.cpp.
+    void setupShaderWarmBakes();
+    void initLayoutAndSettingsWiring();
+    void initCoreAdaptors();
+    void initEnginesAndWiring();
+    bool registerDBusService();
+
     /// Watch the session going idle and push it to the KWin effect, which pauses
     /// decoration-chain animation on it. See m_idleService for why the daemon owns this
     /// rather than the effect.
@@ -660,21 +668,14 @@ private:
     // rule-backed assignment cascade — construction order must build the
     // store first. The RuleAdaptor borrows it too.
     std::unique_ptr<PhosphorRules::RuleStore> m_ruleStore;
-    // Filtered slice of m_ruleStore — only rules whose action list
-    // contains a terminal `Exclude`. Built via
-    // `PhosphorRules::ExclusionRules::excludeRulesFrom` and kept in
-    // lockstep with the unified store via the rulesChanged subscription
-    // wired in init(). SnapEngine borrows a pointer into this set for its
-    // `isAppIdExcluded` probe; the WindowTrackingAdaptor's
-    // `pruneExcludedPendingRestores` receives the AppId patterns extracted
-    // from this same filtered slice by the daemon at refilter time. Held
-    // as a member (stable address) rather than rebuilt per access so the
-    // bound RuleEvaluator's per-revision cache stays valid across
-    // back-to-back resolves. Replaces a legacy QStringList-based settings
-    // path that derived the equivalent set from two flat string lists —
-    // see configmigration.cpp::migrateV3ToV4 for the schema fold; the
-    // unified `PhosphorRules::ExclusionRules` namespace now does the
-    // slicing across both the daemon and the kwin-effect.
+    // Filtered slice of m_ruleStore — only rules with a terminal `Exclude`
+    // action, built via `PhosphorRules::ExclusionRules::excludeRulesFrom` and
+    // kept in lockstep with the store via the rulesChanged subscription wired
+    // in init(). SnapEngine borrows a pointer into this set for isAppIdExcluded;
+    // the WindowTrackingAdaptor's pruneExcludedPendingRestores receives the
+    // AppId patterns extracted from this same slice at refilter time. Held as a
+    // member (stable address) so the bound RuleEvaluator's per-revision cache
+    // stays valid across back-to-back resolves.
     PhosphorRules::RuleSet m_excludeRuleSet;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry. Replaces the old

@@ -27,6 +27,7 @@
 #include <memory>
 #include <optional>
 
+#include <PhosphorTileEngine/AutotileEngineTypes.h>
 #include <PhosphorTileEngine/OverflowManager.h>
 
 namespace PhosphorZones {
@@ -121,24 +122,10 @@ public:
      *
      * Used by the daemon's desktop-count-changed handler to find stale
      * desktops (states on desktop > newCount) so they can be pruned via
-     * pruneStatesForDesktop(). Replaces an older screenStates() accessor
-     * that returned a const-ref to a QHash<TilingStateKey, PhosphorTiles::TilingState*>
-     * — that accessor leaked mutable PhosphorTiles::TilingState pointers via the
-     * const-reference loophole (const on the hash doesn't propagate to the
-     * pointed-to values), for a single caller that only needed desktop
-     * numbers.
-     *
-     * Callers that need the raw state map should add a purpose-built
-     * query method rather than iterating private state. The
-     * `m_states` map itself stays private (no public map
-     * accessor exists); per-screen lookup is available through
-     * `tilingStateForScreen(screenId)`
-     * which returns a (non-const) `PhosphorTiles::TilingState*` for
-     * the read/mutate sites that explicitly key off one screen.
-     * That accessor is public, so the restraint on mutating through it is
-     * convention only (not enforced by access level or `friend`): the
-     * intended writers are the engine's own call paths and the
-     * per-screen config resolver, while tests use it for read-only access.
+     * pruneStatesForDesktop(). The m_states map itself stays private; per-screen
+     * lookup is available through tilingStateForScreen(screenId). (Design notes
+     * on why the older screenStates() accessor was removed live above the
+     * definition in AutotileEngine.cpp.)
      */
     QSet<int> desktopsWithActiveState() const override;
 
@@ -1258,18 +1245,11 @@ private:
     }
 
     /**
-     * @brief Which states a global propagate writes.
+     * @brief Which states a global propagate writes: only the current
+     *        desktop/activity's (CurrentContext) or every key (AllContexts).
      *
-     * CurrentContext is the passive refresh: only the current desktop/activity's
-     * states are written, so a per-desktop tuning on another desktop survives.
-     *
-     * AllContexts is for a refresh that has just DROPPED the per-key user-tuned
-     * flags because the user changed the global value in Settings. The clear
-     * spans every key, so the write must too — a clear that outruns the write
-     * leaves a state holding a tuned value with no flag protecting it, and the
-     * next CurrentContext propagate to run while that state's desktop is current
-     * overwrites the user's value out of nowhere. Same clear-scope/write-scope
-     * pairing as AutotileEngine::setGlobalSplitRatio and its master-count twin.
+     * The clear-scope/write-scope pairing rationale lives above
+     * propagateGlobalSplitRatio in AutotileEngine.cpp.
      */
     enum class PropagateScope {
         CurrentContext,
@@ -1449,24 +1429,9 @@ private:
     // no window is rule-floated. See FloatPredicate doc above.
     FloatPredicate m_floatPredicate{};
 
-    /**
-     * @brief An already-managed window ARRIVING in a state via
-     *        migrateWindowBetweenKeys, with the float state it held on the
-     *        source, captured before the source removed it.
-     *
-     * Set only for the duration of that migration's synchronous
-     * onWindowAdded() → insertWindow() call, so insertWindow can tell a
-     * migration apart from a genuine open. m_floatPredicate answers "should
-     * this app OPEN floating" — a pure app-rule match with no memory of a later
-     * Meta+F — so re-running it on a migration would silently re-float a
-     * float-ruled window the user had explicitly tiled. A migrating window
-     * carries this live float state across instead.
-     */
-    struct MigrationArrival
-    {
-        QString windowId;
-        bool wasFloating = false;
-    };
+    // MigrationArrival moved to AutotileEngineTypes.h; alias keeps the
+    // AutotileEngine::MigrationArrival spelling valid for existing call sites.
+    using MigrationArrival = ::PhosphorTileEngine::MigrationArrival;
     std::optional<MigrationArrival> m_migrationArrival;
 
     /// The float state @p windowId must be inserted with: the live state it
@@ -1496,77 +1461,11 @@ private:
     QSet<PhosphorEngine::TilingStateKey> m_userTunedMasterCount;
 
     // Script-state bags rescued from TilingStates that a teardown destroys, so a
-    // re-created state for the same key can pick its bag back up. Toggling
-    // autotile off destroys the current context's state outright (see
-    // setAutotileScreens), taking with it the only copy of an opaque bag the
-    // algorithm's script authored — e.g. an aligned grid's column fractions from
-    // a manual resize. Toggling back on then lays out from scratch, which reads
-    // to the user as their adjustments being thrown away.
-    //
-    // Tagged with the EFFECTIVE algorithm id at harvest time, and handed back
-    // only when that still matches, because TilingStateKey does not include the
-    // algorithm. That tag is what preserves the invariant the wipe sites enforce
-    // for live states: bags never cross algorithms. A tag mismatch refuses
-    // rather than migrates; script state has no cross-algorithm meaning.
-    //
-    // Algorithm-change sites DO drop entries, but only through the resolver,
-    // which is the only holder of a trustworthy reading. Deriving "did this
-    // screen's algorithm move" from the in-memory override map cannot work at
-    // these moments: a toggle-off has already dropped that map, so a screen
-    // pinned to its own algorithm reads as following the global one, and
-    // dropping on that reading erases the bag the teardown just rescued. That
-    // failure has been produced twice. The resolver's remembered "built under"
-    // id is what answers it instead, so both the global switch
-    // (applyGlobalAlgorithmChange) and per-screen changes go through
-    // wipeStateBagsOnEffectiveAlgorithmChange rather than dropping inline. The
-    // per-key tag then adjudicates lazily at the moment a state takes a bag,
-    // which is the second line of defence rather than the only one.
-    //
-    // Four unconditional drops exist, none of them an algorithm comparison. Two
-    // are screen-id-scoped: orphaned virtual screens in setAutotileScreens, and
-    // that same method's purge of screens no longer connected. The other two key
-    // on the part of the context that died rather than on the screen, in
-    // pruneStatesForDesktop and pruneStatesForActivities.
-    //
-    // Entries are reclaimed by a harvest that finds an EMPTY bag, which erases
-    // rather than inserts (see stashScriptState). That is also what stops a bag
-    // a live wipe cleared from being shadowed by a stale entry and handed back.
-    //
-    // One gap is known and accepted: an entry only dies on a switch away from
-    // its algorithm if some teardown happens to harvest the emptied state while
-    // the other algorithm is live — with no teardown, the entry outlives the
-    // switch. It stays unreachable behind the tag until then, so this costs
-    // memory rather than correctness.
-    //
-    // Within-session only: nothing writes it to disk, so a daemon restart still
-    // starts from a clean layout.
-    // The split tree rides along because it is the same kind of thing: per-context
-    // state holding the user's manual resizes, in its per-node ratios rather than
-    // in an opaque bag. Losing it on a toggle rebuilt a uniform layout, which is
-    // the same complaint the bag's loss produced.
-    //
-    // The tree moves in and out whole, and there is no serialization to move it
-    // through: this is a rescue across a teardown, entirely within one session,
-    // so a JSON round trip would buy nothing and could only lose. The tree's
-    // serializer used to impose depth, node-count and ratio-clamping caps, which
-    // are bounds for untrusted on-disk input rather than for a tree the engine
-    // owned a moment ago. It was removed with the rest of the state
-    // serialization once nothing persisted a TilingState.
-    //
-    // Owning a unique_ptr makes the entry move-only, which is why the stash is a
-    // std::unordered_map: Qt's containers are implicitly shared and require
-    // copyable values, so this cannot be a QHash.
-    //
-    // The tree is NOT governed by the algorithm tag. Bags never cross algorithms,
-    // but trees deliberately do carry between two MEMORY algorithms — that is the
-    // live rule (wipeStateBagsOnEffectiveAlgorithmChange clears a tree only when
-    // the incoming algorithm lacks memory), and a stashed tree follows it.
-    struct StashedScriptState
-    {
-        QJsonObject scriptState;
-        std::unique_ptr<PhosphorTiles::SplitTree> splitTree;
-        QString algorithmId;
-    };
+    // re-created state for the same key can pick its bag back up. See
+    // StashedScriptState in AutotileEngineTypes.h for the full rationale (harvest
+    // rules, the algorithm tag, split-tree carry). The alias keeps the
+    // AutotileEngine::StashedScriptState spelling valid for existing call sites.
+    using StashedScriptState = ::PhosphorTileEngine::StashedScriptState;
     std::unordered_map<PhosphorEngine::TilingStateKey, StashedScriptState> m_scriptStateStash;
 
     /// Rescue @p state's script-state bag and split tree into m_scriptStateStash
@@ -1719,34 +1618,9 @@ private:
     // replay it in onWindowAdded once the window is tracked.
     QString m_pendingFocusReseedWindowId;
 
-    // Drag-insert preview state. When set, applyTiling() filters the dragged
-    // window out of the windowsTiled batch so the KWin interactive move isn't
-    // fought, while the remaining windows animate into their new positions.
-    // Supports three entry modes (captured at begin() time for cancel restoration):
-    //   - Same-screen reorder: window was already tiled/floating on targetScreenId
-    //   - Cross-screen adoption: window was tracked on a different autotile screen
-    //   - Fresh adoption: window was not tracked by the engine at all
-    struct DragInsertPreview
-    {
-        QString windowId;
-        QString targetScreenId;
-        int lastInsertIndex = -1;
-
-        // Prior-state restoration info (used on cancel)
-        bool hadPriorState = false; // True if m_states contained windowId at begin
-        PhosphorEngine::TilingStateKey
-            priorKey; // Key of the prior PhosphorTiles::TilingState (meaningful iff hadPriorState)
-        int priorRawIndex = -1; // Raw index in priorState->windowOrder() at begin
-        bool priorFloating = false; // Prior floating flag in priorState
-        bool priorSameScreen = false; // priorKey == currentKeyForScreen(targetScreenId)
-
-        // Eviction info (used when the target stack is already at maxWindows
-        // and the dragged window is a new member). The last tiled neighbour
-        // is floated to make room; on cancel the eviction is undone, on
-        // commit the evicted window is sent through the batch-float path so
-        // its pre-tile geometry is restored.
-        QString evictedWindowId;
-    };
+    // DragInsertPreview moved to AutotileEngineTypes.h; alias keeps the
+    // AutotileEngine::DragInsertPreview spelling valid for existing call sites.
+    using DragInsertPreview = ::PhosphorTileEngine::DragInsertPreview;
     std::optional<DragInsertPreview> m_dragInsertPreview;
 
     /**

@@ -12,6 +12,7 @@
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorPlacement/IGeometryResolver.h>
 #include <PhosphorPlacement/PlacementConfig.h>
+#include <PhosphorPlacement/SnapStateResolver.h>
 #include <PhosphorProtocol/WindowTypes.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -98,10 +99,7 @@ public:
         return m_config;
     }
 
-    QObject* asQObject() override
-    {
-        return this;
-    }
+    QObject* asQObject() override;
     ~WindowTrackingService() override;
 
     /**
@@ -113,103 +111,26 @@ public:
      *
      * Must be set before start. Not owned.
      */
-    void setWindowRegistry(PhosphorEngine::WindowRegistry* registry)
-    {
-        m_windowRegistry = registry;
-    }
+    void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
 
-    /// Seam onto the snap engine's per-(screen,desktop,activity) SnapState stores.
-    /// The service no longer holds a single SnapState; instead the daemon injects
-    /// resolvers so each windowId-keyed call reaches the state that owns the window
-    /// (via the engine's reverse map) and each screen-carrying write reaches — and
-    /// registers — the state for that screen. `globals` is the single holder of the
-    /// still-global last-used-zone / user-snapped scalars, and `allStates`
-    /// enumerates every store (including the global holder) for whole-store views.
-    /// When unset (unit tests / early init) every resolver is empty and the facade
-    /// degrades to the historical "no SnapState wired" no-op behaviour.
-    struct SnapStateResolver
-    {
-        /// Owning state for a window (reverse-map lookup). Non-null by
-        /// construction in every wiring, by one of two mechanisms: the
-        /// forwarding resolvers because SnapEngine::stateForWindow falls back
-        /// to the global holder rather than returning null, and setSnapState's
-        /// convenience resolver because it rejects a null state outright and
-        /// captures a non-null one. Two genuine null cases remain, and callers
-        /// must still guard: an UNSET resolver (see snapForWindow), and the
-        /// production resolver's QPointer arm once the engine is destroyed
-        /// while this service still holds the resolver (a real teardown order).
-        std::function<PhosphorSnapEngine::SnapState*(const QString& windowId)> forWindow;
-        /// Owning state for a window placed/acting on a screen: resolves the state
-        /// (creating it on first placement) AND records the reverse-map entry.
-        std::function<PhosphorSnapEngine::SnapState*(const QString& windowId, const QString& screenId)>
-            forWindowOnScreen;
-        /// Owning state for a SCREEN's current (screen, desktop, activity) context,
-        /// independent of any window — resolves (creating on first use) the per-key
-        /// store a screen-scoped write (last-used-zone) targets. An empty screenId
-        /// resolves to the global holder.
-        std::function<PhosphorSnapEngine::SnapState*(const QString& screenId)> forScreen;
-        /// The global-scalar holder. Non-null by construction in every wiring
-        /// (SnapEngine::globalState() returns the ctor-constructed holder); the
-        /// same two null cases as @ref forWindow apply — an unset resolver, and
-        /// the production resolver's QPointer arm after engine destruction.
-        std::function<PhosphorSnapEngine::SnapState*()> globals;
-        /// Every store, including the global holder, for aggregate iteration.
-        /// CONTRACT: the returned list never contains a null element. An unset
-        /// resolver yields an empty list rather than a list of nulls, and both
-        /// wirings filter (SnapEngine::allSnapStates() skips nulls; the
-        /// single-store convenience wiring rejects a null state outright). Every
-        /// caller dereferences the elements unguarded, so a resolver that
-        /// breaks this crashes them all.
-        std::function<QList<PhosphorSnapEngine::SnapState*>()> allStates;
-        /// Drop a window's reverse-map entry (window closed / fully removed).
-        std::function<void(const QString& windowId)> forgetWindow;
-    };
+    /// The injectable SnapState-resolver seam. Defined in its own header so
+    /// consumers can name the type without pulling in the whole service. The
+    /// alias keeps the historical `WindowTrackingService::SnapStateResolver`
+    /// spelling valid for existing call sites.
+    using SnapStateResolver = PhosphorPlacement::SnapStateResolver;
 
-    void setSnapStateResolver(SnapStateResolver resolver)
-    {
-        m_snapResolver = std::move(resolver);
-    }
+    void setSnapStateResolver(SnapStateResolver resolver);
 
     /// Convenience wiring for a SINGLE snap store (unit tests / the collapsed
     /// Phase-2 store). Builds a resolver whose every arm routes to @p state, so the
     /// facade behaves exactly as the former single-SnapState pointer. Passing
     /// nullptr clears the resolver (the "no SnapState wired" no-op path).
-    void setSnapState(PhosphorSnapEngine::SnapState* state)
-    {
-        if (!state) {
-            m_snapResolver = SnapStateResolver{};
-            return;
-        }
-        SnapStateResolver resolver;
-        resolver.forWindow = [state](const QString&) {
-            return state;
-        };
-        resolver.forWindowOnScreen = [state](const QString&, const QString&) {
-            return state;
-        };
-        resolver.forScreen = [state](const QString&) {
-            return state;
-        };
-        resolver.globals = [state]() {
-            return state;
-        };
-        resolver.allStates = [state]() {
-            return QList<PhosphorSnapEngine::SnapState*>{state};
-        };
-        resolver.forgetWindow = [](const QString&) { };
-        m_snapResolver = std::move(resolver);
-    }
+    void setSnapState(PhosphorSnapEngine::SnapState* state);
 
     /// The unified, engine-agnostic placement store (one WindowPlacement record
     /// per window). Both engines reach it via this service; the WTA persists it.
-    PhosphorEngine::WindowPlacementStore& placementStore() override
-    {
-        return m_placementStore;
-    }
-    const PhosphorEngine::WindowPlacementStore& placementStore() const
-    {
-        return m_placementStore;
-    }
+    PhosphorEngine::WindowPlacementStore& placementStore() override;
+    const PhosphorEngine::WindowPlacementStore& placementStore() const;
 
     /**
      * @brief Predicate type for "is this snap-mode context active?".
@@ -249,10 +170,7 @@ public:
      * — otherwise a subsequent `windowClosed` call dereferences freed
      * memory.
      */
-    void setShouldTrackPredicate(ShouldTrackPredicate predicate)
-    {
-        m_shouldTrackPredicate = std::move(predicate);
-    }
+    void setShouldTrackPredicate(ShouldTrackPredicate predicate);
 
     /**
      * @brief Wire the snap-mode placement engine.
@@ -265,15 +183,9 @@ public:
      *
      * Must be set after construction. Not owned.
      */
-    void setSnapEngine(PhosphorEngine::PlacementEngineBase* engine)
-    {
-        m_snapEngine = engine;
-    }
+    void setSnapEngine(PhosphorEngine::PlacementEngineBase* engine);
 
-    PhosphorEngine::PlacementEngineBase* snapEngine() const
-    {
-        return m_snapEngine.data();
-    }
+    PhosphorEngine::PlacementEngineBase* snapEngine() const;
 
     /**
      * @brief Predicate: is the window currently in Autotile mode?
@@ -284,10 +196,7 @@ public:
      * treated as snap-mode.
      */
     using AutotileModePredicate = std::function<bool(const QString& windowId)>;
-    void setAutotileModePredicate(AutotileModePredicate predicate)
-    {
-        m_autotileModePredicate = std::move(predicate);
-    }
+    void setAutotileModePredicate(AutotileModePredicate predicate);
 
     /**
      * @brief True if the window's CURRENT screen mode is autotile.
@@ -298,10 +207,7 @@ public:
      * that disagrees mid-mode-flip. Returns false when the predicate is unwired
      * (snap-only tests / early init).
      */
-    bool isWindowInAutotileMode(const QString& windowId) const
-    {
-        return m_autotileModePredicate && m_autotileModePredicate(windowId);
-    }
+    bool isWindowInAutotileMode(const QString& windowId) const;
 
     /**
      * @brief Predicate: is the window ACTIVELY TILED by the autotile engine
@@ -318,30 +224,18 @@ public:
      * starts empty while this engine still holds the tiling state).
      */
     using AutotileTiledPredicate = std::function<bool(const QString& windowId)>;
-    void setAutotileTiledPredicate(AutotileTiledPredicate predicate)
-    {
-        m_autotileTiledPredicate = std::move(predicate);
-    }
+    void setAutotileTiledPredicate(AutotileTiledPredicate predicate);
 
     /// True if the autotile engine reports the window actively tiled.
     /// Returns false when the predicate is unwired (snap-only tests).
-    bool isWindowAutotileTiled(const QString& windowId) const
-    {
-        return m_autotileTiledPredicate && m_autotileTiledPredicate(windowId);
-    }
+    bool isWindowAutotileTiled(const QString& windowId) const;
 
     /**
      * @brief Accessor for consumers that need direct access (effect, adaptor).
      */
-    PhosphorEngine::WindowRegistry* windowRegistry() const
-    {
-        return m_windowRegistry;
-    }
+    PhosphorEngine::WindowRegistry* windowRegistry() const;
 
-    PhosphorScreens::ScreenManager* screenManager() const override
-    {
-        return m_screenManager;
-    }
+    PhosphorScreens::ScreenManager* screenManager() const override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Zone Assignment Management
@@ -498,20 +392,11 @@ public:
     using EngineFloatWriter = std::function<void(const QString& windowId, bool floating)>;
     using EngineFloatLister = std::function<QStringList()>;
 
-    void setEngineFloatResolver(EngineFloatResolver resolver)
-    {
-        m_engineFloatResolver = std::move(resolver);
-    }
-    void setEngineFloatWriter(EngineFloatWriter writer)
-    {
-        m_engineFloatWriter = std::move(writer);
-    }
+    void setEngineFloatResolver(EngineFloatResolver resolver);
+    void setEngineFloatWriter(EngineFloatWriter writer);
     /// Aggregates both engines' floating windows for the engine-agnostic
     /// floatingWindows() enumeration. See setEngineFloatResolver rationale.
-    void setEngineFloatLister(EngineFloatLister lister)
-    {
-        m_engineFloatLister = std::move(lister);
-    }
+    void setEngineFloatLister(EngineFloatLister lister);
 
     /**
      * @brief Check if a window is floating (excluded from snapping)
@@ -777,10 +662,7 @@ public:
      * Called when virtual screen configuration changes to prevent stale
      * resnap data from referencing old screen IDs.
      */
-    void clearResnapBuffer()
-    {
-        m_resnapBuffer.clear();
-    }
+    void clearResnapBuffer();
 
     /**
      * @brief Build a zone-ordered window list for a screen from current zone assignments
@@ -932,15 +814,9 @@ public:
     /**
      * @brief Get pending restore queues (consumption queue: appId -> list of pending restores)
      */
-    const QHash<QString, QList<PendingRestore>>& pendingRestoreQueues() const override
-    {
-        return m_pendingRestoreQueues;
-    }
+    const QHash<QString, QList<PendingRestore>>& pendingRestoreQueues() const override;
 
-    QVector<ResnapEntry> takeResnapBuffer() override
-    {
-        return std::exchange(m_resnapBuffer, {});
-    }
+    QVector<ResnapEntry> takeResnapBuffer() override;
 
     /**
      * @brief Get user-snapped classes
@@ -950,10 +826,7 @@ public:
     /**
      * @brief Set pending restore queues (loaded from KConfig by adaptor)
      */
-    void setPendingRestoreQueues(const QHash<QString, QList<PendingRestore>>& queues)
-    {
-        m_pendingRestoreQueues = queues;
-    }
+    void setPendingRestoreQueues(const QHash<QString, QList<PendingRestore>>& queues);
 
     /**
      * @brief Set user-snapped classes (loaded from KConfig by adaptor)
@@ -968,10 +841,7 @@ public:
     /**
      * @brief Set floating windows (loaded from KConfig by adaptor)
      */
-    void setFloatingWindows(const QSet<QString>& windows)
-    {
-        m_floatingWindows = windows;
-    }
+    void setFloatingWindows(const QSet<QString>& windows);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Dirty field tracking (Phase 3 of refactor/dbus-performance)
@@ -1033,10 +903,7 @@ public:
 
     /// Return the current dirty mask without clearing. Read-only accessor
     /// for tests and instrumentation.
-    DirtyMask peekDirty() const
-    {
-        return m_dirtyMask;
-    }
+    DirtyMask peekDirty() const;
 
     /// Clear every dirty bit. Called from loadState's end after in-memory
     /// state mirrors the disk file — nothing is dirty until the next
@@ -1150,18 +1017,9 @@ private:
     // ── Snap-state resolution helpers (wrap the injected resolver) ───────────
     // Each returns nullptr / empty when the resolver is unwired, preserving the
     // historical "no SnapState" no-op guards at the call sites.
-    PhosphorSnapEngine::SnapState* snapForWindow(const QString& windowId) const
-    {
-        return m_snapResolver.forWindow ? m_snapResolver.forWindow(windowId) : nullptr;
-    }
-    PhosphorSnapEngine::SnapState* snapForWindowOnScreen(const QString& windowId, const QString& screenId)
-    {
-        return m_snapResolver.forWindowOnScreen ? m_snapResolver.forWindowOnScreen(windowId, screenId) : nullptr;
-    }
-    PhosphorSnapEngine::SnapState* snapForScreen(const QString& screenId) const
-    {
-        return m_snapResolver.forScreen ? m_snapResolver.forScreen(screenId) : nullptr;
-    }
+    PhosphorSnapEngine::SnapState* snapForWindow(const QString& windowId) const;
+    PhosphorSnapEngine::SnapState* snapForWindowOnScreen(const QString& windowId, const QString& screenId);
+    PhosphorSnapEngine::SnapState* snapForScreen(const QString& screenId) const;
     /// The store holding the single representative last-used zone: the one with the
     /// highest lastUsedSeq() among all stores that have a non-empty last-used zone,
     /// else the global holder. This is what the facade's screen-agnostic lastUsed*
@@ -1188,22 +1046,13 @@ private:
     /// non-empty list (the callers only build it from zone-assigned windows,
     /// so non-empty means state changed and a save is due).
     bool pruneMigratedWindows(const QStringList& windowsToRemove);
-    PhosphorSnapEngine::SnapState* snapGlobals() const
-    {
-        return m_snapResolver.globals ? m_snapResolver.globals() : nullptr;
-    }
+    PhosphorSnapEngine::SnapState* snapGlobals() const;
     /// Every store, for aggregate iteration. Elements are never null (see the
     /// resolver's `allStates` contract), so callers deref them directly.
-    QList<PhosphorSnapEngine::SnapState*> snapAllStates() const
-    {
-        return m_snapResolver.allStates ? m_snapResolver.allStates() : QList<PhosphorSnapEngine::SnapState*>{};
-    }
+    QList<PhosphorSnapEngine::SnapState*> snapAllStates() const;
     /// True once the resolver is wired — the drop-in replacement for the former
     /// `m_snapState != nullptr` guards.
-    bool hasSnapState() const
-    {
-        return static_cast<bool>(m_snapResolver.globals);
-    }
+    bool hasSnapState() const;
     /// Invoke @p fn once per zone-assigned window, with its zones, screen, and
     /// desktop read from the store that OWNS the window. The per-state replacement
     /// for the removed flat zoneAssignments()/screenAssignments()/

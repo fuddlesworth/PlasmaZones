@@ -23,12 +23,26 @@ set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorTileEngine SHARED
     include/PhosphorTileEngine/AutotileEngine.h
+    include/PhosphorTileEngine/AutotileEngineTypes.h
     include/PhosphorTileEngine/AutotileConfig.h
     include/PhosphorTileEngine/NavigationController.h
     include/PhosphorTileEngine/OverflowManager.h
     include/PhosphorTileEngine/PerScreenConfigResolver.h
     include/PhosphorTileEngine/IAutotileSettings.h
     src/AutotileEngine.cpp
+    src/autotileengine/engine_internal.h
+    src/autotileengine/core.cpp
+    src/autotileengine/context.cpp
+    src/autotileengine/algorithm_state.cpp
+    src/autotileengine/config.cpp
+    src/autotileengine/retile.cpp
+    src/autotileengine/float_handoff.cpp
+    src/autotileengine/window_lifecycle.cpp
+    src/autotileengine/resize.cpp
+    src/autotileengine/insert.cpp
+    src/autotileengine/layout_apply.cpp
+    src/autotileengine/drag_preview.cpp
+    src/autotileengine/facade.cpp
     src/AutotileConfig.cpp
     src/NavigationController.cpp
     src/OverflowManager.cpp

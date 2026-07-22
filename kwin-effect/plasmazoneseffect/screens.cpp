@@ -44,9 +44,9 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
 
     // Cache: screen IDs are stable for the lifetime of an output. Caching avoids
     // repeated QGuiApplication::screens() iteration and sysfs reads (~30Hz during drag).
-    // Invalidated on screen add/remove (m_screenIdCache cleared by screen change handler).
-    auto it = m_screenIdCache.constFind(connectorName);
-    if (it != m_screenIdCache.constEnd()) {
+    // Invalidated on screen add/remove (m_idCaches.screenIdCache cleared by screen change handler).
+    auto it = m_idCaches.screenIdCache.constFind(connectorName);
+    if (it != m_idCaches.screenIdCache.constEnd()) {
         return *it;
     }
 
@@ -80,7 +80,7 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
     }
 
     QString result = hasDuplicate ? baseId + QLatin1Char('/') + connectorName : baseId;
-    m_screenIdCache.insert(connectorName, result);
+    m_idCaches.screenIdCache.insert(connectorName, result);
     return result;
 }
 
@@ -98,7 +98,7 @@ void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop
         return;
     }
     m_lastScreenDesktop.insert(screenId, desktop);
-    if (m_daemonServiceRegistered) {
+    if (m_daemonGate.serviceRegistered) {
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("screenDesktopChanged"), {screenId, desktop});
     }
@@ -214,163 +214,163 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
     // m_virtualScreenDefs only if this is still the latest fetch for the
     // screen — otherwise a slower reply for an older config could land last
     // and clobber a newer one (remove-then-readd raced through D-Bus).
-    const uint64_t seq = ++m_vsFetchSeqPerPhysId[physicalScreenId];
+    const uint64_t seq = ++m_daemonGate.vsFetchSeqPerPhysId[physicalScreenId];
 
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Screen,
                                                    QStringLiteral("getVirtualScreenConfig"), {physicalScreenId}),
         this);
     QPointer<PlasmaZonesEffect> self(this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [self, physicalScreenId, generation, seq](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
-                if (!self)
-                    return;
-                // Helper lambda: decrement pending counter and fire deferred processing when all done.
-                // Only participates in the startup gate if generation != 0 (issued by fetchAllVirtualScreenConfigs)
-                // and the generation matches the current one (not stale from a prior fetch cycle).
-                // Captures self by value (QPointer copy) to avoid dangling reference.
-                auto countdownVsGate = [self, generation]() {
-                    if (generation == 0 || !self || self->m_vsConfigGeneration != generation) {
-                        return;
-                    }
-                    if (self->m_pendingVsConfigReplies > 0 && --self->m_pendingVsConfigReplies == 0) {
-                        self->m_virtualScreensReady = true;
-                        if (self->m_daemonServiceRegistered) {
-                            self->processDaemonReadyWindowState();
-                        }
-                    }
-                };
-
-                QDBusPendingReply<QString> reply = *w;
-
-                // A newer fetch for this physId issued after this one makes
-                // this reply stale: its payload describes a superseded
-                // config. Drop it without touching m_virtualScreenDefs or
-                // m_virtualScreensReady — the latest fetch's reply owns those
-                // — but still run countdownVsGate so a startup batch's reply
-                // tally isn't left hanging on the superseded call.
-                const bool isLatest = self->m_vsFetchSeqPerPhysId.value(physicalScreenId) == seq;
-
-                // Live VS-config changes (generation == 0) flip
-                // m_virtualScreensReady = false in onVirtualScreensChanged so
-                // window-screen-crossing detection pauses until the reply
-                // lands. EVERY early-return below must restore the flag for
-                // generation == 0 — otherwise an errored / stale / malformed
-                // reply leaves the gate closed forever and VS crossings
-                // silently stop being detected for that physical screen.
-                const auto restoreReadyIfLive = [self, generation]() {
-                    if (generation == 0) {
-                        self->m_virtualScreensReady = true;
-                    }
-                };
-
-                if (reply.isError()) {
-                    qCDebug(lcEffect) << "fetchVirtualScreenConfig: no virtual screens for" << physicalScreenId
-                                      << reply.error().message();
-                    if (isLatest) {
-                        self->m_virtualScreenDefs.remove(physicalScreenId);
-                    }
-                    countdownVsGate();
-                    restoreReadyIfLive();
+    connect(
+        watcher, &QDBusPendingCallWatcher::finished, this,
+        [self, physicalScreenId, generation, seq](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            if (!self)
+                return;
+            // Helper lambda: decrement pending counter and fire deferred processing when all done.
+            // Only participates in the startup gate if generation != 0 (issued by fetchAllVirtualScreenConfigs)
+            // and the generation matches the current one (not stale from a prior fetch cycle).
+            // Captures self by value (QPointer copy) to avoid dangling reference.
+            auto countdownVsGate = [self, generation]() {
+                if (generation == 0 || !self || self->m_daemonGate.vsConfigGeneration != generation) {
                     return;
                 }
-
-                if (!isLatest) {
-                    countdownVsGate();
-                    restoreReadyIfLive();
-                    return;
+                if (self->m_daemonGate.pendingVsConfigReplies > 0 && --self->m_daemonGate.pendingVsConfigReplies == 0) {
+                    self->m_daemonGate.virtualScreensReady = true;
+                    if (self->m_daemonGate.serviceRegistered) {
+                        self->processDaemonReadyWindowState();
+                    }
                 }
+            };
 
-                const QString json = reply.value();
-                QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-                if (!doc.isObject()) {
+            QDBusPendingReply<QString> reply = *w;
+
+            // A newer fetch for this physId issued after this one makes
+            // this reply stale: its payload describes a superseded
+            // config. Drop it without touching m_virtualScreenDefs or
+            // m_daemonGate.virtualScreensReady — the latest fetch's reply owns those
+            // — but still run countdownVsGate so a startup batch's reply
+            // tally isn't left hanging on the superseded call.
+            const bool isLatest = self->m_daemonGate.vsFetchSeqPerPhysId.value(physicalScreenId) == seq;
+
+            // Live VS-config changes (generation == 0) flip
+            // m_daemonGate.virtualScreensReady = false in onVirtualScreensChanged so
+            // window-screen-crossing detection pauses until the reply
+            // lands. EVERY early-return below must restore the flag for
+            // generation == 0 — otherwise an errored / stale / malformed
+            // reply leaves the gate closed forever and VS crossings
+            // silently stop being detected for that physical screen.
+            const auto restoreReadyIfLive = [self, generation]() {
+                if (generation == 0) {
+                    self->m_daemonGate.virtualScreensReady = true;
+                }
+            };
+
+            if (reply.isError()) {
+                qCDebug(lcEffect) << "fetchVirtualScreenConfig: no virtual screens for" << physicalScreenId
+                                  << reply.error().message();
+                if (isLatest) {
                     self->m_virtualScreenDefs.remove(physicalScreenId);
-                    countdownVsGate();
-                    restoreReadyIfLive();
-                    return;
                 }
-
-                QJsonArray screens = doc.object().value(QLatin1String("screens")).toArray();
-
-                // Look up the physical output geometry ONCE rather than per VS definition (O(N) vs O(N*M))
-                QRect physGeom;
-                const auto outputs = KWin::effects->screens();
-                for (const auto* out : outputs) {
-                    if (self->outputScreenId(out) == physicalScreenId) {
-                        physGeom = out->geometry();
-                        break;
-                    }
-                }
-
-                if (!physGeom.isValid()) {
-                    qCWarning(lcEffect) << "Physical output" << physicalScreenId
-                                        << "not found (hot-unplug?) — skipping VS config update;"
-                                        << "will re-fetch on reconnect";
-                }
-
-                QVector<EffectVirtualScreenDef> defs;
-                for (const QJsonValue& val : screens) {
-                    QJsonObject obj = val.toObject();
-                    QJsonObject region = obj.value(QLatin1String("region")).toObject();
-
-                    EffectVirtualScreenDef def;
-                    def.id = obj.value(QLatin1String("id")).toString();
-
-                    // Compute absolute geometry from fractional region within physical screen
-                    if (physGeom.isValid()) {
-                        qreal rx = region.value(QLatin1String("x")).toDouble();
-                        qreal ry = region.value(QLatin1String("y")).toDouble();
-                        qreal rw = region.value(QLatin1String("width")).toDouble();
-                        qreal rh = region.value(QLatin1String("height")).toDouble();
-                        // Edge-consistent rounding: compute edges then derive width/height
-                        // to avoid 1px gaps between abutting virtual screens
-                        int left = physGeom.x() + qRound(rx * physGeom.width());
-                        int top = physGeom.y() + qRound(ry * physGeom.height());
-                        int right = physGeom.x() + qRound((rx + rw) * physGeom.width());
-                        int bottom = physGeom.y() + qRound((ry + rh) * physGeom.height());
-                        def.geometry = QRect(left, top, right - left, bottom - top);
-                    }
-
-                    if (def.geometry.isValid() && !def.id.isEmpty()) {
-                        defs.append(def);
-                    }
-                }
-
-                if (defs.isEmpty()) {
-                    self->m_virtualScreenDefs.remove(physicalScreenId);
-                } else {
-                    qCInfo(lcEffect) << "Loaded" << defs.size() << "virtual screens for" << physicalScreenId;
-                    self->m_virtualScreenDefs.insert(physicalScreenId, defs);
-                }
-
-                // Re-resolve tracked screen IDs so stale virtual screen IDs
-                // are replaced with IDs from the updated boundaries.
-                for (auto it = self->m_trackedScreenPerWindow.begin(); it != self->m_trackedScreenPerWindow.end();
-                     ++it) {
-                    auto* window = it.key();
-                    if (!window || window->isDeleted()) {
-                        continue;
-                    }
-                    {
-                        // Position-based resolution (getWindowScreenId), consistent
-                        // with the daemon — do not trust window->screen() for
-                        // identical-model monitors.
-                        const QString newScreenId = self->getWindowScreenId(window);
-                        if (!newScreenId.isEmpty()) {
-                            it.value() = newScreenId;
-                            // Also update the autotile handler's notified screen map
-                            // so slotWindowFrameGeometryChanged does not compare against
-                            // the stale pre-config-change screen ID.
-                            const QString windowId = self->getWindowId(window);
-                            self->m_autotileHandler->updateNotifiedScreen(windowId, newScreenId);
-                        }
-                    }
-                }
-
                 countdownVsGate();
                 restoreReadyIfLive();
-            });
+                return;
+            }
+
+            if (!isLatest) {
+                countdownVsGate();
+                restoreReadyIfLive();
+                return;
+            }
+
+            const QString json = reply.value();
+            QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+            if (!doc.isObject()) {
+                self->m_virtualScreenDefs.remove(physicalScreenId);
+                countdownVsGate();
+                restoreReadyIfLive();
+                return;
+            }
+
+            QJsonArray screens = doc.object().value(QLatin1String("screens")).toArray();
+
+            // Look up the physical output geometry ONCE rather than per VS definition (O(N) vs O(N*M))
+            QRect physGeom;
+            const auto outputs = KWin::effects->screens();
+            for (const auto* out : outputs) {
+                if (self->outputScreenId(out) == physicalScreenId) {
+                    physGeom = out->geometry();
+                    break;
+                }
+            }
+
+            if (!physGeom.isValid()) {
+                qCWarning(lcEffect) << "Physical output" << physicalScreenId
+                                    << "not found (hot-unplug?) — skipping VS config update;"
+                                    << "will re-fetch on reconnect";
+            }
+
+            QVector<EffectVirtualScreenDef> defs;
+            for (const QJsonValue& val : screens) {
+                QJsonObject obj = val.toObject();
+                QJsonObject region = obj.value(QLatin1String("region")).toObject();
+
+                EffectVirtualScreenDef def;
+                def.id = obj.value(QLatin1String("id")).toString();
+
+                // Compute absolute geometry from fractional region within physical screen
+                if (physGeom.isValid()) {
+                    qreal rx = region.value(QLatin1String("x")).toDouble();
+                    qreal ry = region.value(QLatin1String("y")).toDouble();
+                    qreal rw = region.value(QLatin1String("width")).toDouble();
+                    qreal rh = region.value(QLatin1String("height")).toDouble();
+                    // Edge-consistent rounding: compute edges then derive width/height
+                    // to avoid 1px gaps between abutting virtual screens
+                    int left = physGeom.x() + qRound(rx * physGeom.width());
+                    int top = physGeom.y() + qRound(ry * physGeom.height());
+                    int right = physGeom.x() + qRound((rx + rw) * physGeom.width());
+                    int bottom = physGeom.y() + qRound((ry + rh) * physGeom.height());
+                    def.geometry = QRect(left, top, right - left, bottom - top);
+                }
+
+                if (def.geometry.isValid() && !def.id.isEmpty()) {
+                    defs.append(def);
+                }
+            }
+
+            if (defs.isEmpty()) {
+                self->m_virtualScreenDefs.remove(physicalScreenId);
+            } else {
+                qCInfo(lcEffect) << "Loaded" << defs.size() << "virtual screens for" << physicalScreenId;
+                self->m_virtualScreenDefs.insert(physicalScreenId, defs);
+            }
+
+            // Re-resolve tracked screen IDs so stale virtual screen IDs
+            // are replaced with IDs from the updated boundaries.
+            for (auto it = self->m_trackedScreenPerWindow.begin(); it != self->m_trackedScreenPerWindow.end(); ++it) {
+                auto* window = it.key();
+                if (!window || window->isDeleted()) {
+                    continue;
+                }
+                {
+                    // Position-based resolution (getWindowScreenId), consistent
+                    // with the daemon — do not trust window->screen() for
+                    // identical-model monitors.
+                    const QString newScreenId = self->getWindowScreenId(window);
+                    if (!newScreenId.isEmpty()) {
+                        it.value() = newScreenId;
+                        // Also update the autotile handler's notified screen map
+                        // so slotWindowFrameGeometryChanged does not compare against
+                        // the stale pre-config-change screen ID.
+                        const QString windowId = self->getWindowId(window);
+                        self->m_autotileHandler->updateNotifiedScreen(windowId, newScreenId);
+                    }
+                }
+            }
+
+            countdownVsGate();
+            restoreReadyIfLive();
+        });
 }
 
 void PlasmaZonesEffect::fetchAllVirtualScreenConfigs()
@@ -402,18 +402,18 @@ void PlasmaZonesEffect::fetchAllVirtualScreenConfigs()
 
     if (physIds.isEmpty()) {
         // No physical screens to query — gate opens immediately
-        m_virtualScreensReady = true;
-        m_pendingVsConfigReplies = 0;
-        if (m_daemonServiceRegistered) {
+        m_daemonGate.virtualScreensReady = true;
+        m_daemonGate.pendingVsConfigReplies = 0;
+        if (m_daemonGate.serviceRegistered) {
             processDaemonReadyWindowState();
         }
         return;
     }
 
     // Bump generation so stale callbacks from prior fetches are ignored
-    const uint64_t generation = ++m_vsConfigGeneration;
-    m_pendingVsConfigReplies = physIds.size();
-    m_virtualScreensReady = false;
+    const uint64_t generation = ++m_daemonGate.vsConfigGeneration;
+    m_daemonGate.pendingVsConfigReplies = physIds.size();
+    m_daemonGate.virtualScreensReady = false;
 
     for (const QString& physId : physIds) {
         fetchVirtualScreenConfig(physId, generation);
@@ -423,12 +423,12 @@ void PlasmaZonesEffect::fetchAllVirtualScreenConfigs()
 void PlasmaZonesEffect::onVirtualScreensChanged(const QString& physicalScreenId)
 {
     qCInfo(lcEffect) << "Virtual screens changed for" << physicalScreenId;
-    m_screenIdCache.clear();
+    m_idCaches.screenIdCache.clear();
     m_lastEffectiveScreenId.clear();
     // Temporarily disable VS-aware crossing detection while the async fetch is in-flight.
     // Without this, slotWindowFrameGeometryChanged uses stale boundary definitions from the
     // old config, potentially causing spurious VS crossing events during the D-Bus round-trip.
-    m_virtualScreensReady = false;
+    m_daemonGate.virtualScreensReady = false;
     fetchVirtualScreenConfig(physicalScreenId); // generation=0, won't participate in startup gate
 }
 

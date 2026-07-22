@@ -20,6 +20,8 @@
 
 #include <epoxy/gl.h>
 
+class QImage;
+
 namespace PlasmaZones::ShaderInternal {
 
 /// Save/restore the global GL state the offscreen decoration folds perturb —
@@ -99,6 +101,16 @@ private:
 /// Full behavioural notes (BOM strip, comment-aware #version scan, missing
 /// #version synthesis) live at the definition.
 QByteArray injectKwinDefineAfterVersion(const QString& source);
+
+/// Load a user-texture file into a QImage in `Format_RGBA8888` for GL upload:
+/// PNG/JPG/etc. decode via `QImage`, `.svg` / `.svgz` rasterise via
+/// `QSvgRenderer` at @p svgMaxDim max-axis. Returns a null QImage on any
+/// failure. Shared by the async pre-warm and the synchronous cold-install
+/// fallback (both in shader_textures.cpp) and the animation compile path's
+/// caller (shader_transitions.cpp); external linkage rather than an
+/// anonymous-namespace copy per TU because the kwin-effect builds as a Unity
+/// (jumbo) target. Defined in shader_textures.cpp.
+QImage loadUserTextureImage(const QString& path, int svgMaxDim = 1024);
 
 } // namespace PlasmaZones::ShaderInternal
 

@@ -59,6 +59,7 @@
 
 #include "shader_resolve.h"
 #include "types.h"
+#include "effect_state.h"
 
 namespace KWin {
 class SurfaceItem;
@@ -80,6 +81,11 @@ using PhosphorCompositor::ICompositorBridge;
 using PhosphorCompositor::ParsedTrigger;
 namespace AutotileStateHelpers = PhosphorCompositor::AutotileStateHelpers;
 namespace TriggerParser = PhosphorCompositor::TriggerParser;
+
+// Per-call state carried into paintShaderTransitionWindow; defined in
+// paint_internal.h (included only by the paint TUs). Forward-declared here so
+// the method signature below can take it by const reference.
+struct PaintWindowContext;
 
 // Mirror of PhosphorTiles::AutotileDragBehavior (re-exported via core/enums.h).
 // The effect can't include daemon headers (KWin plugin ABI constraints), so the
@@ -192,6 +198,27 @@ protected:
     // hasn't round-tripped).
     void captureOldWindowSnapshot(ShaderTransition& transition, KWin::EffectWindow* window);
 
+    /// Outcome of the shader-transition branch extracted from paintWindow.
+    /// Handled: the branch painted (or captured / suppressed / queued its own
+    /// teardown) and paintWindow must return without touching the rest of the
+    /// chain. Continue: an expired, non-minimized leg fell through, so paintWindow
+    /// proceeds to the decoration fold and the normal paint-chain continuation —
+    /// byte-equivalent to the branch's original fall-out of its `if` block.
+    enum class ShaderBranchOutcome {
+        Handled,
+        Continue,
+    };
+
+    /// The ~970-line shader-transition branch of paintWindow, extracted verbatim
+    /// (paint_shader_window.cpp). Runs the snapshot capture-only frame, computes
+    /// progress, binds every animation-shader uniform, draws the redirected
+    /// window, and drives the deferred expiry teardown. @p st is the live
+    /// transition (guaranteed non-null with a cached shader by the caller's
+    /// guard); @p ctx carries paintWindow's per-call paint arguments and the
+    /// per-frame-pinned clock. See ShaderBranchOutcome for the control-flow
+    /// contract that keeps paintWindow's behaviour byte-equivalent.
+    ShaderBranchOutcome paintShaderTransitionWindow(const PaintWindowContext& ctx, ShaderTransition* st);
+
 private Q_SLOTS:
     void slotWindowAdded(KWin::EffectWindow* w);
     void slotWindowClosed(KWin::EffectWindow* w);
@@ -250,7 +277,7 @@ public:
      * from KWin at first observation; `instanceId` is KWin's internalId()
      * UUID string and is stable for the window's lifetime.
      *
-     * The composite is cached per EffectWindow* in m_windowIdCache and
+     * The composite is cached per EffectWindow* in m_idCaches.windowIdCache and
      * returned unchanged for the rest of the window's lifetime — even if
      * KWin subsequently emits windowClassChanged for an Electron/CEF app
      * that swaps its class. The stable key semantic is load-bearing:
@@ -706,7 +733,7 @@ public:
     /// Clear the EDID-based screen ID cache (call on screen add/remove/reconfigure)
     void clearScreenIdCache()
     {
-        m_screenIdCache.clear();
+        m_idCaches.screenIdCache.clear();
     }
 
     // Animation sequence mode: 0=all at once, 1=one by one in zone order (for batch snaps)
@@ -768,11 +795,7 @@ private:
     // appearance); `lastMs` dedupes the per-frame advance across the chain's
     // packs. windowSurfaceAnimates keeps the window repainting while a value
     // is inside its near-0/near-1 thresholds, so the ramp runs to completion.
-    struct FocusFadeState
-    {
-        float value = -1.0f;
-        qint64 lastMs = -1;
-    };
+    // FocusFadeState moved to effect_state.h.
     QHash<QString, FocusFadeState> m_focusFade;
     // Live focus cross-fade duration (ms) for the uSurfaceFocused ramp (border
     // colour mix + the focus-fade content pack). A STANDALONE decoration
@@ -834,25 +857,7 @@ private:
     // Scope tokens live in PhosphorCompositor::WindowAppearanceScope: "tiled"
     // (snapped OR autotile-managed), "normal" (Normal type AND not transient),
     // "all" (every window). Defaults match ConfigDefaults::windowBorderScope().
-    struct WindowAppearanceDefault
-    {
-        bool showBorder = false;
-        QString borderScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
-        int borderWidth = 0;
-        int borderRadius = 0;
-        QString activeColor;
-        QString inactiveColor;
-        bool hideTitleBar = false;
-        QString titleBarScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
-        // Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*),
-        // rendered by the built-in "opacity-tint" pack in easy mode. The tint
-        // colour carries hex or the accent sentinel like the border colours.
-        bool showOpacityTint = false;
-        QString opacityTintScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
-        double opacity = 1.0;
-        double tintStrength = 0.0;
-        QString tintColor;
-    };
+    // WindowAppearanceDefault moved to effect_state.h.
     WindowAppearanceDefault m_windowAppearanceDefault;
 
     /// True when a config-default border, hidden title bar, or opacity+tint
@@ -937,11 +942,7 @@ private:
     // window_lifecycle.cpp): it is cheap, and deferring it let a re-decorated
     // title bar flash for the throttle window. QPointer auto-nulls if the
     // window dies before the flush; the flush skips those entries.
-    struct PendingFrameGeometry
-    {
-        QRect geometry;
-        QPointer<KWin::EffectWindow> window;
-    };
+    // PendingFrameGeometry moved to effect_state.h.
     QHash<QString, PendingFrameGeometry> m_pendingFrameGeometry;
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
@@ -1138,37 +1139,7 @@ private:
     /// at most once per frame.
     float advanceFocusFade(const QString& windowId, bool focused);
 
-    /// Resolves a pack id to its compiled program, compiling on a cache miss. The fold
-    /// memoises the decoration-profile lookup behind this, so the input side takes it
-    /// as a callable rather than resolving the tree a second time.
-    ///
-    /// A NON-OWNING reference to the caller's lambda, not a std::function. The fold's
-    /// resolver captures three pointers (24 bytes), which is past libstdc++'s 16-byte
-    /// small-object buffer — so every conversion to std::function HEAP-ALLOCATED, and the
-    /// fold converts twice. At eight decorated windows across two outputs at 60Hz that is
-    /// some four thousand malloc/free pairs a second, added by a refactor that shipped
-    /// inside a performance PR. The callee only ever invokes it during the call, so a
-    /// borrowed reference is all it ever needed.
-    class CompiledPackResolver
-    {
-    public:
-        template<typename F, typename = std::enable_if_t<!std::is_same_v<std::decay_t<F>, CompiledPackResolver>>>
-        CompiledPackResolver(F&& fn) // NOLINT(google-explicit-constructor): behaves as a callable
-            : m_ctx(static_cast<void*>(std::addressof(fn)))
-            , m_invoke([](void* ctx, const QString& packId) -> CompiledSurfacePack* {
-                return (*static_cast<std::remove_reference_t<F>*>(ctx))(packId);
-            })
-        {
-        }
-        CompiledSurfacePack* operator()(const QString& packId) const
-        {
-            return m_invoke(m_ctx, packId);
-        }
-
-    private:
-        void* m_ctx;
-        CompiledSurfacePack* (*m_invoke)(void*, const QString&);
-    };
+    // CompiledPackResolver moved to effect_state.h.
 
     /// (Re)allocate a window's composite / capture / per-pack buffer targets for the
     /// current size, scale and chain, dropping every cache an allocation makes stale.
@@ -1585,6 +1556,18 @@ private:
     /// tree on arrival.
     void seedDecorationTreeBaseline();
 
+    // Constructor wiring, decomposed from the ctor along its original comment
+    // seams (definitions in lifecycle_wiring.cpp). Each is called exactly once,
+    // from the ctor, in this declared order. Not part of the public surface —
+    // pure ctor decomposition, so their bodies keep the ordering guarantees the
+    // inline sequence had (notably: connect the screen signals before iterating
+    // the current screens() in initRenderingAndRegistries).
+    void initRenderingAndRegistries();
+    void initTimers();
+    void connectDragTracker();
+    void connectWindowAndScreenSignals();
+    void connectDaemonSubscriptions();
+
     /// Coalesce a full border sweep to the end of the event-loop turn. The
     /// config-default appearance loaders (and the accent / inactive colour
     /// loaders) each land as a separate async settings reply; several arriving in
@@ -1678,11 +1661,7 @@ private:
     /// SetWindowLayer rule is applied to a window. Deliberately NOT re-captured
     /// while a rule owns the layer, so the restore returns the window to the
     /// user's own state, not to an intermediate rule state.
-    struct WindowLayerSnapshot
-    {
-        bool keepAbove = false;
-        bool keepBelow = false;
-    };
+    // WindowLayerSnapshot moved to effect_state.h.
     QHash<QString, WindowLayerSnapshot> m_ruleWindowLayerSnapshots;
 
     std::unique_ptr<NavigationHandler> m_navigationHandler;
@@ -1774,6 +1753,18 @@ private:
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
                                bool holdAddedGrab = false, bool animateMinimized = false,
                                std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
+    /// Resolve the compiled shader program for @p effectId, compiling it (read
+    /// source, assemble entry point, expand includes, splice the param preamble +
+    /// HDR finalize + PLASMAZONES_KWIN define, generate the KWin custom shader,
+    /// and cache every uniform location) on the first miss. Assumes the GL
+    /// context is already current — the sole caller (beginShaderTransition) makes
+    /// it current before the call, since the same context also drives its texture
+    /// uploads. Returns a pointer to the cached entry, whose `shader` is null when
+    /// this @p effectId is a cached compile-failure sentinel. Returns nullptr on a
+    /// transient failure (missing / empty / unexpandable source) that is NOT
+    /// cached, so a later trigger re-attempts. Definition in shader_textures.cpp.
+    const CachedShader* compileOrLoadAnimationShader(const QString& effectId,
+                                                     const PhosphorAnimationShaders::AnimationShaderEffect& eff);
     void endShaderTransition(KWin::EffectWindow* window);
 
     // First-frame open suppression — implementations in window_lifecycle.cpp.
@@ -1930,7 +1921,7 @@ private:
     /**
      * @brief Detect activation trigger and grab keyboard if needed
      *
-     * Sets m_dragActivationDetected and grabs keyboard when an activation
+     * Sets m_dragActivation.detected and grabs keyboard when an activation
      * trigger is first detected during a drag. Returns true if activation
      * was detected (either previously or just now).
      */
@@ -2044,38 +2035,9 @@ private:
         PhosphorAnimation::Limits::DefaultAnimationDurationMs; // ms, fallback until loaded from daemon
     int m_cachedAnimationStaggerInterval = 30; // ms between each window start when animating one by one (cascading)
 
-    // Per-drag activation tracking: set once any activation trigger is detected
-    // during the current drag. Stays true for the remainder of the drag so
-    // the daemon receives all subsequent cursor updates (needed for hold/release
-    // cycles and overlay hide/show).
-    bool m_dragActivationDetected = false;
-
-    /// Monotonic per-drag generation. Bumped on every drag start. The async
-    /// beginDrag reply lambda captures the generation at dispatch time and
-    /// checks against the live value at reply time — if the drag has ended
-    /// (or a new one started) before the reply arrives, the captured policy
-    /// would otherwise be written into m_currentDragPolicy and bleed into
-    /// the next drag's state. Generation-mismatched replies are discarded.
-    quint64 m_dragGeneration = 0;
-
-    // Windows floated by drag on autotile screens. The daemon emits
-    // applyGeometryRequested to restore pre-autotile geometry on float,
-    // but drag-to-float should keep the window where the user dropped it.
-    // Entries are consumed (removed) when slotApplyGeometryRequested skips
-    // the geometry restore for a drag-floated window.
-    QSet<QString> m_dragFloatedWindowIds;
-
-    // Whether the window being dragged was ALREADY floating when the drag
-    // began. Written in the DragTracker::dragStarted handler before any float
-    // transition runs, then snapshotted into a local at callEndDrag dispatch
-    // (the async endDrag reply may land after the next dragStarted has already
-    // overwritten this member, so the reply lambda must not read it directly).
-    // The drag-stop ApplyFloat path consults that snapshot: a window that was
-    // already floating is just being moved, so its current (user-chosen) size
-    // must be preserved. Re-applying the stale pre-autotile size would clobber
-    // any resize the user made while floating. Only the tiled→float transition
-    // wants the pre-autotile size restore.
-    bool m_dragStartedFloating = false;
+    // Per-drag activation / float tracking. Fields + rationale in effect_state.h
+    // (DragActivationState).
+    DragActivationState m_dragActivation;
 
     // Per-rule-cache invalidations accumulated within one event-loop turn,
     // flushed once by flushPendingRuleInvalidations(). Coalesces the double
@@ -2087,74 +2049,14 @@ private:
     // one updateAllDecorations().
     bool m_borderSweepPending = false;
 
-    // Cached daemon D-Bus service registration state.
-    // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid
-    // synchronous isServiceRegistered() calls that block the compositor thread.
-    // --- Daemon readiness / virtual screen fetch gate state ---
-    bool m_daemonServiceRegistered = false;
-    /// True between sending registerBridge and receiving its reply. Prevents
-    /// the Introspect probe + daemonReady signal racing into two concurrent
-    /// registrations before the first reply sets m_daemonServiceRegistered.
-    /// Reset on every reply path (success / error / rejection / version-
-    /// mismatch) so a future retry can re-arm. ALSO reset in the
-    /// serviceUnregistered handler so a daemon restart with an in-flight
-    /// stale call doesn't leave the gate stuck and silently swallow the
-    /// new daemon's daemonReady signal.
-    bool m_bridgeRegistrationInFlight = false;
-    bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
+    // Daemon readiness / virtual-screen fetch gate state. Fields + rationale in
+    // effect_state.h (DaemonGateState).
+    DaemonGateState m_daemonGate;
 
-    bool m_virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive
-    /// True while a daemon-driven geometry apply (slotApplyGeometriesBatch / slotWindowsTileRequested)
-    /// is moving a window. Suppresses the windowFrameGeometryChanged crossing-detection paths so a
-    /// VS swap/rotate does not produce spurious "window moved between monitors" events. The daemon
-    /// emits virtualScreensChanged and the geometry batch in the same handler chain, but on the
-    /// effect side those D-Bus messages can race: the geometry change fires while m_virtualScreenDefs
-    /// still holds the pre-rotation regions, so the crossing comparison computes newScreenId from
-    /// stale config + new position and falsely concludes the window crossed VSes. The daemon is the
-    /// authoritative source of the window's intended VS during these applies, so the crossing check
-    /// is unsafe and must be skipped.
-    bool m_inDaemonGeometryApply = false;
-    /// Per-screen supersession epoch for slotApplyGeometriesBatch cascades.
-    /// When cascade stagger is enabled, a daemon geometry batch spreads its
-    /// per-window moves across QTimer::singleShot ticks. A rapid second batch
-    /// (e.g. holding the rotate shortcut) starts its own cascade while the
-    /// first one's ticks are still queued; the older batch's later-firing
-    /// timers would then clobber the newer batch's positions, leaving windows
-    /// in stale zones. Each batch bumps and captures the epoch for every screen
-    /// it targets. A staggered apply drops itself when its screen's epoch has
-    /// advanced, and the z-order restore drops only when every screen it
-    /// targeted has advanced. Per-screen, not global, so a batch on
-    /// one output never strands an in-flight cascade on another — mirrors the
-    /// autotile cascade guard (m_autotileStaggerGenByScreen).
-    QHash<QString, uint64_t> m_daemonBatchGenByScreen;
-    int m_pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
-    uint64_t m_vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs
-    /// Per-physId fetchVirtualScreenConfig sequence. Every fetch bumps its
-    /// physId's entry; the async reply applies to m_virtualScreenDefs only if
-    /// it is still the latest. Without this, two live changes in quick
-    /// succession (e.g. remove-then-readd a VS) race: replies can land
-    /// out-of-order and a stale payload clobbers the fresh one, leaving
-    /// resolveEffectiveScreenId tagging windows with dead "physId/vs:N" ids.
-    QHash<QString, uint64_t> m_vsFetchSeqPerPhysId;
-    bool m_daemonReadyWindowStateProcessed = false; ///< re-entrancy guard for processDaemonReadyWindowState
-    /// One-shot guard for the Rules rulesChanged D-Bus subscription.
-    /// QDBusConnection::connect silently accepts duplicate subscriptions, so without
-    /// this flag the subscription set would grow unbounded across every
-    /// slotSettingsChanged broadcast (which re-runs loadCachedSettings()). Set true
-    /// after the first successful connect from continueDaemonReadySetup().
-    bool m_rulesSubscribed = false;
-
-    // Screen ID cache: connector name → EDID screen ID (manufacturer:model:serial).
-    // Avoids repeated QScreen iteration and sysfs reads during drag (~30Hz).
-    // Cleared on screen geometry changes (add/remove/reconfigure).
-    mutable QHash<QString, QString> m_screenIdCache;
-
-    // Window ID cache: EffectWindow* → "appId|uuid" (populated on first getWindowId call,
-    // cleared in slotWindowClosed/windowDeleted). Eliminates 3-5 QString allocations per
-    // getWindowId call across all hot paths (~1000-3000 allocs/sec during drag).
-    mutable QHash<KWin::EffectWindow*, QString> m_windowIdCache;
-    // Reverse lookup: windowId → EffectWindow* (for O(1) findWindowById)
-    mutable QHash<QString, KWin::EffectWindow*> m_windowIdReverse;
+    // Screen/window id caches (mutable: populated from const accessors). Fields in
+    // effect_state.h (IdCacheState). m_trackedScreenPerWindow below is a
+    // non-mutable member and is deliberately kept out of this group.
+    mutable IdCacheState m_idCaches;
 
     // Per-window tracked screen ID for cross-screen move detection.
     // Replaces the per-window `new QString` heap allocation that was leaked.
@@ -2179,11 +2081,7 @@ private:
     // cancel can never hit an unrelated reverse leg (a superseding leg,
     // or any future reverse event). Entries are erased on consume and on
     // windowDeleted (raw-pointer-keyed, bounded like its siblings above).
-    struct MinimizeShaderStamp
-    {
-        qint64 timeMs = 0;
-        quint64 generation = 0;
-    };
+    // MinimizeShaderStamp moved to effect_state.h.
     QHash<KWin::EffectWindow*, MinimizeShaderStamp> m_minimizeShaderStamp;
 
     // Cursor output tracking (for daemon shortcut screen detection on Wayland)

@@ -780,7 +780,7 @@ void AutotileHandler::onDaemonReady()
     // The effect survives daemon restarts and still holds each window's true
     // pre-autotile frame here. overwrite=false so anything the daemon
     // restored from its own persisted records wins.
-    if (m_effect->m_daemonServiceRegistered) {
+    if (m_effect->m_daemonGate.serviceRegistered) {
         int resent = 0;
         for (auto scrIt = m_preAutotileGeometries.constBegin(); scrIt != m_preAutotileGeometries.constEnd(); ++scrIt) {
             const QString& screenId = scrIt.key();

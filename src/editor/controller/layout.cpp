@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../EditorController.h"
+#include "../EditorGapsModel.h"
 #include "../services/ILayoutService.h"
 #include "../services/ZoneManager.h"
 #include "../undo/UndoController.h"
@@ -444,14 +445,9 @@ void EditorController::createNewLayout()
     m_currentShaderParams.clear();
     m_cachedShaderParameters.clear();
 
-    // Reset per-layout gap overrides (-1 = use global)
-    m_zonePadding = -1;
-    m_outerGap = -1;
-    m_usePerSideOuterGap = false;
-    m_outerGapTop = -1;
-    m_outerGapBottom = -1;
-    m_outerGapLeft = -1;
-    m_outerGapRight = -1;
+    // Reset per-layout gap overrides (-1 = use global). Signals are emitted
+    // together with the other layout signals below.
+    m_gaps->resetOverrides();
     m_overlayDisplayMode = -1;
     m_useFullScreenGeometry = false;
     m_aspectRatioClass = 0;
@@ -480,8 +476,7 @@ void EditorController::createNewLayout()
     Q_EMIT currentShaderIdChanged();
     Q_EMIT currentShaderParamsChanged();
     Q_EMIT currentShaderParametersChanged();
-    Q_EMIT zonePaddingChanged();
-    Q_EMIT outerGapChanged();
+    m_gaps->emitOverrideSignals();
     Q_EMIT overlayDisplayModeChanged();
     Q_EMIT useFullScreenGeometryChanged();
     Q_EMIT aspectRatioClassChanged();
@@ -721,28 +716,10 @@ void EditorController::loadLayout(const QString& layoutId)
         }
     }
 
-    // Load per-layout gap overrides (-1 = use global setting)
-    int oldZonePadding = m_zonePadding;
+    // Load per-layout gap overrides (-1 = use global setting). The gap
+    // sub-model reads the keys and emits its own change signals.
     bool oldUseFullScreen = m_useFullScreenGeometry;
-    m_zonePadding = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::ZonePadding))
-        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZonePadding)].toInt(-1)
-        : -1;
-    m_outerGap = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGap))
-        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGap)].toInt(-1)
-        : -1;
-    m_usePerSideOuterGap = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap)].toBool(false);
-    m_outerGapTop = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapTop))
-        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapTop)].toInt(-1)
-        : -1;
-    m_outerGapBottom = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapBottom))
-        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapBottom)].toInt(-1)
-        : -1;
-    m_outerGapLeft = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapLeft))
-        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapLeft)].toInt(-1)
-        : -1;
-    m_outerGapRight = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapRight))
-        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapRight)].toInt(-1)
-        : -1;
+    m_gaps->loadFromJson(layoutObj);
     m_useFullScreenGeometry =
         layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry)].toBool(false);
     int oldAspectRatioClass = m_aspectRatioClass;
@@ -796,14 +773,7 @@ void EditorController::loadLayout(const QString& layoutId)
     Q_EMIT currentShaderParamsChanged();
     Q_EMIT currentShaderParametersChanged();
 
-    // Emit gap change signals
-    if (m_zonePadding != oldZonePadding) {
-        Q_EMIT zonePaddingChanged();
-    }
-    // Intentional policy exception to signal-on-change rule:
-    // always emit outerGapChanged here because per-side gap values (top/bottom/left/right)
-    // can differ between layouts even when m_outerGap is numerically unchanged.
-    Q_EMIT outerGapChanged();
+    // Gap change signals were emitted inside EditorGapsModel::loadFromJson above.
     if (m_useFullScreenGeometry != oldUseFullScreen) {
         Q_EMIT useFullScreenGeometryChanged();
     }
@@ -938,25 +908,8 @@ bool EditorController::saveLayout()
         }
     }
 
-    // Include per-layout gap overrides (only if set, >= 0)
-    if (m_zonePadding >= 0) {
-        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZonePadding)] = m_zonePadding;
-    }
-    if (m_outerGap >= 0) {
-        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGap)] = m_outerGap;
-    }
-    // Serialize per-side toggle whenever enabled so user intent is preserved across save/load
-    if (m_usePerSideOuterGap) {
-        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap)] = true;
-        if (m_outerGapTop >= 0)
-            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapTop)] = m_outerGapTop;
-        if (m_outerGapBottom >= 0)
-            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapBottom)] = m_outerGapBottom;
-        if (m_outerGapLeft >= 0)
-            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapLeft)] = m_outerGapLeft;
-        if (m_outerGapRight >= 0)
-            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapRight)] = m_outerGapRight;
-    }
+    // Include per-layout gap overrides (only the ones actually set)
+    m_gaps->writeToJson(layoutObj);
 
     // Include per-layout overlay display mode override (only if set)
     if (m_overlayDisplayMode >= 0) {

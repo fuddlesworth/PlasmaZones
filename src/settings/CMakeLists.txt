@@ -176,7 +176,9 @@ set(plasmazones_settings_SRCS
     # actionTypes, newEmptyRule, ruleTemplates, newRuleFromTemplate) delegate
     # here.
     rules/ruleauthoring.h
+    rules/ruleauthoring_p.h
     rules/ruleauthoring.cpp
+    rules/ruleauthoring_actions.cpp
     rules/ruletemplates.h
     rules/ruletemplates.cpp
     # QAbstractItemModel adapter that exposes a rule's match expression

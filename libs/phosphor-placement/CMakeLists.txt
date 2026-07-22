@@ -24,11 +24,14 @@ set(CMAKE_AUTOMOC ON)
 add_library(PhosphorPlacement SHARED
     include/PhosphorPlacement/IGeometryResolver.h
     include/PhosphorPlacement/PlacementConfig.h
+    include/PhosphorPlacement/SnapStateResolver.h
     include/PhosphorPlacement/WindowTrackingService.h
     src/WindowTrackingService.cpp
     src/navigation.cpp
     src/resnap.cpp
     src/lifecycle.cpp
+    src/virtualscreenmigration.cpp
+    src/placementvalidation_p.h
     src/snap.cpp
     src/placementlogging.h
     src/placementlogging.cpp

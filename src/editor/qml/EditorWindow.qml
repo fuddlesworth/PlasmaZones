@@ -30,14 +30,14 @@ Window {
         if (!editorWindow._editorController)
             return Kirigami.Units.gridUnit;
 
-        return editorWindow._editorController.hasZonePaddingOverride ? editorWindow._editorController.zonePadding : editorWindow._editorController.globalZonePadding;
+        return editorWindow._editorController.gaps.hasZonePaddingOverride ? editorWindow._editorController.gaps.zonePadding : editorWindow._editorController.gaps.globalZonePadding;
     }
     // Edge gap (at screen boundaries) - separate from zone spacing
     readonly property real edgeGap: {
         if (!editorWindow._editorController)
             return Kirigami.Units.gridUnit;
 
-        return editorWindow._editorController.hasOuterGapOverride ? editorWindow._editorController.outerGap : editorWindow._editorController.globalOuterGap;
+        return editorWindow._editorController.gaps.hasOuterGapOverride ? editorWindow._editorController.gaps.outerGap : editorWindow._editorController.gaps.globalOuterGap;
     }
     property var _zonesRepeater: null
     // Base of the zone stacking range inside drawingArea. Each zone sits at

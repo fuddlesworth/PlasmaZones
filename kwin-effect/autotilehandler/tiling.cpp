@@ -163,9 +163,9 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     // frameGeometryChanged would resolve the new position
                     // against stale m_virtualScreenDefs and spuriously
                     // re-announce the just-floated window.
-                    m_effect->m_inDaemonGeometryApply = true;
+                    m_effect->m_daemonGate.inGeometryApply = true;
                     const auto floatGuard = qScopeGuard([this] {
-                        m_effect->m_inDaemonGeometryApply = false;
+                        m_effect->m_daemonGate.inGeometryApply = false;
                     });
                     // Snap-out: leaving tile-managed sizing.
                     m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
@@ -609,9 +609,9 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // m_virtualScreenDefs may still hold pre-rotation regions — without this
             // guard the slot would resolve the new position against stale boundaries
             // and falsely conclude the window crossed VSes, then unsnap it.
-            m_effect->m_inDaemonGeometryApply = true;
+            m_effect->m_daemonGate.inGeometryApply = true;
             const auto guard = qScopeGuard([this] {
-                m_effect->m_inDaemonGeometryApply = false;
+                m_effect->m_daemonGate.inGeometryApply = false;
             });
             saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
             KWin::Window* kwForLog = snap.window->window();
@@ -656,7 +656,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 // The MaximizeRestore call resizes the window to its pre-
                 // maximize restore geometry before applyWindowGeometry below
                 // overwrites it; that intermediate frameGeometryChanged is
-                // intentionally absorbed by the m_inDaemonGeometryApply guard
+                // intentionally absorbed by the m_daemonGate.inGeometryApply guard
                 // set at the top of this lambda — a refactor that moves or
                 // narrows that guard reintroduces the ballooning re-entry.
                 if (KWin::Window* kw = snap.window->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
@@ -725,7 +725,7 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // window's intended VS during VS swap/rotate, and the cached
     // m_virtualScreenDefs may still reflect pre-rotation regions.
     if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()
-        && m_effect->m_virtualScreensReady && !m_effect->m_inDaemonGeometryApply) {
+        && m_effect->m_daemonGate.virtualScreensReady && !m_effect->m_daemonGate.inGeometryApply) {
         // Don't detect VS crossings for the dragged window — the drop handler
         // (callDragStopped / autotile drag end) owns state transitions.
         // Detecting mid-drag would transfer the window before the user drops it.

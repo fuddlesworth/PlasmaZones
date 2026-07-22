@@ -91,6 +91,14 @@ set(plasmazones_core_SRCS
     config/settings/loadsave.cpp
     config/settings/setters.cpp
     config/settings/perscreen.cpp
+    config/settings/animationprofile.cpp
+    config/settings/profiletrees.cpp
+    config/settings/disable.cpp
+    config/settings/uienums.cpp
+    config/settings/triggers.cpp
+    config/settings/systemcolors.cpp
+    config/settings/storescalars.cpp
+    config/settings/shortcuts.cpp
     config/settings.h
     config/configdefaults.cpp
     config/configbackends.h
@@ -105,7 +113,15 @@ set(plasmazones_core_SRCS
     config/settingsvaluelabels.cpp
     config/settingsvaluelabels.h
     config/configmigration.h
+    config/configmigration_util.h
+    config/configmigration_v4detail.h
     config/configmigration.cpp
+    config/configmigration_v2.cpp
+    config/configmigration_v3.cpp
+    config/configmigration_v4.cpp
+    config/configmigration_v4rules.cpp
+    config/configmigration_v4finalize.cpp
+    config/configmigration_v5.cpp
     config/colorimporter.cpp
     config/colorimporter.h
     config/updatechecker.cpp
@@ -133,7 +149,11 @@ set(plasmazones_core_SRCS
     dbus/ruleadaptor.h
     # snapnavigationtargets moved to libs/phosphor-snap-engine/
     dbus/windowtrackingadaptor/windowtrackingadaptor.cpp
+    dbus/windowtrackingadaptor/lifecycle.cpp
+    dbus/windowtrackingadaptor/queries.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
+    dbus/windowtrackingadaptor/rules.cpp
+    dbus/windowtrackingadaptor/crossmode.cpp
     dbus/windowtrackingadaptor/navigation.cpp
     dbus/windowtrackingadaptor/float.cpp
     dbus/windowtrackingadaptor/persistence.cpp
@@ -455,6 +475,11 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/enginefactory.cpp
     daemon/daemon/start.cpp
     daemon/daemon/signals.cpp
+    daemon/daemon/shader_warmup.cpp
+    daemon/daemon/init_services.cpp
+    daemon/daemon/init_adaptors.cpp
+    daemon/daemon/init_engines.cpp
+    daemon/daemon/lifecycle.cpp
     daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
@@ -673,6 +698,8 @@ set(plasmazones_editor_SRCS
     editor/main.cpp
     daemon/rendering/vulkansupport.cpp
     editor/EditorController.cpp
+    editor/EditorGapsModel.cpp
+    editor/EditorGapsModel.h
     editor/EditorLaunchController.cpp
     editor/EditorLaunchController.h
     editor/EditorAppAdaptor.cpp

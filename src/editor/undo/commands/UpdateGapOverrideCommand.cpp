@@ -6,6 +6,7 @@
 #include "phosphor_i18n.h"
 
 #include "../../EditorController.h"
+#include "../../EditorGapsModel.h"
 
 using namespace PlasmaZones;
 
@@ -44,27 +45,31 @@ void UpdateGapOverrideCommand::applyValue(int value)
         return;
     }
 
+    // Zone-padding / edge-gap state moved to the gap sub-model; overlay display
+    // mode is still owned by the controller directly.
+    EditorGapsModel* gaps = m_editorController->gaps();
+
     switch (m_type) {
     case GapType::ZonePadding:
-        m_editorController->setZonePaddingDirect(value);
+        gaps->setZonePaddingDirect(value);
         break;
     case GapType::OuterGap:
-        m_editorController->setOuterGapDirect(value);
+        gaps->setOuterGapDirect(value);
         break;
     case GapType::OuterGapTop:
-        m_editorController->setOuterGapTopDirect(value);
+        gaps->setOuterGapTopDirect(value);
         break;
     case GapType::OuterGapBottom:
-        m_editorController->setOuterGapBottomDirect(value);
+        gaps->setOuterGapBottomDirect(value);
         break;
     case GapType::OuterGapLeft:
-        m_editorController->setOuterGapLeftDirect(value);
+        gaps->setOuterGapLeftDirect(value);
         break;
     case GapType::OuterGapRight:
-        m_editorController->setOuterGapRightDirect(value);
+        gaps->setOuterGapRightDirect(value);
         break;
     case GapType::UsePerSideOuterGap:
-        m_editorController->setUsePerSideOuterGapDirect(static_cast<bool>(value));
+        gaps->setUsePerSideOuterGapDirect(static_cast<bool>(value));
         break;
     case GapType::OverlayDisplayMode:
         m_editorController->setOverlayDisplayModeDirect(value);

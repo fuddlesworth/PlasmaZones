@@ -672,7 +672,7 @@ bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow
 
 bool PlasmaZonesEffect::isDaemonReady(const char* methodName) const
 {
-    if (!m_daemonServiceRegistered) {
+    if (!m_daemonGate.serviceRegistered) {
         qCDebug(lcEffect) << "Cannot" << methodName << "- daemon not ready";
         return false;
     }
@@ -709,7 +709,7 @@ bool PlasmaZonesEffect::isWindowSticky(KWin::EffectWindow* w) const
 
 void PlasmaZonesEffect::updateWindowStickyState(KWin::EffectWindow* w)
 {
-    if (!w || !m_daemonServiceRegistered) {
+    if (!w || !m_daemonGate.serviceRegistered) {
         return;
     }
 
