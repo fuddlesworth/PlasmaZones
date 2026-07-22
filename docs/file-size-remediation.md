@@ -12,6 +12,18 @@ split by concern. Files listed in the Exceptions Register below are sanctioned t
 exceed the ceiling for the stated structural reason and are NOT review findings;
 everything else over 1150 is scheduled work.
 
+## Status: executed 2026-07-22
+
+All split plans in §2 were executed on branch `refactor/file-size` in three waves,
+each verified with both build trees (unity and no-unity) and a full ctest run
+(311/311 passing). After remediation, the only files above the 1150-line ceiling
+are the six entries in the Exceptions Register below (current sizes:
+StubSettings.h 2338, plasmazoneseffect.h 2170, settings.h 1704, AutotileEngine.h
+1635, windowtrackingadaptor.h 1269, pluau.luau 1189). Everything else is at or
+under 1150; the grace-band list in §4 remains accurate as the set of tolerated
+files with their pre-identified seams. The §4 catalog shows the pre-remediation
+sizes for the historical record.
+
 Verdict legend:
 
 - **SPLIT** — over the hard ceiling, has a concrete plan below, scheduled work.
