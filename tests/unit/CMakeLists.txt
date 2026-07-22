@@ -1417,11 +1417,13 @@ target_compile_definitions(test_surface_decoration_orientation PRIVATE
 target_link_libraries(test_surface_decoration_orientation
     PRIVATE
         Qt6::Test
+        Qt6::DBus
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
         plasmazones_rendering
         PhosphorSurface::PhosphorSurface
+        PhosphorProtocol::PhosphorProtocol
 )
 add_test(NAME test_surface_decoration_orientation COMMAND test_surface_decoration_orientation)
 # Non-opted-in and headless runs exit with 77 from the test's custom main,
