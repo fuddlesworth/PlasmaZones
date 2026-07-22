@@ -29,7 +29,7 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 ## License
 - SPDX headers on ALL files: `// SPDX-FileCopyrightText: 2026 fuddlesworth`
 - License identifier depends on the tree:
-  - **App / daemon / editor / settings / KCM / examples / top-level tests** (`src/**`, `kcm/**`, `kwin/**`, `examples/**`, top-level `tests/**`): `GPL-3.0-or-later`
+  - **App / daemon / editor / settings / KCM / examples / top-level tests** (`src/**`, `kcm/**`, `kwin-effect/**`, `examples/**`, top-level `tests/**`): `GPL-3.0-or-later`
   - **Reusable libraries, including their own tests** (`libs/phosphor-*/**`, which subsumes `libs/phosphor-*/tests/**`): `LGPL-2.1-or-later`
   - A library's own `tests/` follow the library (LGPL), NOT the top-level GPL `tests/**` rule: test code that links and ships inside an LGPL lib must not taint that lib's build tree with GPL. The GPL `tests/**` rule means only the top-level app test tree.
   - Rationale: the shell is GPL; libraries are LGPL so third-party plugins / tools can link them without inheriting GPL. Never "fix" a lib header to GPL-3 without understanding the split.
@@ -94,12 +94,12 @@ User-facing strings MUST read like plain, human-written prose with no LLM tics. 
 
 ### Architecture
 - `ISettings` interface → `Settings` class → `IConfigBackend` (pluggable, default: JSON → `~/.config/plasmazones/config.json`)
-- `ConfigDefaults` for all default values; `.kcfg` schema is KCM-only
+- `ConfigDefaults` for all default values; the old `.kcfg` schema files were removed from the repo
 - Editor settings: separate, in `EditorController` (separate process)
 
 ### Adding a Setting
 1. `configdefaults.h` — static default accessor + `xxxKey()` accessor for the config key string
-2. `interfaces.h` — signal in ISettings
+2. `src/core/isettings.h` — signal in ISettings
 3. `settings.h` — Q_PROPERTY + getter + setter + member
 4. `settings.cpp` — setter (check changed, emit), load/save/reset using `ConfigDefaults::xxx()`
 
@@ -126,7 +126,7 @@ User-facing strings MUST read like plain, human-written prose with no LLM tics. 
 - NEVER add per-key fallback reads outside of migration functions — that's ad-hoc migration
 
 ### Shortcuts
-- `IShortcutBackend` (KGlobalAccel / XDG Portal / D-Bus fallback) — never use KGlobalAccel directly
+- `PhosphorShortcuts::IBackend` (KGlobalAccel / XDG Portal / D-Bus fallback) — never use KGlobalAccel directly
 - Register via `ShortcutManager`; dynamic updates via settings signals
 
 ## Build & Test
@@ -160,7 +160,7 @@ cd build && ctest --output-on-failure
 - `qt6_add_qml_module()` — ALL QML files must be listed (missing = runtime "not a type" error)
 - `cmake -DUSE_KDE_FRAMEWORKS=ON` (default) or `OFF` for portable Qt-only build
 - KF6 deps when ON: `KCMUtils`, `GlobalAccel`; optional: `Activities`
-- Pluggable backends: `IConfigBackend`, `IShortcutBackend`, `IWallpaperProvider`
+- Pluggable backends: `IConfigBackend`, `PhosphorShortcuts::IBackend`, `IWallpaperProvider`
 - Standalone settings app (`plasmazones-settings`) + minimal KCM launcher
 
 ### Directory Structure
@@ -173,7 +173,7 @@ src/dbus/        — D-Bus adaptors
 src/config/      — Configuration backends
 src/autotile/    — Tiling algorithms (scripted Luau via phosphor-tiles)
 kcm/             — System Settings module
-kwin/            — KWin script integration
+kwin-effect/     — KWin effect (C++)
 tests/           — Unit tests (Qt Test)
 data/layouts/    — Default layout templates (JSON)
 data/algorithms/ — Bundled Luau tiling algorithms

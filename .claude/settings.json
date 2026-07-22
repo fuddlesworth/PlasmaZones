@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\".claude/audit-state.json\"; [ -f \"$f\" ] || exit 0\ncommand -v jq >/dev/null 2>&1 || exit 0\njq -e . \"$f\" >/dev/null 2>&1 || { printf '{\"decision\":\"block\",\"reason\":\"The code-audit loop guard found .claude/audit-state.json but it is not valid JSON. Repair it (or delete it if no audit is running), then continue the loop.\"}\\n'; exit 0; }\njq -e '.complete == true' \"$f\" >/dev/null 2>&1 && exit 0\njq -e '.awaiting_agents == true' \"$f\" >/dev/null 2>&1 && { printf '{\"systemMessage\":\"Audit loop paused: waiting on dispatched partition reviewers. The loop resumes when their reports arrive.\"}\\n'; exit 0; }\n[ -n \"$(find \"$f\" -mmin +360 2>/dev/null)\" ] && { printf '{\"systemMessage\":\"Stale .claude/audit-state.json (>6h) ignored by the audit-loop guard. Delete it or set complete:true.\"}\\n'; exit 0; }\njq -r '\"\\([.findings[]?|select(.status==\"open\")]|length) \\(.pass // 1)\"' \"$f\" | { read -r open pass\njq -n --arg open \"$open\" --arg pass \"$pass\" '{decision:\"block\",reason:(\"code-audit loop is ACTIVE (pass \\($pass), \\($open) findings still open) and .claude/audit-state.json has complete:false. Rule 0 of the code-audit skill forbids ending the turn before step 12. Do NOT ask the user whether to continue \u2014 invoking the skill already authorized every pass. Resume where you left off: fix open findings (step 5), then step 9 fresh read, step 10 re-analyze, step 11 decision. The loop ends only via the step 11 predicate followed by the step 12 Final Report, which is when you set complete:true.\")}'; }",
+            "timeout": 10,
+            "statusMessage": "Checking audit loop state..."
+          }
+        ]
+      }
+    ]
+  }
+}
