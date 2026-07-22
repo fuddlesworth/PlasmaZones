@@ -101,6 +101,7 @@ public:
     int defaultMaxWindows() const override;
     bool producesOverlappingZones() const override;
     bool supportsMinSizes() const noexcept override;
+    QString overlapStacking() const noexcept override;
     bool supportsMemory() const noexcept override;
     QString zoneNumberDisplay() const noexcept override;
     bool centerLayout() const override;
@@ -164,6 +165,7 @@ private:
     bool m_cachedSupportsMasterCount = false;
     bool m_cachedSupportsSplitRatio = false;
     bool m_cachedProducesOverlappingZones = false;
+    bool m_cachedOverlapFirstOnTop = false;
     bool m_cachedCenterLayout = false;
 };
 

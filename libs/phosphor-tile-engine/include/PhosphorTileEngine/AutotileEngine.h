@@ -563,6 +563,19 @@ public:
     QString effectiveAlgorithmId(const QString& screenId) const;
     PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 
+    /**
+     * @brief Request that a window is activated after the given screen's next applyTiling
+     *
+     * Stored in m_pendingFocusByScreen and emitted as activateWindowRequested
+     * AFTER windowsTiled, so the KWin effect's post-tile raise loop runs first
+     * and the activation lands on top of it. Keyed by screen so a request that
+     * outlives a no-op retile (early return before applyTiling) can only fire
+     * on ITS screen's next retile, never on another screen's. Used by
+     * operations that change which window should be frontmost (e.g. rotating
+     * an overlap layout).
+     */
+    void requestPostRetileFocus(const QString& screenId, const QString& windowId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Manual tiling operations
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1689,10 +1702,13 @@ private:
     QSet<QString> m_retileRetryScreens;
     QHash<QString, int> m_retileRetryCount;
 
-    // Deferred focus: set by onWindowAdded, emitted after applyTiling so the
+    // Deferred focus, keyed by screen: set by onWindowAdded and
+    // requestPostRetileFocus, emitted after that screen's applyTiling so the
     // focus request arrives at KWin AFTER windowsTiled (whose onComplete raises
-    // windows in tiling order). Without this, the raise loop buries the new window.
-    QString m_pendingFocusWindowId;
+    // windows in tiling order). Without this, the raise loop buries the new
+    // window. Per-screen so an entry stranded by a no-op retile cannot be
+    // consumed by another screen's batch and activate the wrong window.
+    QHash<QString, QString> m_pendingFocusByScreen;
 
     // Focus-before-track reseed: a windowFocused() notification can arrive before
     // the window it names is tracked in a TilingState — most visibly on daemon

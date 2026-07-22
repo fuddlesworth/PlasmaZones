@@ -9,6 +9,11 @@ return pluau.algorithm {
         id = "horizontal-deck",
         description = "Focused window on top. Remaining windows peek from the bottom edge",
         producesOverlappingZones = true,
+        -- Same nesting as deck, on the vertical axis: peek cards share the
+        -- bottom edge with heights shrinking by index, so lastOnTop is the
+        -- only direction that keeps every card's top strip visible.
+        overlapStacking = "lastOnTop",
+        masterZoneIndex = 0,
         supportsMasterCount = false,
         supportsSplitRatio = true,
         defaultSplitRatio = 0.75,

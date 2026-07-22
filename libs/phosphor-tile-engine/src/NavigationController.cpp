@@ -4,6 +4,7 @@
 #include <PhosphorTileEngine/NavigationController.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
@@ -113,6 +114,37 @@ void NavigationController::rotateWindowOrder(bool clockwise)
 
     // Rotate the window order
     bool rotated = state->rotateWindows(clockwise);
+
+    // For overlap layouts, rotating exists to bring a different window to the
+    // user's working position (monocle cycles the visible window, deck cycles
+    // which window holds the master slot). Geometry alone cannot express that
+    // — with identical or overlapping zones the retile leaves the old window
+    // on top — so request activation of the window that just arrived there.
+    // Layouts with a declared master zone (deck, horizontal-deck) focus the
+    // window now occupying that slot; for the rest the interaction front is
+    // the stack's topmost window (last tiled index for lastOnTop, first for
+    // firstOnTop). The pending focus is emitted AFTER windowsTiled (see
+    // applyTiling), landing the raise on top of the effect's post-tile
+    // restack.
+    if (rotated) {
+        const PhosphorTiles::TilingAlgorithm* algo = m_engine->effectiveAlgorithm(screenId);
+        if (algo && algo->producesOverlappingZones()) {
+            const QStringList rotatedOrder = state->tiledWindows();
+            if (!rotatedOrder.isEmpty()) {
+                const int masterIdx = algo->masterZoneIndex();
+                QString front;
+                if (masterIdx >= 0 && masterIdx < rotatedOrder.size()) {
+                    front = rotatedOrder.at(masterIdx);
+                } else if (algo->overlapStacking() == QLatin1String("firstOnTop")) {
+                    front = rotatedOrder.first();
+                } else {
+                    front = rotatedOrder.last();
+                }
+                m_engine->requestPostRetileFocus(screenId, front);
+            }
+        }
+    }
+
     m_engine->retileAfterOperation(screenId, rotated);
 
     if (rotated) {

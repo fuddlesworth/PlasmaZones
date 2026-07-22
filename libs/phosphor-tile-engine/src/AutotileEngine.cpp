@@ -930,6 +930,11 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     for (const QString& screenId : removed) {
         m_retileRetryScreens.remove(screenId);
         m_retileRetryCount.remove(screenId);
+        // A deferred focus request stranded by a no-op retile must not
+        // survive the screen's removal: if the same screenId reconnects,
+        // its first applyTiling would consume the stale entry and activate
+        // a window from the previous session of that screen.
+        m_pendingFocusByScreen.remove(screenId);
     }
 
     const bool nowEnabled = !m_autotileScreens.isEmpty();
@@ -1815,6 +1820,11 @@ QString AutotileEngine::effectiveAlgorithmId(const QString& screenId) const
 PhosphorTiles::TilingAlgorithm* AutotileEngine::effectiveAlgorithm(const QString& screenId) const
 {
     return m_configResolver->effectiveAlgorithm(screenId);
+}
+
+void AutotileEngine::requestPostRetileFocus(const QString& screenId, const QString& windowId)
+{
+    m_pendingFocusByScreen.insert(screenId, windowId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -3013,7 +3023,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
         // Defer focus until after applyTiling emits windowsTiled. The KWin effect's
         // onComplete raises windows in tiling order; emitting focus before retile
         // causes the raise loop to bury the new window behind existing ones.
-        m_pendingFocusWindowId = windowId;
+        m_pendingFocusByScreen.insert(screenId, windowId);
     }
 
     // Replay a focus notification that arrived before this window was tracked (see
@@ -3908,14 +3918,17 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     //   - producesOverlappingZones() (Monocle, Cascade, Stair, Deck, Paper,
     //     Spread, horizontal-deck and any future opt-in): zones intentionally
     //     overlap and the implicit removeRectOverlaps inside enforceMinSizes
-    //     would destroy the intended layout.
+    //     would destroy the intended layout. These take the grow-in-place
+    //     else-branch below instead: no stealing, no overlap removal, just
+    //     each zone grown to the min size KWin enforces anyway.
     //   - !supportsMinSizes(): the algorithm says min sizes are not a concept
     //     it works in. Running the pass anyway would apply the very treatment
     //     the flag opts out of, and would silently overrule a shipped script.
-    //     Four bundled algorithms declare it: tatami, floating-center, cluster
-    //     and theater. All four resolve producesOverlappingZones to false
-    //     (three declare it so, theater omits it and takes the default), so
-    //     before this gate all four were min-size corrected despite opting out.
+    //     Two bundled algorithms declare it: tatami and cluster (theater and
+    //     floating-center used to, until their scripts grew min-size handling
+    //     and rejoined this pass). Both resolve producesOverlappingZones to
+    //     false, so before this gate they were min-size corrected despite
+    //     opting out.
     //
     // minSizes is populated iff respectMin (see above). windowCount is
     // tiledCount (>= 1 past the early return at the top) capped by
@@ -3936,6 +3949,25 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
         if (Q_UNLIKELY(PhosphorTileEngine::lcTileEngine().isDebugEnabled()) && zones != preEnforceZones) {
             qCDebug(PhosphorTileEngine::lcTileEngine) << "enforceMinSizes: zones adjusted"
                                                       << "before=" << preEnforceZones << "after=" << zones;
+        }
+    } else if (respectMin && algo->supportsMinSizes() && algo->producesOverlappingZones()) {
+        // Overlap layouts skip enforceMinSizes (its removeRectOverlaps would
+        // destroy the intended stack), but the compositor still forces every
+        // window up to its declared min size. Grow each undersized zone in
+        // place so the emitted rect matches what KWin will produce anyway —
+        // otherwise the engine's model (centering targets, drag-insert hit
+        // tests, lastManagedRect comparisons) disagrees with the real frame.
+        // Position is untouched here; clampZonesToScreen below shifts a grown
+        // zone back on-screen, which for edge-anchored peeks (deck cards
+        // flush against the screen edge) is exactly "grow toward the
+        // interior, keep the anchored edge".
+        for (int i = 0; i < zones.size() && i < minSizes.size(); ++i) {
+            if (minSizes[i].width() > zones[i].width()) {
+                zones[i].setWidth(minSizes[i].width());
+            }
+            if (minSizes[i].height() > zones[i].height()) {
+                zones[i].setHeight(minSizes[i].height());
+            }
         }
     }
 
@@ -4356,6 +4388,15 @@ void AutotileEngine::applyTiling(const QString& screenId)
                                     return z == zones[0];
                                 });
 
+    // Overlap layouts declare a deterministic z-order for the tiled stack
+    // (every bundled overlap layout stacks the last tiled index on top;
+    // custom scripts may declare the reverse).
+    // Emit it per entry so the effect can restack after applying geometry;
+    // the batch is already in tiling order, so the direction is all it needs.
+    const PhosphorTiles::TilingAlgorithm* stackAlgo = effectiveAlgorithm(screenId);
+    const QString stacking =
+        (stackAlgo && stackAlgo->producesOverlappingZones()) ? stackAlgo->overlapStacking() : QString();
+
     QJsonArray arr;
     for (int i = 0; i < tileCount; ++i) {
         if (filterForPreview && windows[i] == filteredWindowId) {
@@ -4383,6 +4424,9 @@ void AutotileEngine::applyTiling(const QString& screenId)
         if (useMonocleMode) {
             obj[QLatin1String("monocle")] = true;
         }
+        if (!stacking.isEmpty()) {
+            obj[QLatin1String("stacking")] = stacking;
+        }
         arr.append(obj);
     }
     // Include overflow windows in the batch with "floating" flag so the effect
@@ -4406,9 +4450,9 @@ void AutotileEngine::applyTiling(const QString& screenId)
 
     // Emit deferred focus AFTER windowsTiled so KWin processes tiles first
     // (including the onComplete raise loop), then focuses the new window on top.
-    if (!m_pendingFocusWindowId.isEmpty()) {
-        Q_EMIT activateWindowRequested(m_pendingFocusWindowId);
-        m_pendingFocusWindowId.clear();
+    // Consumed per screen: only this screen's pending request may fire here.
+    if (const QString pendingFocus = m_pendingFocusByScreen.take(screenId); !pendingFocus.isEmpty()) {
+        Q_EMIT activateWindowRequested(pendingFocus);
     }
 
     // Batch-notify daemon of overflow float state (replaces per-window

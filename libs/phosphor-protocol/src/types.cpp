@@ -71,6 +71,15 @@ QString TileRequestEntry::validationError() const
     if (!floating && (width == 0 || height == 0)) {
         return QStringLiteral("TileRequestEntry: tiled request requires non-zero size (windowId=%1)").arg(windowId);
     }
+    // stacking is optional (empty = non-overlap layout). A non-empty value
+    // must be one of the two declared directions: the effect engages its
+    // overlap restack on ANY non-empty value and treats unknown strings as
+    // lastOnTop, so a garbled or spoofed value would silently force a
+    // restack. Reject it here instead, where every unmarshal site already
+    // checks.
+    if (!stacking.isEmpty() && stacking != QLatin1String("firstOnTop") && stacking != QLatin1String("lastOnTop")) {
+        return QStringLiteral("TileRequestEntry: invalid stacking '%1' (windowId=%2)").arg(stacking, windowId);
+    }
     return {};
 }
 

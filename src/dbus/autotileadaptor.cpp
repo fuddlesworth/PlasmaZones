@@ -454,6 +454,7 @@ void AutotileAdaptor::onWindowsTiled(const QString& tileRequestsJson)
         entry.zoneId = obj.value(QLatin1String("zoneId")).toString();
         entry.screenId = obj.value(QLatin1String("screenId")).toString();
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
+        entry.stacking = obj.value(QLatin1String("stacking")).toString();
         requests.append(entry);
     }
 

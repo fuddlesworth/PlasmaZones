@@ -9,6 +9,7 @@ return pluau.algorithm {
         id = "paper",
         description = "Equal-width overlapping pages like a document viewer, where splitRatio controls page width",
         producesOverlappingZones = true,
+        overlapStacking = "lastOnTop",
         supportsMasterCount = false,
         supportsSplitRatio = true,
         defaultSplitRatio = 0.8,

@@ -158,6 +158,7 @@ ScriptedHelpers::ScriptMetadata parseMetadata(const QVariantMap& m)
     if (m.contains(QStringLiteral("supportsMinSizes"))) {
         md.supportsMinSizes = m.value(QStringLiteral("supportsMinSizes")).toBool();
     }
+    md.overlapStacking = m.value(QStringLiteral("overlapStacking")).toString();
     double ratio = 0.0;
     if (finiteNumber(m, QStringLiteral("defaultSplitRatio"), ratio)) {
         md.defaultSplitRatio = ratio;
@@ -424,6 +425,17 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
     m_cachedSupportsMasterCount = m_metadata.supportsMasterCount;
     m_cachedSupportsSplitRatio = m_metadata.supportsSplitRatio;
     m_cachedProducesOverlappingZones = m_metadata.producesOverlappingZones;
+    // Script metadata is untrusted input: accept exactly the two documented
+    // values and fall back to the default (lastOnTop) for anything else, so a
+    // typo degrades to the common cascade-style stacking instead of silently
+    // inverting the deck.
+    if (!m_metadata.overlapStacking.isEmpty() && m_metadata.overlapStacking != QLatin1String("firstOnTop")
+        && m_metadata.overlapStacking != QLatin1String("lastOnTop")) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "LuauTileAlgorithm: unknown overlapStacking value" << m_metadata.overlapStacking
+            << "- using lastOnTop, script=" << m_scriptId;
+    }
+    m_cachedOverlapFirstOnTop = m_metadata.overlapStacking == QLatin1String("firstOnTop");
     m_cachedCenterLayout = m_metadata.centerLayout;
     m_cachedMinimumWindows = (m_metadata.minimumWindows > 0) ? m_metadata.minimumWindows : 1;
     m_cachedDefaultMaxWindows =
@@ -611,6 +623,11 @@ bool LuauTileAlgorithm::producesOverlappingZones() const
 bool LuauTileAlgorithm::supportsMinSizes() const noexcept
 {
     return m_metadata.supportsMinSizes;
+}
+
+QString LuauTileAlgorithm::overlapStacking() const noexcept
+{
+    return m_cachedOverlapFirstOnTop ? QStringLiteral("firstOnTop") : QStringLiteral("lastOnTop");
 }
 
 bool LuauTileAlgorithm::supportsMemory() const noexcept

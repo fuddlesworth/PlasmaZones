@@ -276,6 +276,35 @@ private Q_SLOTS:
         QVERIFY(e.validationError().isEmpty());
     }
 
+    void tileRequestEntry_invalidStacking_rejected()
+    {
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        e.stacking = QStringLiteral("sideways");
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("invalid stacking")));
+    }
+
+    void tileRequestEntry_stackingValues_tolerated()
+    {
+        // Empty (non-overlap layout) and the two declared directions are the
+        // only legal values.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        QVERIFY(e.validationError().isEmpty());
+        e.stacking = QStringLiteral("firstOnTop");
+        QVERIFY(e.validationError().isEmpty());
+        e.stacking = QStringLiteral("lastOnTop");
+        QVERIFY(e.validationError().isEmpty());
+    }
+
     // ═════════════════════════════════════════════════════════════════════
     // PhosphorProtocol::BridgeRegistrationResult
     // ═════════════════════════════════════════════════════════════════════

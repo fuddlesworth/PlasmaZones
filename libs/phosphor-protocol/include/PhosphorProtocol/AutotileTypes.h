@@ -12,7 +12,7 @@
 
 namespace PhosphorProtocol {
 
-/// D-Bus struct for autotile tile requests: (siiiissbb)
+/// D-Bus struct for autotile tile requests: (siiiissbbs)
 struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 {
     QString windowId;
@@ -24,6 +24,9 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     QString screenId;
     bool monocle = false;
     bool floating = false;
+    /// Overlap-layout stacking direction: "firstOnTop" or "lastOnTop".
+    /// Empty for non-overlap layouts (the effect leaves z-order alone).
+    QString stacking;
 
     QRect toRect() const
     {

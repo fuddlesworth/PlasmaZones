@@ -121,6 +121,7 @@ export type Metadata = {
     supportsScriptState: boolean?, -- persists ctx.state across retiles (non-tree memory)
     supportsMinSizes: boolean?, -- defaults to TRUE when omitted (unlike every other flag); set false to opt out
     producesOverlappingZones: boolean?,
+    overlapStacking: string?, -- overlap layouts only: "lastOnTop" (default) or "firstOnTop"; declares the z-order the host imposes on the tiled stack
     centerLayout: boolean?,
     supportsSingleWindow: boolean?, -- algorithm lays out the lone window itself (else the host fills the work area for a lone window)
     retileOnFocus: boolean?, -- reflow when focus moves between tiled windows (focus-driven layouts, e.g. a spotlight that follows focus)
