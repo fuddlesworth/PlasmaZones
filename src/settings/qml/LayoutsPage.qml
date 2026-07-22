@@ -131,6 +131,10 @@ SettingsFlickable {
     }
 
     function rebuildModel() {
+        // Hold the current height across the delegate teardown the model swap
+        // below causes, or the page snaps to the top whenever a layout is
+        // edited while scrolled down.
+        root.holdContentHeight();
         let allLayouts = settingsController.layouts;
         let filtered = [];
         for (let i = 0; i < allLayouts.length; i++) {
@@ -242,7 +246,10 @@ SettingsFlickable {
         return Core.ungrouped(filtered, i18n("All layouts"));
     }
 
-    contentHeight: content.implicitHeight
+    // `naturalContentHeight`, not `contentHeight`: rebuildModel() swaps the
+    // whole group model, which tears every card down for a few frames. See the
+    // model-swap scroll guard in SettingsFlickable.
+    naturalContentHeight: content.implicitHeight
     clip: true
 
     Component.onCompleted: {

@@ -388,8 +388,16 @@ SettingsFlickable {
     // re-evaluates against this tick whenever any usage source mutates.
     property int _usagesRev: 0
 
-    contentHeight: content.implicitHeight
+    // `naturalContentHeight`, not `contentHeight`: re-evaluating _displayGroups
+    // swaps the section Repeater's model, which tears every card down for a few
+    // frames. See the model-swap scroll guard in SettingsFlickable.
+    naturalContentHeight: content.implicitHeight
     clip: true
+
+    // Hold the current height across that teardown. Layout runs on polish, so
+    // this handler still sees the pre-swap height even though _displayGroups
+    // has already been re-evaluated.
+    on_DisplayGroupsChanged: root.holdContentHeight()
 
     Connections {
         function onShaderEffectsChanged() {
