@@ -18,7 +18,7 @@
  */
 
 #include "internal.h"
-#include "../overlayservice.h"
+#include "daemon/overlayservice.h"
 #include "phosphor_roles.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>

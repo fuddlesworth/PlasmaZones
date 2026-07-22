@@ -6,7 +6,7 @@
 // the screen-lifecycle code grouped with itself.
 
 #include "internal.h"
-#include "../overlayservice.h"
+#include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 

@@ -8,7 +8,7 @@
 #include <QStandardPaths>
 #include <QUuid>
 
-#include "configmigration.h"
+#include "config/configmigration.h"
 
 namespace PlasmaZones {
 namespace TestHelpers {

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "internal.h"
-#include "../overlayservice.h"
+#include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -12,7 +12,7 @@
 #include <PhosphorScreens/Manager.h>
 #include "core/utils/utils.h"
 #include "core/types/zoneselectorlayout.h"
-#include "../config/configdefaults.h"
+#include "config/configdefaults.h"
 #include <QScreen>
 #include <QQuickWindow>
 #include <QQuickItem>

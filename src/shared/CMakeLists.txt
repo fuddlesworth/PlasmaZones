@@ -15,7 +15,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # KDECompilerSettings enables -Wmissing-include-dirs globally, and
 # Qt adds `<target>_autogen/include` to each sub-target's -I list. That
 # directory is populated by AUTOMOC as a build-time side effect; since
-# shared_qml_plugin.cpp carries no Q_OBJECT declarations, MOC produces
+# sharedqmlplugin.cpp carries no Q_OBJECT declarations, MOC produces
 # nothing and the include dir ends up either empty or — after
 # `--clean-first` — missing entirely. cc1plus then fires the warning
 # before AUTOMOC has a chance to recreate the path.
@@ -39,7 +39,7 @@ qt_add_qml_module(plasmazones_shared_qml
     STATIC
     RESOURCE_PREFIX /qt/qml
     SOURCES
-        shared_qml_plugin.cpp
+        sharedqmlplugin.cpp
     QML_FILES
         AspectRatioBadge.qml
         CapabilityBadgeRow.qml

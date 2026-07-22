@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "internal.h"
-#include "../overlayservice.h"
+#include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>

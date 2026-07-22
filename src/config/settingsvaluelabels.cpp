@@ -3,7 +3,7 @@
 
 #include "settingsvaluelabels.h"
 
-#include "../phosphor_i18n.h"
+#include "phosphor_i18n.h"
 #include "configdefaults.h"
 #include "configkeys.h"
 #include "settingsschema.h"

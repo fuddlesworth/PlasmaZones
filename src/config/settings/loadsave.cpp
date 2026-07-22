@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../settings.h"
-#include "../configdefaults.h"
+#include "config/settings.h"
+#include "config/configdefaults.h"
 #include "core/platform/logging.h"
 
 namespace PlasmaZones {

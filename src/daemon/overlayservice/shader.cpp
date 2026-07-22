@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "internal.h"
-#include "../overlayservice.h"
+#include "daemon/overlayservice.h"
 #include "qml_property_names.h"
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
@@ -15,7 +15,7 @@
 #include <PhosphorZones/Zone.h>
 #include "core/utils/utils.h"
 #include "core/interfaces/shaderregistry.h"
-#include "../rendering/zonelabeltexturebuilder.h"
+#include "daemon/rendering/zonelabeltexturebuilder.h"
 #include "phosphor_roles.h"
 
 #include <PhosphorLayer/ILayerShellTransport.h>

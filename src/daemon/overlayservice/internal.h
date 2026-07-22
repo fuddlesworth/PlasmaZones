@@ -10,7 +10,7 @@
 #include "core/interfaces/interfaces.h"
 #include "core/interfaces/shaderregistry.h"
 #include "core/utils/utils.h"
-#include "../config/configdefaults.h"
+#include "config/configdefaults.h"
 
 #include <PhosphorLayer/Role.h>
 #include <PhosphorScreens/Manager.h>

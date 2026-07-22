@@ -16,7 +16,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include "../common/layoutpreviewserialize.h"
+#include "common/layoutpreviewserialize.h"
 #include "core/utils/unifiedlayoutlist.h"
 #include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>

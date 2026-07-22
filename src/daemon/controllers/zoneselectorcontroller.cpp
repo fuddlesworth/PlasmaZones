@@ -10,7 +10,7 @@
 #include "core/utils/utils.h"
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorScreens/Manager.h>
-#include "../overlayservice/internal.h"
+#include "daemon/overlayservice/internal.h"
 #include <QGuiApplication>
 #include <QQuickItem>
 #include <QScreen>

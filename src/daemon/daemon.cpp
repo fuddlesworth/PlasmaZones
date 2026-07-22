@@ -49,7 +49,7 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../config/configbackends.h"
+#include "config/configbackends.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/AutotileLayoutSourceFactory.h>
@@ -73,14 +73,14 @@
 
 #include <PhosphorContext/ContextResolver.h>
 #include "core/utils/utils.h"
-#include "../phosphor_i18n.h"
-#include "../config/configdefaults.h"
-#include "../config/settingsconfigstore.h"
+#include "phosphor_i18n.h"
+#include "config/configdefaults.h"
+#include "config/settingsconfigstore.h"
 #include <PhosphorScreens/DBusScreenAdaptor.h>
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorScreens/PlasmaPanelSource.h>
 #include "core/interfaces/shaderregistry.h"
-#include "../config/settings.h"
+#include "config/settings.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
 #include "dbus/overlayadaptor.h"
@@ -105,8 +105,8 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include "../common/screenidresolver.h"
-#include "../common/layoutbundlebuilder.h"
+#include "common/screenidresolver.h"
+#include "common/layoutbundlebuilder.h"
 
 namespace PlasmaZones {
 

@@ -3,8 +3,8 @@
 
 #include "daemon.h"
 
-#include "../config/configdefaults.h"
-#include "../config/configmigration.h"
+#include "config/configdefaults.h"
+#include "config/configmigration.h"
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
 #include "core/utils/translationloader.h"

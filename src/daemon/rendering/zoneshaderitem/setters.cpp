@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../zoneshaderitem.h"
+#include "daemon/rendering/zoneshaderitem.h"
 
 #include "core/types/constants.h"
 #include "core/platform/logging.h"

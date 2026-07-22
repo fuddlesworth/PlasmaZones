@@ -5,7 +5,7 @@
 
 #include "packvalidatorcommon.h"
 
-#include "../daemon/rendering/zoneentryscaffold.h"
+#include "daemon/rendering/zoneentryscaffold.h"
 
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>

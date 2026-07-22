@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../daemon.h"
+#include "daemon/daemon.h"
 #include "helpers.h"
-#include "../overlayservice.h"
-#include "../controllers/unifiedlayoutcontroller.h"
-#include "../controllers/shortcutmanager.h"
-#include "../../config/settingsconfigstore.h"
+#include "daemon/overlayservice.h"
+#include "daemon/controllers/unifiedlayoutcontroller.h"
+#include "daemon/controllers/shortcutmanager.h"
+#include "config/settingsconfigstore.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorScreens/Manager.h>
@@ -32,11 +32,11 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "core/interfaces/shaderregistry.h"
-#include "../../config/settingsconfigstore.h"
+#include "config/settingsconfigstore.h"
 #include <PhosphorZones/ZoneDetector.h>
 #include <QProcess>
 #include <QPointer>
-#include "../../config/settings.h"
+#include "config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>

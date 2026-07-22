@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "internal.h"
-#include "../overlayservice.h"
+#include "daemon/overlayservice.h"
 #include "qml_property_names.h"
 #include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"

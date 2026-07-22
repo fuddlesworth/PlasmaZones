@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../daemon.h"
+#include "daemon/daemon.h"
 #include "helpers.h"
 #include "macros.h"
-#include "../overlayservice.h"
-#include "../controllers/unifiedlayoutcontroller.h"
-#include "../../config/settings.h"
+#include "daemon/overlayservice.h"
+#include "daemon/controllers/unifiedlayoutcontroller.h"
+#include "config/settings.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>

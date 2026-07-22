@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../daemon.h"
-#include "../overlayservice.h"
-#include "../controllers/unifiedlayoutcontroller.h"
+#include "daemon/daemon.h"
+#include "daemon/overlayservice.h"
+#include "daemon/controllers/unifiedlayoutcontroller.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "core/resolve/screenmoderouter.h"
 #include <PhosphorContext/ContextResolver.h>
@@ -23,7 +23,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include "../../config/settings.h"
+#include "config/settings.h"
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
