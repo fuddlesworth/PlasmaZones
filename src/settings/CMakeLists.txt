@@ -246,7 +246,7 @@ target_include_directories(plasmazones-settings PRIVATE
 # Mark CurvePresets.qml as a QML singleton BEFORE the qt_add_qml_module
 # call below. `qt_add_qml_module`'s auto-detection of `pragma Singleton`
 # is unreliable on Qt 6.11 with our generator setup: the qmldir entry
-# came out as a plain `CurvePresets 1.0 qml/CurvePresets.qml` — no
+# came out as a plain `CurvePresets 1.0 qml/pages/animations/CurvePresets.qml` — no
 # `singleton` keyword — and consumers ended up accessing the QML *type*
 # instead of the singleton instance ("TypeError: Property 'X' of object
 # CurvePresets is not a function" at first AnimationEventCard /
@@ -254,10 +254,10 @@ target_include_directories(plasmazones-settings PRIVATE
 # file forces qt_add_qml_module to write the `singleton` keyword. This
 # MUST come before qt_add_qml_module — the function reads the property
 # at registration time, not at link time.
-set_source_files_properties(qml/CurvePresets.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/pages/animations/CurvePresets.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # TriggerLabels is a singleton for the same reason: the trigger bit tables are
 # shared between the trigger editor and the profile diff.
-set_source_files_properties(qml/TriggerLabels.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/components/TriggerLabels.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(plasmazones-settings
     URI org.plasmazones.settings
@@ -279,205 +279,205 @@ qt_add_qml_module(plasmazones-settings
         rules/rulemodel.cpp
     QML_FILES
         qml/Main.qml
-        qml/ConfirmDialogs.qml
-        qml/Toast.qml
-        qml/KeyboardShortcutOverlay.qml
-        qml/GlobalSearchField.qml
+        qml/dialogs/ConfirmDialogs.qml
+        qml/components/Toast.qml
+        qml/dialogs/KeyboardShortcutOverlay.qml
+        qml/components/GlobalSearchField.qml
         qml/GeneralPage.qml
         # Snapping, organised by subject (Overlay / Zone Selector / Window),
         # each with a Behavior page. Shaders lives under Configuration. The
         # window border / title-bar appearance AND the unified gaps are shared
         # across modes and live on the top-level WindowAppearancePage.
-        qml/SnappingOverlayBehaviorPage.qml
-        qml/SnappingOverlayAppearancePage.qml
-        qml/SnappingZoneSelectorPage.qml
-        qml/SnappingWindowBehaviorPage.qml
-        qml/TilingBehaviorPage.qml
-        qml/TilingAlgorithmPage.qml
-        qml/TilingSimplePage.qml
-        qml/SnappingSimplePage.qml
-        qml/GlobalTimingDefaultsCard.qml
-        qml/AnimationWindowFilterCard.qml
-        qml/SnappingWindowHandlingCard.qml
-        qml/SnappingFocusCard.qml
-        qml/SnappingZoneSpanCard.qml
-        qml/SnappingDragTriggerRow.qml
-        qml/TilingWindowHandlingCard.qml
-        qml/TilingFocusCard.qml
+        qml/pages/snapping/SnappingOverlayBehaviorPage.qml
+        qml/pages/snapping/SnappingOverlayAppearancePage.qml
+        qml/pages/snapping/SnappingZoneSelectorPage.qml
+        qml/pages/snapping/SnappingWindowBehaviorPage.qml
+        qml/pages/tiling/TilingBehaviorPage.qml
+        qml/pages/tiling/TilingAlgorithmPage.qml
+        qml/pages/tiling/TilingSimplePage.qml
+        qml/pages/snapping/SnappingSimplePage.qml
+        qml/components/GlobalTimingDefaultsCard.qml
+        qml/pages/animations/AnimationWindowFilterCard.qml
+        qml/pages/snapping/SnappingWindowHandlingCard.qml
+        qml/pages/snapping/SnappingFocusCard.qml
+        qml/pages/snapping/SnappingZoneSpanCard.qml
+        qml/pages/snapping/SnappingDragTriggerRow.qml
+        qml/pages/tiling/TilingWindowHandlingCard.qml
+        qml/pages/tiling/TilingFocusCard.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which
         # also hosts the unified inner/outer gap controls.
-        qml/WindowAppearancePage.qml
+        qml/pages/decoration/WindowAppearancePage.qml
         qml/EditorPage.qml
-        qml/LayoutsPage.qml
-        qml/SnappingQuickShortcutsPage.qml
+        qml/pages/layouts/LayoutsPage.qml
+        qml/pages/snapping/SnappingQuickShortcutsPage.qml
         qml/OrderingPage.qml
-        qml/SnappingOrderingPage.qml
-        qml/TilingQuickShortcutsPage.qml
-        qml/TilingOrderingPage.qml
+        qml/pages/snapping/SnappingOrderingPage.qml
+        qml/pages/tiling/TilingQuickShortcutsPage.qml
+        qml/pages/tiling/TilingOrderingPage.qml
         # Rules — the unified rule page replacing the five legacy
         # assignment / app-rule surfaces. Every component (including the
         # recursively-instantiated MatchExpressionEditor) MUST be listed.
-        qml/RulesPage.qml
+        qml/pages/rules/RulesPage.qml
         # Settings profiles: tree list page, expandable row, new-profile dialog.
-        qml/ProfilesPage.qml
-        qml/ProfileRow.qml
-        qml/ProfileComboBox.qml
-        qml/ProfileSwitcherHeader.qml
-        qml/SectionHeaderPill.qml
-        qml/ProfileDiffView.qml
-        qml/ProfileDiffTree.js
-        qml/ProfileSignature.qml
-        qml/NewProfileDialog.qml
-        qml/MonitorOverview.qml
-        qml/MonitorOverviewTile.qml
-        qml/ExpandableRowDelegate.qml
-        qml/ExpandChevron.qml
-        qml/ReorderableColumn.qml
-        qml/RuleRow.qml
-        qml/RuleSectionList.qml
-        qml/RuleEditorSheet.qml
-        qml/RuleEditorBody.qml
-        qml/RuleEditorStatusBar.qml
-        qml/AddRuleWizard.qml
-        qml/DiscardChangesDialog.qml
-        qml/RuleStartPicker.qml
-        qml/RuleStartTile.qml
-        qml/MatchExpressionEditor.qml
-        qml/MatchExpressionView.qml
-        qml/ActionListView.qml
-        qml/MatchLeafEditor.qml
-        qml/ActionListEditor.qml
-        qml/ActionRow.qml
-        qml/ActionParamEditors.qml
-        qml/StockAnimationConflictChip.qml
+        qml/pages/profiles/ProfilesPage.qml
+        qml/pages/profiles/ProfileRow.qml
+        qml/pages/profiles/ProfileComboBox.qml
+        qml/pages/profiles/ProfileSwitcherHeader.qml
+        qml/components/SectionHeaderPill.qml
+        qml/pages/profiles/ProfileDiffView.qml
+        qml/js/ProfileDiffTree.js
+        qml/pages/profiles/ProfileSignature.qml
+        qml/pages/profiles/NewProfileDialog.qml
+        qml/pages/screens/MonitorOverview.qml
+        qml/pages/screens/MonitorOverviewTile.qml
+        qml/components/ExpandableRowDelegate.qml
+        qml/components/ExpandChevron.qml
+        qml/components/ReorderableColumn.qml
+        qml/pages/rules/RuleRow.qml
+        qml/pages/rules/RuleSectionList.qml
+        qml/pages/rules/RuleEditorSheet.qml
+        qml/pages/rules/RuleEditorBody.qml
+        qml/pages/rules/RuleEditorStatusBar.qml
+        qml/pages/rules/AddRuleWizard.qml
+        qml/dialogs/DiscardChangesDialog.qml
+        qml/pages/rules/RuleStartPicker.qml
+        qml/pages/rules/RuleStartTile.qml
+        qml/pages/rules/MatchExpressionEditor.qml
+        qml/pages/rules/MatchExpressionView.qml
+        qml/pages/rules/ActionListView.qml
+        qml/pages/rules/MatchLeafEditor.qml
+        qml/pages/rules/ActionListEditor.qml
+        qml/pages/rules/ActionRow.qml
+        qml/pages/rules/ActionParamEditors.qml
+        qml/pages/animations/StockAnimationConflictChip.qml
         qml/AboutPage.qml
         qml/WhatsNewPage.qml
-        qml/MonitorStatePage.qml
-        qml/VirtualScreensPage.qml
-        qml/VirtualScreenPreview.qml
+        qml/pages/screens/MonitorStatePage.qml
+        qml/pages/screens/VirtualScreensPage.qml
+        qml/pages/screens/VirtualScreenPreview.qml
         # Sub-components (copied from KCM)
-        qml/QuickLayoutSlotsCard.qml
-        qml/WindowPickerDialog.qml
-        qml/LayoutComboBox.qml
-        qml/LayoutContextMenu.qml
-        qml/WideComboBox.qml
-        qml/FontPickerDialog.qml
-        qml/ColorButton.qml
-        qml/InputCapture.qml
-        qml/ModifierAndMouseCheckBoxes.qml
-        qml/PositionPicker.qml
-        qml/AlgorithmPreview.qml
-        qml/AlgorithmPreviewCard.qml
-        qml/LayoutThumbnail.qml
-        qml/PerScreenOverrideHelper.qml
-        qml/DisplayMap.qml
-        qml/MonitorScopeChip.qml
-        qml/LayoutGridDelegate.qml
-        qml/LayoutManageCard.qml
-        qml/SegmentedViewSwitch.qml
-        qml/LayoutFilterBar.qml
-        qml/LayoutFilterLogic.js
+        qml/pages/layouts/QuickLayoutSlotsCard.qml
+        qml/dialogs/WindowPickerDialog.qml
+        qml/pages/layouts/LayoutComboBox.qml
+        qml/pages/layouts/LayoutContextMenu.qml
+        qml/components/WideComboBox.qml
+        qml/dialogs/FontPickerDialog.qml
+        qml/components/ColorButton.qml
+        qml/components/InputCapture.qml
+        qml/components/ModifierAndMouseCheckBoxes.qml
+        qml/dialogs/PositionPicker.qml
+        qml/pages/tiling/AlgorithmPreview.qml
+        qml/pages/tiling/AlgorithmPreviewCard.qml
+        qml/pages/layouts/LayoutThumbnail.qml
+        qml/pages/screens/PerScreenOverrideHelper.qml
+        qml/pages/screens/DisplayMap.qml
+        qml/pages/screens/MonitorScopeChip.qml
+        qml/pages/layouts/LayoutGridDelegate.qml
+        qml/pages/layouts/LayoutManageCard.qml
+        qml/components/SegmentedViewSwitch.qml
+        qml/pages/layouts/LayoutFilterBar.qml
+        qml/js/LayoutFilterLogic.js
         # Shared group/sort infrastructure (Layouts + Rules pages)
-        qml/GroupSortBar.qml
-        qml/GroupSortLogic.js
+        qml/components/GroupSortBar.qml
+        qml/js/GroupSortLogic.js
         # Shared theme-font construction (whole-group `font:` bindings)
-        qml/FontUtils.js
-        qml/ZoneSelectorSection.qml
-        qml/EasingPreview.qml
-        qml/EasingSettings.qml
+        qml/js/FontUtils.js
+        qml/pages/screens/ZoneSelectorSection.qml
+        qml/pages/animations/EasingPreview.qml
+        qml/pages/animations/EasingSettings.qml
         # Animations page — Phase 1+2 salvage from PR #291. Standalone
         # widgets + JS helpers; sub-pages and per-event cards land in
         # later phases. Phase 2 widgets (CurveThumbnail, SpringPreview,
         # CurveEditorDialog) bind to (omega, zeta) per
         # `PhosphorAnimation::Spring`. CurvePresets is a singleton
         # consumed by every Animations sub-page and the editor dialog.
-        qml/AnimatedBoxTrack.qml
-        qml/AnimationEventCard.qml
-        qml/AnimationEventCardList.qml
-        qml/AnimationProfileEditor.qml
-        qml/AnimationsWindowsPage.qml
-        qml/AnimationsWindowMotionPage.qml
-        qml/AnimationsWindowDraggingPage.qml
-        qml/AnimationsOsdsPage.qml
-        qml/AnimationsOverlaysPage.qml
-        qml/AnimationsDesktopsPage.qml
-        qml/AnimationsEditorPage.qml
-        qml/AnimationsSidePanelsPage.qml
-        qml/AnimationsWidgetsPage.qml
-        qml/AnimationsGeneralPage.qml
-        qml/AnimationsSimplePage.qml
-        qml/AnimationsMotionSetsPage.qml
-        qml/AnimationsPresetsPage.qml
-        qml/AnimationsShadersPage.qml
-        qml/SnappingShadersPage.qml
+        qml/pages/animations/AnimatedBoxTrack.qml
+        qml/pages/animations/AnimationEventCard.qml
+        qml/pages/animations/AnimationEventCardList.qml
+        qml/pages/animations/AnimationProfileEditor.qml
+        qml/pages/animations/AnimationsWindowsPage.qml
+        qml/pages/animations/AnimationsWindowMotionPage.qml
+        qml/pages/animations/AnimationsWindowDraggingPage.qml
+        qml/pages/animations/AnimationsOsdsPage.qml
+        qml/pages/animations/AnimationsOverlaysPage.qml
+        qml/pages/animations/AnimationsDesktopsPage.qml
+        qml/pages/animations/AnimationsEditorPage.qml
+        qml/pages/animations/AnimationsSidePanelsPage.qml
+        qml/pages/animations/AnimationsWidgetsPage.qml
+        qml/pages/animations/AnimationsGeneralPage.qml
+        qml/pages/animations/AnimationsSimplePage.qml
+        qml/pages/animations/AnimationsMotionSetsPage.qml
+        qml/pages/animations/AnimationsPresetsPage.qml
+        qml/pages/animations/AnimationsShadersPage.qml
+        qml/pages/snapping/SnappingShadersPage.qml
         # Decoration drill-down — per-surface override cards (Windows / OSDs /
         # Popups), each driving a ChainEditor (ordered decoration-pack list with
         # per-pack params) and border/titlebar field overrides via
         # DecorationPageController.
-        qml/DecorationSetsPage.qml
-        qml/DecorationShadersPage.qml
-        qml/DecorationWindowsPage.qml
-        qml/DecorationOsdsPage.qml
-        qml/DecorationPopupsPage.qml
-        qml/DecorationSurfaceCardList.qml
-        qml/DecorationSurfaceCard.qml
-        qml/ChainEditor.qml
+        qml/pages/decoration/DecorationSetsPage.qml
+        qml/pages/decoration/DecorationShadersPage.qml
+        qml/pages/decoration/DecorationWindowsPage.qml
+        qml/pages/decoration/DecorationOsdsPage.qml
+        qml/pages/decoration/DecorationPopupsPage.qml
+        qml/pages/decoration/DecorationSurfaceCardList.qml
+        qml/pages/decoration/DecorationSurfaceCard.qml
+        qml/pages/tiling/ChainEditor.qml
         # Pack-agnostic shader-browser components — shared by the
         # animation-shader, snapping-overlay-shader and decoration-shader
         # pages. All three are thin wrappers that pass the right controller
         # bridge.
-        qml/ShaderBrowserPage.qml
-        qml/ShaderBrowserCard.qml
+        qml/pages/shaders/ShaderBrowserPage.qml
+        qml/pages/shaders/ShaderBrowserCard.qml
         # Domain-agnostic sets page + rich set card — shared by the Decoration
         # Sets and Motion Sets pages. Both are thin wrappers that pass the
         # right ShaderSetStore bridge plus their domain copy.
-        qml/ShaderSetsPage.qml
-        qml/ShaderSetCard.qml
+        qml/pages/shaders/ShaderSetsPage.qml
+        qml/pages/shaders/ShaderSetCard.qml
         # Shared drag-and-drop import band (shader packs, layouts /
         # algorithms, sets).
-        qml/FileDropZone.qml
-        qml/ImportDropCard.qml
+        qml/components/FileDropZone.qml
+        qml/pages/shaders/ImportDropCard.qml
         # Shared row badge (neutral metadata + highlighted state).
-        qml/MetadataChip.qml
-        qml/FilterMenuButton.qml
+        qml/components/MetadataChip.qml
+        qml/components/FilterMenuButton.qml
         # Stay-open checkable menu item used by FilterMenuButton, the one
         # checkbox-filter-menu implementation (Layouts via LayoutFilterBar's
         # invisible instances, Rules + shader browser directly).
-        qml/StayOpenMenuItem.qml
-        qml/ShaderBrowserDetailDialog.qml
-        qml/CurveEditorDialog.qml
-        qml/CurvePresets.qml
-        qml/TriggerLabels.qml
-        qml/CurveThumbnail.qml
-        qml/SpringPreview.qml
-        qml/EasingCurve.js
-        qml/SpringPhysics.js
-        qml/SettingsCard.qml
-        qml/GapsSettingsCard.qml
-        qml/WindowFilterCard.qml
-        qml/OsdCard.qml
-        qml/ShortcutCaptureField.qml
-        qml/ModifierComboBox.qml
-        qml/SettingsSlider.qml
-        qml/SettingsSpinBox.qml
-        qml/SettingsToggleRow.qml
-        qml/SettingsSwitch.qml
-        qml/SettingsRow.qml
-        qml/SettingsSeparator.qml
-        qml/SettingsFlickable.qml
-        qml/AlgorithmCapabilities.js
-        qml/SearchAnchorHelpers.js
-        qml/SettingsButtonGroup.qml
-        qml/ColorSwatchRow.qml
-        qml/NewLayoutDialog.qml
-        qml/NewAlgorithmDialog.qml
-        qml/WizardStepIndicator.qml
-        qml/WizardFooter.qml
-        qml/WizardTemplateCard.qml
-        qml/WizardPreviewBadge.qml
-        qml/WizardConfigCard.qml
-        qml/WizardPreviewFrame.qml
-        qml/WizardUtils.js
+        qml/components/StayOpenMenuItem.qml
+        qml/pages/shaders/ShaderBrowserDetailDialog.qml
+        qml/pages/animations/CurveEditorDialog.qml
+        qml/pages/animations/CurvePresets.qml
+        qml/components/TriggerLabels.qml
+        qml/pages/animations/CurveThumbnail.qml
+        qml/pages/animations/SpringPreview.qml
+        qml/js/EasingCurve.js
+        qml/js/SpringPhysics.js
+        qml/components/SettingsCard.qml
+        qml/pages/layouts/GapsSettingsCard.qml
+        qml/components/WindowFilterCard.qml
+        qml/pages/decoration/OsdCard.qml
+        qml/components/ShortcutCaptureField.qml
+        qml/components/ModifierComboBox.qml
+        qml/components/SettingsSlider.qml
+        qml/components/SettingsSpinBox.qml
+        qml/components/SettingsToggleRow.qml
+        qml/components/SettingsSwitch.qml
+        qml/components/SettingsRow.qml
+        qml/components/SettingsSeparator.qml
+        qml/components/SettingsFlickable.qml
+        qml/js/AlgorithmCapabilities.js
+        qml/js/SearchAnchorHelpers.js
+        qml/components/SettingsButtonGroup.qml
+        qml/components/ColorSwatchRow.qml
+        qml/pages/layouts/NewLayoutDialog.qml
+        qml/pages/tiling/NewAlgorithmDialog.qml
+        qml/pages/wizard/WizardStepIndicator.qml
+        qml/pages/wizard/WizardFooter.qml
+        qml/pages/wizard/WizardTemplateCard.qml
+        qml/pages/wizard/WizardPreviewBadge.qml
+        qml/pages/wizard/WizardConfigCard.qml
+        qml/pages/wizard/WizardPreviewFrame.qml
+        qml/js/WizardUtils.js
     NO_PLUGIN
 )
 

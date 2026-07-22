@@ -31,6 +31,7 @@
 
 #include <QDebug>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -65,6 +66,23 @@ QString readAll(const QString& path)
         return {};
     }
     return QString::fromUtf8(f.readAll());
+}
+
+/// Basename -> absolute path for every .qml under @p qmlDir. The settings QML
+/// tree is nested (pages/<family>/, components/, dialogs/) while this test's
+/// whole scraping model is keyed on unique basenames; this index bridges the
+/// two.
+const QHash<QString, QString>& qmlFileIndex(const QString& qmlDir)
+{
+    static QHash<QString, QString> index;
+    if (index.isEmpty()) {
+        QDirIterator it(qmlDir, {QStringLiteral("*.qml")}, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            it.next();
+            index.insert(it.fileName(), it.filePath());
+        }
+    }
+    return index;
 }
 
 /// Strip line comments only. Block comments are deliberately KEPT: the
@@ -243,13 +261,13 @@ QStringList directHostsOf(const QString& qmlDir, const QString& component)
     const QRegularExpression kUse(QStringLiteral("\\b") + QRegularExpression::escape(component)
                                   + QStringLiteral("\\s*\\{"));
     QStringList out;
-    const QStringList files = QDir(qmlDir).entryList({QStringLiteral("*.qml")}, QDir::Files);
-    for (const QString& file : files) {
-        if (file == component + QStringLiteral(".qml")) {
+    const QHash<QString, QString>& index = qmlFileIndex(qmlDir);
+    for (auto it = index.cbegin(); it != index.cend(); ++it) {
+        if (it.key() == component + QStringLiteral(".qml")) {
             continue;
         }
-        if (stripComments(readAll(qmlDir + QLatin1Char('/') + file)).contains(kUse)) {
-            out << file;
+        if (stripComments(readAll(it.value())).contains(kUse)) {
+            out << it.key();
         }
     }
     return out;
@@ -322,7 +340,7 @@ private Q_SLOTS:
         // AdvancedOnly PAGE or comes from crossFileAdvanced(), neither of which
         // shows up as a per-row `advancedOnly` in these two QML files.
         for (auto it = qmlFileToPageId().cbegin(); it != qmlFileToPageId().cend(); ++it) {
-            const int n = advancedAnchorsIn(m_qmlDir + QLatin1Char('/') + it.key()).size();
+            const int n = advancedAnchorsIn(qmlFileIndex(m_qmlDir).value(it.key())).size();
             QVERIFY2(n > 0,
                      qPrintable(QStringLiteral("no advanced anchors parsed from %1 — the regex or the file's "
                                                "advancedOnly usage changed")
@@ -342,7 +360,7 @@ private Q_SLOTS:
         // directory declare `searchAnchor:`, and an `advancedOnly: true`
         // written inline beside one of those anchors is a real gate that a
         // page-only glob never sees.
-        const QStringList files = QDir(m_qmlDir).entryList({QStringLiteral("*.qml")}, QDir::Files);
+        const QStringList files = qmlFileIndex(m_qmlDir).keys();
         // 155 files today. The floor sits well under that: this glob is the
         // test's whole input, so a directory move or a filter typo that halved
         // it must fail rather than quietly narrow the sweep.
@@ -368,7 +386,7 @@ private Q_SLOTS:
             if (qmlFileToPageId().contains(file)) {
                 continue;
             }
-            const QSet<QString> anchors = advancedAnchorsIn(m_qmlDir + QLatin1Char('/') + file);
+            const QSet<QString> anchors = advancedAnchorsIn(qmlFileIndex(m_qmlDir).value(file));
             if (anchors.isEmpty()) {
                 continue;
             }
@@ -467,7 +485,7 @@ private Q_SLOTS:
             QVERIFY2(!hostFile.isEmpty(),
                      qPrintable(QStringLiteral("no QML file maps to cross-file host page %1").arg(pageId)));
 
-            const QString src = stripComments(readAll(m_qmlDir + QLatin1Char('/') + hostFile));
+            const QString src = stripComments(readAll(qmlFileIndex(m_qmlDir).value(hostFile)));
             // Brace-match the shared-card instantiation and assert THAT block
             // carries advancedOnly: true. A bare contains() on the whole file is
             // insufficient — the host declares many other advanced gates that
@@ -529,7 +547,7 @@ private Q_SLOTS:
         // Every (page, anchor) the QML gates behind advanced mode.
         QSet<QString> expected = crossFileAdvanced();
         for (auto pit = qmlFileToPageId().cbegin(); pit != qmlFileToPageId().cend(); ++pit) {
-            const QSet<QString> anchors = advancedAnchorsIn(m_qmlDir + QLatin1Char('/') + pit.key());
+            const QSet<QString> anchors = advancedAnchorsIn(qmlFileIndex(m_qmlDir).value(pit.key()));
             for (const QString& a : anchors) {
                 expected.insert(pit.value() + QLatin1Char('/') + a);
             }

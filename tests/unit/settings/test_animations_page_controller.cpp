@@ -247,7 +247,8 @@ private Q_SLOTS:
     /// style from turning this into a test that asserts nothing.
     void simpleScopeCoversEverySimplePageCard()
     {
-        const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/AnimationsSimplePage.qml");
+        const QString qmlPath =
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationsSimplePage.qml");
         const QString src = readFile(qmlPath);
         QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
 

@@ -84,13 +84,13 @@ void SettingsController::buildApplicationController()
 
     // ── Block 1: top / global ──
     regVirtual(QStringLiteral("overview"), QString(), PhosphorI18n::tr("Overview"),
-               QStringLiteral("MonitorStatePage.qml"), QStringLiteral("monitor"));
+               QStringLiteral("pages/screens/MonitorStatePage.qml"), QStringLiteral("monitor"));
     // Profiles sits in the top/global block, directly under the switcher in the
     // sidebar header: the active profile frames every page below it, so it
     // belongs here rather than among the tools. regPage trackDomain()s the
     // controller so its staged active-profile pointer joins the Save/Discard
     // transaction; the applied config rides the Settings staging path.
-    regPage(m_profilesPage, QString(), PhosphorI18n::tr("Profiles"), QStringLiteral("ProfilesPage.qml"),
+    regPage(m_profilesPage, QString(), PhosphorI18n::tr("Profiles"), QStringLiteral("pages/profiles/ProfilesPage.qml"),
             QStringLiteral("bookmarks"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     // General leads near the top (mirrors the Animations section leading with
     // its own "General" child). Divider after it closes the top/global block.
@@ -147,7 +147,7 @@ void SettingsController::buildApplicationController()
     // Rules is a top-level leaf (its old "Rules" parent retired after
     // the v4 fold left a single rule surface). Divider after it closes the
     // feature block and opens the tools-and-meta block below.
-    regPage(m_rulesPage, QString(), PhosphorI18n::tr("Rules"), QStringLiteral("RulesPage.qml"),
+    regPage(m_rulesPage, QString(), PhosphorI18n::tr("Rules"), QStringLiteral("pages/rules/RulesPage.qml"),
             QStringLiteral("view-list-details"), /*collapsible=*/false, /*divider=*/true);
 
     // ── Block 3: tools & meta ──
@@ -170,10 +170,11 @@ void SettingsController::buildApplicationController()
 
     // Display children
     regVirtual(QStringLiteral("virtualscreens"), QStringLiteral("display"), PhosphorI18n::tr("Virtual Screens"),
-               QStringLiteral("VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"), /*collapsible=*/false,
+               QStringLiteral("pages/screens/VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"),
+               /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("layouts"), QStringLiteral("display"), PhosphorI18n::tr("Layouts"),
-               QStringLiteral("LayoutsPage.qml"), QStringLiteral("view-grid"));
+               QStringLiteral("pages/layouts/LayoutsPage.qml"), QStringLiteral("view-grid"));
 
     // Snapping children — organised by SUBJECT, each carrying its own Behavior
     // and Appearance pages: the drag Overlay, the edge Zone-Selector popup, and
@@ -193,18 +194,18 @@ void SettingsController::buildApplicationController()
     // Overlay → Behavior are counterparts so mode flips and deep links land
     // sensibly.
     regVirtual(QStringLiteral("snapping-simple"), QStringLiteral("snapping"), PhosphorI18n::tr("Snapping"),
-               QStringLiteral("SnappingSimplePage.qml"), QStringLiteral("view-split-left-right"),
+               QStringLiteral("pages/snapping/SnappingSimplePage.qml"), QStringLiteral("view-split-left-right"),
                /*collapsible=*/false, /*divider=*/true, PV::SimpleOnly, QStringLiteral("snapping-overlay-behavior"));
     regVirtual(QStringLiteral("snapping-overlay-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Overlay"),
                QString(), QStringLiteral("preferences-desktop-color"), /*collapsible=*/true, /*divider=*/true);
     // Advanced-only: its simple face used to be the Triggers card, now
     // condensed into SnappingSimplePage (its declared counterpart).
     regVirtual(QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-overlay-cat"),
-               PhosphorI18n::tr("Behavior"), QStringLiteral("SnappingOverlayBehaviorPage.qml"),
+               PhosphorI18n::tr("Behavior"), QStringLiteral("pages/snapping/SnappingOverlayBehaviorPage.qml"),
                QStringLiteral("preferences-system"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly,
                QStringLiteral("snapping-simple"));
     regVirtual(QStringLiteral("snapping-overlay-appearance"), QStringLiteral("snapping-overlay-cat"),
-               PhosphorI18n::tr("Appearance"), QStringLiteral("SnappingOverlayAppearancePage.qml"),
+               PhosphorI18n::tr("Appearance"), QStringLiteral("pages/snapping/SnappingOverlayAppearancePage.qml"),
                QStringLiteral("preferences-desktop-color"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Zone Selector is a single top leaf under Snapping (not split into
@@ -212,26 +213,29 @@ void SettingsController::buildApplicationController()
     // distance, too small to warrant its own page. Structurally parallel to
     // Tiling's Algorithm leaf.
     regVirtual(QStringLiteral("snapping-zoneselector"), QStringLiteral("snapping"), PhosphorI18n::tr("Zone Selector"),
-               QStringLiteral("SnappingZoneSelectorPage.qml"), QStringLiteral("view-choose"), /*collapsible=*/false,
+               QStringLiteral("pages/snapping/SnappingZoneSelectorPage.qml"), QStringLiteral("view-choose"),
+               /*collapsible=*/false,
                /*divider=*/true, AdvancedOnly);
 
     // Snapping → Window holds just the per-mode Behavior page now. The window
     // border / title-bar appearance moved to the shared, top-level Window
     // Appearance page (config-backed, shared, mode-neutral).
     regVirtual(QStringLiteral("snapping-window-behavior"), QStringLiteral("snapping"), PhosphorI18n::tr("Window"),
-               QStringLiteral("SnappingWindowBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
+               QStringLiteral("pages/snapping/SnappingWindowBehaviorPage.qml"),
+               QStringLiteral("preferences-system-windows"),
                /*collapsible=*/false, /*divider=*/true, AdvancedOnly);
 
     regVirtual(QStringLiteral("snapping-config-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Configuration"),
                QString(), QStringLiteral("configure"), /*collapsible=*/true);
     regVirtual(QStringLiteral("snapping-ordering"), QStringLiteral("snapping-config-cat"), PhosphorI18n::tr("Priority"),
-               QStringLiteral("SnappingOrderingPage.qml"), QStringLiteral("view-sort"), /*collapsible=*/false,
+               QStringLiteral("pages/snapping/SnappingOrderingPage.qml"), QStringLiteral("view-sort"),
+               /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("snapping-shortcuts"), QStringLiteral("snapping-config-cat"),
-               PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("SnappingQuickShortcutsPage.qml"),
+               PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("pages/snapping/SnappingQuickShortcutsPage.qml"),
                QStringLiteral("bookmark"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regPage(m_snappingShadersPage.get(), QStringLiteral("snapping-config-cat"), PhosphorI18n::tr("Shaders"),
-            QStringLiteral("SnappingShadersPage.qml"), QStringLiteral("preferences-desktop-display"),
+            QStringLiteral("pages/snapping/SnappingShadersPage.qml"), QStringLiteral("preferences-desktop-display"),
             /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Tiling children — organised by subject (Window / Algorithm / Configuration)
@@ -247,7 +251,8 @@ void SettingsController::buildApplicationController()
     // shows instead; it and the Algorithm page are counterparts so mode
     // flips and deep links land sensibly.
     regVirtual(QStringLiteral("tiling-simple"), QStringLiteral("tiling"), PhosphorI18n::tr("Tiling"),
-               QStringLiteral("TilingSimplePage.qml"), QStringLiteral("window-duplicate"), /*collapsible=*/false,
+               QStringLiteral("pages/tiling/TilingSimplePage.qml"), QStringLiteral("window-duplicate"),
+               /*collapsible=*/false,
                /*divider=*/true, PV::SimpleOnly, QStringLiteral("tiling-algorithm"));
     // Tiling → Window holds just the per-mode Behavior page now. The window
     // border / title-bar appearance moved to the shared, top-level Window
@@ -255,23 +260,24 @@ void SettingsController::buildApplicationController()
     // its simple face used to be the Triggers card, but drag-reinsert
     // vocabulary is itself power depth; simple mode gets TilingSimplePage.
     regPage(m_tilingBehaviorPage, QStringLiteral("tiling"), PhosphorI18n::tr("Window"),
-            QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
+            QStringLiteral("pages/tiling/TilingBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
             /*collapsible=*/false, /*divider=*/true, AdvancedOnly);
 
     // Algorithm is a top-level leaf under Tiling (no snapping peer — snapping's
     // layout equivalent lives under Display → Layouts). Divider after it sets the
     // mode-specific algorithm apart from the shared Configuration block below.
     regPage(m_tilingAlgorithmPage.get(), QStringLiteral("tiling"), PhosphorI18n::tr("Algorithm"),
-            QStringLiteral("TilingAlgorithmPage.qml"), QStringLiteral("view-grid"), /*collapsible=*/false,
+            QStringLiteral("pages/tiling/TilingAlgorithmPage.qml"), QStringLiteral("view-grid"), /*collapsible=*/false,
             /*divider=*/true, AdvancedOnly, QStringLiteral("tiling-simple"));
 
     regVirtual(QStringLiteral("tiling-config-cat"), QStringLiteral("tiling"), PhosphorI18n::tr("Configuration"),
                QString(), QStringLiteral("configure"), /*collapsible=*/true);
     regVirtual(QStringLiteral("tiling-ordering"), QStringLiteral("tiling-config-cat"), PhosphorI18n::tr("Priority"),
-               QStringLiteral("TilingOrderingPage.qml"), QStringLiteral("view-sort"), /*collapsible=*/false,
+               QStringLiteral("pages/tiling/TilingOrderingPage.qml"), QStringLiteral("view-sort"),
+               /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("tiling-shortcuts"), QStringLiteral("tiling-config-cat"),
-               PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("TilingQuickShortcutsPage.qml"),
+               PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("pages/tiling/TilingQuickShortcutsPage.qml"),
                QStringLiteral("bookmark"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Animations children — Transitions / Motion / Library categories drill in.
@@ -281,10 +287,11 @@ void SettingsController::buildApplicationController()
     // each other's counterparts so a mode flip (or a deep link landing on the
     // hidden one) redirects between them instead of falling back to Overview.
     regVirtual(QStringLiteral("animations-simple"), QStringLiteral("animations"), PhosphorI18n::tr("Animations"),
-               QStringLiteral("AnimationsSimplePage.qml"), QStringLiteral("media-playback-start"),
+               QStringLiteral("pages/animations/AnimationsSimplePage.qml"), QStringLiteral("media-playback-start"),
                /*collapsible=*/false, /*divider=*/true, PV::SimpleOnly, QStringLiteral("animations-general"));
     regVirtual(QStringLiteral("animations-general"), QStringLiteral("animations"), PhosphorI18n::tr("General"),
-               QStringLiteral("AnimationsGeneralPage.qml"), QStringLiteral("configure"), /*collapsible=*/false,
+               QStringLiteral("pages/animations/AnimationsGeneralPage.qml"), QStringLiteral("configure"),
+               /*collapsible=*/false,
                /*divider=*/true, AdvancedOnly, QStringLiteral("animations-simple"));
     // Transitions — shader-driven appearance and reveal events (window
     // open/close/minimize, OSDs, overlays, desktop switch), grouped so each child
@@ -304,46 +311,51 @@ void SettingsController::buildApplicationController()
                QString(), QStringLiteral("folder-open"), /*collapsible=*/true);
 
     regVirtual(QStringLiteral("animations-windows"), QStringLiteral("animations-transitions"),
-               PhosphorI18n::tr("Windows"), QStringLiteral("AnimationsWindowsPage.qml"), QStringLiteral("window-new"),
+               PhosphorI18n::tr("Windows"), QStringLiteral("pages/animations/AnimationsWindowsPage.qml"),
+               QStringLiteral("window-new"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("animations-osds"), QStringLiteral("animations-transitions"), PhosphorI18n::tr("OSDs"),
-               QStringLiteral("AnimationsOsdsPage.qml"), QStringLiteral("dialog-information"), /*collapsible=*/false,
+               QStringLiteral("pages/animations/AnimationsOsdsPage.qml"), QStringLiteral("dialog-information"),
+               /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("animations-overlays"), QStringLiteral("animations-transitions"),
-               PhosphorI18n::tr("Overlays"), QStringLiteral("AnimationsOverlaysPage.qml"),
+               PhosphorI18n::tr("Overlays"), QStringLiteral("pages/animations/AnimationsOverlaysPage.qml"),
                QStringLiteral("view-presentation"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("animations-desktops"), QStringLiteral("animations-transitions"),
-               PhosphorI18n::tr("Desktop"), QStringLiteral("AnimationsDesktopsPage.qml"),
+               PhosphorI18n::tr("Desktop"), QStringLiteral("pages/animations/AnimationsDesktopsPage.qml"),
                QStringLiteral("virtual-desktops"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     regVirtual(QStringLiteral("animations-window-motion"), QStringLiteral("animations-motion"),
-               PhosphorI18n::tr("Window Motion"), QStringLiteral("AnimationsWindowMotionPage.qml"),
+               PhosphorI18n::tr("Window Motion"), QStringLiteral("pages/animations/AnimationsWindowMotionPage.qml"),
                QStringLiteral("window-new"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     // Window Dragging is deliberately its own page, not a row under Window
     // Motion: the drag event is its own opt-in shader class (`move`) that
     // takes no inherited shader, so parking it under the "All Windows"
     // cascade parent would misrepresent the inheritance.
     regVirtual(QStringLiteral("animations-window-dragging"), QStringLiteral("animations-motion"),
-               PhosphorI18n::tr("Window Dragging"), QStringLiteral("AnimationsWindowDraggingPage.qml"),
+               PhosphorI18n::tr("Window Dragging"), QStringLiteral("pages/animations/AnimationsWindowDraggingPage.qml"),
                QStringLiteral("transform-move"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("animations-side-panels"), QStringLiteral("animations-motion"),
-               PhosphorI18n::tr("Side Panels"), QStringLiteral("AnimationsSidePanelsPage.qml"),
+               PhosphorI18n::tr("Side Panels"), QStringLiteral("pages/animations/AnimationsSidePanelsPage.qml"),
                QStringLiteral("sidebar-collapse-symbolic"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("animations-widgets"), QStringLiteral("animations-motion"), PhosphorI18n::tr("Widgets"),
-               QStringLiteral("AnimationsWidgetsPage.qml"), QStringLiteral("preferences-desktop-theme"),
+               QStringLiteral("pages/animations/AnimationsWidgetsPage.qml"),
+               QStringLiteral("preferences-desktop-theme"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("animations-editor"), QStringLiteral("animations-motion"),
-               PhosphorI18n::tr("Layout Editor"), QStringLiteral("AnimationsEditorPage.qml"),
+               PhosphorI18n::tr("Layout Editor"), QStringLiteral("pages/animations/AnimationsEditorPage.qml"),
                QStringLiteral("document-edit"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     regVirtual(QStringLiteral("animations-presets"), QStringLiteral("animations-library"), PhosphorI18n::tr("Presets"),
-               QStringLiteral("AnimationsPresetsPage.qml"), QStringLiteral("bookmarks"), /*collapsible=*/false,
+               QStringLiteral("pages/animations/AnimationsPresetsPage.qml"), QStringLiteral("bookmarks"),
+               /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("animations-motionsets"), QStringLiteral("animations-library"),
-               PhosphorI18n::tr("Motion Sets"), QStringLiteral("AnimationsMotionSetsPage.qml"),
+               PhosphorI18n::tr("Motion Sets"), QStringLiteral("pages/animations/AnimationsMotionSetsPage.qml"),
                QStringLiteral("color-palette"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("animations-shaders"), QStringLiteral("animations-library"), PhosphorI18n::tr("Shaders"),
-               QStringLiteral("AnimationsShadersPage.qml"), QStringLiteral("preferences-desktop-display"),
+               QStringLiteral("pages/animations/AnimationsShadersPage.qml"),
+               QStringLiteral("preferences-desktop-display"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Decoration children — Surfaces / Library categories drill in, the same
@@ -359,7 +371,8 @@ void SettingsController::buildApplicationController()
     // "window-appearance" id so dirty tracking, the per-page reset manifest,
     // and deep links stay stable.
     regPage(m_windowAppearancePage, QStringLiteral("decorations"), PhosphorI18n::tr("General"),
-            QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("configure"), /*collapsible=*/false,
+            QStringLiteral("pages/decoration/WindowAppearancePage.qml"), QStringLiteral("configure"),
+            /*collapsible=*/false,
             /*divider=*/true);
 
     regVirtual(QStringLiteral("decorations-surfaces"), QStringLiteral("decorations"), PhosphorI18n::tr("Surfaces"),
@@ -368,20 +381,23 @@ void SettingsController::buildApplicationController()
                QString(), QStringLiteral("folder-open"), /*collapsible=*/true);
 
     regVirtual(QStringLiteral("decorations-windows"), QStringLiteral("decorations-surfaces"),
-               PhosphorI18n::tr("Windows"), QStringLiteral("DecorationWindowsPage.qml"), QStringLiteral("window-new"),
+               PhosphorI18n::tr("Windows"), QStringLiteral("pages/decoration/DecorationWindowsPage.qml"),
+               QStringLiteral("window-new"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("decorations-osds"), QStringLiteral("decorations-surfaces"), PhosphorI18n::tr("OSDs"),
-               QStringLiteral("DecorationOsdsPage.qml"), QStringLiteral("dialog-information"), /*collapsible=*/false,
+               QStringLiteral("pages/decoration/DecorationOsdsPage.qml"), QStringLiteral("dialog-information"),
+               /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("decorations-popups"), QStringLiteral("decorations-surfaces"), PhosphorI18n::tr("Popups"),
-               QStringLiteral("DecorationPopupsPage.qml"), QStringLiteral("view-presentation"), /*collapsible=*/false,
+               QStringLiteral("pages/decoration/DecorationPopupsPage.qml"), QStringLiteral("view-presentation"),
+               /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
 
     regVirtual(QStringLiteral("decorations-sets"), QStringLiteral("decorations-library"),
-               PhosphorI18n::tr("Decoration Sets"), QStringLiteral("DecorationSetsPage.qml"),
+               PhosphorI18n::tr("Decoration Sets"), QStringLiteral("pages/decoration/DecorationSetsPage.qml"),
                QStringLiteral("color-palette"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("decorations-shaders"), QStringLiteral("decorations-library"),
-               PhosphorI18n::tr("Shaders"), QStringLiteral("DecorationShadersPage.qml"),
+               PhosphorI18n::tr("Shaders"), QStringLiteral("pages/decoration/DecorationShadersPage.qml"),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Every page declared its simple/advanced tier at registration above.
