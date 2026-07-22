@@ -96,9 +96,12 @@ return pluau.algorithm {
         local marginY = math.floor((area.height - centerH) / 2)
 
         -- Only recompute the center from a pushed-out margin when a minimum
-        -- actually binds; otherwise keep the ratio-derived size so the layout
-        -- is byte-identical to the min-free behavior (the right/bottom panels
-        -- absorb the rounding pixel, as before).
+        -- actually binds; otherwise keep the ratio-derived size so the center
+        -- rect is byte-identical to the min-free behavior (the right/bottom
+        -- panels absorb the rounding pixel, as before). The top/bottom strips
+        -- are not covered by this claim: they now distribute through
+        -- distributeWithMinSizes, whose remainder handling differs from the
+        -- old even split.
         local sideNeedW = math.max(rightMinW, leftMinW)
         if sideNeedW > 0 and marginX < sideNeedW + gap then
             marginX = sideNeedW + gap

@@ -115,7 +115,9 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
     // Snapshot the full global stacking order before tiling. After all
     // moveResize calls (which implicitly raise on KWin 6 / Wayland),
     // the onComplete callback re-raises in this order so non-tiled
-    // windows (e.g. Settings) retain their stacking position.
+    // windows (e.g. Settings) retain their stacking position. Overlap-layout
+    // batches substitute their tiled group with a deterministic order during
+    // that restore — see the onComplete raise loop below.
     const auto allWindows = KWin::effects->stackingOrder();
     QVector<QPointer<KWin::EffectWindow>> savedGlobalStack;
     for (KWin::EffectWindow* w : allWindows) {
@@ -312,7 +314,8 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
     // of an overlap-algorithm batch with its stacking policy; the batch is in
     // tiling order, so per screen this yields the bottom-to-top raise order:
     // tiling order for "lastOnTop" (cascade/stair/paper — last window ends up
-    // topmost), reversed for "firstOnTop" (deck peeks — index 0 topmost).
+    // topmost), reversed for "firstOnTop" (reverse-nested layouts — index 0
+    // topmost; no bundled algorithm declares it, custom scripts may).
     // Non-overlap batches leave this empty and keep the pre-tile stacking.
     QHash<QString, QVector<QPointer<KWin::EffectWindow>>> overlapStackByScreen;
     {
@@ -412,8 +415,18 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // Membership index for the overlap restack: window -> the screen
             // whose ordered group it belongs to. Resolved at completion time
             // because QPointers may have gone null since the batch was built.
+            // A screen whose per-screen stagger generation has advanced past
+            // this batch's captured value is superseded (same guard as the
+            // untile cleanup above): the newer batch's onComplete owns that
+            // screen's stacking, and re-imposing this batch's stale order
+            // AFTER it would stand as the final, wrong z-order. Excluding the
+            // screen here routes its windows through the plain saved-stack
+            // restore below and skips it in the fresh-window sweep.
             QHash<const KWin::EffectWindow*, QString> overlapMemberScreen;
             for (auto it = overlapStackByScreen.constBegin(); it != overlapStackByScreen.constEnd(); ++it) {
+                if (m_autotileStaggerGenByScreen.value(it.key()) != genByScreen.value(it.key())) {
+                    continue;
+                }
                 for (const auto& gPtr : it.value()) {
                     if (gPtr && !gPtr->isDeleted()) {
                         overlapMemberScreen.insert(gPtr.data(), it.key());
@@ -430,8 +443,11 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // order, at the stack position of the group's lowest pre-tile
             // member. Restoring the arbitrary pre-tile order for them is
             // exactly the reported bug (cascade/deck/monocle stacks scrambled
-            // after every retile); substituting the block keeps floats and
-            // other screens' windows interleaved where they were.
+            // after every retile). Substitution keeps other screens' windows
+            // and floats OUTSIDE the group's span where they were; a float
+            // that sat between two group members ends up above the whole
+            // block (its saved-stack raise comes after the block's slot),
+            // which is the useful place for a float anyway.
             QSet<const KWin::EffectWindow*> groupRaised;
             for (const auto& wPtr : savedGlobalStack) {
                 if (!wPtr || wPtr->isDeleted()) {
@@ -461,7 +477,12 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // A window can join an overlap batch without having been in the
             // pre-tile stack snapshot (opened in the same tick). Raise any
             // group not visited above so it still gets its declared order.
+            // Superseded screens are skipped for the same reason as in the
+            // membership build.
             for (auto it = overlapStackByScreen.constBegin(); it != overlapStackByScreen.constEnd(); ++it) {
+                if (m_autotileStaggerGenByScreen.value(it.key()) != genByScreen.value(it.key())) {
+                    continue;
+                }
                 for (const auto& gPtr : it.value()) {
                     if (gPtr && !gPtr->isDeleted() && !groupRaised.contains(gPtr.data())) {
                         if (KWin::Window* gkw = gPtr->window()) {

@@ -207,8 +207,9 @@ private Q_SLOTS:
 
     void testTileRequestToRect()
     {
-        PhosphorProtocol::TileRequestEntry entry{QStringLiteral("app|5"), 15,    25,   640, 480, QStringLiteral("{z}"),
-                                                 QStringLiteral("s0"),    false, false};
+        PhosphorProtocol::TileRequestEntry entry{
+            QStringLiteral("app|5"), 15,    25,    640,      480, QStringLiteral("{z}"),
+            QStringLiteral("s0"),    false, false, QString()};
         QCOMPARE(entry.toRect(), QRect(15, 25, 640, 480));
     }
 

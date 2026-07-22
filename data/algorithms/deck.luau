@@ -9,7 +9,12 @@ return pluau.algorithm {
         id = "deck",
         description = "Focused window takes the left portion. Remaining windows peek from the right edge. Ratio controls focused window width",
         producesOverlappingZones = true,
-        overlapStacking = "firstOnTop",
+        -- The peek cards share the screen's right edge with widths shrinking
+        -- by index, so each card is nested inside the previous one. Only
+        -- lastOnTop (narrowest card topmost) leaves every card's leading
+        -- strip visible; firstOnTop would bury all but the widest card.
+        overlapStacking = "lastOnTop",
+        masterZoneIndex = 0,
         supportsMasterCount = false,
         supportsSplitRatio = true,
         defaultSplitRatio = 0.75,

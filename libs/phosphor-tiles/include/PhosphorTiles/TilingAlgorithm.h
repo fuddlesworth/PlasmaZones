@@ -293,7 +293,7 @@ public:
      * @brief Whether this algorithm supports per-window minimum size constraints
      *
      * Most algorithms respect the minSizes parameter. Algorithms that ignore
-     * it (e.g., Floating Center, Tatami) return false to say so.
+     * it (e.g., Tatami, Cluster) return false to say so.
      *
      * Returning false opts the algorithm out of the engine's min-size pass:
      * AutotileEngine skips enforceMinSizes (and the removeRectOverlaps implied
@@ -317,11 +317,15 @@ public:
      * z-order the compositor should impose on the tiled windows so overlap
      * layouts keep a deterministic stack across retiles:
      *   - "lastOnTop": z-order follows tiling order, the last tiled index is
-     *     the topmost window (cascade/stair/paper style; new windows append
-     *     to the order, so they arrive on top).
+     *     the topmost window. Right for cascades/staggered pages (new windows
+     *     append to the order, so they arrive on top) AND for nested peeks
+     *     like deck, where each later zone sits inside the previous one and
+     *     only the narrowest-on-top direction leaves every peek strip
+     *     visible. Every bundled overlap algorithm uses this.
      *   - "firstOnTop": tiled index 0 is topmost and later indices descend
-     *     underneath (deck-style peeks, where each later card peeks out from
-     *     under the previous one).
+     *     underneath. For layouts whose later zones extend BEYOND the earlier
+     *     ones (reverse nesting), so their edges stay visible from under the
+     *     stack.
      *
      * @return "lastOnTop" (default) or "firstOnTop"
      */

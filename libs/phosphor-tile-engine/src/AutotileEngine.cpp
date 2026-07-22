@@ -1817,9 +1817,9 @@ PhosphorTiles::TilingAlgorithm* AutotileEngine::effectiveAlgorithm(const QString
     return m_configResolver->effectiveAlgorithm(screenId);
 }
 
-void AutotileEngine::requestPostRetileFocus(const QString& windowId)
+void AutotileEngine::requestPostRetileFocus(const QString& screenId, const QString& windowId)
 {
-    m_pendingFocusWindowId = windowId;
+    m_pendingFocusByScreen.insert(screenId, windowId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -3018,7 +3018,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
         // Defer focus until after applyTiling emits windowsTiled. The KWin effect's
         // onComplete raises windows in tiling order; emitting focus before retile
         // causes the raise loop to bury the new window behind existing ones.
-        m_pendingFocusWindowId = windowId;
+        m_pendingFocusByScreen.insert(screenId, windowId);
     }
 
     // Replay a focus notification that arrived before this window was tracked (see
@@ -4384,7 +4384,8 @@ void AutotileEngine::applyTiling(const QString& screenId)
                                 });
 
     // Overlap layouts declare a deterministic z-order for the tiled stack
-    // (deck peeks need index 0 on top, cascades need the last index on top).
+    // (every bundled overlap layout stacks the last tiled index on top;
+    // custom scripts may declare the reverse).
     // Emit it per entry so the effect can restack after applying geometry;
     // the batch is already in tiling order, so the direction is all it needs.
     const PhosphorTiles::TilingAlgorithm* stackAlgo = effectiveAlgorithm(screenId);
@@ -4444,9 +4445,9 @@ void AutotileEngine::applyTiling(const QString& screenId)
 
     // Emit deferred focus AFTER windowsTiled so KWin processes tiles first
     // (including the onComplete raise loop), then focuses the new window on top.
-    if (!m_pendingFocusWindowId.isEmpty()) {
-        Q_EMIT activateWindowRequested(m_pendingFocusWindowId);
-        m_pendingFocusWindowId.clear();
+    // Consumed per screen: only this screen's pending request may fire here.
+    if (const QString pendingFocus = m_pendingFocusByScreen.take(screenId); !pendingFocus.isEmpty()) {
+        Q_EMIT activateWindowRequested(pendingFocus);
     }
 
     // Batch-notify daemon of overflow float state (replaces per-window
