@@ -78,6 +78,19 @@ ColumnLayout {
     /// the Duration slider alongside the shader picker + parameters. The
     /// stored profile keeps whatever curve/mode it already has.
     property bool simpleTiming: false
+    /// Show the per-axis inheritance status captions (with their revert
+    /// links) under the curve summary and the Duration row. The per-event
+    /// card turns this on so a user can see WHICH of the two timing
+    /// fields a direct override actually pins; the Global defaults card
+    /// has no inheritance to describe and leaves it off.
+    property bool showOverrideStatus: false
+    /// Whether the edited event owns a DIRECT curve override (as opposed
+    /// to following an ancestor or the Global default). Only rendered
+    /// when showOverrideStatus is on; the consumer feeds it from the
+    /// stored profile.
+    property bool curveOverridden: false
+    /// Same, for the duration field.
+    property bool durationOverridden: false
     /// Picker model — the consumer hands in
     /// `availableShaderEffects()` (or a registry-tick-bound
     /// equivalent) so the picker stays reactive without this editor
@@ -143,6 +156,23 @@ ColumnLayout {
     /// The per-event card and the global-defaults page (AnimationsGeneralPage)
     /// each connect this to their own commit path.
     signal valueChanged
+    /// Per-axis refinements of `valueChanged`, emitted alongside it (the
+    /// specific signal first, then the aggregate). A consumer that
+    /// persists per-field overrides (the per-event card) listens to
+    /// these so a duration drag writes only the duration field and a
+    /// curve edit writes only the curve field, leaving the other field
+    /// inheriting. Consumers that commit the whole timing state (the
+    /// Global defaults card) keep using `valueChanged`. The timing-mode
+    /// combo and the spring editor count as CURVE edits: the mode and
+    /// the spring parameters are encoded in the curve wire string.
+    signal durationEdited
+    signal curveEdited
+    /// Revert requests from the per-axis "Revert to inherited" links —
+    /// only reachable when `showOverrideStatus` is on. The consumer
+    /// clears the corresponding field from the stored override so the
+    /// event follows its ancestors (and the Global defaults) again.
+    signal curveRevertRequested
+    signal durationRevertRequested
     /// Emitted when the user activates a shader from the picker.
     /// Distinct from `valueChanged` so the consumer can persist a
     /// shader switch (which carries side-effects: dropping the
@@ -241,6 +271,35 @@ ColumnLayout {
                     color: Kirigami.Theme.disabledTextColor
                     elide: Text.ElideRight
                 }
+
+                // Curve-axis inheritance status. Overriding is per field:
+                // editing the curve pins only the curve, so this caption
+                // (and its duration twin below) tells the user which of
+                // the two fields this event actually owns.
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: root.showOverrideStatus
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        text: root.curveOverridden ? i18n("Overridden for this event") : i18n("Following the inherited value")
+                        font: Kirigami.Theme.smallFont
+                        color: Kirigami.Theme.disabledTextColor
+                        elide: Text.ElideRight
+                    }
+
+                    Kirigami.LinkButton {
+                        visible: root.curveOverridden
+                        text: i18n("Revert to inherited")
+                        font: Kirigami.Theme.smallFont
+                        Accessible.name: i18n("Revert curve to inherited")
+                        onClicked: root.curveRevertRequested()
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+                }
             }
 
             Button {
@@ -266,6 +325,7 @@ ColumnLayout {
                 currentIndex: root.timingMode
                 onActivated: function (index) {
                     root.timingMode = index;
+                    root.curveEdited();
                     root.valueChanged();
                 }
             }
@@ -278,22 +338,24 @@ ColumnLayout {
             visible: root.timingMode === CurvePresets.timingModeEasing && !root.simpleTiming
         }
 
-        // Simple-mode spring stand-in: with the timing-mode machinery hidden
-        // and a spring profile active (set in the Global animation defaults
-        // card, which keeps its full editor in simple mode, or on this event
-        // in advanced mode), the Duration row below also hides — without this
-        // hint the timing section would render silently empty.
+        // Spring stand-in for the hidden Duration row. A spring derives its
+        // own settle time from omega and zeta, so the Duration slider below
+        // hides whenever the mode is Spring — without this hint the row just
+        // vanishes with no explanation. Both modes need it, with wording
+        // matched to what each can actually do about it: simple mode has no
+        // curve controls of its own, so it points at the Global card and at
+        // Advanced; advanced mode has the Timing mode combo right above.
         Label {
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
-            visible: root.simpleTiming && root.timingMode === CurvePresets.timingModeSpring
-            // Path-neutral wording: the spring can come from the Global
-            // defaults card or from an override this event owns, and the
-            // hint has to name a way out of both. The Global card is the
-            // first stop because it is right there on the same page, and
+            visible: root.timingMode === CurvePresets.timingModeSpring
+            // Path-neutral wording in simple mode: the spring can come from
+            // the Global defaults card or from an override this event owns,
+            // and the hint has to name a way out of both. The Global card is
+            // the first stop because it is right there on the same page, and
             // Advanced covers the per-event override the card cannot show.
-            text: i18n("A spring curve is set, so the duration has no effect. Change the curve in Global animation defaults, or switch to Advanced in the sidebar to change it for this event.")
+            text: root.simpleTiming ? i18n("A spring curve is set, so the duration has no effect. Change the curve in Global animation defaults, or switch to Advanced in the sidebar to change it for this event.") : i18n("A spring curve derives its own settle time from its parameters, so there is no duration to set. Switch the timing mode to Easing to use a duration.")
             font.italic: true
             color: Kirigami.Theme.disabledTextColor
             wrapMode: Text.WordWrap
@@ -302,6 +364,11 @@ ColumnLayout {
         SettingsRow {
             visible: root.timingMode === CurvePresets.timingModeEasing
             title: i18n("Duration")
+            // Duration-axis twin of the curve status caption above. On
+            // the simple page this is the only status shown (the curve
+            // chrome is hidden there), which matches what simple mode
+            // can edit.
+            description: root.showOverrideStatus ? (root.durationOverridden ? i18n("Overridden for this event") : i18n("Following the inherited value")) : ""
 
             SettingsSlider {
                 // Bound to the single source of truth (ConfigDefaults, exposed
@@ -317,8 +384,31 @@ ColumnLayout {
                 value: root.duration
                 onMoved: function (value) {
                     root.duration = Math.round(value);
+                    root.durationEdited();
                     root.valueChanged();
                 }
+            }
+        }
+
+        // Escape hatch for a pinned duration: without it the only way
+        // to unpin one field is the card's Override toggle, which
+        // clears BOTH fields and the shader leg with it.
+        RowLayout {
+            visible: root.showOverrideStatus && root.durationOverridden && root.timingMode === CurvePresets.timingModeEasing
+            Layout.fillWidth: true
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
+            spacing: Kirigami.Units.smallSpacing
+
+            Kirigami.LinkButton {
+                text: i18n("Revert duration to inherited")
+                font: Kirigami.Theme.smallFont
+                Accessible.name: i18n("Revert duration to inherited")
+                onClicked: root.durationRevertRequested()
+            }
+
+            Item {
+                Layout.fillWidth: true
             }
         }
     }
@@ -531,12 +621,14 @@ ColumnLayout {
         onCurveApplied: function (curve) {
             root.easingCurve = curve;
             root.timingMode = CurvePresets.timingModeEasing;
+            root.curveEdited();
             root.valueChanged();
         }
         onSpringApplied: function (omega, zeta) {
             root.springOmega = omega;
             root.springZeta = zeta;
             root.timingMode = CurvePresets.timingModeSpring;
+            root.curveEdited();
             root.valueChanged();
         }
     }
