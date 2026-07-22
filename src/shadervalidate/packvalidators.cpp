@@ -268,9 +268,16 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // empty / whitespace-only tokens skipped silently.
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
-        const QStringList animAppliesToTokens = {PP::EventClassGeometry, PP::EventClassAppearance,
-                                                 PP::EventClassDesktop, PP::EventClassMove};
-        const QJsonArray declaredAppliesTo = doc.object().value(QLatin1String("appliesTo")).toArray();
+        static const QStringList animAppliesToTokens = {PP::EventClassGeometry, PP::EventClassAppearance,
+                                                        PP::EventClassDesktop, PP::EventClassMove};
+        const QJsonValue appliesToValue = doc.object().value(QLatin1String("appliesTo"));
+        // A present-but-non-array appliesTo (e.g. a bare string) is ignored
+        // wholesale by fromJson's .toArray() and the pack silently becomes
+        // universal — a plausible author typo worth a shape diagnostic.
+        if (!appliesToValue.isUndefined() && !appliesToValue.isArray()) {
+            lints << QStringLiteral("appliesTo must be an array of tokens (ignored at load; pack becomes universal)");
+        }
+        const QJsonArray declaredAppliesTo = appliesToValue.toArray();
         for (const QJsonValue& v : declaredAppliesTo) {
             const QString token = v.toString().trimmed();
             if (!token.isEmpty() && !animAppliesToTokens.contains(token)) {

@@ -20,7 +20,7 @@
  * the desktop switch, the fullscreen-effect claim — so a hand-edited
  * per-event profile JSON cannot arm a multi-minute animation. Four call
  * sites clamp against them (keep in sync when adding one):
- *  - the settings load (`daemon_bringup.cpp`),
+ *  - the settings load (`daemon_settings.cpp`),
  *  - the Rule timing slot, ONCE, in `resolveAnimationMotionProfile`
  *    (`shader_resolve.cpp`). The shader resolver deliberately does NOT
  *    read that slot: `resolveEventMotionProfile` owns it and feeds both

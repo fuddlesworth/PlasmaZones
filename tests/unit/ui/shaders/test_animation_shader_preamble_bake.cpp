@@ -1,14 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// End-to-end proof for T1.1 on the animation side: for every built-in
-// animation shader, generate its `#define p_<id> ...` preamble from
+// End-to-end proof for T1.1 on the animation side: for every daemon-eligible
+// built-in animation shader, generate its `#define p_<id> ...` preamble from
 // metadata.json (via the production AnimationShaderRegistry::paramPreamble),
 // splice it after #version into the include-expanded source, and bake the
 // result through ShaderCompiler. This pins that the GENERATED accessors
 // actually compile against the real animation UBO (animation_uniforms.glsl) —
-// catching any naming, slot, or UBO-mismatch regression across all packs
-// before the preamble is wired into the live runtimes.
+// catching any naming, slot, or UBO-mismatch regression before the preamble
+// is wired into the live runtimes. Compositor-only packs are excluded (their
+// source is kwin classic-GL by design); test_animation_shader_kwin_bake
+// covers their preamble compile.
 //
 // Also asserts the p_<id> macro for at least one known param resolves to the
 // SAME lane the runtime's translateAnimationParams uploads to, so a future

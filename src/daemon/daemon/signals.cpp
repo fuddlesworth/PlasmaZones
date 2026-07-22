@@ -643,7 +643,8 @@ void Daemon::connectLayoutSignals()
                 // (it calls `showOsdForAllScreens`). Letting this handler also
                 // fire double-queues a show on every screen: the first OSD
                 // begins its fly-in shader leg, the second show immediately
-                // cancels that AV via `cancelTrackingFor` + `parkShaderForReuse`
+                // cancels that AV via `cancelTrackingFor` (whose
+                // teardownShaderLeg parks the shader pieces)
                 // and re-enters via the reuse path. The user sees the slide
                 // animation get nuked mid-flight and visually perceives "show
                 // doesn't animate", because only the hide leg (no duplicate)
@@ -678,7 +679,7 @@ void Daemon::connectLayoutSignals()
                 // Without this gate, autotile users would hit the same first-OSD
                 // double-queue that the layoutApplied gate fixes for snap-mode
                 // users: the first OSD begins its fly-in shader leg, the second
-                // show cancels that AV via cancelTrackingFor + parkShaderForReuse,
+                // show cancels that AV via cancelTrackingFor's shader-leg park,
                 // and the slide-in animation gets nuked mid-flight.
                 if (!m_running) {
                     return;

@@ -213,9 +213,12 @@ void SurfaceAnimator::Private::destroyPendingReuseEntry(PendingReuseShader& pend
     pending.fboExtentKindPtr.reset();
 }
 
-/// Drop the reuse stash for one surface — used when the surface is
-/// destroyed, when the next leg uses a different effect / target,
-/// or when a non-shader leg supersedes a shader leg.
+/// Drop the reuse stash for one surface — sole caller is the
+/// surface-destroyed cleanup lambda (connectSurfaceCleanup). The
+/// per-target cases go elsewhere: an effect/anchor mismatch destroys
+/// its single entry inline (destroyPendingReuseEntry) and a
+/// non-shader leg superseding a shader leg uses
+/// destroyPendingReuseForKey.
 /// Walks every (surface, *) entry — a surface may have multiple
 /// targets parked simultaneously now that the unified shell hosts
 /// independent items as siblings on one Surface.
@@ -294,6 +297,26 @@ void SurfaceAnimator::Private::connectSurfaceCleanup(PhosphorLayer::Surface* sur
             // path. Walk the map and erase all matching entries.
             for (auto trackIt = m_tracks.begin(); trackIt != m_tracks.end();) {
                 if (trackIt->first.surface == surf) {
+                    // Park the AVs in m_pendingDestroy instead of destroying
+                    // them synchronously with the erase — destroying an
+                    // AnimatedValue from inside its own callback chain is the
+                    // re-entrancy hazard the rest of this file defends
+                    // against (see cancelTrackingFor), and this slot can run
+                    // inside a motion callback if a consumer deletes the
+                    // Surface there.
+                    Track& track = trackIt->second;
+                    if (track.opacity) {
+                        track.opacity->cancel();
+                        m_pendingDestroy.push_back(std::move(track.opacity));
+                    }
+                    if (track.scale) {
+                        track.scale->cancel();
+                        m_pendingDestroy.push_back(std::move(track.scale));
+                    }
+                    if (track.shaderTime) {
+                        track.shaderTime->cancel();
+                        m_pendingDestroy.push_back(std::move(track.shaderTime));
+                    }
                     trackIt = m_tracks.erase(trackIt);
                 } else {
                     ++trackIt;
@@ -412,7 +435,7 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     // entry behind on null-target strands its AV (custom
     // orchestrators bypass Surface::Impl::drive()'s pre-cancel).
     // cancelTrackingFor parks any in-flight shader pieces in
-    // m_pendingReuse[{surface,target}] (see parkShaderForReuse) so
+    // m_pendingReuse[{surface,target}] (teardownShaderLeg's park step) so
     // they survive the external Surface::show()/hide() pre-cancel
     // and can be reclaimed below if the new leg uses the same
     // effect. Null target means "supersede whatever was running on
@@ -596,6 +619,19 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     {
         auto it = m_tracks.find(TrackKey{surface, target});
         if (it == m_tracks.end()) {
+            // The setOpacity/setScale chain above re-entered cancel() and
+            // erased the slot. Any shader pieces claimed from m_pendingReuse
+            // earlier in this call live only in locals now — tracked by
+            // neither m_tracks nor m_pendingReuse — so wind them down before
+            // bailing or they sit dormant on the anchor holding their FBO
+            // until surface destruction.
+            if (reusedShaderItem || reusedShaderSource) {
+                PendingReuseShader transient;
+                transient.shaderItem = reusedShaderItem;
+                transient.shaderSource = reusedShaderSource;
+                transient.shaderAnchor = reusedShaderAnchor;
+                destroyPendingReuseEntry(transient);
+            }
             return;
         }
         if (!hasShaderLeg) {

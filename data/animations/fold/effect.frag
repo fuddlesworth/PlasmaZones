@@ -37,7 +37,9 @@ vec4 pTransition(vec2 uv, float t) {
     vec4 newC = surfaceColor(cuv); // live new content, native aspect
 
     // Cross-fade old -> new as the move settles, then apply the crease
-    // shade. Inputs are premultiplied, so a straight mix and a scalar
-    // multiply are both correct on premultiplied colour.
+    // shade. The scalar multiply scales alpha too, so on premultiplied
+    // colour the valleys are deliberately a coverage fade (the backdrop
+    // ghosts through slightly) rather than a pigment darken — and it
+    // keeps the rgb <= a premultiplied invariant intact.
     return mix(oldC, newC, fade) * shade * mask;
 }

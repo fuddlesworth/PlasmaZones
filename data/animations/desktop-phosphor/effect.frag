@@ -203,7 +203,8 @@ vec4 pTransition(vec2 uv, float t) {
 
     // reveal: 0 = still outgoing desktop .. 1 = incoming desktop. The
     // completion floor guarantees a clean t = 1 endpoint even for a pixel
-    // pathologically far from every gated node.
+    // pathologically far from every node (the worst-case activation plus
+    // travel time lands at ~0.98).
     float reveal = smoothstep(0.0, 0.12, m);
     reveal = max(reveal, smoothstep(0.92, 1.0, t));
 
