@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -81,8 +80,9 @@ Item {
 
     /// Raw stored TIMING profile per write path, refreshed by refreshFromTree.
     /// _setOverrideMerged and _storedStateKey read it to merge over, and to
-    /// compare against, each path's own stored fields. It exists to avoid DISK
-    /// I/O: both run from the duration slider's durationEdited, i.e. every tick
+    /// compare against, each path's own stored fields; _clearFieldOnAll and
+    /// the _primaryRaw ownership captions read it too. It exists to avoid DISK
+    /// I/O: the first two run from the duration slider's durationEdited, i.e. every tick
     /// of a drag, and reading each path's stored profile there meant a
     /// synchronous file open per path per reader per tick. With the cache the
     /// only timing reads left on a tick are refreshFromTree's own, which seeds
