@@ -212,6 +212,12 @@ private Q_SLOTS:
         QVERIFY(algo->producesOverlappingZones());
         QVERIFY(!algo->supportsMasterCount());
         QVERIFY(algo->supportsSplitRatio());
+        // Pins the overlap-stack contract: the peek cards are nested toward
+        // the trailing edge, so only lastOnTop keeps every peek visible, and
+        // rotate must focus the declared master slot (zone 0), not the
+        // narrowest card on top of the stack.
+        QCOMPARE(algo->overlapStacking(), QStringLiteral("lastOnTop"));
+        QCOMPARE(algo->masterZoneIndex(), 0);
     }
 
     void testDeck_multipleWindows()
@@ -252,6 +258,9 @@ private Q_SLOTS:
         auto* algo = hDeck();
         QCOMPARE(algo->name(), QStringLiteral("Horizontal Deck"));
         QVERIFY(algo->producesOverlappingZones());
+        // Same overlap-stack contract as deck, on the vertical axis.
+        QCOMPARE(algo->overlapStacking(), QStringLiteral("lastOnTop"));
+        QCOMPARE(algo->masterZoneIndex(), 0);
     }
 
     void testHDeck_multipleWindows()

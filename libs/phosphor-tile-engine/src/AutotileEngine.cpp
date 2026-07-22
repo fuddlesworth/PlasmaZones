@@ -930,6 +930,11 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     for (const QString& screenId : removed) {
         m_retileRetryScreens.remove(screenId);
         m_retileRetryCount.remove(screenId);
+        // A deferred focus request stranded by a no-op retile must not
+        // survive the screen's removal: if the same screenId reconnects,
+        // its first applyTiling would consume the stale entry and activate
+        // a window from the previous session of that screen.
+        m_pendingFocusByScreen.remove(screenId);
     }
 
     const bool nowEnabled = !m_autotileScreens.isEmpty();
