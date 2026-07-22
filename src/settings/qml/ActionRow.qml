@@ -402,10 +402,10 @@ ColumnLayout {
         }
 
         // One editor per parameter — the shape comes from the param `kind`,
-        // never an action-type ladder. The param-editor Components are
-        // declared as `property Component` on `row` (below) so the Loader
-        // inside the Repeater delegate can resolve them via
-        // `row._…ParamEditor`. Plain `id`-based sibling references don't
+        // never an action-type ladder. The param-editor Components live on the
+        // `paramEditors` handle (ActionParamEditors.qml, instantiated above) so
+        // the Loader inside the Repeater delegate can resolve them via
+        // `paramEditors._…ParamEditor`. Plain `id`-based sibling references don't
         // propagate into a Repeater delegate's QML scope, which is why
         // MatchLeafEditor (a root-level Loader) works but this pattern
         // previously rendered blank.

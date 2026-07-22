@@ -549,8 +549,9 @@ Item {
         return JSON.stringify([compared, shader]);
     }
 
-    /// Recompute _mirrorsDiverged. Called from both refreshers so it tracks
-    /// every signal that can move either tree.
+    /// Recompute _mirrorsDiverged. Called from refreshFromTree (which every
+    /// shader-side refresh chains into), so it tracks every signal that can move
+    /// either tree.
     function _refreshMirrorDivergence() {
         const mirrors = root._validMirrorPaths;
         if (mirrors.length === 0) {

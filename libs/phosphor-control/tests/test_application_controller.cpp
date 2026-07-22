@@ -354,10 +354,16 @@ private Q_SLOTS:
         ApplicationController app;
         app.registerPage(new StubPage(QStringLiteral("a")), {}, QStringLiteral("A"), QUrl());
 
+        // Pin the no-op via the emit, not the return value: an empty anchor
+        // stored (guard removed) would still make takePendingAnchor return "",
+        // so .isEmpty() alone cannot tell rejection from an empty store. A
+        // rejecting setPendingAnchor never reaches its pendingAnchorChanged emit.
+        QSignalSpy spy(&app, &ApplicationController::pendingAnchorChanged);
         app.setPendingAnchor(QStringLiteral("a"), QString()); // empty anchor → no-op
         QVERIFY(app.takePendingAnchor(QStringLiteral("a")).isEmpty());
         app.setPendingAnchor(QString(), QStringLiteral("x")); // empty page → no-op
         QVERIFY(app.takePendingAnchor(QString()).isEmpty());
+        QCOMPARE(spy.count(), 0);
     }
 
     void registryIsAccessibleViaProperty()

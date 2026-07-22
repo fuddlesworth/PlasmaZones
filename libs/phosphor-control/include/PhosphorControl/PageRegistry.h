@@ -291,8 +291,11 @@ public:
     // moved to SidebarRows and Breadcrumbs uses pageData / firstVisibleLeafId.
     // Retained as exported API for out-of-tree consumers, and covered by tests
     // so the serialization contract cannot rot. Same standing as
-    // setPageVisibility. pageData / allPagesData ARE live (PageHost.qml,
-    // SettingsAppWindow.qml).
+    // setPageVisibility, and as allPagesData — which likewise has no in-tree
+    // consumer now that the apply-on-close dirty toast is built from
+    // ApplicationController::dirtyPageIds() + pageData() rather than a QML walk
+    // over allPagesData(). Only pageData() is live in-tree (PageHost.qml,
+    // Sidebar.qml, Breadcrumbs.qml, settings Main.qml).
     Q_INVOKABLE QVariantList topLevelPagesData() const;
     Q_INVOKABLE QVariantList childPagesData(const QString& parentId) const;
     Q_INVOKABLE QVariantMap pageData(const QString& id) const;

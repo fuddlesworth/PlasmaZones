@@ -119,7 +119,8 @@ bool SettingsController::pageSupportsReset(const QString& page) const
     // means "reset this whole feature area", which is the honest reading of a
     // page that IS the feature area in that mode.
     //
-    // Parent categories too, PLUS the leaves — mirroring pageSupportsDiscard.
+    // Parent categories too, PLUS the leaves. This is the single predicate for
+    // both kebab actions — pageSupportsDiscard delegates straight to it.
     // Reset is invoked with activeDirtyScope (Main.qml / ConfirmDialogs), which
     // hoists a condensed page to its group, so "snapping" / "tiling" arrive here
     // and resetPage has a parent-category branch that resets the group's

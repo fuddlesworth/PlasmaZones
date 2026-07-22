@@ -277,10 +277,12 @@ private Q_SLOTS:
 
     void allPagesDataReturnsFlatList()
     {
-        // allPagesData feeds the lib's apply-on-close failure toast
-        // (SettingsAppWindow.collectDirtyPageIds) — must enumerate
-        // every registered page in insertion order so consumers can
-        // iterate without first walking topLevel + child layers.
+        // allPagesData is a retained, out-of-tree-only exported accessor now
+        // (the in-tree apply-on-close toast builds from
+        // ApplicationController::dirtyPageIds()). This still guards its
+        // serialization contract: it must enumerate every registered page in
+        // insertion order so consumers can iterate without first walking
+        // topLevel + child layers.
         PageRegistry reg;
         auto* a = new StubPage(QStringLiteral("a"), &reg);
         auto* b = new StubPage(QStringLiteral("a.b"), &reg);
