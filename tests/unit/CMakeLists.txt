@@ -361,6 +361,7 @@ p_add_test(test_configdefaults config/test_configdefaults.cpp)
 p_add_test(test_configbackend_json config/test_configbackend_json.cpp)
 
 p_add_test(test_configmigration config/migrations/test_configmigration.cpp)
+p_add_test(test_configmigration_v2tov3 config/migrations/test_configmigration_v2tov3.cpp)
 p_add_test(test_migration_v1_animation config/migrations/test_migration_v1_animation.cpp)
 p_add_test(test_layoutsettings_relocation config/migrations/test_layoutsettings_relocation.cpp)
 
