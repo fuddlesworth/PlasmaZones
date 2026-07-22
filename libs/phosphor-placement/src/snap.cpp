@@ -135,4 +135,80 @@ bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
     return true;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Snap-state resolver wiring and access helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void WindowTrackingService::setSnapStateResolver(SnapStateResolver resolver)
+{
+    m_snapResolver = std::move(resolver);
+}
+
+void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
+{
+    if (!state) {
+        m_snapResolver = SnapStateResolver{};
+        return;
+    }
+    SnapStateResolver resolver;
+    resolver.forWindow = [state](const QString&) {
+        return state;
+    };
+    resolver.forWindowOnScreen = [state](const QString&, const QString&) {
+        return state;
+    };
+    resolver.forScreen = [state](const QString&) {
+        return state;
+    };
+    resolver.globals = [state]() {
+        return state;
+    };
+    resolver.allStates = [state]() {
+        return QList<PhosphorSnapEngine::SnapState*>{state};
+    };
+    resolver.forgetWindow = [](const QString&) { };
+    m_snapResolver = std::move(resolver);
+}
+
+void WindowTrackingService::setSnapEngine(PhosphorEngine::PlacementEngineBase* engine)
+{
+    m_snapEngine = engine;
+}
+
+PhosphorEngine::PlacementEngineBase* WindowTrackingService::snapEngine() const
+{
+    return m_snapEngine.data();
+}
+
+PhosphorSnapEngine::SnapState* WindowTrackingService::snapForWindow(const QString& windowId) const
+{
+    return m_snapResolver.forWindow ? m_snapResolver.forWindow(windowId) : nullptr;
+}
+
+PhosphorSnapEngine::SnapState* WindowTrackingService::snapForWindowOnScreen(const QString& windowId,
+                                                                            const QString& screenId)
+{
+    return m_snapResolver.forWindowOnScreen ? m_snapResolver.forWindowOnScreen(windowId, screenId) : nullptr;
+}
+
+PhosphorSnapEngine::SnapState* WindowTrackingService::snapForScreen(const QString& screenId) const
+{
+    return m_snapResolver.forScreen ? m_snapResolver.forScreen(screenId) : nullptr;
+}
+
+PhosphorSnapEngine::SnapState* WindowTrackingService::snapGlobals() const
+{
+    return m_snapResolver.globals ? m_snapResolver.globals() : nullptr;
+}
+
+QList<PhosphorSnapEngine::SnapState*> WindowTrackingService::snapAllStates() const
+{
+    return m_snapResolver.allStates ? m_snapResolver.allStates() : QList<PhosphorSnapEngine::SnapState*>{};
+}
+
+bool WindowTrackingService::hasSnapState() const
+{
+    return static_cast<bool>(m_snapResolver.globals);
+}
+
 } // namespace PhosphorPlacement

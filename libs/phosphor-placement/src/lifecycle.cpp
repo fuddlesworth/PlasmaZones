@@ -711,4 +711,108 @@ WindowTrackingService::ZoneLookupResult WindowTrackingService::findZoneInAllLayo
     return {};
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Wiring, accessors, and state getters/setters (trivial forwarders)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QObject* WindowTrackingService::asQObject()
+{
+    return this;
+}
+
+void WindowTrackingService::setWindowRegistry(PhosphorEngine::WindowRegistry* registry)
+{
+    m_windowRegistry = registry;
+}
+
+PhosphorEngine::WindowPlacementStore& WindowTrackingService::placementStore()
+{
+    return m_placementStore;
+}
+
+const PhosphorEngine::WindowPlacementStore& WindowTrackingService::placementStore() const
+{
+    return m_placementStore;
+}
+
+void WindowTrackingService::setShouldTrackPredicate(ShouldTrackPredicate predicate)
+{
+    m_shouldTrackPredicate = std::move(predicate);
+}
+
+void WindowTrackingService::setAutotileModePredicate(AutotileModePredicate predicate)
+{
+    m_autotileModePredicate = std::move(predicate);
+}
+
+bool WindowTrackingService::isWindowInAutotileMode(const QString& windowId) const
+{
+    return m_autotileModePredicate && m_autotileModePredicate(windowId);
+}
+
+void WindowTrackingService::setAutotileTiledPredicate(AutotileTiledPredicate predicate)
+{
+    m_autotileTiledPredicate = std::move(predicate);
+}
+
+bool WindowTrackingService::isWindowAutotileTiled(const QString& windowId) const
+{
+    return m_autotileTiledPredicate && m_autotileTiledPredicate(windowId);
+}
+
+PhosphorEngine::WindowRegistry* WindowTrackingService::windowRegistry() const
+{
+    return m_windowRegistry;
+}
+
+PhosphorScreens::ScreenManager* WindowTrackingService::screenManager() const
+{
+    return m_screenManager;
+}
+
+void WindowTrackingService::setEngineFloatResolver(EngineFloatResolver resolver)
+{
+    m_engineFloatResolver = std::move(resolver);
+}
+
+void WindowTrackingService::setEngineFloatWriter(EngineFloatWriter writer)
+{
+    m_engineFloatWriter = std::move(writer);
+}
+
+void WindowTrackingService::setEngineFloatLister(EngineFloatLister lister)
+{
+    m_engineFloatLister = std::move(lister);
+}
+
+void WindowTrackingService::clearResnapBuffer()
+{
+    m_resnapBuffer.clear();
+}
+
+const QHash<QString, QList<WindowTrackingService::PendingRestore>>& WindowTrackingService::pendingRestoreQueues() const
+{
+    return m_pendingRestoreQueues;
+}
+
+QVector<WindowTrackingService::ResnapEntry> WindowTrackingService::takeResnapBuffer()
+{
+    return std::exchange(m_resnapBuffer, {});
+}
+
+void WindowTrackingService::setPendingRestoreQueues(const QHash<QString, QList<PendingRestore>>& queues)
+{
+    m_pendingRestoreQueues = queues;
+}
+
+void WindowTrackingService::setFloatingWindows(const QSet<QString>& windows)
+{
+    m_floatingWindows = windows;
+}
+
+WindowTrackingService::DirtyMask WindowTrackingService::peekDirty() const
+{
+    return m_dirtyMask;
+}
+
 } // namespace PhosphorPlacement
