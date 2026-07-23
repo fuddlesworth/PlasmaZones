@@ -149,16 +149,20 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
 //     when called repeatedly for the same extension.
 //   - Clears the extension's dirty bit (the extension's own isDirty() is
 //     the authoritative upload gate — there is no node-side mirror).
+//   - clearDirty() runs BEFORE write(): a GUI-thread setter landing between
+//     the two then re-arms the flag and the missed value uploads next frame.
+//     The old write-then-clear order silently dropped that setter's dirty
+//     bit, freezing its value until the next unrelated set.
 void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 {
     const int extSize = m_uniformExtension->extensionSize();
     if (m_extensionStaging.size() != extSize) {
         m_extensionStaging.resize(extSize);
     }
+    m_uniformExtension->clearDirty();
     m_uniformExtension->write(m_extensionStaging.data(), 0);
     const int extOffset = m_uboProfile->baseSize();
     batch->updateDynamicBuffer(m_ubo.get(), extOffset, extSize, m_extensionStaging.constData());
-    m_uniformExtension->clearDirty();
 }
 
 // ============================================================================

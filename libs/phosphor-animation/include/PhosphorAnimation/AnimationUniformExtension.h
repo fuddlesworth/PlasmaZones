@@ -64,6 +64,10 @@ namespace PhosphorAnimation {
 /// `m_mutex` serializes both — sync phase normally blocks the render
 /// thread but some Qt render loops can advance through prepare() before
 /// the next sync fires, so the lock is required to prevent torn copies.
+/// The lost-dirty race (a setter landing between the render thread's
+/// copy and its dirty-clear) is defended on the consumer side:
+/// `uploadExtensionToUbo` clears the flag BEFORE copying, so such a
+/// setter re-arms it and the value uploads next frame.
 class PHOSPHORANIMATION_EXPORT AnimationUniformExtension : public PhosphorShaders::IUniformExtension
 {
 public:

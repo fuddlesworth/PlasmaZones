@@ -514,9 +514,9 @@ private Q_SLOTS:
     }
 
     /// Fresh first show (no prior animation, target opacity defaulted to
-    /// 1.0 by QQuickItem) must reset to 0 and fade up. Otherwise the
-    /// supersession-aware live-from path would observe opacity==1.0 and
-    /// run a no-op fade-from-1-to-1.
+    /// 1.0 by QQuickItem) must reset to 0 and fade up: beginShow always
+    /// hardcodes fromOpacity=0 (surfaceanimator.cpp), so the QQuickItem
+    /// default 1.0 never turns the fade-in into a no-op fade-from-1-to-1.
     void show_fresh_starts_from_zero()
     {
         PhosphorLayer::Testing::MockTransport t;
@@ -542,10 +542,9 @@ private Q_SLOTS:
         QVERIFY(target);
 
         // After show kicks the runLeg synchronously, target opacity must
-        // be 0.0 — the fresh-show path picked the configured fromOpacity
-        // because the live opacity (QQuickItem default 1.0) was at the
-        // terminal value. Without the supersession-aware reset this would
-        // be 1.0 and we'd see no fade-in.
+        // be 0.0 — beginShow's hardcoded fromOpacity=0 overrides the
+        // QQuickItem default of 1.0. If show ever read the live opacity
+        // instead, this would be 1.0 and we'd see no fade-in.
         QCOMPARE(target->opacity(), 0.0);
         QVERIFY(waitFor(
             [target] {

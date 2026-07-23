@@ -22,14 +22,16 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/zonedetectionadaptor.h"
 
-#include <QJsonDocument>
-#include <QJsonObject>
+#include "config/settings.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
+
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include <PhosphorSnapEngine/SnapEngine.h>
-#include "config/settings.h"
+
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTimer>
 
 #include <algorithm>
@@ -592,7 +594,7 @@ void Daemon::connectLayoutSignals()
 
     // Note: autotileEnabledChanged, snappingEnabledChanged, and perScreenAutotileSettingsChanged
     // are handled by the consolidated settingsChanged handler (lives in
-    // daemon.cpp since the daemon file split — single-pass processing).
+    // init_services.cpp since the daemon file split — single-pass processing).
     // Individual autotile signals only fire from runtime setters, where settingsChanged also
     // fires and handles the transitions — no separate handlers needed.
 
