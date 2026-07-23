@@ -4,6 +4,7 @@
 #include "daemon/daemon.h"
 #include "helpers.h"
 #include "macros.h"
+#include "config/settings.h"
 #include "core/platform/logging.h"
 #include "core/resolve/screenmoderouter.h"
 #include "core/types/constants.h"
@@ -13,27 +14,28 @@
 #include "daemon/overlayservice.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/zonedetectionadaptor.h"
 
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
-#include "config/settings.h"
-#include "dbus/windowdragadaptor/windowdragadaptor.h"
-
-#include <PhosphorEngine/PlacementEngineBase.h>
-#include <PhosphorSnapEngine/SnapEngine.h>
-#include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/TilingAlgorithm.h>
-
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRect>
+#include <QSet>
 #include <QTimer>
+#include <QUuid>
+#include <QVector>
 
 #include <algorithm>
 #include <memory>

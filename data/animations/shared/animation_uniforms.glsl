@@ -57,8 +57,8 @@
 // the size static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
 // If any assert fails after a C++-side change, this header has to move
 // in lockstep. The bake test in
-// `tests/unit/ui/test_animation_shader_bake.cpp` surfaces GLSL-side
-// drift by running `qsb` over every built-in shader.
+// `tests/unit/ui/shaders/test_animation_shader_bake.cpp` surfaces
+// GLSL-side drift by running `qsb` over every daemon-eligible shader.
 
 #ifndef PLASMAZONES_ANIMATION_UNIFORMS_GLSL
 #define PLASMAZONES_ANIMATION_UNIFORMS_GLSL
@@ -101,11 +101,12 @@ uniform vec4 customColors[16];
 // `iAudioSpectrumSize` is likewise absent from THIS header on the kwin
 // branch, but it is not a dead end: the opt-in audio module
 // (data/animations/shared/audio.glsl) declares it as a default-block
-// uniform alongside the `uAudioSpectrum` sampler, and paint_pipeline.cpp
-// pushes both per frame for packs that include the module. A pack that
+// uniform alongside the `uAudioSpectrum` sampler, and
+// paint_shader_window.cpp pushes both per frame for packs that include
+// the module. A pack that
 // reaches for it WITHOUT the module still gets the compile error.
 // `iTextureResolution[4]` IS populated on the kwin path: the per-effect
-// uTexture<N> setter loop in `paint_pipeline.cpp::paintWindow` writes the
+// uTexture<N> setter loop in `paint_shader_window.cpp` writes the
 // pixel size of each user texture into this uniform array before
 // `drawWindow`. Listed here distinct from the "absent on kwin" set above
 // (iChannelResolution, iAudioSpectrumSize) so a future reader doesn't
@@ -322,9 +323,10 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              in logical-screen pixels;
                                  //              .zw = (screenWidth, screenHeight).
                                  //              Populated by SurfaceAnimator (daemon)
-                                 //              and paint_pipeline (kwin-effect) once
-                                 //              per leg attach + on every anchor /
-                                 //              window geometry change.
+                                 //              and paint_shader_window.cpp
+                                 //              (kwin-effect) once per leg attach +
+                                 //              on every anchor / window geometry
+                                 //              change.
     vec2 iAnchorSize;            // offset 688 (8 bytes) — anchor (card) pixel size
                                  //              in logical pixels. Decoupled from
                                  //              iResolution because Qt's QQuickItem

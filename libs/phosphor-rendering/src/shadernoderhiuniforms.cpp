@@ -374,6 +374,12 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             m_userTextureSamplers[i].reset(
                 rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
             if (!m_userTextureSamplers[i]->create()) {
+                // Reset to null so the `!m_userTextureSamplers[i]` re-create
+                // gate above fires again next frame (dirty is still set) —
+                // a stranded non-created sampler would otherwise pass the
+                // truthiness gates below and be bound into the SRB.
+                qCWarning(lcShaderNode) << "user texture slot" << i << "sampler create() failed, will retry next frame";
+                m_userTextureSamplers[i].reset();
                 continue;
             }
             resetAllBindingsAndPipelines();
@@ -519,20 +525,31 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
 
     // Desktop wallpaper texture upload (binding 11)
     if (m_wallpaperDirty && m_wallpaperTexture && m_wallpaperSampler) {
-        m_wallpaperDirty = false;
         const QImage& img = m_wallpaperImage;
         const QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);
         if (m_wallpaperTexture->pixelSize() != targetSize) {
-            m_wallpaperTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
-            if (!m_wallpaperTexture->create()) {
-                m_wallpaperTexture.reset();
+            // Build the resized texture into a local and only swap it in on a
+            // successful create() (mirrors the audio-spectrum path above): a
+            // failed resize keeps the previous working texture alive — the SRB
+            // still references it, so freeing it first would leave the bound
+            // pipeline sampling a destroyed QRhiTexture — and leaves
+            // m_wallpaperDirty set for a retry next frame. The wallpaper
+            // texture is allocated exactly once at node init, so nulling it
+            // here with dirty cleared would blank the wallpaper for the
+            // node's remaining life.
+            std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
+            if (!resized->create()) {
+                qCWarning(lcShaderNode) << "wallpaper texture create() failed for size" << targetSize
+                                        << ", keeping previous texture; will retry next frame";
                 return;
             }
+            m_wallpaperTexture = std::move(resized);
             resetAllBindingsAndPipelines();
             if (!ensurePipeline()) {
                 return;
             }
         }
+        m_wallpaperDirty = false;
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
             if (!img.isNull() && img.width() > 0 && img.height() > 0) {
