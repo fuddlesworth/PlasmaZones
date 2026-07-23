@@ -102,9 +102,16 @@ void NavigationController::swapFocusedWithMaster()
 
 void NavigationController::rotateWindowOrder(bool clockwise)
 {
+    // Rotation acts on the active screen's whole window ORDER, so it resolves
+    // through resolveActiveState rather than tiledWindowsForFocusedScreen:
+    // the latter skips the active screen when that screen's state has no
+    // focused window (focus arrived via a floating, snapped, or never-tracked
+    // window) and falls through to a hash-ordered scan, which would rotate a
+    // different screen than the shortcut targeted while the OSD still names
+    // the intended one.
     QString screenId;
-    PhosphorTiles::TilingState* state = nullptr;
-    const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
+    PhosphorTiles::TilingState* state = resolveActiveState(screenId);
+    const QStringList windows = state ? state->tiledWindows() : QStringList();
 
     if (windows.size() < 2 || !state) {
         Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("nothing_to_rotate"),
@@ -584,24 +591,25 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     }
 
     // Geometry not computed yet: fall back to order-based neighbour with wrap.
-    // This needs a partner — a single window has nothing to swap with and no
-    // geometry to cross a boundary, so report nothing_to_swap.
+    // The focused-window discriminator runs FIRST: a window that is tracked
+    // but absent from tiledWindows() is floating, not unfocused, and reporting
+    // "nothing to swap" for it would hide the real reason whenever the screen
+    // also happens to hold fewer than two tiled windows.
+    const int currentIndex = windows.indexOf(focused);
+    if (currentIndex < 0) {
+        const QString reason =
+            state->containsWindow(focused) ? QStringLiteral("not_tiled") : QStringLiteral("no_focus");
+        Q_EMIT m_engine->navigationFeedback(false, action, reason, QString(), QString(), screenId);
+        return;
+    }
+    // A lone tiled window has no partner to trade with and no geometry to
+    // cross a boundary with.
     if (windows.size() < 2) {
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("nothing_to_swap"), QString(), QString(),
                                             screenId);
         return;
     }
     const bool forward = isForwardDirection(direction);
-    const int currentIndex = windows.indexOf(focused);
-    if (currentIndex < 0) {
-        // A focused window that is tracked but absent from tiledWindows() is
-        // floating, not unfocused; "no window is focused" copy would be
-        // wrong for it.
-        const QString reason =
-            state->containsWindow(focused) ? QStringLiteral("not_tiled") : QStringLiteral("no_focus");
-        Q_EMIT m_engine->navigationFeedback(false, action, reason, QString(), QString(), screenId);
-        return;
-    }
     int targetIndex = forward ? currentIndex + 1 : currentIndex - 1;
     if (targetIndex < 0) {
         targetIndex = windows.size() - 1;

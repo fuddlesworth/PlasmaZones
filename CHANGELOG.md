@@ -1782,6 +1782,9 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [2.4.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.3...v2.4.5
 [2.4.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.1...v2.4.2
+[#237]: https://github.com/fuddlesworth/PlasmaZones/discussions/237
+[#235]: https://github.com/fuddlesworth/PlasmaZones/discussions/235
+[#223]: https://github.com/fuddlesworth/PlasmaZones/discussions/223
 [#211]: https://github.com/fuddlesworth/PlasmaZones/discussions/211
 [#249]: https://github.com/fuddlesworth/PlasmaZones/issues/249
 [#251]: https://github.com/fuddlesworth/PlasmaZones/discussions/251
@@ -1954,9 +1957,6 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#280]: https://github.com/fuddlesworth/PlasmaZones/pull/280
 [#281]: https://github.com/fuddlesworth/PlasmaZones/pull/281
 [#282]: https://github.com/fuddlesworth/PlasmaZones/pull/282
-[#223]: https://github.com/fuddlesworth/PlasmaZones/issues/223
-[#235]: https://github.com/fuddlesworth/PlasmaZones/issues/235
-[#237]: https://github.com/fuddlesworth/PlasmaZones/issues/237
 [Discussion #160]: https://github.com/fuddlesworth/PlasmaZones/discussions/160
 [PR #231]: https://github.com/fuddlesworth/PlasmaZones/pull/231
 [PR #238]: https://github.com/fuddlesworth/PlasmaZones/pull/238

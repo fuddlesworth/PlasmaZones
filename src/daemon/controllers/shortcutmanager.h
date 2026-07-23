@@ -50,12 +50,14 @@ public:
     explicit ShortcutManager(Settings* settings, QObject* parent = nullptr);
     ~ShortcutManager() override;
 
+public Q_SLOTS:
     void registerShortcuts();
     /// Re-applies current sequences after a settings save; returns true when
     /// something actually changed and cheatsheetModelChanged was emitted.
     bool updateShortcuts();
     void unregisterShortcuts();
 
+public:
     /**
      * Register an ad-hoc shortcut that lives outside the main settings-driven
      * table. Used by subsystems that need a transient grab bound to a UI state
@@ -186,6 +188,14 @@ private:
         QString description;
         std::function<void()> callback;
     };
+
+    /// Clears the in-flight flag, replays deferred settings/adhoc work, and
+    /// publishes the catalog. Runs from Registry::ready or, if the backend
+    /// never answers, from the fallback timer; idempotent either way.
+    void settleRegistration();
+
+    /// How long to wait for the backend's ready() before settling anyway.
+    static constexpr int kRegistrationSettleTimeoutMs = 5000;
 
     void buildEntries();
     /// Re-applies every entry's current sequence; returns true when any

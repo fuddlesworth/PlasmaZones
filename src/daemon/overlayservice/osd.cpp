@@ -706,8 +706,16 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // no notification window, etc.) must NOT poison the dedup state,
     // otherwise a failed show silently swallows the next legitimate call
     // within 200 ms.
+    //
+    // Span is exempt: its reason is direction-stable ("grow:right" on every
+    // step), so consecutive genuine steps produce an identical key. The
+    // shortcut's own 100 ms debounce is shorter than this window, so a second
+    // real step would otherwise commit geometry with no feedback. The
+    // duplicate this window exists to catch (one action arriving on both the
+    // Qt and D-Bus paths) does not apply to span, which has a single relay.
     const QString actionKey = action + QLatin1Char(':') + reason;
-    if (actionKey == m_lastNavigationActionKey && effectiveId == m_lastNavigationScreenId
+    const bool dedupEligible = action != QLatin1String("span");
+    if (dedupEligible && actionKey == m_lastNavigationActionKey && effectiveId == m_lastNavigationScreenId
         && m_lastNavigationTime.isValid() && m_lastNavigationTime.elapsed() < 200) {
         qCDebug(lcOverlay) << "Skipping duplicate navigation OSD:" << action << reason;
         return;

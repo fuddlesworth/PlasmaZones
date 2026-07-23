@@ -213,6 +213,45 @@ private Q_SLOTS:
     }
 
     /**
+     * Every shortcut setting must be registered, checked by REFLECTION rather than
+     * by scraping fetch sites.
+     *
+     * The scrapes above only cover keys some other process is already known to
+     * fetch. Shortcut settings have no such fetch site: they are read in-process by
+     * ShortcutManager, and the D-Bus surface exists for the settings UI, which
+     * enumerates generically. A whole directional quad can therefore be added to
+     * Settings, the schema, and the shortcut table while the registry block is
+     * forgotten, and nothing in this file would notice — which is exactly what
+     * happened to the span quad.
+     *
+     * Q_PROPERTY reflection closes that hole with no list to maintain: every
+     * property whose name ends in "Shortcut" must resolve through getSetting. The
+     * editor-owned `editor*` shortcuts are excluded deliberately; they are read by
+     * the editor's own config store, never over this bus.
+     */
+    void testEveryShortcutPropertyIsRegistered()
+    {
+        const QMetaObject* mo = m_settings->metaObject();
+        QStringList missing;
+        int checked = 0;
+        for (int i = mo->propertyOffset(); i < mo->propertyCount(); ++i) {
+            const QString name = QString::fromLatin1(mo->property(i).name());
+            if (!name.endsWith(QLatin1String("Shortcut")) || name.startsWith(QLatin1String("editor"))) {
+                continue;
+            }
+            ++checked;
+            if (!m_adaptor->getSetting(name).variant().isValid()) {
+                missing.append(name);
+            }
+        }
+        QVERIFY2(checked > 0, "Reflection found no shortcut properties: the scan itself is broken.");
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("These shortcut settings exist on Settings but are absent from "
+                                           "SettingsAdaptor's getter registry: %1")
+                                .arg(missing.join(QStringLiteral(", ")))));
+    }
+
+    /**
      * An EMPTY key is a caller bug in exactly the way an unknown one is, and must answer
      * the same way. It used to return a valid empty string, which is the silent shape
      * this whole file exists to stamp out.

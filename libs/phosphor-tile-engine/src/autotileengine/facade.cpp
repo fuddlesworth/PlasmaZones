@@ -408,7 +408,13 @@ void AutotileEngine::restoreFocusedWindow(const NavigationContext& ctx)
 
 PhosphorEngine::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId)
 {
-    return tilingStateForScreen(screenId);
+    // Non-creating, matching the const overload below: a read accessor that
+    // persists an empty TilingState for an unknown screen is the create-on-read
+    // leak the cross-surface lookups explicitly guard against.
+    if (screenId.isEmpty()) {
+        return nullptr;
+    }
+    return m_states.stateForKey(currentKeyForScreen(screenId));
 }
 
 const PhosphorEngine::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId) const

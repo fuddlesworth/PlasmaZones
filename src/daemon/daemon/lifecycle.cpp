@@ -379,6 +379,19 @@ void Daemon::stop()
     // teardown severs explicitly rather than relying on an invariant.
     m_bridgeWatchdogTimer.stop();
 
+    // Null the drag adaptor's borrowed pointers ABOVE the m_running gate, for
+    // the same reason as the provider lambdas and QML statics below: both are
+    // wired from init() (init_adaptors.cpp / init_engines.cpp), which runs
+    // before start(), so an init-without-start teardown (test fixture,
+    // early-fail init, double-stop) would otherwise reach member destruction
+    // with the adaptor still holding a pointer to the about-to-die
+    // ShortcutManager / AutotileEngine. Both setters are null-safe and
+    // idempotent, so running this on an already-stopped daemon costs nothing.
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->setAutotileEngine(nullptr);
+        m_windowDragAdaptor->setShortcutRegistrar(nullptr);
+    }
+
     // Drop the layout-manager provider lambdas FIRST, before the m_running
     // gate. They capture `this` and dereference m_settings; m_settings is
     // declared after m_layoutManager, so reverse-order member destruction
@@ -622,15 +635,6 @@ void Daemon::stop()
     }
 
     // Null the WindowDragAdaptor's engine pointer for the same reason.
-    // Also null its ShortcutRegistrar pointer: m_shortcutManager (a unique_ptr
-    // member) is destroyed before ~QObject runs, so it dies before the
-    // adaptor itself. Any late event reaching the adaptor between those two
-    // moments would otherwise deref a dead ShortcutManager.
-    if (m_windowDragAdaptor) {
-        m_windowDragAdaptor->setAutotileEngine(nullptr);
-        m_windowDragAdaptor->setShortcutRegistrar(nullptr);
-    }
-
     // Clear engine references before destruction
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr);

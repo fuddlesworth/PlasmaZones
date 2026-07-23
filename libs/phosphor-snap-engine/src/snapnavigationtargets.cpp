@@ -488,14 +488,20 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
     // side-by-side with the union (positive perpendicular overlap — a
     // diagonal zone is not a grow target). Nearest edge gap wins, clamped to
     // zero so overlapping-zone layouts tie at the edge and break by
-    // perpendicular centre distance — the same ranking the shared
-    // directionalNeighbor raycast uses.
+    // perpendicular centre distance, then by travel-axis centre distance —
+    // the same three-key ranking the shared directionalNeighbor raycast uses.
+    // The third key matters for the same reason it does there: overlapping
+    // zones all clamp to gap 0, and without it the tie falls through to list
+    // order, which is direction-asymmetric (zones are stored left-to-right,
+    // so "left" would skip to the farthest zone instead of the nearest).
     const int uLo = travelLo(unionRect, horizontal);
     const int uHi = travelHi(unionRect, horizontal);
     const int uPerpCenter = horizontal ? unionRect.center().y() : unionRect.center().x();
+    const int uTravelCenter = horizontal ? unionRect.center().x() : unionRect.center().y();
     int bestIndex = -1;
     int bestGap = 0;
     int bestPerp = 0;
+    int bestAxis = 0;
     for (int i = 0; i < candidates.size(); ++i) {
         const QRect& r = candidates[i].second;
         if (perpendicularOverlap(unionRect, r, horizontal) <= 0) {
@@ -515,6 +521,11 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
         // perpendicular tie-break - uniting it would then extend the span
         // BACKWARD along the travel axis. Require the candidate to start at
         // or beyond the union's trailing edge (same rounding tolerance).
+        // The tolerance is deliberately two-sided here, so a candidate
+        // starting up to kSpanEdgeTolerancePx before the trailing edge still
+        // joins and the applied union can move that far against the pressed
+        // direction. That is the same jitter the shrink band absorbs, and
+        // sub-pixel-rounding sized, so it is accepted rather than clamped.
         const bool startsWithinSpan = positive ? (travelLo(r, horizontal) >= uLo - kSpanEdgeTolerancePx)
                                                : (travelHi(r, horizontal) <= uHi + kSpanEdgeTolerancePx);
         if (!startsWithinSpan) {
@@ -522,10 +533,13 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
         }
         const int gap = positive ? qMax(0, travelLo(r, horizontal) - uHi) : qMax(0, uLo - travelHi(r, horizontal));
         const int perp = qAbs((horizontal ? r.center().y() : r.center().x()) - uPerpCenter);
-        if (bestIndex < 0 || gap < bestGap || (gap == bestGap && perp < bestPerp)) {
+        const int axis = qAbs((horizontal ? r.center().x() : r.center().y()) - uTravelCenter);
+        if (bestIndex < 0 || gap < bestGap || (gap == bestGap && perp < bestPerp)
+            || (gap == bestGap && perp == bestPerp && axis < bestAxis)) {
             bestIndex = i;
             bestGap = gap;
             bestPerp = perp;
+            bestAxis = axis;
         }
     }
 

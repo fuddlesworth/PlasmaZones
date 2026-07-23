@@ -497,6 +497,17 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
         return false;
     }
 
+    // Keep-above overlays (Spectacle, colour pickers, screen rulers) — same
+    // rejection shouldHandleWindow applies, preserved so upgrading doesn't
+    // start bordering these lingering utility windows. Consults the window's
+    // OWN flag (see windowOwnKeepAbove) so a SetWindowLayer-raised window
+    // keeps its decoration. Checked before the rule slice for the same reason
+    // as in shouldHandleWindow: a flag read beats a ruleQuery build, and both
+    // are pure rejects.
+    if (windowOwnKeepAbove(w)) {
+        return false;
+    }
+
     // User Exclude rules — reuse the SAME snapping exclusion slice
     // shouldHandleWindow gates on, so a window the user excluded from
     // management is not decorated either (preserves prior behavior, since the
@@ -507,15 +518,6 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
         if (m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded()) {
             return false;
         }
-    }
-
-    // Keep-above overlays (Spectacle, colour pickers, screen rulers) — same
-    // rejection shouldHandleWindow applies, preserved so upgrading doesn't
-    // start bordering these lingering utility windows. Consults the window's
-    // OWN flag (see windowOwnKeepAbove) so a SetWindowLayer-raised window
-    // keeps its decoration.
-    if (windowOwnKeepAbove(w)) {
-        return false;
     }
 
     // Transient-window filter — dialogs / popups / tooltips / dropdowns /

@@ -18,10 +18,10 @@ All split plans in §2 were executed on branch `refactor/file-size` in three wav
 each verified with both build trees (unity and no-unity) and a full ctest run
 (311/311 passing). After remediation, the only C++/QML/Luau source files above
 the 1150-line ceiling are the six entries in the Exceptions Register below
-(build scripts such as `tests/unit/CMakeLists.txt` are outside the policy's
-scope; sizes as of 2026-07-22:
-StubSettings.h 2338, plasmazoneseffect.h 2170, settings.h 1723, AutotileEngine.h
-1635, windowtrackingadaptor.h 1269, pluau.luau 1189; exception-register line
+(build scripts such as `tests/unit/CMakeLists.txt` and shader sources such as
+`data/overlays/nixos-drift/effect.frag` are outside the policy's scope; sizes as of 2026-07-22:
+StubSettings.h 2338, plasmazoneseffect.h 2163, settings.h 1723, AutotileEngine.h
+1638, windowtrackingadaptor.h 1269, pluau.luau 1189; exception-register line
 counts are as-of snapshots and drift as sanctioned files grow within their
 exception). Everything else is at or
 under 1150; the grace-band list in §4 remains accurate as the set of tolerated
@@ -51,12 +51,12 @@ constraint and the condition under which it should be revisited.
 | `src/dbus/windowtrackingadaptor/windowtrackingadaptor.h` | 1269 | Single moc'd Q_CLASSINFO D-Bus adaptor class (`org.plasmazones.WindowTracking`). Splitting the header means splitting the D-Bus interface itself, a wire-protocol change affecting the KWin effect, phosphorctl, tests, and the checked-in XML. ~60% of the lines are safety-critical bus-exposure doc comments. | A protocol-version bump ever happens anyway; then consider a second adaptor class (query surface) on the same object path. |
 | `kwin-effect/plasmazoneseffect/plasmazoneseffect.h` | 2163 | **Partial exception.** Single Q_OBJECT class deriving KWin::OffscreenEffect; all overrides, signals, and slots must sit in one class declaration. Planned type/state-struct extraction (see §2.1) gets it to roughly 1550–1650; the KWin API puts a floor of ~600–800 lines of unavoidable declarations under it, and the rest of the reduction requires a real delegation refactor (manager objects), tracked as follow-up work, not a quick split. | After the §2.1 extractions land, reassess whether a DecorationManager-style delegation is worth the effort. |
 | `libs/phosphor-tiles/src/pluau/pluau.luau` | 1189 | Luau sandbox prelude loaded as a single frozen chunk (`runPrelude` in luautilealgorithm.cpp:317). There is no module system in the sandbox; splitting into sequential preludes would force helpers into frozen **globals** visible to untrusted user scripts, growing the security/API surface. | If it keeps growing, add a CMake/qrc-time concatenation step so it can be multiple source files but one runtime chunk. |
-| `libs/phosphor-tile-engine/include/PhosphorTileEngine/AutotileEngine.h` | 1639 | **Partial exception.** Single Q_OBJECT class; most of its lines are Doxygen prose. Nested-struct extraction plus doc trimming (see §2.2) lands it around 1100–1200. Any residual over 1150 is documentation on a language-atomic class declaration. | After the §2.2 extraction lands, if still over ceiling, accept the remainder. |
+| `libs/phosphor-tile-engine/include/PhosphorTileEngine/AutotileEngine.h` | 1638 | **Partial exception.** Single Q_OBJECT class; most of its lines are Doxygen prose. Nested-struct extraction plus doc trimming (see §2.2) lands it around 1100–1200. Any residual over 1150 is documentation on a language-atomic class declaration. | After the §2.2 extraction lands, if still over ceiling, accept the remainder. |
 
 Grace-band headers that look like exceptions but are merely TOLERATED (single-class
-headers under 1150, no action): `src/daemon/daemon.h` (1149), `src/daemon/overlayservice.h`
+headers under 1150, no action): `src/daemon/daemon.h` (1150), `src/daemon/overlayservice.h`
 (1137), `src/settings/controller/settingscontroller.h` (1149),
-`PhosphorZones/LayoutRegistry.h` (1119), `PhosphorSnapEngine/SnapEngine.h` (1079).
+`PhosphorZones/LayoutRegistry.h` (1119), `PhosphorSnapEngine/SnapEngine.h` (1085).
 Warning for daemon.h: the daemon.cpp split adds ~10 private declarations; trim its
 longest doc essays in the same PR to stay under 1150.
 

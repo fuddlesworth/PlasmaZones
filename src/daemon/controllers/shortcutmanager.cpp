@@ -15,6 +15,7 @@
 #include <QHash>
 #include <QSet>
 #include <QStringList>
+#include <QTimer>
 #include <QVariantMap>
 
 #include <algorithm>
@@ -584,28 +585,48 @@ void ShortcutManager::registerShortcuts()
     connect(
         m_registry.get(), &PhosphorShortcuts::Registry::ready, this,
         [this] {
-            m_registrationInProgress = false;
-            qCInfo(lcShortcuts) << "Registered" << m_entries.size() << "shortcuts";
-            bool modelAlreadyEmitted = false;
-            if (m_settingsDirty) {
-                m_settingsDirty = false;
-                modelAlreadyEmitted = updateShortcuts();
-            }
-            // Replay any adhoc (un)registrations that arrived while the
-            // initial batch was in flight. Must run AFTER the in-progress
-            // flag is cleared so each drained op goes through the normal
-            // path instead of re-queuing itself.
-            drainPendingAdhocOps();
-            // The catalog is first meaningful once the batch has settled
-            // (backend read-back can answer now). One emit per settle: a
-            // dirty-settings replay above may already have re-pushed it.
-            if (!modelAlreadyEmitted) {
-                Q_EMIT cheatsheetModelChanged();
-            }
+            settleRegistration();
         },
         Qt::SingleShotConnection);
 
+    // Fallback settle: a backend that never answers (Portal request lost, a
+    // compositor that drops the reply) would otherwise leave
+    // m_registrationInProgress true forever — every later settings rebind
+    // silently defers and every adhoc grab queues undrained, which kills the
+    // picker / snap-assist Escape binding for the rest of the session.
+    // Settling late is harmless: the ready() connection is single-shot and
+    // settleRegistration is idempotent.
+    QTimer::singleShot(kRegistrationSettleTimeoutMs, this, [this] {
+        if (!m_registrationInProgress) {
+            return;
+        }
+        qCWarning(lcShortcuts) << "Shortcut backend never reported ready after" << kRegistrationSettleTimeoutMs
+                               << "ms — settling registration anyway";
+        settleRegistration();
+    });
+
     m_registry->flush();
+}
+
+void ShortcutManager::settleRegistration()
+{
+    m_registrationInProgress = false;
+    qCInfo(lcShortcuts) << "Registered" << m_entries.size() << "shortcuts";
+    bool modelAlreadyEmitted = false;
+    if (m_settingsDirty) {
+        m_settingsDirty = false;
+        modelAlreadyEmitted = updateShortcuts();
+    }
+    // Replay any adhoc (un)registrations that arrived while the initial batch
+    // was in flight. Must run AFTER the in-progress flag is cleared so each
+    // drained op takes the immediate path instead of re-queuing itself.
+    drainPendingAdhocOps();
+    // The catalog is first meaningful once the batch has settled (backend
+    // read-back can answer now). One emit per settle: a dirty-settings replay
+    // above may already have re-pushed it.
+    if (!modelAlreadyEmitted) {
+        Q_EMIT cheatsheetModelChanged();
+    }
 }
 
 bool ShortcutManager::updateShortcuts()
@@ -735,8 +756,9 @@ void ShortcutManager::drainPendingAdhocOps()
     if (m_pendingAdhocOps.isEmpty()) {
         return;
     }
-    // Swap-and-iterate so a callback that itself calls (un)registerAdhocShortcut
-    // lands in a fresh queue rather than mutating the one we're draining.
+    // Swap so the member queue is empty for the duration; the registration
+    // flag is already cleared, so a re-entrant (un)registerAdhocShortcut
+    // binds immediately instead of re-queuing into the vector we're walking.
     QVector<PendingAdhocOp> ops;
     m_pendingAdhocOps.swap(ops);
     qCInfo(lcShortcuts) << "Draining" << ops.size() << "deferred adhoc shortcut op(s) after initial registration";

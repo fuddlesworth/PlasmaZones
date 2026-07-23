@@ -108,13 +108,17 @@ private Q_SLOTS:
         QCOMPARE(ShortcutManager::compressCheatsheetFamilies(rows, {arrowFamily()}).size(), 4);
     }
 
-    void bareTokenBinding_staysUncompressed()
+    void emptyPrefixBindings_stayUncompressed()
     {
-        // A member bound to a modifier-less key has no '+' to split on;
-        // compressing it would emit a bogus "+Arrows" chip with an empty
-        // shared prefix.
+        // Every member bound with a leading '+' and no modifier: each split
+        // index is 0, so the expected-token and shared-prefix checks all pass
+        // and only the `split <= 0` guard rejects the family. Weakening that
+        // guard to `< 0` would compress these into a bogus "+Arrows" chip.
         QVector<QVariantMap> rows = arrowRows();
-        rows[0].insert(QStringLiteral("triggers"), QStringList{QStringLiteral("Left")});
+        rows[0].insert(QStringLiteral("triggers"), QStringList{QStringLiteral("+Left")});
+        rows[1].insert(QStringLiteral("triggers"), QStringList{QStringLiteral("+Right")});
+        rows[2].insert(QStringLiteral("triggers"), QStringList{QStringLiteral("+Up")});
+        rows[3].insert(QStringLiteral("triggers"), QStringList{QStringLiteral("+Down")});
 
         QCOMPARE(ShortcutManager::compressCheatsheetFamilies(rows, {arrowFamily()}).size(), 4);
     }

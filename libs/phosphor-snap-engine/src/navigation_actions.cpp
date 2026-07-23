@@ -493,6 +493,8 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
     // the release-build pair every other m_globals assert carries.
     Q_ASSERT(m_globals);
     if (!m_globals) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("engine_unavailable"), QString(),
+                                  QString(), ctx.screenId);
         return;
     }
     if (!m_windowTracker) {
@@ -691,6 +693,8 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
 {
     Q_ASSERT(m_globals);
     if (!m_globals) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("engine_unavailable"), QString(),
+                                  QString(), ctx.screenId);
         return;
     }
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::toggleFocusedFloat";
