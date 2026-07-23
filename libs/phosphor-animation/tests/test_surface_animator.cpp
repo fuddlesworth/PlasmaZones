@@ -267,7 +267,9 @@ private Q_SLOTS:
 
         // Cancel the in-flight long animation so we get a clean slate.
         anim.cancel(surface);
-        target->setOpacity(1.0); // reset for the supersession-aware fresh-show check
+        // Clear the cancelled mid-fade state so the second show starts from
+        // clean values (beginShow hardcodes fromOpacity=0 regardless).
+        target->setOpacity(1.0);
         target->setScale(1.0);
 
         // Reload the profile to a 20ms duration — same path, new shape.
