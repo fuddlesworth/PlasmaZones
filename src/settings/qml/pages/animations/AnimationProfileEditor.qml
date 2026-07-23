@@ -125,20 +125,46 @@ ColumnLayout {
     /// with neither text nor params, keeps the row-click inert and
     /// the chevron hidden.
     readonly property bool shaderSectionExpandable: shaderEffectId.length > 0 && (shaderDescription.length > 0 || shaderParamSchema.length > 0)
-    /// Description of the currently-picked shader, resolved from the
-    /// consumer-fed picker model. Empty when nothing is picked or the
-    /// pack ships no description.
-    readonly property string shaderDescription: {
+    /// Registry entry for the currently-picked shader, resolved from the
+    /// consumer-fed picker model. Null when nothing is picked or the id
+    /// has no match (a pack uninstalled while its override survives).
+    /// Hoisted so the name and description legs share one scan.
+    readonly property var _shaderEffect: {
         if (shaderEffectId.length === 0)
-            return "";
+            return null;
 
         for (var i = 0; i < availableShaders.length; ++i) {
             var e = availableShaders[i];
             if (e && e.id === shaderEffectId)
-                return typeof e.description === "string" ? e.description : "";
+                return e;
         }
-        return "";
+        return null;
     }
+    /// Display name of the currently-picked shader. An id with no entry in
+    /// the picker model (a pack uninstalled while its override survives, or
+    /// one an ancestor set that this event's path filter excludes) renders
+    /// with the SAME "(missing: …)" wording CategoryMenuButton uses for the
+    /// same state — the picker sits directly below this row, so a bare id
+    /// here would read like a real pack name beside the picker's "(missing:
+    /// …)" for the very same shader.
+    readonly property string shaderName: {
+        if (shaderEffectId.length === 0)
+            return "";
+
+        if (_shaderEffect && _shaderEffect.name)
+            return _shaderEffect.name;
+
+        return i18nc("@info item missing", "(missing: %1)", shaderEffectId);
+    }
+    /// Description of the currently-picked shader. Empty when nothing is
+    /// picked or the pack ships no description.
+    readonly property string shaderDescription: (_shaderEffect && typeof _shaderEffect.description === "string") ? _shaderEffect.description : ""
+    /// Whether the picker has anything to offer. False while the shader
+    /// registry is still loading (or absent), which is a state the empty
+    /// slot and the setter caption BOTH have to agree about: telling the
+    /// user to set a pack below while the picker holds only "None" is an
+    /// instruction they cannot follow.
+    readonly property bool _anyPackAvailable: availableShaders && availableShaders.length > 0
     /// Wire-format curve string the rule / profile schema expects.
     readonly property string curveString: {
         if (timingMode === CurvePresets.timingModeSpring)
@@ -424,23 +450,38 @@ ColumnLayout {
         visible: root.shaderLegSupported && root.showTimingSection
     }
 
-    // Shader header row — the same collapsed-row model as the decoration
-    // chain packs (ExpandableRowDelegate + ExpandChevron): whole-row click
-    // toggles, the chevron signals state, and the collapsed header shows a
-    // one-line elided description teaser while the expansion body carries
-    // the full text + parameter editor. Hand-rolled from the same pattern
-    // rather than reusing ExpandableRowDelegate, because that shell
-    // lazy-loads its body and the parameter editor must stay statically
-    // instantiated — the `lockedShaderParams` alias above targets its id.
+    // Empty state, mirroring the decoration chain editor's: an unset
+    // shader says so in place of the row, and points at the setter below.
+    Label {
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.largeSpacing
+        Layout.rightMargin: Kirigami.Units.largeSpacing
+        visible: root.shaderLegSupported && root.shaderEffectId.length === 0
+        // Points at the setter only when the setter can actually serve.
+        text: root._anyPackAvailable ? i18n("No shader pack. Set one below.") : i18n("No shader pack.")
+        wrapMode: Text.WordWrap
+        opacity: 0.7
+    }
+
+    // Selected-shader row — the same collapsed-row model as a decoration
+    // chain pack (ExpandableRowDelegate + ExpandChevron): the row names the
+    // PACK, whole-row click toggles, the chevron signals state, and the
+    // collapsed header shows a one-line elided description teaser while the
+    // expansion body carries the full text + parameter editor. Hand-rolled
+    // from the same pattern rather than reusing ExpandableRowDelegate,
+    // because that shell lazy-loads its body and the parameter editor must
+    // stay statically instantiated — the `lockedShaderParams` alias above
+    // targets its id. Unlike the decoration chain this slot holds at most
+    // one pack, so the picker lives in its own setter row below.
     ItemDelegate {
-        visible: root.shaderLegSupported
+        visible: root.shaderLegSupported && root.shaderEffectId.length > 0
         Layout.fillWidth: true
         hoverEnabled: true
         // Match the largeSpacing inset the SettingsRows in this editor
-        // self-apply, so the header text and picker line up with them.
+        // self-apply, so the row's text lines up with them.
         leftPadding: Kirigami.Units.largeSpacing
         rightPadding: Kirigami.Units.largeSpacing
-        Accessible.name: i18n("Shader effect")
+        Accessible.name: root.shaderName
         onClicked: {
             if (root.shaderSectionExpandable)
                 root.shaderSectionExpanded = !root.shaderSectionExpanded;
@@ -451,19 +492,12 @@ ColumnLayout {
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: Math.round(Kirigami.Units.smallSpacing / 2)
+                spacing: 0
 
                 Label {
                     Layout.fillWidth: true
-                    text: i18n("Shader effect")
-                    elide: Text.ElideRight
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: i18n("Apply a shader transition to this event")
-                    font: Kirigami.Theme.smallFont
-                    color: Kirigami.Theme.disabledTextColor
+                    text: root.shaderName
+                    font.bold: true
                     elide: Text.ElideRight
                 }
 
@@ -480,25 +514,16 @@ ColumnLayout {
                 }
             }
 
-            PZCommon.CategoryMenuButton {
-                id: shaderPicker
-
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 16
-                Layout.alignment: Qt.AlignVCenter
-                // Bound straight to the consumer's property. The consumer owns the
-                // registry-tick dependency and re-assigns this on every bump, so an
-                // extra tick read here would only double the invalidation.
-                items: root.availableShaders
-                currentId: root.shaderEffectId
-                noneId: ""
-                includeNoneEntry: true
-                placeholderText: i18nc("@action:button", "Select shader…")
-                onSelected: function (id) {
-                    var sid = id || "";
-                    root.shaderEffectActivated(sid);
-                    // Picking a shader reveals its description + parameters
-                    // right away; clearing to None collapses the section.
-                    root.shaderSectionExpanded = sid.length > 0;
+            // Clearing the slot, in the same position a decoration pack row
+            // carries its remove button. Routes through the same activation
+            // signal the picker's None entry uses.
+            ToolButton {
+                icon.name: "edit-delete-remove"
+                display: ToolButton.IconOnly
+                Accessible.name: i18n("Remove %1", root.shaderName)
+                onClicked: {
+                    root.shaderEffectActivated("");
+                    root.shaderSectionExpanded = false;
                 }
             }
 
@@ -606,6 +631,75 @@ ColumnLayout {
                     root.shaderParams = defaults;
                     root.resetRequested(defaults);
                 }
+            }
+        }
+    }
+
+    // Divider between the selected shader and the setter row, so the
+    // picker reads as a separate affordance rather than running into the
+    // row it replaces (the same break the decoration chain draws above
+    // its add row).
+    SettingsSeparator {
+        Layout.topMargin: Kirigami.Units.smallSpacing
+        visible: root.shaderLegSupported && root.shaderEffectId.length > 0
+    }
+
+    // ── Setter row ──────────────────────────────────────────────────
+    // Compact right-aligned picker in a labelled SettingsRow, matching the
+    // decoration chain's add row. The difference is the slot: this holds a
+    // single shader, so picking REPLACES the row above (and None clears
+    // it) rather than appending, and the button carries the current
+    // selection instead of a permanent placeholder.
+    //
+    // The button deliberately carries NO `enabled` gate where the decoration
+    // add row disables itself on an empty candidate list. That row is a pure
+    // append action, so an empty list leaves it nothing to do, while this
+    // picker's None entry stays meaningful with an empty catalog: it is how a
+    // user blocks a shader inherited from an ancestor path. Gating it on
+    // `availableShaders` would take away the only picker route to that.
+    SettingsRow {
+        id: setShaderRow
+
+        visible: root.shaderLegSupported
+        title: i18n("Set shader pack")
+        // The caption tracks what the picker can currently do, the way the
+        // decoration add row's does: a filled slot says the pick replaces
+        // what is already there, an empty one invites a pack, and an empty
+        // registry says so instead of promising an action with nothing to
+        // offer.
+        description: {
+            if (root.shaderEffectId.length > 0)
+                return i18n("Swap this event's pack for another, or clear it");
+
+            if (!root._anyPackAvailable)
+                return i18n("No shader packs are available for this event");
+
+            return i18n("Apply a shader pack to this event");
+        }
+
+        PZCommon.CategoryMenuButton {
+            // SettingsRow lays its default children out in a plain Row
+            // positioner, so Layout.* attached properties are inert here —
+            // size explicitly or the button sits at implicit width. Clamped
+            // to the same 45% of the row that SettingsRow caps its control
+            // slot at, measured against the INNER layout (inset by
+            // largeSpacing per side) so it cannot overhang the margin.
+            width: Math.min(Kirigami.Units.gridUnit * 16, Math.max(0, (setShaderRow.width - Kirigami.Units.largeSpacing * 2) * 0.45))
+            // Bound straight to the consumer's property. The consumer owns the
+            // registry-tick dependency and re-assigns this on every bump, so an
+            // extra tick read here would only double the invalidation.
+            items: root.availableShaders
+            currentId: root.shaderEffectId
+            noneId: ""
+            includeNoneEntry: true
+            placeholderText: i18nc("@action:button", "Select a pack…")
+            Accessible.description: i18n("Set the shader pack this event uses")
+            onSelected: function (id) {
+                var sid = id || "";
+                root.shaderEffectActivated(sid);
+                // Picking a shader reveals its description + parameters
+                // right away; clearing to None collapses the section.
+                root.shaderSectionExpanded = sid.length > 0;
             }
         }
     }
