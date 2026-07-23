@@ -650,6 +650,13 @@ ColumnLayout {
     // single shader, so picking REPLACES the row above (and None clears
     // it) rather than appending, and the button carries the current
     // selection instead of a permanent placeholder.
+    //
+    // The button deliberately carries NO `enabled` gate where the decoration
+    // add row disables itself on an empty candidate list. That row is a pure
+    // append action, so an empty list leaves it nothing to do, while this
+    // picker's None entry stays meaningful with an empty catalog: it is how a
+    // user blocks a shader inherited from an ancestor path. Gating it on
+    // `availableShaders` would take away the only picker route to that.
     SettingsRow {
         id: setShaderRow
 
