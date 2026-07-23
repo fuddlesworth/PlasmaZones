@@ -333,7 +333,8 @@ void SurfaceAnimator::Private::connectSurfaceCleanup(PhosphorLayer::Surface* sur
 /// spec.onComplete (cancel = non-completion termination per
 /// ISurfaceAnimator). AVs are parked in m_pendingDestroy because a
 /// re-entrant cancel from inside spec.onValueChanged must not
-/// destroy *this mid-advance (AnimatedValue.h:547); graveyard
+/// destroy *this mid-advance (AnimatedValue::advance()'s
+/// re-entrancy contract); graveyard
 /// drains on next tickAll. Shader pieces are parked in
 /// m_pendingReuse (see teardownShaderLeg) so they survive the
 /// external Surface::show()/hide() pre-cancel and can be reclaimed
@@ -458,7 +459,8 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         // surface-wide destruction violates the per-(Surface, target)
         // keying contract.
         // Synchronous onComplete: same forbidden-ops contract as a
-        // legCompleted-fired callback (SurfaceAnimator.h:79-90).
+        // legCompleted-fired callback (SurfaceAnimator.h's
+        // "Re-entrancy contract" section).
         if (onComplete) {
             onComplete();
         }
@@ -1045,8 +1047,8 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
 /// onComplete and retire the entry. Idempotent against a missing
 /// entry. AVs are parked in m_pendingDestroy (deferred destroy)
 /// because legCompleted runs from inside the spec.onComplete of
-/// the very AV — AnimatedValue.h:547 forbids destroying *this from
-/// within a spec callback.
+/// the very AV — AnimatedValue::advance()'s re-entrancy contract
+/// forbids destroying *this from within a spec callback.
 void SurfaceAnimator::Private::legCompleted(PhosphorLayer::Surface* surface, QQuickItem* target)
 {
     const auto it = m_tracks.find(TrackKey{surface, target});

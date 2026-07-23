@@ -325,8 +325,9 @@ public:
     /// constructed Track (generation 0) can never match a live leg.
     quint64 m_nextTrackGeneration = 1;
     /// Graveyard for AVs whose final tick fired legCompleted from
-    /// inside their own spec.onComplete (AnimatedValue.h:547 forbids
-    /// destroying *this from a spec callback). Drained at the start
+    /// inside their own spec.onComplete (AnimatedValue::advance()'s
+    /// re-entrancy contract forbids destroying *this from a spec
+    /// callback). Drained at the start
     /// of the next tickAll. MUST be declared after m_clock and
     /// before m_driverTimer so the destruction order is sound.
     std::vector<std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>>> m_pendingDestroy;

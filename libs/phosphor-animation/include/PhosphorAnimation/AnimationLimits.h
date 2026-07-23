@@ -119,9 +119,9 @@ constexpr int MaxAnimationStaggerIntervalMs = 200;
 ///    integrator, and the one every spring-curve animation runs on,
 ///  - the daemon's overlay shader push (`overlayservice/shader.cpp`),
 ///  - the daemon-side `SurfaceAnimator`'s shader delta
-///    (`surfaceanimator.cpp`),
+///    (`surfaceanimator_tick.cpp`),
 ///  - the compositor's `iTimeDelta` uniform
-///    (`plasmazoneseffect/paint_pipeline.cpp`),
+///    (`plasmazoneseffect/paint_shader_window.cpp`),
 ///  - `ShaderInternal::easeProgress`
 ///    (`plasmazoneseffect/shader_internal.h`), the SINGLE clamp for the
 ///    spring integrator's dt on BOTH compositor paint paths — the

@@ -178,7 +178,8 @@ uniform float iWindowOpacity;
 // kwin-effect: `paint_shader_window.cpp`'s
 // `cached->iAnchorRectInTextureLoc` setUniform site writes the value
 // computed by `ShaderInternal::computeTextureSubRect(anchorGeo,
-// expandedGeo)`. Daemon: `SurfaceAnimator::syncShaderGeometryNow` pushes
+// expandedGeo)` for surface-extent legs; anchor-extent legs carry the
+// (0, 0, 1, 1) identity. Daemon: `SurfaceAnimator::syncShaderGeometryNow` pushes
 // it through `AnimationUniformExtension`. Both stamp the value before
 // the first painted frame, so a fragment never sees the GL default
 // `vec4(0)` — `surfaceColor` would otherwise sample the corner texel

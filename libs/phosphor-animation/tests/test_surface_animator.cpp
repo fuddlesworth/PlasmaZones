@@ -674,8 +674,9 @@ private Q_SLOTS:
     /// can call `anim.cancel(surface)` — which routes through
     /// cancelTracking. Pre-fix, cancelTracking destroyed the
     /// AnimatedValue at scope exit (local unique_ptr), tearing it down
-    /// while `advance()` was still on the stack. AnimatedValue.h:547
-    /// forbids this — `advance()` accesses `*this` after the callback
+    /// while `advance()` was still on the stack. AnimatedValue::
+    /// advance()'s re-entrancy contract forbids this — `advance()`
+    /// accesses `*this` after the callback
     /// returns (e.g. the m_isComplete branch).
     ///
     /// The fix parks cancelled AnimatedValues in m_pendingDestroy

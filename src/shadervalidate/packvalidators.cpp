@@ -29,6 +29,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
@@ -181,20 +182,27 @@ int validatePack(const QString& packDir, QTextStream& out)
 // shared/desktop_transition.glsl declare these binding-less, which the strict
 // SPIR-V bake rejects — so when a daemon-eligible pack's compile fails with
 // the binding-less-sampler diagnostic AND its source pulls one of these in,
-// the root cause is almost certainly a metadata bug (missing compositor-only
+// the likely root cause is a metadata bug (missing compositor-only
 // appliesTo), not a GLSL bug, and deserves a hint that says so. The source
 // scan alone is NOT a lint: daemon-capable packs legitimately reference these
 // samplers inside `#ifdef PLASMAZONES_KWIN` branches, which the preprocessor
 // strips before they can fail the bake — hence the hint is gated on the
 // compile actually failing with glslang's binding diagnostic (which does not
-// echo the offending identifier, so the source scan supplies the name).
+// echo the offending identifier, so the source scan supplies the name). The
+// combination is still heuristic — a pack whose OWN binding-less sampler
+// fails while a guarded compositor-sampler reference coexists would draw the
+// hint spuriously — which is why this stays an advisory hint appended to the
+// real compile error, never an error of its own.
 static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
 {
     static const QStringList kCompositorOnlySamplers = {QStringLiteral("uOldWindow"), QStringLiteral("uFromDesktop"),
                                                         QStringLiteral("uToDesktop")};
     QStringList used;
     for (const QString& sampler : kCompositorOnlySamplers) {
-        if (expandedSource.contains(sampler)) {
+        // Word-boundary match so a comment mentioning a longer identifier
+        // (e.g. "uOldWindowFallback") can't count as a use of the sampler.
+        const QRegularExpression wordRe(QStringLiteral("\\b") + sampler + QStringLiteral("\\b"));
+        if (expandedSource.contains(wordRe)) {
             used << sampler;
         }
     }
