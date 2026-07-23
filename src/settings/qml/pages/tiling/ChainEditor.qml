@@ -83,9 +83,16 @@ ColumnLayout {
         return null;
     }
 
+    // A chained pack id with no entry in `availableShaders` (uninstalled out
+    // from under the chain) renders with the SAME "(missing: …)" wording
+    // CategoryMenuButton uses for an unmatched currentId, so the row does not
+    // pass a bare machine id off as a pack name.
     function _displayName(packId) {
         var e = root._effectFor(packId);
-        return (e && e.name) ? e.name : packId;
+        if (e && e.name)
+            return e.name;
+
+        return i18nc("@info item missing", "(missing: %1)", packId);
     }
 
     // Packs not already in the chain, for the Add combo's model.
@@ -299,7 +306,7 @@ ColumnLayout {
 
     // ── Add row ──────────────────────────────────────────────────────────
     // Compact right-aligned pack picker in a labelled SettingsRow, matching the
-    // animation "Set shader" selector (PZCommon.CategoryMenuButton) rather
+    // animation "Set shader pack" selector (PZCommon.CategoryMenuButton) rather
     // than a full-width dropdown bar. It is an ACTION, not a persistent
     // selection: selecting a pack appends it to the chain, so currentId stays
     // empty and the button always shows its placeholder.

@@ -129,7 +129,7 @@ ColumnLayout {
     /// consumer-fed picker model. Null when nothing is picked or the id
     /// has no match (a pack uninstalled while its override survives).
     /// Hoisted so the name and description legs share one scan.
-    readonly property var shaderEffect: {
+    readonly property var _shaderEffect: {
         if (shaderEffectId.length === 0)
             return null;
 
@@ -140,17 +140,25 @@ ColumnLayout {
         }
         return null;
     }
-    /// Display name of the currently-picked shader, falling back to the
-    /// raw id so a pack that is no longer installed still names itself.
+    /// Display name of the currently-picked shader. An id with no entry in
+    /// the picker model (a pack uninstalled while its override survives, or
+    /// one an ancestor set that this event's path filter excludes) renders
+    /// with the SAME "(missing: …)" wording CategoryMenuButton uses for the
+    /// same state — the picker sits directly below this row, so a bare id
+    /// here would read like a real pack name beside the picker's "(missing:
+    /// …)" for the very same shader.
     readonly property string shaderName: {
         if (shaderEffectId.length === 0)
             return "";
 
-        return (shaderEffect && shaderEffect.name) ? shaderEffect.name : shaderEffectId;
+        if (_shaderEffect && _shaderEffect.name)
+            return _shaderEffect.name;
+
+        return i18nc("@info item missing", "(missing: %1)", shaderEffectId);
     }
     /// Description of the currently-picked shader. Empty when nothing is
     /// picked or the pack ships no description.
-    readonly property string shaderDescription: (shaderEffect && typeof shaderEffect.description === "string") ? shaderEffect.description : ""
+    readonly property string shaderDescription: (_shaderEffect && typeof _shaderEffect.description === "string") ? _shaderEffect.description : ""
     /// Wire-format curve string the rule / profile schema expects.
     readonly property string curveString: {
         if (timingMode === CurvePresets.timingModeSpring)
@@ -640,10 +648,20 @@ ColumnLayout {
 
         visible: root.shaderLegSupported
         title: i18n("Set shader pack")
-        // Two states, the way the decoration add row's caption tracks what
-        // the picker can currently do: an empty slot invites a pack, a
-        // filled one says the pick replaces what is already there.
-        description: root.shaderEffectId.length > 0 ? i18n("Swap this event's pack for another, or clear it") : i18n("Apply a shader pack to this event")
+        // The caption tracks what the picker can currently do, the way the
+        // decoration add row's does: a filled slot says the pick replaces
+        // what is already there, an empty one invites a pack, and an empty
+        // registry says so instead of promising an action with nothing to
+        // offer.
+        description: {
+            if (root.shaderEffectId.length > 0)
+                return i18n("Swap this event's pack for another, or clear it");
+
+            if (!root.availableShaders || root.availableShaders.length === 0)
+                return i18n("No shader packs are available for this event");
+
+            return i18n("Apply a shader pack to this event");
+        }
 
         PZCommon.CategoryMenuButton {
             // SettingsRow lays its default children out in a plain Row
