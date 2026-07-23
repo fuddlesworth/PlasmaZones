@@ -682,8 +682,9 @@ add_test(NAME test_zone_uniform_extension COMMAND test_zone_uniform_extension)
 # overlay-surface animation path. Pinned by the canonical UBO declaration in
 # data/animations/shared/animation_uniforms.glsl. Compositor-only packs are
 # excluded (their source is kwin classic-GL by design) and covered by
-# test_animation_shader_kwin_bake; fragment-stage coverage lives in
-# test_animation_shader_preamble_bake.
+# test_animation_shader_kwin_bake, which needs a desktop-GL 4.5 context and
+# QSKIPs headless — a GPU-less CI run leaves them uncovered. Fragment-stage
+# coverage lives in test_animation_shader_preamble_bake.
 add_executable(test_animation_shader_bake ui/shaders/test_animation_shader_bake.cpp)
 target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering)
 target_compile_definitions(test_animation_shader_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
@@ -722,7 +723,8 @@ add_test(NAME test_shader_param_preamble COMMAND test_shader_param_preamble)
 # End-to-end: every daemon-eligible built-in animation shader must still bake
 # once its generated `#define p_<id> ...` preamble is spliced in — proving the
 # generated accessors compile against the real animation UBO. Compositor-only
-# packs are excluded here; test_animation_shader_kwin_bake covers them.
+# packs are excluded here; test_animation_shader_kwin_bake covers them where a
+# desktop-GL 4.5 context exists (it QSKIPs headless).
 add_executable(test_animation_shader_preamble_bake ui/shaders/test_animation_shader_preamble_bake.cpp)
 target_link_libraries(test_animation_shader_preamble_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
 target_compile_definitions(test_animation_shader_preamble_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")

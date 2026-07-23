@@ -8,7 +8,9 @@
 // `animation_uniforms.glsl` UBO — and any future drift that breaks the
 // daemon's overlay-surface execution site. Compositor-only packs are excluded
 // (their source is kwin classic-GL by design); test_animation_shader_kwin_bake
-// covers them. Fragment-stage coverage moved to
+// covers them WHERE a desktop-GL 4.5 context exists — it QSKIPs headless, so a
+// GPU-less CI run leaves those packs without compile coverage. Fragment-stage
+// coverage moved to
 // `test_animation_shader_preamble_bake`, which bakes each daemon-eligible
 // effect.frag through the FULL runtime assembly (T1.4/T1.5 entry scaffold +
 // T1.1 param preamble + include expansion); a raw compileFromFile here would

@@ -10,9 +10,9 @@ bundled animation + zone packs migrated, offline validator + CI gate landed). Ti
 the full scope across all tiers; the Tier-2/3 sections are the forward design.
 
 Pack counts throughout this document reflect the v3.1 tree at design time (53
-animation + 26 zone packs); the animation tree has since grown (69 packs as of
-v3.2) and every pack added after the T1.5 migration follows the migrated
-conventions from day one.
+animation + 26 zone packs); both trees have since grown (81 animation + 27 zone
+packs as of v3.3) and every pack added after the T1.5 migration follows the
+migrated conventions from day one.
 
 ## Motivation
 
@@ -654,8 +654,8 @@ mechanisms and the author wires them by hand:
 2. For **asymmetric** shaders, an `int iIsReversed` is `1` on reverse legs, `0`
    otherwise — with a documented footgun: branch on `iIsReversed == 1`, never `!= 0`.
 
-The pain is real and widespread: **24 of 53 bundled shaders branch on
-`iIsReversed`**, and most hand-write the *same* line to recover direction-
+The pain is real and widespread: **24 of the 53 shaders bundled at design time
+branch on `iIsReversed`**, and most hand-write the *same* line to recover direction-
 independent progress. From `matrix/effect.frag`:
 
 ```glsl

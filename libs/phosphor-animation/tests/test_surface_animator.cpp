@@ -27,8 +27,9 @@
  *     compile / bake layer: `test_animation_shader_preamble_bake` runs
  *     every daemon-eligible shader's fragment stage through SPIR-V with
  *     the canonical UBO including `iIsReversed` (compositor-only packs
- *     get the same via `test_animation_shader_kwin_bake`'s KWin-branch
- *     compile). The runtime push is mechanical (`shaderItem->
+ *     get the default-block equivalent via
+ *     `test_animation_shader_kwin_bake`'s KWin-branch compile, when a
+ *     desktop-GL 4.5 context is available). The runtime push is mechanical (`shaderItem->
  *     setIsReversed(!isShowLeg)`) — when extending behavioural coverage
  *     here, mock the ShaderEffect output via a `QQuickItem` subclass
  *     exposing the `isReversed` Q_PROPERTY and have the test's content

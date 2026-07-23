@@ -133,6 +133,7 @@ function(pal_add_test _name)
             # Reuse the in-tree phosphor-layer test mocks.
             ${CMAKE_SOURCE_DIR}/libs/phosphor-layer/tests
     )
+    set_target_properties(${_name} PROPERTIES AUTOMOC ON)
     target_link_libraries(${_name}
         PRIVATE
             Qt6::Test

@@ -10,7 +10,8 @@
 // catching any naming, slot, or UBO-mismatch regression before the preamble
 // is wired into the live runtimes. Compositor-only packs are excluded (their
 // source is kwin classic-GL by design); test_animation_shader_kwin_bake
-// covers their preamble compile.
+// covers their preamble compile WHERE a desktop-GL 4.5 context exists — it
+// QSKIPs headless, so a GPU-less CI run leaves those packs uncovered.
 //
 // Also asserts the p_<id> macro for at least one known param resolves to the
 // SAME lane the runtime's translateAnimationParams uploads to, so a future
@@ -124,9 +125,13 @@ private Q_SLOTS:
     void testPreambleLaneMatchesRuntimeUpload()
     {
         const QString dir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations/bounce");
-        if (!QFileInfo::exists(dir + QStringLiteral("/metadata.json"))) {
-            QSKIP("bounce pack not present");
-        }
+        // Hard-fail rather than QSKIP: this is the ONLY pin that the generated
+        // p_<id> macro and translateAnimationParams agree on a lane, so a
+        // rename or removal of the fixture pack must break the build, not
+        // silently evaporate the cross-check. (A missing source tree entirely
+        // is already handled by the _data() functions above.)
+        QVERIFY2(QFileInfo::exists(dir + QStringLiteral("/metadata.json")),
+                 "the bounce pack is this test's lane-agreement fixture and must exist");
         const AnimationShaderEffect eff = loadEffect(dir);
         QVERIFY(eff.isValid());
 
