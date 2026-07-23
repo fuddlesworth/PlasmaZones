@@ -3,11 +3,11 @@
 
 #include "DBusLayoutService.h"
 #include "core/platform/logging.h"
+#include "phosphor_i18n.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
-#include <QCoreApplication>
 #include <QDBusError>
 #include <QDBusMessage>
 
@@ -36,7 +36,7 @@ DBusLayoutService::DBusLayoutService(QObject* parent)
 QString DBusLayoutService::loadLayout(const QString& layoutId)
 {
     if (layoutId.isEmpty()) {
-        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Layout ID cannot be empty"));
+        Q_EMIT errorOccurred(PhosphorI18n::tr("Layout ID cannot be empty"));
         return QString();
     }
 
@@ -44,7 +44,7 @@ QString DBusLayoutService::loadLayout(const QString& layoutId)
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
         const QString err = errorMessage(reply);
         qCWarning(lcDbus) << "loadLayout: failed for" << layoutId << err;
-        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Failed to load layout: %1").arg(err));
+        Q_EMIT errorOccurred(PhosphorI18n::tr("Failed to load layout: %1").arg(err));
         return QString();
     }
     // An empty document is how getLayout reports a layout it does not hold, and
@@ -54,7 +54,7 @@ QString DBusLayoutService::loadLayout(const QString& layoutId)
     const QString jsonLayout = reply.arguments().constFirst().toString();
     if (jsonLayout.isEmpty()) {
         qCWarning(lcDbus) << "loadLayout: daemon holds no layout with id" << layoutId;
-        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "That layout is no longer available."));
+        Q_EMIT errorOccurred(PhosphorI18n::tr("That layout is no longer available."));
         return QString();
     }
     return jsonLayout;
@@ -63,7 +63,7 @@ QString DBusLayoutService::loadLayout(const QString& layoutId)
 QString DBusLayoutService::createLayout(const QString& jsonLayout)
 {
     if (jsonLayout.isEmpty()) {
-        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Layout JSON cannot be empty"));
+        Q_EMIT errorOccurred(PhosphorI18n::tr("Layout JSON cannot be empty"));
         return QString();
     }
 
@@ -71,12 +71,12 @@ QString DBusLayoutService::createLayout(const QString& jsonLayout)
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
         const QString err = errorMessage(reply);
         qCWarning(lcDbus) << "createLayout: failed:" << err;
-        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Failed to create layout: %1").arg(err));
+        Q_EMIT errorOccurred(PhosphorI18n::tr("Failed to create layout: %1").arg(err));
         return QString();
     }
     const QString layoutId = reply.arguments().constFirst().toString();
     if (layoutId.isEmpty()) {
-        QString error = QCoreApplication::translate("DBusLayoutService", "Created layout but received empty ID");
+        QString error = PhosphorI18n::tr("Created layout but received empty ID");
         qCWarning(lcDbus) << error;
         Q_EMIT errorOccurred(error);
         return QString();
@@ -87,7 +87,7 @@ QString DBusLayoutService::createLayout(const QString& jsonLayout)
 bool DBusLayoutService::updateLayout(const QString& jsonLayout)
 {
     if (jsonLayout.isEmpty()) {
-        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Layout JSON cannot be empty"));
+        Q_EMIT errorOccurred(PhosphorI18n::tr("Layout JSON cannot be empty"));
         return false;
     }
 
@@ -95,7 +95,7 @@ bool DBusLayoutService::updateLayout(const QString& jsonLayout)
     if (reply.type() != QDBusMessage::ReplyMessage) {
         const QString err = errorMessage(reply);
         qCWarning(lcDbus) << "updateLayout: failed:" << err;
-        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Failed to update layout: %1").arg(err));
+        Q_EMIT errorOccurred(PhosphorI18n::tr("Failed to update layout: %1").arg(err));
         return false;
     }
     // A reply arrived, which only says the daemon was reachable. updateLayout is
@@ -106,7 +106,7 @@ bool DBusLayoutService::updateLayout(const QString& jsonLayout)
     // write the daemon threw away.
     if (reply.arguments().isEmpty() || !reply.arguments().constFirst().toBool()) {
         qCWarning(lcDbus) << "updateLayout: daemon rejected the layout";
-        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "The layout could not be saved."));
+        Q_EMIT errorOccurred(PhosphorI18n::tr("The layout could not be saved."));
         return false;
     }
     return true;
@@ -138,8 +138,7 @@ void DBusLayoutService::assignLayoutToScreen(const QString& screenName, const QS
     if (reply.type() != QDBusMessage::ReplyMessage) {
         const QString err = errorMessage(reply);
         qCWarning(lcDbus) << "assignLayoutToScreen: failed for layout" << layoutId << "to screen" << screenName << err;
-        Q_EMIT errorOccurred(
-            QCoreApplication::translate("DBusLayoutService", "Failed to assign layout to screen: %1").arg(err));
+        Q_EMIT errorOccurred(PhosphorI18n::tr("Failed to assign layout to screen: %1").arg(err));
     }
 }
 

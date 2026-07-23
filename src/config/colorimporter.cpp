@@ -3,6 +3,7 @@
 
 #include "colorimporter.h"
 #include "core/types/constants.h"
+#include "phosphor_i18n.h"
 #include <QFile>
 #include <QTextStream>
 #include <QJsonDocument>
@@ -16,7 +17,7 @@ ColorImportResult ColorImporter::importFromFile(const QString& filePath)
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         ColorImportResult result;
-        result.errorMessage = QObject::tr("Could not open file: %1").arg(filePath);
+        result.errorMessage = PhosphorI18n::tr("Could not open file: %1").arg(filePath);
         return result;
     }
 
@@ -25,7 +26,7 @@ ColorImportResult ColorImporter::importFromFile(const QString& filePath)
 
     if (content.isEmpty()) {
         ColorImportResult result;
-        result.errorMessage = QObject::tr("File is empty: %1").arg(filePath);
+        result.errorMessage = PhosphorI18n::tr("File is empty: %1").arg(filePath);
         return result;
     }
 
@@ -50,7 +51,7 @@ ColorImportResult ColorImporter::parsePywalJson(const QString& content)
     QJsonParseError parseError;
     QJsonDocument doc = QJsonDocument::fromJson(content.toUtf8(), &parseError);
     if (doc.isNull()) {
-        result.errorMessage = QObject::tr("Invalid JSON: %1").arg(parseError.errorString());
+        result.errorMessage = PhosphorI18n::tr("Invalid JSON: %1").arg(parseError.errorString());
         return result;
     }
 
@@ -64,7 +65,7 @@ ColorImportResult ColorImporter::parsePywalJson(const QString& content)
     }
 
     if (colors.isEmpty()) {
-        result.errorMessage = QObject::tr("No colors found in JSON file");
+        result.errorMessage = PhosphorI18n::tr("No colors found in JSON file");
         return result;
     }
 
@@ -74,7 +75,7 @@ ColorImportResult ColorImporter::parsePywalJson(const QString& content)
     QString color7Str = colors[QLatin1String("color7")].toString();
 
     if (color4Str.isEmpty() || color0Str.isEmpty() || color7Str.isEmpty()) {
-        result.errorMessage = QObject::tr("Missing required colors (color0, color4, color7) in pywal file");
+        result.errorMessage = PhosphorI18n::tr("Missing required colors (color0, color4, color7) in pywal file");
         return result;
     }
 
@@ -83,7 +84,7 @@ ColorImportResult ColorImporter::parsePywalJson(const QString& content)
     QColor fg(color7Str);
 
     if (!accent.isValid() || !bg.isValid() || !fg.isValid()) {
-        result.errorMessage = QObject::tr("Invalid color values in pywal file");
+        result.errorMessage = PhosphorI18n::tr("Invalid color values in pywal file");
         return result;
     }
 
@@ -111,7 +112,7 @@ ColorImportResult ColorImporter::parseColorList(const QString& content)
     lines.removeAll(QString());
 
     if (lines.size() < 8) {
-        result.errorMessage = QObject::tr("Color file needs at least 8 colors (found %1)").arg(lines.size());
+        result.errorMessage = PhosphorI18n::tr("Color file needs at least 8 colors (found %1)").arg(lines.size());
         return result;
     }
 
@@ -120,7 +121,7 @@ ColorImportResult ColorImporter::parseColorList(const QString& content)
     QColor fg(lines[7].trimmed());
 
     if (!accent.isValid() || !bg.isValid() || !fg.isValid()) {
-        result.errorMessage = QObject::tr("Invalid color format in color list file");
+        result.errorMessage = PhosphorI18n::tr("Invalid color format in color list file");
         return result;
     }
 
