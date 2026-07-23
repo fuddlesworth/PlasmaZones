@@ -120,7 +120,14 @@ Working today:
 - Audio mock generators (silent / sine / noise / sweep)
 - Frame-grab and PNG / VP9 / H.264 output
 - ZoneUniformExtension attached so zone arrays in the UBO match
-  the runtime exactly
+  the runtime exactly. The tool renders at an exact pixel
+  resolution with no display scaling, so it leaves the
+  extension's logical-to-device scale at its 1.0 default rather
+  than reporting a device-pixel ratio the way the daemon item
+  does. A corner radius or border width therefore comes out in
+  the units you asked for, which is what a preview wants. Render
+  at a larger `--resolution` to see how a pack looks on a scaled
+  display.
 
 Known gaps to verify on first run:
 

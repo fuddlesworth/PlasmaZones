@@ -37,7 +37,7 @@ namespace PhosphorAnimation {
 /// `common.glsl` cache-key gap in `shaderCacheKey`, but unconfirmed).
 /// Keeping `BaseUniforms` at 672 bytes and routing animation-only
 /// fields through this extension isolates the two pipelines: zone
-/// shaders attach `ZoneUniformExtension` (4096 bytes after base) and
+/// shaders attach `ZoneUniformExtension` (4112 bytes after base) and
 /// never observe these fields at all; animation shaders attach
 /// `AnimationUniformExtension` (48 bytes after base) — `iSurfaceScreenPos`
 /// at offset 672, `iAnchorSize` at 688, `iAnchorPosInFbo` at 696,

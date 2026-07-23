@@ -210,8 +210,10 @@ float atmosphericSmog(vec2 uv, float time, float density) {
 
 vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted,
                            float bass, float mids, float treble, float overall, bool hasAudio) {
-    float borderRadius = max(params.x, 6.0);
-    float borderWidth = max(params.y, 2.5);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     // Parameters with defaults (toned down for subtlety)
     float circuitDensity = p_circuitDensity >= 0.0 ? p_circuitDensity : 12.0;
@@ -264,7 +266,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
 
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     // Colors - Toxic Circuit palette
     vec3 primaryColor = colorWithFallback(p_primaryColor.rgb, vec3(0.224, 1.0, 0.078));   // #39FF14

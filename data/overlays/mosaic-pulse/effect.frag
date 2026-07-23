@@ -78,8 +78,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 vec4 params, bool isHighlighted,
                 float bass, float mids, float treble, float overall, bool hasAudio)
 {
-    float borderRadius = max(params.x, 6.0);
-    float borderWidth  = max(params.y, 2.5);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
     // Parameters with defaults
     float gridDensity   = p_gridDensity >= 0.0 ? p_gridDensity : 64.0;
@@ -118,7 +120,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec2 center   = rectPos + rectSize * 0.5;
     vec2 p        = fragCoord - center;
     vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
-    float d       = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d       = zoneShape.d;
 
     float energy    = hasAudio ? overall * reactivity : 0.0;
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(iTime * 0.8 * PI)) * 0.5;

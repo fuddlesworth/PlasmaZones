@@ -506,8 +506,10 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
                      bool isHighlighted, float bass, float mids, float treble,
                      bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     // -- Parameters (p_<id> from metadata.json, sentinel-default fallbacks) ------
     float speed         = p_speed >= 0.0 ? p_speed : 0.08;
@@ -543,10 +545,9 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
-    vec2 halfSize = rectSize * 0.5;
 
     vec2 p = fragCoord - center;
-    float d = sdRoundedBox(p, halfSize, borderRadius);
+    float d = zoneShape.d;
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     float aspect = iResolution.x / max(iResolution.y, 1.0);
     float time = iTime;

@@ -371,15 +371,17 @@ vec4 renderFluxZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                     float bass, float mids, float treble, float overall, bool hasAudio)
 {
     float vitality = zoneVitality(isHighlighted);
-    float borderRadius = max(params.x, 4.0);
-    float borderWidth  = max(params.y, 1.0);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     vec2 center   = rectPos + rectSize * 0.5;
     vec2 p        = fragCoord - center;
 
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     float t    = iTime * getSpeed();
     float diag = screenDiag(fragCoord);
@@ -455,13 +457,15 @@ vec4 renderFluxZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 // from one zone must not darken an adjacent zone's fill during blendOver).
 vec4 fluxZoneGlow(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted) {
     float vitality = zoneVitality(isHighlighted);
-    float borderRadius = max(params.x, 4.0);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     vec2 center   = rectPos + rectSize * 0.5;
     vec2 p        = fragCoord - center;
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     float glowExtent = vitalityScale(12.0, 30.0, vitality);
     if (d > 0.0 && d < glowExtent) {

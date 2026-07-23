@@ -170,8 +170,10 @@ float energyDistortion(vec2 pos, vec2 mousePos, float time, float amount) {
 
 vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted,
                         float bass, float mids, float treble, float overall, bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     // Parameters
     float fieldStrength = p_fieldStrength >= 0.0 ? p_fieldStrength : 1.0;
@@ -226,7 +228,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     vec2 mouseGlobal = iMouse.xy / max(iResolution, vec2(1.0));
 
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     // Colors
     vec3 fieldColor = p_fieldColor.rgb;

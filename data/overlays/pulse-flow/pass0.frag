@@ -39,16 +39,15 @@ float getAudioReact()     { return customParams[1].z >= 0.0 ? customParams[1].z 
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-// Minimum distance to any zone border (borderRadius scaled by pxScale for
-// resolution-independent corner shapes matching the effect pass).
-float zoneEdgeSDF(vec2 fragCoord, float pxs) {
+// Minimum distance to any zone border. Goes through the shared zoneSdf() so
+// the corner arcs this pass measures are the same ones the effect pass draws —
+// the two used to derive the radius independently (this one via pxScale, the
+// effect pass via its own inline copy), which put the glow trail slightly off
+// the painted corner at any scale other than 1080p.
+float zoneEdgeSDF(vec2 fragCoord) {
     float minDist = 1e6;
     for (int i = 0; i < zoneCount && i < 64; i++) {
-        vec2 pos = zoneRectPos(zoneRects[i]);
-        vec2 sz  = zoneRectSize(zoneRects[i]);
-        float radius = max(zoneParams[i].x, 8.0) * pxs;
-        vec2 center = pos + sz * 0.5;
-        float d = sdRoundedBox(fragCoord - center, sz * 0.5, radius);
+        float d = zoneSdf(fragCoord, zoneRects[i], zoneParams[i].x).d;
         minDist = min(minDist, abs(d));
         if (minDist < 1.0) break;
     }
@@ -72,7 +71,7 @@ void main() {
     // ── First frame: seed initial state ─────────────────────────────────────
     if (iFrame == 0) {
         float energy = 0.0;
-        float edgeDist = zoneEdgeSDF(fragCoord, pxs);
+        float edgeDist = zoneEdgeSDF(fragCoord);
         energy += smoothstep(40.0 * pxs, 0.0, edgeDist) * 0.3;
         energy += noise2D(uv * 8.0) * 0.05;
         fragColor = vec4(clamp(energy, 0.0, 1.0), energy, 0.0, 1.0);
@@ -164,7 +163,7 @@ void main() {
     // ── 4. ZONE-EDGE EMISSION ───────────────────────────────────────────────
     // Exponential falloff with noise flicker. Bass makes edges flare.
 
-    float edgeDist = zoneEdgeSDF(fragCoord, pxs);
+    float edgeDist = zoneEdgeSDF(fragCoord);
 
     if (edgeDist < edgeW * 2.0) {
         float falloff = exp(-edgeDist / max(edgeW, 1.0));

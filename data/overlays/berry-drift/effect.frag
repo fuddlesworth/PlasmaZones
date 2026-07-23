@@ -133,14 +133,16 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                      float bass, float mids, float treble, float overall, bool hasAudio)
 {
     // Zone geometry
-    float borderRadius = max(params.x, 6.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
     vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     // Parameters (sentinel pattern)
     float speed        = p_speed >= 0.0 ? p_speed : 0.06;

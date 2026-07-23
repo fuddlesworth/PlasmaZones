@@ -17,7 +17,10 @@ namespace PhosphorRendering {
  * @brief IUniformExtension implementation for zone data.
  *
  * Appends zone arrays (zoneRects, zoneFillColors, zoneBorderColors, zoneParams)
- * after BaseUniforms in the UBO. Total extension size: MaxZones * 4 * sizeof(float) * 4 = 4096 bytes.
+ * plus the trailing zoneScale scalar after BaseUniforms in the UBO. Total
+ * extension size: MaxZones * 4 * sizeof(float) * 4 + 16 = 4112 bytes (the
+ * scalar plus the 12 pad bytes std140 needs to close the block on a 16-byte
+ * boundary).
  *
  * The zone data layout matches the GLSL UBO declaration in common.glsl exactly,
  * and is binary-compatible with the zone region of ZoneShaderUniforms.
@@ -35,6 +38,11 @@ public:
     ZoneUniformExtension()
     {
         std::memset(&m_data, 0, sizeof(m_data));
+        // Identity scale until the item reports the real device-pixel ratio.
+        // A zeroed scale would multiply every radius and border width to 0,
+        // so the first frames of a fresh overlay would render square-cornered
+        // and border-less before the first setScale() lands.
+        m_data.zoneScale = 1.0f;
     }
 
     int extensionSize() const override
@@ -93,6 +101,27 @@ public:
         m_dirty.store(true, std::memory_order_release);
     }
 
+    /// Set the logical-to-device scale the shader applies to the lengths in
+    /// zoneParams (corner radius, border width). Called on the GUI thread from
+    /// the item's sync phase with the same device-pixel ratio the node's
+    /// resolution is scaled by, so `radius * uZoneScale` lands in the same
+    /// device-px space as iResolution and vFragCoord.
+    ///
+    /// Separate from updateFromZones() because the two change on different
+    /// clocks: zone contents churn per drag frame, the scale only when the
+    /// overlay moves to a differently-scaled screen. Guarded by the same mutex
+    /// and only marks dirty on an actual change, so a per-frame call from the
+    /// sync phase costs nothing.
+    void setScale(float scale)
+    {
+        QMutexLocker lock(&m_mutex);
+        if (qFuzzyCompare(m_data.zoneScale, scale)) {
+            return;
+        }
+        m_data.zoneScale = scale;
+        m_dirty.store(true, std::memory_order_release);
+    }
+
 private:
     /// Raw zone extension data — matches the zone region of ZoneShaderUniforms exactly.
     struct alignas(16) ZoneExtensionData
@@ -101,10 +130,13 @@ private:
         float zoneFillColors[MaxZones][4];
         float zoneBorderColors[MaxZones][4];
         float zoneParams[MaxZones][4];
+        float zoneScale;
+        float _pad_after_zoneScale[3];
     };
 
-    static_assert(sizeof(ZoneExtensionData) == MaxZones * 4 * sizeof(float) * 4,
-                  "ZoneExtensionData must be MaxZones * 4 arrays * 4 floats");
+    static_assert(sizeof(ZoneExtensionData) == MaxZones * 4 * sizeof(float) * 4 + 4 * sizeof(float),
+                  "ZoneExtensionData must be MaxZones * 4 arrays * 4 floats, plus the "
+                  "zoneScale scalar and its std140 tail pad");
     // Field offsets must match the GLSL UBO layout in common.glsl exactly.
     // Reordering or inserting fields here silently breaks shader rendering
     // (no compile error, just wrong colors/positions on every zone).
@@ -115,6 +147,8 @@ private:
                   "zoneBorderColors must follow zoneFillColors with no gap");
     static_assert(offsetof(ZoneExtensionData, zoneParams) == 3 * sizeof(float[MaxZones][4]),
                   "zoneParams must follow zoneBorderColors with no gap");
+    static_assert(offsetof(ZoneExtensionData, zoneScale) == 4 * sizeof(float[MaxZones][4]),
+                  "zoneScale must follow zoneParams with no gap");
     // Verify ZoneExtensionData is binary-identical to the zone region of
     // ZoneShaderUniforms (BaseUniforms + this == ZoneShaderUniforms layout).
     static_assert(sizeof(ZoneExtensionData) == sizeof(ZoneShaderUniforms) - sizeof(PhosphorShaders::BaseUniforms),

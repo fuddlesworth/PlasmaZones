@@ -82,8 +82,10 @@ vec3 chromaticSample(float baseVal, float edgeDist, float strength) {
 vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                         vec4 params, bool isHighlighted,
                         float bass, float mids, float treble, float overall, bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
@@ -91,7 +93,7 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     vec2 p = fragCoord - center;
     vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
 
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     // Params
     float cellScale = p_cellScale >= 0.0 ? p_cellScale : 12.0;

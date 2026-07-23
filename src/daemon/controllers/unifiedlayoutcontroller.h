@@ -5,6 +5,11 @@
 
 #include "core/utils/unifiedlayoutlist.h"
 #include <PhosphorLayoutApi/LayoutPreview.h>
+// Layout must be COMPLETE here, not forward-declared: the layoutApplied signal
+// below carries a PhosphorZones::Layout*, and moc's metatype registration asks
+// whether that type is complete. Answering "no" and then completing the type
+// later in the same translation unit is what -Wsfinae-incomplete reports.
+#include <PhosphorZones/Layout.h>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -22,7 +27,6 @@ class ITileAlgorithmRegistry;
 }
 
 namespace PhosphorZones {
-class Layout;
 class LayoutRegistry;
 }
 

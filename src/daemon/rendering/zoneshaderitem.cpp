@@ -21,6 +21,8 @@
 #include <QImage>
 #include <QMetaType>
 #include <QMutexLocker>
+#include <QQuickWindow>
+#include <QScreen>
 #include <QStandardPaths>
 #include <QVariantMap>
 
@@ -452,6 +454,25 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             node->invalidateShader();
             setStatus(Status::Null);
         }
+    }
+
+    // ── Logical-to-device scale for the lengths in zoneParams ────────
+    //
+    // Corner radius and border width arrive from settings in LOGICAL px, but
+    // the shader's rect / fragCoord space is DEVICE px, because
+    // ZoneUniformExtension leaves requiresPhysicalResolution() at its true
+    // default and the base therefore uploads iResolution pre-multiplied by the
+    // window's effective DPR. Report the SAME ratio the base uses for that
+    // multiply — deriving it any other way (screen()->devicePixelRatio(), the
+    // item's own size) reintroduces the mismatch on fractional scales.
+    //
+    // Pushed unconditionally rather than under m_zoneDataDirty: moving the
+    // overlay to a differently-scaled screen changes the ratio without
+    // touching zone contents, and setScale() early-outs when the value is
+    // unchanged, so the steady-state cost is a mutex lock and a compare.
+    {
+        const qreal dpr = (window() && window()->screen()) ? window()->effectiveDevicePixelRatio() : 1.0;
+        m_zoneExtension->setScale(static_cast<float>(dpr));
     }
 
     // ── Sync zone data to the node AFTER shader is ready ─────────────

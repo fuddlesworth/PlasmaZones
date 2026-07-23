@@ -571,8 +571,10 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float SPEED = getSpeed();
     float vitality = zoneVitality(isHighlighted);
 
-    float borderRadius = max(params.x, 4.0);
-    float borderWidth  = max(params.y, 1.0);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
@@ -581,7 +583,7 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
     localUV = clamp(localUV, 0.0, 1.0);
 
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     vec4 result = vec4(0.0);
 
@@ -673,13 +675,15 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 // doesn't darken an adjacent zone's fill during blendOver compositing.
 vec4 arethaZoneGlow(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted) {
     float vitality = zoneVitality(isHighlighted);
-    float borderRadius = max(params.x, 4.0);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     vec2 center   = rectPos + rectSize * 0.5;
     vec2 p        = fragCoord - center;
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     float glowExtent = vitalityScale(10.0, 28.0, vitality);
     if (d > 0.0 && d < glowExtent) {

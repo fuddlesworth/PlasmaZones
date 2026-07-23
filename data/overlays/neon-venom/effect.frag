@@ -194,11 +194,14 @@ vec4 renderNeonVenomZone(
     vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
     float px = pxScale();
 
-    float borderRadius = params.x * px;
-    float borderWidth = params.y * px;
-    vec2 halfSize = rectSize * 0.5;
-    vec2 centered = fragCoord - rectPos - halfSize;
-    float sdf = sdRoundedBox(centered, halfSize, borderRadius);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    // This pack used to scale by pxScale() (a 1080p-relative factor) rather
+    // than the display scale, so its corners tracked resolution instead of
+    // DPI and diverged from both its sibling packs and the decorations.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
+    float sdf = zoneShape.d;
 
     // Early-out: wide enough for rim glow at max audio + edge glow headroom
     if (sdf > borderWidth * 2.0 + 60.0 * px) return vec4(0.0);

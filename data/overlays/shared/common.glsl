@@ -36,6 +36,13 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 zoneFillColors[64];
     vec4 zoneBorderColors[64];
     vec4 zoneParams[64];
+    // Logical-to-device scale: multiply a length expressed in LOGICAL px (the
+    // units the settings UI and zoneParams use) by this to reach the device-px
+    // space iResolution / vFragCoord / zoneRectPos are in. The overlay
+    // counterpart of the decoration contract's uSurfaceScale
+    // (data/surface/shared/surface_uniforms.glsl). std140 places this float
+    // immediately after the zoneParams array; the block pads to 16 from here.
+    float uZoneScale;
 };
 
 // Per-zone context handed to a `vec4 pZone(ZoneCtx z)` entry function (T1.4).
@@ -52,6 +59,9 @@ struct ZoneCtx {
     vec4  fillColor;     // zoneFillColors[i]
     vec4  borderColor;   // zoneBorderColors[i]
     vec4  params;        // zoneParams[i] (x=borderRadius, y=borderWidth, z=highlight flag, …)
+                         // x/y are LOGICAL px — pass them through zoneSdf() /
+                         // zoneBorderWidth() rather than using them raw, so they
+                         // reach device px the way decoration packs do.
     bool  isHighlighted; // zoneParams[i].z > 0.5
 };
 
@@ -133,6 +143,58 @@ vec2 zoneLocalUV(vec2 fragCoord, vec2 rectPos, vec2 rectSize) {
 float sdRoundedBox(vec2 p, vec2 b, float r) {
     vec2 q = abs(p) - b + r;
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+}
+
+// Zone frame geometry + rounded-rect signed distance — the overlay counterpart
+// of the decoration side's frameSdf() (data/surface/shared/surface_lib.glsl).
+// One call replaces the centre / half-size / radius / SDF idiom every overlay
+// pack repeated inline, and fixes the three ways those inline copies diverged
+// from the decoration packs:
+//
+//   * SCALE. `radiusLogical` is the pack's LOGICAL-px radius (zoneParams[i].x
+//     is the user's configured value in logical px). It is multiplied by
+//     uZoneScale to reach the device-px space the rect and fragCoord live in,
+//     exactly as decoration packs multiply by uSurfaceScale. The inline copies
+//     skipped this, so on a 2x display an overlay corner rounded half as hard
+//     as a decoration corner set to the same number.
+//   * CLAMP. The radius is clamped to half the smaller side. sdRoundedBox()
+//     with r greater than a half-extent distorts the silhouette (the inset
+//     box inverts), which a narrow zone in a multi-column layout hits at
+//     ordinary radius values. frameSdf() has always clamped; the inline copies
+//     never did.
+//   * NO FLOOR. The inline copies each applied their own `max(params.x, N)`
+//     with N of 4, 6, or 8 depending on the pack, so a configured radius of 0
+//     still rounded, by a different amount per pack. The configured value is
+//     now honoured exactly, including 0 for square corners.
+//
+// `fragCoord` is the device-px fragment (ZoneCtx::fragCoord / vFragCoord),
+// `rect` the normalised zoneRects[i].
+struct ZoneSDF {
+    vec2 center;     // zone centre, device px
+    vec2 halfSize;   // zone half-extents, device px
+    float radius;    // scaled + clamped corner radius, device px
+    float d;         // signed distance; negative inside the zone
+};
+ZoneSDF zoneSdf(vec2 fragCoord, vec4 rect, float radiusLogical) {
+    ZoneSDF z;
+    z.halfSize = zoneRectSize(rect) * 0.5;
+    z.center = zoneRectPos(rect) + z.halfSize;
+    z.radius = clamp(radiusLogical * uZoneScale, 0.0, min(z.halfSize.x, z.halfSize.y));
+    z.d = sdRoundedBox(fragCoord - z.center, z.halfSize, z.radius);
+    return z;
+}
+// ZoneCtx convenience form: reads the fragment, rect, and logical radius
+// (params.x) straight off the per-zone context a pZone entry point receives.
+ZoneSDF zoneSdf(ZoneCtx z) {
+    return zoneSdf(z.fragCoord, z.rect, z.params.x);
+}
+
+// Border width in device px: the pack's logical-px width (zoneParams[i].y)
+// scaled by uZoneScale, so a border keeps its physical thickness across
+// output scales the same way a decoration pack's width does. Floored at one
+// device pixel so a hairline never vanishes entirely on a fractional scale.
+float zoneBorderWidth(float widthLogical) {
+    return max(widthLogical * uZoneScale, 1.0);
 }
 
 // 2D rotation matrix. mat2 is column-major, so p * rot(a) rotates by +a,

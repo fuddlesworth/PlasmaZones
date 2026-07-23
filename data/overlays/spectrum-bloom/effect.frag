@@ -39,8 +39,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 vec4 params, bool isHighlighted,
                 float bass, float mids, float treble, float overall, bool hasAudio)
 {
-    float borderRadius = max(params.x, 6.0);
-    float borderWidth  = max(params.y, 2.5);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
     // Parameters with defaults (sentinel: -1.0 = unset -> use default)
     float reactivity   = p_reactivity >= 0.0 ? p_reactivity : 1.5;
@@ -61,7 +63,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec2 center   = rectPos + rectSize * 0.5;
     vec2 p        = fragCoord - center;  // KEEP for border/glow angle
     vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
-    float d       = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d       = zoneShape.d;
 
     // Screen-space polar coords
     vec2 screenCenter = iResolution.xy * 0.5;

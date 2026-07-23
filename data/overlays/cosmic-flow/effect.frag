@@ -28,8 +28,10 @@
 
 vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted,
                       float bass, float mids, float treble, bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     // Get shader parameters with defaults
     float speed = p_speed >= 0.0 ? p_speed : 0.1;
@@ -58,13 +60,12 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
-    vec2 halfSize = rectSize * 0.5;
 
     // Position relative to zone center
     vec2 p = fragCoord - center;
 
     // Calculate SDF
-    float d = sdRoundedBox(p, halfSize, borderRadius);
+    float d = zoneShape.d;
 
     // Global screen-space UV for pattern generation -- one continuous field
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));

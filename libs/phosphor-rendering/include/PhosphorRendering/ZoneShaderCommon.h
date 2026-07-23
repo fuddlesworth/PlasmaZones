@@ -47,12 +47,27 @@ struct alignas(16) ZoneShaderUniforms
     float zoneFillColors[MaxZones][4];
     float zoneBorderColors[MaxZones][4];
     float zoneParams[MaxZones][4];
+
+    // Logical-to-device scale for the lengths carried in zoneParams (corner
+    // radius, border width). The GLSL counterpart is `uZoneScale` at the tail
+    // of the ZoneUniforms block in data/overlays/shared/common.glsl. std140
+    // places a float directly after the preceding vec4 array, so no leading
+    // pad is needed; the three trailing floats round the block out to the
+    // 16-byte boundary std140 requires.
+    float zoneScale;
+    float _pad_after_zoneScale[3];
 };
 
 static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds expected size");
 static_assert(offsetof(ZoneShaderUniforms, base) == 0, "base must be at offset 0");
 static_assert(offsetof(ZoneShaderUniforms, zoneRects) == sizeof(PhosphorShaders::BaseUniforms),
               "zoneRects must follow BaseUniforms with no gap");
+// std140 puts a scalar directly after a vec4 array — pin that, because an
+// accidental pad here shifts uZoneScale and every overlay pack silently reads
+// garbage as its logical-to-device scale (corners round by a random factor).
+static_assert(offsetof(ZoneShaderUniforms, zoneScale)
+                  == offsetof(ZoneShaderUniforms, zoneParams) + sizeof(float[MaxZones][4]),
+              "zoneScale must follow zoneParams with no gap (std140 scalar after vec4 array)");
 
 /**
  * @brief UBO region offsets for partial updates (reduces GPU bandwidth).

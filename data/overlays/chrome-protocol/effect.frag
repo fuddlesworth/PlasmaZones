@@ -743,8 +743,10 @@ vec3 renderGlobalScene(vec2 fragCoord, GlobalParams g) {
 // Per-zone chrome: fill (from global scene with vitality), border, glow.
 vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                       vec4 zParams, vec3 sceneCol, GlobalParams g, bool isHighlighted) {
-    float borderRadius = max(zParams.x, 6.0);
-    float borderWidth  = max(zParams.y, 2.5);
+    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, zParams.x);
+    float borderWidth  = zoneBorderWidth(zParams.y);
     float fillOpacity  = p_fillOpacity;
     float edgeGlow     = p_edgeGlow;
 
@@ -752,7 +754,7 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     vec2 rectSize = zoneRectSize(rect);
     vec2 center   = rectPos + rectSize * 0.5;
     vec2 p        = fragCoord - center;
-    float d       = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d       = zoneShape.d;
     float px      = pxScale();
 
     float vitality = zoneVitality(isHighlighted);

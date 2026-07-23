@@ -41,6 +41,10 @@ private Q_SLOTS:
     void write_nonZeroOffset_writesAtRequestedOffset();
     void dirty_initiallyTrue_clearable();
     void dirty_setOnUpdateFromZones();
+    void scale_defaultsToIdentity();
+    void scale_writesAtTailOffset();
+    void scale_survivesZoneUpdate();
+    void dirty_setOnScaleChangeOnly();
     void layout_matchesZoneShaderUniformsOffsets();
 };
 
@@ -90,7 +94,8 @@ void TestZoneUniformExtension::extensionSize_matchesZoneShaderUniformsRegion()
     ZoneUniformExtension ext;
     const int expected = static_cast<int>(sizeof(ZoneShaderUniforms) - sizeof(PhosphorShaders::BaseUniforms));
     QCOMPARE(ext.extensionSize(), expected);
-    QCOMPARE(ext.extensionSize(), MaxZones * kArraysPerZone * kBytesPerVec4);
+    // The zone arrays plus the trailing zoneScale scalar and its std140 pad.
+    QCOMPARE(ext.extensionSize(), MaxZones * kArraysPerZone * kBytesPerVec4 + kBytesPerVec4);
 }
 
 void TestZoneUniformExtension::write_emptyZones_zerosAllSlots()
@@ -327,6 +332,82 @@ void TestZoneUniformExtension::dirty_setOnUpdateFromZones()
     QVERIFY(ext.isDirty());
 }
 
+namespace {
+
+/// Read the trailing zoneScale scalar out of a written extension buffer.
+float readScale(const std::vector<char>& buf)
+{
+    float scale = 0.0f;
+    std::memcpy(&scale, buf.data() + MaxZones * kArraysPerZone * kBytesPerVec4, sizeof(float));
+    return scale;
+}
+
+} // namespace
+
+void TestZoneUniformExtension::scale_defaultsToIdentity()
+{
+    // Not merely cosmetic: the shader multiplies every corner radius and border
+    // width by this, so a zeroed default would paint square, border-less zones
+    // until the item's first sync reported the real device-pixel ratio.
+    ZoneUniformExtension ext;
+    std::vector<char> buf(ext.extensionSize(), char{0x55});
+    ext.write(buf.data(), 0);
+    QCOMPARE(readScale(buf), 1.0f);
+}
+
+void TestZoneUniformExtension::scale_writesAtTailOffset()
+{
+    ZoneUniformExtension ext;
+    ext.setScale(2.0f);
+
+    std::vector<char> buf(ext.extensionSize(), 0);
+    ext.write(buf.data(), 0);
+    QCOMPARE(readScale(buf), 2.0f);
+
+    // The scale must not bleed into the last zone's params — an off-by-one in
+    // the tail offset would land inside zoneParams[63] and corrupt that zone.
+    const Vec4 lastParams = readVec4(buf, 3, MaxZones - 1);
+    QCOMPARE(lastParams.x, 0.0f);
+    QCOMPARE(lastParams.y, 0.0f);
+    QCOMPARE(lastParams.z, 0.0f);
+    QCOMPARE(lastParams.w, 0.0f);
+}
+
+void TestZoneUniformExtension::scale_survivesZoneUpdate()
+{
+    // Zone contents and the scale are pushed by separate calls on different
+    // clocks. updateFromZones() must not stomp a scale already reported, or a
+    // drag frame would reset the overlay to 1x mid-gesture on a scaled screen.
+    ZoneUniformExtension ext;
+    ext.setScale(1.5f);
+
+    QVector<ZoneData> zones;
+    zones.append(makeZone(0.0, 0.0, 1.0, 1.0, QColor::fromRgbF(1.0f, 1.0f, 1.0f, 1.0f),
+                          QColor::fromRgbF(1.0f, 1.0f, 1.0f, 1.0f),
+                          /*radius*/ 8.0f, /*width*/ 2.0f, /*highlighted*/ false, /*number*/ 1));
+    ext.updateFromZones(zones);
+
+    std::vector<char> buf(ext.extensionSize(), 0);
+    ext.write(buf.data(), 0);
+    QCOMPARE(readScale(buf), 1.5f);
+}
+
+void TestZoneUniformExtension::dirty_setOnScaleChangeOnly()
+{
+    ZoneUniformExtension ext;
+    ext.setScale(2.0f);
+    ext.clearDirty();
+
+    // Re-reporting the same ratio must not dirty the extension: the item calls
+    // setScale() every frame, and a spurious dirty would re-upload the whole
+    // 4 KiB zone region on every frame of every overlay.
+    ext.setScale(2.0f);
+    QVERIFY(!ext.isDirty());
+
+    ext.setScale(1.0f);
+    QVERIFY(ext.isDirty());
+}
+
 void TestZoneUniformExtension::layout_matchesZoneShaderUniformsOffsets()
 {
     // Write integer-valued zone data (no float-precision noise from QColor's
@@ -351,6 +432,9 @@ void TestZoneUniformExtension::layout_matchesZoneShaderUniformsOffsets()
     expected.zoneBorderColors[0][1] = 1.0f;
     expected.zoneBorderColors[0][2] = 0.0f;
     expected.zoneBorderColors[0][3] = 1.0f;
+    // A fresh extension reports the identity scale, not a zeroed one — see the
+    // constructor's note on why zero would render the first frames square.
+    expected.zoneScale = 1.0f;
 
     ZoneUniformExtension ext;
     QVector<ZoneData> zones;

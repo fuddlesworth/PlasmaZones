@@ -99,8 +99,12 @@ inline QString resolveZoneVertexPath(const QString& fragmentPath, const QStringL
         return {};
     }
     for (const QString& root : trustedShaderRoots()) {
-        for (const QString& candidate :
-             {root + QStringLiteral("/shared/zone.vert"), root + QStringLiteral("/zone.vert")}) {
+        // Build the candidates as real QStrings. A braced list of `root + ...`
+        // yields QStringBuilder expressions, and binding `const QString&` to
+        // those forces a hidden conversion temporary per iteration
+        // (-Wrange-loop-construct).
+        const QStringList candidates{root + QStringLiteral("/shared/zone.vert"), root + QStringLiteral("/zone.vert")};
+        for (const QString& candidate : candidates) {
             if (QFile::exists(candidate)) {
                 return candidate;
             }
