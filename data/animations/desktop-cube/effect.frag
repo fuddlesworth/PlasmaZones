@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-FileCopyrightText: gl-transitions contributors
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Desktop Cube — the outgoing and incoming desktops rotate past each other as
@@ -8,7 +9,6 @@
 // persp/unzoom/reflection/floating uniforms map to the p_* params.
 #include <desktop_transition.glsl>
 
-#ifdef PLASMAZONES_KWIN
 vec2 pz_cube_project(vec2 p) {
     return p * vec2(1.0, -1.2) + vec2(0.0, -p_floating / 100.0);
 }
@@ -37,10 +37,8 @@ vec2 pz_cube_xskew(vec2 p, float persp, float center) {
                 * vec2(0.5 / distance(center, 0.5) * (center < 0.5 ? 1.0 : -1.0), 1.0)
             + vec2(center < 0.5 ? 0.0 : 1.0, 0.0));
 }
-#endif // PLASMAZONES_KWIN
 
 vec4 pTransition(vec2 uv, float tRaw) {
-#ifdef PLASMAZONES_KWIN
     // Clamp the timeline. iTime is NOT bounded to [0,1] — an overshooting curve
     // (spring, back, elastic) delivers its overshoot — and this transform has hard
     // [0,1] assumptions in three places: pow(t, 2.0) is undefined for t < 0 and
@@ -55,7 +53,7 @@ vec4 pTransition(vec2 uv, float tRaw) {
     // At the exact endpoints one face is zero-width, so its skew divides by zero
     // and yields inf/NaN coords. That is intentional (canonical GL-Transitions
     // "cube"): the inf face fails pz_cube_inBounds and the other, full-width face
-    // is checked first and drawn, so no black frame results.
+    // passes its check and is drawn, so no black frame results.
     vec2 fromP = pz_cube_xskew((p - vec2(t, 0.0)) / vec2(1.0 - t, 1.0), 1.0 - mix(t, 0.0, p_persp), 0.0);
     vec2 toP = pz_cube_xskew(p / vec2(t, 1.0), mix(pow(t, 2.0), 1.0, p_persp), 1.0);
     if (pz_cube_inBounds(fromP)) {
@@ -64,7 +62,4 @@ vec4 pTransition(vec2 uv, float tRaw) {
         return getToColor(toP);
     }
     return pz_cube_bgColor(fromP, toP);
-#else
-    return vec4(0.0);
-#endif
 }

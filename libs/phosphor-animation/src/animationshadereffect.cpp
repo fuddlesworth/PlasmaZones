@@ -214,7 +214,16 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     // opt-in desktop and move classes — see shaderEffectAppliesToEventPath).
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
-        const QJsonArray appliesArr = obj.value(QLatin1String("appliesTo")).toArray();
+        const QJsonValue appliesVal = obj.value(QLatin1String("appliesTo"));
+        // Shape guard: a present-but-non-array appliesTo (a bare string is
+        // the plausible author typo) would silently reduce to universal via
+        // toArray(); an in-array unknown token warns below, so the shape
+        // error deserves the same journal signal.
+        if (!appliesVal.isUndefined() && !appliesVal.isArray()) {
+            qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: appliesTo for effect" << e.id
+                                         << "is not an array; ignoring it (pack treated as universal).";
+        }
+        const QJsonArray appliesArr = appliesVal.toArray();
         for (const QJsonValue& v : appliesArr) {
             const QString token = v.toString().trimmed();
             if (token == PP::EventClassGeometry || token == PP::EventClassAppearance || token == PP::EventClassDesktop
@@ -453,6 +462,16 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
         return effect.appliesTo.contains(PP::EventClassGeometry) || effect.appliesTo.contains(PP::EventClassAppearance);
     }
     return effect.appliesTo.contains(cls);
+}
+
+bool shaderEffectIsCompositorOnly(const AnimationShaderEffect& effect)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    // Universal packs (no declared constraint) run on every single-surface
+    // path, daemon overlays included. A constrained pack reaches the daemon
+    // only through the appearance class — desktop / geometry / move events
+    // exist solely inside the kwin-effect.
+    return !effect.appliesTo.isEmpty() && !effect.appliesTo.contains(PP::EventClassAppearance);
 }
 
 } // namespace PhosphorAnimationShaders

@@ -10,7 +10,7 @@
     "parameters": [
         {
             "id": "scale",
-            "name": "Speckle Size",
+            "name": "Speckle Density",
             "type": "float",
             "default": 180.0,
             "min": 20.0,

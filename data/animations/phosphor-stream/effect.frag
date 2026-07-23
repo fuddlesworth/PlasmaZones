@@ -14,13 +14,10 @@
 // Old and new content are sampled at the SAME card uv and cross-faded by
 // arrival ease (flow's contract), so each shows at its own native aspect.
 
-#ifdef PLASMAZONES_KWIN
 // .xy = card uv within the destination rect, .z = arrival ease, .w = lane
 // seed. Interpolated from effect.vert across the grid.
 layout(location = 1) in vec4 vFlow;
-#endif
 
-#include <anchor_remap.glsl>
 #include <noise.glsl>
 
 // uOldWindow + oldColor(): the shared captured-old-frame sampler.
@@ -40,13 +37,14 @@ vec3 fluxGradient(float t) {
 }
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     vec2 cuv = vFlow.xy;
     float e = clamp(vFlow.z, 0.0, 1.0);
     float lane = vFlow.w;
 
-    // Feathered window mask in card space — the grid spans the whole
-    // output, so only cells inside the card carry window content. The card
+    // Feathered window mask in card space — the grid spans the padded
+    // decoration canvas (paint_capture.cpp sets it to the layer's canvasGeo,
+    // falling back to the frame rect), so cuv runs past [0, 1] into the halo
+    // band rather than covering the whole output. The card
     // runs past [0, 1] by the decoration chain's outer margin: that band is
     // the halo the compositor composited into the padded canvas, which
     // surfaceColor() resolves through its layer remap, so the mask includes
@@ -73,12 +71,14 @@ vec4 pTransition(vec2 uv, float t) {
     // Gradient light riding the stream: hue per lane (the separated
     // streams show different stops) drifting with the ease.
     vec3 flux = fluxGradient(fract(lane * 0.35 + e * 0.45));
-    // Squaring, written as a multiply. pow(x, 2.0) is UNDEFINED for x < 0 per the
-    // GLSL spec, and (e - 0.5) is negative for half of every leg — strict drivers
-    // return NaN. Pre-existing, not an iTime consequence (e is clamped upstream),
-    // but undefined either way and free to fix.
+    // Squared via multiply: pow(x, 2.0) is undefined for x < 0 per the GLSL
+    // spec, and (e - 0.5) is negative for half of every leg.
     float d = (e - 0.5) * 3.2;
     float front = exp(-d * d) * mid;
+    // Additive emissive: this deliberately pushes rgb above alpha, breaking
+    // the premultiplied rgb <= a invariant the cross-fade packs keep. That is
+    // the intended glow. The clamp below holds rgb inside [0, 1] so the
+    // overbright stays bounded — it does NOT restore rgb <= a.
     col.rgb += flux * front * clamp(p_frontGlow, 0.0, 2.0) * 0.55 * col.a;
 
     // Ember sparks shed in the un-settled wake: brief hash twinkles that
@@ -97,9 +97,4 @@ vec4 pTransition(vec2 uv, float t) {
 
     col.rgb = clamp(col.rgb, 0.0, 1.0);
     return col * mask;
-#else
-    // Daemon path: the stream is compositor-only. Render the surface
-    // unchanged so the shader bakes for the daemon target.
-    return surfaceColor(anchorRemap(uv));
-#endif
 }

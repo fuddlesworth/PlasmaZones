@@ -62,11 +62,15 @@ constraint and the condition under which it should be revisited.
 | `libs/phosphor-tile-engine/include/PhosphorTileEngine/AutotileEngine.h` | 1638 | **Partial exception.** Single Q_OBJECT class; most of its lines are Doxygen prose. Nested-struct extraction plus doc trimming (see §2.2) lands it around 1100–1200. Any residual over 1150 is documentation on a language-atomic class declaration. | After the §2.2 extraction lands, if still over ceiling, accept the remainder. |
 
 Grace-band headers that look like exceptions but are merely TOLERATED (single-class
-headers under 1150, no action): `src/daemon/daemon.h` (1149), `src/daemon/overlayservice.h`
+headers under 1150, no action): `src/daemon/daemon.h` (1150), `src/daemon/overlayservice.h`
 (1137), `src/settings/controller/settingscontroller.h` (1149),
 `PhosphorZones/LayoutRegistry.h` (1119), `PhosphorSnapEngine/SnapEngine.h` (1085).
-Warning for daemon.h: the daemon.cpp split adds ~10 private declarations; trim its
-longest doc essays in the same PR to stay under 1150.
+Warning for daemon.h: it sits just under 1150 after one round of doc-essay
+trimming, so any further declaration must be paid for by trimming again.
+
+Completed split: `src/daemon/daemon/signals.cpp` (was 1088) had
+`initializeAutotile()` extracted to `src/daemon/daemon/autotile_init.cpp`,
+leaving 625 and 568 lines respectively.
 
 `src/ui/PassiveOverlayShell.qml` (1047) is TOLERATED but flagged **near-exception**:
 C++ (`OverlayService`) writes properties directly onto its slot Items and inner
@@ -351,7 +355,7 @@ list; missing QML files in `qt6_add_qml_module` fail at runtime, not build time.
 | 1189 | libs/phosphor-tiles/src/pluau/pluau.luau | EXCEPTION |
 | 1160 | src/editor/EditorController.h | SPLIT (§2.6) |
 | 1149 | src/settings/controller/settingscontroller.h | TOLERATED |
-| 1149 | src/daemon/daemon.h | TOLERATED (watch: daemon.cpp split adds decls) |
+| 1150 | src/daemon/daemon.h | TOLERATED at the ceiling; doc essays trimmed once already, next addition must trim again |
 | 1137 | src/daemon/overlayservice.h | TOLERATED |
 | 1131 | src/config/settingsschema.cpp | TOLERATED (seam: per-domain append functions) |
 | 1130 | libs/phosphor-zones/src/layoutregistry_assignments.cpp | TOLERATED (easy seam: contextresolve vs CRUD) |
@@ -365,7 +369,6 @@ list; missing QML files in `qt6_add_qml_module` fail at runtime, not build time.
 | 1099 | libs/phosphor-config/src/jsonbackend.cpp | TOLERATED (trivial seam: JsonGroup) |
 | 1090 | src/daemon/daemon/start.cpp | TOLERATED (easy seam: shortcuts.cpp / virtual_screens.cpp) |
 | 1089 | tests/unit/settings/stores/test_profilestore.cpp | TOLERATED |
-| 1088 | src/daemon/daemon/signals.cpp | TOLERATED (easy seam: autotile_init.cpp) |
 | 1087 | src/editor/qml/PropertyPanel.qml | TOLERATED (twinFormLayouts obstacle) |
 | 1080 | src/settings/stores/profilestore.cpp | TOLERATED (seam: CRUD partial) |
 | 1079 | libs/phosphor-snap-engine/include/PhosphorSnapEngine/SnapEngine.h | TOLERATED |

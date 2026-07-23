@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Phosphor Stream vertex shader — the Phosphor set's geometry pack: the
 // window pours into its zone as separated luminous streams.
 //
-// Built on flow's grid mechanics (the grid sits on the DESTINATION rect;
+// Built on flow's grid mechanics (the grid sits on the padded composite
+// canvas with DESTINATION-frame-relative texcoords;
 // each vertex's displacement is the pull back toward iFromRect, vanishing
 // as its region arrives) with one addition: LANES. The card is cut into
 // strips parallel to the travel axis, and each lane runs its own slightly
@@ -25,7 +26,6 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 // Geometry-morph endpoints (logical-screen px, x/y/w/h), pushed by the
 // kwin-effect paint pipeline for any shader that declares them.
@@ -35,13 +35,14 @@ uniform vec4 iToRect;
 // ease (0 = still at the old rect, 1 = settled), .w = lane seed.
 layout(location = 1) out vec4 vFlow;
 
+// Deliberately local rather than including noise.glsl: the vertex stage
+// needs exactly one scalar hash, and the frag already carries the full
+// noise module for its own use.
 float laneHash(float n) {
     return fract(sin(n * 127.1 + 311.7) * 43758.5453);
 }
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     // Card uv with y = 0 at the window top (KWin Y-flips window-quad
     // texcoords on upload; re-apply the flip, same as flow).
     vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
@@ -91,10 +92,4 @@ void main() {
     vTexCoord = cuv;
     vFlow = vec4(cuv, e, lh);
     gl_Position = modelViewProjectionMatrix * vec4(position + delta, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the geometry stream is compositor-only. Pass
-    // the quad through so the shader still bakes — mirrors flow's branch.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }

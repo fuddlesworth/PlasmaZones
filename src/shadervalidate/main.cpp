@@ -18,15 +18,17 @@
 //     daemon Qt-RHI path.
 //   • animation/transition packs (--animation, data/animations/*):
 //     AnimationShaderEffect + the animation entry scaffold (pTransition / pIn+pOut)
-//     + paramPreamble; validates effect.frag on the daemon Qt-RHI path. (The
-//     kwin-effect classic-GL branch is not baked — see validateAnimationPack.)
+//     + paramPreamble; validates effect.frag on the daemon Qt-RHI path.
+//     Compositor-only packs get metadata lints only — their kwin classic-GL
+//     source is never baked here (see validateAnimationPack).
 //   • surface/decoration packs (--surface, data/surface/*):
 //     SurfaceShaderEffect + paramPreamble; validates effect.frag, buffer
 //     passes, and the shared vertex stage on the daemon Qt-RHI path — see
 //     validateSurfacePack.
 //
 // Usage:
-//   plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface] <path> [<path> ...]
+//   plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface]
+//                               [--emit-preamble] [--] <path> [<path> ...]
 // where each <path> is either a pack directory (contains metadata.json) or a
 // root that holds pack subdirectories. Exits non-zero if any pack has an error.
 
@@ -179,9 +181,18 @@ int main(int argc, char** argv)
     // --emit-preamble: don't validate — write each pack's `p_<id>` autocomplete
     // sidecar (T2.2) for editor tooling.
     bool emitMode = false;
+    bool endOfOptions = false;
     for (int i = 1; i < argc; ++i) {
         const QString a = QString::fromLocal8Bit(argv[i]);
-        if (a == QLatin1String("--quiet") || a == QLatin1String("-q")) {
+        // Everything after a bare `--` is a path, so a pack directory literally
+        // named `--surface` (or any other flag spelling) stays reachable.
+        if (endOfOptions) {
+            args << a;
+            continue;
+        }
+        if (a == QLatin1String("--")) {
+            endOfOptions = true;
+        } else if (a == QLatin1String("--quiet") || a == QLatin1String("-q")) {
             quiet = true;
         } else if (a == QLatin1String("--animation") || a == QLatin1String("-a")) {
             animationMode = true;
@@ -200,7 +211,7 @@ int main(int argc, char** argv)
     }
     if (args.isEmpty()) {
         errStream << "usage: plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface] "
-                     "[--emit-preamble] <pack-dir-or-root> [...]\n"
+                     "[--emit-preamble] [--] <pack-dir-or-root> [...]\n"
                   << "  --overlay         zone/overlay packs (data/overlays/*)        [default]\n"
                   << "  --animation       transition/animation packs (data/animations/*)\n"
                   << "  --surface         surface-layer packs (data/surface/*)\n"

@@ -8,11 +8,14 @@
 #include <desktop_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     // Sweep direction follows the actual switch when p_followSwitch is on; the
     // configured p_dirX / p_dirY vector is the fallback / override.
     vec2 cfg = vec2(p_dirX, p_dirY);
-    vec2 dir = normalize(((p_followSwitch > 0.5) ? switchDirection(cfg) : cfg) + vec2(1.0e-6, 0.0));
+    // Zero-direction guard: fall back to a rightward sweep instead of
+    // epsilon-nudging into normalize (tiny opposing components can still
+    // cancel a nudge into NaN — same guard idiom as phosphor-peek).
+    vec2 raw = (p_followSwitch > 0.5) ? switchDirection(cfg) : cfg;
+    vec2 dir = dot(raw, raw) > 1.0e-6 ? normalize(raw) : vec2(1.0, 0.0);
     // Project onto the sweep direction, normalised by the direction's L1 extent
     // so proj spans exactly [0,1] corner-to-corner for ANY direction. A plain
     // dot()+0.5 overshoots [0,1] on diagonals (a unit diagonal reaches ±0.707),
@@ -25,7 +28,4 @@ vec4 pTransition(vec2 uv, float t) {
     // proj < sweep -> already wiped to the incoming desktop.
     float fromSide = smoothstep(sweep - soft, sweep + soft, proj);
     return mix(getToColor(uv), getFromColor(uv), fromSide);
-#else
-    return vec4(0.0);
-#endif
 }

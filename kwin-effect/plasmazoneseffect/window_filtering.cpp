@@ -236,6 +236,15 @@ bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow*
     }
 
     // Special / non-manageable window types (inherently effect-side — KWin metadata).
+    //
+    // isFullScreen() is the one REVERSIBLE state in an otherwise type-based
+    // set, and that is deliberate: a fullscreen window must not be a snap or
+    // autotile target while it is fullscreen, and every consumer of this
+    // predicate wants that. The consequence to know about is that it also
+    // suppresses activation reporting and classifies a fullscreen window as
+    // Transient for as long as the state lasts; both revert when the window
+    // leaves fullscreen. Do not "clean up" the state check out of here without
+    // re-adding an equivalent rejection at the snap/tile call sites.
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()) {
         if (rejectReason) {
             *rejectReason = QStringLiteral("special/desktop/dock/fullscreen/skipSwitcher window type");
@@ -307,6 +316,16 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         return false;
     }
 
+    // Close-grabbed corpse: reject BEFORE the rule slice below, which builds a
+    // ruleQuery and therefore calls getWindowId(w). That re-inserts the
+    // reverse-map entry buildWindowMap deliberately skips for deleted windows
+    // — the very pollution windowOwnKeepAbove's own isDeleted guard exists to
+    // prevent, which is inert here because ruleQuery runs first. A dying
+    // window is never a snap target regardless.
+    if (w->isDeleted()) {
+        return rejectedBecause(rejectReason, "deleted window");
+    }
+
     // Keep-above overlays (Spectacle, color pickers, screen rulers, screenshot
     // tools that linger after capture) shouldn't be snapped to a zone — same
     // rationale as isTileableWindow's keep-above gate. Consults the window's
@@ -323,7 +342,7 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     // must filter for drag operations and lifecycle reporting).
     // `m_snappingExclusionRuleSet` mirrors the Exclude-shaped slice of the
     // unified Rule store, refreshed on every rulesChanged via
-    // loadRuleAnimationsFromDbus (see shader_transitions.cpp). The
+    // loadRuleAnimationsFromDbus (see shader_config_dbus.cpp). The
     // `!isEmpty()` fast path keeps a no-exclusions user at two pointer
     // reads — same cost as the prior list-derived check.
     if (!m_snappingExclusionRuleSet.isEmpty()) {
@@ -343,14 +362,32 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
 
     const QString windowClass = w->windowClass();
 
+    // NOTE: unlike shouldHandleWindow and shouldDecorateWindow, this gate
+    // deliberately has NO isDeleted() bail. slotWindowClosed calls
+    // tryBeginShaderForEvent BEFORE the id-cache scrub, and a window.close
+    // animation genuinely needs the id — adding the guard here would kill
+    // close transitions. Do not "complete the refactor" by adding one.
+    //
     // Structural non-window surfaces — panels (docks), the desktop,
     // plasmoid / Plasma-shell surfaces, and other special or
     // skip-switcher windows are never application windows; a
     // window-event shader on them is always wrong. Hard-excluded with
-    // no toggle and ahead of the rule-override path, mirroring the
-    // structural rejections `shouldHandleWindow()` already applies.
+    // no toggle and ahead of the rule-override path. This set deliberately
+    // DIVERGES from isStructurallyUnmanageableWindowType: it omits
+    // isFullScreen() (a fullscreen window closing should still animate) and
+    // the transient/dialog family (handled toggleably below). Do NOT fold the
+    // two into one predicate — shouldDecorateWindow carries the same warning.
+    //
+    // Our OWN surfaces (the daemon's layer-shell overlays, the editor
+    // toplevel) and portal dialogs are rejected here for the same reason
+    // shouldHandleWindow() and shouldDecorateWindow() reject them: animating
+    // our own UI redirects it through OffscreenEffect and makes the overlay
+    // that is drawing the animation itself animate. shouldAnimateWindow is
+    // the ONLY filter on the tryBeginShaderForEvent path (window_lifecycle),
+    // so omitting them here is not covered elsewhere.
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isSkipSwitcher()
-        || isPlasmaShellSurface(windowClass)) {
+        || isPlasmaShellSurface(windowClass) || isOwnOverlayClass(windowClass)
+        || isXdgDesktopPortalSurface(windowClass)) {
         return false;
     }
 
@@ -423,7 +460,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // (Type exclusions are handled above and are NOT bypassable here.)
     //
     // `m_shaderManager.animationRuleSet()` admits every rule carrying a
-    // Tag::Effect action (shader_transitions.cpp's `hasTag(type, Tag::Effect)`
+    // Tag::Effect action (shader_config_dbus.cpp's `hasTag(type, Tag::Effect)`
     // loop; the tag assignments in ruleaction.cpp are the authoritative
     // membership list). So a rule
     // whose only action is an appearance or layer override also force-animates
@@ -470,6 +507,12 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
 bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
 {
     if (!w) {
+        return false;
+    }
+    // Same reason as shouldHandleWindow: the rule slice below builds a
+    // ruleQuery, whose getWindowId(w) would re-pollute the id caches for a
+    // close-grabbed corpse. A dying window is never a decoration target.
+    if (w->isDeleted()) {
         return false;
     }
 
@@ -674,10 +717,12 @@ bool PlasmaZonesEffect::isDaemonReady(const char* methodName) const
 
 KWin::EffectWindow* PlasmaZonesEffect::getActiveWindow() const
 {
-    // Prefer KWin's active (focused) window when it is manageable and on current desktop
+    // Prefer KWin's active (focused) window when it is manageable and on current
+    // desktop. Skip a close-grabbed dying window here for the same reason the
+    // fallback loop does — it must not become the navigation / snap-assist anchor.
     KWin::EffectWindow* active = KWin::effects->activeWindow();
-    if (active && active->isOnCurrentActivity() && active->isOnCurrentDesktop() && !active->isMinimized()
-        && shouldHandleWindow(active)) {
+    if (active && !active->isDeleted() && active->isOnCurrentActivity() && active->isOnCurrentDesktop()
+        && !active->isMinimized() && shouldHandleWindow(active)) {
         return active;
     }
     // Fallback: topmost manageable window on current desktop (e.g. when activeWindow() is

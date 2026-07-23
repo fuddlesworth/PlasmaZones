@@ -5,14 +5,7 @@
 
 #include <PhosphorRendering/ShaderCompiler.h>
 
-#include <QDateTime>
-#include <QFileInfo>
-#include <QQuickWindow>
-#include <cmath>
-#include <cstring>
 #include <type_traits>
-
-#include <rhi/qshaderbaker.h>
 
 namespace PhosphorRendering {
 
@@ -123,7 +116,30 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
             state.channelResolution[i][1] = 1.0f;
         }
     }
-    state.audioSpectrumSize = static_cast<int>(m_audioSpectrum.size());
+    // Publish a bar count safe against whichever texture is actually bound at
+    // draw: the smaller of the currently-bound width and the count the audio
+    // block below will resize to. audio.glsl's audioBar() validates barIndex
+    // against this then texelFetch()es — and an out-of-range texelFetch is
+    // undefined in GLSL (unlike texture(), it does not clamp) — so advertising
+    // more bars than the bound texture is wide is a real out-of-bounds read.
+    //
+    // This region is filled EARLIER in uploadDirtyTextures() than the audio
+    // block that resizes the texture, so neither the pre-resize width nor the
+    // pending count is safe alone. On a GROW the texture may still be the old
+    // smaller width this frame (a failed create() keeps it, and the
+    // m_dummyChannelTextureNeedsUpload early return skips the resize outright),
+    // so the pending count would over-report. On a SHRINK the bound width is
+    // still the old larger one here while the block is about to shrink the
+    // texture, so the bound width would over-report. min() under-reports in
+    // both directions instead, which is safe — audioBar() just reads fewer
+    // bars for a frame — and a successful resize re-arms m_uniformsDirty so the
+    // next frame republishes the settled width. The pending count mirrors the
+    // audio block's own `uploadBars` (raw size clamped to the device limit).
+    const int boundAudioWidth = m_audioSpectrumTexture ? m_audioSpectrumTexture->pixelSize().width() : 0;
+    const int audioDeviceMax = rhi ? rhi->resourceLimit(QRhi::TextureSizeMax) : 0;
+    const int rawAudioBars = static_cast<int>(m_audioSpectrum.size());
+    const int pendingAudioBars = (audioDeviceMax > 0) ? qMin(rawAudioBars, audioDeviceMax) : rawAudioBars;
+    state.audioSpectrumSize = qMin(boundAudioWidth, pendingAudioBars);
 
     // User texture resolutions (bindings 7-10) — resolved node-side.
     for (int i = 0; i < kMaxUserTextures; ++i) {
@@ -149,16 +165,20 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
 //     when called repeatedly for the same extension.
 //   - Clears the extension's dirty bit (the extension's own isDirty() is
 //     the authoritative upload gate — there is no node-side mirror).
+//   - clearDirty() runs BEFORE write(): a GUI-thread setter landing between
+//     the two then re-arms the flag and the missed value uploads next frame.
+//     The old write-then-clear order silently dropped that setter's dirty
+//     bit, freezing its value until the next unrelated set.
 void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 {
     const int extSize = m_uniformExtension->extensionSize();
     if (m_extensionStaging.size() != extSize) {
         m_extensionStaging.resize(extSize);
     }
+    m_uniformExtension->clearDirty();
     m_uniformExtension->write(m_extensionStaging.data(), 0);
     const int extOffset = m_uboProfile->baseSize();
     batch->updateDynamicBuffer(m_ubo.get(), extOffset, extSize, m_extensionStaging.constData());
-    m_uniformExtension->clearDirty();
 }
 
 // ============================================================================
@@ -326,8 +346,27 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
 
     // Audio spectrum texture: resize if needed, upload when dirty
     if (m_audioSpectrumDirty && m_audioSpectrumTexture && m_audioSpectrumSampler) {
-        const int bars = m_audioSpectrum.size();
+        // Clamp the bar count to the device limit. In practice the bundled
+        // producer caps at PhosphorAudio::Defaults::MaxBars (256), but
+        // `audioSpectrum` is a writable QML property and neither setter bounds
+        // the vector LENGTH, so an oversized spectrum is reachable rather than
+        // hypothetical — and an unclamped one fails create() every frame.
+        // `uploadBars` drives BOTH the texture extent and the QImage below, so
+        // the two can never disagree.
+        const int deviceMax = rhi->resourceLimit(QRhi::TextureSizeMax);
+        const int rawBars = static_cast<int>(m_audioSpectrum.size());
+        const int uploadBars = (deviceMax > 0) ? qMin(rawBars, deviceMax) : rawBars;
+        if (uploadBars < rawBars && !m_warnedAudioTruncated) {
+            // Latch: this block re-runs at spectrum cadence (~60 Hz), and an
+            // oversized vector stays oversized — without the latch it floods
+            // the journal. Same shape as m_warnedForeignRhi.
+            m_warnedAudioTruncated = true;
+            qCWarning(lcShaderNode) << "audio spectrum has" << rawBars << "bars, exceeding device TextureSizeMax"
+                                    << deviceMax << "— truncating";
+        }
+        const int bars = uploadBars;
         const QSize targetSize = bars > 0 ? QSize(bars, 1) : QSize(1, 1);
+        bool audioResizeFailed = false;
         if (m_audioSpectrumTexture->pixelSize() != targetSize) {
             // Build the resized texture into a local and only swap it in on a
             // successful create(), so a failed resize keeps the previous working
@@ -336,18 +375,39 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             // stranding a non-created texture with dirty already cleared.
             std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
             if (!resized->create()) {
-                qCWarning(lcShaderNode) << "audio spectrum texture create() failed for size" << targetSize
-                                        << ", keeping previous texture; will retry next frame";
-                return;
-            }
-            m_audioSpectrumTexture = std::move(resized);
-            resetAllBindingsAndPipelines();
-            if (!ensurePipeline()) {
-                return;
+                if (!m_warnedAudioCreateFailed) {
+                    // Latched for the same reason: the retry is per-frame by
+                    // design, so an unrecoverable size would log every frame.
+                    m_warnedAudioCreateFailed = true;
+                    qCWarning(lcShaderNode) << "audio spectrum texture create() failed for size" << targetSize
+                                            << ", keeping previous texture; will retry next frame";
+                }
+                // Fall THROUGH rather than return: this block sits above the
+                // user-texture, source-provider, fallback and wallpaper
+                // uploads, and a persistently failing spectrum would otherwise
+                // starve all of them for the node's life. dirty stays set, so
+                // the resize still retries next frame.
+                audioResizeFailed = true;
+            } else {
+                m_audioSpectrumTexture = std::move(resized);
+                // iAudioSpectrumSize mirrors the bound texture's width, and the
+                // UBO region for this frame was filled before this resize ran.
+                // Re-arm so the next frame publishes the new width.
+                m_uniformsDirty = true;
+                m_sceneDataDirty = true;
+                resetAllBindingsAndPipelines();
+                if (!ensurePipeline()) {
+                    return;
+                }
             }
         }
-        m_audioSpectrumDirty = false;
-        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+        // Clear dirty only once a batch is in hand: nextResourceUpdateBatch()
+        // returns null when Qt's 64-batch pool is exhausted, and clearing
+        // first would drop the upload with nothing left to re-arm it.
+        QRhiResourceUpdateBatch* batch = audioResizeFailed ? nullptr : rhi->nextResourceUpdateBatch();
+        if (batch) {
+            m_audioSpectrumDirty = false;
+        }
         if (batch && bars > 0) {
             QImage img(bars, 1, QImage::Format_RGBA8888);
             for (int i = 0; i < bars; ++i) {
@@ -370,64 +430,76 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             m_userTextureSamplers[i].reset(
                 rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
             if (!m_userTextureSamplers[i]->create()) {
+                // Reset to null so the `!m_userTextureSamplers[i]` re-create
+                // gate above fires again next frame (dirty is still set) —
+                // a stranded non-created sampler would otherwise pass the
+                // truthiness gates below and be bound into the SRB.
+                qCWarning(lcShaderNode) << "user texture slot" << i << "sampler create() failed, will retry next frame";
+                m_userTextureSamplers[i].reset();
                 continue;
             }
             resetAllBindingsAndPipelines();
         }
-        // Sampler is the only hard prerequisite — m_userTextures[i] may be
-        // null after a previous failed create() on this slot, in which case
-        // the size-mismatch branch below allocates fresh. Without that gate
-        // relaxation the failed-create retry promised by the qCWarning text
-        // is structurally unreachable: the loop short-circuits on
-        // !m_userTextures[i] before line 354 ever runs again.
+        // Sampler is the only hard prerequisite. m_userTextures[i] is null
+        // before the slot's first successful allocation (and after
+        // releaseRhiResources), and the size-mismatch branch below is what
+        // allocates it — so gating on the texture here would make the very
+        // first upload unreachable. Defensive beyond that: since the local-
+        // swap rework no path in this file leaves the slot null after a
+        // failed create.
         if (!m_userTextureDirty[i] || !m_userTextureSamplers[i]) {
             continue;
         }
-        const QImage& img = m_userTextureImages[i];
+        QImage img = m_userTextureImages[i];
         QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);
         // Clamp against the device's hard texture-size limit. A user-supplied
         // PNG larger than the device max (commonly 16384 on desktop GPUs but
         // as low as 4096 on some mobile/Vulkan drivers) would otherwise hit
         // newTexture()->create() == false below. Clamping to the device limit
-        // is a graceful degradation — the texture upload below will scale-fit
-        // the image into the clamped bounds via QRhi's blit semantics.
+        // is a graceful degradation, but it must be paired with an explicit
+        // downscale of the SOURCE image: QRhi::uploadTexture copies 1:1 and
+        // performs no scaling, so handing it an oversized QImage against a
+        // clamped texture is a validation failure, not a fit.
         const int textureSizeMax = rhi->resourceLimit(QRhi::TextureSizeMax);
         if (textureSizeMax > 0 && (targetSize.width() > textureSizeMax || targetSize.height() > textureSizeMax)) {
             qCWarning(lcShaderNode) << "user texture slot" << i << "size" << targetSize
                                     << "exceeds device TextureSizeMax" << textureSizeMax << ", clamping";
             targetSize = QSize(qMin(targetSize.width(), textureSizeMax), qMin(targetSize.height(), textureSizeMax));
+            img = img.scaled(targetSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
         }
         // Branch covers two cases uniformly:
-        //   (a) initial allocation when m_userTextures[i] is null (after a
-        //       prior failed create reset us to nullptr).
+        //   (a) initial allocation when m_userTextures[i] is null (first
+        //       upload for the slot, or after releaseRhiResources).
         //   (b) resize when the existing texture's pixel size doesn't match
         //       the new target.
         if (!m_userTextures[i] || m_userTextures[i]->pixelSize() != targetSize) {
-            m_userTextures[i].reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
-            if (!m_userTextures[i]->create()) {
+            // Build into a local and swap only on a successful create()
+            // (mirrors the audio-spectrum and wallpaper paths): the SRB
+            // built on the prior frame still binds the old texture raw, so
+            // freeing it before the replacement is confirmed would leave
+            // that frame's draw sampling a destroyed QRhiTexture. On
+            // failure the slot keeps its previous texture (or stays null on
+            // initial alloc, which appendUserTextureBindings() skips via
+            // its truthiness gate) and dirty stays set, so a transient
+            // RHI-side condition (OOM, device loss) self-heals next frame.
+            std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
+            if (!resized->create()) {
                 qCWarning(lcShaderNode) << "user texture slot" << i << "create() failed for size" << targetSize
                                         << ", slot will retry next frame";
-                // Reset to nullptr so appendUserTextureBindings() skips the
-                // slot via its truthiness gate (the SRB must NOT bind a
-                // failed texture; it would wire a non-functional GPU resource
-                // into the pipeline). Keep dirty=true so the next prepare()
-                // pass retries — the relaxed gate above lets a null pointer
-                // re-enter this branch on the next frame, so a transient
-                // RHI-side condition (OOM, device loss, post-clamp size
-                // acceptance) can clear and the slot self-heals.
-                m_userTextures[i].reset();
                 continue;
             }
+            m_userTextures[i] = std::move(resized);
             resetAllBindingsAndPipelines();
             if (!ensurePipeline()) {
                 return;
             }
         }
-        // Clear dirty AFTER successful create so a transient failure above
-        // keeps the slot scheduled for retry.
-        m_userTextureDirty[i] = false;
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
+            // Clear dirty AFTER a successful create AND once a batch is in
+            // hand: a null batch (Qt's 64-batch pool exhausted) must leave the
+            // slot scheduled, or the upload is dropped with nothing to re-arm.
+            m_userTextureDirty[i] = false;
             if (!img.isNull() && img.width() > 0 && img.height() > 0) {
                 ubatch->uploadTexture(m_userTextures[i].get(), img);
             } else {
@@ -515,15 +587,25 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
 
     // Desktop wallpaper texture upload (binding 11)
     if (m_wallpaperDirty && m_wallpaperTexture && m_wallpaperSampler) {
-        m_wallpaperDirty = false;
         const QImage& img = m_wallpaperImage;
         const QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);
         if (m_wallpaperTexture->pixelSize() != targetSize) {
-            m_wallpaperTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
-            if (!m_wallpaperTexture->create()) {
-                m_wallpaperTexture.reset();
+            // Build the resized texture into a local and only swap it in on a
+            // successful create() (mirrors the audio-spectrum path above): a
+            // failed resize keeps the previous working texture alive — the SRB
+            // still references it, so freeing it first would leave the bound
+            // pipeline sampling a destroyed QRhiTexture — and leaves
+            // m_wallpaperDirty set for a retry next frame. The wallpaper
+            // texture is allocated exactly once at node init, so nulling it
+            // here with dirty cleared would blank the wallpaper for the
+            // node's remaining life.
+            std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
+            if (!resized->create()) {
+                qCWarning(lcShaderNode) << "wallpaper texture create() failed for size" << targetSize
+                                        << ", keeping previous texture; will retry next frame";
                 return;
             }
+            m_wallpaperTexture = std::move(resized);
             resetAllBindingsAndPipelines();
             if (!ensurePipeline()) {
                 return;
@@ -531,6 +613,10 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
+            // Same batch-in-hand rule as the audio and user-texture paths: the
+            // wallpaper texture is allocated once at node init, so a dropped
+            // upload with dirty already cleared blanks it for the node's life.
+            m_wallpaperDirty = false;
             if (!img.isNull() && img.width() > 0 && img.height() > 0) {
                 ubatch->uploadTexture(m_wallpaperTexture.get(), img);
             } else {
@@ -590,6 +676,8 @@ void ShaderNodeRhi::releaseRhiResources()
     m_lastSourceRhiTexture = nullptr;
     m_sourceSamplerFailed = false; // re-attempt sampler creation on next prepare()
     m_warnedForeignRhi = false; // re-warn (once) after device reset
+    m_warnedAudioTruncated = false;
+    m_warnedAudioCreateFailed = false;
     m_transparentFallbackTexture.reset();
     m_transparentFallbackTextureNeedsUpload = false;
 

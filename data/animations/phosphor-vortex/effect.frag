@@ -56,7 +56,6 @@ float pingPong(float x) {
 // Full turn; the shared headers define no TAU on the KWin path.
 const float kTau = 6.28318530718;
 
-#ifdef PLASMAZONES_KWIN
 // Fade a card-space sample to zero as it approaches the edge of the texture
 // it actually resolves into (the padded surface layer when one is active,
 // the expanded uTexture0 otherwise). Displaced taps past that extent would
@@ -68,10 +67,8 @@ float texelInsideMask(vec2 uv) {
            * (vec2(1.0) - smoothstep(vec2(0.996), vec2(1.0), tc));
     return e.x * e.y;
 }
-#endif
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     vec2 auv = anchorRemap(uv);
 
     // Dissolve IS the leg progress: 0→1 at grab, pinned 1 while held,
@@ -96,7 +93,10 @@ vec4 pTransition(vec2 uv, float t) {
 
     // Continuous rotation for as long as the effect is alive — iFrame is
     // monotonic through the whole held leg, so the plasma keeps swirling
-    // however long the drag holds still.
+    // however long the drag holds still. Frame-keyed spin is refresh-rate
+    // dependent (a 144 Hz display swirls 2.4x faster than 60 Hz); accepted:
+    // the swirl is decorative, has no timeline to keep, and iDate.w (the
+    // rate-independent alternative) wraps at midnight.
     float spin = float(iFrame) * 0.03 * clamp(p_spin, 0.0, 3.0);
     float streaks = clamp(p_streaks, 0.0, 1.0);
 
@@ -107,9 +107,13 @@ vec4 pTransition(vec2 uv, float t) {
     // pulled a different depth along its ray so the smear reads as motion
     // blur INTO the vortex. Angle-striped gating (constant along each ray)
     // tears the smear into discrete streamlines feeding the cloud, and a
-    // noise erosion front eats the content as it nears the cursor. The
-    // whole body fades out as the dissolve completes, so at full hold the
-    // window is GONE. ──
+    // noise erosion front breaks the smear up as it nears the cursor. Note
+    // the erosion term rides the per-tap WEIGHTS, and the accumulator is
+    // renormalised by those same weights — so a uniform erosion across the
+    // six taps cancels and only inter-tap variance survives (that variance
+    // is the visible break-up). What actually fades the body is `holdBody`
+    // below. The whole body fades out as the dissolve completes, so at full
+    // hold the window is GONE. ──
     float holdBody = 1.0 - dEase;
     if (holdBody > 0.003) {
         float suction = clamp(p_suction, 0.0, 1.0);
@@ -156,15 +160,46 @@ vec4 pTransition(vec2 uv, float t) {
     float cloudGain = smoothstep(0.1, 0.75, dEase) * clamp(p_glow, 0.0, 2.0);
     if (cloudGain > 0.003) {
         float cloudR = max(p_cloudSize, 20.0) / anchor.y;
+        const int kGhosts = 6;
+        // Radial early-out. This is an fboExtent:"surface" pack, so the quad
+        // spans the whole output and anchorRemap pushes auv far past [0,1] for
+        // a small window on a large screen — without this gate every fragment
+        // pays 6 iterations of sin/pow/exp/atan plus a 4-stop gradient for the
+        // entire duration of a drag, on an effect already documented as
+        // GPU-bound.
+        //
+        // The bound must be CONSERVATIVE. iMoveTrail holds absolute frame
+        // origins by AGE (slot 0 newest, one per 15 ms), NOT by distance — on
+        // a reversal drag an intermediate slot can sit far outside the newest
+        // and the oldest. So take the max offset over exactly the six slots
+        // the loop below reads; bounding by any single slot can cull a
+        // fragment sitting on another ghost's centre.
+        float maxOffPc = 0.0;
+        for (int k = 0; k < kGhosts; ++k) {
+            vec2 offPc = (iMoveTrail[int(float(k) / float(kGhosts - 1) * 12.0)] / anchor) * vec2(aspect, 1.0);
+            maxOffPc = max(maxOffPc, length(offPc));
+        }
+        // Triangle inequality: gr >= (|pc - cpc| - maxOff) / cloudR for every
+        // ghost, so nearR is a true lower bound on each ghost's gr.
+        float nearR = max(length(pc - cpc) - maxOffPc, 0.0) / cloudR;
+        // Threshold the EMITTED contribution, not one unweighted term: the
+        // falloff is scaled by fil (peaks ~1.30), summed over the ghosts
+        // (Sum(w) <= 2.56 with a compact trail) and then by cloudGain * 0.45.
+        // Fold those in so the cut is below one 8-bit step of real output.
+        float peakFall = exp(-nearR * nearR * 1.4) * 1.30 + exp(-nearR * nearR * 8.0) * 0.9;
+        if (peakFall * 2.56 * cloudGain * 0.45 < 1.0 / 255.0) {
+            outC.rgb = clamp(outC.rgb, 0.0, 1.0);
+            return outC;
+        }
         vec3 cloudC = vec3(0.0);
         float cloudA = 0.0;
 
-        const int kGhosts = 6;
         for (int g = 0; g < kGhosts; ++g) {
             float gf = float(g) / float(kGhosts - 1);
 
             // Ghost centres ride the drag history (old origin - now).
-            vec2 gOffPc = (iMoveTrail[int(min(gf * 12.0, 15.0))] / anchor) * vec2(aspect, 1.0);
+            // gf <= 1, so the index tops out at 12 of iMoveTrail's 16 slots.
+            vec2 gOffPc = (iMoveTrail[int(gf * 12.0)] / anchor) * vec2(aspect, 1.0);
             vec2 grel = pc - (cpc + gOffPc);
             float gr = length(grel) / cloudR;
             float gAng = atan(grel.y, grel.x);
@@ -193,10 +228,4 @@ vec4 pTransition(vec2 uv, float t) {
 
     outC.rgb = clamp(outC.rgb, 0.0, 1.0);
     return outC;
-#else
-    // Daemon RHI bake target: the vortex is compositor-only (held-move
-    // uniforms never populate here). Pass the surface through so the shader
-    // still bakes — mirrors wobble's daemon branch.
-    return surfaceColor(anchorRemap(uv));
-#endif
 }

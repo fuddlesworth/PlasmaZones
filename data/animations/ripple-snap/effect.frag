@@ -8,20 +8,15 @@
 // old->new cross-fade through vRip. This stage samples the window at the
 // card uv, cross-fades the captured old frame into the live content as the
 // move settles (so a resize re-lays correctly), multiplies in the ripple
-// shade, and masks the window's [0, 1] card rect.
+// shade, and masks the window's pad-widened card rect.
 
-#ifdef PLASMAZONES_KWIN
 // .xy = sampling card uv, .z = ripple shade, .w = old->new cross-fade.
 layout(location = 1) in vec4 vRip;
-#endif
-
-#include <anchor_remap.glsl>
 
 // uOldWindow + oldColor(): the shared captured-old-frame sampler.
 #include <old_content.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     vec2 cuv = vRip.xy;
     float shade = clamp(vRip.z, 0.0, 1.0);
     float fade = clamp(vRip.w, 0.0, 1.0);
@@ -41,11 +36,11 @@ vec4 pTransition(vec2 uv, float t) {
     vec4 oldC = oldColor(cuv);     // captured old frame, native aspect
     vec4 newC = surfaceColor(cuv); // live new content, native aspect
 
-    // Cross-fade old -> new as the move settles, then apply the ripple
-    // shade. Inputs are premultiplied, so a straight mix and a scalar
-    // multiply are both correct on premultiplied colour.
+    // Cross-fade old -> new with the rigid travel (complete by IMPACT, before
+    // the ripple phase), then apply the ripple shade. The scalar multiply
+    // scales alpha too, so on premultiplied
+    // colour the wave troughs are deliberately a coverage fade (the
+    // backdrop ghosts through slightly) rather than a pigment darken —
+    // and it keeps the rgb <= a premultiplied invariant intact.
     return mix(oldC, newC, fade) * shade * mask;
-#else
-    return surfaceColor(anchorRemap(uv));
-#endif
 }

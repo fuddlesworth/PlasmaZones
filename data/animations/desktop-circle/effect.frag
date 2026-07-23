@@ -9,9 +9,9 @@
 #include <desktop_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     vec2 center = vec2(p_centerX, p_centerY);
-    float aspect = iResolution.x / max(iResolution.y, 1.0);
+    vec2 res = resolutionSafe();
+    float aspect = res.x / res.y;
     // Aspect-correct the distance so the iris is a round circle, not an oval.
     vec2 d = uv - center;
     d.x *= aspect;
@@ -31,7 +31,4 @@ vec4 pTransition(vec2 uv, float t) {
     vec4 inside = close ? getFromColor(uv) : getToColor(uv);
     vec4 outside = close ? getToColor(uv) : getFromColor(uv);
     return mix(inside, outside, outsideMask);
-#else
-    return vec4(0.0);
-#endif
 }

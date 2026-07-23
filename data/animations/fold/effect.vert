@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Fold vertex shader — grid-deformed origami window-move.
 //
 // The window concertinas along its travel axis (creases run perpendicular
 // to the direction of motion), folding up mid-flight and unfolding flat
 // into the destination zone. Runs on the same window-relative grid as the
-// flow effect: apply() builds an NxN grid over the destination frame rect
+// flow effect: apply() builds an NxN grid over the padded composite canvas
+// with destination-frame-relative texcoords
 // (metadata `geometryGrid`), and this stage displaces each vertex.
 //
 // Geometry is computed in card space (an orthonormal travel/perp basis),
@@ -24,17 +25,15 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
 // Per-vertex data for the fragment: .xy = sampling card uv, .z = crease
-// shade (1 = lit ridge, < 1 = shadowed valley), .w = old->new cross-fade.
+// shade (1 = lit ridge, < 1 = shadowed valley, applied as a coverage
+// fade — see effect.frag), .w = old->new cross-fade.
 layout(location = 1) out vec4 vFold;
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     const float PI = 3.14159265358979;
     const float FOLDS = 5.0;      // crease count along the travel axis
     const float COMPRESS = 0.35;  // how far the accordion pulls in at full fold
@@ -55,8 +54,11 @@ void main() {
     // would reach its target and then snap BACKWARD ~7% at the very moment the
     // curve overshoots, bouncing the wrong way. Ease the clamped value and carry
     // the overshoot as a LINEAR extension past the ends, which keeps the mix
-    // monotone while still letting the rect overshoot — the bounce is the point on
-    // a geometry morph, so it is preserved rather than refused.
+    // monotone while still letting the rect overshoot — the bounce is the point
+    // of THIS morph, so it is preserved rather than refused. Not a family-wide
+    // rule: flow, ripple-snap and phosphor-stream deliberately consume bounded
+    // progress instead, because a slam and a stagger each carry their own
+    // character envelope and an extra curve overshoot would fight it.
     float ec = clamp(tt, 0.0, 1.0);
     float ease = ec * ec * (3.0 - 2.0 * ec) + (tt - ec);
     // Tent fold amount: flat at both ends, fully folded at mid-flight. sin(PI*tt)
@@ -94,30 +96,23 @@ void main() {
     // (the grid sits on iToRect). quad-space <-> screen-space is a pure
     // 1:1 translation, so the screen delta applies straight to `position`.
     // POSITION takes the unbounded `ease` (the overshoot IS the bounce); SIZE takes a
-    // bounded copy. Lerping the whole vec4 with `ease`, as this did, extrapolates the
+    // bounded copy. Lerping the whole vec4 with `ease` extrapolates the
     // EXTENT: the engine bounds delivered progress to the overshoot envelope [-1, 2]
     // (legProgress flips a reverse leg's -1 to tt = +2), and even at that ceiling a
     // strong shrink computes rect.zw = 2*to - from: NEGATIVE width and height whenever
     // the window halves or more. `screenPos` then mirrors the card and inflates it: a
-    // flipped, garbage-scaled window. (Before the envelope, elastic reached ease =
-    // 3.45 and produced extents like (-8028, -4257).) This is verbatim the hazard
-    // window-morph guards against, and it belongs here too.
+    // flipped, garbage-scaled window. This is verbatim the hazard window-morph
+    // guards against, and it belongs here too.
     vec4 rect = vec4(mix(iFromRect.xy, iToRect.xy, ease), mix(iFromRect.zw, iToRect.zw, clamp(ease, 0.0, 1.0)));
     vec2 screenPos = rect.xy + duv * rect.zw;
     vec2 toPos = iToRect.xy + cuv * iToRect.zw;
     vec2 displaced = position + (screenPos - toPos);
 
-    // Crease shade: ridges toward the viewer stay lit, valleys darken with
-    // fold depth.
+    // Crease shade: ridges toward the viewer stay lit, valleys fade toward
+    // the backdrop with fold depth (a coverage fade — see effect.frag).
     float shade = 1.0 - f * SHADE * (0.5 - saw);
 
     vTexCoord = cuv;
     vFold = vec4(cuv, shade, ease);
     gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the fold is compositor-only. Pass the quad
-    // through so the shader still bakes and is harmless if ever run.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }

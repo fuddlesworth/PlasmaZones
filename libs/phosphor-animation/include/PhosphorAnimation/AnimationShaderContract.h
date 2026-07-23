@@ -370,11 +370,14 @@ inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
 /// (`uOldWindow`) into the live new content. Both default to `(0,0,0,0)`
 /// for non-morph transitions (window.open/close/etc.), which a shader can
 /// treat as "no morph". COMPOSITOR PATH ONLY, and deliberately NOT
-/// declared by the canonical shared header: each geometry-morph pack
-/// (flow, fold, ripple-snap, stretch, window-morph) declares the pair
-/// itself inside its own `#ifdef PLASMAZONES_KWIN` block — geometry
-/// events never run on the daemon, and the guard keeps the daemon's
-/// strict SPIR-V bake from ever seeing the loose declarations.
+/// declared by the canonical shared header: geometry-morph packs are
+/// compositor-only (`appliesTo: ["geometry"]`), so each one (flow, fold,
+/// phosphor-stream, ripple-snap, stretch, window-morph) declares the pair
+/// as plain default-block uniforms with no guard — the daemon never
+/// bakes or attaches such packs (`shaderEffectIsCompositorOnly` gates
+/// the warm-bake, SurfaceAnimator, the daemon-target bake tests, and
+/// shadervalidate), so its strict SPIR-V path never sees the loose
+/// declarations.
 inline constexpr const char* kIFromRect = "iFromRect";
 inline constexpr const char* kIToRect = "iToRect";
 
@@ -392,10 +395,13 @@ inline constexpr const char* kIToRect = "iToRect";
 /// window is painted only during its own output's pass, so a
 /// deformation toward a foreign-output icon clips at that output's
 /// edge. COMPOSITOR PATH ONLY and deliberately NOT declared by the
-/// canonical shared header, exactly like `iFromRect` / `iToRect`: a pack
-/// that reads it declares it inside its own `#ifdef PLASMAZONES_KWIN`
-/// block, keeping the daemon's strict SPIR-V bake away from the loose
-/// declaration.
+/// canonical shared header. Unlike `iFromRect` / `iToRect` (whose
+/// geometry-pack consumers are compositor-only and declare them
+/// unguarded), the packs that read this one (genie, phosphor-siphon)
+/// are appearance-class and DAEMON-CAPABLE, so each declares it inside
+/// its own `#ifdef PLASMAZONES_KWIN` block — that guard is what keeps
+/// the daemon's strict SPIR-V bake of these dual-runtime packs away
+/// from the loose declaration.
 inline constexpr const char* kIIconRect = "iIconRect";
 
 /// `sampler2D uOldWindow` — snapshot of the window's content captured at
@@ -408,7 +414,8 @@ inline constexpr const char* kIIconRect = "iIconRect";
 /// declared by the canonical header — only the `iHasOldWindow` gate int
 /// is; packs that sample old content opt in via
 /// `data/animations/shared/old_content.glsl`, which declares the sampler
-/// inside its own `#ifdef PLASMAZONES_KWIN` guard.
+/// unguarded: every including pack is compositor-only, excluded from the
+/// daemon's SPIR-V bake entirely via `shaderEffectIsCompositorOnly`.
 inline constexpr const char* kUOldWindow = "uOldWindow";
 
 /// `sampler2D uSurfaceLayer` — COMPOSITOR PATH ONLY. The window's surface
@@ -538,12 +545,14 @@ inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";
 /// `.xy = (cursorX, cursorY)` relative to the shader surface's origin
 /// (window frame origin on the kwin path; overlay surface origin on
 /// the daemon path); `(-1, -1)` when the cursor is outside the shader's
-/// surface. `.zw` are reserved for click state in the daemon overlay
-/// contract; the kwin path leaves them at 0.
+/// surface. `.zw` on the kwin path carry the same cursor position
+/// normalised to the frame size ([0, 1] inside the window, negative
+/// when the off-surface sentinel applies) — phosphor-vortex reads them;
+/// the daemon overlay contract reserves `.zw` for click state.
 inline constexpr const char* kIMouse = "iMouse";
 
 /// `vec4 customParams[N]` — per-effect declared parameter slots.
-/// Cross-runtime element-name lookup constant: used by the kwin-effect's
+/// Cross-runtime element-name lookup constant: mirrored by (not consumed from) the kwin-effect's
 /// `glGetUniformLocation("customParams[N]")` calls (the canonical header's
 /// `#ifdef PLASMAZONES_KWIN` branch declares them as default-block uniforms
 /// `customParams[0]..customParams[7]`) and as a documentation anchor for
@@ -590,7 +599,7 @@ inline QString slotKey(int slot)
 
 /// `vec4 customColors[N]` — per-effect declared color parameter slots.
 /// Cross-runtime element-name lookup constant, symmetric with
-/// `kCustomParamsArray` above: used by the kwin-effect's
+/// `kCustomParamsArray` above: mirrored by (not consumed from) the kwin-effect's
 /// `glGetUniformLocation("customColors[N]")` calls (the canonical
 /// header's `#ifdef PLASMAZONES_KWIN` branch declares them as
 /// default-block uniforms `customColors[0]..customColors[15]`) and as

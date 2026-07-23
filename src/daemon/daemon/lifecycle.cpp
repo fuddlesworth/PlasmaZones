@@ -489,11 +489,15 @@ void Daemon::stop()
     // settings-style disconnect, for the reason documented above
     // teardownIdleConnections(): every connection these senders hold on
     // `this` is made in per-start code, so severing them is exactly undone
-    // by the next start(). Connections whose sender or receiver falls outside
-    // the sweep (m_layoutManager is a mixed sender whose init_services.cpp
-    // connections must survive; the WTA-to-drag-adaptor fan-out has a
-    // non-daemon receiver; one m_settings connection is per-start) are
-    // tracked in m_perStartConnections and severed individually below.
+    // by the next start(). This sweep covers the connectScreenSignals /
+    // connectDesktopActivity / connectShortcutSignals connections in
+    // start.cpp; the connectLayoutSignals / connectOverlaySignals connections
+    // (whose sender m_layoutManager is mixed and must not be blanket-severed)
+    // are instead tracked in m_restartScopedConnections and cleared at the
+    // top of connectLayoutSignals(), and the WTA-to-drag-adaptor fan-out uses
+    // Qt::UniqueConnection. The two schemes are complementary, not
+    // alternatives — this one owns the persistent-sender sweep, that one owns
+    // the mixed-sender and non-daemon-receiver connections.
     if (m_shortcutManager) {
         m_shortcutManager->disconnect(this);
     }
@@ -512,6 +516,8 @@ void Daemon::stop()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->disconnect(this);
     }
+    // The per-start connections the sweep above cannot reach by sender
+    // (the m_settings cheatsheet refilter), severed by handle.
     for (const QMetaObject::Connection& conn : std::as_const(m_perStartConnections)) {
         disconnect(conn);
     }

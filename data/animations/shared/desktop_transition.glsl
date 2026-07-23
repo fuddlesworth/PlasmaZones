@@ -24,22 +24,44 @@
 // pack must hold its endpoints for a t just outside the range. Clamping t up
 // front is the simplest way and most packs do it. Feeding t through a padded
 // smoothstep works too, since smoothstep saturates on its own — desktop-wipe,
-// desktop-circle, desktop-dissolve, desktop-aretha and desktop-phosphor take
-// that route and need no clamp of their own. Either way is fine; what is NOT
-// fine is a pack that only holds its endpoints for t exactly 0 and 1.
+// desktop-circle, desktop-dissolve, desktop-aretha, desktop-phosphor and
+// desktop-fade take that route and need no clamp of their own. Either way is
+// fine; what is NOT fine is a pack that only holds its endpoints for t
+// exactly 0 and 1.
 //
-// Desktop transitions only ever run in the kwin-effect. The samplers live in
-// the PLASMAZONES_KWIN branch only, mirroring old_content.glsl's uOldWindow:
-// KWin's GLShader binds them by uniform location + glActiveTexture, so no
-// layout(binding) qualifier is needed. The daemon UBO target compiles through a
-// strict SPIR-V path that rejects binding-less samplers, so this whole unit
-// compiles away there — a desktop pack's frag must keep its getFromColor /
-// getToColor calls inside its own PLASMAZONES_KWIN guard (see desktop-fade).
+// Desktop transitions only ever run in the kwin-effect, and compositor-only
+// packs are excluded from the daemon's SPIR-V bake entirely, so the samplers
+// are declared unguarded: KWin's GLShader binds them by uniform location +
+// glActiveTexture, so no layout(binding) qualifier is needed.
+//
+// WHAT IS ACTUALLY BOUND ON THIS PASS. DesktopTransitionManager caches and
+// pushes exactly: uFromDesktop, uToDesktop, iTime, iResolution, iFrame,
+// iSwitchDelta, plus the customParams / customColors pools behind p_<id>.
+// NOTE iResolution carries DEVICE pixels on this pass (the manager uploads
+// viewport.deviceSize()), unlike the per-window path where it is logical.
+// Aspect ratios are unaffected; anything deriving a PIXEL-scale feature size
+// from it renders that feature at device scale on a scaled output.
+// EVERY other uniform the animation contract declares stays at the GL
+// default of zero here. Two consequences worth stating, because both
+// COMPILE cleanly and then render wrong:
+//   - iIsReversed is never bound, so `p_reversed` is permanently false and
+//     `legProgress()` returns raw iTime. Direction on this pass comes ONLY
+//     from the iTime sweep (the peek SHOW leg runs time backwards — see the
+//     endpoint note above), never from the reversed flag.
+//   - surfaceColor() is a per-WINDOW helper. It is in scope (the entry
+//     prologue always includes animation_uniforms.glsl) and compiles here,
+//     but returns black: iWindowOpacity and iAnchorRectInTexture are both
+//     zero. oldColor() is a different hazard — it lives in
+//     shared/old_content.glsl, which no desktop pack includes, so reaching
+//     for it is a COMPILE error. On THIS pass that does not look like the
+//     daemon's flat-gray swallow: the manager caches a null-shader sentinel
+//     and ABANDONS the transition, so you get an instant desktop cut, a
+//     warning on the journal, and no recompile for the rest of the session.
+//     Use getFromColor() / getToColor() instead.
 // Include AFTER the animation uniform block.
 #ifndef PLASMAZONES_DESKTOP_TRANSITION_GLSL
 #define PLASMAZONES_DESKTOP_TRANSITION_GLSL
 
-#ifdef PLASMAZONES_KWIN
 uniform sampler2D uFromDesktop;
 uniform sampler2D uToDesktop;
 
@@ -84,6 +106,5 @@ vec4 getToColor(vec2 uv) {
 vec4 crossFade(vec2 uv, float t) {
     return mix(getFromColor(uv), getToColor(uv), t);
 }
-#endif // PLASMAZONES_KWIN
 
 #endif // PLASMAZONES_DESKTOP_TRANSITION_GLSL

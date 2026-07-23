@@ -1,21 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Heat Melt transition — ported from liixini/shaders niri shader
-// (https://github.com/liixini/shaders/tree/main/heat-melt). Heat-driven
-// melt — simplex noise carves the surface from a bottom-right corner with
-// radial falloff.
+// Heat Melt transition — a heat-driven melt where simplex noise carves
+// the surface from a bottom-right corner with radial falloff. Inspired by
+// liixini/shaders' niri heat-melt shader.
 //
-// Niri's heat-melt ships symmetric close.glsl/open.glsl. PlasmaZones'
-// runtime flips iTime on reverse legs (1→0 on close, 0→1 on open),
-// so we use the niri OPEN body verbatim with `niri_clamped_progress`
-// translated to `clamp(iTime, 0.0, 1.0)` and the runtime flip
-// auto-mirrors the visual on close — no iIsReversed branch needed.
-//
-// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
-// == texture coords here), so the matrix multiply is dropped and
-// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
-// rewritten to `texture` (GLSL 4.50 core) inline.
+// Symmetric transition, written as a single `pTransition`. The runtime
+// flips the leg's iTime on reverse legs (0→1 on open, 1→0 on close), so
+// the reveal reads `clamp(iTime, 0.0, 1.0)` directly and the close leg
+// plays in reverse automatically, with no `iIsReversed` branch. Geometry
+// and texture coordinates coincide here, so `texture(uTexture0, uv)`
+// samples directly.
 
 #include <noise.glsl>
 vec3 hm_mod289_3(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -44,7 +39,6 @@ float hm_snoise(vec2 v) {
 }
 
 vec4 pTransition(vec2 uv, float t) {
-    // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(t, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
 
@@ -53,8 +47,8 @@ vec4 pTransition(vec2 uv, float t) {
     // multiplying by iAnchorSize.x/iSurfaceScreenPos.z scales the cycle
     // count to the fraction of the screen this surface covers, so
     // melt-front wobble pixel size stays constant across popup vs.
-    // maximized windows. Matches niri's reference on full-screen
-    // (multiplier = 1.0 there). Floor guards against the pre-first-
+    // maximized windows. The multiplier is 1.0 when the surface fills
+    // the screen. Floor guards against the pre-first-
     // frame iSurfaceScreenPos = (0,0,0,0) state.
     float perScreenScaleX = p_meltNoiseScale * max(iAnchorSize.x, 1.0)
                                            / max(iSurfaceScreenPos.z, 1.0);

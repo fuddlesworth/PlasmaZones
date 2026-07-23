@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Stretch vertex shader — grid-deformed elastic ("rubber-band") window-move.
 //
@@ -9,7 +9,8 @@
 // Entirely in-plane — no faked depth — but it needs the grid because the
 // stretch varies across the window (a 4-vertex quad could only scale
 // uniformly). Runs on the same window-relative grid as the other geometry
-// effects: apply() builds an NxN grid over the destination frame rect
+// effects: apply() builds an NxN grid over the padded composite canvas
+// with destination-frame-relative texcoords
 // (metadata `geometryGrid`) and this stage displaces each vertex.
 //
 // Each vertex rides a back-ease (easeOutBack) that overshoots its target
@@ -27,7 +28,6 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
@@ -45,10 +45,8 @@ float backOut(float x) {
     float xm = x - 1.0;
     return 1.0 + c3 * xm * xm * xm + c1 * xm * xm;
 }
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     const float PI = 3.14159265358979;
     const float SPREAD = 0.45;  // how far trailing verts lag the leading edge
     const float SQUASH = 0.16;  // perpendicular thinning at peak motion
@@ -81,9 +79,17 @@ void main() {
     vec2 centerPos = mix(fromC, toC, eC);
 
     // Per-vertex along-travel position (stretched), then thin perpendicular.
+    // Split translation from extent (fold's guard, same hazard): the back-
+    // ease overshoot rides the per-vertex CENTRE translation (which is the
+    // stagger stretch and the bounce), while the vertex's offset within the
+    // rect interpolates on a clamped copy — an extrapolated extent factor
+    // goes negative on an extreme shrink (destination span under ~12% of the
+    // source) and locally mirrors the card at the overshoot peak.
     vec2 fromPos = iFromRect.xy + cuv * iFromRect.zw;
     vec2 toPos = iToRect.xy + cuv * iToRect.zw;
-    vec2 alongPos = mix(fromPos, toPos, e);
+    vec2 fromRel = fromPos - fromC;
+    vec2 toRel = toPos - toC;
+    vec2 alongPos = mix(fromC, toC, e) + mix(fromRel, toRel, clamp(e, 0.0, 1.0));
 
     vec2 rel = alongPos - centerPos;
     float alongComp = dot(rel, dir);
@@ -100,10 +106,4 @@ void main() {
     vTexCoord = cuv;
     vStretch = vec3(cuv, clamp(eC, 0.0, 1.0));
     gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the stretch is compositor-only. Pass the
-    // quad through so the shader still bakes and is harmless if ever run.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }

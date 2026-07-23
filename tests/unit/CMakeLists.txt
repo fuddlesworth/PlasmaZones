@@ -691,13 +691,18 @@ add_executable(test_zone_uniform_extension ui/zones/test_zone_uniform_extension.
 target_link_libraries(test_zone_uniform_extension PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate plasmazones_rendering)
 add_test(NAME test_zone_uniform_extension COMMAND test_zone_uniform_extension)
 
-# Bake-check every built-in animation shader against ShaderCompiler so a
-# qsb-incompatible source change (e.g. accidentally re-introducing
-# default-block uniforms in #version 450) fails CI instead of silently
-# breaking the daemon's overlay-surface animation path. Pinned by the
-# canonical UBO declaration in data/animations/shared/animation_uniforms.glsl.
+# Bake-check the VERTEX stage of every daemon-eligible animation pack (plus
+# shared/animation.vert) against ShaderCompiler so a qsb-incompatible source
+# change (e.g. accidentally re-introducing default-block uniforms in
+# #version 450) fails CI instead of silently breaking the daemon's
+# overlay-surface animation path. Pinned by the canonical UBO declaration in
+# data/animations/shared/animation_uniforms.glsl. Compositor-only packs are
+# excluded (their source is kwin classic-GL by design) and covered by
+# test_animation_shader_kwin_bake, which needs a desktop-GL 4.5 context and
+# QSKIPs headless — a GPU-less CI run leaves them uncovered. Fragment-stage
+# coverage lives in test_animation_shader_preamble_bake.
 add_executable(test_animation_shader_bake ui/shaders/test_animation_shader_bake.cpp)
-target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorRendering::PhosphorRendering)
+target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering)
 target_compile_definitions(test_animation_shader_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_bake COMMAND test_animation_shader_bake)
 
@@ -731,9 +736,11 @@ add_executable(test_shader_param_preamble ui/shaders/test_shader_param_preamble.
 target_link_libraries(test_shader_param_preamble PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
 add_test(NAME test_shader_param_preamble COMMAND test_shader_param_preamble)
 
-# End-to-end: every built-in animation shader must still bake once its
-# generated `#define p_<id> ...` preamble is spliced in — proving the
-# generated accessors compile against the real animation UBO across all packs.
+# End-to-end: every daemon-eligible built-in animation shader must still bake
+# once its generated `#define p_<id> ...` preamble is spliced in — proving the
+# generated accessors compile against the real animation UBO. Compositor-only
+# packs are excluded here; test_animation_shader_kwin_bake covers them where a
+# desktop-GL 4.5 context exists (it QSKIPs headless).
 add_executable(test_animation_shader_preamble_bake ui/shaders/test_animation_shader_preamble_bake.cpp)
 target_link_libraries(test_animation_shader_preamble_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
 target_compile_definitions(test_animation_shader_preamble_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")

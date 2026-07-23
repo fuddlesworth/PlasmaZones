@@ -7,44 +7,8 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QFile>
 #include <QStandardPaths>
-
-inline void appendUniquePath(QStringList& paths, const QString& path)
-{
-    if (!path.isEmpty() && QDir(path).exists() && !paths.contains(path)) {
-        paths.append(path);
-    }
-}
-
-inline QStringList trustedShaderRoots()
-{
-    return QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/overlays"),
-                                     QStandardPaths::LocateDirectory);
-}
-
-inline QStringList expandShaderIncludePaths(const QStringList& inputPaths)
-{
-    QStringList expanded;
-
-    // Trusted PlasmaZones shader roots first. This ensures shared/common.glsl
-    // resolves consistently for bundled, dev-prefix, system, and user shader roots.
-    for (const QString& root : trustedShaderRoots()) {
-        appendUniquePath(expanded, root + QStringLiteral("/shared"));
-        appendUniquePath(expanded, root);
-    }
-
-    // Preserve caller-provided include paths, but do not infer arbitrary parent
-    // directories from them.
-    for (const QString& path : inputPaths) {
-        const QFileInfo info(path);
-        const QString dir = info.isFile() ? info.absolutePath() : info.absoluteFilePath();
-
-        appendUniquePath(expanded, dir + QStringLiteral("/shared"));
-        appendUniquePath(expanded, dir);
-    }
-
-    return expanded;
-}
 
 namespace PlasmaZones {
 

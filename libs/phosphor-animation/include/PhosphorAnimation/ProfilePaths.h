@@ -163,6 +163,11 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 // (AnimationShaderEffect::appliesTo) and the settings UI dims the rows it
 // can't drive. These string tokens are the SSOT for that vocabulary —
 // matched verbatim against `appliesTo` entries and `eventClassForPath`.
+//
+// Adding a class token? `shaderEffectIsCompositorOnly` (AnimationShaderEffect.h)
+// hardcodes "appearance is the only class that reaches a daemon surface" —
+// a new daemon-driven class must be added there too, or its packs will be
+// silently classified compositor-only and skipped by the daemon.
 
 /// Geometry transitions: snapIn/snapOut, layoutSwitch, maximize — every leg
 /// that carries an old and new rect.

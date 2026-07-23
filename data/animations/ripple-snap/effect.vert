@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Ripple-snap vertex shader — grid-deformed impact window-move.
 //
@@ -7,7 +7,8 @@
 // then on arrival a decaying wave travels across the grid from the leading
 // edge — the edge that hit the zone boundary — like a sheet snapping taut.
 // Runs on the same window-relative grid as flow/fold: apply() builds an
-// NxN grid over the destination frame rect (metadata `geometryGrid`) and
+// NxN grid over the padded composite canvas with destination-frame-relative texcoords
+// (metadata `geometryGrid`) and
 // this stage displaces each vertex.
 //
 // The wave is a transverse (in-plane, perpendicular-to-travel) ripple so
@@ -24,17 +25,14 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
 // Per-vertex data for the fragment: .xy = sampling card uv, .z = ripple
 // shade, .w = old->new cross-fade.
 layout(location = 1) out vec4 vRip;
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     const float TWO_PI = 6.28318530718;
     const float IMPACT = 0.4;          // fraction of the leg spent travelling
     const float SPEED = 1.6;           // wavefront speed across the window
@@ -79,18 +77,13 @@ void main() {
     vec2 toPos = iToRect.xy + cuv * iToRect.zw;
     vec2 displaced = position + (screenPos - toPos);
 
-    // Darken-only: brightening a premultiplied sample (scaling RGB and
-    // alpha together) would push alpha past 1.0 in the FBO, so cap at 1.0
-    // and let the troughs darken.
+    // Fade-only: brightening a premultiplied sample (scaling RGB and
+    // alpha together) would push alpha past 1.0 in the FBO, so cap at
+    // 1.0; the sub-1 side is the coverage fade the frag applies to the
+    // troughs (see effect.frag).
     float shade = clamp(1.0 + wave * SHADE, 0.6, 1.0);
 
     vTexCoord = cuv;
     vRip = vec4(cuv, shade, teE);
     gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the ripple is compositor-only. Pass the quad
-    // through so the shader still bakes and is harmless if ever run.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }
