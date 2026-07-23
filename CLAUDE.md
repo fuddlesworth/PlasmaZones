@@ -32,6 +32,7 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
   - **App / daemon / editor / settings / KCM / examples / top-level tests** (`src/**`, `kcm/**`, `kwin-effect/**`, `examples/**`, top-level `tests/**`): `GPL-3.0-or-later`
   - **Reusable libraries, including their own tests** (`libs/phosphor-*/**`, which subsumes `libs/phosphor-*/tests/**`): `LGPL-2.1-or-later`
   - A library's own `tests/` follow the library (LGPL), NOT the top-level GPL `tests/**` rule: test code that links and ships inside an LGPL lib must not taint that lib's build tree with GPL. The GPL `tests/**` rule means only the top-level app test tree.
+  - **Bundled animation shader packs** (`data/animations/**` shader source: `.frag`, `.vert`, `.glsl`): `LGPL-2.1-or-later`. These are reusable rendering assets a third-party pack or tool can build on, so both stages of a pack carry the same LGPL header (a pack's `.frag` and `.vert` must not disagree). Generated editor aids like `p_generated.glsl` are gitignored and carry no SPDX header. (`data/overlays/**` is currently GPL and `data/surface/**` is mixed; neither has been normalized, so follow the existing header in those trees.)
   - Rationale: the shell is GPL; libraries are LGPL so third-party plugins / tools can link them without inheriting GPL. Never "fix" a lib header to GPL-3 without understanding the split.
 - `#pragma once` for C++ headers
 

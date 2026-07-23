@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-FileCopyrightText: 2021-2024 Simon Schneegans (Burn-My-Windows)
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Incinerate transition — ported from Burn-My-Windows' incinerate.frag
 // (https://github.com/Schneegans/Burn-My-Windows). Heat-driven dissolve

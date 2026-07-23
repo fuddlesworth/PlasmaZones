@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Morph vertex shader — pass-through. The rasterised quad covers the
 // entire surface FBO (sized to the QQuickWindow's contentItem by the

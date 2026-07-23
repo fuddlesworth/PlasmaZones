@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Phosphor Stream vertex shader — the Phosphor set's geometry pack: the
 // window pours into its zone as separated luminous streams.
