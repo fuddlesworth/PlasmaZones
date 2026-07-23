@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Wobbly-move fragment shader — plain decorated sampling; all the work
 // happens in the vertex stage's velocity-lag deformation. Samples through
