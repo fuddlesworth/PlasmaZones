@@ -103,8 +103,8 @@ uniform vec4 customColors[16];
 // (data/animations/shared/audio.glsl) declares it as a default-block
 // uniform alongside the `uAudioSpectrum` sampler, and
 // paint_shader_window.cpp pushes both per frame for packs that include
-// the module. A pack that
-// reaches for it WITHOUT the module still gets the compile error.
+// the module. A pack that reaches for it WITHOUT the module still gets
+// the compile error.
 // `iTextureResolution[4]` IS populated on the kwin path: the per-effect
 // uTexture<N> setter loop in `paint_shader_window.cpp` writes the
 // pixel size of each user texture into this uniform array before
