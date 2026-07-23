@@ -14913,7 +14913,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="67"/>
         <source>Blank</source>
-        <translation>Blank</translation>
+        <translation>Pusty</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="69"/>
@@ -14923,7 +14923,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="72"/>
         <source>Master + Stack</source>
-        <translation>Master + Stack</translation>
+        <translation>Główne okno + stos</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="74"/>
@@ -14938,7 +14938,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="82"/>
         <source>Binary Split</source>
-        <translation>Binary Split</translation>
+        <translation>Podział binarny</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="84"/>
@@ -14948,7 +14948,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="87"/>
         <source>Aligned Grid</source>
-        <translation>Aligned Grid</translation>
+        <translation>Wyrównana siatka</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="89"/>
@@ -14958,7 +14958,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="92"/>
         <source>Dwindle (Memory)</source>
-        <translation>Dwindle (Memory)</translation>
+        <translation>Dwindle (pamięć)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="94"/>
@@ -14968,7 +14968,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="97"/>
         <source>Cluster</source>
-        <translation>Cluster</translation>
+        <translation>Klaster</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="99"/>
@@ -14978,7 +14978,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="102"/>
         <source>Theater</source>
-        <translation>Theater</translation>
+        <translation>Teatr</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="104"/>
@@ -14988,7 +14988,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="107"/>
         <source>Deck</source>
-        <translation>Deck</translation>
+        <translation>Talia</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="109"/>
