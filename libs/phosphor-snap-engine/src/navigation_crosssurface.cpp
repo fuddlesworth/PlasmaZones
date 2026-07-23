@@ -81,9 +81,12 @@ bool SnapEngine::tryCrossModeOutput(const QString& windowId, const QString& dire
     // Same success OSD as the cross-desktop autotile handoff in
     // tryCrossDesktopMove: the daemon's cross-mode handler relocates the
     // window but emits no feedback itself, so without this a successful
-    // cross-output handoff is the one nav action with no OSD.
+    // cross-output handoff is the one nav action with no OSD. Shown on the
+    // NEIGHBOUR output — the window lands there, matching the snap-to-snap
+    // cross-output convention (the resolver's cross results carry the
+    // destination screen).
     Q_EMIT navigationFeedback(true, swap ? QStringLiteral("swap") : QStringLiteral("move"),
-                              QStringLiteral("screen:") + direction, QString(), QString(), screenId);
+                              QStringLiteral("screen:") + direction, QString(), QString(), neighbour);
     return true;
 }
 
