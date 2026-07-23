@@ -5,6 +5,7 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QTest>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
@@ -340,6 +341,9 @@ private Q_SLOTS:
         // throw or smuggle garbage in; the field reduces to universal/valid.
         QJsonObject scalar = obj;
         scalar.insert(QLatin1String("appliesTo"), QStringLiteral("geometry"));
+        // The scalar shape now warns on the journal — expect it so the log
+        // stays clean AND the warning's existence is pinned.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("appliesTo .* is not an array")));
         QVERIFY(AnimationShaderEffect::fromJson(scalar).appliesTo.isEmpty());
 
         QJsonObject mixed;

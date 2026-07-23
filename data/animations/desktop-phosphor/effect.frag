@@ -62,7 +62,7 @@ vec2 graphNodePos(vec2 cell) {
 // idiom) so proj spans exactly [0,1] corner-to-corner for ANY direction. The
 // old fixed * 0.7071 was sized for the diagonal only: an axis-aligned switch
 // (the common left/right case under p_followSwitch) compressed proj to
-// [0.15, 0.85], so the first node lit at t ≈ 0.12 and the flood was done by
+// [0.15, 0.85], so the first node lit at t ≈ 0.11 and the flood was done by
 // t ≈ 0.89 worst-case (same basis as the 0.98 budget figure below) — the
 // same dead head/tail phosphor-peek had, which an ease-out
 // progress curve stretches into a visible hang on a settled screen. The

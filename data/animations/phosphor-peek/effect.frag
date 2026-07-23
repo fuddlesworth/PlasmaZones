@@ -98,8 +98,12 @@ vec4 pTransition(vec2 uv, float t) {
     float band = smoothstep(-0.28, 0.0, fb) * (1.0 - smoothstep(0.0, 0.28, fb));
 
     // De-energize: the windows darken just as the front reaches them, before
-    // the desktop takes over. Gated by band, so no residue at the endpoints.
-    col *= 1.0 - band * (1.0 - reveal) * clamp(p_dim, 0.0, 1.0) * 0.7;
+    // the desktop takes over. The band alone does NOT vanish at tt = 0 (the
+    // front's -0.11 - soft lead can reach the leading corner's jittered p on
+    // the very first frame), so ramp the dim in over the first 5% of the leg
+    // — same first-frame-pop guard as desktop-phosphor's frontIn. The tt = 1
+    // side needs no gate: (1 - reveal) is 0 there.
+    col *= 1.0 - band * (1.0 - reveal) * clamp(p_dim, 0.0, 1.0) * 0.7 * smoothstep(0.0, 0.05, tt);
 
     // Traces: thin lines parallel to the drain direction, carrying dashes that
     // flow along the drain so the windows read as pixels draining down them.

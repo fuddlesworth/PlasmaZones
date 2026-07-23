@@ -4,29 +4,15 @@
 #include "daemon/daemon.h"
 #include "helpers.h"
 
-#include <QGuiApplication>
 #include <QFutureWatcher>
 #include <QPointer>
 #include <QStandardPaths>
 #include <QtConcurrent>
-#include <QScreen>
-#include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusObjectPath>
-#include <QDBusPendingCall>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
-#include <QDBusError>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QPluginLoader>
-#include <QRegularExpression>
-#include <QSet>
-#include <QThread>
 #include <array>
 
-#include <PhosphorServiceIdle/IdleService.h>
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -39,44 +25,8 @@
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
 #include "daemon/overlayservice.h"
-#include "daemon/controllers/unifiedlayoutcontroller.h"
-#include "daemon/controllers/shortcutmanager.h"
-#include "daemon/controllers/enginefactory.h"
-#include "daemon/controllers/contextresolverwiring.h"
 #include "daemon/rendering/surfaceshaderitem.h"
 #include "daemon/rendering/zoneentryscaffold.h"
-#include "daemon/rendering/zoneshadernoderhi.h"
-
-#include <PhosphorIdentity/VirtualScreenId.h>
-#include <PhosphorIdentity/WindowId.h>
-#include <PhosphorLayoutApi/LayoutId.h>
-#include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorZones/IZoneLayoutRegistry.h>
-#include <PhosphorZones/ZonesLayoutSource.h>
-#include <PhosphorZones/LayoutComputeService.h>
-#include <PhosphorZones/ZoneDetector.h>
-#include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/AutotileConstants.h>
-#include <PhosphorTiles/AutotileLayoutSourceFactory.h>
-#include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
-#include <PhosphorTiles/TilingAlgorithm.h>
-#include <PhosphorEngine/WindowRegistry.h>
-#include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include <PhosphorWorkspaces/ActivityManager.h>
-#include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorContext/ContextResolver.h>
-#include <PhosphorScreens/DBusScreenAdaptor.h>
-#include <PhosphorScreens/Swapper.h>
-#include <PhosphorScreens/PlasmaPanelSource.h>
-#include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorSnapEngine/SnapEngine.h>
-#include <PhosphorSnapEngine/SnapState.h>
-#include <PhosphorTileEngine/AutotileEngine.h>
-#include <PhosphorRules/ExclusionRules.h>
-#include <PhosphorRules/RuleAction.h>
-#include <PhosphorRules/Rule.h>
-#include <PhosphorRules/RuleStore.h>
 
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
@@ -93,19 +43,6 @@
 #include "core/interfaces/shaderregistry.h"
 #include "common/screenidresolver.h"
 #include "common/layoutbundlebuilder.h"
-#include "phosphor_i18n.h"
-#include "dbus/layoutadaptor/layoutadaptor.h"
-#include "dbus/settingsadaptor/settingsadaptor.h"
-#include "dbus/overlayadaptor.h"
-#include "dbus/zonedetectionadaptor.h"
-#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
-#include "dbus/windowdragadaptor/windowdragadaptor.h"
-#include "dbus/autotileadaptor/autotileadaptor.h"
-#include "dbus/snapadaptor/snapadaptor.h"
-#include "dbus/shaderadaptor.h"
-#include "dbus/compositorbridgeadaptor.h"
-#include "dbus/controladaptor.h"
-#include "dbus/ruleadaptor.h"
 
 namespace PlasmaZones {
 

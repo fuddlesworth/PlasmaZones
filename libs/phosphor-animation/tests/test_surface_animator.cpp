@@ -486,6 +486,73 @@ private Q_SLOTS:
         delete surface;
     }
 
+    /// A synchronous beginHide re-entered from inside the outer
+    /// beginShow's pre-state setOpacity chain installs a FRESH slot for
+    /// the same (surface, target). The outer leg's post-write re-find
+    /// must NOT adopt it (Track::generation mismatch): the outer leg
+    /// bails, only the nested hide runs, and only the nested leg's
+    /// onComplete fires. Pre-guard, the outer frame overwrote the
+    /// nested slot's AVs and completed the wrong leg.
+    void restart_during_prestate_setOpacity_defers_to_nested_leg()
+    {
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        SurfaceAnimator anim(m_registry, defaultsForTesting());
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        deps.animator = &anim;
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig cfg;
+        cfg.role = PhosphorShellPatterns::Modal();
+        cfg.contentItem = std::make_unique<QQuickItem>();
+        cfg.screen = s.primary();
+        cfg.keepMappedOnHide = true;
+        cfg.debugName = QStringLiteral("restart-during-prestate");
+
+        auto* surface = f.create(std::move(cfg));
+        QVERIFY(surface);
+        surface->warmUp();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        // Force opacity ≠ 0 so the outer beginShow's pre-state
+        // setOpacity(0) genuinely emits opacityChanged.
+        target->setOpacity(1.0);
+
+        bool restarted = false;
+        int outerCompleteFires = 0;
+        int nestedCompleteFires = 0;
+        QMetaObject::Connection conn = QObject::connect(target, &QQuickItem::opacityChanged, target, [&]() {
+            if (restarted) {
+                return;
+            }
+            restarted = true;
+            // Re-enter with a REPLACEMENT leg instead of a bare cancel:
+            // beginHide cancels the outer slot and installs its own.
+            anim.beginHide(surface, target, [&nestedCompleteFires]() {
+                ++nestedCompleteFires;
+            });
+        });
+
+        anim.beginShow(surface, target, [&outerCompleteFires]() {
+            ++outerCompleteFires;
+        });
+
+        QObject::disconnect(conn);
+        QVERIFY(restarted);
+
+        // Let the nested hide run to completion. Only its onComplete may
+        // fire; the superseded outer show must never complete, and the
+        // nested leg must end at its own terminal opacity (0.0), proving
+        // the outer frame neither overwrote its AVs nor restarted them
+        // with the show leg's endpoints.
+        QTRY_COMPARE_WITH_TIMEOUT(nestedCompleteFires, 1, 1000);
+        QCOMPARE(outerCompleteFires, 0);
+        QCOMPARE(target->opacity(), qreal(0.0));
+
+        delete surface;
+    }
+
     /// cancel mid-flight stops the AnimatedValue and does not produce a
     /// completion callback. After cancel, opacity stays at whatever
     /// value the animation left it at (no snap-to-target).
