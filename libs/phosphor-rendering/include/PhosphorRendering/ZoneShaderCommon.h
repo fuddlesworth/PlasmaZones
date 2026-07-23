@@ -88,7 +88,8 @@ constexpr size_t K_SCENE_HEADER_SIZE = sizeof(PhosphorShaders::BaseUniforms) - K
 constexpr size_t K_SCENE_DATA_OFFSET = offsetof(ZoneShaderUniforms, base.iResolution);
 constexpr size_t K_SCENE_DATA_SIZE = sizeof(ZoneShaderUniforms) - K_SCENE_DATA_OFFSET;
 
-// Zone extension region (zoneRects/zoneFillColors/zoneBorderColors/zoneParams).
+// Zone extension region (zoneRects/zoneFillColors/zoneBorderColors/zoneParams,
+// then the trailing zoneScale scalar and its std140 pad).
 constexpr size_t K_ZONE_EXTENSION_OFFSET = sizeof(PhosphorShaders::BaseUniforms);
 constexpr size_t K_ZONE_EXTENSION_SIZE = sizeof(ZoneShaderUniforms) - sizeof(PhosphorShaders::BaseUniforms);
 
