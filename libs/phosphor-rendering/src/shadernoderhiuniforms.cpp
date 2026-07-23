@@ -400,13 +400,13 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             }
             resetAllBindingsAndPipelines();
         }
-        // Sampler is the only hard prerequisite — m_userTextures[i] may be
-        // null after a failed initial create() on this slot, in which case
-        // the size-mismatch branch below allocates fresh. Without that gate
-        // relaxation the failed-create retry promised by the qCWarning text
-        // is structurally unreachable: the loop short-circuits on
-        // !m_userTextures[i] before the size-mismatch alloc branch below
-        // ever runs again.
+        // Sampler is the only hard prerequisite. m_userTextures[i] is null
+        // before the slot's first successful allocation (and after
+        // releaseRhiResources), and the size-mismatch branch below is what
+        // allocates it — so gating on the texture here would make the very
+        // first upload unreachable. Defensive beyond that: since the local-
+        // swap rework no path in this file leaves the slot null after a
+        // failed create.
         if (!m_userTextureDirty[i] || !m_userTextureSamplers[i]) {
             continue;
         }
@@ -425,8 +425,8 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             targetSize = QSize(qMin(targetSize.width(), textureSizeMax), qMin(targetSize.height(), textureSizeMax));
         }
         // Branch covers two cases uniformly:
-        //   (a) initial allocation when m_userTextures[i] is null (after a
-        //       prior failed create reset us to nullptr).
+        //   (a) initial allocation when m_userTextures[i] is null (first
+        //       upload for the slot, or after releaseRhiResources).
         //   (b) resize when the existing texture's pixel size doesn't match
         //       the new target.
         if (!m_userTextures[i] || m_userTextures[i]->pixelSize() != targetSize) {

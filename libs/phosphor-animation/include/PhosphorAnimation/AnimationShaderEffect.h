@@ -9,8 +9,7 @@
 #include <QList>
 #include <QString>
 #include <QStringList>
-#include <QUrl>
-#include <QVariantMap>
+#include <QVariant>
 
 namespace PhosphorAnimationShaders {
 

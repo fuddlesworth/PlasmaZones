@@ -63,7 +63,7 @@ void main() {
     // Cap so a violent fling cannot fold the window over itself; the clamp
     // preserves direction.
     float m = length(lag);
-    float cap = max(float(p_maxBend), 8.0);
+    float cap = max(p_maxBend, 8.0);
     if (m > cap) {
         lag *= cap / m;
     }

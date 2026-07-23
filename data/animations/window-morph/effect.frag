@@ -35,6 +35,11 @@ uniform vec4 iToRect;
 #include <old_content.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
+    // `t` is the raw (possibly flipped) iTime the pTransition entry contract
+    // hands every symmetric pack — NOT legProgress(). That is correct here:
+    // this is a geometry-class pack, and geometry legs always run forward
+    // (direction lives in iFromRect/iToRect), so raw t IS forward progress.
+    //
     // `t` is deliberately NOT clamped here. iTime leaves [0,1] for an overshooting
     // curve (an underdamped spring, a back / elastic ease), and on THIS pack that
     // overshoot is the whole point: the rect lerp below extrapolates past iToRect,

@@ -247,6 +247,15 @@ bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow*
     }
 
     // Special / non-manageable window types (inherently effect-side — KWin metadata).
+    //
+    // isFullScreen() is the one REVERSIBLE state in an otherwise type-based
+    // set, and that is deliberate: a fullscreen window must not be a snap or
+    // autotile target while it is fullscreen, and every consumer of this
+    // predicate wants that. The consequence to know about is that it also
+    // suppresses activation reporting and classifies a fullscreen window as
+    // Transient for as long as the state lasts; both revert when the window
+    // leaves fullscreen. Do not "clean up" the state check out of here without
+    // re-adding an equivalent rejection at the snap/tile call sites.
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()) {
         if (rejectReason) {
             *rejectReason = QStringLiteral("special/desktop/dock/fullscreen/skipSwitcher window type");

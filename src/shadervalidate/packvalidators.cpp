@@ -64,16 +64,8 @@ int validatePack(const QString& packDir, QTextStream& out)
     // surface validators apply. Zone packs have no `builtin:` buffer tokens
     // (that resolver is surface-only), so every path must stay inside the pack.
     // An empty path is left as-is (that stage is simply absent).
-    const auto confineToPack = [&packDir](QString& path) -> bool {
-        if (path.isEmpty()) {
-            return true;
-        }
-        const auto confined = confinedPackPath(packDir, path);
-        if (!confined) {
-            return false;
-        }
-        path = *confined;
-        return true;
+    const auto confineToPack = [&packDir](QString& path) {
+        return confinePackPathInPlace(packDir, path);
     };
     if (!confineToPack(info.sourcePath)) {
         out << name
@@ -162,6 +154,12 @@ int validatePack(const QString& packDir, QTextStream& out)
     }
     if (!QFile::exists(info.sourcePath)) {
         lints << QStringLiteral("fragment shader missing: %1").arg(QFileInfo(info.sourcePath).fileName());
+    }
+    // A declared-but-absent vertexShader silently falls back to the shared
+    // zone.vert below, hiding the author's typo — same lint the animation and
+    // surface validators apply.
+    if (!info.vertexShaderPath.isEmpty() && !QFile::exists(info.vertexShaderPath)) {
+        lints << QStringLiteral("vertex shader missing: %1").arg(QFileInfo(info.vertexShaderPath).fileName());
     }
 
     if (lints.isEmpty()) {
@@ -373,7 +371,17 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         const QJsonArray declaredAppliesTo = appliesToValue.toArray();
         for (const QJsonValue& v : declaredAppliesTo) {
             const QString token = v.toString().trimmed();
-            if (!token.isEmpty() && !kAnimAppliesToTokens.contains(token)) {
+            if (token.isEmpty()) {
+                // fromJson drops these without even a journal warning, so a
+                // stray "" entry is the one appliesTo typo that leaves no
+                // runtime trace at all — and an array that validates down to
+                // empty makes the pack universal.
+                lints << QStringLiteral(
+                    "empty appliesTo token (dropped at load with no runtime warning; an "
+                    "appliesTo that validates down to empty makes the pack universal)");
+                continue;
+            }
+            if (!kAnimAppliesToTokens.contains(token)) {
                 lints << QStringLiteral(
                              "unknown appliesTo token '%1' (dropped at load; an appliesTo that "
                              "validates down to empty makes the pack universal; valid tokens are "
@@ -555,16 +563,8 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // confinedPackPath) before it is opened and fed to glslang: a
     // `../../../etc/...` or absolute path must be rejected, not compiled. An
     // empty path is left as-is (that stage is simply absent).
-    const auto confineToPack = [&packDir](QString& path) -> bool {
-        if (path.isEmpty()) {
-            return true;
-        }
-        const auto confined = confinedPackPath(packDir, path);
-        if (!confined) {
-            return false;
-        }
-        path = *confined;
-        return true;
+    const auto confineToPack = [&packDir](QString& path) {
+        return confinePackPathInPlace(packDir, path);
     };
     if (!confineToPack(eff.fragmentShaderPath)) {
         out << name

@@ -527,6 +527,12 @@ void Daemon::setupShaderWarmBakes()
     // `shared/animation.vert` when an effect doesn't ship its own)
     // also mirrors the runtime, otherwise the warm-baked entry's
     // cache key would differ from what runtime queries.
+    // Belt-and-braces: both shader registries are constructed unconditionally
+    // in the Daemon ctor and setupShaderWarmBakes() runs later from init(), so
+    // these are non-null on every real path. Kept (rather than asserted) so a
+    // future construction-order change degrades to "no warm bake" instead of a
+    // startup crash — the warm bake is an optimisation, never a correctness
+    // dependency.
     if (m_animationShaderRegistry) {
         auto scheduleWarmForAnimEffect = [this,
                                           registryPtr = QPointer<PhosphorAnimationShaders::AnimationShaderRegistry>(

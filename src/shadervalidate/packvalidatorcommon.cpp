@@ -46,6 +46,19 @@ std::optional<QString> confinedPackPath(const QString& packDir, const QString& r
     return abs;
 }
 
+bool confinePackPathInPlace(const QString& packDir, QString& path)
+{
+    if (path.isEmpty()) {
+        return true;
+    }
+    const auto confined = confinedPackPath(packDir, path);
+    if (!confined) {
+        return false;
+    }
+    path = *confined;
+    return true;
+}
+
 const QStringList kValidParamTypes = {QStringLiteral("float"), QStringLiteral("int"), QStringLiteral("bool"),
                                       QStringLiteral("color"), QStringLiteral("image")};
 
