@@ -63,7 +63,7 @@ pre-commit:
         else echo "plasmazones-shader-validate not built (build/bin/) — skipping shader validation; build the target to enable this local gate" >&2; fi'
     shader-validate-animation:
       glob: "data/animations/**/*.{frag,vert,glsl,json}"
-      # Animation packs are the third authoring model and have their own CI
+      # Animation packs are the second authoring model and have their own CI
       # gate (shader_validate_animations); without a local hook, edits under
       # data/animations/** were the only shader tree with no pre-commit
       # validation. Same best-effort skip when the binary isn't built.

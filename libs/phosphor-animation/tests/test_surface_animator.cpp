@@ -34,8 +34,19 @@
  *     here, mock the ShaderEffect output via a `QQuickItem` subclass
  *     exposing the `isReversed` Q_PROPERTY and have the test's content
  *     item host one tagged `shaderAnchor: true`.
+ *   - runLeg's compositor-only ATTACH REFUSAL (it drops the shader leg for
+ *     a pack whose appliesTo omits "appearance") is unreachable from this
+ *     layer for the same reason: with no `shaderAnchor` in the mock content
+ *     item, no shader attaches on either side of the branch, so a test here
+ *     cannot distinguish them. A candidate test was written and PROVEN
+ *     VACUOUS by mutation (stubbing the branch to `false` left it green), so
+ *     it was removed rather than left as false assurance. The predicate
+ *     itself is pinned in test_animationshadereffect; closing the animator
+ *     half needs the same shaderAnchor-bearing harness described above.
  */
 #include "SurfaceAnimatorTestHarness.h"
+
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
 
 class TestSurfaceAnimator : public QObject
 {

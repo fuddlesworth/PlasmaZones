@@ -92,6 +92,9 @@ function(pas_add_test _name)
     set(_sources ${ARGN})
     add_executable(${_name} ${_sources})
     set_target_properties(${_name} PROPERTIES AUTOMOC ON)
+    target_include_directories(${_name}
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    )
     target_link_libraries(${_name}
         PRIVATE
             Qt6::Test

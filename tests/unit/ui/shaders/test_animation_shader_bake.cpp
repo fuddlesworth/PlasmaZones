@@ -52,12 +52,24 @@ private Q_SLOTS:
             // branch — the strict SPIR-V target rejects their default-block
             // uniforms by design. Their compile coverage is
             // test_animation_shader_kwin_bake.
-            QFile meta(animationsDir + QLatin1Char('/') + sub + QStringLiteral("/metadata.json"));
+            const QString metaPath = animationsDir + QLatin1Char('/') + sub + QStringLiteral("/metadata.json");
+            // A subdir carrying shader sources but NO metadata.json is invisible
+            // to every other gate — the CLI's isPackDir() and the preamble bake
+            // both require the file before a directory counts as a pack — so it
+            // would ship with zero compile coverage. Fail loudly here rather
+            // than skipping.
+            const bool hasSources =
+                QFileInfo::exists(animationsDir + QLatin1Char('/') + sub + QStringLiteral("/effect.frag"))
+                || QFileInfo::exists(animationsDir + QLatin1Char('/') + sub + QStringLiteral("/effect.vert"));
+            if (hasSources && !QFileInfo::exists(metaPath)) {
+                QFAIL(qPrintable(QStringLiteral("pack directory has shader sources but no metadata.json: ") + sub));
+            }
+            QFile meta(metaPath);
             if (!meta.open(QIODevice::ReadOnly)) {
-                // Do NOT fall through: an unreadable metadata.json would
-                // silently reclassify a compositor-only pack as
-                // daemon-eligible and bake a vert that is not meant for the
-                // SPIR-V target. Skip and let the pack-level gates complain.
+                // Present but unreadable: do NOT fall through, or a
+                // compositor-only pack would be silently reclassified as
+                // daemon-eligible and its kwin-dialect vert fed to the strict
+                // SPIR-V target. Skip; the pack-level gates will complain.
                 continue;
             }
             {

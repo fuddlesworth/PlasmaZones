@@ -592,7 +592,9 @@ transient (non-persisted) param session in the detail dialog.
 
 ## The second system — animation / transition shaders
 
-PlasmaZones has two shader registries (per `AnimationShaderContract.h`):
+PlasmaZones has three shader registries; the table below compares the
+overlay/animation pair (per `AnimationShaderContract.h`), with surface/decoration
+covered separately by `SurfaceShaderRegistry`:
 
 | | Overlay / zone shaders | Animation / transition shaders |
 |---|---|---|
