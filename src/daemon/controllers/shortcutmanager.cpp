@@ -511,13 +511,11 @@ QKeySequence parseSequence(const QString& raw, const QString& contextId)
 
 } // namespace
 
-ShortcutManager::ShortcutManager(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager, QObject* parent)
+ShortcutManager::ShortcutManager(Settings* settings, QObject* parent)
     : QObject(parent)
     , m_settings(settings)
-    , m_layoutManager(layoutManager)
 {
     Q_ASSERT(settings);
-    Q_ASSERT(layoutManager);
 
     // Backend + Registry are NOT created here — they're created lazily in
     // registerShortcuts() so unregisterShortcuts() can fully release the
@@ -588,9 +586,10 @@ void ShortcutManager::registerShortcuts()
         [this] {
             m_registrationInProgress = false;
             qCInfo(lcShortcuts) << "Registered" << m_entries.size() << "shortcuts";
+            bool modelAlreadyEmitted = false;
             if (m_settingsDirty) {
                 m_settingsDirty = false;
-                updateShortcuts();
+                modelAlreadyEmitted = updateShortcuts();
             }
             // Replay any adhoc (un)registrations that arrived while the
             // initial batch was in flight. Must run AFTER the in-progress
@@ -598,33 +597,37 @@ void ShortcutManager::registerShortcuts()
             // path instead of re-queuing itself.
             drainPendingAdhocOps();
             // The catalog is first meaningful once the batch has settled
-            // (backend read-back can answer now).
-            Q_EMIT cheatsheetModelChanged();
+            // (backend read-back can answer now). One emit per settle: a
+            // dirty-settings replay above may already have re-pushed it.
+            if (!modelAlreadyEmitted) {
+                Q_EMIT cheatsheetModelChanged();
+            }
         },
         Qt::SingleShotConnection);
 
     m_registry->flush();
 }
 
-void ShortcutManager::updateShortcuts()
+bool ShortcutManager::updateShortcuts()
 {
     if (m_registrationInProgress) {
         // Defer — the ready() callback above will call us again.
         m_settingsDirty = true;
-        return;
+        return false;
     }
     if (m_entries.isEmpty()) {
-        return;
+        return false;
     }
     // settingsChanged fires for every settings save; only a save that
     // actually moved a shortcut sequence needs a backend flush or a
     // cheatsheet refresh (a visible sheet re-pushes its model on the emit,
     // so over-notifying is user-visible churn, not just wasted work).
     if (!rebindAll()) {
-        return;
+        return false;
     }
     m_registry->flush();
     Q_EMIT cheatsheetModelChanged();
+    return true;
 }
 
 void ShortcutManager::unregisterShortcuts()
@@ -737,13 +740,19 @@ void ShortcutManager::drainPendingAdhocOps()
     QVector<PendingAdhocOp> ops;
     m_pendingAdhocOps.swap(ops);
     qCInfo(lcShortcuts) << "Draining" << ops.size() << "deferred adhoc shortcut op(s) after initial registration";
+    // Bind/unbind directly instead of replaying through the public methods:
+    // each of those flushes per call, and a drained batch only needs one
+    // backend round-trip at the end. The registration flag is already
+    // cleared, so nothing re-queues.
     for (auto& op : ops) {
         if (op.kind == PendingAdhocOp::Register) {
-            registerAdhocShortcut(op.id, op.sequence, op.description, std::move(op.callback));
+            m_registry->bind(op.id, op.sequence, op.description, std::move(op.callback), /*persistent=*/false);
+            m_registry->rebind(op.id, op.sequence);
         } else {
-            unregisterAdhocShortcut(op.id);
+            m_registry->unbind(op.id);
         }
     }
+    m_registry->flush();
 }
 
 QVariantList ShortcutManager::cheatsheetModel() const

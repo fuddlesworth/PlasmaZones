@@ -154,7 +154,10 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)
         return false;
     }
 
-    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
+    // Non-creating lookup: this runs from removeWindow paths too, and a
+    // pre-seeded window that closes before ever arriving must not create
+    // and persist an empty TilingState for the pending screen.
+    PhosphorTiles::TilingState* state = m_states.stateForKey(currentKeyForScreen(screenId));
     if (!state) {
         return false;
     }

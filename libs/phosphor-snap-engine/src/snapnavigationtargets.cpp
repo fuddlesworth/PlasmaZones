@@ -3,18 +3,18 @@
 
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 
+#include "snapenginelogging.h"
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "snapenginelogging.h"
-#include <PhosphorScreens/Manager.h>
-#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/Zone.h>
 
 #include <QRect>
 #include <QStringList>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorSnapEngine {
 
@@ -455,6 +455,10 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
     for (const auto& m : std::as_const(members)) {
         unionRect = unionRect.united(m.second);
     }
+    // members preserves currentZones order, so this is the stored primary
+    // whenever it survived validation, and the first surviving member when
+    // the primary went stale (a dead id would resolve to no zone number on
+    // the OSD, so promoting the survivor is the useful report).
     result.sourceZoneId = members.first().first;
 
     // Candidate rects: every non-member zone of this screen's layout.
@@ -504,6 +508,16 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
         const bool extends = positive ? (travelHi(r, horizontal) > uHi + kSpanEdgeTolerancePx)
                                       : (travelLo(r, horizontal) < uLo - kSpanEdgeTolerancePx);
         if (!extends) {
+            continue;
+        }
+        // Overlap layouts: a wide candidate lying mostly BEHIND the union
+        // passes the far-edge test above, ties at gap 0, and can win the
+        // perpendicular tie-break - uniting it would then extend the span
+        // BACKWARD along the travel axis. Require the candidate to start at
+        // or beyond the union's trailing edge (same rounding tolerance).
+        const bool startsWithinSpan = positive ? (travelLo(r, horizontal) >= uLo - kSpanEdgeTolerancePx)
+                                               : (travelHi(r, horizontal) <= uHi + kSpanEdgeTolerancePx);
+        if (!startsWithinSpan) {
             continue;
         }
         const int gap = positive ? qMax(0, travelLo(r, horizontal) - uHi) : qMax(0, uLo - travelHi(r, horizontal));

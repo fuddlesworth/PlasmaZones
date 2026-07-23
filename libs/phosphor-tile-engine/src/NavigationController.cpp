@@ -556,6 +556,15 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     if (hasGeometry) {
         // The focused window is at the layout edge in this direction — try the
         // adjacent output first, then the adjacent desktop, before giving up.
+        //
+        // The cross-MODE leg of crossOutputMove defers to the daemon's
+        // direct-connected handoff handlers, which can no-op (target engine
+        // unavailable, or per-desktop mode resolution disagreeing with this
+        // engine's neighbour check). This success OSD is therefore optimistic
+        // for that leg — the same documented convention as the snap engine's
+        // tryCrossModeOutput. A daemon-side failure emit cannot fix it: the
+        // handler runs synchronously inside the Q_EMIT, so its OSD would be
+        // immediately replaced by this one.
         if (crossOutputMove(screenId, focused, direction, action)) {
             Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("screen:") + direction, QString(),
                                                 QString(), screenId);
@@ -585,7 +594,12 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     const bool forward = isForwardDirection(direction);
     const int currentIndex = windows.indexOf(focused);
     if (currentIndex < 0) {
-        Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_focus"), QString(), QString(), screenId);
+        // A focused window that is tracked but absent from tiledWindows() is
+        // floating, not unfocused; "no window is focused" copy would be
+        // wrong for it.
+        const QString reason =
+            state->containsWindow(focused) ? QStringLiteral("not_tiled") : QStringLiteral("no_focus");
+        Q_EMIT m_engine->navigationFeedback(false, action, reason, QString(), QString(), screenId);
         return;
     }
     int targetIndex = forward ? currentIndex + 1 : currentIndex - 1;

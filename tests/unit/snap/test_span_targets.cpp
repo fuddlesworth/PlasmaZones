@@ -252,6 +252,29 @@ struct SpanFixture
     {
         return SnapNavigationTargetResolver(&wts, registry.get(), &adj, {});
     }
+
+    // Captured OSD feedback from the most recent resolver call. The reason
+    // strings are contract, not incidental: entry-snap is worded "snap:" so
+    // the OSD says "Snapped" rather than "Extended", and the shrink target
+    // is the FIRST removed member so a multi-zone retraction reports
+    // deterministically.
+    bool feedbackSuccess = false;
+    QString feedbackReason;
+    QString feedbackSource;
+    QString feedbackTarget;
+
+    SnapNavigationTargetResolver makeFeedbackResolver()
+    {
+        return SnapNavigationTargetResolver(&wts, registry.get(), &adj,
+                                            [this](bool success, const QString&, const QString& reason,
+                                                   const QString& sourceZoneId, const QString& targetZoneId,
+                                                   const QString&) {
+                                                feedbackSuccess = success;
+                                                feedbackReason = reason;
+                                                feedbackSource = sourceZoneId;
+                                                feedbackTarget = targetZoneId;
+                                            });
+    }
 };
 
 /// 2x2 grid: z0 top-left, z1 top-right, z2 bottom-left, z3 bottom-right.
@@ -353,7 +376,7 @@ void TestSpanTargets::shrink_pressingBackTowardSpan_removesTrailingZone()
     SpanFixture f(quadrants());
     f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0], f.zoneIds[1]};
 
-    auto resolver = f.makeResolver();
+    auto resolver = f.makeFeedbackResolver();
     const SpanTargetResult result =
         resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("left"), kScreen);
 
@@ -361,6 +384,10 @@ void TestSpanTargets::shrink_pressingBackTowardSpan_removesTrailingZone()
     QVERIFY(!result.grew);
     QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[0]}));
     QCOMPARE(result.geometry, QRect(0, 0, 960, 540));
+    QVERIFY(f.feedbackSuccess);
+    QCOMPARE(f.feedbackReason, QStringLiteral("shrink:left"));
+    QCOMPARE(f.feedbackSource, f.zoneIds[0]);
+    QCOMPARE(f.feedbackTarget, f.zoneIds[1]);
 }
 
 void TestSpanTargets::shrink_afterVerticalGrow_pressingUp_removesBottomZone()
@@ -418,7 +445,7 @@ void TestSpanTargets::unsnapped_snapsIntoEdgeZone()
     SpanFixture f(quadrants());
     f.adj.firstInDir[key(QStringLiteral("right"), kScreen)] = f.zoneIds[1];
 
-    auto resolver = f.makeResolver();
+    auto resolver = f.makeFeedbackResolver();
     const SpanTargetResult result =
         resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
 
@@ -426,6 +453,11 @@ void TestSpanTargets::unsnapped_snapsIntoEdgeZone()
     QVERIFY(result.grew);
     QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[1]}));
     QCOMPARE(result.geometry, QRect(960, 0, 960, 540));
+    // "snap:", never "grow:" — the OSD words an entry snap differently from
+    // an extension of an existing span.
+    QVERIFY(f.feedbackSuccess);
+    QCOMPARE(f.feedbackReason, QStringLiteral("snap:right"));
+    QCOMPARE(f.feedbackTarget, f.zoneIds[1]);
 }
 
 void TestSpanTargets::staleMembers_fallBackToEdgeZone()
@@ -492,7 +524,7 @@ void TestSpanTargets::shrinkTolerance_dropsJitteredTrailingBandTogether()
     SpanFixture f({QRectF(0.0, 0.0, 0.5, 1.0), QRectF(0.5, 0.0, 0.4995, 0.5), QRectF(0.5, 0.5, 0.5, 0.5)});
     f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0], f.zoneIds[1], f.zoneIds[2]};
 
-    auto resolver = f.makeResolver();
+    auto resolver = f.makeFeedbackResolver();
     const SpanTargetResult result =
         resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("left"), kScreen);
 
@@ -500,6 +532,10 @@ void TestSpanTargets::shrinkTolerance_dropsJitteredTrailingBandTogether()
     QVERIFY(!result.grew);
     QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[0]}));
     QCOMPARE(result.geometry, QRect(0, 0, 960, 1080));
+    // Two members drop at once, so this also pins the documented
+    // first-removed-member determinism of the feedback target.
+    QCOMPARE(f.feedbackReason, QStringLiteral("shrink:left"));
+    QCOMPARE(f.feedbackTarget, f.zoneIds[1]);
 }
 
 void TestSpanTargets::jitterSliverInBand_doesNotJoinSweep()
@@ -547,21 +583,14 @@ void TestSpanTargets::growTie_prefersPerpendicularNearerCandidate()
     SpanFixture f({QRectF(0.0, 0.25, 0.5, 0.5), QRectF(0.5, 0.25, 0.5, 0.75), QRectF(0.5, 0.25, 0.25, 0.5)});
     f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
 
-    QString feedbackReason;
-    QString feedbackTarget;
-    SnapNavigationTargetResolver resolver(
-        &f.wts, f.registry.get(), &f.adj,
-        [&](bool, const QString&, const QString& reason, const QString&, const QString& targetZoneId, const QString&) {
-            feedbackReason = reason;
-            feedbackTarget = targetZoneId;
-        });
+    auto resolver = f.makeFeedbackResolver();
     const SpanTargetResult result =
         resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
 
     QVERIFY(result.success);
     QVERIFY(result.grew);
-    QCOMPARE(feedbackReason, QStringLiteral("grow:right"));
-    QCOMPARE(feedbackTarget, f.zoneIds[2]);
+    QCOMPARE(f.feedbackReason, QStringLiteral("grow:right"));
+    QCOMPARE(f.feedbackTarget, f.zoneIds[2]);
     // The winner's band (960-1440 by the member's height) legitimately
     // sweeps the off-centre candidate too; pin the full set so the sweep
     // outcome in an overlapping tie layout stays deterministic.

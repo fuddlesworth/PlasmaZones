@@ -489,8 +489,12 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
     // The global-scalar holder is created by SnapEngine's ctor as a Qt-child, so
     // it (and the per-screen store map) is always live for a constructed engine.
     // Asserted unconditionally on entry (mirrors toggleFocusedFloat) so the
-    // invariant fires regardless of which early-return path runs below.
+    // invariant fires regardless of which early-return path runs below, with
+    // the release-build pair every other m_globals assert carries.
     Q_ASSERT(m_globals);
+    if (!m_globals) {
+        return;
+    }
     if (!m_windowTracker) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("engine_unavailable"), QString(),
                                   QString(), ctx.screenId);
@@ -686,6 +690,9 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
 void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
 {
     Q_ASSERT(m_globals);
+    if (!m_globals) {
+        return;
+    }
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::toggleFocusedFloat";
     if (!m_windowTracker) {
         Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("engine_unavailable"), QString(),

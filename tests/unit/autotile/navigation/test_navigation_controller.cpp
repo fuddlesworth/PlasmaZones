@@ -216,8 +216,6 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win1")));
 
-        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
-
         // win1 is at index 0. Swapping "left" (backward) should wrap to win3.
         engine->swapFocusedInDirection(QStringLiteral("left"), QStringLiteral("move"));
 

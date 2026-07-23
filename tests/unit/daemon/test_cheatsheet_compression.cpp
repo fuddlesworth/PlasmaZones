@@ -108,6 +108,17 @@ private Q_SLOTS:
         QCOMPARE(ShortcutManager::compressCheatsheetFamilies(rows, {arrowFamily()}).size(), 4);
     }
 
+    void bareTokenBinding_staysUncompressed()
+    {
+        // A member bound to a modifier-less key has no '+' to split on;
+        // compressing it would emit a bogus "+Arrows" chip with an empty
+        // shared prefix.
+        QVector<QVariantMap> rows = arrowRows();
+        rows[0].insert(QStringLiteral("triggers"), QStringList{QStringLiteral("Left")});
+
+        QCOMPARE(ShortcutManager::compressCheatsheetFamilies(rows, {arrowFamily()}).size(), 4);
+    }
+
     void missingFamilyMember_leavesRowsAlone()
     {
         // A family id absent from the rows (e.g. entries not yet registered)

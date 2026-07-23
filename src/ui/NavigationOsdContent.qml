@@ -89,6 +89,9 @@ Item {
                 if (reason === "not_snapped")
                     return i18n("Window is not in a zone");
 
+                if (reason === "not_tiled")
+                    return i18n("Window is floating");
+
                 if (reason === "no_window_in_zone" || reason === "no_neighbor")
                     return i18n("No window in that direction");
 
@@ -184,6 +187,9 @@ Item {
                 if (reason === "not_snapped")
                     return i18n("Window is not in a zone");
 
+                if (reason === "not_tiled")
+                    return i18n("Window is floating");
+
                 if (reason === "swap_failed")
                     return i18n("Could not swap windows");
 
@@ -248,13 +254,13 @@ Item {
         }
         // Success messages with zone numbers
         if (action === "rotate") {
-            var arrow = (reason === "clockwise") ? "↻" : "↺";
+            const arrow = (reason === "clockwise") ? "↻" : "↺";
             if (windowCount > 1)
                 return arrow + " " + i18np("Rotated %n window", "Rotated %n windows", windowCount);
             else
                 return arrow + " " + i18n("Rotated");
         } else if (action === "move") {
-            var moveArrow = directionArrow(reason);
+            const moveArrow = directionArrow(reason);
             if (targetZoneNumber > 0)
                 return moveArrow + " " + i18n("Zone %1", targetZoneNumber);
 
@@ -262,7 +268,7 @@ Item {
         } else if (action === "span") {
             // reason format: "grow:right", "shrink:left", or "snap:right"
             // (the last one when span snapped a previously unsnapped window)
-            var spanArrow = directionArrow(reason);
+            const spanArrow = directionArrow(reason);
             if (reason.indexOf("grow") === 0) {
                 if (targetZoneNumber > 0)
                     return spanArrow + " " + i18n("Extended into Zone %1", targetZoneNumber);
@@ -277,13 +283,13 @@ Item {
             }
             return spanArrow + " " + i18n("Span reduced");
         } else if (action === "focus") {
-            var focusArrow = directionArrow(reason);
+            const focusArrow = directionArrow(reason);
             if (targetZoneNumber > 0)
                 return focusArrow + " " + i18n("Focus: Zone %1", targetZoneNumber);
 
             return focusArrow + " " + i18n("Focus");
         } else if (action === "swap") {
-            var swapArrow = directionArrow(reason);
+            const swapArrow = directionArrow(reason);
             if (sourceZoneNumber > 0 && targetZoneNumber > 0)
                 return swapArrow + " " + i18n("Zone %1 ↔ Zone %2", sourceZoneNumber, targetZoneNumber);
 
@@ -303,6 +309,12 @@ Item {
             if (reason === "unfloated")
                 return i18n("Snapped");
 
+            // Autotile auto-floats windows that overflow the layout; the
+            // generic copy would read as a deliberate float of the focused
+            // window.
+            if (reason === "overflow")
+                return i18n("Extra windows are floating");
+
             return i18n("Floating");
         } else if (action === "snap") {
             if (targetZoneNumber > 0)
@@ -317,25 +329,20 @@ Item {
             return i18n("Swapped with main window");
         } else if (action === "master_ratio") {
             // reason format: "increased:65" or "decreased:60"
-            let parts = reason.split(":");
-            let pct = parts.length >= 2 ? parts[1] : "";
+            const parts = reason.split(":");
+            const pct = parts.length >= 2 ? parts[1] : "";
             return pct ? i18n("Master ratio → %1%", pct) : i18n("Master ratio changed");
         } else if (action === "master_count") {
-            let parts = reason.split(":");
-            let count = parts.length >= 2 ? parts[1] : "";
+            const parts = reason.split(":");
+            const count = parts.length >= 2 ? parts[1] : "";
             return count ? i18n("Master count → %1", count) : i18n("Master count changed");
         } else if (action === "retile") {
             return i18n("Layout refreshed");
-        } else if (action === "resnap") {
-            if (windowCount > 1)
-                return i18np("Rearranged %n window", "Rearranged %n windows", windowCount);
-
-            return i18n("Windows rearranged");
         } else if (action === "swap_vs") {
-            var vsSwapArrow = directionArrow(reason);
+            const vsSwapArrow = directionArrow(reason);
             return vsSwapArrow + " " + i18n("Virtual screens swapped");
         } else if (action === "rotate_vs") {
-            var vsRotateArrow = (reason === "clockwise") ? "↻" : "↺";
+            const vsRotateArrow = (reason === "clockwise") ? "↻" : "↺";
             return vsRotateArrow + " " + i18n("Virtual screens rotated");
         } else {
             return i18n("Action completed");

@@ -307,6 +307,17 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         return false;
     }
 
+    // Keep-above overlays (Spectacle, color pickers, screen rulers, screenshot
+    // tools that linger after capture) shouldn't be snapped to a zone — same
+    // rationale as isTileableWindow's keep-above gate. Consults the window's
+    // OWN flag (see windowOwnKeepAbove) so a SetWindowLayer-raised window
+    // stays manageable. Checked BEFORE the rule slice below: this is a flag
+    // read, while a rule-cache miss builds the full ~30-accessor ruleQuery,
+    // and both are pure rejects so the order is behaviour-neutral.
+    if (windowOwnKeepAbove(w)) {
+        return rejectedBecause(rejectReason, "keep-above window");
+    }
+
     // Check user-authored / migrated Exclude rules (needed for drag gating —
     // daemon also enforces these for keyboard navigation, but the effect
     // must filter for drag operations and lifecycle reporting).
@@ -319,15 +330,6 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         if (m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded()) {
             return rejectedBecause(rejectReason, "user exclusion rule match");
         }
-    }
-
-    // Keep-above overlays (Spectacle, color pickers, screen rulers, screenshot
-    // tools that linger after capture) shouldn't be snapped to a zone — same
-    // rationale as isTileableWindow's keep-above gate. Consults the window's
-    // OWN flag (see windowOwnKeepAbove) so a SetWindowLayer-raised window
-    // stays manageable.
-    if (windowOwnKeepAbove(w)) {
-        return rejectedBecause(rejectReason, "keep-above window");
     }
 
     return true;

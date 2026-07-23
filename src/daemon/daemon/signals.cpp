@@ -800,7 +800,7 @@ void Daemon::connectOverlaySignals()
                     m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
                     return;
                 }
-                if (m_settings && m_settings->showNavigationOsd()) {
+                if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
                     m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenId);
                 }
             });
@@ -819,7 +819,7 @@ void Daemon::connectOverlaySignals()
     // creates a fresh one. For non-continuation selections, this provides the final cleanup.
     connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowZoneChanged, this,
             [this](const QString& /*windowId*/, const QString& /*zoneId*/) {
-                if (m_overlayService->isSnapAssistVisible()) {
+                if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
             });

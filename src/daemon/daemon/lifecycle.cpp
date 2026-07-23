@@ -374,6 +374,11 @@ void Daemon::stop()
     // (the engine is cleared below; a late fire would be a wasted no-op).
     m_gapResnapTimer.stop();
 
+    // The bridge watchdog is double-guarded (m_shuttingDown + registered
+    // re-check) so a late fire is harmless, but every other piece of this
+    // teardown severs explicitly rather than relying on an invariant.
+    m_bridgeWatchdogTimer.stop();
+
     // Drop the layout-manager provider lambdas FIRST, before the m_running
     // gate. They capture `this` and dereference m_settings; m_settings is
     // declared after m_layoutManager, so reverse-order member destruction

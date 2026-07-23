@@ -755,8 +755,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     auto* navSurface = navState->shell->shellSurface();
     auto* osdSlot = navState->osdSlot();
 
-    // Process reason field - for rotation/resnap, extract window count
-    // Format: "clockwise:N" or "counterclockwise:N" or "resnap:N" where N is window count
+    // Process reason field - for rotation, extract the window count.
+    // Format: "clockwise:N" or "counterclockwise:N" where N is window count.
     int windowCount = 1;
     QString displayReason = reason;
     if (reason.contains(QLatin1Char(':'))) {

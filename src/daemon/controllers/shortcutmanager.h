@@ -19,10 +19,6 @@ class IBackend;
 class Registry;
 } // namespace PhosphorShortcuts
 
-namespace PhosphorZones {
-class LayoutRegistry;
-}
-
 namespace PlasmaZones {
 
 class Settings;
@@ -51,12 +47,13 @@ class ShortcutManager : public QObject, public PhosphorShortcutsIntegration::IAd
     Q_OBJECT
 
 public:
-    explicit ShortcutManager(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager,
-                             QObject* parent = nullptr);
+    explicit ShortcutManager(Settings* settings, QObject* parent = nullptr);
     ~ShortcutManager() override;
 
     void registerShortcuts();
-    void updateShortcuts();
+    /// Re-applies current sequences after a settings save; returns true when
+    /// something actually changed and cheatsheetModelChanged was emitted.
+    bool updateShortcuts();
     void unregisterShortcuts();
 
     /**
@@ -197,7 +194,6 @@ private:
     void drainPendingAdhocOps();
 
     Settings* m_settings = nullptr;
-    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
 
     std::unique_ptr<PhosphorShortcuts::IBackend> m_backend;
     std::unique_ptr<PhosphorShortcuts::Registry> m_registry;
