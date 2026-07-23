@@ -125,9 +125,12 @@ Working today:
   extension's logical-to-device scale at its 1.0 default rather
   than reporting a device-pixel ratio the way the daemon item
   does. A corner radius or border width therefore comes out in
-  the units you asked for, which is what a preview wants. Render
-  at a larger `--resolution` to see how a pack looks on a scaled
-  display.
+  the units you asked for, which is what a preview wants. Raising
+  `--resolution` does NOT stand in for a scaled display: the zone
+  rects grow with `iResolution` while the radius stays fixed, so
+  the corners get relatively smaller, which is the opposite of
+  what a real scaled display does. The tool cannot preview a
+  non-1.0 scale today.
 
 Known gaps to verify on first run:
 

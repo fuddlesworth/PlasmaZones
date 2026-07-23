@@ -102,8 +102,8 @@ public:
     }
 
     /// Set the logical-to-device scale the shader applies to the lengths in
-    /// zoneParams (corner radius, border width). Called on the GUI thread from
-    /// the item's sync phase with the same device-pixel ratio the node's
+    /// zoneParams (corner radius, border width). Called from the item's
+    /// updatePaintNode sync phase with the same device-pixel ratio the node's
     /// resolution is scaled by, so `radius * uZoneScale` lands in the same
     /// device-px space as iResolution and vFragCoord.
     ///

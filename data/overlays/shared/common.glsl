@@ -158,9 +158,11 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 //     skipped this, so on a 2x display an overlay corner rounded half as hard
 //     as a decoration corner set to the same number.
 //   * CLAMP. The radius is clamped to half the smaller side. sdRoundedBox()
-//     with r greater than a half-extent distorts the silhouette (the inset
-//     box inverts), which a narrow zone in a multi-column layout hits at
-//     ordinary radius values. frameSdf() has always clamped; the inline copies
+//     with r greater than a half-extent inverts the inset box and collapses
+//     the zone to a sliver rather than rounding it. The settings UI caps the
+//     radius at 50 logical px, so reaching this needs a zone under 100 logical
+//     px on its smaller side, or a per-zone borderRadius from layout JSON,
+//     which is unbounded. frameSdf() has always clamped; the inline copies
 //     never did.
 //   * NO FLOOR. The inline copies each applied their own `max(params.x, N)`
 //     with N of 4, 6, or 8 depending on the pack, so a configured radius of 0
@@ -183,12 +185,6 @@ ZoneSDF zoneSdf(vec2 fragCoord, vec4 rect, float radiusLogical) {
     z.d = sdRoundedBox(fragCoord - z.center, z.halfSize, z.radius);
     return z;
 }
-// ZoneCtx convenience form: reads the fragment, rect, and logical radius
-// (params.x) straight off the per-zone context a pZone entry point receives.
-ZoneSDF zoneSdf(ZoneCtx z) {
-    return zoneSdf(z.fragCoord, z.rect, z.params.x);
-}
-
 // Border width in device px: the pack's logical-px width (zoneParams[i].y)
 // scaled by uZoneScale, so a border keeps its physical thickness across
 // output scales the same way a decoration pack's width does. Floored at one

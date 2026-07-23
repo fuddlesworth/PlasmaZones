@@ -458,20 +458,26 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     // ── Logical-to-device scale for the lengths in zoneParams ────────
     //
-    // Corner radius and border width arrive from settings in LOGICAL px, but
-    // the shader's rect / fragCoord space is DEVICE px, because
-    // ZoneUniformExtension leaves requiresPhysicalResolution() at its true
-    // default and the base therefore uploads iResolution pre-multiplied by the
-    // window's effective DPR. Report the SAME ratio the base uses for that
-    // multiply — deriving it any other way (screen()->devicePixelRatio(), the
-    // item's own size) reintroduces the mismatch on fractional scales.
+    // Corner radius and border width arrive from settings in LOGICAL px, while
+    // the shader's rect / fragCoord space follows iResolution. Report exactly
+    // the ratio the base class scaled iResolution by, so the two always agree.
+    //
+    // That means mirroring the base's requiresPhysicalResolution() gate as well
+    // as its dpr lookup: an extension that opts out of physical resolution gets
+    // a LOGICAL iResolution, and reporting a device-pixel ratio against it
+    // would scale every radius by the dpr twice over. ZoneUniformExtension
+    // leaves the flag at its true default today, so this evaluates to the same
+    // number either way — but reading the flag rather than assuming it keeps
+    // the two derivations structurally identical instead of silently coupled.
     //
     // Pushed unconditionally rather than under m_zoneDataDirty: moving the
     // overlay to a differently-scaled screen changes the ratio without
     // touching zone contents, and setScale() early-outs when the value is
     // unchanged, so the steady-state cost is a mutex lock and a compare.
     {
-        const qreal dpr = (window() && window()->screen()) ? window()->effectiveDevicePixelRatio() : 1.0;
+        const bool needsPhysical = !m_zoneExtension || m_zoneExtension->requiresPhysicalResolution();
+        const qreal dpr =
+            (needsPhysical && window() && window()->screen()) ? window()->effectiveDevicePixelRatio() : 1.0;
         m_zoneExtension->setScale(static_cast<float>(dpr));
     }
 

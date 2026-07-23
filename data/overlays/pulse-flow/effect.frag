@@ -56,7 +56,12 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // DPI and diverged from both its sibling packs and the decorations.
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
     float d = zoneShape.d;
-    if (d > 20.0 * px) return vec4(0.0);
+    // Reject fragments beyond everything this pack draws. The outer glow below
+    // reaches getGlowRadius() * 2.5 * px, so bound by that same expression
+    // rather than a constant: glowRadius is user-adjustable up to 20, and the
+    // old hard-coded 20.0 matched only the default of 8, silently clipping the
+    // glow to 40% of its reach at the top of the slider.
+    if (d > getGlowRadius() * 2.5 * px) return vec4(0.0);
 
     float borderWidth = zoneBorderWidth(params.y);
     float fillOpacity = getFillOpacity();
