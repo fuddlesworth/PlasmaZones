@@ -116,23 +116,30 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
             state.channelResolution[i][1] = 1.0f;
         }
     }
-    // Publish the width of the texture that is ACTUALLY BOUND, not the bar
-    // count we intend to upload. audio.glsl's audioBar() validates barIndex
+    // Publish a bar count safe against whichever texture is actually bound at
+    // draw: the smaller of the currently-bound width and the count the audio
+    // block below will resize to. audio.glsl's audioBar() validates barIndex
     // against this then texelFetch()es — and an out-of-range texelFetch is
     // undefined in GLSL (unlike texture(), it does not clamp) — so advertising
-    // more bars than the texture is wide is a real out-of-bounds read.
+    // more bars than the bound texture is wide is a real out-of-bounds read.
     //
-    // Deriving from the intended count instead would over-report on two
-    // reachable paths, because this region is filled EARLIER in
-    // uploadDirtyTextures() than the audio block that resizes the texture:
-    // a failed create() keeps the previous smaller texture, and the
-    // m_dummyChannelTextureNeedsUpload early return skips the audio block
-    // outright. Both would leave a frame drawing a new-size UBO against an
-    // old-size texture. Under-reporting is safe — audioBar() just reads no
-    // bars for a frame — so trailing the texture by one frame is the correct
-    // direction to err. A successful resize re-arms m_uniformsDirty so the
-    // next frame republishes the grown width.
-    state.audioSpectrumSize = m_audioSpectrumTexture ? m_audioSpectrumTexture->pixelSize().width() : 0;
+    // This region is filled EARLIER in uploadDirtyTextures() than the audio
+    // block that resizes the texture, so neither the pre-resize width nor the
+    // pending count is safe alone. On a GROW the texture may still be the old
+    // smaller width this frame (a failed create() keeps it, and the
+    // m_dummyChannelTextureNeedsUpload early return skips the resize outright),
+    // so the pending count would over-report. On a SHRINK the bound width is
+    // still the old larger one here while the block is about to shrink the
+    // texture, so the bound width would over-report. min() under-reports in
+    // both directions instead, which is safe — audioBar() just reads fewer
+    // bars for a frame — and a successful resize re-arms m_uniformsDirty so the
+    // next frame republishes the settled width. The pending count mirrors the
+    // audio block's own `uploadBars` (raw size clamped to the device limit).
+    const int boundAudioWidth = m_audioSpectrumTexture ? m_audioSpectrumTexture->pixelSize().width() : 0;
+    const int audioDeviceMax = rhi ? rhi->resourceLimit(QRhi::TextureSizeMax) : 0;
+    const int rawAudioBars = static_cast<int>(m_audioSpectrum.size());
+    const int pendingAudioBars = (audioDeviceMax > 0) ? qMin(rawAudioBars, audioDeviceMax) : rawAudioBars;
+    state.audioSpectrumSize = qMin(boundAudioWidth, pendingAudioBars);
 
     // User texture resolutions (bindings 7-10) — resolved node-side.
     for (int i = 0; i < kMaxUserTextures; ++i) {

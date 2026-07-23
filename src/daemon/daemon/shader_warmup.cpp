@@ -495,6 +495,16 @@ void Daemon::setupShaderWarmBakes()
             const QString entryPrologue = zoneEntryPrologue();
             const QList<PhosphorShaders::EntryCandidate> entryCandidates = zoneEntryCandidates();
             const QString paramPreamble = ShaderRegistry::paramPreamble(info);
+            // Zone shaders bake through the UNQUALIFIED (PlasmaZones) wrapper on
+            // purpose: it prepends the plasmazones/overlays trusted roots so
+            // `#include <common.glsl>` resolves the same way ZoneShaderItem's
+            // live load does. The animation and surface warm-bakes below MUST
+            // instead call PhosphorRendering::warmShaderBakeCacheForPaths
+            // directly — their include lists are already the animation/surface
+            // shared roots, and routing them through this wrapper would prepend
+            // overlays/shared, shadowing the animation/surface copies of
+            // audio.glsl with the overlay copy (different UBO contract) and
+            // fingerprinting the cache key on the wrong include content.
             watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
                                                  [vertPath = zoneVertPath, fragPath = info.sourcePath, includePaths,
                                                   paramPreamble, entryPrologue, entryCandidates]() {
@@ -605,9 +615,9 @@ void Daemon::setupShaderWarmBakes()
             watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
                                                  [vertPath, fragPath = info.fragmentShaderPath, includePaths,
                                                   paramPreamble, entryPrologue, entryCandidates]() {
-                                                     return warmShaderBakeCacheForPaths(vertPath, fragPath,
-                                                                                        includePaths, paramPreamble,
-                                                                                        entryPrologue, entryCandidates);
+                                                     return PhosphorRendering::warmShaderBakeCacheForPaths(
+                                                         vertPath, fragPath, includePaths, paramPreamble, entryPrologue,
+                                                         entryCandidates);
                                                  }));
         };
         connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,
@@ -642,84 +652,84 @@ void Daemon::setupShaderWarmBakes()
     // SurfaceShaderItem). A pack with no resolvable vert is skipped — the live
     // path would error on it too, so there is nothing to warm.
     if (m_surfaceShaderRegistry) {
-        auto scheduleWarmForSurfaceEffect = [this,
-                                             registryPtr = QPointer<PhosphorSurfaceShaders::SurfaceShaderRegistry>(
-                                                 m_surfaceShaderRegistry.get())](
-                                                const PhosphorSurfaceShaders::SurfaceShaderEffect& info) {
-            if (!info.isValid() || info.fragmentShaderPath.isEmpty() || !QFile::exists(info.fragmentShaderPath)) {
-                return;
-            }
-            // Pure liveness gate: the include paths come from the static
-            // helper below (not the registry), so the QPointer is checked
-            // only to skip bakes scheduled across registry teardown.
-            if (!registryPtr) {
-                return;
-            }
-            // Include paths come from the SAME function the live loader's
-            // constructor uses (SurfaceShaderItem::surfaceIncludePaths — XDG
-            // dirs user-first, each contributing its `shared` subdir then
-            // itself), so the bake-cache key the warm compile writes is
-            // structurally guaranteed to be the one the first live paint
-            // looks up; the two can no longer silently diverge. The vert
-            // resolves as the live loader does: the pack's metadata vert
-            // first, else `surface.vert` beside the frag, else the first
-            // `surface.vert` in the include dirs (the `shared` subdir
-            // carries the shipped one — packs themselves ship no vert, so
-            // both sides land on the shared vert today). The overlay host
-            // satisfies the matching side of this contract: applyDecoration
-            // writes each chain stage's vertexSource from the pack's declared
-            // vertexShaderPath (and the registry preamble), so a pack that
-            // ships its own vert keys the same vert on both the warm bake
-            // and the live load.
-            const QStringList includePaths = SurfaceShaderItem::surfaceIncludePaths();
-            QString vertPath = info.vertexShaderPath;
-            if (vertPath.isEmpty()) {
-                const QString besideFrag =
-                    QFileInfo(info.fragmentShaderPath).absolutePath() + QStringLiteral("/surface.vert");
-                if (QFile::exists(besideFrag)) {
-                    vertPath = besideFrag;
+        auto scheduleWarmForSurfaceEffect =
+            [this,
+             registryPtr = QPointer<PhosphorSurfaceShaders::SurfaceShaderRegistry>(m_surfaceShaderRegistry.get())](
+                const PhosphorSurfaceShaders::SurfaceShaderEffect& info) {
+                if (!info.isValid() || info.fragmentShaderPath.isEmpty() || !QFile::exists(info.fragmentShaderPath)) {
+                    return;
                 }
-            }
-            if (vertPath.isEmpty()) {
-                for (const QString& incDir : std::as_const(includePaths)) {
-                    const QString candidate = incDir + QStringLiteral("/surface.vert");
-                    if (QFile::exists(candidate)) {
-                        vertPath = candidate;
-                        break;
+                // Pure liveness gate: the include paths come from the static
+                // helper below (not the registry), so the QPointer is checked
+                // only to skip bakes scheduled across registry teardown.
+                if (!registryPtr) {
+                    return;
+                }
+                // Include paths come from the SAME function the live loader's
+                // constructor uses (SurfaceShaderItem::surfaceIncludePaths — XDG
+                // dirs user-first, each contributing its `shared` subdir then
+                // itself), so the bake-cache key the warm compile writes is
+                // structurally guaranteed to be the one the first live paint
+                // looks up; the two can no longer silently diverge. The vert
+                // resolves as the live loader does: the pack's metadata vert
+                // first, else `surface.vert` beside the frag, else the first
+                // `surface.vert` in the include dirs (the `shared` subdir
+                // carries the shipped one — packs themselves ship no vert, so
+                // both sides land on the shared vert today). The overlay host
+                // satisfies the matching side of this contract: applyDecoration
+                // writes each chain stage's vertexSource from the pack's declared
+                // vertexShaderPath (and the registry preamble), so a pack that
+                // ships its own vert keys the same vert on both the warm bake
+                // and the live load.
+                const QStringList includePaths = SurfaceShaderItem::surfaceIncludePaths();
+                QString vertPath = info.vertexShaderPath;
+                if (vertPath.isEmpty()) {
+                    const QString besideFrag =
+                        QFileInfo(info.fragmentShaderPath).absolutePath() + QStringLiteral("/surface.vert");
+                    if (QFile::exists(besideFrag)) {
+                        vertPath = besideFrag;
                     }
                 }
-            }
-            if (vertPath.isEmpty() || !QFile::exists(vertPath)) {
-                return;
-            }
-            const QString effectId = info.id;
-            const QString paramPreamble = PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(info);
-            // Bake WITH the same fragment entry-point scaffold the live loader
-            // installs (surfaceshaderitem.cpp setEntryScaffold), or a
-            // `pSurface()`-only pack bakes its raw main()-less source and fails
-            // to compile, and even a traditional main() pack would key the
-            // cache differently from the scaffolded live load and miss it.
-            // Mirrors the zone and animation warm-bakes above.
-            const QString entryPrologue = PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryPrologue();
-            const QList<PhosphorShaders::EntryCandidate> entryCandidates =
-                PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryCandidates();
-            auto* watcher = new QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>(this);
-            connect(watcher, &QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>::finished, this,
-                    [watcher, effectId]() {
-                        const PhosphorRendering::WarmShaderBakeResult r = watcher->result();
-                        if (!r.success) {
-                            qCWarning(lcDaemon) << "Surface shader bake: failed for" << effectId << r.errorMessage;
+                if (vertPath.isEmpty()) {
+                    for (const QString& incDir : std::as_const(includePaths)) {
+                        const QString candidate = incDir + QStringLiteral("/surface.vert");
+                        if (QFile::exists(candidate)) {
+                            vertPath = candidate;
+                            break;
                         }
-                        watcher->deleteLater();
-                    });
-            watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
-                                                 [vertPath, fragPath = info.fragmentShaderPath, includePaths,
-                                                  paramPreamble, entryPrologue, entryCandidates]() {
-                                                     return warmShaderBakeCacheForPaths(vertPath, fragPath,
-                                                                                        includePaths, paramPreamble,
-                                                                                        entryPrologue, entryCandidates);
-                                                 }));
-        };
+                    }
+                }
+                if (vertPath.isEmpty() || !QFile::exists(vertPath)) {
+                    return;
+                }
+                const QString effectId = info.id;
+                const QString paramPreamble = PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(info);
+                // Bake WITH the same fragment entry-point scaffold the live loader
+                // installs (surfaceshaderitem.cpp setEntryScaffold), or a
+                // `pSurface()`-only pack bakes its raw main()-less source and fails
+                // to compile, and even a traditional main() pack would key the
+                // cache differently from the scaffolded live load and miss it.
+                // Mirrors the zone and animation warm-bakes above.
+                const QString entryPrologue = PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryPrologue();
+                const QList<PhosphorShaders::EntryCandidate> entryCandidates =
+                    PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryCandidates();
+                auto* watcher = new QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>(this);
+                connect(watcher, &QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>::finished, this,
+                        [watcher, effectId]() {
+                            const PhosphorRendering::WarmShaderBakeResult r = watcher->result();
+                            if (!r.success) {
+                                qCWarning(lcDaemon) << "Surface shader bake: failed for" << effectId << r.errorMessage;
+                            }
+                            watcher->deleteLater();
+                        });
+                watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
+                                                     [vertPath, fragPath = info.fragmentShaderPath, includePaths,
+                                                      paramPreamble, entryPrologue, entryCandidates]() {
+                                                         return PhosphorRendering::warmShaderBakeCacheForPaths(
+                                                             vertPath, fragPath, includePaths, paramPreamble,
+                                                             entryPrologue, entryCandidates);
+                                                     }));
+            };
         connect(m_surfaceShaderRegistry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
                 [this, scheduleWarmForSurfaceEffect]() {
                     if (!m_surfaceShaderRegistry) {
