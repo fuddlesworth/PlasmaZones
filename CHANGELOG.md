@@ -15,7 +15,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **Animation shader pickers now describe the shader you picked**: choosing a shader for an animation event shows the pack's description, and the description and parameters fold into a collapsible section that opens with a click, the same way decoration packs behave ([#834](https://github.com/fuddlesworth/PlasmaZones/pull/834)).
-- **Picking an animation shader works like picking a decoration pack**: the pack you chose now gets its own named row, with a remove button and its description and parameters behind the same collapsible chevron a decoration surface uses. The picker moved below that row as a "Set shader pack" action, so choosing a pack replaces what is there and choosing None clears it. A pack that is no longer installed now reads as missing in the row rather than showing its internal id, on the decoration pages as well ([#839](https://github.com/fuddlesworth/PlasmaZones/pull/839)).
+- **Picking an animation shader works like picking a decoration pack**: the pack you chose now gets its own named row, with a remove button and its description and parameters behind the same collapsible chevron a decoration surface uses. The picker moved below that row as a "Set shader pack" action, so choosing a pack replaces what is there and choosing None clears it. A pack that is no longer installed now reads as missing instead of showing its internal id. The decoration pages read the same way ([#839](https://github.com/fuddlesworth/PlasmaZones/pull/839)).
 
 ### Fixed
 

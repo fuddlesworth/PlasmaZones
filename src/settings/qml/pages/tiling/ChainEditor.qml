@@ -138,8 +138,17 @@ ColumnLayout {
     Label {
         Layout.fillWidth: true
         visible: !root.chain || root.chain.length === 0
-        // Points at the add row only when the add row can actually serve.
-        text: !root.showAddRow ? i18n("No decoration packs. Matched windows render undecorated.") : (root._anyPackAvailable ? i18n("No decoration packs. Add one below.") : i18n("No decoration packs."))
+        // Points at the add row only when the add row is there AND can
+        // actually serve.
+        text: {
+            if (!root.showAddRow)
+                return i18n("No decoration packs. Matched windows render undecorated.");
+
+            if (!root._anyPackAvailable)
+                return i18n("No decoration packs.");
+
+            return i18n("No decoration packs. Add one below.");
+        }
         wrapMode: Text.WordWrap
         opacity: 0.7
     }
