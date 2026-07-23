@@ -175,9 +175,9 @@ uniform float iWindowOpacity;
 //
 // Lifecycle: populated on every leg attach (alongside `iAnchorPosInFbo`
 // / `iAnchorSize`) and on every geometry change while the leg is live.
-// kwin-effect: `paint_pipeline.cpp::paintWindow`'s
+// kwin-effect: `paint_shader_window.cpp`'s
 // `cached->iAnchorRectInTextureLoc` setUniform site writes the value
-// computed by `ShaderInternal::computeTextureSubRect(frameGeo,
+// computed by `ShaderInternal::computeTextureSubRect(anchorGeo,
 // expandedGeo)`. Daemon: `SurfaceAnimator::syncShaderGeometryNow` pushes
 // it through `AnimationUniformExtension`. Both stamp the value before
 // the first painted frame, so a fragment never sees the GL default

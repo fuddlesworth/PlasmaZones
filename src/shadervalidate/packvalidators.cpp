@@ -176,6 +176,31 @@ int validatePack(const QString& packDir, QTextStream& out)
     return errors;
 }
 
+// Which of the compositor-only shared-helper samplers the (include-expanded)
+// fragment source references. shared/old_content.glsl and
+// shared/desktop_transition.glsl declare these binding-less, which the strict
+// SPIR-V bake rejects — so when a daemon-eligible pack's compile fails with
+// the binding-less-sampler diagnostic AND its source pulls one of these in,
+// the root cause is almost certainly a metadata bug (missing compositor-only
+// appliesTo), not a GLSL bug, and deserves a hint that says so. The source
+// scan alone is NOT a lint: daemon-capable packs legitimately reference these
+// samplers inside `#ifdef PLASMAZONES_KWIN` branches, which the preprocessor
+// strips before they can fail the bake — hence the hint is gated on the
+// compile actually failing with glslang's binding diagnostic (which does not
+// echo the offending identifier, so the source scan supplies the name).
+static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
+{
+    static const QStringList kCompositorOnlySamplers = {QStringLiteral("uOldWindow"), QStringLiteral("uFromDesktop"),
+                                                        QStringLiteral("uToDesktop")};
+    QStringList used;
+    for (const QString& sampler : kCompositorOnlySamplers) {
+        if (expandedSource.contains(sampler)) {
+            used << sampler;
+        }
+    }
+    return used;
+}
+
 // Validate one ANIMATION pack directory (data/animations/*). Reproduces the
 // animation runtime's fragment assembly on the daemon (Qt-RHI) path — the entry
 // scaffold (pTransition / pIn+pOut, or a pass-through main()), the generated
@@ -190,6 +215,7 @@ int validatePack(const QString& packDir, QTextStream& out)
 // dialect directly and never run on the daemon, so only their metadata is
 // linted here; their compile coverage is test_animation_shader_kwin_bake.
 // Daemon-capable packs get the full stage compile below.
+
 int validateAnimationPack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();
@@ -347,6 +373,21 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                     PhosphorShaders::spliceAfterVersion(expanded, AnimationShaderRegistry::paramPreamble(eff));
                 const ShaderCompiler::Result result = ShaderCompiler::compile(spliced.toUtf8(), QShader::FragmentStage);
                 errors += reportCompile(out, fragLabel, result, declaredParamNames(eff.parameters));
+                // A binding-less-sampler failure in a pack that pulls in the
+                // compositor-only shared helpers is a metadata bug in disguise
+                // — point the author at the real fix instead of leaving the
+                // opaque GLSL error. (glslang's diagnostic does not name the
+                // sampler, so match the failure mode + the source reference.)
+                if (!result.success && result.error.contains(QLatin1String("requires layout(binding"))) {
+                    const QStringList kwinOnly = compositorOnlySamplersUsed(expanded);
+                    if (!kwinOnly.isEmpty()) {
+                        out << "    (hint: " << kwinOnly.join(QStringLiteral(", "))
+                            << " is declared by the compositor-only shared/old_content.glsl / "
+                               "shared/desktop_transition.glsl helpers; packs that use them outside "
+                               "a PLASMAZONES_KWIN guard must declare a compositor-only appliesTo — "
+                               "omit \"appearance\")\n";
+                    }
+                }
             }
         }
     }

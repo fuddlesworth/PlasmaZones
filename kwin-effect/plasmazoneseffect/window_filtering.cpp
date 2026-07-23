@@ -323,7 +323,7 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     // must filter for drag operations and lifecycle reporting).
     // `m_snappingExclusionRuleSet` mirrors the Exclude-shaped slice of the
     // unified Rule store, refreshed on every rulesChanged via
-    // loadRuleAnimationsFromDbus (see shader_transitions.cpp). The
+    // loadRuleAnimationsFromDbus (see shader_config_dbus.cpp). The
     // `!isEmpty()` fast path keeps a no-exclusions user at two pointer
     // reads — same cost as the prior list-derived check.
     if (!m_snappingExclusionRuleSet.isEmpty()) {

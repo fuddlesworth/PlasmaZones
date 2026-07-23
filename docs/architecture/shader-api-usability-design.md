@@ -725,7 +725,10 @@ single `pTransition` and keeps its current auto-mirror behaviour.
 - An author can write `pTransition` (symmetric) or `pIn`/`pOut` (asymmetric) with
   no `iIsReversed` handling; `p_reversed` and `legProgress()` exist for authors who
   keep `main()`.
-- All 53 bundled animation packs compile and render identically on both runtimes.
+- All 53 design-time animation packs compile on every runtime that loads them.
+  Packs whose `appliesTo` omits `appearance` are compositor-only (kwin-effect
+  only, gated by `shaderEffectIsCompositorOnly`) and never run on the daemon,
+  so cross-runtime render parity applies only to daemon-eligible packs.
 
 ---
 
@@ -783,8 +786,10 @@ that closes the cross-app gap.
   produce identical author-visible symbols on the daemon (UBO) and kwin-effect
   (`PLASMAZONES_KWIN` default-block) paths. A test should bake a generated-entry
   animation shader on both branches and assert both compile — the std140 offset
-  contract is already pinned by `BaseUniforms.h` asserts + `test_animation_shader_bake`,
-  so the new surface is the *generated* GLSL, not the UBO layout.
+  contract is already pinned by `BaseUniforms.h` asserts +
+  `test_animation_shader_preamble_bake` (the fragment-UBO bake;
+  `test_animation_shader_bake` covers the vertex stage only), so the new
+  surface is the *generated* GLSL, not the UBO layout.
 - **`legProgress()` and the `iTime` flip** (T1.5): `pIn`/`pOut` receive forward
   0→1 `t`, but `pTransition` receives raw (flipped) `iTime`. Document this
   difference loudly — a symmetric author who assumes `t` is always forward will get
@@ -815,4 +820,4 @@ that closes the cross-app gap.
   identically (25 via pImage/pZone; magnetic-field keeps its custom-vertex main()).
 - The animation system meets its own [definition of done](#a4--definition-of-done-animation-system)
   (cross-runtime generation, both-branch validation, `pTransition`/`pIn`/`pOut`,
-  all 53 animation packs migrated and rendering identically).
+  all 53 design-time animation packs migrated).

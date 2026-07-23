@@ -24,9 +24,11 @@
  *     and (c) reading the `isReversed` Q_PROPERTY off the dynamically-
  *     constructed item — substantial infrastructure that exceeds this
  *     unit-test layer's mock surface. The contract IS verified at the
- *     compile / bake layer: `test_animation_shader_bake` runs every
- *     shipped shader through SPIR-V with the canonical UBO including
- *     `iIsReversed`. The runtime push is mechanical (`shaderItem->
+ *     compile / bake layer: `test_animation_shader_preamble_bake` runs
+ *     every daemon-eligible shader's fragment stage through SPIR-V with
+ *     the canonical UBO including `iIsReversed` (compositor-only packs
+ *     get the same via `test_animation_shader_kwin_bake`'s KWin-branch
+ *     compile). The runtime push is mechanical (`shaderItem->
  *     setIsReversed(!isShowLeg)`) — when extending behavioural coverage
  *     here, mock the ShaderEffect output via a `QQuickItem` subclass
  *     exposing the `isReversed` Q_PROPERTY and have the test's content
