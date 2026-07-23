@@ -294,6 +294,11 @@ Item {
             }
             return glyphed(spanArrow, i18n("Span reduced"));
         } else if (action === "focus") {
+            // A directional press whose focus was not in the tiled set enters
+            // at the master rather than travelling, and says so.
+            if (reason === "master")
+                return i18n("Focus on the master window");
+
             const focusArrow = directionArrow(reason);
             if (targetZoneNumber > 0)
                 return glyphed(focusArrow, i18n("Focus on Zone %1", targetZoneNumber));
@@ -404,7 +409,6 @@ Item {
         return -1;
     }
 
-    // Helper: direction string ("left","right","up","down") → arrow character
     /// Prefix @p text with @p glyph as one translatable unit, so translators
     /// control the order and RTL locales mirror it. One call site for the
     /// context string, so it cannot fork into near-duplicate msgids.
@@ -418,6 +422,7 @@ Item {
         return dir === "clockwise" ? "↻" : "↺";
     }
 
+    /// Map a direction string ("left","right","up","down") to an arrow character.
     function directionArrow(dir: string): string {
         // Cross-surface moves prefix the direction with the surface they cross:
         // "screen:left", "desktop:right". Strip it to the bare token so the

@@ -237,7 +237,10 @@ private Q_SLOTS:
         const QMetaObject* mo = m_settings->metaObject();
         QStringList missing;
         int checked = 0;
-        for (int i = mo->propertyOffset(); i < mo->propertyCount(); ++i) {
+        // From 0, not propertyOffset(): a *Shortcut property declared on the
+        // ISettings base would otherwise be skipped silently while the check
+        // below still passed on the concrete ones.
+        for (int i = 0; i < mo->propertyCount(); ++i) {
             const QString name = QString::fromLatin1(mo->property(i).name());
             if (!name.endsWith(QLatin1String("Shortcut")) || name.startsWith(QLatin1String("editor"))) {
                 continue;

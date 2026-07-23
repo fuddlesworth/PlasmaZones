@@ -1068,7 +1068,12 @@ private:
     QElapsedTimer m_floatDebounce;
     QElapsedTimer m_cycleLayoutDebounce;
     // Span flips grow into shrink at a boundary, so auto-repeat must not
-    // chain presses (see handleSpan).
+    // chain presses (see handleSpan). One timer for all four directions, which
+    // means a deliberate reversal inside the window (grow right, then grow
+    // left within 100 ms) is dropped as well. That is accepted: the reversal
+    // is a correction of a press the user has not seen the result of yet, and
+    // per-direction timers would let auto-repeat on one arrow chain past a
+    // boundary flip while the opposite arrow was still settling.
     QElapsedTimer m_spanDebounce;
     // Shared debounce for VS swap/rotate. Each fire commits a config change
     // through Settings and kicks a refresh → resnap cascade — cheap per call

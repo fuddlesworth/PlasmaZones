@@ -56,9 +56,16 @@ void AutotileEngine::toggleFocusedWindowFloat()
     // copy: a hand-copied clone drifted out of sync once already, keeping the
     // focus gate that made screen-scoped operations act on the wrong monitor.
     // The focus requirement stays here, as the consumer's own check below.
+    //
+    // requireTiledWindows is false because this is the one caller that wants
+    // the screen HOLDING THE FOCUS rather than a screen with a layout. A
+    // monitor whose windows are all floating has an empty tiledWindows() and a
+    // live focusedWindow(), and it is precisely the target of a "put me back
+    // in the layout" press; demanding tiles there would hand back a different
+    // monitor's state and float the wrong window.
     QString screenId;
     PhosphorTiles::TilingState* state = nullptr;
-    m_navigation->tiledWindowsForFocusedScreen(screenId, state);
+    m_navigation->tiledWindowsForFocusedScreen(screenId, state, QString(), /*requireTiledWindows=*/false);
 
     if (!state) {
         qCWarning(PhosphorTileEngine::lcTileEngine) << "toggleFocusedWindowFloat: no state found for focused screen"

@@ -5,7 +5,11 @@
             "date": "2026-07-22",
             "highlights": [
                 "New: keyboard shortcuts that grow and shrink a window's zone span. Ctrl+Alt+Arrows extends the window into the neighbouring zone in that direction, and once it reaches the edge the same key pulls the opposite side back in, so one set of keys both grows and shrinks (#838)",
-                "New: a shortcut cheatsheet overlay that shows your global shortcuts with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ and it only lists the shortcuts that apply in the current tiling mode (#810)"
+                "New: a shortcut cheatsheet overlay that shows your global shortcuts with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ and it only lists the shortcuts that apply in the current tiling mode (#810)",
+                "Changed: animation shader pickers now show the pack's description, with the description and its parameters folded into a section you can open with a click (#834)",
+                "Fixed: the layout right-click menu works again, so \"Set as Default\" and \"Hide from Zone Selector\" do something (#827)",
+                "Fixed: editing a layout no longer throws the page back to the top, and the cards no longer flicker while one of them changes (#827)",
+                "Fixed: the Neon City and Voxel Terrain overlays render again on drivers that refused their depth buffer setup (#827)"
             ]
         },
         {

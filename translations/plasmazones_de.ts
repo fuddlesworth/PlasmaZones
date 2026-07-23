@@ -2,6 +2,98 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="de">
 <context>
+    <name>DBusLayoutService</name>
+    <message>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="39"/>
+        <source>Layout ID cannot be empty</source>
+        <translation type="unfinished">Layout-ID darf nicht leer sein</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="47"/>
+        <source>Failed to load layout: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="57"/>
+        <source>That layout is no longer available.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="66"/>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="90"/>
+        <source>Layout JSON cannot be empty</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="74"/>
+        <source>Failed to create layout: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="79"/>
+        <source>Created layout but received empty ID</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="98"/>
+        <source>Failed to update layout: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="109"/>
+        <source>The layout could not be saved.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="142"/>
+        <source>Failed to assign layout to screen: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>QObject</name>
+    <message>
+        <location filename="../src/config/colorimporter.cpp" line="19"/>
+        <source>Could not open file: %1</source>
+        <translation type="unfinished">Datei konnte nicht geöffnet werden: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/config/colorimporter.cpp" line="28"/>
+        <source>File is empty: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/colorimporter.cpp" line="53"/>
+        <source>Invalid JSON: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/colorimporter.cpp" line="67"/>
+        <source>No colors found in JSON file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/colorimporter.cpp" line="77"/>
+        <source>Missing required colors (color0, color4, color7) in pywal file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/colorimporter.cpp" line="86"/>
+        <source>Invalid color values in pywal file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/colorimporter.cpp" line="114"/>
+        <source>Color file needs at least 8 colors (found %1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/colorimporter.cpp" line="123"/>
+        <source>Invalid color format in color list file</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>plasmazones</name>
     <message>
         <location filename="../src/daemon/main.cpp" line="215"/>
@@ -345,52 +437,52 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="847"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="859"/>
         <source>Arrows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="857"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="869"/>
         <source>Apply Layout 1-9</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="858"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="870"/>
         <source>Snap to Zone 1-9</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="862"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="874"/>
         <source>Move Window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="867"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="879"/>
         <source>Focus Zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="872"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="884"/>
         <source>Swap Window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="877"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="889"/>
         <source>Span Window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="883"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="895"/>
         <source>Swap Screens</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1020"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1032"/>
         <source>Apply Layout %1</source>
         <translation>Layout %1 anwenden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1038"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1050"/>
         <source>Snap to Zone %1</source>
         <translation>In Zone %1 einrasten</translation>
     </message>
@@ -492,9 +584,302 @@
         <translation>Ein</translation>
     </message>
     <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="43"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="59"/>
+        <source>Automatic</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="44"/>
+        <source>Vulkan</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="45"/>
+        <source>OpenGL</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="49"/>
+        <source>Stereo</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="50"/>
+        <source>Mono (average)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="51"/>
+        <source>Mono (left)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="52"/>
+        <source>Mono (right)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="60"/>
+        <source>PipeWire</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="61"/>
+        <source>PulseAudio</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="62"/>
+        <source>ALSA</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="63"/>
+        <source>JACK</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="64"/>
+        <source>sndio</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="65"/>
+        <source>OSS</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="66"/>
+        <source>PortAudio</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="67"/>
+        <source>FIFO</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="68"/>
+        <source>Shared memory</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="73"/>
+        <source>Tiled and snapped windows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="74"/>
+        <source>All normal windows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="75"/>
+        <source>All windows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
+        <source>None</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="85"/>
+        <source>Text only</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="86"/>
+        <source>Visual preview</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="90"/>
+        <source>Full zone highlight</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="91"/>
+        <source>Compact preview</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="97"/>
+        <source>Top-Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="98"/>
+        <source>Top</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="99"/>
+        <source>Top-Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="100"/>
+        <source>Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="101"/>
+        <source>Center</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="102"/>
+        <source>Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="103"/>
+        <source>Bottom-Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="104"/>
+        <source>Bottom</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="105"/>
+        <source>Bottom-Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="109"/>
+        <source>Grid</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="110"/>
+        <source>Horizontal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="111"/>
+        <source>Vertical</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="118"/>
+        <source>Auto</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="119"/>
+        <source>Manual</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="126"/>
+        <source>Shift</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="127"/>
+        <source>Ctrl</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="128"/>
+        <source>Alt</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="129"/>
+        <source>Meta</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="130"/>
+        <source>Ctrl + Alt</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="131"/>
+        <source>Ctrl + Shift</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="132"/>
+        <source>Alt + Shift</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="133"/>
+        <source>Always active</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="134"/>
+        <source>Alt + Meta</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="135"/>
+        <source>Ctrl + Alt + Meta</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="144"/>
+        <source>Treat as normal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="145"/>
+        <source>Restore only</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="146"/>
+        <source>Ignore all</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="155"/>
+        <source>After existing</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="156"/>
+        <source>After focused</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="157"/>
+        <source>As main window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="162"/>
+        <source>Reorder on drag</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="166"/>
+        <source>Float excess</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="167"/>
+        <source>Unlimited</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="325"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="216"/>
         <source>Off</source>
         <translation>Aus</translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="340"/>
+        <source>%1 %2</source>
+        <comment>a number followed by its unit</comment>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="272"/>
@@ -1077,9 +1462,10 @@
         <translation>%1 Zonen einfügen</translation>
     </message>
     <message>
+        <location filename="../src/editor/EditorGapsModel.cpp" line="284"/>
         <source>Clear Edge Gap Override</source>
         <comment>@action</comment>
-        <translation type="vanished">Randabstand-Überschreibung zurücksetzen</translation>
+        <translation>Randabstand-Überschreibung zurücksetzen</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="434"/>
@@ -2011,6 +2397,7 @@
         <translation>Unbegrenzt (keine Obergrenze)</translation>
     </message>
     <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="161"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="362"/>
         <source>Float on drag</source>
         <translation>Beim Ziehen schweben lassen</translation>
@@ -2667,6 +3054,7 @@
         <translation type="vanished">Fensterfilterung</translation>
     </message>
     <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="125"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="296"/>
         <source>Disabled</source>
         <translation>Deaktiviert</translation>
@@ -6302,6 +6690,102 @@
     <message>
         <location filename="../src/settings/stores/profilestore_diff.cpp" line="263"/>
         <source>Unnamed rule</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/updatechecker.cpp" line="157"/>
+        <source>Failed to parse response: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/updatechecker.cpp" line="171"/>
+        <source>No version found in release data</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="52"/>
+        <source>All Monitors</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="56"/>
+        <source>Standard (16:9)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="60"/>
+        <source>Ultrawide (21:9)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="64"/>
+        <source>Super-Ultrawide (32:9)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="68"/>
+        <source>Portrait (9:16)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="279"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="323"/>
+        <source>File path cannot be empty</source>
+        <comment>@info</comment>
+        <translation type="unfinished">Der Dateipfad darf nicht leer sein</translation>
+    </message>
+    <message>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="283"/>
+        <source>No shader selected to save</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="299"/>
+        <source>Failed to save preset: %1</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="309"/>
+        <source>Failed to write preset file: %1</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="330"/>
+        <source>Failed to open preset file: %1</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="338"/>
+        <source>Invalid preset file: %1</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="342"/>
+        <source>Preset file must contain a JSON object</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="349"/>
+        <source>Preset file missing shader ID</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="354"/>
+        <source>Shader in preset is no longer available</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="364"/>
+        <source>Preset file has malformed parameters</source>
+        <comment>@info</comment>
         <translation type="unfinished"></translation>
     </message>
 </context>

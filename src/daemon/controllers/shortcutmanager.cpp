@@ -519,8 +519,11 @@ ShortcutManager::ShortcutManager(Settings* settings, QObject* parent)
     Q_ASSERT(settings);
     if (!settings) {
         // Release-build pair for the assert above. Every Entry::currentSeq
-        // lambda captures this pointer raw, so continuing would defer the
-        // crash to the first rebindAll() instead of failing here.
+        // lambda captures this pointer raw, so a built table would deref null
+        // on its first rebind. The manager instead stays inert: the guard at
+        // the top of registerShortcuts() keeps m_entries empty, and every
+        // other public entry point already no-ops on an empty table or a null
+        // m_registry.
         qCCritical(lcShortcuts) << "ShortcutManager constructed without Settings — shortcuts disabled";
         return;
     }
@@ -545,6 +548,15 @@ ShortcutManager::~ShortcutManager() = default;
 
 void ShortcutManager::registerShortcuts()
 {
+    if (!m_settings) {
+        // Constructed without Settings. buildEntries() would produce currentSeq
+        // lambdas over a null pointer and the bind loop below would deref them,
+        // so stop before the backend is even created — that keeps the ctor's
+        // "shortcuts disabled" claim true instead of trading one crash site for
+        // a Portal round-trip and the same crash.
+        qCWarning(lcShortcuts) << "registerShortcuts(): no Settings — shortcuts stay disabled";
+        return;
+    }
     if (m_registrationInProgress) {
         qCWarning(lcShortcuts) << "registerShortcuts() called re-entrantly — ignoring";
         return;

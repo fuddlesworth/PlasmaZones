@@ -28,9 +28,9 @@ under 1150. The §4 catalog is a pre-remediation snapshot kept for the
 historical record, so its line counts and verdicts are as-of that run, not
 current. Files that entered the grace band after it was taken, and are
 tolerated with no action: `libs/phosphor-tile-engine/src/NavigationController.cpp`
-(1012; seam: the cross-surface helpers), `libs/phosphor-snap-engine/src/snapnavigationtargets.cpp`
-(1015; seam: the span resolver), `src/daemon/controllers/shortcutmanager.cpp`
-(1051; seam: the cheatsheet catalog and its family compression),
+(1108; seam: the cross-surface helpers), `libs/phosphor-snap-engine/src/snapnavigationtargets.cpp`
+(1090; seam: the span resolver), `src/daemon/controllers/shortcutmanager.cpp`
+(1063; seam: the cheatsheet catalog and its family compression),
 `kwin-effect/plasmazoneseffect/lifecycle_wiring.cpp` (1134) and
 `kwin-effect/plasmazoneseffect/paint_shader_window.cpp` (1019), both created by
 the §2.1 splits and sized as those plans predicted, and

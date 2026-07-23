@@ -306,6 +306,8 @@ private Q_SLOTS:
     void jitterSliverInBand_doesNotJoinSweep();
     void jitterEdgeCandidate_isNotGrowTarget();
     void growTie_prefersPerpendicularNearerCandidate();
+    void growDoubleTie_prefersFarthestFarEdge();
+    void growDoubleTie_prefersFarthestFarEdgeLeftward();
     void asymmetricStack_growTakesWholeColumnConsistently();
     void gapBearingLayout_growsAcrossGap();
     void diagonalOnlyCandidate_doesNotGrow();
@@ -596,6 +598,50 @@ void TestSpanTargets::growTie_prefersPerpendicularNearerCandidate()
     // sweeps the off-centre candidate too; pin the full set so the sweep
     // outcome in an overlapping tie layout stays deterministic.
     QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[0], f.zoneIds[1], f.zoneIds[2]}));
+}
+
+void TestSpanTargets::growDoubleTie_prefersFarthestFarEdge()
+{
+    // Two candidates tie on BOTH edge gap (flush at x=960) and perpendicular
+    // centre (both full height), so only the far-edge key can separate them.
+    // The SHORT one is inserted first, so enumeration order alone would pick
+    // it and the resulting 960-1440 band would then sweep the wider zone
+    // whole anyway — geometry covering a zone whose far edge the band never
+    // reached. Preferring the farthest far edge makes the band a superset, so
+    // the winner is the zone that actually defines the extension.
+    SpanFixture f({QRectF(0.0, 0.0, 0.5, 1.0), QRectF(0.5, 0.0, 0.25, 1.0), QRectF(0.5, 0.0, 0.5, 1.0)});
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
+
+    auto resolver = f.makeFeedbackResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
+
+    QVERIFY(result.success);
+    QVERIFY(result.grew);
+    QCOMPARE(f.feedbackReason, QStringLiteral("grow:right"));
+    QCOMPARE(f.feedbackTarget, f.zoneIds[2]);
+    QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[0], f.zoneIds[1], f.zoneIds[2]}));
+    QCOMPARE(result.geometry, QRect(0, 0, 1920, 1080));
+}
+
+void TestSpanTargets::growDoubleTie_prefersFarthestFarEdgeLeftward()
+{
+    // Mirror of the case above, pinning the sign of the far-edge key in the
+    // negative direction: there the FARTHEST edge is the SMALLEST travelLo,
+    // which the ranking expresses as -travelLo so a larger value is always
+    // the longer band. Getting the sign wrong picks the near zone instead.
+    SpanFixture f({QRectF(0.5, 0.0, 0.5, 1.0), QRectF(0.25, 0.0, 0.25, 1.0), QRectF(0.0, 0.0, 0.5, 1.0)});
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
+
+    auto resolver = f.makeFeedbackResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("left"), kScreen);
+
+    QVERIFY(result.success);
+    QVERIFY(result.grew);
+    QCOMPARE(f.feedbackReason, QStringLiteral("grow:left"));
+    QCOMPARE(f.feedbackTarget, f.zoneIds[2]);
+    QCOMPARE(result.geometry, QRect(0, 0, 1920, 1080));
 }
 
 void TestSpanTargets::asymmetricStack_growTakesWholeColumnConsistently()

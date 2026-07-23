@@ -200,6 +200,19 @@ public:
                                                                    const QString& screenId);
 
 private:
+    /// Release-build pair for the constructor's Q_ASSERTs on @c m_service and
+    /// @c m_layoutManager. Neither is ever reset, so this can only be false on
+    /// a resolver constructed with a null. That cannot happen in-tree
+    /// (SnapEngine::ensureTargetResolver is the only construction site and
+    /// returns early when its tracker is null), but the class is exported with
+    /// a public constructor, so an out-of-tree consumer can reach it. Every
+    /// public query checks this and returns its own @c engine_unavailable
+    /// failure result rather than dereferencing.
+    bool hasDependencies() const
+    {
+        return m_service != nullptr && m_layoutManager != nullptr;
+    }
+
     /// Single emission point so call sites don't have to null-check the
     /// optional callback at every feedback opportunity. Inline + private
     /// keeps the cost identical to the previous EMIT_FEEDBACK macro
