@@ -395,8 +395,8 @@ void Daemon::initializeAutotile()
             // pre-autotile floating geometry restored via the batched buildAutotileRestoreEntries → emitBatchedResnap
             // path.
             auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get());
-            if (applied && wasAutotile && !concreteSnap) {
-                if (m_snapEngine) {
+            if (wasAutotile && (!applied || !concreteSnap)) {
+                if (applied && m_snapEngine) {
                     qCWarning(lcDaemon) << "Snap engine is not a SnapEngine — autotile→snap resnap skipped";
                 }
                 // The resnap path below is what normally consumes
@@ -634,12 +634,14 @@ void Daemon::connectLayoutSignals()
     // This is the FIRST of the pair start() calls (lifecycle.cpp), so the
     // clear lives here and connectOverlaySignals() only appends.
     //
-    // Scope note: this handles the DUPLICATION half of restart only. A
-    // stop()->start() cycle without a fresh init() also LOSES wiring whose
-    // owner stop() destroyed — initializeAutotile()'s handlers and the
-    // autotile shortcut lambdas all hang off m_autotileEngine, which stop()
-    // resets and only initEnginesAndWiring() recreates. Restarting in-process
-    // therefore requires init(), not just start().
+    // Scope note: this handles the DUPLICATION half of restart for the four
+    // connections below only. initializeAutotile() has BOTH problems and is
+    // not covered here: its engine handlers hang off m_autotileEngine (which
+    // stop() resets and only initEnginesAndWiring() recreates, so they are
+    // LOST on a bare start()), while its seven shortcut lambdas hang off
+    // m_shortcutManager (ctor-owned, never reset — so on a stop()+init()+
+    // start() cycle they DUPLICATE and each autotile shortcut fires twice).
+    // Both want the same treatment as the four here.
     //
     // m_layoutManager is constructed in the Daemon ctor and never reset, so it
     // is non-null on every path that reaches here; the guards elsewhere in

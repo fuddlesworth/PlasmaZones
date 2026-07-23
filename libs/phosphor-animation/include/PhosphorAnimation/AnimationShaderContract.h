@@ -599,7 +599,7 @@ inline QString slotKey(int slot)
 
 /// `vec4 customColors[N]` — per-effect declared color parameter slots.
 /// Cross-runtime element-name lookup constant, symmetric with
-/// `kCustomParamsArray` above: used by the kwin-effect's
+/// `kCustomParamsArray` above: mirrored by (not consumed from) the kwin-effect's
 /// `glGetUniformLocation("customColors[N]")` calls (the canonical
 /// header's `#ifdef PLASMAZONES_KWIN` branch declares them as
 /// default-block uniforms `customColors[0]..customColors[15]`) and as

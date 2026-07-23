@@ -323,15 +323,23 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
 
     // Audio spectrum texture: resize if needed, upload when dirty
     if (m_audioSpectrumDirty && m_audioSpectrumTexture && m_audioSpectrumSampler) {
-        const int bars = m_audioSpectrum.size();
-        // No TextureSizeMax clamp here, unlike the user-texture path below: a
-        // user-supplied PNG can be any size, but the spectrum length is
-        // producer-capped at PhosphorAudio::Defaults::MaxBars (256) and
-        // neither audio-spectrum setter grows the vector, so the bound rests on producer discipline, so it cannot
-        // approach any device limit. A clamp would also have to shrink the
-        // uploaded QImage in lockstep — the texture extent and the image
-        // extent must agree — for a case that cannot occur.
+        // Clamp the bar count to the device limit. In practice the bundled
+        // producer caps at PhosphorAudio::Defaults::MaxBars (256), but
+        // `audioSpectrum` is a writable QML property and neither setter bounds
+        // the vector LENGTH, so an oversized spectrum is reachable rather than
+        // hypothetical — and an unclamped one fails create() every frame.
+        // `uploadBars` drives BOTH the texture extent and the QImage below, so
+        // the two can never disagree.
+        const int deviceMax = rhi->resourceLimit(QRhi::TextureSizeMax);
+        const int rawBars = m_audioSpectrum.size();
+        const int uploadBars = (deviceMax > 0) ? qMin(rawBars, deviceMax) : rawBars;
+        if (uploadBars < rawBars) {
+            qCWarning(lcShaderNode) << "audio spectrum has" << rawBars << "bars, exceeding device TextureSizeMax"
+                                    << deviceMax << "— truncating";
+        }
+        const int bars = uploadBars;
         const QSize targetSize = bars > 0 ? QSize(bars, 1) : QSize(1, 1);
+        bool audioResizeFailed = false;
         if (m_audioSpectrumTexture->pixelSize() != targetSize) {
             // Build the resized texture into a local and only swap it in on a
             // successful create(), so a failed resize keeps the previous working
@@ -342,18 +350,24 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             if (!resized->create()) {
                 qCWarning(lcShaderNode) << "audio spectrum texture create() failed for size" << targetSize
                                         << ", keeping previous texture; will retry next frame";
-                return;
-            }
-            m_audioSpectrumTexture = std::move(resized);
-            resetAllBindingsAndPipelines();
-            if (!ensurePipeline()) {
-                return;
+                // Fall THROUGH rather than return: this block sits above the
+                // user-texture, source-provider, fallback and wallpaper
+                // uploads, and a persistently failing spectrum would otherwise
+                // starve all of them for the node's life. dirty stays set, so
+                // the resize still retries next frame.
+                audioResizeFailed = true;
+            } else {
+                m_audioSpectrumTexture = std::move(resized);
+                resetAllBindingsAndPipelines();
+                if (!ensurePipeline()) {
+                    return;
+                }
             }
         }
         // Clear dirty only once a batch is in hand: nextResourceUpdateBatch()
         // returns null when Qt's 64-batch pool is exhausted, and clearing
         // first would drop the upload with nothing left to re-arm it.
-        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+        QRhiResourceUpdateBatch* batch = audioResizeFailed ? nullptr : rhi->nextResourceUpdateBatch();
         if (batch) {
             m_audioSpectrumDirty = false;
         }

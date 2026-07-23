@@ -54,8 +54,11 @@ void main() {
     // would reach its target and then snap BACKWARD ~7% at the very moment the
     // curve overshoots, bouncing the wrong way. Ease the clamped value and carry
     // the overshoot as a LINEAR extension past the ends, which keeps the mix
-    // monotone while still letting the rect overshoot — the bounce is the point on
-    // a geometry morph, so it is preserved rather than refused.
+    // monotone while still letting the rect overshoot — the bounce is the point
+    // of THIS morph, so it is preserved rather than refused. Not a family-wide
+    // rule: flow, ripple-snap and phosphor-stream deliberately consume bounded
+    // progress instead, because a slam and a stagger each carry their own
+    // character envelope and an extra curve overshoot would fight it.
     float ec = clamp(tt, 0.0, 1.0);
     float ease = ec * ec * (3.0 - 2.0 * ec) + (tt - ec);
     // Tent fold amount: flat at both ends, fully folded at mid-flight. sin(PI*tt)

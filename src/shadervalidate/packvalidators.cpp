@@ -151,9 +151,12 @@ int validatePack(const QString& packDir, QTextStream& out)
         // The runtime caps buffer passes at 4 (parseShaderMetadata's qMin) and
         // drops the surplus with only a journal warning — exactly the
         // "runtime hid the author error" class this block lints for.
-        if (bufferNames.size() > 4) {
+        // Compare the RAW declared array against the cap, not the non-empty
+        // subset: parseShaderMetadata iterates qMin(rawSize, 4) and only then
+        // skips empties, so ["", "a", "b", "c", "d"] silently loses "d".
+        if (declared.size() > 4) {
             lints << QStringLiteral("too many buffer shaders: %1 declared, cap is 4 (surplus dropped at load)")
-                         .arg(bufferNames.size());
+                         .arg(static_cast<int>(declared.size()));
         }
 
         const double rawScale = root.value(QLatin1String("bufferScale")).toDouble(1.0);

@@ -454,25 +454,34 @@ void Daemon::setupShaderWarmBakes()
             if (!reg) {
                 return;
             }
-            // Resolve the vertex stage the way ZoneShaderItem does at load:
-            // per-pack zone.vert, else shared/zone.vert from the search paths.
-            // Bailing on an empty vertexShaderPath (as this did) skipped the
-            // warm bake for every pack that does NOT ship its own vert — 26 of
-            // the 27 bundled overlay packs — so their first paint still paid a
-            // cold glslang compile, which is the exact cost this function
-            // exists to remove. Both siblings below already do this.
-            QString zoneVertPath = info.vertexShaderPath;
-            if (zoneVertPath.isEmpty()) {
-                const QString localVert = QFileInfo(info.sourcePath).absolutePath() + QStringLiteral("/zone.vert");
-                if (QFile::exists(localVert)) {
-                    zoneVertPath = localVert;
-                } else {
-                    for (const QString& incDir : reg->searchPaths()) {
-                        const QString candidate = incDir + QStringLiteral("/zone.vert");
+            // Resolve the vertex stage EXACTLY as ZoneShaderItem does at load
+            // (zoneshaderitem.cpp): `<fragdir>/zone.vert`, else the first
+            // `zone.vert` found walking each overlay root's `shared` subdir
+            // and then the root itself. Two details matter and an earlier
+            // attempt got both wrong:
+            //   - searchPaths() yields the overlay ROOTS; the shared vert
+            //     lives at `<root>/shared/zone.vert`, so probing only
+            //     `<root>/zone.vert` never matches and every pack without its
+            //     own vert silently went unbaked (26 of the 27 bundled packs).
+            //   - the live loader IGNORES the metadata `vertexShader` field
+            //     for zone packs, so preferring it here would warm a different
+            //     file than the runtime compiles and the bake-cache key (which
+            //     includes the vert path) would never be hit.
+            const QString localVert = QFileInfo(info.sourcePath).absolutePath() + QStringLiteral("/zone.vert");
+            QString zoneVertPath;
+            if (QFile::exists(localVert)) {
+                zoneVertPath = localVert;
+            } else {
+                for (const QString& incDir : reg->searchPaths()) {
+                    for (const QString& candidate :
+                         {incDir + QStringLiteral("/shared/zone.vert"), incDir + QStringLiteral("/zone.vert")}) {
                         if (QFile::exists(candidate)) {
                             zoneVertPath = candidate;
                             break;
                         }
+                    }
+                    if (!zoneVertPath.isEmpty()) {
+                        break;
                     }
                 }
             }
@@ -549,12 +558,11 @@ void Daemon::setupShaderWarmBakes()
     // `shared/animation.vert` when an effect doesn't ship its own)
     // also mirrors the runtime, otherwise the warm-baked entry's
     // cache key would differ from what runtime queries.
-    // Belt-and-braces: both shader registries are constructed unconditionally
-    // in the Daemon ctor and setupShaderWarmBakes() runs later from init(), so
-    // these are non-null on every real path. Kept (rather than asserted) so a
-    // future construction-order change degrades to "no warm bake" instead of a
-    // startup crash — the warm bake is an optimisation, never a correctness
-    // dependency.
+    // Load-bearing, NOT belt-and-braces: stop() resets both shader registries
+    // (lifecycle.cpp) and only the Daemon ctor recreates them, so on a
+    // stop() -> init() -> start() cycle these are genuinely null and the warm
+    // bakes correctly skip rather than crash. (That the registries do not come
+    // back is a separate restart-completeness gap, noted in signals.cpp.)
     if (m_animationShaderRegistry) {
         auto scheduleWarmForAnimEffect = [this,
                                           registryPtr = QPointer<PhosphorAnimationShaders::AnimationShaderRegistry>(
