@@ -436,8 +436,8 @@ void TestSpanTargets::staleMembers_fallBackToEdgeZone()
 
 void TestSpanTargets::gapBearingLayout_growsAcrossGap()
 {
-    // Two columns separated by a real gap (77px, well past the 2px edge
-    // tolerance): grow must still find the neighbour across the gap.
+    // Two columns separated by a real 76px gap: grow must still find the
+    // neighbour across it.
     SpanFixture f({QRectF(0.0, 0.0, 0.48, 1.0), QRectF(0.52, 0.0, 0.48, 1.0)});
     f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
 

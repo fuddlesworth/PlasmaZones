@@ -272,6 +272,10 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
         return moveResult(false, QStringLiteral("invalid_direction"), QString(), QRect(), QString(), screenId);
     }
     if (!m_zoneAdjacency) {
+        // Only reachable before the adjacency resolver is wired (broken
+        // init) — surface it on the OSD instead of failing silently.
+        emitFeedback(false, QStringLiteral("move"), QStringLiteral("no_zone_detection"), QString(), QString(),
+                     screenId);
         return moveResult(false, QStringLiteral("no_zone_detection"), QString(), QRect(), QString(), screenId);
     }
 
@@ -423,6 +427,10 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
         // Unsnapped (or fully stale) — mirror move's entry behaviour: snap
         // into the edge zone in the pressed direction.
         if (!m_zoneAdjacency) {
+            // Only reachable before the adjacency resolver is wired (broken
+            // init) — surface it on the OSD instead of failing silently.
+            emitFeedback(false, QStringLiteral("span"), QStringLiteral("no_zone_detection"), QString(), QString(),
+                         effectiveScreenId);
             result.reason = QStringLiteral("no_zone_detection");
             return result;
         }
@@ -612,6 +620,9 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
         return focusResult(false, QStringLiteral("invalid_direction"), QString(), QString(), QString(), screenId);
     }
     if (!m_zoneAdjacency) {
+        // See getMoveTargetForWindow — broken-init state, surfaced on the OSD.
+        emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_zone_detection"), QString(), QString(),
+                     screenId);
         return focusResult(false, QStringLiteral("no_zone_detection"), QString(), QString(), QString(), screenId);
     }
 
@@ -805,6 +816,9 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
                           0, 0, QString(), screenId, QString(), QString());
     }
     if (!m_zoneAdjacency) {
+        // See getMoveTargetForWindow — broken-init state, surfaced on the OSD.
+        emitFeedback(false, QStringLiteral("swap"), QStringLiteral("no_zone_detection"), QString(), QString(),
+                     screenId);
         return swapResult(false, QStringLiteral("no_zone_detection"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0,
                           0, 0, QString(), screenId, QString(), QString());
     }

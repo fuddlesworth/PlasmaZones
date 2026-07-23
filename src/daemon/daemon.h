@@ -679,27 +679,21 @@ private:
     // stays valid across back-to-back resolves.
     PhosphorRules::RuleSet m_excludeRuleSet;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
-    // Daemon-owned tile-algorithm registry. Replaces the old
+    // Daemon-owned tile-algorithm registry (replaces the old
     // AlgorithmRegistry::instance() singleton — per-process ownership is
-    // the only shape that works once PlasmaZones becomes a plugin-based
-    // compositor/WM/shell (plugins can't share process-global state
-    // safely).
+    // the only shape that survives a plugin-based future).
     //
     // ─── DECLARATION ORDER INVARIANT ─────────────────────────────────
     // Every FactoryContext service the bundle borrows (m_layoutManager
     // → IZoneLayoutRegistry, m_algorithmRegistry → ITileAlgorithmRegistry)
     // MUST be declared before m_layoutSources so reverse-order member
-    // destruction tears the bundle (and its ZonesLayoutSource /
-    // AutotileLayoutSource children) down BEFORE the registries those
-    // children borrow. The LayoutSourceBundle contract
-    // (libs/phosphor-layout-api/.../LayoutSourceBundle.h) is explicit
-    // about this — violating the order produces dangling pointers in
-    // every source's destructor, hidden today only by Qt's signal
-    // auto-disconnect. Do not reorder these three lines without revisiting
-    // every source's destructor.
-    //
-    // Also declared before ScriptedAlgorithmLoader + AutotileEngine
-    // because both take a borrowed pointer to it in their constructor.
+    // destruction tears the bundle down BEFORE the registries its source
+    // children borrow — the LayoutSourceBundle contract
+    // (libs/phosphor-layout-api/.../LayoutSourceBundle.h) is explicit.
+    // Violating the order produces dangling pointers in every source's
+    // destructor, hidden today only by Qt's signal auto-disconnect.
+    // Also declared before ScriptedAlgorithmLoader + AutotileEngine,
+    // which borrow it in their constructors.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_algorithmRegistry;
     // Manual layouts + autotile algorithms composed behind layoutSource().
     // The bundle owns all three objects so destruction is deterministic
@@ -1073,9 +1067,8 @@ private:
     QElapsedTimer m_rotateDebounce;
     QElapsedTimer m_floatDebounce;
     QElapsedTimer m_cycleLayoutDebounce;
-    // Span is not monotonic: at the layout boundary a grow press flips into
-    // a shrink of the opposite edge, so keyboard auto-repeat on a held key
-    // would grow to the edge and then eat the window down to a single zone.
+    // Span flips grow into shrink at a boundary, so auto-repeat must not
+    // chain presses (see handleSpan).
     QElapsedTimer m_spanDebounce;
     // Shared debounce for VS swap/rotate. Each fire commits a config change
     // through Settings and kicks a refresh → resnap cascade — cheap per call
