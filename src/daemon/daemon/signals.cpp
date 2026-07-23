@@ -368,7 +368,10 @@ void Daemon::initializeAutotile()
                     // No layoutApplied/autotileApplied signal fires for a direct
                     // entry write, so surface the feedback OSD here: the mode
                     // switched to autotile but nothing is assigned to tile with.
+                    // The cheatsheet refilter rides those same signals, so an
+                    // open sheet also needs the explicit nudge on this path.
                     showNotAssignedOsd(screenId);
+                    refreshCheatsheetIfVisible();
                     applied = true;
                 }
             }
@@ -699,10 +702,12 @@ void Daemon::connectLayoutSignals()
 
     // Live cheatsheet refilter on mode switches. Mode authority is
     // ScreenModeRouter + AssignmentEntry::Mode, and the router is a plain
-    // query class with no change signal — a mode switch always lands as an
+    // query class with no change signal — a mode switch normally lands as an
     // applied layout (the toggle-autotile handler routes through
     // applyLayoutById), so these two are the mode-change edge the sheet can
-    // observe. refreshCheatsheetIfVisible re-resolves the mode for the
+    // observe. The one exception, the bare suppressed-default autotile entry
+    // written directly, calls refreshCheatsheetIfVisible itself at its write
+    // site. refreshCheatsheetIfVisible re-resolves the mode for the
     // sheet's BOUND screen, so an apply on another screen is a harmless
     // no-op re-push. These live HERE, not in connectShortcutSignals(),
     // because the controller is created only in initializeUnifiedController,
