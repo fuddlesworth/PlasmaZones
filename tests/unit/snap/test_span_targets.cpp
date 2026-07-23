@@ -10,14 +10,17 @@
 
 #include <QHash>
 #include <QRect>
+#include <QSignalSpy>
 #include <QTest>
 
 #include <memory>
 #include <optional>
 
 #include <PhosphorEngine/IWindowTrackingService.h>
+#include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -47,6 +50,7 @@ class FakeWindowTracking : public PhosphorEngine::IWindowTrackingService
 public:
     QHash<QString, QStringList> spanOfWindow; // windowId -> zoneIds
     QHash<QString, QRect> zoneGeo; // "zone|screen" -> rect
+    QVector<QPair<QStringList, QString>> multiZoneAssignments; // recorded (zoneIds, screen) commits
 
     QStringList zonesForWindow(const QString& w) const override
     {
@@ -94,8 +98,9 @@ public:
     void assignWindowToZone(const QString&, const QString&, const QString&, int) override
     {
     }
-    void assignWindowToZones(const QString&, const QStringList&, const QString&, int) override
+    void assignWindowToZones(const QString&, const QStringList& zoneIds, const QString& screen, int) override
     {
+        multiZoneAssignments.append({zoneIds, screen});
     }
     void unassignWindow(const QString&) override
     {
@@ -271,7 +276,7 @@ private Q_SLOTS:
     void unsnapped_snapsIntoEdgeZone();
     void staleMembers_fallBackToEdgeZone();
     void mixedStaleMembers_dropsDeadIdOnGrow();
-    void unsnappedEmptyLayout_reportsNoZones();
+    void unsnappedNoEntryZone_reportsNoZones();
     void shrinkTolerance_dropsJitteredTrailingBandTogether();
     void jitterSliverInBand_doesNotJoinSweep();
     void jitterEdgeCandidate_isNotGrowTarget();
@@ -281,6 +286,7 @@ private Q_SLOTS:
     void overlappingCandidate_beatsDistantZone();
     void invalidDirection_reportsInvalidDirection();
     void emptyWindowId_reportsInvalidWindow();
+    void engineSpan_growCommitsAndAppliesGeometry();
 };
 
 void TestSpanTargets::grow_right_addsAdjacentZoneOnly()
@@ -459,7 +465,7 @@ void TestSpanTargets::mixedStaleMembers_dropsDeadIdOnGrow()
     QCOMPARE(result.geometry, QRect(0, 0, 1920, 540));
 }
 
-void TestSpanTargets::unsnappedEmptyLayout_reportsNoZones()
+void TestSpanTargets::unsnappedNoEntryZone_reportsNoZones()
 {
     // Unsnapped window and the adjacency resolver reports no entry zone in
     // the pressed direction: the failure leg must report no_zones, not crash
@@ -554,6 +560,10 @@ void TestSpanTargets::growTie_prefersPerpendicularNearerCandidate()
     QVERIFY(result.grew);
     QCOMPARE(feedbackReason, QStringLiteral("grow:right"));
     QCOMPARE(feedbackTarget, f.zoneIds[2]);
+    // The winner's band (960-1440 by the member's height) legitimately
+    // sweeps the off-centre candidate too; pin the full set so the sweep
+    // outcome in an overlapping tie layout stays deterministic.
+    QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[0], f.zoneIds[1], f.zoneIds[2]}));
 }
 
 void TestSpanTargets::gapBearingLayout_growsAcrossGap()
@@ -630,6 +640,42 @@ void TestSpanTargets::emptyWindowId_reportsInvalidWindow()
 
     QVERIFY(!result.success);
     QCOMPARE(result.reason, QStringLiteral("invalid_window"));
+}
+
+void TestSpanTargets::engineSpan_growCommitsAndAppliesGeometry()
+{
+    // End-to-end through SnapEngine::spanFocusedInDirection rather than the
+    // bare resolver: the grow must be committed as a multi-zone snap and the
+    // union geometry applied, with exactly one success feedback.
+    SpanFixture f(quadrants());
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
+
+    PhosphorSnapEngine::SnapEngine engine(f.registry.get(), &f.wts, nullptr, nullptr);
+    QSignalSpy feedbackSpy(&engine, &PhosphorSnapEngine::SnapEngine::navigationFeedback);
+    QSignalSpy geoSpy(&engine, &PhosphorSnapEngine::SnapEngine::applyGeometryRequested);
+
+    PhosphorEngine::NavigationContext ctx;
+    ctx.windowId = QStringLiteral("w1");
+    ctx.screenId = kScreen;
+    engine.spanFocusedInDirection(QStringLiteral("right"), ctx);
+
+    QCOMPARE(feedbackSpy.count(), 1);
+    QCOMPARE(feedbackSpy.at(0).at(0).toBool(), true);
+    QCOMPARE(feedbackSpy.at(0).at(1).toString(), QStringLiteral("span"));
+    QCOMPARE(feedbackSpy.at(0).at(2).toString(), QStringLiteral("grow:right"));
+
+    QCOMPARE(f.wts.multiZoneAssignments.size(), 1);
+    QCOMPARE(f.wts.multiZoneAssignments.first().first, (QStringList{f.zoneIds[0], f.zoneIds[1]}));
+    QCOMPARE(f.wts.multiZoneAssignments.first().second, kScreen);
+
+    QCOMPARE(geoSpy.count(), 1);
+    QCOMPARE(geoSpy.at(0).at(0).toString(), QStringLiteral("w1"));
+    QCOMPARE(geoSpy.at(0).at(1).toInt(), 0);
+    QCOMPARE(geoSpy.at(0).at(2).toInt(), 0);
+    QCOMPARE(geoSpy.at(0).at(3).toInt(), 1920);
+    QCOMPARE(geoSpy.at(0).at(4).toInt(), 540);
+    QCOMPARE(geoSpy.at(0).at(5).toString(), f.zoneIds[0]);
+    QCOMPARE(geoSpy.at(0).at(6).toString(), kScreen);
 }
 
 QTEST_MAIN(TestSpanTargets)

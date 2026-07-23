@@ -4,6 +4,7 @@
 #include <QTest>
 #include <QSignalSpy>
 
+#include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -118,6 +119,32 @@ private Q_SLOTS:
             }
         }
         QVERIFY(foundMasterFeedback);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Span (snap-mode concept, reported as unsupported)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testNavigation_spanFocusedInDirection_reportsNotSupported()
+    {
+        const QString screen = QStringLiteral("eDP-1");
+        QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 2, QStringLiteral("win1")));
+
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = QStringLiteral("win1");
+        ctx.screenId = screen;
+        engine->spanFocusedInDirection(QStringLiteral("right"), ctx);
+
+        // Exactly one failure feedback so the shortcut is never silent on an
+        // autotile screen, with the context's screen passed through for the OSD.
+        QCOMPARE(feedbackSpy.count(), 1);
+        const QList<QVariant> args = feedbackSpy.first();
+        QCOMPARE(args.at(0).toBool(), false);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("span"));
+        QCOMPARE(args.at(2).toString(), QStringLiteral("not_supported"));
+        QCOMPARE(args.at(5).toString(), screen);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

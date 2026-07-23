@@ -627,6 +627,11 @@ void ShortcutManager::unregisterShortcuts()
 {
     m_registrationInProgress = false;
     m_settingsDirty = false;
+    // Adhoc ops queued behind an in-flight initial batch belong to UI
+    // contexts (e.g. an overlay's Escape grab) that no longer exist after
+    // teardown; replaying them on the next registerShortcuts() would
+    // re-bind a stale grab.
+    m_pendingAdhocOps.clear();
     if (m_registry) {
         for (const auto& e : std::as_const(m_entries)) {
             m_registry->unbind(e.id);

@@ -29,7 +29,7 @@ Item {
 
     // ── Data properties ───────────────────────────────────────────────────
     property bool success: true
-    property string action: "" // one of the tokens handled by messageText(): "rotate", "move", "span", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "swap_vs", "rotate_vs"
+    property string action: "" // one of the tokens handled by messageText(): "rotate", "move", "span", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "snap_assist", "snap_all", "swap_vs", "rotate_vs"
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/unfloated)
     property var zones: []
     property var highlightedZoneIds: [] // Zone IDs involved (target zones)
@@ -80,7 +80,10 @@ Item {
                 if (reason === "no_zones" || reason === "no_active_layout")
                     return noLayoutText;
 
-                if (reason === "no_window")
+                // Autotile emits no_windows / no_focus / nothing_to_swap when
+                // there is no tiled window to act on; direction copy would
+                // wrongly suggest another arrow key could work.
+                if (reason === "no_window" || reason === "no_windows" || reason === "no_focus" || reason === "nothing_to_swap")
                     return noWindowText;
 
                 if (reason === "not_snapped")
@@ -89,7 +92,7 @@ Item {
                 if (reason === "no_window_in_zone")
                     return i18n("No window in that direction");
 
-                if (reason === "not_supported")
+                if (action === "span" && reason === "not_supported")
                     return i18n("Spanning is not available in autotile mode");
 
                 if (isInternalReason)
@@ -122,10 +125,16 @@ Item {
                 if (reason === "no_active_window" || reason === "no_focused_window" || reason === "no_window" || reason === "window_not_tracked" || reason === "invalid_window")
                     return noWindowText;
 
+                if (reason === "no_pre_float_zone")
+                    return i18n("No zone to return to");
+
                 return i18n("Floating is unavailable");
             } else if (action === "cycle") {
                 if (reason === "single_window")
                     return i18n("No other window in this zone");
+
+                if (reason === "no_neighbor")
+                    return i18n("No other window");
 
                 if (reason === "not_snapped")
                     return i18n("Window is not in a zone");
@@ -158,21 +167,42 @@ Item {
 
                 return noWindowText;
             } else if (action === "rotate") {
+                if (reason === "no_active_layout")
+                    return noLayoutText;
+
+                if (isInternalReason)
+                    return unavailableText;
+
                 return i18n("Nothing to rotate");
             } else if (action === "swap") {
-                if (reason === "no_window")
+                if (reason === "no_window" || reason === "no_focus" || reason === "no_windows")
                     return noWindowText;
+
+                if (reason === "not_snapped")
+                    return i18n("Window is not in a zone");
 
                 if (isInternalReason)
                     return unavailableText;
 
                 return i18n("Nothing to swap");
+            } else if (action === "snap_assist") {
+                return noWindowText;
+            } else if (action === "snap_all") {
+                if (reason === "no_unsnapped_windows")
+                    return i18n("All windows are already in zones");
+
+                return unavailableText;
             } else if (action === "swap_vs") {
                 if (reason === "no_subdivision" || reason === "not_virtual")
                     return i18n("No virtual screen split on this monitor");
 
                 if (reason === "unknown_vs")
                     return i18n("Virtual screen no longer exists");
+
+                // Internal write/validation errors are not a topology fact;
+                // only no_sibling means there is genuinely no neighbour.
+                if (reason === "swap_failed" || reason === "settings_rejected" || reason === "no_config_store" || reason === "invalid_direction")
+                    return i18n("Virtual screen swap failed");
 
                 return i18n("No adjacent virtual screen");
             } else if (action === "rotate_vs") {
@@ -183,6 +213,10 @@ Item {
                 // when rotating on an unsplit monitor vs swapping on one.
                 if (reason === "not_virtual" || reason === "no_subdivision")
                     return i18n("No virtual screen split on this monitor");
+
+                // Same internal-error split as swap_vs above.
+                if (reason === "swap_failed" || reason === "settings_rejected" || reason === "no_config_store" || reason === "invalid_direction")
+                    return i18n("Virtual screen rotation failed");
 
                 return i18n("No virtual screens to rotate");
             } else if (action === "focus_master")

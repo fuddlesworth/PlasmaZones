@@ -556,9 +556,10 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
         // to its current assignment (then window1's screen) as before.
         QString screen2 = result.screenName2;
         if (screen2.isEmpty()) {
-            if (const SnapState* s2 = stateForWindow(result.windowId2)) {
-                screen2 = s2->screenForWindow(result.windowId2);
-            }
+            // stateForWindow never returns null (untracked windows resolve
+            // to the global holder, whose lookup yields an empty screen and
+            // falls through to the screenName fallback below).
+            screen2 = stateForWindow(result.windowId2)->screenForWindow(result.windowId2);
         }
         if (screen2.isEmpty()) {
             screen2 = result.screenName;

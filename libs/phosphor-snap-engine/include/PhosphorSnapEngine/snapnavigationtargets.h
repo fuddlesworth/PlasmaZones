@@ -35,7 +35,9 @@ struct SpanTargetResult
     QString reason;
     /// The window's full NEW span set, primary zone first. On a grow this is
     /// the old set plus every zone the extension band swept up; on a shrink
-    /// it is the old set minus the retracted edge band.
+    /// it is the old set minus the retracted edge band. When the old primary
+    /// itself sits in the retracted band, the first surviving member is
+    /// promoted, so the primary is not stable across shrinks.
     QStringList zoneIds;
     /// Union rect of the new span's zone geometries.
     QRect geometry;

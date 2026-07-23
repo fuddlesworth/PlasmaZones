@@ -544,7 +544,10 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "PreviousLayout shortcut: no screen info";
             return;
         }
-        // Restart only on actual dispatch — see handleSpan.
+        // Restart once a screen resolves — handleCycleLayout's own locked
+        // path still shows a locked-preview OSD, which counts as the
+        // dispatch this window throttles (unlike handleSpan's guards,
+        // which reject with no user-visible effect).
         m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, false);
     });
@@ -559,7 +562,10 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "NextLayout shortcut: no screen info";
             return;
         }
-        // Restart only on actual dispatch — see handleSpan.
+        // Restart once a screen resolves — handleCycleLayout's own locked
+        // path still shows a locked-preview OSD, which counts as the
+        // dispatch this window throttles (unlike handleSpan's guards,
+        // which reject with no user-visible effect).
         m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, true);
     });
