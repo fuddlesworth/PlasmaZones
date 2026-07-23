@@ -18,12 +18,12 @@
  *     in surfaceanimator_tracks.cpp and the fresh-attach path in
  *     surfaceanimator_shaderattach.cpp) are not behaviourally tested
  *     here. Exercising them would
- *     require: (a) a real shader pack on disk that
- *     `AnimationShaderRegistry` can discover, (b) a `ShaderEffect`
- *     instantiated through `attachShaderToAnchor`'s scene-graph path,
- *     and (c) reading the `isReversed` Q_PROPERTY off the dynamically-
- *     constructed item — substantial infrastructure that exceeds this
- *     unit-test layer's mock surface. The contract IS verified at the
+ *     require reading the `isReversed` Q_PROPERTY off the dynamically-
+ *     constructed ShaderEffect. (A discoverable pack and an attached
+ *     ShaderEffect are both cheap — see
+ *     beginShow_refuses_compositor_only_pack below, which builds a pack in a
+ *     QTemporaryDir, and note attachShaderToAnchor falls back to the target
+ *     when no tagged anchor exists. Only the property read is real work.) The contract IS verified at the
  *     compile / bake layer: `test_animation_shader_preamble_bake` runs
  *     every daemon-eligible shader's fragment stage through SPIR-V with
  *     the canonical UBO including `iIsReversed` (compositor-only packs
@@ -34,17 +34,14 @@
  *     here, mock the ShaderEffect output via a `QQuickItem` subclass
  *     exposing the `isReversed` Q_PROPERTY and have the test's content
  *     item host one tagged `shaderAnchor: true`.
- *   - runLeg's compositor-only ATTACH REFUSAL (it drops the shader leg for
- *     a pack whose appliesTo omits "appearance") is unreachable from this
- *     layer for the same reason: with no `shaderAnchor` in the mock content
- *     item, no shader attaches on either side of the branch, so a test here
- *     cannot distinguish them. A candidate test was written and PROVEN
- *     VACUOUS by mutation (stubbing the branch to `false` left it green), so
- *     it was removed rather than left as false assurance. The predicate
- *     itself is pinned in test_animationshadereffect; closing the animator
- *     half needs the same shaderAnchor-bearing harness described above.
  */
 #include "SurfaceAnimatorTestHarness.h"
+
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
+
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
@@ -1029,6 +1026,98 @@ private Q_SLOTS:
                      },
                      500),
                  "show animation must complete even when shaderEffectId doesn't resolve in the registry");
+
+        delete surface;
+    }
+
+    /// runLeg REFUSES to attach a compositor-only pack (appliesTo omitting
+    /// "appearance") on the daemon path: such a pack is authored against the
+    /// kwin classic-GL dialect and would fail the strict SPIR-V bake at first
+    /// paint, stalling the leg. It is reachable through a picker-legal config,
+    /// so the refusal is load-bearing.
+    ///
+    /// The observable is the PRE-STATE write, not the shader item: a surviving
+    /// shader leg snaps opacity straight to its terminal value and suppresses
+    /// the scale leg entirely, while a refused one leaves the plain
+    /// opacity+scale legs to write their `from` values. Asserting on shader
+    /// attachment instead would be vacuous — attachShaderToAnchor falls back
+    /// to the target when no tagged anchor exists, so something attaches
+    /// either way.
+    void beginShow_refuses_compositor_only_pack()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString packDir = tmp.path() + QStringLiteral("/compositor-only-probe");
+        QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("compositor-only-probe")));
+        {
+            // Schema-complete or the scan silently drops the pack.
+            QFile meta(packDir + QStringLiteral("/metadata.json"));
+            QVERIFY(meta.open(QIODevice::WriteOnly));
+            meta.write(R"({"id":"compositor-only-probe","name":"Probe","description":"probe",)"
+                       R"("author":"test","version":"1.0","category":"Test",)"
+                       R"("fragmentShader":"effect.frag","parameters":[],"appliesTo":["geometry"]})");
+        }
+        {
+            QFile frag(packDir + QStringLiteral("/effect.frag"));
+            QVERIFY(frag.open(QIODevice::WriteOnly));
+            frag.write("void main(){}\n");
+        }
+
+        PhosphorAnimationShaders::AnimationShaderRegistry shaderRegistry;
+        shaderRegistry.addSearchPath(tmp.path());
+        shaderRegistry.refresh();
+        const auto eff = shaderRegistry.effect(QStringLiteral("compositor-only-probe"));
+        QVERIFY2(eff.isValid(), "fixture pack must resolve");
+        QVERIFY2(PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff), "fixture must be compositor-only");
+
+        SurfaceAnimator::Config cfg;
+        cfg.showProfile = QStringLiteral("test.show");
+        cfg.hideProfile = QStringLiteral("test.hide");
+        cfg.showScaleProfile = QStringLiteral("test.scale-show");
+        cfg.showScaleFrom = 0.5;
+        cfg.showShaderEffectId = QStringLiteral("compositor-only-probe");
+        cfg.showShaderProfile = QStringLiteral("test.show");
+        SurfaceAnimator anim(m_registry, cfg);
+        anim.setAnimationShaderRegistry(&shaderRegistry);
+
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig sc;
+        sc.role = PhosphorShellPatterns::Modal();
+        sc.contentItem = std::make_unique<QQuickItem>();
+        sc.screen = s.primary();
+        sc.keepMappedOnHide = true;
+        sc.debugName = QStringLiteral("compositor-only-probe");
+
+        auto* surface = f.create(std::move(sc));
+        QVERIFY(surface);
+        surface->warmUp();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        int fires = 0;
+        anim.beginShow(surface, target, [&fires]() {
+            ++fires;
+        });
+
+        // Refused => plain-leg pre-state. A surviving shader leg would snap
+        // opacity to 1.0 here and never write scale at all.
+        QCOMPARE(target->opacity(), 0.0);
+        QCOMPARE(target->scale(), 0.5);
+
+        QVERIFY(waitFor(
+            [target] {
+                return target->opacity() >= 0.999 && target->scale() >= 0.999;
+            },
+            500));
+        QVERIFY(waitFor(
+            [&fires] {
+                return fires == 1;
+            },
+            500));
 
         delete surface;
     }

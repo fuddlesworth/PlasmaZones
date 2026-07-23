@@ -43,6 +43,7 @@ private Q_SLOTS:
         }
         const QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         bool any = false;
+        QStringList metadataless;
         for (const QString& sub : subdirs) {
             if (sub == QLatin1String("shared")) {
                 continue; // shared/ holds the canonical UBO include + default vert, not a pack
@@ -62,7 +63,11 @@ private Q_SLOTS:
                 QFileInfo::exists(animationsDir + QLatin1Char('/') + sub + QStringLiteral("/effect.frag"))
                 || QFileInfo::exists(animationsDir + QLatin1Char('/') + sub + QStringLiteral("/effect.vert"));
             if (hasSources && !QFileInfo::exists(metaPath)) {
-                QFAIL(qPrintable(QStringLiteral("pack directory has shader sources but no metadata.json: ") + sub));
+                // Collect rather than QFAIL here: QFAIL expands to `return`,
+                // which would drop every row for packs sorting after the
+                // offender and turn one bad directory into a near-empty suite.
+                metadataless << sub;
+                continue;
             }
             QFile meta(metaPath);
             if (!meta.open(QIODevice::ReadOnly)) {
@@ -99,6 +104,10 @@ private Q_SLOTS:
         if (QFileInfo::exists(sharedVert)) {
             QTest::newRow("shared/animation:vert") << sharedVert;
             any = true;
+        }
+        if (!metadataless.isEmpty()) {
+            QFAIL(qPrintable(QStringLiteral("pack directories have shader sources but no metadata.json: ")
+                             + metadataless.join(QStringLiteral(", "))));
         }
         if (!any) {
             QSKIP("no animation shaders found to bake-check");
