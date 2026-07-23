@@ -7,8 +7,11 @@
 
 **Tier 1 implemented** (T1.1–T1.5; all bundled animation + zone packs migrated,
 and the offline validator now covers overlay, animation and surface packs with
-a CI gate each). Tiers 2–3 remain proposed. This document covers
-the full scope across all tiers; the Tier-2/3 sections are the forward design.
+a CI gate each). From Tiers 2–3, T2.2 (`--emit-preamble` sidecar), T2.3
+(authoring guide) and T3.1 (live preview in the shader browser) have also
+landed; T2.1 (hello-world template) and T3.2 (in-app compile banner) remain
+proposed. This document covers the full scope across all tiers; the sections
+for the two unlanded items are the forward design.
 
 Pack counts throughout this document reflect the v3.1 tree at design time (53
 animation + 26 zone packs); both trees have since grown (81 animation + 27 zone
@@ -29,9 +32,12 @@ zone-aware SDF helpers, label compositing — but the *authoring ergonomics* are
 roughly where autotile was before its rework. A motivated GPU programmer can write
 a shader; nearly everyone else bounces off.
 
-There are in fact **two** shader systems with the same problems: overlay/zone
-shaders (`data/overlays/*`, 26 packs) and animation/transition shaders
-(`data/animations/*`, 53 packs). The body of this document develops the design
+There are in fact **three** shader systems with the same problems: overlay/zone
+shaders (`data/overlays/*`, 26 packs at design time), animation/transition
+shaders (`data/animations/*`, 53 packs at design time) and surface/decoration
+shaders (`data/surface/*`, added since). Each has its own authoring model,
+validator mode and CI gate — `src/shadervalidate/main.cpp` is the canonical
+list. The body of this document develops the design
 against the zone system, then the
 [Animation / transition shaders](#the-second-system--animation--transition-shaders)
 section folds in the second — which adds a cross-runtime constraint and a direction
@@ -75,7 +81,9 @@ containing `metadata.json`, `effect.frag`, optional buffer passes
 (`pass0.frag`…), an optional `zone.vert`, and an optional `preview.png`. Bundled
 packs live in `data/overlays/` (installed to `…/share/plasmazones/overlays/`).
 
-> **Two shader systems.** This is one of *two* shader registries. The other —
+> **Three shader systems.** This is one of *three* shader registries (the
+> third, surface/decoration, arrived after this document was written and is
+> covered by `--surface` and its own CI gate). The other —
 > **animation / transition shaders** (`data/animations/*`, 53 bundled packs,
 > driven by `AnimationShaderRegistry`) — has the same authoring problems *plus* a
 > direction (in/out) dimension *and* runs on two runtimes. Everything from here to
@@ -117,6 +125,8 @@ wiring and generation, not new subsystems.
 
 ### D1 — Slot arithmetic is the worst friction
 
+*(Pre-work state — addressed by Tier 1 / T2.2 / T3.1; kept for the record.)*
+
 An author declares a parameter with an explicit integer `slot`, must avoid
 colliding with other params, and then reads it in GLSL by hand-decoding the slot
 into a vec4 lane:
@@ -147,6 +157,8 @@ locate.
 
 ### D3 — No editor tooling
 
+*(Pre-work state — addressed by Tier 1 / T2.2 / T3.1; kept for the record.)*
+
 There is no `.glslrc` analogue, no documented include path for an LSP, no shipped
 headers location an editor can resolve `#include <common.glsl>` against. Authors
 write GLSL blind.
@@ -161,6 +173,8 @@ assumes GPU expertise, with no separate quick-start.
 
 ### D5 — In-app experience is split
 
+*(Pre-work state — addressed by Tier 1 / T2.2 / T3.1; kept for the record.)*
+
 Live preview + audio-reactive testing exists **only** in the zone editor's
 `ShaderSettingsDialog.qml`. The settings app's shader browser
 (`ShaderBrowserDetailDialog.qml`) is read-only — you cannot test parameters
@@ -169,6 +183,8 @@ without first assigning a shader to an event in a different app. The renderer
 missing capability.
 
 ### D6 — Every pack re-implements the dispatch loop
+
+*(Pre-work state — addressed by Tier 1 / T2.2 / T3.1; kept for the record.)*
 
 There is no entry-point convention. Each shader writes its own `main()`, which
 across all 26 packs is near-identical boilerplate: the `#version`/in/out preamble,
@@ -247,7 +263,7 @@ symbols. Existing explicit `slot` declarations keep working.
 
 #### What this actually looks like — `cosmic-flow` before / after
 
-This is the real bundled `data/overlays/cosmic-flow/` pack (24 parameters),
+This is the real bundled `data/overlays/cosmic-flow/` pack (25 parameters),
 trimmed to the parts that change.
 
 **Before — metadata.** Every parameter carries a hand-assigned `slot`, and the
@@ -525,7 +541,7 @@ full-frame + `main()` triad covers everything else cleanly.)
   algorithms page's create/duplicate affordance. Wire a "Create shader…" /
   "Duplicate" button into `ShaderBrowserPage.qml`.
 
-#### T2.2 — Editor support (the `.luaurc` analogue)
+#### T2.2 — Editor support (the `.luaurc` analogue) — LANDED
 
 - Ship the shared GLSL headers at a documented, stable path (they already install
   under `…/share/plasmazones/overlays/shared/`).
@@ -533,12 +549,12 @@ full-frame + `main()` triad covers everything else cleanly.)
   `glsl-language-server` / `glslls` resolves `#include <common.glsl>` and friends.
 - For the generated `p_*` defines: the validator (T1.2) gains a `--emit-preamble`
   mode that writes the generated `#define` block to a sidecar
-  (e.g. `.p-generated.glsl`) the author can `#include "…"` while editing for
+  (e.g. `p_generated.glsl`) the author can `#include "…"` while editing for
   autocomplete, stripped/ignored at load. (This is the pragmatic GLSL-side stand-in
   for `pluau.d.luau`; GLSL LSP tooling is weaker than luau-lsp, so we lean on a
   generated include rather than a type stub.)
 
-#### T2.3 — Documentation split
+#### T2.3 — Documentation split — LANDED (`docs/architecture/shader-authoring.md`)
 
 Restructure shader docs to mirror `luau-algorithm-authoring.md`:
 
@@ -552,7 +568,7 @@ Restructure shader docs to mirror `luau-algorithm-authoring.md`:
 
 ### Tier 3 — Unify the in-app experience (D5)
 
-#### T3.1 — Live preview + editable params in the settings app
+#### T3.1 — Live preview + editable params in the settings app — LANDED
 
 Promote the editor's `ZoneShaderRenderer`-based live preview into
 `ShaderBrowserDetailDialog.qml` so a user can scrub parameters and watch the
@@ -819,7 +835,7 @@ that closes the cross-app gap.
   failure. *(Animation packs are gated by both
   `test_animation_shader_preamble_bake` and the CLI's `--animation` mode.)*
 - glslang errors reference the author's file/line.
-- All 26 zone packs migrated to the named-param + entry-point API and render
+- All 26 design-time zone packs migrated to the named-param + entry-point API and render
   identically (25 via pImage/pZone; magnetic-field keeps its custom-vertex main()).
 - The animation system meets its own [definition of done](#a4--definition-of-done-animation-system)
   (cross-runtime generation, both-branch validation, `pTransition`/`pIn`/`pOut`,

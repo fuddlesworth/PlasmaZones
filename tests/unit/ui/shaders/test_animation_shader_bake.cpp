@@ -53,16 +53,20 @@ private Q_SLOTS:
             // uniforms by design. Their compile coverage is
             // test_animation_shader_kwin_bake.
             QFile meta(animationsDir + QLatin1Char('/') + sub + QStringLiteral("/metadata.json"));
-            if (meta.open(QIODevice::ReadOnly)) {
+            if (!meta.open(QIODevice::ReadOnly)) {
+                // Do NOT fall through: an unreadable metadata.json would
+                // silently reclassify a compositor-only pack as
+                // daemon-eligible and bake a vert that is not meant for the
+                // SPIR-V target. Skip and let the pack-level gates complain.
+                continue;
+            }
+            {
                 const auto eff = PhosphorAnimationShaders::AnimationShaderEffect::fromJson(
                     QJsonDocument::fromJson(meta.readAll()).object());
                 if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
                     continue;
                 }
             }
-            // Fragment-stage bake coverage lives in
-            // test_animation_shader_preamble_bake (full runtime assembly). Here
-            // we only cover the vertex stage.
             // Bake the pack's vertex shader if it ships one. Per the AnimationShaderEffect
             // contract, packs that ship their own `effect.vert` must compile under
             // the same UBO contract as the fragment side. Without this row the

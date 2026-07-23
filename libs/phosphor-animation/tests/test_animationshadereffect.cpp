@@ -112,10 +112,9 @@ private Q_SLOTS:
         // operator== must observe appliesTo: two effects differing ONLY in
         // their declared event classes are not equal. Without the dedicated
         // branch this would falsely compare equal.
-        AnimationShaderEffect c = a;
         AnimationShaderEffect d = a;
         d.appliesTo = QStringList{QStringLiteral("geometry")};
-        QVERIFY(c != d);
+        QVERIFY(a != d);
     }
 
     /// Multipass / wallpaper / depth / buffer fields survive a full
