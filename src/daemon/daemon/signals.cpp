@@ -634,6 +634,13 @@ void Daemon::connectLayoutSignals()
     // This is the FIRST of the pair start() calls (lifecycle.cpp), so the
     // clear lives here and connectOverlaySignals() only appends.
     //
+    // Scope note: this handles the DUPLICATION half of restart only. A
+    // stop()->start() cycle without a fresh init() also LOSES wiring whose
+    // owner stop() destroyed — initializeAutotile()'s handlers and the
+    // autotile shortcut lambdas all hang off m_autotileEngine, which stop()
+    // resets and only initEnginesAndWiring() recreates. Restarting in-process
+    // therefore requires init(), not just start().
+    //
     // m_layoutManager is constructed in the Daemon ctor and never reset, so it
     // is non-null on every path that reaches here; the guards elsewhere in
     // this file cover members that stop() DOES reset.

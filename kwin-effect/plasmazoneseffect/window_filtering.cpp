@@ -327,6 +327,16 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         return false;
     }
 
+    // Close-grabbed corpse: reject BEFORE the rule slice below, which builds a
+    // ruleQuery and therefore calls getWindowId(w). That re-inserts the
+    // reverse-map entry buildWindowMap deliberately skips for deleted windows
+    // — the very pollution windowOwnKeepAbove's own isDeleted guard exists to
+    // prevent, which is inert here because ruleQuery runs first. A dying
+    // window is never a snap target regardless.
+    if (w->isDeleted()) {
+        return rejectedBecause(rejectReason, "deleted window");
+    }
+
     // Check user-authored / migrated Exclude rules (needed for drag gating —
     // daemon also enforces these for keyboard navigation, but the effect
     // must filter for drag operations and lifecycle reporting).
@@ -365,8 +375,11 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // plasmoid / Plasma-shell surfaces, and other special or
     // skip-switcher windows are never application windows; a
     // window-event shader on them is always wrong. Hard-excluded with
-    // no toggle and ahead of the rule-override path, mirroring the
-    // structural rejections `shouldHandleWindow()` already applies.
+    // no toggle and ahead of the rule-override path. This set deliberately
+    // DIVERGES from isStructurallyUnmanageableWindowType: it omits
+    // isFullScreen() (a fullscreen window closing should still animate) and
+    // the transient/dialog family (handled toggleably below). Do NOT fold the
+    // two into one predicate — shouldDecorateWindow carries the same warning.
     //
     // Our OWN surfaces (the daemon's layer-shell overlays, the editor
     // toplevel) and portal dialogs are rejected here for the same reason
@@ -497,6 +510,12 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
 bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
 {
     if (!w) {
+        return false;
+    }
+    // Same reason as shouldHandleWindow: the rule slice below builds a
+    // ruleQuery, whose getWindowId(w) would re-pollute the id caches for a
+    // close-grabbed corpse. A dying window is never a decoration target.
+    if (w->isDeleted()) {
         return false;
     }
 

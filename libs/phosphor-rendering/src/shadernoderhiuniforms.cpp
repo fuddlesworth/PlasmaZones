@@ -327,7 +327,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         // No TextureSizeMax clamp here, unlike the user-texture path below: a
         // user-supplied PNG can be any size, but the spectrum length is
         // producer-capped at PhosphorAudio::Defaults::MaxBars (256) and
-        // neither setAudioSpectrum overload can grow the vector, so it cannot
+        // neither audio-spectrum setter grows the vector, so the bound rests on producer discipline, so it cannot
         // approach any device limit. A clamp would also have to shrink the
         // uploaded QImage in lockstep — the texture extent and the image
         // extent must agree — for a case that cannot occur.

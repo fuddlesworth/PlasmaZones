@@ -27,7 +27,8 @@
 //     validateSurfacePack.
 //
 // Usage:
-//   plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface] <path> [<path> ...]
+//   plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface]
+//                               [--emit-preamble] [--] <path> [<path> ...]
 // where each <path> is either a pack directory (contains metadata.json) or a
 // root that holds pack subdirectories. Exits non-zero if any pack has an error.
 

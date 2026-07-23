@@ -552,7 +552,7 @@ inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";
 inline constexpr const char* kIMouse = "iMouse";
 
 /// `vec4 customParams[N]` — per-effect declared parameter slots.
-/// Cross-runtime element-name lookup constant: used by the kwin-effect's
+/// Cross-runtime element-name lookup constant: mirrored by (not consumed from) the kwin-effect's
 /// `glGetUniformLocation("customParams[N]")` calls (the canonical header's
 /// `#ifdef PLASMAZONES_KWIN` branch declares them as default-block uniforms
 /// `customParams[0]..customParams[7]`) and as a documentation anchor for

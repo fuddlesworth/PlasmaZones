@@ -447,14 +447,36 @@ void Daemon::setupShaderWarmBakes()
             if (ShaderRegistry::isNoneShader(info.id) || !info.isValid()) {
                 return;
             }
-            if (info.vertexShaderPath.isEmpty() || info.sourcePath.isEmpty()) {
-                return;
-            }
-            if (!QFile::exists(info.vertexShaderPath) || !QFile::exists(info.sourcePath)) {
+            if (info.sourcePath.isEmpty() || !QFile::exists(info.sourcePath)) {
                 return;
             }
             ShaderRegistry* reg = registryPtr.data();
             if (!reg) {
+                return;
+            }
+            // Resolve the vertex stage the way ZoneShaderItem does at load:
+            // per-pack zone.vert, else shared/zone.vert from the search paths.
+            // Bailing on an empty vertexShaderPath (as this did) skipped the
+            // warm bake for every pack that does NOT ship its own vert — 26 of
+            // the 27 bundled overlay packs — so their first paint still paid a
+            // cold glslang compile, which is the exact cost this function
+            // exists to remove. Both siblings below already do this.
+            QString zoneVertPath = info.vertexShaderPath;
+            if (zoneVertPath.isEmpty()) {
+                const QString localVert = QFileInfo(info.sourcePath).absolutePath() + QStringLiteral("/zone.vert");
+                if (QFile::exists(localVert)) {
+                    zoneVertPath = localVert;
+                } else {
+                    for (const QString& incDir : reg->searchPaths()) {
+                        const QString candidate = incDir + QStringLiteral("/zone.vert");
+                        if (QFile::exists(candidate)) {
+                            zoneVertPath = candidate;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (zoneVertPath.isEmpty() || !QFile::exists(zoneVertPath)) {
                 return;
             }
             const QString shaderId = info.id;
@@ -487,8 +509,8 @@ void Daemon::setupShaderWarmBakes()
             const QList<PhosphorShaders::EntryCandidate> entryCandidates = zoneEntryCandidates();
             const QString paramPreamble = ShaderRegistry::paramPreamble(info);
             watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
-                                                 [vertPath = info.vertexShaderPath, fragPath = info.sourcePath,
-                                                  includePaths, paramPreamble, entryPrologue, entryCandidates]() {
+                                                 [vertPath = zoneVertPath, fragPath = info.sourcePath, includePaths,
+                                                  paramPreamble, entryPrologue, entryCandidates]() {
                                                      return warmShaderBakeCacheForPaths(vertPath, fragPath,
                                                                                         includePaths, paramPreamble,
                                                                                         entryPrologue, entryCandidates);

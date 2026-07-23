@@ -108,9 +108,25 @@ void SurfaceAnimator::Private::teardownShaderLeg(PhosphorLayer::Surface* surface
         track.shaderTime->cancel();
         m_pendingDestroy.push_back(std::move(track.shaderTime));
     }
-    // Restore previously-hidden sibling decorators FIRST. Reused
-    // shader runs hide them again on next attach, so this just
-    // covers the between-legs and post-final-leg cases.
+    // Make the shader pieces DORMANT BEFORE restoring siblings. Order is
+    // load-bearing: the restore loop below calls setVisible(true), which fires
+    // visibleChanged synchronously, and a consumer handler can re-enter with a
+    // fresh beginShow. That nested runLeg's hideAnchorSiblings walk skips
+    // QQuickShaderEffectSources and its own pair but NOT a foreign
+    // ShaderEffect — so a still-visible shaderItem would be recorded as a
+    // decorator sibling and later re-shown by the nested leg's own teardown,
+    // waking a parked tower back into per-frame RHI work (and rendering a
+    // stale ghost). Hiding first makes the nested walk skip it.
+    if (track.shaderItem) {
+        track.shaderItem->setVisible(false);
+    }
+    if (track.shaderSource) {
+        track.shaderSource->setLive(false);
+        track.shaderSource->setHideSource(false);
+    }
+    // Restore previously-hidden sibling decorators. Reused shader runs hide
+    // them again on next attach, so this just covers the between-legs and
+    // post-final-leg cases.
     for (const QPointer<QQuickItem>& sibling : track.hiddenSiblings) {
         if (sibling) {
             sibling->setVisible(true);
@@ -168,7 +184,9 @@ void SurfaceAnimator::Private::teardownShaderLeg(PhosphorLayer::Surface* surface
     pending.target = track.target;
     pending.fboExtentKindPtr = std::move(track.fboExtentKindPtr);
 
-    // Make parked pieces dormant — see method docstring.
+    // Re-assert dormancy on the parked pieces. Already applied above (before
+    // the sibling restore, which can re-enter); repeating it here keeps the
+    // invariant local to the park step and is idempotent.
     if (pending.shaderItem) {
         pending.shaderItem->setVisible(false);
     }
@@ -452,9 +470,11 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         cancelAllForSurface(surface);
         qCWarning(lcSurfaceAnimator) << "runLeg called with null target — onComplete fires synchronously";
         // Null-target dispatch is malformed and won't drive any
-        // specific (surface, target) pair. The tickAll sweep will
-        // GC stale pending entries that outlive their target's
-        // QPointer; do NOT cascade-destroy every sibling slot's
+        // specific (surface, target) pair. The tickAll sweep GCs a
+        // pending entry once all three of its pieces have gone —
+        // it does not test `target`, but the shader pieces are
+        // parented under the target and die with it, so the effect
+        // is the same; do NOT cascade-destroy every sibling slot's
         // parked shader on this surface. The unified-overlay-shell
         // pattern hosts multiple sibling slots per Surface, so
         // surface-wide destruction violates the per-(Surface, target)

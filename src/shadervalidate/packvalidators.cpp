@@ -53,7 +53,7 @@ int validatePack(const QString& packDir, QTextStream& out)
     QString parseErr;
     ShaderRegistry::ShaderInfo info = ShaderRegistry::parsePackMetadata(packDir, &parseErr);
     if (!parseErr.isEmpty()) {
-        out << name << "\n  metadata      ERROR\n    " << parseErr << "\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    " << parseErr << "\n  → 1 error\n\n";
         return 1;
     }
 
@@ -69,21 +69,22 @@ int validatePack(const QString& packDir, QTextStream& out)
     };
     if (!confineToPack(info.sourcePath)) {
         out << name
-            << "\n  metadata      ERROR\n    fragmentShader path escapes the pack directory (path traversal "
+            << "\n  metadata       ERROR\n    fragmentShader path escapes the pack directory (path traversal "
                "rejected)\n  → 1 error\n\n";
         return 1;
     }
     for (QString& buf : info.bufferShaderPaths) {
         if (!confineToPack(buf)) {
             out << name
-                << "\n  metadata      ERROR\n    bufferShaders path escapes the pack directory (path traversal "
+                << "\n  metadata       ERROR\n    bufferShaders path escapes the pack directory (path traversal "
                    "rejected)\n  → 1 error\n\n";
             return 1;
         }
     }
     if (!confineToPack(info.vertexShaderPath)) {
         out << name
-            << "\n  metadata      ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n  "
+            << "\n  metadata       ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n "
+               " "
                "→ 1 error\n\n";
         return 1;
     }
@@ -145,6 +146,14 @@ int validatePack(const QString& packDir, QTextStream& out)
             } else if (!QFile::exists(*confined)) {
                 lints << QStringLiteral("multipass buffer shader missing: %1").arg(bufName);
             }
+        }
+
+        // The runtime caps buffer passes at 4 (parseShaderMetadata's qMin) and
+        // drops the surplus with only a journal warning — exactly the
+        // "runtime hid the author error" class this block lints for.
+        if (bufferNames.size() > 4) {
+            lints << QStringLiteral("too many buffer shaders: %1 declared, cap is 4 (surplus dropped at load)")
+                         .arg(bufferNames.size());
         }
 
         const double rawScale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
@@ -286,13 +295,13 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
 
     QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
     if (!metaFile.open(QIODevice::ReadOnly)) {
-        out << name << "\n  metadata      ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
         return 1;
     }
     QJsonParseError perr{};
     const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll(), &perr);
     if (doc.isNull() || !doc.isObject()) {
-        out << name << "\n  metadata      ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
         return 1;
     }
 
@@ -309,7 +318,7 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         const auto confined = confinedPackPath(packDir, eff.fragmentShaderPath);
         if (!confined) {
             out << name
-                << "\n  metadata      ERROR\n    fragmentShader path escapes the pack directory (path traversal "
+                << "\n  metadata       ERROR\n    fragmentShader path escapes the pack directory (path traversal "
                    "rejected)\n  → 1 error\n\n";
             return 1;
         }
@@ -322,14 +331,14 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         const auto confinedVert = confinedPackPath(packDir, eff.vertexShaderPath);
         if (!confinedVert) {
             out << name
-                << "\n  metadata      ERROR\n    vertexShader path escapes the pack directory (path traversal "
+                << "\n  metadata       ERROR\n    vertexShader path escapes the pack directory (path traversal "
                    "rejected)\n  → 1 error\n\n";
             return 1;
         }
         eff.vertexShaderPath = *confinedVert;
     }
     if (!eff.isValid()) {
-        out << name << "\n  metadata      ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
         return 1;
     }
     const QString fragLabel = QFileInfo(eff.fragmentShaderPath).fileName();
@@ -558,13 +567,13 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
 
     QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
     if (!metaFile.open(QIODevice::ReadOnly)) {
-        out << name << "\n  metadata      ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
         return 1;
     }
     QJsonParseError perr{};
     const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll(), &perr);
     if (doc.isNull() || !doc.isObject()) {
-        out << name << "\n  metadata      ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
         return 1;
     }
 
@@ -580,7 +589,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     };
     if (!confineToPack(eff.fragmentShaderPath)) {
         out << name
-            << "\n  metadata      ERROR\n    fragmentShader path escapes the pack directory (path traversal "
+            << "\n  metadata       ERROR\n    fragmentShader path escapes the pack directory (path traversal "
                "rejected)\n  → 1 error\n\n";
         return 1;
     }
@@ -595,19 +604,20 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         }
         if (!confineToPack(b)) {
             out << name
-                << "\n  metadata      ERROR\n    bufferShaders path escapes the pack directory (path traversal "
+                << "\n  metadata       ERROR\n    bufferShaders path escapes the pack directory (path traversal "
                    "rejected)\n  → 1 error\n\n";
             return 1;
         }
     }
     if (!confineToPack(eff.vertexShaderPath)) {
         out << name
-            << "\n  metadata      ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n  "
+            << "\n  metadata       ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n "
+               " "
                "→ 1 error\n\n";
         return 1;
     }
     if (!eff.isValid()) {
-        out << name << "\n  metadata      ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
         return 1;
     }
     const QString fragLabel = QFileInfo(eff.fragmentShaderPath).fileName();
