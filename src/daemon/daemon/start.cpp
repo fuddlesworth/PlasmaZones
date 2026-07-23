@@ -537,7 +537,6 @@ void Daemon::connectShortcutSignals()
         if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
             return;
         }
-        m_cycleLayoutDebounce.restart();
         // Screen-targeted (cycles a screen's layout) — resolve cursor-first.
         // See layoutPickerRequested below for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
@@ -545,13 +544,14 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "PreviousLayout shortcut: no screen info";
             return;
         }
+        // Restart only on actual dispatch — see handleSpan.
+        m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, false);
     });
     connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
         if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
             return;
         }
-        m_cycleLayoutDebounce.restart();
         // Screen-targeted (cycles a screen's layout) — resolve cursor-first.
         // See layoutPickerRequested below for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
@@ -559,6 +559,8 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "NextLayout shortcut: no screen info";
             return;
         }
+        // Restart only on actual dispatch — see handleSpan.
+        m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, true);
     });
 

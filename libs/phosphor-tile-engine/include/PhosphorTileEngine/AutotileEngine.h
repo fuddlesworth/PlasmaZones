@@ -807,6 +807,7 @@ public:
 
     void focusInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void moveFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
+    void spanFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void swapFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void moveFocusedToPosition(int position, const PhosphorEngine::NavigationContext& ctx) override;
     void rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx) override;

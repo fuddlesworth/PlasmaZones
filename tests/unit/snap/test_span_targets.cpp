@@ -461,9 +461,9 @@ void TestSpanTargets::mixedStaleMembers_dropsDeadIdOnGrow()
 
 void TestSpanTargets::unsnappedEmptyLayout_reportsNoZones()
 {
-    // Unsnapped window and the adjacency resolver knows no entry zone in the
-    // pressed direction (empty layout for this screen): the failure leg must
-    // report no_zones, not crash or claim a direction problem.
+    // Unsnapped window and the adjacency resolver reports no entry zone in
+    // the pressed direction: the failure leg must report no_zones, not crash
+    // or claim a direction problem.
     SpanFixture f(quadrants());
 
     auto resolver = f.makeResolver();

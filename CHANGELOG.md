@@ -5,7 +5,7 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.3.0] - 2026-07-20
+## [3.3.0] - 2026-07-22
 
 ### Added
 
@@ -1745,7 +1745,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [3.0.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.2...v3.0.3
 [3.0.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.0...v3.0.1
-[3.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v3.0.0
+[3.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.8...v3.0.0
 [2.8.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v2.8.8
 [2.8.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.6...v2.8.7
 [2.8.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.5...v2.8.6

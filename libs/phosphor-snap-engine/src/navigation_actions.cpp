@@ -240,7 +240,7 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
     const QString windowId = effectiveWindowId(ctx, m_navState);
     if (windowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_window"), QString(), QString(),
-                                  ctx.screenId);
+                                  effectiveScreenId(ctx, m_navState));
         return;
     }
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
@@ -315,7 +315,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
     const QString windowId = effectiveWindowId(ctx, m_navState);
     if (windowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_window"), QString(), QString(),
-                                  ctx.screenId);
+                                  effectiveScreenId(ctx, m_navState));
         return;
     }
     if (isWindowExcludedForAction(windowId, QStringLiteral("move"), ctx.screenId)) {
@@ -378,7 +378,7 @@ void SnapEngine::spanFocusedInDirection(const QString& direction, const Navigati
     const QString windowId = effectiveWindowId(ctx, m_navState);
     if (windowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("span"), QStringLiteral("no_window"), QString(), QString(),
-                                  ctx.screenId);
+                                  effectiveScreenId(ctx, m_navState));
         return;
     }
     if (isWindowExcludedForAction(windowId, QStringLiteral("span"), ctx.screenId)) {
@@ -520,7 +520,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
     const QString windowId = effectiveWindowId(ctx, m_navState);
     if (windowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("no_window"), QString(), QString(),
-                                  ctx.screenId);
+                                  effectiveScreenId(ctx, m_navState));
         return;
     }
     if (isWindowExcludedForAction(windowId, QStringLiteral("swap"), ctx.screenId)) {
@@ -609,6 +609,10 @@ void SnapEngine::moveFocusedToPosition(int zoneNumber, const NavigationContext& 
     if (!geo.isValid()) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine)
             << "SnapEngine::moveFocusedToPosition: invalid geometry from nav result";
+        // Same success-OSD correction as moveFocusedInDirection: the
+        // resolver emitted "snap" success at resolve time.
+        Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("geometry_error"), QString(), QString(),
+                                  effectiveScreen);
         return;
     }
     commitSnap(windowId, result.zoneId, effectiveScreen);
@@ -647,6 +651,10 @@ void SnapEngine::pushFocusedToEmptyZone(const NavigationContext& ctx)
     if (!geo.isValid()) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine)
             << "SnapEngine::pushFocusedToEmptyZone: invalid geometry from nav result";
+        // Same success-OSD correction as moveFocusedInDirection: the
+        // resolver emitted "push" success at resolve time.
+        Q_EMIT navigationFeedback(false, QStringLiteral("push"), QStringLiteral("geometry_error"), QString(), QString(),
+                                  effectiveScreen);
         return;
     }
     commitSnap(windowId, result.zoneId, effectiveScreen);

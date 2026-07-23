@@ -248,6 +248,17 @@ void AutotileEngine::moveFocusedInDirection(const QString& direction, const Navi
     m_navigation->swapFocusedInDirection(direction, QStringLiteral("move"), canonicalizeForLookup(ctx.windowId));
 }
 
+void AutotileEngine::spanFocusedInDirection(const QString& direction, const NavigationContext& ctx)
+{
+    Q_UNUSED(direction)
+    // Zone spanning is a snap-mode concept with no autotile equivalent.
+    // Report it instead of absorbing the press silently: every other
+    // navigation shortcut on an autotile screen produces feedback, and a
+    // silent shortcut reads as broken.
+    Q_EMIT navigationFeedback(false, QStringLiteral("span"), QStringLiteral("not_supported"), QString(), QString(),
+                              ctx.screenId);
+}
+
 void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     m_navigation->swapFocusedInDirection(direction, QStringLiteral("swap"), canonicalizeForLookup(ctx.windowId));

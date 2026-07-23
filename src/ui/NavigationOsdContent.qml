@@ -29,7 +29,7 @@ Item {
 
     // ── Data properties ───────────────────────────────────────────────────
     property bool success: true
-    property string action: "" // one of the tokens handled by messageText(): "rotate", "move", "span", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "algorithm", "swap_vs", "rotate_vs"
+    property string action: "" // one of the tokens handled by messageText(): "rotate", "move", "span", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "swap_vs", "rotate_vs"
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/unfloated)
     property var zones: []
     property var highlightedZoneIds: [] // Zone IDs involved (target zones)
@@ -62,9 +62,14 @@ Item {
     // Computed message text - informative zone-based messages
     readonly property string messageText: {
         if (!success) {
-            // Failure messages
+            // Failure messages. Shared strings first: producers reuse these
+            // reason tokens across actions, so the copy is defined once.
+            const noWindowText = i18n("No window is focused");
+            const noLayoutText = i18n("No zone layout on this screen");
+            const unavailableText = i18n("Zone navigation is unavailable");
+            const isInternalReason = reason === "engine_unavailable" || reason === "invalid_direction" || reason === "geometry_error" || reason === "no_zone_detection";
             if (reason === "excluded") {
-                // Shared by move/focus/swap/push/snap/span: the focused window
+                // Shared by move/swap/push/snap/span: the focused window
                 // is excluded by a rule or below the minimum size.
                 return i18n("This window is excluded from tiling");
             }
@@ -73,20 +78,94 @@ Item {
                 // the user "no zone in that direction" would suggest another
                 // arrow key could work when no layout is active at all.
                 if (reason === "no_zones" || reason === "no_active_layout")
-                    return i18n("No zone layout on this screen");
+                    return noLayoutText;
 
                 if (reason === "no_window")
-                    return i18n("No window is focused");
+                    return noWindowText;
 
-                if (reason === "engine_unavailable" || reason === "invalid_direction" || reason === "geometry_error" || reason === "no_zone_detection")
-                    return i18n("Zone navigation is unavailable");
+                if (reason === "not_snapped")
+                    return i18n("Window is not in a zone");
+
+                if (reason === "no_window_in_zone")
+                    return i18n("No window in that direction");
+
+                if (reason === "not_supported")
+                    return i18n("Spanning is not available in autotile mode");
+
+                if (isInternalReason)
+                    return unavailableText;
 
                 return i18n("No zone in that direction");
             } else if (action === "push") {
+                if (reason === "no_window")
+                    return noWindowText;
+
+                if (isInternalReason)
+                    return unavailableText;
+
                 return i18n("No empty zone available");
+            } else if (action === "snap") {
+                if (reason === "no_window" || reason === "no_focus" || reason === "no_windows")
+                    return noWindowText;
+
+                if (reason === "no_active_layout")
+                    return noLayoutText;
+
+                if (reason === "invalid_zone_number" || reason === "zone_not_found")
+                    return i18n("No zone with that number");
+
+                if (reason === "already_at_position")
+                    return i18n("Window is already in that position");
+
+                return unavailableText;
+            } else if (action === "float") {
+                if (reason === "no_active_window" || reason === "no_focused_window" || reason === "no_window" || reason === "window_not_tracked" || reason === "invalid_window")
+                    return noWindowText;
+
+                return i18n("Floating is unavailable");
+            } else if (action === "cycle") {
+                if (reason === "single_window")
+                    return i18n("No other window in this zone");
+
+                if (reason === "not_snapped")
+                    return i18n("Window is not in a zone");
+
+                if (isInternalReason)
+                    return unavailableText;
+
+                return noWindowText;
+            } else if (action === "restore") {
+                if (reason === "no_window")
+                    return noWindowText;
+
+                if (isInternalReason)
+                    return unavailableText;
+
+                return i18n("Nothing to restore");
+            } else if (action === "resnap") {
+                if (reason === "no_active_layout")
+                    return noLayoutText;
+
+                return i18n("No windows to rearrange");
+            } else if (action === "master_ratio" || action === "master_count") {
+                // The producer deliberately reports success=false at the
+                // clamp bound while still carrying the clamped value in the
+                // reason ("increased:NN"); show the value at its limit
+                // instead of a generic failure.
+                const boundParts = reason.split(":");
+                if (boundParts.length >= 2)
+                    return action === "master_ratio" ? i18n("Master ratio at limit (%1%)", boundParts[1]) : i18n("Master count at limit (%1)", boundParts[1]);
+
+                return noWindowText;
             } else if (action === "rotate") {
                 return i18n("Nothing to rotate");
             } else if (action === "swap") {
+                if (reason === "no_window")
+                    return noWindowText;
+
+                if (isInternalReason)
+                    return unavailableText;
+
                 return i18n("Nothing to swap");
             } else if (action === "swap_vs") {
                 if (reason === "no_subdivision" || reason === "not_virtual")
@@ -198,8 +277,6 @@ Item {
                 return i18np("Rearranged %n window", "Rearranged %n windows", windowCount);
 
             return i18n("Windows rearranged");
-        } else if (action === "algorithm") {
-            return i18n("Autotile: %1", reason || "");
         } else if (action === "swap_vs") {
             var vsSwapArrow = directionArrow(reason);
             return vsSwapArrow + " " + i18n("Virtual screens swapped");
