@@ -203,9 +203,6 @@ vec4 renderNeonVenomZone(
     float borderWidth = zoneBorderWidth(params.y);
     float sdf = zoneShape.d;
 
-    // Early-out: wide enough for rim glow at max audio + edge glow headroom
-    if (sdf > borderWidth * 2.0 + 60.0 * px) return vec4(0.0);
-
     float vitality = zoneVitality(isHighlighted);
     float t = iTime * veinSpeed;
 
@@ -216,6 +213,17 @@ vec4 renderNeonVenomZone(
 
     // Mouse proximity — intensifies veins and glow near cursor
     float mouseFx = mouseProximity(fragCoord, mouseInfluence) * vitality;
+
+    // Early-out, placed after the audio and mouse terms because the rim glow's
+    // reach depends on them. The rim below decays over rimFalloff, so bound at
+    // four falloff lengths and the border band, which leaves the rim at ~2%
+    // where it is cut. The old bound was a flat 60 * px, sized for the resting
+    // falloff of 10 * px; audioReactivity (max 2) and mouseInfluence (max 4)
+    // push rimFalloff to 80 * px, where 60 * px sliced the gradient at ~47% and
+    // left a hard ring. These terms are a few cheap ALU ops, well below the
+    // vein FBM the early-out protects.
+    float rimFalloff = (10.0 + audioPulse * 15.0 + mouseFx * 10.0) * px;
+    if (sdf > borderWidth * 2.0 + rimFalloff * 4.0) return vec4(0.0);
 
     // ─── Vein network ────────────────────────────────────────────────
     // Bass + mouse warp the vein domain for a breathing/throbbing effect
@@ -286,7 +294,8 @@ vec4 renderNeonVenomZone(
 
     // Edge glow (bioluminescent rim) — pulses strongly with bass + mouse
     float rimDist = abs(sdf);
-    float rimFalloff = (10.0 + audioPulse * 15.0 + mouseFx * 10.0) * px;
+    // rimFalloff is computed up at the early-out, which bounds itself by this
+    // same reach — keep it one definition so the two cannot drift apart.
     float rim = exp(-rimDist / rimFalloff) * edgeGlow * vitality;
     col += rim * mix(venomCol, glowCol, audioPulse * 0.5) * (1.0 + audioPulse);
 
