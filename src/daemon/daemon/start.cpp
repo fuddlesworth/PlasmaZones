@@ -723,23 +723,11 @@ void Daemon::connectShortcutSignals()
     connect(m_shortcutManager.get(), &ShortcutManager::cheatsheetModelChanged, this, [this]() {
         refreshCheatsheetIfVisible();
     });
-    if (m_unifiedLayoutController) {
-        // Mode authority is ScreenModeRouter + AssignmentEntry::Mode, and the
-        // router is a plain query class with no change signal. A mode switch
-        // always lands as an applied layout (the toggle-autotile handler routes
-        // through applyLayoutById), so these two are the mode-change edge the
-        // sheet can observe. refreshCheatsheetIfVisible re-resolves the mode for
-        // the sheet's BOUND screen, so an apply on some other screen is a
-        // harmless no-op re-push.
-        connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this,
-                [this](PhosphorZones::Layout*) {
-                    refreshCheatsheetIfVisible();
-                });
-        connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied, this,
-                [this](const QString&, int) {
-                    refreshCheatsheetIfVisible();
-                });
-    }
+    // The controller-driven mode-refresh connects (layoutApplied /
+    // autotileApplied → refreshCheatsheetIfVisible) live in
+    // connectLayoutSignals(): this function runs BEFORE
+    // initializeUnifiedController() creates the controller, so a connect
+    // guarded on m_unifiedLayoutController here would never fire.
     if (m_settings) {
         // Tracked handle: m_settings is deliberately excluded from stop()'s
         // per-sender sweep (its ctor/init connections must survive), so this

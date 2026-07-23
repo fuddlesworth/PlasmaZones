@@ -35,8 +35,6 @@
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutUtils.h>
-#include <PhosphorZones/Zone.h>
 
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorRules/WindowQuery.h>
@@ -44,7 +42,6 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include "snapenginelogging.h"
-#include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 
 namespace PhosphorSnapEngine {

@@ -106,14 +106,20 @@ public:
      * expected token, and shares the modifier prefix; any deviation keeps the
      * individual rows. Returns the surviving rows, unsorted.
      */
-    static QVariantList compressCheatsheetFamilies(QVector<QVariantMap> rows,
-                                                   const QVector<CheatsheetFamily>& families);
+    static QVector<QVariantMap> compressCheatsheetFamilies(QVector<QVariantMap> rows,
+                                                           const QVector<CheatsheetFamily>& families);
 
 Q_SIGNALS:
     /**
      * The cheatsheet catalog's contents changed: a sequence was rebound
      * (in-process or externally via System Settings / compositor) or the
      * registration batch settled. Consumers re-query cheatsheetModel().
+     *
+     * Settings saves emit this only when a sequence actually moved; external
+     * rebinds surface through the Registry::triggersChanged relay, which
+     * depends on the backend reporting them (KGlobalAccel does, the D-Bus
+     * fallback backend does not) — on a non-reporting backend an open sheet
+     * reflects an external rebind on its next show rather than live.
      */
     void cheatsheetModelChanged();
 

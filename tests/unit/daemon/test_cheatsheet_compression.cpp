@@ -56,10 +56,10 @@ class TestCheatsheetCompression : public QObject
 private Q_SLOTS:
     void fullFamily_compressesToOneRow()
     {
-        const QVariantList out = ShortcutManager::compressCheatsheetFamilies(arrowRows(), {arrowFamily()});
+        const QVector<QVariantMap> out = ShortcutManager::compressCheatsheetFamilies(arrowRows(), {arrowFamily()});
 
         QCOMPARE(out.size(), 1);
-        const QVariantMap row = out.first().toMap();
+        const QVariantMap row = out.first();
         QCOMPARE(row.value(QStringLiteral("label")).toString(), QStringLiteral("Span Window"));
         QCOMPARE(row.value(QStringLiteral("triggers")).toStringList(),
                  (QStringList{QStringLiteral("Ctrl+Alt+Arrows")}));
@@ -73,10 +73,10 @@ private Q_SLOTS:
         rows[1].insert(QStringLiteral("triggers"),
                        QStringList{QStringLiteral("Ctrl+Alt+Right"), QStringLiteral("Meta+F1")});
 
-        const QVariantList out = ShortcutManager::compressCheatsheetFamilies(rows, {arrowFamily()});
+        const QVector<QVariantMap> out = ShortcutManager::compressCheatsheetFamilies(rows, {arrowFamily()});
 
         QCOMPARE(out.size(), 4);
-        QCOMPARE(out.at(1).toMap().value(QStringLiteral("triggers")).toStringList(),
+        QCOMPARE(out.at(1).value(QStringLiteral("triggers")).toStringList(),
                  (QStringList{QStringLiteral("Ctrl+Alt+Right"), QStringLiteral("Meta+F1")}));
     }
 
@@ -90,6 +90,9 @@ private Q_SLOTS:
 
     void unassignedMember_staysUncompressed()
     {
+        // Pins the unassigned OUTCOME: an empty trigger list fails the
+        // single-trigger requirement (the producer derives "assigned" from
+        // triggers-non-empty, so there is no separate assigned guard).
         QVector<QVariantMap> rows = arrowRows();
         rows[3].insert(QStringLiteral("triggers"), QStringList());
         rows[3].insert(QStringLiteral("assigned"), false);

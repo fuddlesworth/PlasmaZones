@@ -833,18 +833,24 @@ QVariantList ShortcutManager::cheatsheetModel() const
          arrowsTail},
     };
 
-    QVariantList out = compressCheatsheetFamilies(rows, families);
+    QVector<QVariantMap> out = compressCheatsheetFamilies(rows, families);
     // Category blocks in display order; stable sort keeps the table's
-    // hand-authored order within each category.
-    std::stable_sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
-        return a.toMap().value(QLatin1String("categoryOrder")).toInt()
-            < b.toMap().value(QLatin1String("categoryOrder")).toInt();
+    // hand-authored order within each category. Sorting the map vector
+    // (before the QVariantList conversion) compares by reference instead of
+    // detaching two QVariantMaps per comparison.
+    std::stable_sort(out.begin(), out.end(), [](const QVariantMap& a, const QVariantMap& b) {
+        return a.value(QLatin1String("categoryOrder")).toInt() < b.value(QLatin1String("categoryOrder")).toInt();
     });
-    return out;
+    QVariantList model;
+    model.reserve(out.size());
+    for (const QVariantMap& row : std::as_const(out)) {
+        model.push_back(row);
+    }
+    return model;
 }
 
-QVariantList ShortcutManager::compressCheatsheetFamilies(QVector<QVariantMap> rows,
-                                                         const QVector<CheatsheetFamily>& families)
+QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVariantMap> rows,
+                                                                 const QVector<CheatsheetFamily>& families)
 {
     QHash<QString, int> rowIndexById;
     for (int i = 0; i < rows.size(); ++i) {
@@ -865,10 +871,13 @@ QVariantList ShortcutManager::compressCheatsheetFamilies(QVector<QVariantMap> ro
         bool compressible = true;
         for (int m = 0; m < family.ids.size() && compressible; ++m) {
             const int idx = rowIndexById.value(family.ids[m], -1);
-            if (idx < 0 || !rows[idx].value(QLatin1String("assigned")).toBool()) {
+            if (idx < 0) {
                 compressible = false;
                 break;
             }
+            // No separate "assigned" check: the producer derives it as
+            // triggers-non-empty, so the single-trigger requirement below
+            // already rejects unassigned members.
             const QStringList memberTriggers = rows[idx].value(QLatin1String("triggers")).toStringList();
             // A member carrying an alternate binding must not compress: the
             // compressed row shows a single combined chip, so the extra
@@ -902,7 +911,7 @@ QVariantList ShortcutManager::compressCheatsheetFamilies(QVector<QVariantMap> ro
         }
     }
 
-    QVariantList out;
+    QVector<QVariantMap> out;
     out.reserve(rows.size());
     for (int i = 0; i < rows.size(); ++i) {
         if (!removedIndices.contains(i)) {

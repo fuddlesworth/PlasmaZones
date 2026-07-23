@@ -697,6 +697,26 @@ void Daemon::connectLayoutSignals()
                 }
             });
 
+    // Live cheatsheet refilter on mode switches. Mode authority is
+    // ScreenModeRouter + AssignmentEntry::Mode, and the router is a plain
+    // query class with no change signal — a mode switch always lands as an
+    // applied layout (the toggle-autotile handler routes through
+    // applyLayoutById), so these two are the mode-change edge the sheet can
+    // observe. refreshCheatsheetIfVisible re-resolves the mode for the
+    // sheet's BOUND screen, so an apply on another screen is a harmless
+    // no-op re-push. These live HERE, not in connectShortcutSignals(),
+    // because the controller is created only in initializeUnifiedController,
+    // which runs between the two; the connections die with the per-start
+    // controller, so no tracked handle is needed.
+    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this,
+            [this](PhosphorZones::Layout*) {
+                refreshCheatsheetIfVisible();
+            });
+    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied, this,
+            [this](const QString&, int) {
+                refreshCheatsheetIfVisible();
+            });
+
     // Record manual layout only when user explicitly selects one via zone selector
     // or unified layout controller — NOT on every internal layout change.
 
