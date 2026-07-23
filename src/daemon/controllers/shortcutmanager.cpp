@@ -15,6 +15,7 @@
 #include <QHash>
 #include <QSet>
 #include <QStringList>
+#include <QTimer>
 #include <QVariantMap>
 
 #include <algorithm>
@@ -69,6 +70,10 @@ constexpr auto kIdIncreaseMasterCount = "increase_master_count";
 constexpr auto kIdDecreaseMasterCount = "decrease_master_count";
 constexpr auto kIdRetile = "retile";
 constexpr auto kIdToggleCheatsheet = "toggle_cheatsheet";
+constexpr auto kIdSpanWindowLeft = "span_window_left";
+constexpr auto kIdSpanWindowRight = "span_window_right";
+constexpr auto kIdSpanWindowUp = "span_window_up";
+constexpr auto kIdSpanWindowDown = "span_window_down";
 
 QString quickLayoutId(int slotZeroBased)
 {
@@ -141,6 +146,28 @@ const StaticEntry kStaticEntries[] = {
      QT_TRANSLATE_NOOP("plasmazones", "Move Window Down"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->moveWindowRequested(NavigationDirection::Down);
+     }},
+
+    // ─── Span window (grow/shrink the zone span) ───────────────────────────
+    {kIdSpanWindowLeft, &ConfigDefaults::spanWindowLeftShortcut, &Settings::spanWindowLeftShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Span Window Left"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->spanWindowRequested(NavigationDirection::Left);
+     }},
+    {kIdSpanWindowRight, &ConfigDefaults::spanWindowRightShortcut, &Settings::spanWindowRightShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Span Window Right"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->spanWindowRequested(NavigationDirection::Right);
+     }},
+    {kIdSpanWindowUp, &ConfigDefaults::spanWindowUpShortcut, &Settings::spanWindowUpShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Span Window Up"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->spanWindowRequested(NavigationDirection::Up);
+     }},
+    {kIdSpanWindowDown, &ConfigDefaults::spanWindowDownShortcut, &Settings::spanWindowDownShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Span Window Down"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->spanWindowRequested(NavigationDirection::Down);
      }},
 
     // ─── Focus zone ────────────────────────────────────────────────────────
@@ -416,6 +443,11 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdSwapWindowRight, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
         add(kIdSwapWindowUp, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
         add(kIdSwapWindowDown, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        // Span grows/shrinks a multi-zone snap — a hard no-op off snapping.
+        add(kIdSpanWindowLeft, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
+        add(kIdSpanWindowRight, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
+        add(kIdSpanWindowUp, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
+        add(kIdSpanWindowDown, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
         add(kIdRotateWindowsCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
             QT_TRANSLATE_NOOP("plasmazones", "Rotate Clockwise"));
         add(kIdRotateWindowsCCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
@@ -480,13 +512,21 @@ QKeySequence parseSequence(const QString& raw, const QString& contextId)
 
 } // namespace
 
-ShortcutManager::ShortcutManager(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager, QObject* parent)
+ShortcutManager::ShortcutManager(Settings* settings, QObject* parent)
     : QObject(parent)
     , m_settings(settings)
-    , m_layoutManager(layoutManager)
 {
     Q_ASSERT(settings);
-    Q_ASSERT(layoutManager);
+    if (!settings) {
+        // Release-build pair for the assert above. Every Entry::currentSeq
+        // lambda captures this pointer raw, so a built table would deref null
+        // on its first rebind. The manager instead stays inert: the guard at
+        // the top of registerShortcuts() keeps m_entries empty, and every
+        // other public entry point already no-ops on an empty table or a null
+        // m_registry.
+        qCCritical(lcShortcuts) << "ShortcutManager constructed without Settings — shortcuts disabled";
+        return;
+    }
 
     // Backend + Registry are NOT created here — they're created lazily in
     // registerShortcuts() so unregisterShortcuts() can fully release the
@@ -508,6 +548,15 @@ ShortcutManager::~ShortcutManager() = default;
 
 void ShortcutManager::registerShortcuts()
 {
+    if (!m_settings) {
+        // Constructed without Settings. buildEntries() would produce currentSeq
+        // lambdas over a null pointer and the bind loop below would deref them,
+        // so stop before the backend is even created — that keeps the ctor's
+        // "shortcuts disabled" claim true instead of trading one crash site for
+        // a Portal round-trip and the same crash.
+        qCWarning(lcShortcuts) << "registerShortcuts(): no Settings — shortcuts stay disabled";
+        return;
+    }
     if (m_registrationInProgress) {
         qCWarning(lcShortcuts) << "registerShortcuts() called re-entrantly — ignoring";
         return;
@@ -552,50 +601,97 @@ void ShortcutManager::registerShortcuts()
         m_registry->rebind(e.id, e.currentSeq());
     }
 
+    // Tag this batch so a settle that arrives late (either path) can tell
+    // whether it still refers to the batch it was armed for.
+    const quint64 generation = ++m_registrationGeneration;
+
     connect(
         m_registry.get(), &PhosphorShortcuts::Registry::ready, this,
-        [this] {
-            m_registrationInProgress = false;
-            qCInfo(lcShortcuts) << "Registered" << m_entries.size() << "shortcuts";
-            if (m_settingsDirty) {
-                m_settingsDirty = false;
-                updateShortcuts();
-            }
-            // Replay any adhoc (un)registrations that arrived while the
-            // initial batch was in flight. Must run AFTER the in-progress
-            // flag is cleared so each drained op goes through the normal
-            // path instead of re-queuing itself.
-            drainPendingAdhocOps();
-            // The catalog is first meaningful once the batch has settled
-            // (backend read-back can answer now).
-            Q_EMIT cheatsheetModelChanged();
+        [this, generation] {
+            settleRegistration(generation);
         },
         Qt::SingleShotConnection);
+
+    // Fallback settle: a backend that never answers (Portal request lost, a
+    // compositor that drops the reply) would otherwise leave
+    // m_registrationInProgress true forever — every later settings rebind
+    // silently defers and every adhoc grab queues undrained, which kills the
+    // picker / snap-assist Escape binding for the rest of the session.
+    QTimer::singleShot(kRegistrationSettleTimeoutMs, this, [this, generation] {
+        if (generation != m_registrationGeneration || !m_registrationInProgress) {
+            // Superseded by a later registerShortcuts()/unregisterShortcuts(),
+            // or already settled by ready(). Settling here would clear the
+            // in-flight flag of a DIFFERENT, still-pending batch.
+            return;
+        }
+        qCWarning(lcShortcuts) << "Shortcut backend never reported ready after" << kRegistrationSettleTimeoutMs
+                               << "ms — settling registration anyway";
+        settleRegistration(generation);
+    });
 
     m_registry->flush();
 }
 
-void ShortcutManager::updateShortcuts()
+void ShortcutManager::settleRegistration(quint64 generation)
+{
+    if (generation != m_registrationGeneration || !m_registrationInProgress) {
+        // Stale (a newer batch owns the manager) or already settled. Running
+        // the body again would re-publish the catalog for no change, which
+        // the cheatsheet re-pushes as visible churn.
+        return;
+    }
+    m_registrationInProgress = false;
+    qCInfo(lcShortcuts) << "Registered" << m_entries.size() << "shortcuts";
+    bool modelAlreadyEmitted = false;
+    if (m_settingsDirty) {
+        m_settingsDirty = false;
+        modelAlreadyEmitted = updateShortcuts();
+    }
+    // Replay any adhoc (un)registrations that arrived while the initial batch
+    // was in flight. Must run AFTER the in-progress flag is cleared so each
+    // drained op takes the immediate path instead of re-queuing itself.
+    drainPendingAdhocOps();
+    // The catalog is first meaningful once the batch has settled (backend
+    // read-back can answer now). One emit per settle: a dirty-settings replay
+    // above may already have re-pushed it.
+    if (!modelAlreadyEmitted) {
+        Q_EMIT cheatsheetModelChanged();
+    }
+}
+
+bool ShortcutManager::updateShortcuts()
 {
     if (m_registrationInProgress) {
         // Defer — the ready() callback above will call us again.
         m_settingsDirty = true;
-        return;
+        return false;
     }
     if (m_entries.isEmpty()) {
-        return;
+        return false;
     }
-    rebindAll();
+    // settingsChanged fires for every settings save; only a save that
+    // actually moved a shortcut sequence needs a backend flush or a
+    // cheatsheet refresh (a visible sheet re-pushes its model on the emit,
+    // so over-notifying is user-visible churn, not just wasted work).
+    if (!rebindAll()) {
+        return false;
+    }
     m_registry->flush();
-    // Sequences may have changed with the settings — cheap to over-notify,
-    // consumers re-query lazily.
     Q_EMIT cheatsheetModelChanged();
+    return true;
 }
 
 void ShortcutManager::unregisterShortcuts()
 {
     m_registrationInProgress = false;
     m_settingsDirty = false;
+    // Supersede any armed fallback settle: its generation no longer matches.
+    ++m_registrationGeneration;
+    // Adhoc ops queued behind an in-flight initial batch belong to UI
+    // contexts (e.g. an overlay's Escape grab) that no longer exist after
+    // teardown; replaying them on the next registerShortcuts() would
+    // re-bind a stale grab.
+    m_pendingAdhocOps.clear();
     if (m_registry) {
         for (const auto& e : std::as_const(m_entries)) {
             m_registry->unbind(e.id);
@@ -692,25 +788,31 @@ void ShortcutManager::drainPendingAdhocOps()
     if (m_pendingAdhocOps.isEmpty()) {
         return;
     }
-    // Swap-and-iterate so a callback that itself calls (un)registerAdhocShortcut
-    // lands in a fresh queue rather than mutating the one we're draining.
+    // Swap so the member queue is empty for the duration; the registration
+    // flag is already cleared, so a re-entrant (un)registerAdhocShortcut
+    // binds immediately instead of re-queuing into the vector we're walking.
     QVector<PendingAdhocOp> ops;
     m_pendingAdhocOps.swap(ops);
     qCInfo(lcShortcuts) << "Draining" << ops.size() << "deferred adhoc shortcut op(s) after initial registration";
+    // Bind/unbind directly instead of replaying through the public methods:
+    // each of those flushes per call, and a drained batch only needs one
+    // backend round-trip at the end. The registration flag is already
+    // cleared, so nothing re-queues.
     for (auto& op : ops) {
         if (op.kind == PendingAdhocOp::Register) {
-            registerAdhocShortcut(op.id, op.sequence, op.description, std::move(op.callback));
+            m_registry->bind(op.id, op.sequence, op.description, std::move(op.callback), /*persistent=*/false);
+            m_registry->rebind(op.id, op.sequence);
         } else {
-            unregisterAdhocShortcut(op.id);
+            m_registry->unbind(op.id);
         }
     }
+    m_registry->flush();
 }
 
 QVariantList ShortcutManager::cheatsheetModel() const
 {
     QVector<QVariantMap> rows;
     rows.reserve(m_entries.size());
-    QHash<QString, int> rowIndexById;
     for (const auto& e : m_entries) {
         const CatalogMeta meta = catalogMetaForId(e.id);
         QStringList triggers;
@@ -722,7 +824,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
         // Portal backend relays the compositor's trigger_description
         // verbatim, which may be native/localized spelling — without
         // normalization the family compression's token compares silently
-        // fail and the sheet shows all 26 uncompressed rows. A string that
+        // fail and the sheet shows every family-member row uncompressed. A string that
         // doesn't parse stays verbatim (better an odd chip than a lost
         // binding).
         for (QString& t : triggers) {
@@ -739,7 +841,6 @@ QVariantList ShortcutManager::cheatsheetModel() const
         row.insert(QStringLiteral("triggers"), triggers);
         row.insert(QStringLiteral("assigned"), !triggers.isEmpty());
         row.insert(QStringLiteral("mode"), QString::fromLatin1(meta.mode));
-        rowIndexById.insert(e.id, rows.size());
         rows.push_back(row);
     }
 
@@ -752,13 +853,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // chip is a range token ("1…9") or "Arrows". Any deviation — a member
     // unassigned, a rebind off-pattern — falls back to the individual rows,
     // because a compressed row would then lie about what the keys do.
-    struct FamilySpec
-    {
-        QStringList ids;
-        QStringList expectedLastTokens;
-        QString combinedLabel;
-        QString tailToken;
-    };
+    using FamilySpec = CheatsheetFamily;
     const QStringList arrowTokens{QStringLiteral("Left"), QStringLiteral("Right"), QStringLiteral("Up"),
                                   QStringLiteral("Down")};
     const QString arrowsTail = PhosphorI18n::tr("Arrows");
@@ -788,6 +883,11 @@ QVariantList ShortcutManager::cheatsheetModel() const
          arrowTokens,
          PhosphorI18n::tr("Swap Window"),
          arrowsTail},
+        {{QString::fromLatin1(kIdSpanWindowLeft), QString::fromLatin1(kIdSpanWindowRight),
+          QString::fromLatin1(kIdSpanWindowUp), QString::fromLatin1(kIdSpanWindowDown)},
+         arrowTokens,
+         PhosphorI18n::tr("Span Window"),
+         arrowsTail},
         {{QString::fromLatin1(kIdSwapVirtualScreenLeft), QString::fromLatin1(kIdSwapVirtualScreenRight),
           QString::fromLatin1(kIdSwapVirtualScreenUp), QString::fromLatin1(kIdSwapVirtualScreenDown)},
          arrowTokens,
@@ -796,6 +896,29 @@ QVariantList ShortcutManager::cheatsheetModel() const
          arrowsTail},
     };
 
+    QVector<QVariantMap> out = compressCheatsheetFamilies(rows, families);
+    // Category blocks in display order; stable sort keeps the table's
+    // hand-authored order within each category. Sorting the map vector
+    // (before the QVariantList conversion) compares by reference instead of
+    // detaching two QVariantMaps per comparison.
+    std::stable_sort(out.begin(), out.end(), [](const QVariantMap& a, const QVariantMap& b) {
+        return a.value(QLatin1String("categoryOrder")).toInt() < b.value(QLatin1String("categoryOrder")).toInt();
+    });
+    QVariantList model;
+    model.reserve(out.size());
+    for (const QVariantMap& row : std::as_const(out)) {
+        model.push_back(row);
+    }
+    return model;
+}
+
+QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVariantMap> rows,
+                                                                 const QVector<CheatsheetFamily>& families)
+{
+    QHash<QString, int> rowIndexById;
+    for (int i = 0; i < rows.size(); ++i) {
+        rowIndexById.insert(rows[i].value(QLatin1String("id")).toString(), i);
+    }
     QSet<int> removedIndices;
     for (const auto& family : families) {
         // The two lists are parallel arrays; a mismatched spec would index
@@ -811,11 +934,22 @@ QVariantList ShortcutManager::cheatsheetModel() const
         bool compressible = true;
         for (int m = 0; m < family.ids.size() && compressible; ++m) {
             const int idx = rowIndexById.value(family.ids[m], -1);
-            if (idx < 0 || !rows[idx].value(QLatin1String("assigned")).toBool()) {
+            if (idx < 0) {
                 compressible = false;
                 break;
             }
-            const QString seq = rows[idx].value(QLatin1String("triggers")).toStringList().value(0);
+            // No separate "assigned" check: the producer derives it as
+            // triggers-non-empty, so the single-trigger requirement below
+            // already rejects unassigned members.
+            const QStringList memberTriggers = rows[idx].value(QLatin1String("triggers")).toStringList();
+            // A member carrying an alternate binding must not compress: the
+            // compressed row shows a single combined chip, so the extra
+            // binding would silently vanish from the sheet.
+            if (memberTriggers.size() != 1) {
+                compressible = false;
+                break;
+            }
+            const QString seq = memberTriggers.first();
             const int split = seq.lastIndexOf(QLatin1Char('+'));
             if (split <= 0 || seq.mid(split + 1) != family.expectedLastTokens[m]) {
                 compressible = false;
@@ -840,27 +974,27 @@ QVariantList ShortcutManager::cheatsheetModel() const
         }
     }
 
-    QVariantList out;
+    QVector<QVariantMap> out;
     out.reserve(rows.size());
     for (int i = 0; i < rows.size(); ++i) {
         if (!removedIndices.contains(i)) {
             out.push_back(rows[i]);
         }
     }
-    // Category blocks in display order; stable sort keeps the table's
-    // hand-authored order within each category.
-    std::stable_sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
-        return a.toMap().value(QLatin1String("categoryOrder")).toInt()
-            < b.toMap().value(QLatin1String("categoryOrder")).toInt();
-    });
     return out;
 }
 
-void ShortcutManager::rebindAll()
+bool ShortcutManager::rebindAll()
 {
+    bool anyChanged = false;
     for (const auto& e : std::as_const(m_entries)) {
-        m_registry->rebind(e.id, e.currentSeq());
+        const QKeySequence seq = e.currentSeq();
+        if (m_registry->shortcut(e.id) != seq) {
+            anyChanged = true;
+        }
+        m_registry->rebind(e.id, seq);
     }
+    return anyChanged;
 }
 
 void ShortcutManager::buildEntries()

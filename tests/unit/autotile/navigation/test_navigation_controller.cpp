@@ -4,6 +4,7 @@
 #include <QTest>
 #include <QSignalSpy>
 
+#include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -120,6 +121,119 @@ private Q_SLOTS:
         QVERIFY(foundMasterFeedback);
     }
 
+    /**
+     * Screen-scoped operations must act on the screen the shortcut targeted,
+     * even when that screen's state carries no tracked focus (focus arrived
+     * via a floating, snapped, or never-tracked window). Before the fix,
+     * tiledWindowsForFocusedScreen required a non-empty focusedWindow() on the
+     * hinted screen and otherwise fell through to a hash-ordered scan, so
+     * rotate and swap-with-master mutated whichever screen happened to have a
+     * tracked focus.
+     */
+    void testNavigation_hintedScreenWithoutTrackedFocus_isStillTheTarget()
+    {
+        const QString hinted = QStringLiteral("DP-2");
+        const QString other = QStringLiteral("eDP-1");
+
+        QScopedPointer<AutotileEngine> engine(
+            new AutotileEngine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry()));
+        engine->setAutotileScreens({other, hinted});
+        // "other" gets the tracked focus; "hinted" gets windows but no focus.
+        for (int i = 1; i <= 3; ++i) {
+            engine->windowOpened(QStringLiteral("other%1").arg(i), other);
+        }
+        for (int i = 1; i <= 3; ++i) {
+            engine->windowOpened(QStringLiteral("hint%1").arg(i), hinted);
+        }
+        QCoreApplication::processEvents();
+        engine->tilingStateForScreen(other)->setFocusedWindow(QStringLiteral("other1"));
+        engine->windowFocused(QStringLiteral("other1"), other);
+
+        // The discriminating premise: the hinted screen has windows but no
+        // tracked focus. If window-open ever seeds focus, this assertion fails
+        // loudly rather than the test silently covering nothing.
+        QVERIFY(engine->tilingStateForScreen(hinted)->focusedWindow().isEmpty());
+
+        // The daemon hints the target screen on every autotile shortcut.
+        engine->setActiveScreenHint(hinted);
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
+
+        const QStringList otherBefore = engine->tilingStateForScreen(other)->tiledWindows();
+        engine->rotateWindowOrder(true);
+
+        // The hinted screen rotated; the focused-elsewhere screen did not.
+        QCOMPARE(engine->tilingStateForScreen(hinted)->tiledWindows(),
+                 (QStringList{QStringLiteral("hint3"), QStringLiteral("hint1"), QStringLiteral("hint2")}));
+        QCOMPARE(engine->tilingStateForScreen(other)->tiledWindows(), otherBefore);
+
+        bool sawRotate = false;
+        for (const auto& args : feedbackSpy) {
+            if (args.at(1).toString() == QStringLiteral("rotate")) {
+                sawRotate = true;
+                QCOMPARE(args.at(0).toBool(), true);
+                // The OSD must name the screen that actually rotated.
+                QCOMPARE(args.at(5).toString(), hinted);
+                break;
+            }
+        }
+        QVERIFY(sawRotate);
+    }
+
+    void testNavigation_swapFocusedInDirection_successReasonIsDirection()
+    {
+        // Pins the feedback-reason contract: a successful directional swap
+        // reports the bare direction (the OSD arrow token), never the
+        // structured swap_failed failure reason. swapWindowsById cannot fail
+        // for ids drawn from the state's own window list, so the failure leg
+        // is defensive; this pins the reachable side of the ternary.
+        const QString screen = QStringLiteral("eDP-1");
+        QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 2, QStringLiteral("win1")));
+
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = QStringLiteral("win1");
+        ctx.screenId = screen;
+        engine->swapFocusedInDirection(QStringLiteral("right"), ctx);
+
+        bool foundSwapFeedback = false;
+        for (const auto& args : feedbackSpy) {
+            if (args.at(1).toString() == QStringLiteral("swap")) {
+                foundSwapFeedback = true;
+                QCOMPARE(args.at(0).toBool(), true);
+                QCOMPARE(args.at(2).toString(), QStringLiteral("right"));
+                break;
+            }
+        }
+        QVERIFY(foundSwapFeedback);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Span (snap-mode concept, reported as unsupported)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testNavigation_spanFocusedInDirection_reportsNotSupported()
+    {
+        const QString screen = QStringLiteral("eDP-1");
+        QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 2, QStringLiteral("win1")));
+
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = QStringLiteral("win1");
+        ctx.screenId = screen;
+        engine->spanFocusedInDirection(QStringLiteral("right"), ctx);
+
+        // Exactly one failure feedback so the shortcut is never silent on an
+        // autotile screen, with the context's screen passed through for the OSD.
+        QCOMPARE(feedbackSpy.count(), 1);
+        const QList<QVariant> args = feedbackSpy.first();
+        QCOMPARE(args.at(0).toBool(), false);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("span"));
+        QCOMPARE(args.at(2).toString(), QStringLiteral("not_supported"));
+        QCOMPARE(args.at(5).toString(), screen);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Rotate
     // ═══════════════════════════════════════════════════════════════════════════
@@ -159,8 +273,6 @@ private Q_SLOTS:
     {
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win1")));
-
-        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
 
         // win1 is at index 0. Swapping "left" (backward) should wrap to win3.
         engine->swapFocusedInDirection(QStringLiteral("left"), QStringLiteral("move"));
@@ -239,11 +351,17 @@ private Q_SLOTS:
     // Fallback behavior
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testNavigation_tiledWindowsForFocusedScreen_fallbackToPrimary()
+    void testNavigation_noTrackedFocus_stillResolvesAScreenWithTiledWindows()
     {
-        // When no window has focus, focusNext/focusPrevious should still work
-        // if there is a screen with tiled windows. Without a PhosphorScreens::ScreenManager,
-        // the fallback returns empty — no crash expected.
+        // No focused window anywhere and no active-screen hint: the resolver's
+        // scan tier still finds the autotile screen that HAS tiled windows, so
+        // focus cycling works instead of dropping the press. Selecting on
+        // tracked focus instead would return nothing here — and, with two
+        // screens, could return one whose layout is empty while another holds
+        // the windows.
+        //
+        // No ScreenManager is wired, so this also covers the primary-screen
+        // fallback being absent without crashing.
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
@@ -251,16 +369,14 @@ private Q_SLOTS:
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
-        // No focused window set, no m_activeScreen set
 
         QSignalSpy focusSpy(&engine, &AutotileEngine::activateWindowRequested);
-
-        // Without PhosphorScreens::ScreenManager, the primary screen fallback in
-        // tiledWindowsForFocusedScreen returns empty. No crash expected.
         engine.focusNext();
 
-        // No focus request since no focused window and no primary screen
-        QCOMPARE(focusSpy.count(), 0);
+        // Index 0 is the implied starting point with no tracked focus, so
+        // "next" is the second window.
+        QCOMPARE(focusSpy.count(), 1);
+        QCOMPARE(focusSpy.first().first().toString(), QStringLiteral("win2"));
     }
 
     void testNavigation_resolveActiveScreen_fallback()

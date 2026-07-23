@@ -90,14 +90,14 @@ QStringList AutotileEngine::allFloatingWindows() const
     return result;
 }
 
-void AutotileEngine::swapInDirection(const QString& direction, const QString& action)
+void AutotileEngine::rotateWindows(bool clockwise, const QString& screenId)
 {
-    swapFocusedInDirection(direction, action);
-}
-
-void AutotileEngine::rotateWindows(bool clockwise, const QString& /*screenId*/)
-{
-    // AutotileEngine operates on the active screen internally
+    // Prefer the caller's screen: the internal m_activeScreen tracker can
+    // drift when focus moves through floating, snapped, or never-tracked
+    // windows (the same reason the other NavigationContext overrides pass
+    // the daemon-authoritative context through). An empty id keeps the
+    // tracker-resolved behaviour.
+    setActiveScreenHint(screenId);
     rotateWindowOrder(clockwise);
 }
 

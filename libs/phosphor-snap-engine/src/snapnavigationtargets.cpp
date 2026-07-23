@@ -3,18 +3,18 @@
 
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 
+#include "snapenginelogging.h"
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "snapenginelogging.h"
-#include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/Zone.h>
 
 #include <QRect>
 #include <QStringList>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorSnapEngine {
 
@@ -57,13 +57,24 @@ PhosphorProtocol::SwapTargetResult swapResult(bool success, const QString& reaso
             x2,      y2,     w2,        h2, zoneId2, screenId, sourceZoneId, targetZoneId, QString()};
 }
 
+// Pre-call contract checks. Target-resolver callers (the WTA slots) are
+// supposed to run validation *before* calling the resolver — dispatcher
+// responsibility, not resolver responsibility. But defensively check here
+// too so a misrouted call returns a clean no-op result instead of crashing.
+bool checkWindowId(const QString& windowId)
+{
+    return !windowId.isEmpty();
+}
+
+bool checkDirection(const QString& direction)
+{
+    return !direction.isEmpty();
+}
+
+} // anonymous namespace
+
 // ═══════════════════════════════════════════════════════════════════════════
-// Stored Screen Validation
-//
-// For virtual screen IDs, verifies both that the backing physical screen
-// is still connected AND that the virtual screen ID is still in the
-// effective screen list (guards against stale IDs after config removal).
-// For physical screen IDs, verifies the screen is connected.
+// Stored Screen Validation (shared with SnapEngine's resolveNavScreen)
 // ═══════════════════════════════════════════════════════════════════════════
 
 bool isStoredScreenValid(PhosphorScreens::ScreenManager* mgr, const QString& storedScreen)
@@ -80,22 +91,6 @@ bool isStoredScreenValid(PhosphorScreens::ScreenManager* mgr, const QString& sto
     }
     return PhosphorScreens::ScreenIdentity::findByIdOrName(storedScreen) != nullptr;
 }
-
-// Pre-call contract checks. Target-resolver callers (the WTA slots) are
-// supposed to run validation *before* calling the resolver — dispatcher
-// responsibility, not resolver responsibility. But defensively check here
-// too so a misrouted call returns a clean no-op result instead of crashing.
-bool checkWindowId(const QString& windowId)
-{
-    return !windowId.isEmpty();
-}
-
-bool checkDirection(const QString& direction)
-{
-    return !direction.isEmpty();
-}
-
-} // anonymous namespace
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Construction
@@ -134,12 +129,10 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntr
                                                                                         bool requireSnapNeighbour) const
 {
     const QString fail = QString();
-    // m_service is a ctor invariant (Q_ASSERT'd, never null and never reset):
-    // SnapEngine::ensureTargetResolver is the sole construction site and returns
-    // early without building this resolver when its tracker is null, so no live
-    // resolver can hold a null m_service. Only the late-bound resolvers (set
-    // post-construction) are genuinely optional here.
-    if (!m_crossSurface || !m_zoneAdjacency) {
+    // hasDependencies() is the release pair for the ctor asserts on m_service
+    // and m_layoutManager. The rest are late-bound resolvers set after
+    // construction, so they are genuinely optional and checked alongside.
+    if (!hasDependencies() || !m_crossSurface || !m_zoneAdjacency) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
     }
     const QString neighborScreen = m_crossSurface->neighborOutputInDirection(sourceScreenId, direction);
@@ -176,8 +169,10 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
         return swapResult(false, reason, QString(), 0, 0, 0, 0, QString(), QString(), 0, 0, 0, 0, QString(),
                           sourceScreenId, currentZoneId, QString());
     };
-    // m_service is a ctor invariant; only the late-bound resolvers are optional.
-    if (!m_crossSurface || !m_zoneAdjacency) {
+    // hasDependencies() is the release pair for the ctor asserts; the rest are
+    // late-bound resolvers and genuinely optional. Same shape as
+    // crossOutputEntryTarget.
+    if (!hasDependencies() || !m_crossSurface || !m_zoneAdjacency) {
         return fail(QString());
     }
     const QString neighborScreen = m_crossSurface->neighborOutputInDirection(sourceScreenId, direction);
@@ -229,6 +224,9 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
 QStringList SnapNavigationTargetResolver::windowsInZoneOnScreen(const QString& zoneId, const QString& screenName) const
 {
     QStringList result;
+    if (!hasDependencies()) {
+        return result;
+    }
     const QStringList windows = m_service->windowsInZone(zoneId);
     for (const QString& windowId : windows) {
         // screenForWindow canonicalizes the id (issue #628); the exact-equality
@@ -258,6 +256,11 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
                                                                                         const QString& direction,
                                                                                         const QString& screenId)
 {
+    if (!hasDependencies()) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "SnapNavigationTargetResolver used without its ctor dependencies";
+        return moveResult(false, QStringLiteral("engine_unavailable"), QString(), QRect(), QString(), screenId);
+    }
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getMoveTargetForWindow - empty window ID";
         return moveResult(false, QStringLiteral("invalid_window"), QString(), QRect(), QString(), screenId);
@@ -272,6 +275,10 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
         return moveResult(false, QStringLiteral("invalid_direction"), QString(), QRect(), QString(), screenId);
     }
     if (!m_zoneAdjacency) {
+        // Only reachable before the adjacency resolver is wired (broken
+        // init) — surface it on the OSD instead of failing silently.
+        emitFeedback(false, QStringLiteral("move"), QStringLiteral("no_zone_detection"), QString(), QString(),
+                     screenId);
         return moveResult(false, QStringLiteral("no_zone_detection"), QString(), QRect(), QString(), screenId);
     }
 
@@ -319,14 +326,11 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
                              cross.zoneId, cross.screenName);
                 return cross;
             }
-            // Defer the boundary decision (and its feedback) to the caller when a
-            // cross-surface resolver is present: SnapEngine may cross to an
-            // adjacent desktop, which doesn't fit a zone-target result. Without a
-            // resolver, emit the boundary feedback here as before.
-            if (!m_crossSurface) {
-                emitFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId,
-                             QString(), effectiveScreenId);
-            }
+            // Defer the boundary decision AND its feedback to the caller:
+            // SnapEngine tries the cross-mode and cross-desktop axes and
+            // emits the boundary feedback itself when they fail, in every
+            // configuration — emitting here too would double the OSD when
+            // no cross-surface resolver is wired.
             return moveResult(false, QStringLiteral("no_adjacent_zone"), QString(), QRect(), currentZoneId,
                               effectiveScreenId);
         }
@@ -344,10 +348,370 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
     return moveResult(true, QString(), targetZoneId, geo, currentZoneId, effectiveScreenId);
 }
 
+namespace {
+
+/// Signed 1-D interval overlap of two rects on the axis PERPENDICULAR to the
+/// travel axis. Positive means the rects are genuinely side-by-side for a
+/// horizontal/vertical grow; zero or negative means corner/diagonal only.
+int perpendicularOverlap(const QRect& a, const QRect& b, bool horizontal)
+{
+    if (horizontal) {
+        return qMin(a.y() + a.height(), b.y() + b.height()) - qMax(a.y(), b.y());
+    }
+    return qMin(a.x() + a.width(), b.x() + b.width()) - qMax(a.x(), b.x());
+}
+
+/// Low/high coordinate of @p r on the travel axis, half-open (hi = lo + size)
+/// so edge math avoids QRect's inclusive right()/bottom() off-by-one.
+int travelLo(const QRect& r, bool horizontal)
+{
+    return horizontal ? r.x() : r.y();
+}
+int travelHi(const QRect& r, bool horizontal)
+{
+    return horizontal ? r.x() + r.width() : r.y() + r.height();
+}
+
+/// Zone rects rounded from relative geometry can disagree by a pixel; edges
+/// within this tolerance count as the same edge for shrink-band membership.
+constexpr int kSpanEdgeTolerancePx = 2;
+
+} // anonymous namespace
+
+SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QString& windowId, const QString& direction,
+                                                                      const QString& screenId)
+{
+    SpanTargetResult result;
+    result.screenName = screenId;
+    if (!hasDependencies()) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "SnapNavigationTargetResolver used without its ctor dependencies";
+        result.reason = QStringLiteral("engine_unavailable");
+        return result;
+    }
+    if (!checkWindowId(windowId)) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getSpanTargetForWindow - empty window ID";
+        result.reason = QStringLiteral("invalid_window");
+        return result;
+    }
+    const bool horizontal = (direction == QLatin1String("left") || direction == QLatin1String("right"));
+    const bool vertical = (direction == QLatin1String("up") || direction == QLatin1String("down"));
+    if (!horizontal && !vertical) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot span - invalid direction" << direction;
+        emitFeedback(false, QStringLiteral("span"), QStringLiteral("invalid_direction"), QString(), QString(),
+                     screenId);
+        result.reason = QStringLiteral("invalid_direction");
+        return result;
+    }
+    // Travel toward increasing coordinate? (screen space: y grows downward)
+    const bool positive = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+
+    QStringList currentZones = m_service->zonesForWindow(windowId);
+
+    // Trust stored screen for snapped windows — see getMoveTargetForWindow comment.
+    QString effectiveScreenId = screenId;
+    if (!currentZones.isEmpty()) {
+        const QString storedScreen = m_service->screenForWindow(windowId);
+        if (isStoredScreenValid(m_service->screenManager(), storedScreen)) {
+            effectiveScreenId = storedScreen;
+        }
+    }
+    result.screenName = effectiveScreenId;
+
+    // Member rects. A stale member whose zone no longer resolves (layout
+    // switched under the span) is dropped from the working set rather than
+    // carried forward as a dead id.
+    QVector<QPair<QString, QRect>> members;
+    for (const QString& zoneId : std::as_const(currentZones)) {
+        const QRect geo = m_service->zoneGeometry(zoneId, effectiveScreenId);
+        if (geo.isValid()) {
+            members.append({zoneId, geo});
+        }
+    }
+
+    if (members.isEmpty()) {
+        // Unsnapped (or fully stale) — mirror move's entry behaviour: snap
+        // into the edge zone in the pressed direction.
+        if (!m_zoneAdjacency) {
+            // Only reachable before the adjacency resolver is wired (broken
+            // init) — surface it on the OSD instead of failing silently.
+            emitFeedback(false, QStringLiteral("span"), QStringLiteral("no_zone_detection"), QString(), QString(),
+                         effectiveScreenId);
+            result.reason = QStringLiteral("no_zone_detection");
+            return result;
+        }
+        const QString entryZone = m_zoneAdjacency->getFirstZoneInDirection(direction, effectiveScreenId);
+        if (entryZone.isEmpty()) {
+            emitFeedback(false, QStringLiteral("span"), QStringLiteral("no_zones"), QString(), QString(),
+                         effectiveScreenId);
+            result.reason = QStringLiteral("no_zones");
+            return result;
+        }
+        const QRect geo = m_service->zoneGeometry(entryZone, effectiveScreenId);
+        if (!geo.isValid()) {
+            emitFeedback(false, QStringLiteral("span"), QStringLiteral("geometry_error"), QString(), entryZone,
+                         effectiveScreenId);
+            result.reason = QStringLiteral("geometry_error");
+            return result;
+        }
+        result.success = true;
+        result.grew = true;
+        result.zoneIds = QStringList{entryZone};
+        result.geometry = geo;
+        // "snap:", not "grow:" — this is an initial snap of an unsnapped
+        // window, and the OSD words it as a snap rather than an extension.
+        emitFeedback(true, QStringLiteral("span"), QStringLiteral("snap:") + direction, QString(), entryZone,
+                     effectiveScreenId);
+        return result;
+    }
+
+    QRect unionRect = members.first().second;
+    for (const auto& m : std::as_const(members)) {
+        unionRect = unionRect.united(m.second);
+    }
+    // members preserves currentZones order, so this is the stored primary
+    // whenever it survived validation, and the first surviving member when
+    // the primary went stale (a dead id would resolve to no zone number on
+    // the OSD, so promoting the survivor is the useful report).
+    result.sourceZoneId = members.first().first;
+
+    // Candidate rects: every non-member zone of this screen's layout.
+    auto* layout = m_layoutManager->resolveLayoutForScreen(effectiveScreenId);
+    if (!layout) {
+        emitFeedback(false, QStringLiteral("span"), QStringLiteral("no_active_layout"), result.sourceZoneId, QString(),
+                     effectiveScreenId);
+        result.reason = QStringLiteral("no_active_layout");
+        return result;
+    }
+    QVector<QPair<QString, QRect>> candidates;
+    const auto layoutZones = layout->zones();
+    for (PhosphorZones::Zone* zone : layoutZones) {
+        const QString zoneId = zone->id().toString();
+        if (currentZones.contains(zoneId)) {
+            continue;
+        }
+        const QRect geo = m_service->zoneGeometry(zoneId, effectiveScreenId);
+        if (geo.isValid()) {
+            candidates.append({zoneId, geo});
+        }
+    }
+
+    // ── Grow: nearest candidate extending past the span's leading edge ──────
+    // A candidate qualifies when it genuinely enlarges the union toward
+    // @p direction (its far edge lies beyond the union's) and it sits
+    // side-by-side with the union (positive perpendicular overlap — a
+    // diagonal zone is not a grow target). Ranked by nearest edge gap
+    // (clamped to zero so overlapping-zone layouts tie at the edge), then
+    // perpendicular centre distance, then FARTHEST far edge.
+    //
+    // The third key differs from the shared directionalNeighbor raycast,
+    // which breaks the same tie by travel-axis centre distance. DN picks one
+    // window to focus, so a nearer centre is simply a better answer; span
+    // picks the zone whose far edge DEFINES the extension band the sweep
+    // below then fills, and a centre-nearer candidate yields a SHORTER band
+    // that a wider swept zone still unions past — leaving geometry covering
+    // zones outside the member set. Choosing the farthest far edge makes the
+    // band a travel-axis superset of every gap-and-perp-tied alternative, so
+    // the pick is deterministic rather than dependent on the layout's zone
+    // enumeration order.
+    //
+    // Gap-and-perp double ties are common in-tree: 13 of them across 8 bundled
+    // layouts, including fibonacci, focus and master-stack. On every one of
+    // those the farthest-far-edge candidate is also the first-enumerated one,
+    // so the key changes no winner today. That agreement is the reason to make
+    // it explicit rather than to leave it out: without the key the result rests
+    // on JSON ordering, and reordering a layout's zones would silently flip it.
+    // growDoubleTie_prefersFarthestFarEdge in
+    // tests/unit/snap/test_span_targets.cpp is the coverage.
+    //
+    // The perpendicular centre key stays: it disambiguates stacked
+    // neighbours, and it is the far-edge key below that governs band length.
+    const int uLo = travelLo(unionRect, horizontal);
+    const int uHi = travelHi(unionRect, horizontal);
+    const int uPerpCenter = horizontal ? unionRect.center().y() : unionRect.center().x();
+    int bestIndex = -1;
+    int bestGap = 0;
+    int bestPerp = 0;
+    int bestReach = 0;
+    for (int i = 0; i < candidates.size(); ++i) {
+        const QRect& r = candidates[i].second;
+        // Same jitter allowance as every other edge predicate here: a zone
+        // that is diagonal in intent can overlap by a pixel or two of
+        // relative-geometry rounding, and admitting it unions its WHOLE rect
+        // perpendicular to the press. The cost is that a genuinely 1-2px-tall
+        // zone can never be a grow target, which at 1080p is under 0.2% of the
+        // screen and below anything authorable.
+        if (perpendicularOverlap(unionRect, r, horizontal) <= kSpanEdgeTolerancePx) {
+            continue;
+        }
+        // Tolerance mirrors shrink-band membership: a candidate whose far
+        // edge exceeds the union's by only rounding jitter is the same edge,
+        // not a grow target - without this, a 1-2px sliver registers as a
+        // gap-0 "grow" that adds a jitter zone and blocks grow-else-retract.
+        const bool extends = positive ? (travelHi(r, horizontal) > uHi + kSpanEdgeTolerancePx)
+                                      : (travelLo(r, horizontal) < uLo - kSpanEdgeTolerancePx);
+        if (!extends) {
+            continue;
+        }
+        // Overlap layouts: a wide candidate lying mostly BEHIND the union
+        // passes the far-edge test above, ties at gap 0, and can win the
+        // perpendicular tie-break - uniting it would then extend the span
+        // BACKWARD along the travel axis. Require the candidate to start at
+        // or beyond the union's trailing edge (same rounding tolerance).
+        // The tolerance is deliberately two-sided here, so a candidate
+        // starting up to kSpanEdgeTolerancePx before the trailing edge still
+        // joins and the applied union can move that far against the pressed
+        // direction. That is the same jitter the shrink band absorbs, and
+        // sub-pixel-rounding sized, so it is accepted rather than clamped.
+        const bool startsWithinSpan = positive ? (travelLo(r, horizontal) >= uLo - kSpanEdgeTolerancePx)
+                                               : (travelHi(r, horizontal) <= uHi + kSpanEdgeTolerancePx);
+        if (!startsWithinSpan) {
+            continue;
+        }
+        const int gap = positive ? qMax(0, travelLo(r, horizontal) - uHi) : qMax(0, uLo - travelHi(r, horizontal));
+        const int perp = qAbs((horizontal ? r.center().y() : r.center().x()) - uPerpCenter);
+        // How far this candidate would push the leading edge, oriented so a
+        // larger value is always the longer band in either direction.
+        const int reach = positive ? travelHi(r, horizontal) : -travelLo(r, horizontal);
+        if (bestIndex < 0 || gap < bestGap || (gap == bestGap && perp < bestPerp)
+            || (gap == bestGap && perp == bestPerp && reach > bestReach)) {
+            bestIndex = i;
+            bestGap = gap;
+            bestPerp = perp;
+            bestReach = reach;
+        }
+    }
+
+    if (bestIndex >= 0) {
+        // Extension band: from the union's old leading edge to the picked
+        // neighbour's far edge, spanning the union's perpendicular extent.
+        // Every candidate the band overlaps joins the span, so growing a
+        // full-height span into a column of stacked zones takes the whole
+        // column instead of leaving an L-shaped set whose bounding rect
+        // covers zones that were never added.
+        //
+        // Bounding-rect semantics: the applied geometry is the union of the
+        // member rects, matching multiZoneGeometry everywhere else in the
+        // codebase. When an added zone extends past the band's PERPENDICULAR
+        // extent (irregular layouts), the union can therefore overlap zones
+        // that are not in the set — inherent to bounding-rect spans, and
+        // identical to what a drag multi-zone snap of the same set would
+        // produce. This is the norm on master-stack-shaped layouts rather than
+        // a corner case: 12 of the 26 bundled layouts hit it, and on
+        // master-stack.json a single grow-left from Stack 1 picks Master and
+        // produces the whole screen while Stack 2 and Stack 3 stay unowned and
+        // separately snappable. data/layouts/bsp.json is the mild version,
+        // where growing right from zone 1 sweeps a zone taller than the band
+        // so the union reaches the screen edge with zone 4 left unowned.
+        //
+        // Neither axis is bounded to the band. A swept candidate joins WHOLE,
+        // so on an overlapping-zone layout one that starts inside the band and
+        // extends past the winner's far edge pushes the union past newEdge
+        // too. Clamping either axis would mean applying geometry that does not
+        // cover a member zone, which is worse than overshooting into an
+        // unowned one. The band is deliberately NOT iterated to a
+        // fixpoint: flood-filling would swallow overlapping zones the user
+        // never aimed at (see ZoneDetector::detectMultiZone's matching
+        // choice for the drag path).
+        const QRect& winner = candidates[bestIndex].second;
+        const int newEdge = positive ? travelHi(winner, horizontal) : travelLo(winner, horizontal);
+        QRect band;
+        if (horizontal) {
+            band = positive ? QRect(uHi, unionRect.y(), newEdge - uHi, unionRect.height())
+                            : QRect(newEdge, unionRect.y(), uLo - newEdge, unionRect.height());
+        } else {
+            band = positive ? QRect(unionRect.x(), uHi, unionRect.width(), newEdge - uHi)
+                            : QRect(unionRect.x(), newEdge, unionRect.width(), uLo - newEdge);
+        }
+        // Base the new set on the validated members, not raw currentZones —
+        // a stale id the member pass dropped must not be re-included (it
+        // could even become the primary zone the commit keys off).
+        result.zoneIds.clear();
+        for (const auto& m : std::as_const(members)) {
+            result.zoneIds.append(m.first);
+        }
+        QRect newUnion = unionRect;
+        for (int i = 0; i < candidates.size(); ++i) {
+            const QRect& candidateRect = candidates[i].second;
+            // Sweep membership needs more than rounding jitter: zone rects
+            // rounded from relative geometry can leak 1-2px into the band
+            // (see kSpanEdgeTolerancePx), and an exact intersection test
+            // would let such a sliver of a perpendicular neighbour silently
+            // join the span. The winner is exempt - it defines the band and
+            // always joins its own extension.
+            const QRect overlap = band.intersected(candidateRect);
+            const bool beyondJitter = overlap.width() > kSpanEdgeTolerancePx && overlap.height() > kSpanEdgeTolerancePx;
+            // The winner's trailing-edge test applies to swept candidates too:
+            // a zone that starts behind the span's trailing edge is united
+            // WHOLE, so admitting it here would move the applied geometry
+            // against the pressed direction by an unbounded amount and defeat
+            // the guard above.
+            const bool sweepStartsWithinSpan = positive
+                ? (travelLo(candidateRect, horizontal) >= uLo - kSpanEdgeTolerancePx)
+                : (travelHi(candidateRect, horizontal) <= uHi + kSpanEdgeTolerancePx);
+            if (i == bestIndex || (beyondJitter && sweepStartsWithinSpan)) {
+                result.zoneIds.append(candidates[i].first);
+                newUnion = newUnion.united(candidateRect);
+            }
+        }
+        result.success = true;
+        result.grew = true;
+        result.geometry = newUnion;
+        emitFeedback(true, QStringLiteral("span"), QStringLiteral("grow:") + direction, result.sourceZoneId,
+                     candidates[bestIndex].first, effectiveScreenId);
+        return result;
+    }
+
+    // ── Shrink: nothing to grow into, so retract the opposite edge ──────────
+    // Pressing toward a boundary undoes the last grow away from it: the
+    // trailing-edge member band (the zones whose far edge forms the union's
+    // edge opposite to @p direction) drops out. A span that is a single band
+    // along this axis has nothing to retract and reports the boundary.
+    if (members.size() > 1) {
+        QStringList kept;
+        QRect keptUnion;
+        QString removedZoneId;
+        for (const auto& [memberId, memberRect] : std::as_const(members)) {
+            const bool inTrailingBand = positive ? (travelLo(memberRect, horizontal) <= uLo + kSpanEdgeTolerancePx)
+                                                 : (travelHi(memberRect, horizontal) >= uHi - kSpanEdgeTolerancePx);
+            if (inTrailingBand) {
+                // Record the FIRST removed member (members preserve span
+                // order) so the feedback's target zone is deterministic
+                // when the band drops several zones at once.
+                if (removedZoneId.isEmpty()) {
+                    removedZoneId = memberId;
+                }
+                continue;
+            }
+            kept.append(memberId);
+            keptUnion = keptUnion.isNull() ? memberRect : keptUnion.united(memberRect);
+        }
+        if (!kept.isEmpty()) {
+            result.success = true;
+            result.grew = false;
+            result.zoneIds = kept;
+            result.geometry = keptUnion;
+            emitFeedback(true, QStringLiteral("span"), QStringLiteral("shrink:") + direction, result.sourceZoneId,
+                         removedZoneId, effectiveScreenId);
+            return result;
+        }
+    }
+
+    emitFeedback(false, QStringLiteral("span"), QStringLiteral("no_adjacent_zone"), result.sourceZoneId, QString(),
+                 effectiveScreenId);
+    result.reason = QStringLiteral("no_adjacent_zone");
+    return result;
+}
+
 PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QString& windowId,
                                                                                           const QString& direction,
                                                                                           const QString& screenId)
 {
+    if (!hasDependencies()) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "SnapNavigationTargetResolver used without its ctor dependencies";
+        return focusResult(false, QStringLiteral("engine_unavailable"), QString(), QString(), QString(), screenId);
+    }
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getFocusTargetForWindow - empty window ID";
         return focusResult(false, QStringLiteral("invalid_window"), QString(), QString(), QString(), screenId);
@@ -360,6 +724,9 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
         return focusResult(false, QStringLiteral("invalid_direction"), QString(), QString(), QString(), screenId);
     }
     if (!m_zoneAdjacency) {
+        // See getMoveTargetForWindow — broken-init state, surfaced on the OSD.
+        emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_zone_detection"), QString(), QString(),
+                     screenId);
         return focusResult(false, QStringLiteral("no_zone_detection"), QString(), QString(), QString(), screenId);
     }
 
@@ -381,8 +748,10 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
     QString targetZoneId = m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
         // No adjacent zone on this output — try focusing into the adjacent
-        // output's entry zone. Focus may cross to an autotile screen, so the
-        // neighbour's mode is not gated (requireSnapNeighbour=false).
+        // output's entry zone. The neighbour's mode is not gated
+        // (requireSnapNeighbour=false), but the landing below still needs a
+        // snap-tracked occupant, so an autotile neighbour dead-ends to
+        // no_adjacent_zone anyway.
         const PhosphorProtocol::MoveTargetResult cross =
             crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/false);
         if (cross.success) {
@@ -402,13 +771,10 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
         // "no_adjacent_zone" reason: from the caller's perspective there is no
         // window to land on that way, so it should try the desktop axis next. The
         // reason intentionally does not distinguish the empty-zone case.
-        // Defer the boundary decision (and feedback) to the caller when a
-        // cross-surface resolver is present — SnapEngine may focus a window on
-        // the adjacent desktop. Without one, emit the boundary feedback here.
-        if (!m_crossSurface) {
-            emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
-                         effectiveScreenId);
-        }
+        // Defer the boundary decision AND its feedback to the caller —
+        // SnapEngine tries the cross-desktop axis and emits the boundary
+        // feedback itself when it fails, in every configuration (see the
+        // matching note in getMoveTargetForWindow).
         return focusResult(false, QStringLiteral("no_adjacent_zone"), QString(), currentZoneId, QString(),
                            effectiveScreenId);
     }
@@ -442,6 +808,11 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
 PhosphorProtocol::RestoreTargetResult SnapNavigationTargetResolver::getRestoreForWindow(const QString& windowId,
                                                                                         const QString& screenId)
 {
+    if (!hasDependencies()) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "SnapNavigationTargetResolver used without its ctor dependencies";
+        return {false, false, 0, 0, 0, 0};
+    }
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getRestoreForWindow - empty window ID";
         return {false, false, 0, 0, 0, 0};
@@ -468,6 +839,11 @@ PhosphorProtocol::RestoreTargetResult SnapNavigationTargetResolver::getRestoreFo
 PhosphorProtocol::CycleTargetResult
 SnapNavigationTargetResolver::getCycleTargetForWindow(const QString& windowId, bool forward, const QString& screenId)
 {
+    if (!hasDependencies()) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "SnapNavigationTargetResolver used without its ctor dependencies";
+        return cycleResult(false, QStringLiteral("engine_unavailable"), QString(), QString(), screenId);
+    }
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getCycleTargetForWindow - empty window ID";
         return cycleResult(false, QStringLiteral("invalid_window"), QString(), QString(), screenId);
@@ -539,6 +915,12 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
 {
     // On failure, windowId1 is returned empty so that a caller which forgets
     // to check `success` cannot accidentally act on the calling window.
+    if (!hasDependencies()) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "SnapNavigationTargetResolver used without its ctor dependencies";
+        return swapResult(false, QStringLiteral("engine_unavailable"), QString(), 0, 0, 0, 0, QString(), QString(), 0,
+                          0, 0, 0, QString(), screenId, QString(), QString());
+    }
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getSwapTargetForWindow - empty window ID";
         return swapResult(false, QStringLiteral("invalid_window"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0, 0,
@@ -553,6 +935,9 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
                           0, 0, QString(), screenId, QString(), QString());
     }
     if (!m_zoneAdjacency) {
+        // See getMoveTargetForWindow — broken-init state, surfaced on the OSD.
+        emitFeedback(false, QStringLiteral("swap"), QStringLiteral("no_zone_detection"), QString(), QString(),
+                     screenId);
         return swapResult(false, QStringLiteral("no_zone_detection"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0,
                           0, 0, QString(), screenId, QString(), QString());
     }
@@ -585,13 +970,10 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
                          cross.targetZoneId, cross.screenName);
             return cross;
         }
-        // Defer the boundary decision (and its feedback) to the caller when a
-        // cross-surface resolver is present: SnapEngine may cross to an adjacent
-        // desktop. Without a resolver, emit the boundary feedback here as before.
-        if (!m_crossSurface) {
-            emitFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
-                         effectiveScreenId);
-        }
+        // Defer the boundary decision AND its feedback to the caller —
+        // SnapEngine tries the cross-mode axis and emits the boundary
+        // feedback itself when it fails, in every configuration (see the
+        // matching note in getMoveTargetForWindow).
         return swapResult(false, QStringLiteral("no_adjacent_zone"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0,
                           0, 0, QString(), effectiveScreenId, currentZoneId, QString());
     }
@@ -632,6 +1014,11 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
 PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getPushTargetForWindow(const QString& windowId,
                                                                                         const QString& screenId)
 {
+    if (!hasDependencies()) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "SnapNavigationTargetResolver used without its ctor dependencies";
+        return moveResult(false, QStringLiteral("engine_unavailable"), QString(), QRect(), QString(), screenId);
+    }
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getPushTargetForWindow - empty window ID";
         return moveResult(false, QStringLiteral("invalid_window"), QString(), QRect(), QString(), screenId);
@@ -657,6 +1044,11 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getSnapToZoneBy
                                                                                              int zoneNumber,
                                                                                              const QString& screenId)
 {
+    if (!hasDependencies()) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "SnapNavigationTargetResolver used without its ctor dependencies";
+        return moveResult(false, QStringLiteral("engine_unavailable"), QString(), QRect(), QString(), screenId);
+    }
     if (!checkWindowId(windowId)) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getSnapToZoneByNumberTarget - empty window ID";
         return moveResult(false, QStringLiteral("invalid_window"), QString(), QRect(), QString(), screenId);

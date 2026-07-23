@@ -358,7 +358,7 @@ void Daemon::emitBridgeMissingWarning(const QString& diagnosis)
     notify << QStringLiteral("PlasmaZones") // app_name
            << 0u // replaces_id
            << QStringLiteral("plasmazones") // app_icon
-           << PhosphorI18n::tr("PlasmaZones: window manager integration inactive") // summary
+           << PhosphorI18n::tr("Window manager integration is inactive") // summary
            << body // body
            << QStringList() // actions
            << QVariantMap() // hints
@@ -373,6 +373,24 @@ void Daemon::stop()
     // Cancel any pending debounced gap-resnap so it can't fire mid-teardown
     // (the engine is cleared below; a late fire would be a wasted no-op).
     m_gapResnapTimer.stop();
+
+    // The bridge watchdog is double-guarded (m_shuttingDown + registered
+    // re-check) so a late fire is harmless, but every other piece of this
+    // teardown severs explicitly rather than relying on an invariant.
+    m_bridgeWatchdogTimer.stop();
+
+    // Null the drag adaptor's borrowed pointers ABOVE the m_running gate, for
+    // the same reason as the provider lambdas and QML statics below: both are
+    // wired from init() (init_adaptors.cpp / init_engines.cpp), which runs
+    // before start(), so an init-without-start teardown (test fixture,
+    // early-fail init, double-stop) would otherwise reach member destruction
+    // with the adaptor still holding a pointer to the about-to-die
+    // ShortcutManager / AutotileEngine. Both setters are null-safe and
+    // idempotent, so running this on an already-stopped daemon costs nothing.
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->setAutotileEngine(nullptr);
+        m_windowDragAdaptor->setShortcutRegistrar(nullptr);
+    }
 
     // Drop the layout-manager provider lambdas FIRST, before the m_running
     // gate. They capture `this` and dereference m_settings; m_settings is
@@ -460,6 +478,57 @@ void Daemon::stop()
 
     if (!m_running) {
         return;
+    }
+
+    // start() reconnects these persistent senders on every run
+    // (connectScreenSignals / connectDesktopActivity / connectShortcutSignals /
+    // connectOverlaySignals / initializeAutotile); sever them here or a
+    // stop()→start() cycle stacks duplicate lambda connections and every
+    // shortcut / screen / desktop / overlay signal dispatches its handler
+    // twice on the second run. Scoped per-sender, NOT a blanket
+    // settings-style disconnect, for the reason documented above
+    // teardownIdleConnections(): every connection these senders hold on
+    // `this` is made in per-start code, so severing them is exactly undone
+    // by the next start(). This sweep covers the connectScreenSignals /
+    // connectDesktopActivity / connectShortcutSignals connections in
+    // start.cpp; the connectLayoutSignals / connectOverlaySignals connections
+    // (whose sender m_layoutManager is mixed and must not be blanket-severed)
+    // are instead tracked in m_restartScopedConnections and cleared at the
+    // top of connectLayoutSignals(), and the WTA-to-drag-adaptor fan-out uses
+    // Qt::UniqueConnection. The two schemes are complementary, not
+    // alternatives — this one owns the persistent-sender sweep, that one owns
+    // the mixed-sender and non-daemon-receiver connections.
+    if (m_shortcutManager) {
+        m_shortcutManager->disconnect(this);
+    }
+    if (m_screenManager) {
+        m_screenManager->disconnect(this);
+    }
+    if (m_virtualDesktopManager) {
+        m_virtualDesktopManager->disconnect(this);
+    }
+    if (m_activityManager) {
+        m_activityManager->disconnect(this);
+    }
+    if (m_overlayService) {
+        m_overlayService->disconnect(this);
+    }
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->disconnect(this);
+    }
+    // The per-start connections the sweep above cannot reach by sender
+    // (the m_settings cheatsheet refilter), severed by handle.
+    for (const QMetaObject::Connection& conn : std::as_const(m_perStartConnections)) {
+        disconnect(conn);
+    }
+    m_perStartConnections.clear();
+
+    // Release the shortcut grabs and the Portal session with the connections:
+    // registerShortcuts() on the next start() lazily recreates the registry
+    // and backend, and starting from an empty entry table avoids the second
+    // run's re-registration warning.
+    if (m_shortcutManager) {
+        m_shortcutManager->unregisterShortcuts();
     }
 
     // stop() deliberately does NOT unregister the settings-driven entries
@@ -572,15 +641,6 @@ void Daemon::stop()
     }
 
     // Null the WindowDragAdaptor's engine pointer for the same reason.
-    // Also null its ShortcutRegistrar pointer: m_shortcutManager (a unique_ptr
-    // member) is destroyed before ~QObject runs, so it dies before the
-    // adaptor itself. Any late event reaching the adaptor between those two
-    // moments would otherwise deref a dead ShortcutManager.
-    if (m_windowDragAdaptor) {
-        m_windowDragAdaptor->setAutotileEngine(nullptr);
-        m_windowDragAdaptor->setShortcutRegistrar(nullptr);
-    }
-
     // Clear engine references before destruction
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr);

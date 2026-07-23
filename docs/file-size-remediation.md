@@ -16,13 +16,25 @@ everything else over 1150 is scheduled work.
 
 All split plans in §2 were executed on branch `refactor/file-size` in three waves,
 each verified with both build trees (unity and no-unity) and a full ctest run
-(311/311 passing). After remediation, the only files above the 1150-line ceiling
-are the six entries in the Exceptions Register below (current sizes:
-StubSettings.h 2338, plasmazoneseffect.h 2170, settings.h 1704, AutotileEngine.h
-1635, windowtrackingadaptor.h 1269, pluau.luau 1189). Everything else is at or
-under 1150; the grace-band list in §4 remains accurate as the set of tolerated
-files with their pre-identified seams. The §4 catalog shows the pre-remediation
-sizes for the historical record.
+(311/311 passing at the time of that run; the suite has grown since). After remediation, the only C++/QML/Luau source files above
+the 1150-line ceiling are the six entries in the Exceptions Register below
+(build scripts such as `tests/unit/CMakeLists.txt` and shader sources such as
+`data/overlays/nixos-drift/effect.frag` are outside the policy's scope; sizes as of 2026-07-22:
+StubSettings.h 2338, plasmazoneseffect.h 2163, settings.h 1723, AutotileEngine.h
+1638, windowtrackingadaptor.h 1269, pluau.luau 1189; exception-register line
+counts are as-of snapshots and drift as sanctioned files grow within their
+exception). Everything else is at or
+under 1150. The §4 catalog is a pre-remediation snapshot kept for the
+historical record, so its line counts and verdicts are as-of that run, not
+current. Files that entered the grace band after it was taken, and are
+tolerated with no action: `libs/phosphor-tile-engine/src/NavigationController.cpp`
+(1108; seam: the cross-surface helpers), `libs/phosphor-snap-engine/src/snapnavigationtargets.cpp`
+(1095; seam: the span resolver), `src/daemon/controllers/shortcutmanager.cpp`
+(1063; seam: the cheatsheet catalog and its family compression),
+`kwin-effect/plasmazoneseffect/lifecycle_wiring.cpp` (1134) and
+`kwin-effect/plasmazoneseffect/paint_shader_window.cpp` (1019), both created by
+the §2.1 splits and sized as those plans predicted, and
+`src/config/configkeys.h` (1001; seam: the per-domain key blocks).
 
 Verdict legend:
 
@@ -42,18 +54,18 @@ constraint and the condition under which it should be revisited.
 
 | File | Lines | Constraint | Revisit when |
 |---|---|---|---|
-| `src/config/settings.h` | 1704 | Single Q_OBJECT class with 217 Q_PROPERTY declarations behind `ISettings`. moc requires the whole class declaration in one header. Splitting into domain sub-settings QObjects changes QML property paths, the D-Bus settingsadaptor surface, and the ISettings interface consumed by daemon/editor/settings; that is a cross-cutting refactor, not a file-size fix. | ISettings is ever decomposed into domain sub-objects (long-term direction already noted at settings.h:119). |
+| `src/config/settings.h` | 1723 | Single Q_OBJECT class with 221 Q_PROPERTY declarations behind `ISettings`. moc requires the whole class declaration in one header. Splitting into domain sub-settings QObjects changes QML property paths, the D-Bus settingsadaptor surface, and the ISettings interface consumed by daemon/editor/settings; that is a cross-cutting refactor, not a file-size fix. | ISettings is ever decomposed into domain sub-objects (long-term direction already noted at settings.h:119). |
 | `tests/unit/helpers/StubSettings.h` | 2338 | 309 overrides mirroring the aggregate ISettings surface. Size is a direct mirror of the production interface, not test bloat. Splitting into mixin headers fragments shared member state (documented in-file cross-references) for zero gain. **Dependent exception**: shrinks automatically when settings.h does. | Same trigger as settings.h; then split into per-domain stub mixins along the existing section comments. |
 | `src/dbus/windowtrackingadaptor/windowtrackingadaptor.h` | 1269 | Single moc'd Q_CLASSINFO D-Bus adaptor class (`org.plasmazones.WindowTracking`). Splitting the header means splitting the D-Bus interface itself, a wire-protocol change affecting the KWin effect, phosphorctl, tests, and the checked-in XML. ~60% of the lines are safety-critical bus-exposure doc comments. | A protocol-version bump ever happens anyway; then consider a second adaptor class (query surface) on the same object path. |
-| `kwin-effect/plasmazoneseffect/plasmazoneseffect.h` | 2272 | **Partial exception.** Single Q_OBJECT class deriving KWin::OffscreenEffect; all overrides, signals, and slots must sit in one class declaration. Planned type/state-struct extraction (see §2.1) gets it to roughly 1550–1650; the KWin API puts a floor of ~600–800 lines of unavoidable declarations under it, and the rest of the reduction requires a real delegation refactor (manager objects), tracked as follow-up work, not a quick split. | After the §2.1 extractions land, reassess whether a DecorationManager-style delegation is worth the effort. |
+| `kwin-effect/plasmazoneseffect/plasmazoneseffect.h` | 2163 | **Partial exception.** Single Q_OBJECT class deriving KWin::OffscreenEffect; all overrides, signals, and slots must sit in one class declaration. Planned type/state-struct extraction (see §2.1) gets it to roughly 1550–1650; the KWin API puts a floor of ~600–800 lines of unavoidable declarations under it, and the rest of the reduction requires a real delegation refactor (manager objects), tracked as follow-up work, not a quick split. | After the §2.1 extractions land, reassess whether a DecorationManager-style delegation is worth the effort. |
 | `libs/phosphor-tiles/src/pluau/pluau.luau` | 1189 | Luau sandbox prelude loaded as a single frozen chunk (`runPrelude` in luautilealgorithm.cpp:317). There is no module system in the sandbox; splitting into sequential preludes would force helpers into frozen **globals** visible to untrusted user scripts, growing the security/API surface. | If it keeps growing, add a CMake/qrc-time concatenation step so it can be multiple source files but one runtime chunk. |
-| `libs/phosphor-tile-engine/include/PhosphorTileEngine/AutotileEngine.h` | 1761 | **Partial exception.** Single Q_OBJECT class; 1174 of 1761 lines are Doxygen prose. Nested-struct extraction plus doc trimming (see §2.2) lands it around 1100–1200. Any residual over 1150 is documentation on a language-atomic class declaration. | After the §2.2 extraction lands, if still over ceiling, accept the remainder. |
+| `libs/phosphor-tile-engine/include/PhosphorTileEngine/AutotileEngine.h` | 1638 | **Partial exception.** Single Q_OBJECT class; most of its lines are Doxygen prose. Nested-struct extraction plus doc trimming (see §2.2) lands it around 1100–1200. Any residual over 1150 is documentation on a language-atomic class declaration. | After the §2.2 extraction lands, if still over ceiling, accept the remainder. |
 
 Grace-band headers that look like exceptions but are merely TOLERATED (single-class
 headers under 1150, no action): `src/daemon/daemon.h` (1150), `src/daemon/overlayservice.h`
 (1137), `src/settings/controller/settingscontroller.h` (1149),
-`PhosphorZones/LayoutRegistry.h` (1119), `PhosphorSnapEngine/SnapEngine.h` (1079).
-Warning for daemon.h: it now sits exactly at 1150 after one round of doc-essay
+`PhosphorZones/LayoutRegistry.h` (1119), `PhosphorSnapEngine/SnapEngine.h` (1085).
+Warning for daemon.h: it sits just under 1150 after one round of doc-essay
 trimming, so any further declaration must be paid for by trimming again.
 
 Completed split: `src/daemon/daemon/signals.cpp` (was 1088) had

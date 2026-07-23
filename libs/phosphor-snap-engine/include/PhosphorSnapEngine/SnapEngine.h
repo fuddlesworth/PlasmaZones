@@ -584,6 +584,12 @@ public:
     /// (displacing or filling the target). Empty direction is a no-op.
     void moveFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
 
+    /// Grow the focused window's zone span into the adjacent zone(s) in
+    /// @p direction, or retract the opposite edge when nothing lies that way
+    /// (pressing back toward the span undoes the last grow). Never crosses
+    /// outputs or desktops. Empty direction is a no-op with feedback.
+    void spanFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
+
     /// Swap the focused window with whatever's in the adjacent zone in
     /// @p direction. Empty direction is a no-op.
     void swapFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;

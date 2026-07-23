@@ -478,6 +478,16 @@ public:
     Q_PROPERTY(QString swapWindowDownShortcut READ swapWindowDownShortcut WRITE setSwapWindowDownShortcut NOTIFY
                    swapWindowDownShortcutChanged)
 
+    // Span Window Shortcuts (Ctrl+Alt+Arrow)
+    Q_PROPERTY(QString spanWindowLeftShortcut READ spanWindowLeftShortcut WRITE setSpanWindowLeftShortcut NOTIFY
+                   spanWindowLeftShortcutChanged)
+    Q_PROPERTY(QString spanWindowRightShortcut READ spanWindowRightShortcut WRITE setSpanWindowRightShortcut NOTIFY
+                   spanWindowRightShortcutChanged)
+    Q_PROPERTY(QString spanWindowUpShortcut READ spanWindowUpShortcut WRITE setSpanWindowUpShortcut NOTIFY
+                   spanWindowUpShortcutChanged)
+    Q_PROPERTY(QString spanWindowDownShortcut READ spanWindowDownShortcut WRITE setSpanWindowDownShortcut NOTIFY
+                   spanWindowDownShortcutChanged)
+
     // Snap to PhosphorZones::Zone by Number Shortcuts (Meta+Ctrl+1-9)
     Q_PROPERTY(QString snapToZone1Shortcut READ snapToZone1Shortcut WRITE setSnapToZone1Shortcut NOTIFY
                    snapToZone1ShortcutChanged)
@@ -1204,6 +1214,15 @@ public:
     QString swapWindowDownShortcut() const;
     void setSwapWindowDownShortcut(const QString& shortcut);
 
+    QString spanWindowLeftShortcut() const;
+    void setSpanWindowLeftShortcut(const QString& shortcut);
+    QString spanWindowRightShortcut() const;
+    void setSpanWindowRightShortcut(const QString& shortcut);
+    QString spanWindowUpShortcut() const;
+    void setSpanWindowUpShortcut(const QString& shortcut);
+    QString spanWindowDownShortcut() const;
+    void setSpanWindowDownShortcut(const QString& shortcut);
+
     QString snapToZone1Shortcut() const;
     void setSnapToZone1Shortcut(const QString& shortcut);
     QString snapToZone2Shortcut() const;
@@ -1408,7 +1427,7 @@ Q_SIGNALS:
     // unqualified `Q_EMIT xChanged()` (which resolves to the derived
     // signal). All editor / fillOnDrop / filterLayoutsByAspectRatio /
     // virtualScreenConfigs signals live on ISettings and are inherited
-    // here — see src/core/isettings.h.
+    // here — see src/core/interfaces/isettings.h.
 
 private:
     /// Installs the QEvent::ApplicationPaletteChange filter on the application

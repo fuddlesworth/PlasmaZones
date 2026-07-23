@@ -421,6 +421,7 @@ private:
     void handleRotate(bool clockwise);
     void handleFloat();
     void handleMove(NavigationDirection direction);
+    void handleSpan(NavigationDirection direction);
     void handleFocus(NavigationDirection direction);
     void handlePush();
     void handleRestore();
@@ -1072,12 +1073,23 @@ private:
     QElapsedTimer m_rotateDebounce;
     QElapsedTimer m_floatDebounce;
     QElapsedTimer m_cycleLayoutDebounce;
+    // One timer for all four span directions; handleSpan carries the why.
+    QElapsedTimer m_spanDebounce;
     // Shared debounce for VS swap/rotate. Each fire commits a config change
     // through Settings and kicks a refresh → resnap cascade — cheap per call
     // but pile-up-prone under keyboard auto-repeat, same rationale as
     // m_rotateDebounce above. One timer for both ops: rapid alternation
     // between swap and rotate is not a user pattern.
     QElapsedTimer m_virtualScreenDebounce;
+    /// Per-start connections outside stop()'s per-sender sweep and outside
+    /// m_restartScopedConnections: the m_settings→this autotile-enabled
+    /// cheatsheet refilter. m_settings is swept only by teardownIdleConnections,
+    /// whose ctor/init connections must survive, so this per-start one is
+    /// severed here by handle. The WTA-to-drag-adaptor fan-out is instead kept
+    /// unique with Qt::UniqueConnection, and the layout/overlay connections are
+    /// tracked in m_restartScopedConnections and cleared at the top of
+    /// connectLayoutSignals().
+    QVector<QMetaObject::Connection> m_perStartConnections;
 
     // Last autotile window order per (screen, desktop, activity), captured when
     // leaving autotile. Used to re-seed the autotile engine with the same order

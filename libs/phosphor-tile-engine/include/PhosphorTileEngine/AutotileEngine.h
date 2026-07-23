@@ -145,7 +145,11 @@ public:
      */
     bool isWindowTracked(const QString& windowId) const override
     {
-        return m_states.hasWindow(windowId);
+        // Canonicalize like every sibling predicate (isWindowTiled,
+        // screenForTrackedWindow): callers pass raw daemon/effect composite
+        // ids, and a mutated-appId window must still resolve to its
+        // tracked entry.
+        return m_states.hasWindow(canonicalizeForLookup(windowId));
     }
 
     /**
@@ -807,6 +811,7 @@ public:
 
     void focusInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void moveFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
+    void spanFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void swapFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void moveFocusedToPosition(int position, const PhosphorEngine::NavigationContext& ctx) override;
     void rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx) override;
@@ -830,9 +835,7 @@ public:
     void pushToEmptyZone(const PhosphorEngine::NavigationContext& ctx) override;
     void restoreFocusedWindow(const PhosphorEngine::NavigationContext& ctx) override;
 
-    // Autotile-specific navigation. Callable directly on the concrete
-    // AutotileEngine pointer from internal callers.
-    void swapInDirection(const QString& direction, const QString& action);
+    // Autotile-specific navigation, callable on the concrete engine.
     void rotateWindows(bool clockwise, const QString& screenId);
 
     /**

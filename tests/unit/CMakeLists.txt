@@ -462,6 +462,18 @@ target_link_libraries(test_snap_assist_thumbnail_provider
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick PhosphorProtocol::PhosphorProtocol)
 add_test(NAME test_snap_assist_thumbnail_provider COMMAND test_snap_assist_thumbnail_provider)
 
+# Cheatsheet family compression: compiles the daemon source directly because
+# ShortcutManager lives in the plasmazonesd executable, not plasmazones_core.
+# The test drives only the static compressCheatsheetFamilies helper, so no
+# shortcut backend or Settings instance is constructed at runtime.
+add_executable(test_cheatsheet_compression
+    daemon/test_cheatsheet_compression.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+)
+target_link_libraries(test_cheatsheet_compression
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
+add_test(NAME test_cheatsheet_compression COMMAND test_cheatsheet_compression)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Layout Tests (core, zones)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -592,6 +604,10 @@ target_compile_definitions(test_per_screen_config PRIVATE "P_SOURCE_DIR=\"${PROJ
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_navigation_controller autotile/navigation/test_navigation_controller.cpp)
 p_add_test(test_snap_cross_surface snap/test_snap_cross_surface.cpp)
+p_add_test(test_span_targets snap/test_span_targets.cpp)
+# Constructs a real SnapEngine, so the dependency is contractual, not the
+# coincidental transitive pull through plasmazones_core.
+target_link_libraries(test_span_targets PRIVATE PhosphorSnapEngine::PhosphorSnapEngine)
 p_add_test(test_snap_state_class_mutation snap/test_snap_state_class_mutation.cpp)
 
 # Cross-surface navigation exercises cross-output handoff, which needs real

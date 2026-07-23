@@ -7,12 +7,18 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorProtocol/NavigationTypes.h>
 
+#include <QRect>
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 
 namespace PhosphorZones {
 class LayoutRegistry;
+}
+
+namespace PhosphorScreens {
+class ScreenManager;
 }
 
 namespace PhosphorEngine {
@@ -23,6 +29,36 @@ namespace PhosphorSnapEngine {
 
 class ISettings;
 class IZoneAdjacencyResolver;
+
+/// Result of a span (grow/shrink) target computation. Resolver-local rather
+/// than a PhosphorProtocol type: span is driven only by the daemon's shortcut
+/// path and never crosses D-Bus, so the zone list can stay a QStringList.
+struct SpanTargetResult
+{
+    bool success = false;
+    QString reason;
+    /// The window's full NEW span set, primary zone first. On a grow this is
+    /// the old set plus every zone the extension band swept up; on a shrink
+    /// it is the old set minus the retracted edge band. When the old primary
+    /// itself sits in the retracted band, the first surviving member is
+    /// promoted, so the primary is not stable across shrinks.
+    QStringList zoneIds;
+    /// Union rect of the new span's zone geometries.
+    QRect geometry;
+    /// Primary zone before the change (empty when the window was unsnapped).
+    QString sourceZoneId;
+    QString screenName;
+    /// true when the span grew into new zone(s), false when it retracted.
+    bool grew = false;
+};
+
+/// True when @p storedScreen still resolves on the live screen set: a
+/// physical id must be connected; a virtual id additionally needs its backing
+/// physical output present AND continued membership in @p mgr's effective
+/// screen list (guards against stale ids after a config removal). Shared by
+/// the resolver's stored-screen preference and SnapEngine's resolveNavScreen
+/// so the validation rule lives in one place.
+PHOSPHORSNAPENGINE_EXPORT bool isStoredScreenValid(PhosphorScreens::ScreenManager* mgr, const QString& storedScreen);
 
 /// The edge a neighbour surface is entered from when crossing in @p direction:
 /// crossing "right" lands on the neighbour's LEFT edge, "down" on its TOP, etc.
@@ -59,8 +95,10 @@ inline QString oppositeCrossingDirection(const QString& direction)
  *   reads from them. It does not mutate their state.
  * - It never touches D-Bus or Qt signals directly — navigation
  *   feedback (OSD data) is emitted through a std::function callback
- *   wired at construction time. The adaptor forwards that callback
- *   to its own navigationFeedback signal.
+ *   wired at construction time. In production the sole construction
+ *   site is SnapEngine::ensureTargetResolver, which forwards the
+ *   callback to SnapEngine::navigationFeedback (relayed onward via
+ *   SnapAdaptor to WindowTrackingAdaptor::navigationFeedback).
  * - Validation failures (empty windowId, empty direction) are
  *   considered pre-call contract violations and return an early
  *   noSnap-equivalent result; the adaptor's dispatcher is expected
@@ -78,10 +116,11 @@ inline QString oppositeCrossingDirection(const QString& direction)
 class PHOSPHORSNAPENGINE_EXPORT SnapNavigationTargetResolver
 {
 public:
-    /// Callback shape matching WindowTrackingAdaptor::navigationFeedback.
-    /// Invoked by the resolver whenever a target computation succeeds or
-    /// fails in a user-visible way. The adaptor wires this to its own
-    /// navigationFeedback signal at construction time.
+    /// Callback shape matching SnapEngine::navigationFeedback (and the
+    /// WindowTrackingAdaptor signal it is ultimately relayed to). Invoked
+    /// by the resolver whenever a target computation succeeds or fails in
+    /// a user-visible way. SnapEngine::ensureTargetResolver wires this to
+    /// SnapEngine::navigationFeedback at construction time.
     using FeedbackFn =
         std::function<void(bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
                            const QString& targetZoneId, const QString& screenId)>;
@@ -115,13 +154,34 @@ public:
     /// neighbour (deferring to the engine's cross-mode handoff) instead of
     /// snapping the window onto a tiled screen. May be empty, in which case no
     /// gating happens and every neighbour is treated as snap-mode (the
-    /// pre-provider behaviour). The FOCUS cross-output path is never gated — it
-    /// may still cross to an autotile screen.
+    /// pre-provider behaviour). The FOCUS cross-output path is never gated
+    /// here, but landing still requires a snap-tracked occupant in the
+    /// neighbour's entry zone (autotile windows are not in windowsInZone),
+    /// so focus toward an autotile output collapses to no_adjacent_zone
+    /// instead of crossing.
     using NeighbourAutotileFn = std::function<bool(const QString& screenId)>;
     void setNeighbourAutotileProvider(NeighbourAutotileFn fn);
 
     PhosphorProtocol::MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction,
                                                               const QString& screenId);
+
+    /**
+     * @brief Compute the new zone span when the user grows/shrinks toward @p direction.
+     *
+     * One shortcut quad drives both operations: when zone(s) exist beyond the
+     * span's @p direction edge, the span GROWS into them (the extension band
+     * sweeps up every zone between the old edge and the picked neighbour's far
+     * edge, so growing a full-height span into a column of stacked zones takes
+     * the whole column). When nothing lies that way, the span SHRINKS instead
+     * by dropping the member band on the opposite edge (pressing left after
+     * growing right undoes the grow). An unsnapped window snaps into the edge
+     * zone in @p direction, mirroring getMoveTargetForWindow. A single-zone
+     * span with nothing to grow into fails with "no_adjacent_zone".
+     *
+     * Span never crosses outputs or desktops — a span is a set of zones on one
+     * screen's layout, so the boundary is a hard stop, not a handoff.
+     */
+    SpanTargetResult getSpanTargetForWindow(const QString& windowId, const QString& direction, const QString& screenId);
 
     PhosphorProtocol::FocusTargetResult getFocusTargetForWindow(const QString& windowId, const QString& direction,
                                                                 const QString& screenId);
@@ -140,6 +200,19 @@ public:
                                                                    const QString& screenId);
 
 private:
+    /// Release-build pair for the constructor's Q_ASSERTs on @c m_service and
+    /// @c m_layoutManager. Neither is ever reset, so this can only be false on
+    /// a resolver constructed with a null. That cannot happen in-tree
+    /// (SnapEngine::ensureTargetResolver is the only construction site and
+    /// returns early when its tracker is null), but the class is exported with
+    /// a public constructor, so an out-of-tree consumer can reach it. Every
+    /// public query checks this and returns its own @c engine_unavailable
+    /// failure result rather than dereferencing.
+    bool hasDependencies() const
+    {
+        return m_service != nullptr && m_layoutManager != nullptr;
+    }
+
     /// Single emission point so call sites don't have to null-check the
     /// optional callback at every feedback opportunity. Inline + private
     /// keeps the cost identical to the previous EMIT_FEEDBACK macro

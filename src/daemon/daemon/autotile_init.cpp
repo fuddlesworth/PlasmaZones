@@ -388,7 +388,10 @@ void Daemon::initializeAutotile()
                         // No layoutApplied/autotileApplied signal fires for a direct
                         // entry write, so surface the feedback OSD here: the mode
                         // switched to autotile but nothing is assigned to tile with.
+                        // The cheatsheet refilter rides those same signals, so an
+                        // open sheet also needs the explicit nudge on this path.
                         showNotAssignedOsd(screenId);
+                        refreshCheatsheetIfVisible();
                         applied = true;
                     }
                 }

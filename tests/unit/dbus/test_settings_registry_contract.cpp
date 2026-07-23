@@ -3,8 +3,8 @@
 
 /**
  * @file test_settings_registry_contract.cpp
- * @brief Every setting the KWin effect fetches over D-Bus must be registered in
- *        SettingsAdaptor's getter registry.
+ * @brief Every setting reachable through SettingsAdaptor's getter registry must
+ *        actually be registered there.
  *
  * This is a tripwire for a silent-failure class that has already shipped once.
  *
@@ -210,6 +210,51 @@ private Q_SLOTS:
         const QVariant on = m_adaptor->getSetting(QStringLiteral("decorationPauseWhenIdle")).variant();
         QCOMPARE(on.typeId(), QMetaType::Bool);
         QCOMPARE(on.toBool(), true);
+    }
+
+    /**
+     * Every shortcut setting must be registered, checked by REFLECTION rather than
+     * by scraping fetch sites.
+     *
+     * The scrapes above only cover keys some other process is already known to
+     * fetch. Shortcut settings have no such fetch site: they are read in-process by
+     * ShortcutManager, and the D-Bus surface exists for the settings UI, which
+     * enumerates generically. A whole directional quad can therefore be added to
+     * Settings, the schema, and the shortcut table while the registry block is
+     * forgotten, and nothing in this file would notice — which is exactly what
+     * happened to the span quad.
+     *
+     * Q_PROPERTY reflection closes that hole with no list to maintain: every
+     * property whose name ends in "Shortcut" must resolve through getSetting.
+     *
+     * The `editor*` prefix is reserved: the editor keeps its own shortcuts in
+     * its own config store (src/editor/controller/settings.cpp) and never reads
+     * them over this bus, so any such property added to Settings later would be
+     * out of scope here. None exist today, so the clause excludes nothing yet.
+     */
+    void testEveryShortcutPropertyIsRegistered()
+    {
+        const QMetaObject* mo = m_settings->metaObject();
+        QStringList missing;
+        int checked = 0;
+        // From 0, not propertyOffset(): a *Shortcut property declared on the
+        // ISettings base would otherwise be skipped silently while the check
+        // below still passed on the concrete ones.
+        for (int i = 0; i < mo->propertyCount(); ++i) {
+            const QString name = QString::fromLatin1(mo->property(i).name());
+            if (!name.endsWith(QLatin1String("Shortcut")) || name.startsWith(QLatin1String("editor"))) {
+                continue;
+            }
+            ++checked;
+            if (!m_adaptor->getSetting(name).variant().isValid()) {
+                missing.append(name);
+            }
+        }
+        QVERIFY2(checked > 0, "Reflection found no shortcut properties: the scan itself is broken.");
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("These shortcut settings exist on Settings but are absent from "
+                                           "SettingsAdaptor's getter registry: %1")
+                                .arg(missing.join(QStringLiteral(", ")))));
     }
 
     /**

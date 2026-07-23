@@ -778,6 +778,12 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_STRING("swapWindowUpShortcut", swapWindowUpShortcut, setSwapWindowUpShortcut)
         REGISTER_CONCRETE_STRING("swapWindowDownShortcut", swapWindowDownShortcut, setSwapWindowDownShortcut)
 
+        // Span window shortcuts
+        REGISTER_CONCRETE_STRING("spanWindowLeftShortcut", spanWindowLeftShortcut, setSpanWindowLeftShortcut)
+        REGISTER_CONCRETE_STRING("spanWindowRightShortcut", spanWindowRightShortcut, setSpanWindowRightShortcut)
+        REGISTER_CONCRETE_STRING("spanWindowUpShortcut", spanWindowUpShortcut, setSpanWindowUpShortcut)
+        REGISTER_CONCRETE_STRING("spanWindowDownShortcut", spanWindowDownShortcut, setSpanWindowDownShortcut)
+
         // Snap to zone by number shortcuts
         REGISTER_CONCRETE_STRING("snapToZone1Shortcut", snapToZone1Shortcut, setSnapToZone1Shortcut)
         REGISTER_CONCRETE_STRING("snapToZone2Shortcut", snapToZone2Shortcut, setSnapToZone2Shortcut)
@@ -802,6 +808,21 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_STRING("snapAllWindowsShortcut", snapAllWindowsShortcut, setSnapAllWindowsShortcut)
         REGISTER_CONCRETE_STRING("layoutPickerShortcut", layoutPickerShortcut, setLayoutPickerShortcut)
         REGISTER_CONCRETE_STRING("toggleLayoutLockShortcut", toggleLayoutLockShortcut, setToggleLayoutLockShortcut)
+
+        // Virtual screen shortcuts
+        REGISTER_CONCRETE_STRING("swapVirtualScreenLeftShortcut", swapVirtualScreenLeftShortcut,
+                                 setSwapVirtualScreenLeftShortcut)
+        REGISTER_CONCRETE_STRING("swapVirtualScreenRightShortcut", swapVirtualScreenRightShortcut,
+                                 setSwapVirtualScreenRightShortcut)
+        REGISTER_CONCRETE_STRING("swapVirtualScreenUpShortcut", swapVirtualScreenUpShortcut,
+                                 setSwapVirtualScreenUpShortcut)
+        REGISTER_CONCRETE_STRING("swapVirtualScreenDownShortcut", swapVirtualScreenDownShortcut,
+                                 setSwapVirtualScreenDownShortcut)
+        REGISTER_CONCRETE_STRING("rotateVirtualScreensClockwiseShortcut", rotateVirtualScreensClockwiseShortcut,
+                                 setRotateVirtualScreensClockwiseShortcut)
+        REGISTER_CONCRETE_STRING("rotateVirtualScreensCounterclockwiseShortcut",
+                                 rotateVirtualScreensCounterclockwiseShortcut,
+                                 setRotateVirtualScreensCounterclockwiseShortcut)
     }
 
 // Clean up macros (local scope)

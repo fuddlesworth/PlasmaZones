@@ -19,10 +19,6 @@ class IBackend;
 class Registry;
 } // namespace PhosphorShortcuts
 
-namespace PhosphorZones {
-class LayoutRegistry;
-}
-
 namespace PlasmaZones {
 
 class Settings;
@@ -51,14 +47,17 @@ class ShortcutManager : public QObject, public PhosphorShortcutsIntegration::IAd
     Q_OBJECT
 
 public:
-    explicit ShortcutManager(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager,
-                             QObject* parent = nullptr);
+    explicit ShortcutManager(Settings* settings, QObject* parent = nullptr);
     ~ShortcutManager() override;
 
+public Q_SLOTS:
     void registerShortcuts();
-    void updateShortcuts();
+    /// Re-applies current sequences after a settings save; returns true when
+    /// something actually changed and cheatsheetModelChanged was emitted.
+    bool updateShortcuts();
     void unregisterShortcuts();
 
+public:
     /**
      * Register an ad-hoc shortcut that lives outside the main settings-driven
      * table. Used by subsystems that need a transient grab bound to a UI state
@@ -89,11 +88,37 @@ public:
      */
     QVariantList cheatsheetModel() const;
 
+    /// One collapsible cheatsheet family: parallel id / expected-final-token
+    /// lists, the combined row label, and the tail token for the merged chip.
+    struct CheatsheetFamily
+    {
+        QStringList ids;
+        QStringList expectedLastTokens;
+        QString combinedLabel;
+        QString tailToken;
+    };
+
+    /**
+     * Pure family-compression pass over cheatsheet rows (static so tests can
+     * drive it without a shortcut backend). A family collapses into one row
+     * when every member is assigned, carries exactly one trigger, ends in its
+     * expected token, and shares the modifier prefix; any deviation keeps the
+     * individual rows. Returns the surviving rows, unsorted.
+     */
+    static QVector<QVariantMap> compressCheatsheetFamilies(QVector<QVariantMap> rows,
+                                                           const QVector<CheatsheetFamily>& families);
+
 Q_SIGNALS:
     /**
      * The cheatsheet catalog's contents changed: a sequence was rebound
      * (in-process or externally via System Settings / compositor) or the
      * registration batch settled. Consumers re-query cheatsheetModel().
+     *
+     * Settings saves emit this only when a sequence actually moved; external
+     * rebinds surface through the Registry::triggersChanged relay, which
+     * depends on the backend reporting them (KGlobalAccel does, the D-Bus
+     * fallback backend does not) — on a non-reporting backend an open sheet
+     * reflects an external rebind on its next show rather than live.
      */
     void cheatsheetModelChanged();
 
@@ -105,6 +130,7 @@ Q_SIGNALS:
     void quickLayoutRequested(int number);
 
     void moveWindowRequested(NavigationDirection direction);
+    void spanWindowRequested(NavigationDirection direction);
     void focusZoneRequested(NavigationDirection direction);
     void pushToEmptyZoneRequested();
     void restoreWindowSizeRequested();
@@ -163,12 +189,41 @@ private:
         std::function<void()> callback;
     };
 
+    /// Clears the in-flight flag, replays deferred settings/adhoc work, and
+    /// publishes the catalog. Runs from Registry::ready or, if the backend
+    /// never answers, from the fallback timer. Settles the batch identified by
+    /// @p generation only, and only once, so a late arrival on either path is
+    /// a no-op rather than a second publish.
+    void settleRegistration(quint64 generation);
+
+    /// How long to wait for the backend's ready() before settling anyway.
+    ///
+    /// Sized against the slowest HEALTHY backend rather than a typical one:
+    /// PortalBackend answers ready() synchronously on its error paths, but on
+    /// the happy path it defers to the BindShortcuts Response, which can sit
+    /// behind an interactive permission dialog with no latency guarantee (see
+    /// portalbackend.cpp's handleBindShortcutsResponse). Settling early would
+    /// drain queued adhoc grabs into a still-in-flight batch.
+    ///
+    /// The cost of waiting is real, so this is not set arbitrarily high:
+    /// until it fires, settings rebinds defer and adhoc grabs queue, which
+    /// leaves the picker / snap-assist Escape binding dead. Matched to the
+    /// compositor-bridge watchdog, the project's other "a healthy system
+    /// answered long ago" bound.
+    static constexpr int kRegistrationSettleTimeoutMs = 20000;
+
+    /// Identifies the current registration batch. Incremented by every
+    /// registerShortcuts()/unregisterShortcuts(), so a fallback timer armed
+    /// for an earlier batch cannot settle a later one.
+    quint64 m_registrationGeneration = 0;
+
     void buildEntries();
-    void rebindAll();
+    /// Re-applies every entry's current sequence; returns true when any
+    /// binding actually differed from the registry's stored sequence.
+    bool rebindAll();
     void drainPendingAdhocOps();
 
     Settings* m_settings = nullptr;
-    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
 
     std::unique_ptr<PhosphorShortcuts::IBackend> m_backend;
     std::unique_ptr<PhosphorShortcuts::Registry> m_registry;

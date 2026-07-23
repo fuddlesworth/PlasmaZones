@@ -100,6 +100,50 @@ public:
      */
     int windowOrderIndexOnScreen(const QString& screenId, const QString& windowId) const;
 
+    /**
+     * @brief Resolve the screen a navigation operation should act on, with its
+     *        state and tiled-window list.
+     *
+     * Three tiers, all on the current desktop/activity:
+     *   1. `explicitWindowId` — locate the state containing that window. The
+     *      daemon may know the true focused window even when the engine's
+     *      per-state focusedWindow() tracker is stale. This tier alone is NOT
+     *      gated on autotile mode: a state that still holds the window is
+     *      authoritative about where that window lives, and refusing it would
+     *      silently retarget the operation at a different monitor during the
+     *      window between a mode switch and the state teardown that follows.
+     *   2. The active-screen hint (`onWindowFocused`, and the daemon's
+     *      `setActiveScreenHint` on every autotile shortcut), accepted
+     *      whenever that screen HAS tiled windows. Deliberately NOT gated on
+     *      a tracked focusedWindow(): focus can sit on a floating, snapped,
+     *      or never-tracked window there, and requiring one sent every
+     *      screen-scoped operation to tier 3 and onto the wrong monitor.
+     *   3. A scan of the remaining states, preferring one that also holds the
+     *      focus, then the primary screen. Runners-up are ranked (hint,
+     *      primary, lowest screenId) rather than taken in QHash order, so a
+     *      mutation cannot land on an arbitrary monitor run to run.
+     * Tiers 2 and 3 and the primary-screen fallback are restricted to autotile
+     * screens.
+     *
+     * @p requireTiledWindows selects what tiers 2 and 3 accept. The default,
+     * true, wants a screen with a layout to operate on. Pass false when the
+     * caller wants "the screen holding the focus" even if everything on it is
+     * floating — toggling a floating window back into the layout is exactly
+     * that case, and it would otherwise resolve a different monitor.
+     *
+     * @p outScreenId is always set to a usable output when one exists, even on
+     * a total miss, because callers emit navigationFeedback on failure and the
+     * OSD needs somewhere to appear.
+     *
+     * The name is historical — resolution is hint-first and gated on tiled
+     * windows, not on focus. Consumers that genuinely need a focused window
+     * (swap-with-master, directional swap) check `state->focusedWindow()`
+     * themselves and report `no_focus`.
+     */
+    QStringList tiledWindowsForFocusedScreen(QString& outScreenId, PhosphorTiles::TilingState*& outState,
+                                             const QString& explicitWindowId = QString(),
+                                             bool requireTiledWindows = true);
+
 private:
     /**
      * @brief Resolve active screen for navigation feedback
@@ -122,16 +166,11 @@ private:
      */
     void emitFocusRequestAtIndex(int indexOffset, bool useFirst = false);
 
-    /**
-     * @brief Helper to get tiled windows and state for focus operations.
-     *
-     * When `explicitWindowId` is non-empty, locate the state that contains
-     * that window first — the daemon may know the true focused window even
-     * when the engine's per-state focusedWindow() tracker is stale. Falls
-     * through to the focused-screen lookup if the window isn't in any state.
-     */
-    QStringList tiledWindowsForFocusedScreen(QString& outScreenId, PhosphorTiles::TilingState*& outState,
-                                             const QString& explicitWindowId = QString());
+    /// The activation half of emitFocusRequestAtIndex, for callers that have
+    /// already resolved the screen and want to reuse that work instead of
+    /// paying for a second three-tier walk.
+    void activateResolvedWindowAtIndex(const QStringList& windows, PhosphorTiles::TilingState* state, int indexOffset,
+                                       bool useFirst);
 
     /**
      * @brief Pick the tiled window spatially adjacent to @p focused in

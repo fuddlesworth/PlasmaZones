@@ -451,8 +451,8 @@ void Daemon::connectDesktopActivity()
 void Daemon::connectShortcutSignals()
 {
     // NOTE: registerShortcuts() is called by Daemon::start() before this method.
-    // Do NOT call it again here — it would hit the m_registrationInProgress guard
-    // and log a spurious warning.
+    // Do NOT call it again here — it would hit registerShortcuts()'s own
+    // already-registered / in-flight guards and do nothing useful.
 
     // Connect shortcut signals
     // Screen detection: On X11, QCursor::pos() works; on Wayland, background daemons
@@ -537,7 +537,6 @@ void Daemon::connectShortcutSignals()
         if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
             return;
         }
-        m_cycleLayoutDebounce.restart();
         // Screen-targeted (cycles a screen's layout) — resolve cursor-first.
         // See layoutPickerRequested below for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
@@ -545,13 +544,17 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "PreviousLayout shortcut: no screen info";
             return;
         }
+        // Restart once a screen resolves — handleCycleLayout's own locked
+        // path still shows a locked-preview OSD, which counts as the
+        // dispatch this window throttles (unlike handleSpan's guards,
+        // which reject with no user-visible effect).
+        m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, false);
     });
     connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
         if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
             return;
         }
-        m_cycleLayoutDebounce.restart();
         // Screen-targeted (cycles a screen's layout) — resolve cursor-first.
         // See layoutPickerRequested below for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
@@ -559,6 +562,11 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "NextLayout shortcut: no screen info";
             return;
         }
+        // Restart once a screen resolves — handleCycleLayout's own locked
+        // path still shows a locked-preview OSD, which counts as the
+        // dispatch this window throttles (unlike handleSpan's guards,
+        // which reject with no user-visible effect).
+        m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, true);
     });
 
@@ -569,6 +577,9 @@ void Daemon::connectShortcutSignals()
     // Navigation shortcuts — single code path per operation (handleXxx)
     connect(m_shortcutManager.get(), &ShortcutManager::moveWindowRequested, this, [this](NavigationDirection d) {
         handleMove(d);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::spanWindowRequested, this, [this](NavigationDirection d) {
+        handleSpan(d);
     });
     connect(m_shortcutManager.get(), &ShortcutManager::focusZoneRequested, this, [this](NavigationDirection d) {
         handleFocus(d);
@@ -712,27 +723,18 @@ void Daemon::connectShortcutSignals()
     connect(m_shortcutManager.get(), &ShortcutManager::cheatsheetModelChanged, this, [this]() {
         refreshCheatsheetIfVisible();
     });
-    if (m_unifiedLayoutController) {
-        // Mode authority is ScreenModeRouter + AssignmentEntry::Mode, and the
-        // router is a plain query class with no change signal. A mode switch
-        // always lands as an applied layout (the toggle-autotile handler routes
-        // through applyLayoutById), so these two are the mode-change edge the
-        // sheet can observe. refreshCheatsheetIfVisible re-resolves the mode for
-        // the sheet's BOUND screen, so an apply on some other screen is a
-        // harmless no-op re-push.
-        connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this,
-                [this](PhosphorZones::Layout*) {
-                    refreshCheatsheetIfVisible();
-                });
-        connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied, this,
-                [this](const QString&, int) {
-                    refreshCheatsheetIfVisible();
-                });
-    }
+    // The controller-driven mode-refresh connects (layoutApplied /
+    // autotileApplied → refreshCheatsheetIfVisible) live in
+    // connectLayoutSignals(): this function runs BEFORE
+    // initializeUnifiedController() creates the controller, so a connect
+    // guarded on m_unifiedLayoutController here would never fire.
     if (m_settings) {
-        connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
+        // Tracked handle: m_settings is deliberately excluded from stop()'s
+        // per-sender sweep (its ctor/init connections must survive), so this
+        // per-start connection is severed individually.
+        m_perStartConnections.append(connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
             refreshCheatsheetIfVisible();
-        });
+        }));
     }
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
         // Release the shared Escape grab only when no other consumer (snap

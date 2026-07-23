@@ -124,6 +124,19 @@ public:
     /// Move the focused window to the adjacent slot.
     virtual void moveFocusedInDirection(const QString& direction, const NavigationContext& ctx) = 0;
 
+    /// Grow or shrink the focused window's zone span toward the direction:
+    /// extend into the adjacent zone(s) when some exist beyond that edge,
+    /// otherwise retract the opposite edge. Zone spanning is a snap-mode
+    /// concept, so unlike the required intents above this has a default
+    /// no-op, keeping the daemon free of engine-type branching. Engines
+    /// that want the shortcut to give feedback instead of silence override
+    /// it — AutotileEngine reports a "not_supported" failure OSD.
+    virtual void spanFocusedInDirection(const QString& direction, const NavigationContext& ctx)
+    {
+        Q_UNUSED(direction)
+        Q_UNUSED(ctx)
+    }
+
     /// Swap the focused window with the adjacent window.
     virtual void swapFocusedInDirection(const QString& direction, const NavigationContext& ctx) = 0;
 

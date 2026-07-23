@@ -15,55 +15,34 @@
 # as if the block were still inline).
 find_package(Qt6LinguistTools QUIET)
 
-# Source files for lupdate string extraction (daemon + autotile + editor)
-set(PLASMAZONESD_I18N_SOURCES
-    ${CMAKE_SOURCE_DIR}/src/daemon/main.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/daemon.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/daemon/osd.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/overlayservice.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
-    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/windowdragadaptor.cpp
-    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/drag.cpp
+# Source files for lupdate string extraction.
+#
+# The daemon, editor, KCM and settings app all load the same plasmazones
+# catalog at runtime via PlasmaZones::loadTranslations(), so they share one
+# translation context and one source set. That set is the whole app tree, not
+# a per-binary list: partitioning it by binary is what produced every
+# extraction gap this file has had. src/daemon/daemon/lifecycle.cpp lost a
+# user-facing notification when the daemon.cpp split moved it out of a listed
+# file, and src/editor/EditorGapsModel.cpp, src/editor/helpers/
+# BatchOperationScope.h, src/config/settingsvaluelabels.cpp,
+# src/config/updatechecker.cpp and src/core/utils/unifiedlayoutlist.cpp were
+# each unreachable until someone happened to notice. Headers are included
+# because PhosphorI18n::tr() calls live in them too.
+#
+# CONFIGURE_DEPENDS makes the build re-run the glob, so a newly-added file is
+# extractable without a manual `cmake` invocation.
+file(GLOB_RECURSE PLASMAZONES_I18N_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_SOURCE_DIR}/src/*.h"
+    "${CMAKE_SOURCE_DIR}/kcm/*.cpp"
+    "${CMAKE_SOURCE_DIR}/kcm/*.h"
 )
-file(GLOB PLASMAZONESD_QML "${CMAKE_SOURCE_DIR}/src/ui/*.qml")
-
-file(GLOB PLASMAZONES_EDITOR_I18N_SOURCES
-    "${CMAKE_SOURCE_DIR}/src/editor/main.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/EditorController.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/gaps.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/shader.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/layout.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/selection.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/multiselect.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/visibility.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/clipboard.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/zones.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/zoneops.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/settings.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/undo/commands/*.cpp"
+file(GLOB_RECURSE PLASMAZONES_I18N_QML CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/src/*.qml"
+    "${CMAKE_SOURCE_DIR}/kcm/*.qml"
 )
-file(GLOB PLASMAZONES_EDITOR_QML "${CMAKE_SOURCE_DIR}/src/editor/qml/*.qml")
 
-# KCM QML sources (also covered by lupdate now)
-file(GLOB_RECURSE KCM_PLASMAZONES_QML "${CMAKE_SOURCE_DIR}/kcm/*.qml")
-list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/AspectRatioBadge.qml)
-list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml)
-
-# Standalone settings app — all of its C++ (PhosphorI18n::tr) and QML (i18n)
-# strings. Globbed recursively so a newly-added controller or page is picked up
-# without touching this list. The settings app already installs the plasmazones
-# catalog at runtime via PlasmaZones::loadTranslations(), so these strings are
-# the same translation context as the daemon / editor / KCM.
-file(GLOB_RECURSE PLASMAZONES_SETTINGS_I18N_SOURCES "${CMAKE_SOURCE_DIR}/src/settings/*.cpp")
-file(GLOB_RECURSE PLASMAZONES_SETTINGS_QML "${CMAKE_SOURCE_DIR}/src/settings/*.qml")
-
-# All sources for lupdate (daemon + editor + KCM + settings - same translation context)
-set(_all_i18n_sources
-    ${PLASMAZONESD_I18N_SOURCES} ${PLASMAZONESD_QML}
-    ${PLASMAZONES_EDITOR_I18N_SOURCES} ${PLASMAZONES_EDITOR_QML}
-    ${KCM_PLASMAZONES_QML}
-    ${PLASMAZONES_SETTINGS_I18N_SOURCES} ${PLASMAZONES_SETTINGS_QML}
-)
+set(_all_i18n_sources ${PLASMAZONES_I18N_SOURCES} ${PLASMAZONES_I18N_QML})
 
 # Collect per-language .ts files (plasmazones_de.ts, plasmazones_fr.ts, etc.)
 # Flat layout: translations/plasmazones_<lang>.ts → plasmazones_<lang>.qm

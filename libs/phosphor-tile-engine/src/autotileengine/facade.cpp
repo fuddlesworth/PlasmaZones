@@ -154,7 +154,10 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)
         return false;
     }
 
-    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
+    // Non-creating lookup: this runs from removeWindow paths too, and a
+    // pre-seeded window that closes before ever arriving must not create
+    // and persist an empty TilingState for the pending screen.
+    PhosphorTiles::TilingState* state = m_states.stateForKey(currentKeyForScreen(screenId));
     if (!state) {
         return false;
     }
@@ -246,6 +249,17 @@ void AutotileEngine::moveFocusedInDirection(const QString& direction, const Navi
     // in the tiling order — the only way to move is to trade places with
     // the neighbour. OSD label "move" keeps the user-facing wording.
     m_navigation->swapFocusedInDirection(direction, QStringLiteral("move"), canonicalizeForLookup(ctx.windowId));
+}
+
+void AutotileEngine::spanFocusedInDirection(const QString& direction, const NavigationContext& ctx)
+{
+    Q_UNUSED(direction)
+    // Zone spanning is a snap-mode concept with no autotile equivalent.
+    // Report it instead of absorbing the press silently: every other
+    // navigation shortcut on an autotile screen produces feedback, and a
+    // silent shortcut reads as broken.
+    Q_EMIT navigationFeedback(false, QStringLiteral("span"), QStringLiteral("not_supported"), QString(), QString(),
+                              ctx.screenId);
 }
 
 void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
@@ -394,7 +408,13 @@ void AutotileEngine::restoreFocusedWindow(const NavigationContext& ctx)
 
 PhosphorEngine::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId)
 {
-    return tilingStateForScreen(screenId);
+    // Non-creating, matching the const overload below: a read accessor that
+    // persists an empty TilingState for an unknown screen is the create-on-read
+    // leak the cross-surface lookups explicitly guard against.
+    if (screenId.isEmpty()) {
+        return nullptr;
+    }
+    return m_states.stateForKey(currentKeyForScreen(screenId));
 }
 
 const PhosphorEngine::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId) const

@@ -58,17 +58,6 @@ QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap() const
     return windowMap;
 }
 
-KWin::EffectWindow* PlasmaZonesEffect::getValidActiveWindowOrFail(const QString& action)
-{
-    KWin::EffectWindow* activeWindow = getActiveWindow();
-    if (!activeWindow || !shouldHandleWindow(activeWindow)) {
-        qCDebug(lcEffect) << "No valid active window for" << action;
-        emitNavigationFeedback(false, action, QStringLiteral("no_window"));
-        return nullptr;
-    }
-    return activeWindow;
-}
-
 QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback)
 {
     // A maximized or fullscreen window's frameGeometry() is the full-monitor rect.
@@ -337,6 +326,17 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         return rejectedBecause(rejectReason, "deleted window");
     }
 
+    // Keep-above overlays (Spectacle, color pickers, screen rulers, screenshot
+    // tools that linger after capture) shouldn't be snapped to a zone — same
+    // rationale as isTileableWindow's keep-above gate. Consults the window's
+    // OWN flag (see windowOwnKeepAbove) so a SetWindowLayer-raised window
+    // stays manageable. Checked BEFORE the rule slice below: this is a flag
+    // read, while a rule-cache miss builds the full ~30-accessor ruleQuery,
+    // and both are pure rejects so the order is behaviour-neutral.
+    if (windowOwnKeepAbove(w)) {
+        return rejectedBecause(rejectReason, "keep-above window");
+    }
+
     // Check user-authored / migrated Exclude rules (needed for drag gating —
     // daemon also enforces these for keyboard navigation, but the effect
     // must filter for drag operations and lifecycle reporting).
@@ -349,15 +349,6 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         if (m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded()) {
             return rejectedBecause(rejectReason, "user exclusion rule match");
         }
-    }
-
-    // Keep-above overlays (Spectacle, color pickers, screen rulers, screenshot
-    // tools that linger after capture) shouldn't be snapped to a zone — same
-    // rationale as isTileableWindow's keep-above gate. Consults the window's
-    // OWN flag (see windowOwnKeepAbove) so a SetWindowLayer-raised window
-    // stays manageable.
-    if (windowOwnKeepAbove(w)) {
-        return rejectedBecause(rejectReason, "keep-above window");
     }
 
     return true;
@@ -549,6 +540,17 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
         return false;
     }
 
+    // Keep-above overlays (Spectacle, colour pickers, screen rulers) — same
+    // rejection shouldHandleWindow applies, preserved so upgrading doesn't
+    // start bordering these lingering utility windows. Consults the window's
+    // OWN flag (see windowOwnKeepAbove) so a SetWindowLayer-raised window
+    // keeps its decoration. Checked before the rule slice for the same reason
+    // as in shouldHandleWindow: a flag read beats a ruleQuery build, and both
+    // are pure rejects.
+    if (windowOwnKeepAbove(w)) {
+        return false;
+    }
+
     // User Exclude rules — reuse the SAME snapping exclusion slice
     // shouldHandleWindow gates on, so a window the user excluded from
     // management is not decorated either (preserves prior behavior, since the
@@ -559,15 +561,6 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
         if (m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded()) {
             return false;
         }
-    }
-
-    // Keep-above overlays (Spectacle, colour pickers, screen rulers) — same
-    // rejection shouldHandleWindow applies, preserved so upgrading doesn't
-    // start bordering these lingering utility windows. Consults the window's
-    // OWN flag (see windowOwnKeepAbove) so a SetWindowLayer-raised window
-    // keeps its decoration.
-    if (windowOwnKeepAbove(w)) {
-        return false;
     }
 
     // Transient-window filter — dialogs / popups / tooltips / dropdowns /
