@@ -886,7 +886,10 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         if (cit == m_tracks.end() || cit->second.generation != legGeneration) {
             return;
         }
-        legCompleted(surface, target);
+        // Pass legGeneration (not the default 0) to match every other
+        // completion site, so a future edit inserting consumer-visible work
+        // between the check above and this call stays generation-guarded.
+        legCompleted(surface, target, legGeneration);
     } else {
         auto it = m_tracks.find(TrackKey{surface, target});
         if (it == m_tracks.end() || it->second.generation != legGeneration) {
@@ -955,7 +958,13 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
                                                                   if (sit == m_tracks.end() || !sit->second.target) {
                                                                       return;
                                                                   }
-                                                                  sit->second.target->setScale(v);
+                                                                  // Clamp the lower bound only: an
+                                                                  // underdamped scale profile can undershoot
+                                                                  // below zero and briefly mirror the QML
+                                                                  // subtree. The opacity/shaderTime legs
+                                                                  // clamp for the same overshoot reason;
+                                                                  // scale keeps its above-1 bounce on show.
+                                                                  sit->second.target->setScale(qMax(qreal(0.0), v));
                                                               },
                                                               /*onComplete=*/
                                                               [this, surface, target]() {

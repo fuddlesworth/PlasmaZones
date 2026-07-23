@@ -30,8 +30,8 @@ namespace PhosphorAnimation {
 ///
 /// Why an extension and not a BaseUniforms member: the zone-shader path
 /// (`ZoneShaderItem` via `ZoneUniformExtension`) shares `BaseUniforms`
-/// with the animation path. An earlier revision grew BaseUniforms to
-/// 704 bytes to add these two fields directly; that change broke zone-
+/// with the animation path. An earlier revision grew BaseUniforms
+/// directly to add the first of these per-leg fields; that change broke zone-
 /// shader rendering on multi-VS setups in a way the team couldn't
 /// reproduce in a controlled test (likely a transitively-included-
 /// `common.glsl` cache-key gap in `shaderCacheKey`, but unconfirmed).
