@@ -281,8 +281,6 @@ Daemon::Daemon(QObject* parent)
     // states land together, rather than the static going live against
     // an empty registry for the brief window before loaders run.
     setupAnimationProfiles();
-    setupAnimationShaderEffects();
-    setupSurfaceShaderEffects();
 }
 
 Daemon::~Daemon()
@@ -299,6 +297,13 @@ bool Daemon::init()
     // daemon/init_engines.cpp). The call order below is byte-order faithful to the
     // former monolithic init() and MUST NOT be reordered — later phases borrow
     // members the earlier phases construct and wire.
+    // Both shader registries live here rather than in the ctor because stop()
+    // resets them: a stop() -> init() -> start() cycle would otherwise leave
+    // them null for the rest of the process, with the overlay service's
+    // borrows permanently null and every warm bake silently skipped. They must
+    // precede setupShaderWarmBakes(), which borrows both.
+    setupAnimationShaderEffects();
+    setupSurfaceShaderEffects();
     setupShaderWarmBakes();
     initLayoutAndSettingsWiring();
     initCoreAdaptors();

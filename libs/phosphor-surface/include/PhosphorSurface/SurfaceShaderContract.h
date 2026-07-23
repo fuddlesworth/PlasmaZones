@@ -81,16 +81,14 @@ namespace PhosphorSurfaceShaders {
 /// surface-layer uniform plumbing — so none is guarded by an
 /// `#ifdef PLASMAZONES_KWIN`.
 ///
-/// Field dynamics:
-///
-///   • **Per-frame-dynamic** — re-pushed every paint because they can
-///     change frame to frame: `uTexture0` (the live captured surface),
-///     `uSurfaceSize` (texture size in device px), `uSurfaceFrameTopLeft`
-///     / `uSurfaceFrameSize` (the content/frame rect within the texture,
-///     which shifts as the window moves/resizes), `uSurfaceScale` (the
-///     logical-to-device pixel scale, which changes when the window moves
-///     to a differently-scaled output), and `uSurfaceFocused` (focus
-///     toggles independently of any redraw).
+/// Field dynamics: the following are re-pushed every paint because they
+/// can change frame to frame. `uTexture0` (the live captured surface),
+/// `uSurfaceSize` (texture size in device px), `uSurfaceFrameTopLeft` /
+/// `uSurfaceFrameSize` (the content/frame rect within the texture, which
+/// shifts as the window moves/resizes), `uSurfaceScale` (the logical-to-
+/// device pixel scale, which changes when the window moves to a
+/// differently-scaled output), and `uSurfaceFocused` (focus toggles
+/// independently of any redraw).
 ///
 /// Decoration APPEARANCE — border width, corner radius, colours, glow,
 /// etc. — is NOT host state. It is each pack's own declared PARAMETERS
@@ -167,13 +165,15 @@ inline constexpr const char* kUSurfaceFocused = "uSurfaceFocused";
 /// static decoration costs nothing.
 inline constexpr const char* kITime = "iTime";
 
-/// `float uSurfaceOpacity` — LEGACY, always 1.0 on both runtimes. It used
-/// to carry the window's rule-resolved SetOpacity for packs declaring the
-/// retired `handlesOpacity` contract; SetOpacity is layer-backed now (the
-/// plain opacity-tint layer folds it into its own pack param) and in-pack
-/// content dimming is an ordinary pack parameter (frost/glass
-/// `contentOpacity`). Kept in the contract so existing third-party packs
-/// referencing it keep compiling and the daemon UBO layout is unchanged.
+/// `float uSurfaceOpacity` — the host item's own opacity on the DAEMON
+/// runtime, always 1.0 on the compositor runtime. It no longer carries the
+/// window's rule-resolved SetOpacity: that was the retired `handlesOpacity`
+/// contract, SetOpacity is layer-backed now (the plain opacity-tint layer
+/// folds it into its own pack param) and in-pack content dimming is an
+/// ordinary pack parameter (frost/glass `contentOpacity`). What it does
+/// carry is the daemon SurfaceShaderItem's live `opacity()`, wired through
+/// opacityChanged so a host can fade the whole decoration. A pack that
+/// ignores it will not fade with its host.
 inline constexpr const char* kUSurfaceOpacity = "uSurfaceOpacity";
 
 /// `sampler2D uBackdrop` — COMPOSITOR-ONLY. The scene BEHIND the window,

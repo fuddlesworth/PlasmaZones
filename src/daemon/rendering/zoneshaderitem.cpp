@@ -87,20 +87,12 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     // scene-graph node recreations.
     ShaderEffect::setUniformExtension(m_zoneExtension);
 
-    // Set PlasmaZones-specific shader include paths so that #include <common.glsl>
-    // in zone.vert/effect.frag resolves to the system shaders directory.
-    // Use locateAll() because locate() stops at the first match (~/.local/share/
-    // which has user shaders but NOT common.glsl). We need the system dir too.
-    const QStringList allShaderDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/overlays"), QStandardPaths::LocateDirectory);
-    QStringList includePaths;
-    for (const QString& dir : allShaderDirs) {
-        const QString sharedDir = dir + QStringLiteral("/shared");
-        if (QDir(sharedDir).exists()) {
-            includePaths.append(sharedDir);
-        }
-        includePaths.append(dir);
-    }
+    // Shader include paths, so #include <common.glsl> in zone.vert/effect.frag
+    // resolves against every trusted overlay root rather than stopping at the
+    // user one (which has user shaders but NOT common.glsl). Shared with the
+    // daemon warm bake: both must compile against the same list or their
+    // bake-cache keys diverge.
+    const QStringList includePaths = expandShaderIncludePaths();
     setShaderIncludePaths(includePaths);
 
     // Set PlasmaZones-specific default colors from ConfigDefaults

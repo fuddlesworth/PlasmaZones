@@ -116,16 +116,23 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
             state.channelResolution[i][1] = 1.0f;
         }
     }
-    // Publish the SAME count the texture upload truncates to. audio.glsl's
-    // audioBar() validates barIndex against this then texelFetch()es — and an
-    // out-of-range texelFetch is undefined in GLSL (unlike texture(), it does
-    // not clamp) — so advertising more bars than the texture is wide would be
-    // a real out-of-bounds read, not a cosmetic mismatch.
-    {
-        const int audioDeviceMax = rhi->resourceLimit(QRhi::TextureSizeMax);
-        const int rawSize = static_cast<int>(m_audioSpectrum.size());
-        state.audioSpectrumSize = (audioDeviceMax > 0) ? qMin(rawSize, audioDeviceMax) : rawSize;
-    }
+    // Publish the width of the texture that is ACTUALLY BOUND, not the bar
+    // count we intend to upload. audio.glsl's audioBar() validates barIndex
+    // against this then texelFetch()es — and an out-of-range texelFetch is
+    // undefined in GLSL (unlike texture(), it does not clamp) — so advertising
+    // more bars than the texture is wide is a real out-of-bounds read.
+    //
+    // Deriving from the intended count instead would over-report on two
+    // reachable paths, because this region is filled EARLIER in
+    // uploadDirtyTextures() than the audio block that resizes the texture:
+    // a failed create() keeps the previous smaller texture, and the
+    // m_dummyChannelTextureNeedsUpload early return skips the audio block
+    // outright. Both would leave a frame drawing a new-size UBO against an
+    // old-size texture. Under-reporting is safe — audioBar() just reads no
+    // bars for a frame — so trailing the texture by one frame is the correct
+    // direction to err. A successful resize re-arms m_uniformsDirty so the
+    // next frame republishes the grown width.
+    state.audioSpectrumSize = m_audioSpectrumTexture ? m_audioSpectrumTexture->pixelSize().width() : 0;
 
     // User texture resolutions (bindings 7-10) — resolved node-side.
     for (int i = 0; i < kMaxUserTextures; ++i) {
@@ -376,6 +383,11 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 audioResizeFailed = true;
             } else {
                 m_audioSpectrumTexture = std::move(resized);
+                // iAudioSpectrumSize mirrors the bound texture's width, and the
+                // UBO region for this frame was filled before this resize ran.
+                // Re-arm so the next frame publishes the new width.
+                m_uniformsDirty = true;
+                m_sceneDataDirty = true;
                 resetAllBindingsAndPipelines();
                 if (!ensurePipeline()) {
                     return;
@@ -431,19 +443,22 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         if (!m_userTextureDirty[i] || !m_userTextureSamplers[i]) {
             continue;
         }
-        const QImage& img = m_userTextureImages[i];
+        QImage img = m_userTextureImages[i];
         QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);
         // Clamp against the device's hard texture-size limit. A user-supplied
         // PNG larger than the device max (commonly 16384 on desktop GPUs but
         // as low as 4096 on some mobile/Vulkan drivers) would otherwise hit
         // newTexture()->create() == false below. Clamping to the device limit
-        // is a graceful degradation — the texture upload below will scale-fit
-        // the image into the clamped bounds via QRhi's blit semantics.
+        // is a graceful degradation, but it must be paired with an explicit
+        // downscale of the SOURCE image: QRhi::uploadTexture copies 1:1 and
+        // performs no scaling, so handing it an oversized QImage against a
+        // clamped texture is a validation failure, not a fit.
         const int textureSizeMax = rhi->resourceLimit(QRhi::TextureSizeMax);
         if (textureSizeMax > 0 && (targetSize.width() > textureSizeMax || targetSize.height() > textureSizeMax)) {
             qCWarning(lcShaderNode) << "user texture slot" << i << "size" << targetSize
                                     << "exceeds device TextureSizeMax" << textureSizeMax << ", clamping";
             targetSize = QSize(qMin(targetSize.width(), textureSizeMax), qMin(targetSize.height(), textureSizeMax));
+            img = img.scaled(targetSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
         }
         // Branch covers two cases uniformly:
         //   (a) initial allocation when m_userTextures[i] is null (first

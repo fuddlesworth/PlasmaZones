@@ -8,6 +8,7 @@
 
 #include <plasmazones_rendering_export.h>
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
@@ -35,6 +36,50 @@ namespace PlasmaZones {
 /// directly). ZoneShaderItem passes its own list so a customised item still
 /// resolves against exactly the paths it will compile with; the warm bake
 /// omits it and gets the canonical roots.
+/// Append @p path if it is a non-empty, existing directory not already listed.
+inline void appendUniquePath(QStringList& paths, const QString& path)
+{
+    if (!path.isEmpty() && QDir(path).exists() && !paths.contains(path)) {
+        paths.append(path);
+    }
+}
+
+/// The trusted PlasmaZones overlay roots, in QStandardPaths priority order
+/// (user first). NOT the same order as ShaderRegistry::searchPaths(), which is
+/// this list reversed.
+inline QStringList trustedShaderRoots()
+{
+    return QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/overlays"),
+                                     QStandardPaths::LocateDirectory);
+}
+
+/// Expand @p inputPaths into the include-path list used to resolve
+/// `#include <common.glsl>` in zone shaders: every trusted root's `shared`
+/// subdir and the root itself first, then the same pair for each caller path,
+/// existence-filtered and deduplicated.
+///
+/// SINGLE SOURCE OF TRUTH, for the same reason as resolveZoneVertexPath below.
+/// ZoneShaderItem and the daemon warm bake must compile against identical
+/// include paths or their bake-cache keys diverge, so neither may re-derive
+/// this walk by hand.
+inline QStringList expandShaderIncludePaths(const QStringList& inputPaths = {})
+{
+    QStringList expanded;
+    for (const QString& root : trustedShaderRoots()) {
+        appendUniquePath(expanded, root + QStringLiteral("/shared"));
+        appendUniquePath(expanded, root);
+    }
+    // Preserve caller-provided include paths, but do not infer arbitrary parent
+    // directories from them.
+    for (const QString& path : inputPaths) {
+        const QFileInfo info(path);
+        const QString dir = info.isFile() ? info.absolutePath() : info.absoluteFilePath();
+        appendUniquePath(expanded, dir + QStringLiteral("/shared"));
+        appendUniquePath(expanded, dir);
+    }
+    return expanded;
+}
+
 inline QString resolveZoneVertexPath(const QString& fragmentPath, const QStringList& searchDirs = {})
 {
     if (fragmentPath.isEmpty()) {
@@ -53,9 +98,7 @@ inline QString resolveZoneVertexPath(const QString& fragmentPath, const QStringL
         }
         return {};
     }
-    const QStringList roots = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/overlays"), QStandardPaths::LocateDirectory);
-    for (const QString& root : roots) {
+    for (const QString& root : trustedShaderRoots()) {
         for (const QString& candidate :
              {root + QStringLiteral("/shared/zone.vert"), root + QStringLiteral("/zone.vert")}) {
             if (QFile::exists(candidate)) {

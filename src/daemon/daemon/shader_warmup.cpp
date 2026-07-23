@@ -536,11 +536,11 @@ void Daemon::setupShaderWarmBakes()
     // `shared/animation.vert` when an effect doesn't ship its own)
     // also mirrors the runtime, otherwise the warm-baked entry's
     // cache key would differ from what runtime queries.
-    // Load-bearing, NOT belt-and-braces: stop() resets both shader registries
-    // (lifecycle.cpp) and only the Daemon ctor recreates them, so on a
-    // stop() -> init() -> start() cycle these are genuinely null and the warm
-    // bakes correctly skip rather than crash. (That the registries do not come
-    // back is a separate restart-completeness gap, noted in signals.cpp.)
+    // Defensive rather than load-bearing on the normal path: init() calls
+    // setupAnimationShaderEffects() / setupSurfaceShaderEffects() immediately
+    // before this, so both registries are non-null here. The guards remain
+    // because stop() resets both (lifecycle.cpp), and a caller reaching this
+    // function outside that ordering must skip rather than crash.
     if (m_animationShaderRegistry) {
         auto scheduleWarmForAnimEffect = [this,
                                           registryPtr = QPointer<PhosphorAnimationShaders::AnimationShaderRegistry>(
