@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-FileCopyrightText: gl-transitions contributors
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Desktop Pixelate — the two desktops crossfade while the whole screen quantises
@@ -9,7 +10,6 @@
 #include <desktop_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     float d = min(t, 1.0 - t);           // 0 at the ends, 0.5 at the midpoint
     const float steps = 50.0;            // quantise the block size so it steps, not glides
     float dist = ceil(d * steps) / steps;
@@ -21,7 +21,4 @@ vec4 pTransition(vec2 uv, float t) {
     // flash; a float/HDR target does not clamp it at all. A cross-fade has no
     // meaningful state past its endpoints.
     return crossFade(p, clamp(t, 0.0, 1.0));
-#else
-    return vec4(0.0);
-#endif
 }

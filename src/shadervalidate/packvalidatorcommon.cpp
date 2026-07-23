@@ -46,6 +46,19 @@ std::optional<QString> confinedPackPath(const QString& packDir, const QString& r
     return abs;
 }
 
+bool confinePackPathInPlace(const QString& packDir, QString& path)
+{
+    if (path.isEmpty()) {
+        return true;
+    }
+    const auto confined = confinedPackPath(packDir, path);
+    if (!confined) {
+        return false;
+    }
+    path = *confined;
+    return true;
+}
+
 const QStringList kValidParamTypes = {QStringLiteral("float"), QStringLiteral("int"), QStringLiteral("bool"),
                                       QStringLiteral("color"), QStringLiteral("image")};
 
@@ -118,10 +131,10 @@ int reportCompile(QTextStream& out, const QString& label, const ShaderCompiler::
                   const QStringList& declared)
 {
     if (result.success) {
-        out << "  " << label.leftJustified(14) << "OK\n";
+        out << "  " << label.leftJustified(15) << "OK\n";
         return 0;
     }
-    out << "  " << label.leftJustified(14) << "ERROR\n";
+    out << "  " << label.leftJustified(15) << "ERROR\n";
     const QStringList diagLines = result.error.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
     for (const QString& line : diagLines) {
         // glslang names the root source (file id 0, via the T1.3 #line directives)
@@ -170,7 +183,7 @@ int compileStage(QTextStream& out, const QString& label, const QString& path, QS
 {
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        out << "  " << label.leftJustified(14) << "ERROR\n    cannot read " << path << "\n";
+        out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << path << "\n";
         return 1;
     }
     const QString raw = QString::fromUtf8(f.readAll());
@@ -184,7 +197,7 @@ int compileStage(QTextStream& out, const QString& label, const QString& path, QS
     QString expanded =
         ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(), includePaths, &err);
     if (expanded.isEmpty()) {
-        out << "  " << label.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
+        out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
         return 1;
     }
     // The p_<id> preamble is spliced only into the scaffolded main fragment, the

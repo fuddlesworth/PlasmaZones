@@ -92,6 +92,9 @@ function(pas_add_test _name)
     set(_sources ${ARGN})
     add_executable(${_name} ${_sources})
     set_target_properties(${_name} PROPERTIES AUTOMOC ON)
+    target_include_directories(${_name}
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    )
     target_link_libraries(${_name}
         PRIVATE
             Qt6::Test
@@ -101,7 +104,7 @@ function(pas_add_test _name)
     )
     add_test(NAME ${_name} COMMAND ${_name})
     set_tests_properties(${_name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphoranimation.debug=false"
         LABELS "phosphoranimation;phosphoranimationshaders"
     )
 endfunction()
@@ -133,6 +136,7 @@ function(pal_add_test _name)
             # Reuse the in-tree phosphor-layer test mocks.
             ${CMAKE_SOURCE_DIR}/libs/phosphor-layer/tests
     )
+    set_target_properties(${_name} PROPERTIES AUTOMOC ON)
     target_link_libraries(${_name}
         PRIVATE
             Qt6::Test
@@ -150,3 +154,4 @@ function(pal_add_test _name)
 endfunction()
 
 pal_add_test(pal_test_surface_animator test_surface_animator.cpp)
+pal_add_test(pal_test_surface_animator_reentrancy test_surface_animator_reentrancy.cpp)

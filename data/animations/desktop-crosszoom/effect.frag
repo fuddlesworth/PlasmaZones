@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-FileCopyrightText: gl-transitions contributors
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Desktop Cross Zoom — the outgoing desktop zooms and directional-blurs toward a
@@ -11,7 +12,6 @@
 // replace this pack's per-copy pz_rand and pz_crossFade.
 #include <noise.glsl>
 
-#ifdef PLASMAZONES_KWIN
 const float PZ_PI = 3.141592653589793;
 
 float pz_linearEase(float begin, float change, float duration, float time) {
@@ -35,10 +35,7 @@ float pz_sinEaseInOut(float begin, float change, float duration, float time) {
     return -change / 2.0 * (cos(PZ_PI * time / duration) - 1.0) + begin;
 }
 
-#endif // PLASMAZONES_KWIN
-
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     vec2 center = vec2(pz_linearEase(0.25, 0.5, 1.0, t), 0.5);
     float dissolve = pz_expEaseInOut(0.0, 1.0, 1.0, t);
     // Clamp: pz_sinEaseInOut is PERIODIC in t (it is a cosine), so while it lands
@@ -57,7 +54,4 @@ vec4 pTransition(vec2 uv, float t) {
         total += weight;
     }
     return color / total;
-#else
-    return vec4(0.0);
-#endif
 }

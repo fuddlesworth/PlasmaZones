@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace PhosphorAnimationLayer {
 
@@ -107,9 +108,25 @@ void SurfaceAnimator::Private::teardownShaderLeg(PhosphorLayer::Surface* surface
         track.shaderTime->cancel();
         m_pendingDestroy.push_back(std::move(track.shaderTime));
     }
-    // Restore previously-hidden sibling decorators FIRST. Reused
-    // shader runs hide them again on next attach, so this just
-    // covers the between-legs and post-final-leg cases.
+    // Make the shader pieces DORMANT BEFORE restoring siblings. Order is
+    // load-bearing: the restore loop below calls setVisible(true), which fires
+    // visibleChanged synchronously, and a consumer handler can re-enter with a
+    // fresh beginShow. That nested runLeg's hideAnchorSiblings walk skips
+    // QQuickShaderEffectSources and its own pair but NOT a foreign
+    // ShaderEffect — so a still-visible shaderItem would be recorded as a
+    // decorator sibling and later re-shown by the nested leg's own teardown,
+    // waking a parked tower back into per-frame RHI work (and rendering a
+    // stale ghost). Hiding first makes the nested walk skip it.
+    if (track.shaderItem) {
+        track.shaderItem->setVisible(false);
+    }
+    if (track.shaderSource) {
+        track.shaderSource->setLive(false);
+        track.shaderSource->setHideSource(false);
+    }
+    // Restore previously-hidden sibling decorators. Reused shader runs hide
+    // them again on next attach, so this just covers the between-legs and
+    // post-final-leg cases.
     for (const QPointer<QQuickItem>& sibling : track.hiddenSiblings) {
         if (sibling) {
             sibling->setVisible(true);
@@ -124,6 +141,7 @@ void SurfaceAnimator::Private::teardownShaderLeg(PhosphorLayer::Surface* surface
         track.shaderAnchor.clear();
         track.foundExplicitAnchor = false;
         track.shaderEffectId.clear();
+        track.fboExtentKindPtr.reset();
         return;
     }
 
@@ -166,7 +184,9 @@ void SurfaceAnimator::Private::teardownShaderLeg(PhosphorLayer::Surface* surface
     pending.target = track.target;
     pending.fboExtentKindPtr = std::move(track.fboExtentKindPtr);
 
-    // Make parked pieces dormant — see method docstring.
+    // Re-assert dormancy on the parked pieces. Already applied above (before
+    // the sibling restore, which can re-enter); repeating it here keeps the
+    // invariant local to the park step and is idempotent.
     if (pending.shaderItem) {
         pending.shaderItem->setVisible(false);
     }
@@ -212,9 +232,12 @@ void SurfaceAnimator::Private::destroyPendingReuseEntry(PendingReuseShader& pend
     pending.fboExtentKindPtr.reset();
 }
 
-/// Drop the reuse stash for one surface — used when the surface is
-/// destroyed, when the next leg uses a different effect / target,
-/// or when a non-shader leg supersedes a shader leg.
+/// Drop the reuse stash for one surface — sole caller is the
+/// surface-destroyed cleanup lambda (connectSurfaceCleanup). The
+/// per-target cases go elsewhere: an effect/anchor mismatch destroys
+/// its single entry inline (destroyPendingReuseEntry) and a
+/// non-shader leg superseding a shader leg uses
+/// destroyPendingReuseForKey.
 /// Walks every (surface, *) entry — a surface may have multiple
 /// targets parked simultaneously now that the unified shell hosts
 /// independent items as siblings on one Surface.
@@ -230,10 +253,11 @@ void SurfaceAnimator::Private::destroyPendingReuseFor(PhosphorLayer::Surface* su
     }
 }
 
-/// Single-(surface, target) variant. Used by runLeg's null-target
-/// path: target is null, so iterate every (surface, *) anyway.
-/// Used by teardownShaderLeg-driven reuse claim: caller has
-/// already moved fields out, so we just erase.
+/// Single-(surface, target) variant. Sole caller: runLeg's
+/// non-shader-leg branch, which drops this target's parked reuse
+/// stash when the superseding leg carries no shader (a stale
+/// parked ShaderEffect must not outlive a leg that will never
+/// reclaim it).
 void SurfaceAnimator::Private::destroyPendingReuseForKey(const TrackKey& key)
 {
     const auto it = m_pendingReuse.find(key);
@@ -292,6 +316,26 @@ void SurfaceAnimator::Private::connectSurfaceCleanup(PhosphorLayer::Surface* sur
             // path. Walk the map and erase all matching entries.
             for (auto trackIt = m_tracks.begin(); trackIt != m_tracks.end();) {
                 if (trackIt->first.surface == surf) {
+                    // Park the AVs in m_pendingDestroy instead of destroying
+                    // them synchronously with the erase — destroying an
+                    // AnimatedValue from inside its own callback chain is the
+                    // re-entrancy hazard the rest of this file defends
+                    // against (see cancelTrackingFor), and this slot can run
+                    // inside a motion callback if a consumer deletes the
+                    // Surface there.
+                    Track& track = trackIt->second;
+                    if (track.opacity) {
+                        track.opacity->cancel();
+                        m_pendingDestroy.push_back(std::move(track.opacity));
+                    }
+                    if (track.scale) {
+                        track.scale->cancel();
+                        m_pendingDestroy.push_back(std::move(track.scale));
+                    }
+                    if (track.shaderTime) {
+                        track.shaderTime->cancel();
+                        m_pendingDestroy.push_back(std::move(track.shaderTime));
+                    }
                     trackIt = m_tracks.erase(trackIt);
                 } else {
                     ++trackIt;
@@ -308,7 +352,8 @@ void SurfaceAnimator::Private::connectSurfaceCleanup(PhosphorLayer::Surface* sur
 /// spec.onComplete (cancel = non-completion termination per
 /// ISurfaceAnimator). AVs are parked in m_pendingDestroy because a
 /// re-entrant cancel from inside spec.onValueChanged must not
-/// destroy *this mid-advance (AnimatedValue.h:547); graveyard
+/// destroy *this mid-advance (AnimatedValue::advance()'s
+/// re-entrancy contract); graveyard
 /// drains on next tickAll. Shader pieces are parked in
 /// m_pendingReuse (see teardownShaderLeg) so they survive the
 /// external Surface::show()/hide() pre-cancel and can be reclaimed
@@ -319,20 +364,25 @@ void SurfaceAnimator::Private::cancelTrackingFor(PhosphorLayer::Surface* surface
     if (it == m_tracks.end()) {
         return;
     }
-    // Cancel BEFORE moving so m_isAnimating=false propagates to
-    // any advance() frame still on the stack — post-callback work
-    // there then bails on the m_isAnimating guard rather than
-    // mutating cancelled state.
-    if (it->second.opacity) {
-        it->second.opacity->cancel();
-        m_pendingDestroy.push_back(std::move(it->second.opacity));
-    }
-    if (it->second.scale) {
-        it->second.scale->cancel();
-        m_pendingDestroy.push_back(std::move(it->second.scale));
-    }
-    teardownShaderLeg(surface, it->second);
+    // Extract the Track and ERASE FIRST: teardownShaderLeg's sibling
+    // restore fires visibleChanged synchronously, and a consumer handler
+    // re-entering cancel() must find no entry (a recursive teardown of
+    // the same live Track would invalidate the hiddenSiblings iteration
+    // and this iterator). Moving the unique_ptr AVs does not touch the
+    // AV objects themselves, so the cancel() calls below still reach
+    // any advance() frame on the stack — m_isAnimating=false makes its
+    // post-callback work bail rather than mutate cancelled state.
+    Track track = std::move(it->second);
     m_tracks.erase(it);
+    if (track.opacity) {
+        track.opacity->cancel();
+        m_pendingDestroy.push_back(std::move(track.opacity));
+    }
+    if (track.scale) {
+        track.scale->cancel();
+        m_pendingDestroy.push_back(std::move(track.scale));
+    }
+    teardownShaderLeg(surface, track);
 }
 
 /// Cancel every in-flight leg for the surface, regardless of target.
@@ -372,14 +422,33 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     QStringList animIncludePaths;
     if (!shaderEffectId.isEmpty() && m_shaderRegistry) {
         resolvedShaderEff = m_shaderRegistry->effect(shaderEffectId);
-        for (const QString& sp : m_shaderRegistry->searchPaths()) {
-            const QString sharedDir = sp + QStringLiteral("/shared");
-            if (QDir(sharedDir).exists()) {
-                animIncludePaths.append(sharedDir);
-                if (resolvedShaderEff.isValid() && resolvedShaderEff.vertexShaderPath.isEmpty()) {
-                    const QString sharedVert = sharedDir + QStringLiteral("/animation.vert");
-                    if (QFile::exists(sharedVert)) {
-                        resolvedShaderEff.vertexShaderPath = sharedVert;
+        // A compositor-only pack (desktop / geometry / move classes) is
+        // authored against the kwin classic-GL dialect with no daemon
+        // branch: attaching it would fail the strict SPIR-V bake at first
+        // paint and stall the leg. This is reachable through a picker-legal
+        // config — the picker is permissive on ambiguous rows (e.g. the
+        // `global` root), so a geometry-only pack assigned there cascades to
+        // every OSD/popup leg via resolveShaderWithDefault, which does no
+        // applicability filtering. Routine, so log at debug level only —
+        // drop the shader leg and let the opacity/scale legs run.
+        if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(resolvedShaderEff)) {
+            qCDebug(lcSurfaceAnimator) << "runLeg: shader effect" << shaderEffectId << "is compositor-only (appliesTo"
+                                       << resolvedShaderEff.appliesTo << ") — skipping shader leg on daemon surface";
+            resolvedShaderEff = {};
+        }
+        // Include paths (and the default-vert fallback) only matter when a
+        // shader leg will actually attach — skip the per-leg filesystem
+        // probes when the effect resolved invalid or was refused above.
+        if (resolvedShaderEff.isValid()) {
+            for (const QString& sp : m_shaderRegistry->searchPaths()) {
+                const QString sharedDir = sp + QStringLiteral("/shared");
+                if (QDir(sharedDir).exists()) {
+                    animIncludePaths.append(sharedDir);
+                    if (resolvedShaderEff.vertexShaderPath.isEmpty()) {
+                        const QString sharedVert = sharedDir + QStringLiteral("/animation.vert");
+                        if (QFile::exists(sharedVert)) {
+                            resolvedShaderEff.vertexShaderPath = sharedVert;
+                        }
                     }
                 }
             }
@@ -391,7 +460,7 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     // entry behind on null-target strands its AV (custom
     // orchestrators bypass Surface::Impl::drive()'s pre-cancel).
     // cancelTrackingFor parks any in-flight shader pieces in
-    // m_pendingReuse[{surface,target}] (see parkShaderForReuse) so
+    // m_pendingReuse[{surface,target}] (teardownShaderLeg's park step) so
     // they survive the external Surface::show()/hide() pre-cancel
     // and can be reclaimed below if the new leg uses the same
     // effect. Null target means "supersede whatever was running on
@@ -401,15 +470,18 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         cancelAllForSurface(surface);
         qCWarning(lcSurfaceAnimator) << "runLeg called with null target — onComplete fires synchronously";
         // Null-target dispatch is malformed and won't drive any
-        // specific (surface, target) pair. The tickAll sweep will
-        // GC stale pending entries that outlive their target's
-        // QPointer; do NOT cascade-destroy every sibling slot's
+        // specific (surface, target) pair. The tickAll sweep GCs a
+        // pending entry once all three of its pieces have gone —
+        // it does not test `target`, but the shader pieces are
+        // parented under the target and die with it, so the effect
+        // is the same; do NOT cascade-destroy every sibling slot's
         // parked shader on this surface. The unified-overlay-shell
         // pattern hosts multiple sibling slots per Surface, so
         // surface-wide destruction violates the per-(Surface, target)
         // keying contract.
         // Synchronous onComplete: same forbidden-ops contract as a
-        // legCompleted-fired callback (SurfaceAnimator.h:79-90).
+        // legCompleted-fired callback (SurfaceAnimator.h's
+        // "Re-entrancy contract" section).
         if (onComplete) {
             onComplete();
         }
@@ -516,8 +588,18 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     // cancel(surface). With the slot installed first, that cancel
     // erases cleanly (no AVs to park yet) and the post-write
     // re-find below detects the erasure and bails.
+    // Stamp this leg's slot generation so the re-find below can tell
+    // "my slot was erased" from "my slot was erased AND a re-entrant
+    // beginShow/beginHide installed a fresh one" — adopting a nested
+    // leg's slot would overwrite its AVs and leak its shader pieces.
+    const quint64 legGeneration = m_nextTrackGeneration++;
+    // Wire the surface-destroyed sweep for every animated surface, not
+    // just ones that park shader pieces — a surface deleted mid-flight
+    // must drop its Track (and park its AVs) regardless of leg kind.
+    connectSurfaceCleanup(surface);
     {
         Track& slot = m_tracks[TrackKey{surface, target}];
+        slot.generation = legGeneration;
         slot.opacity.reset();
         slot.scale.reset();
         // Reset shader-leg state explicitly — a non-shader leg
@@ -574,7 +656,23 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     // re-entered cancel() — bail per the cancellation contract.
     {
         auto it = m_tracks.find(TrackKey{surface, target});
-        if (it == m_tracks.end()) {
+        if (it == m_tracks.end() || it->second.generation != legGeneration) {
+            // The setOpacity/setScale chain above re-entered cancel() and
+            // erased the slot — or additionally re-entered beginShow/
+            // beginHide, whose nested runLeg installed a FRESH slot (the
+            // generation mismatch): that slot belongs to the nested leg
+            // and must not be adopted. Any shader pieces claimed from
+            // m_pendingReuse earlier in this call live only in locals now
+            // — tracked by neither m_tracks nor m_pendingReuse — so wind
+            // them down before bailing or they sit dormant on the anchor
+            // holding their FBO until surface destruction.
+            if (reusedShaderItem || reusedShaderSource) {
+                PendingReuseShader transient;
+                transient.shaderItem = reusedShaderItem;
+                transient.shaderSource = reusedShaderSource;
+                transient.shaderAnchor = reusedShaderAnchor;
+                destroyPendingReuseEntry(transient);
+            }
             return;
         }
         if (!hasShaderLeg) {
@@ -585,6 +683,19 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         }
         if (hasShaderLeg) {
             const bool isShowLeg = (toOpacity > fromOpacity);
+            // Stage the attach/wake results in locals: both branches below
+            // call setVisible on consumer-owned decorator items
+            // (hideAnchorSiblings / attachShaderToAnchor), whose
+            // visibleChanged handlers can synchronously re-enter cancel()
+            // or beginShow/beginHide and erase or replace this slot —
+            // `it` must not be written through after those calls without
+            // the generation-checked re-find further down.
+            QPointer<PhosphorRendering::ShaderEffect> newShaderItem;
+            QPointer<QQuickShaderEffectSource> newShaderSource;
+            QPointer<QQuickItem> newShaderAnchor;
+            bool newFoundExplicit = false;
+            QList<QPointer<QQuickItem>> newHidden;
+            std::shared_ptr<PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind> newFboExtentKindPtr;
             if (reusedShaderItem) {
                 // Reuse path: keep the existing ShaderEffect /
                 // ShaderEffectSource / ShaderNodeRhi tower across
@@ -672,17 +783,13 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
                 // during the idle phase, but the new leg's shader
                 // needs them out of the way again. Same helper as
                 // the fresh-attach path uses.
-                QList<QPointer<QQuickItem>> hidden = hideAnchorSiblings(
-                    reusedShaderAnchor.data(), reusedShaderItem.data(), reusedShaderSource.data(), reusedFoundExplicit);
-                it->second.shaderItem = reusedShaderItem;
-                it->second.shaderSource = reusedShaderSource;
-                it->second.shaderAnchor = reusedShaderAnchor;
-                it->second.foundExplicitAnchor = reusedFoundExplicit;
-                it->second.hiddenSiblings = std::move(hidden);
-                it->second.shaderEffectId = shaderEffectId;
-                it->second.fboExtentKindPtr = std::move(reusedFboExtentKindPtr);
-                it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
-                seedShaderUniformsAtAttach(it->second);
+                newHidden = hideAnchorSiblings(reusedShaderAnchor.data(), reusedShaderItem.data(),
+                                               reusedShaderSource.data(), reusedFoundExplicit);
+                newShaderItem = reusedShaderItem;
+                newShaderSource = reusedShaderSource;
+                newShaderAnchor = reusedShaderAnchor;
+                newFoundExplicit = reusedFoundExplicit;
+                newFboExtentKindPtr = std::move(reusedFboExtentKindPtr);
             } else {
                 // Fresh attach: no prior compatible shader pair, or
                 // the previous one was for a different effect id.
@@ -695,16 +802,71 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
                 // setITime block.
                 ShaderAttachResult attached = attachShaderToAnchor(target, resolvedShaderEff, shaderEffectId,
                                                                    shaderParameters, isShowLeg, animIncludePaths);
-                it->second.shaderItem = attached.shaderItem;
-                it->second.shaderSource = attached.shaderSource;
-                it->second.shaderAnchor = attached.shaderAnchor;
-                it->second.foundExplicitAnchor = attached.foundExplicitAnchor;
-                it->second.hiddenSiblings = std::move(attached.hiddenSiblings);
-                it->second.shaderEffectId = shaderEffectId;
-                it->second.fboExtentKindPtr = std::move(attached.fboExtentKindPtr);
-                it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
-                seedShaderUniformsAtAttach(it->second);
+                newShaderItem = attached.shaderItem;
+                newShaderSource = attached.shaderSource;
+                newShaderAnchor = attached.shaderAnchor;
+                newFoundExplicit = attached.foundExplicitAnchor;
+                newHidden = std::move(attached.hiddenSiblings);
+                newFboExtentKindPtr = std::move(attached.fboExtentKindPtr);
             }
+            // Re-find with the generation check before writing the staged
+            // pieces into the slot — the attach/wake calls above may have
+            // erased or replaced it (see the staging comment). On a bail,
+            // undo the consumer-visible state the staging created: restore
+            // the hidden siblings and wind the pieces down.
+            auto attachIt = m_tracks.find(TrackKey{surface, target});
+            if (attachIt == m_tracks.end() || attachIt->second.generation != legGeneration) {
+                // Route the staged hidden siblings by what replaced us: a
+                // live replacement slot with its own shader leg still needs
+                // them hidden (its hideAnchorSiblings only recorded
+                // still-visible siblings, so ones WE hid are in neither
+                // list) — hand them to that track for its teardown to
+                // restore. Otherwise restore them now.
+                if (attachIt != m_tracks.end() && attachIt->second.shaderItem) {
+                    for (const QPointer<QQuickItem>& sibling : newHidden) {
+                        // Never route the replacement leg's own shader pieces
+                        // into its hiddenSiblings — its teardown would then
+                        // wrongly re-show a piece it manages itself. Its
+                        // shaderItem must instead have OUR hide undone (we
+                        // snapshotted it as a visible sibling only if the
+                        // nested attach completed before our walk), or the
+                        // replacement leg renders blank for its whole leg;
+                        // its shaderSource is dropped outright
+                        // (hideAnchorSiblings never hides source items, so a
+                        // match can only be stale).
+                        QQuickItem* raw = sibling.data();
+                        if (!raw) {
+                            continue;
+                        }
+                        if (raw == static_cast<QQuickItem*>(attachIt->second.shaderItem.data())) {
+                            raw->setVisible(true);
+                        } else if (raw != static_cast<QQuickItem*>(attachIt->second.shaderSource.data())) {
+                            attachIt->second.hiddenSiblings.append(sibling);
+                        }
+                    }
+                } else {
+                    for (const QPointer<QQuickItem>& sibling : newHidden) {
+                        if (sibling) {
+                            sibling->setVisible(true);
+                        }
+                    }
+                }
+                PendingReuseShader transient;
+                transient.shaderItem = newShaderItem;
+                transient.shaderSource = newShaderSource;
+                transient.shaderAnchor = newShaderAnchor;
+                destroyPendingReuseEntry(transient);
+                return;
+            }
+            attachIt->second.shaderItem = newShaderItem;
+            attachIt->second.shaderSource = newShaderSource;
+            attachIt->second.shaderAnchor = newShaderAnchor;
+            attachIt->second.foundExplicitAnchor = newFoundExplicit;
+            attachIt->second.hiddenSiblings = std::move(newHidden);
+            attachIt->second.shaderEffectId = shaderEffectId;
+            attachIt->second.fboExtentKindPtr = std::move(newFboExtentKindPtr);
+            attachIt->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+            seedShaderUniformsAtAttach(attachIt->second);
         }
     }
 
@@ -717,63 +879,116 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         // Shader-exclusive mode: opacity was snapped to toOpacity
         // above. The opacity "leg" completes immediately — the
         // shader's iTime 0→1 drives the entire visual transition.
-        legCompleted(surface, target);
-    } else {
-        auto it = m_tracks.find(TrackKey{surface, target});
-        if (it == m_tracks.end() || !it->second.opacity) {
+        // Generation-guarded: a slot replaced during the attach window
+        // belongs to a nested leg whose pendingLegs must not be
+        // decremented by this superseded one.
+        const auto cit = m_tracks.find(TrackKey{surface, target});
+        if (cit == m_tracks.end() || cit->second.generation != legGeneration) {
             return;
         }
-        it->second.opacity->start(fromOpacity, toOpacity,
-                                  buildSpec(
-                                      resolveProfile(m_registry, opacityProfilePath), clock,
-                                      /*onValueChanged=*/
-                                      [this, surface, target](const qreal& v) {
-                                          auto sit = m_tracks.find(TrackKey{surface, target});
-                                          if (sit == m_tracks.end() || !sit->second.target) {
-                                              return;
-                                          }
-                                          // Clamp: an overshooting curve's value is
-                                          // unbounded, so a hide leg (1 -> 0) with a
-                                          // bouncy spring drives this NEGATIVE (the
-                                          // step response peaks at 1.163 for zeta=0.5,
-                                          // so 1 - 1.163 = -0.163; at zeta=0.05 it is
-                                          // -0.85). The sibling shader leg already
-                                          // clamps for the same reason.
-                                          sit->second.target->setOpacity(qBound(qreal(0.0), v, qreal(1.0)));
-                                      },
-                                      /*onComplete=*/
-                                      [this, surface, target]() {
-                                          legCompleted(surface, target);
-                                      }));
+        // Pass legGeneration (not the default 0) to match every other
+        // completion site, so a future edit inserting consumer-visible work
+        // between the check above and this call stays generation-guarded.
+        legCompleted(surface, target, legGeneration);
+    } else {
+        auto it = m_tracks.find(TrackKey{surface, target});
+        if (it == m_tracks.end() || it->second.generation != legGeneration) {
+            return;
+        }
+        if (!it->second.opacity) {
+            // Unreachable today, but a bare return would strand pendingLegs
+            // and pin the driver — complete the leg instead, matching the
+            // shader block's discipline below.
+            legCompleted(surface, target, legGeneration);
+            return;
+        }
+        const bool opacityStarted =
+            it->second.opacity->start(fromOpacity, toOpacity,
+                                      buildSpec(
+                                          resolveProfile(m_registry, opacityProfilePath), clock,
+                                          /*onValueChanged=*/
+                                          [this, surface, target](const qreal& v) {
+                                              auto sit = m_tracks.find(TrackKey{surface, target});
+                                              if (sit == m_tracks.end() || !sit->second.target) {
+                                                  return;
+                                              }
+                                              // Clamp: an overshooting curve's value is
+                                              // unbounded, so a hide leg (1 -> 0) with a
+                                              // bouncy spring drives this NEGATIVE (the
+                                              // step response peaks at 1.163 for zeta=0.5,
+                                              // so 1 - 1.163 = -0.163; at zeta=0.05 it is
+                                              // -0.85). The sibling shader leg already
+                                              // clamps for the same reason.
+                                              sit->second.target->setOpacity(qBound(qreal(0.0), v, qreal(1.0)));
+                                          },
+                                          /*onComplete=*/
+                                          [this, surface, target]() {
+                                              legCompleted(surface, target);
+                                          }));
+        // start() returns false when the leg completed in place (zero
+        // distance — e.g. hiding an already-invisible surface — or a
+        // rejected degenerate endpoint) WITHOUT firing spec.onComplete.
+        // Complete the leg explicitly or the track hangs with
+        // pendingLegs stuck and the consumer's onComplete never fires.
+        if (!opacityStarted) {
+            legCompleted(surface, target, legGeneration);
+        }
     }
 
     if (hasScaleLeg) {
         auto it = m_tracks.find(TrackKey{surface, target});
-        if (it == m_tracks.end() || !it->second.scale) {
+        if (it == m_tracks.end() || it->second.generation != legGeneration) {
             // The opacity leg's start() (or a synchronous callback)
-            // cancelled the entry; let the cancellation stand.
+            // cancelled — or replaced — the entry; let it stand. The
+            // generation check stops this superseded leg from restarting
+            // a replacement slot's scale AV with stale from/to values.
             return;
         }
-        it->second.scale->start(fromScale, toScale,
-                                buildSpec(
-                                    resolveProfile(m_registry, scaleProfilePath), clock,
-                                    /*onValueChanged=*/
-                                    [this, surface, target](const qreal& v) {
-                                        auto sit = m_tracks.find(TrackKey{surface, target});
-                                        if (sit == m_tracks.end() || !sit->second.target) {
-                                            return;
-                                        }
-                                        sit->second.target->setScale(v);
-                                    },
-                                    /*onComplete=*/
-                                    [this, surface, target]() {
-                                        legCompleted(surface, target);
-                                    }));
+        if (!it->second.scale) {
+            // Unreachable today; complete rather than strand pendingLegs.
+            legCompleted(surface, target, legGeneration);
+            return;
+        }
+        const bool scaleStarted = it->second.scale->start(fromScale, toScale,
+                                                          buildSpec(
+                                                              resolveProfile(m_registry, scaleProfilePath), clock,
+                                                              /*onValueChanged=*/
+                                                              [this, surface, target](const qreal& v) {
+                                                                  auto sit = m_tracks.find(TrackKey{surface, target});
+                                                                  if (sit == m_tracks.end() || !sit->second.target) {
+                                                                      return;
+                                                                  }
+                                                                  // Clamp the lower bound only: an
+                                                                  // underdamped scale profile can undershoot
+                                                                  // below zero and briefly mirror the QML
+                                                                  // subtree. The opacity/shaderTime legs
+                                                                  // clamp for the same overshoot reason;
+                                                                  // scale keeps its above-1 bounce on show.
+                                                                  sit->second.target->setScale(qMax(qreal(0.0), v));
+                                                              },
+                                                              /*onComplete=*/
+                                                              [this, surface, target]() {
+                                                                  legCompleted(surface, target);
+                                                              }));
+        // Zero-distance/rejected start completes in place without firing
+        // spec.onComplete — complete the leg explicitly (see the opacity
+        // leg's matching block).
+        if (!scaleStarted) {
+            legCompleted(surface, target, legGeneration);
+        }
     }
 
     if (hasShaderLeg) {
         auto it = m_tracks.find(TrackKey{surface, target});
-        if (it == m_tracks.end() || !it->second.shaderTime || !it->second.shaderItem) {
+        if (it == m_tracks.end() || it->second.generation != legGeneration) {
+            return;
+        }
+        if (!it->second.shaderTime || !it->second.shaderItem) {
+            // Unreachable today (nothing between the attach-block write and
+            // here can null the pieces while the generation matches), but a
+            // bare return would strand pendingLegs and pin the driver —
+            // complete the leg instead, matching the false-start discipline.
+            legCompleted(surface, target, legGeneration);
             return;
         }
         const QString shaderLegProfilePath = shaderProfilePath.isEmpty() ? opacityProfilePath : shaderProfilePath;
@@ -807,52 +1022,60 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         qCDebug(lcSurfaceAnimator).nospace()
             << "shader leg start: path=" << shaderLegProfilePath << " duration=" << shaderLegProfile.effectiveDuration()
             << "ms surface=" << surface;
-        it->second.shaderTime->start(shaderFrom, shaderTo,
-                                     buildSpec(
-                                         shaderLegProfile, clock,
-                                         /*onValueChanged=*/
-                                         [this, surface, target](const qreal& v) {
-                                             auto sit = m_tracks.find(TrackKey{surface, target});
-                                             // shaderItem QPointer auto-nulls if the
-                                             // ShaderEffect's parent (the anchor) was torn
-                                             // down between ticks — bail rather than UAF.
-                                             if (sit == m_tracks.end() || !sit->second.shaderItem) {
-                                                 return;
-                                             }
-                                             // Clamp iTime to the [0, 1] contract before
-                                             // forwarding. Underdamped curves (Spring with
-                                             // zeta < 1, e.g. `bouncy`) overshoot the
-                                             // target — show legs push the lerp above 1.0
-                                             // and hide legs push it below 0.0 at each
-                                             // oscillation peak. Shaders treat iTime
-                                             // outside [0, 1] as undefined per
-                                             // AnimationShaderContract; without clamping,
-                                             // a hide leg flicks iTime negative which most
-                                             // shaders render as "more than fully gone"
-                                             // (transparent/invisible) before the spring
-                                             // oscillates back to a slightly positive
-                                             // value, producing a visible disappear→re-
-                                             // render→disappear flicker. This is a
-                                             // DELIBERATE divergence from the compositor,
-                                             // which now lets an overshooting curve's iTime
-                                             // leave [0,1] (see
-                                             // ShaderInternal::clampProgressForCurve). The
-                                             // daemon keeps the clamp: its surfaces are
-                                             // QQuickItems whose hide legs would flicker on
-                                             // an out-of-range value, and it has no
-                                             // geometry bounce to stay consistent with. So
-                                             // the same pack with the same curve bounces in
-                                             // the compositor and is flat here, on purpose.
-                                             // Geometry sync runs off the anchor's
-                                             // widthChanged/heightChanged signals (see
-                                             // syncGeometry); the per-tick callback only
-                                             // threads the time value through.
-                                             sit->second.shaderItem->setITime(qBound(qreal(0.0), v, qreal(1.0)));
-                                         },
-                                         /*onComplete=*/
-                                         [this, surface, target]() {
-                                             legCompleted(surface, target);
-                                         }));
+        const bool shaderStarted =
+            it->second.shaderTime->start(shaderFrom, shaderTo,
+                                         buildSpec(
+                                             shaderLegProfile, clock,
+                                             /*onValueChanged=*/
+                                             [this, surface, target](const qreal& v) {
+                                                 auto sit = m_tracks.find(TrackKey{surface, target});
+                                                 // shaderItem QPointer auto-nulls if the
+                                                 // ShaderEffect's parent (the anchor) was torn
+                                                 // down between ticks — bail rather than UAF.
+                                                 if (sit == m_tracks.end() || !sit->second.shaderItem) {
+                                                     return;
+                                                 }
+                                                 // Clamp iTime to the [0, 1] contract before
+                                                 // forwarding. Underdamped curves (Spring with
+                                                 // zeta < 1, e.g. `bouncy`) overshoot the
+                                                 // target — show legs push the lerp above 1.0
+                                                 // and hide legs push it below 0.0 at each
+                                                 // oscillation peak. Shaders treat iTime
+                                                 // outside [0, 1] as undefined per
+                                                 // AnimationShaderContract; without clamping,
+                                                 // a hide leg flicks iTime negative which most
+                                                 // shaders render as "more than fully gone"
+                                                 // (transparent/invisible) before the spring
+                                                 // oscillates back to a slightly positive
+                                                 // value, producing a visible disappear→re-
+                                                 // render→disappear flicker. This is a
+                                                 // DELIBERATE divergence from the compositor,
+                                                 // which now lets an overshooting curve's iTime
+                                                 // leave [0,1] (see
+                                                 // ShaderInternal::clampProgressForCurve). The
+                                                 // daemon keeps the clamp: its surfaces are
+                                                 // QQuickItems whose hide legs would flicker on
+                                                 // an out-of-range value, and it has no
+                                                 // geometry bounce to stay consistent with. So
+                                                 // the same pack with the same curve bounces in
+                                                 // the compositor and is flat here, on purpose.
+                                                 // Geometry sync runs off the anchor's
+                                                 // widthChanged/heightChanged signals (see
+                                                 // syncGeometry); the per-tick callback only
+                                                 // threads the time value through.
+                                                 sit->second.shaderItem->setITime(qBound(qreal(0.0), v, qreal(1.0)));
+                                             },
+                                             /*onComplete=*/
+                                             [this, surface, target]() {
+                                                 legCompleted(surface, target);
+                                             }));
+        // Zero-distance/rejected start completes in place without firing
+        // spec.onComplete — complete the leg explicitly (see the opacity
+        // leg's matching block). Unreachable for the 0→1 / 1→0 iTime
+        // endpoints in practice, kept for the rejected-endpoint case.
+        if (!shaderStarted) {
+            legCompleted(surface, target, legGeneration);
+        }
     }
 
     // Kick the driver — ensureDriving is idempotent. Skip if a
@@ -866,39 +1089,59 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
 /// onComplete and retire the entry. Idempotent against a missing
 /// entry. AVs are parked in m_pendingDestroy (deferred destroy)
 /// because legCompleted runs from inside the spec.onComplete of
-/// the very AV — AnimatedValue.h:547 forbids destroying *this from
-/// within a spec callback.
-void SurfaceAnimator::Private::legCompleted(PhosphorLayer::Surface* surface, QQuickItem* target)
+/// the very AV — AnimatedValue::advance()'s re-entrancy contract
+/// forbids destroying *this from within a spec callback.
+void SurfaceAnimator::Private::legCompleted(PhosphorLayer::Surface* surface, QQuickItem* target,
+                                            quint64 expectedGeneration)
 {
     const auto it = m_tracks.find(TrackKey{surface, target});
     if (it == m_tracks.end()) {
+        return;
+    }
+    if (expectedGeneration != 0 && it->second.generation != expectedGeneration) {
+        // A synchronous callback replaced the slot between our caller's
+        // decision and this call; the leg we were retiring is already gone
+        // and the decrement would belong to someone else's track.
         return;
     }
     --it->second.pendingLegs;
     if (it->second.pendingLegs > 0) {
         return;
     }
+    // Extract the Track and RETIRE the entry before any consumer-visible
+    // mutation: both teardownShaderLeg's sibling restore and the terminal
+    // opacity snap fire QML changed signals synchronously, and a consumer
+    // handler can re-enter cancel(surface) — with the entry still in
+    // m_tracks that cancel would park its AVs and erase the node under
+    // our iterator. With the entry already gone, a re-entrant cancel
+    // finds nothing and is a no-op. The AVs go to the graveyard (not
+    // destroyed here) because legCompleted runs from inside the very
+    // AV's spec.onComplete.
+    Track track = std::move(it->second);
+    m_tracks.erase(it);
+
+    const QPointer<QQuickItem> snapTarget = track.shaderExclusive ? track.target : QPointer<QQuickItem>();
+    const qreal snapOpacity = track.targetOpacity;
+    auto onComplete = std::move(track.onComplete);
+    if (track.opacity) {
+        m_pendingDestroy.push_back(std::move(track.opacity));
+    }
+    if (track.scale) {
+        m_pendingDestroy.push_back(std::move(track.scale));
+    }
+    teardownShaderLeg(surface, track);
+
     // Shader-exclusive hide: the surface stayed at full opacity while
     // the shader ran. Now snap to the terminal opacity (0.0 for hide)
-    // so the surface actually disappears.
-    if (it->second.shaderExclusive && it->second.target) {
-        it->second.target->setOpacity(it->second.targetOpacity);
+    // so the surface actually disappears. Skip the snap when the
+    // sibling restore inside teardownShaderLeg re-entered
+    // beginShow/beginHide and installed a FRESH track for this target —
+    // the nested leg owns the opacity now, and stamping our retained
+    // terminal value over its pre-state would run its whole leg from
+    // the wrong base (e.g. a nested shader show forced transparent).
+    if (snapTarget && m_tracks.find(TrackKey{surface, snapTarget.data()}) == m_tracks.end()) {
+        snapTarget->setOpacity(snapOpacity);
     }
-
-    // Move the callback + AnimatedValues out before erase so:
-    //   1. m_tracks.erase doesn't drop the std::function we're
-    //      about to invoke;
-    //   2. m_tracks.erase doesn't destroy the AnimatedValue whose
-    //      onComplete we're currently inside (deferred to graveyard).
-    auto onComplete = std::move(it->second.onComplete);
-    if (it->second.opacity) {
-        m_pendingDestroy.push_back(std::move(it->second.opacity));
-    }
-    if (it->second.scale) {
-        m_pendingDestroy.push_back(std::move(it->second.scale));
-    }
-    teardownShaderLeg(surface, it->second);
-    m_tracks.erase(it);
     if (onComplete) {
         onComplete();
     }

@@ -211,6 +211,11 @@ public:
         int pendingLegs = 0;
         bool shaderExclusive = false; ///< Shader replaces motion legs
         qreal targetOpacity = 1.0; ///< Snapped on completion when shaderExclusive
+        /// Install stamp from m_nextTrackGeneration. runLeg's post-write
+        /// re-find compares it so a slot REPLACED by a re-entrant
+        /// beginShow/beginHide (not merely erased) is never adopted by
+        /// the outer, superseded leg.
+        quint64 generation = 0;
         ISurfaceAnimator::CompletionCallback onComplete;
         /// Per-leg `iFrame` counter pushed to the shader item by
         /// `pushDynamicShaderUniforms`. Resets to 0 on each fresh attach
@@ -255,7 +260,12 @@ public:
                 const QString& opacityProfilePath, qreal fromScale, qreal toScale, const QString& scaleProfilePath,
                 const QString& shaderEffectId, const QString& shaderProfilePath, const QVariantMap& shaderParameters,
                 ISurfaceAnimator::CompletionCallback onComplete);
-    void legCompleted(PhosphorLayer::Surface* surface, QQuickItem* target);
+    /// @p expectedGeneration, when non-zero, retires a leg only if the slot
+    /// still holds that generation. False-start call sites (AnimatedValue::
+    /// start() returning false) MUST pass it: start()'s value write can fire
+    /// a synchronous QML handler that cancels and installs a fresh leg, and
+    /// an unguarded decrement would then retire the NEW leg early.
+    void legCompleted(PhosphorLayer::Surface* surface, QQuickItem* target, quint64 expectedGeneration = 0);
     void tickAll();
     void pushDynamicShaderUniforms(Track& track, qreal deltaSecs);
     void seedShaderUniformsAtAttach(Track& track);
@@ -315,9 +325,14 @@ public:
     /// auto-disconnect) exactly one slot per surface. Map entries are
     /// removed when the surface dies (slot self-removes its own key).
     QHash<PhosphorLayer::Surface*, QMetaObject::Connection> m_destroyedConnections;
+    /// Monotonic source for Track::generation install stamps (see the
+    /// Track field's doc); never reset, starts at 1 so a default-
+    /// constructed Track (generation 0) can never match a live leg.
+    quint64 m_nextTrackGeneration = 1;
     /// Graveyard for AVs whose final tick fired legCompleted from
-    /// inside their own spec.onComplete (AnimatedValue.h:547 forbids
-    /// destroying *this from a spec callback). Drained at the start
+    /// inside their own spec.onComplete (AnimatedValue::advance()'s
+    /// re-entrancy contract forbids destroying *this from a spec
+    /// callback). Drained at the start
     /// of the next tickAll. MUST be declared after m_clock and
     /// before m_driverTimer so the destruction order is sound.
     std::vector<std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>>> m_pendingDestroy;

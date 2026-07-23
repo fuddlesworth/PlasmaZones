@@ -20,13 +20,13 @@
  * the desktop switch, the fullscreen-effect claim — so a hand-edited
  * per-event profile JSON cannot arm a multi-minute animation. Four call
  * sites clamp against them (keep in sync when adding one):
- *  - the settings load (`daemon_bringup.cpp`),
+ *  - the settings load (`daemon_settings.cpp`),
  *  - the Rule timing slot, ONCE, in `resolveAnimationMotionProfile`
  *    (`shader_resolve.cpp`). The shader resolver deliberately does NOT
  *    read that slot: `resolveEventMotionProfile` owns it and feeds both
  *    the animator leg and the shader leg from one read and one clamp,
  *  - `PlasmaZonesEffect::resolveEventMotionProfile`
- *    (`shader_transitions.cpp`), which bounds the motion cascade's
+ *    (`shader_config_dbus.cpp`), which bounds the motion cascade's
  *    resolved DURATION at the source,
  *  - `ShaderInternal::resolveTransitionLifetimeMs`
  *    (`kwin-effect/plasmazoneseffect/shader_internal.h`), which bounds a
@@ -119,9 +119,9 @@ constexpr int MaxAnimationStaggerIntervalMs = 200;
 ///    integrator, and the one every spring-curve animation runs on,
 ///  - the daemon's overlay shader push (`overlayservice/shader.cpp`),
 ///  - the daemon-side `SurfaceAnimator`'s shader delta
-///    (`surfaceanimator.cpp`),
+///    (`surfaceanimator_tick.cpp`),
 ///  - the compositor's `iTimeDelta` uniform
-///    (`plasmazoneseffect/paint_pipeline.cpp`),
+///    (`plasmazoneseffect/paint_shader_window.cpp`),
 ///  - `ShaderInternal::easeProgress`
 ///    (`plasmazoneseffect/shader_internal.h`), the SINGLE clamp for the
 ///    spring integrator's dt on BOTH compositor paint paths — the
@@ -162,14 +162,17 @@ constexpr float MaxShaderTimeDeltaSeconds = 0.1f;
 ///
 /// It must be enforced by the CONSUMERS rather than inside `Curve::evaluate`,
 /// because a third-party curve supplies its own `evaluate()` and would simply
-/// not call it. Both consumers bound against it, and they have to agree: the
+/// not call it. All three consumers bound against it, and they have to agree: the
 /// shader and the geometry animator are handed the same curve for the same
 /// window on the same event, so a bound applied to one and not the other would
 /// render the pixels and the window frame at different overshoots.
 ///  - `AnimatedValue` (`AnimatedValue.h`, `AnimatedValue_geometric.h`) — the
 ///    geometry animator, at the lerp and at the swept-bounds sampler,
 ///  - `ShaderInternal::clampProgressForCurve`
-///    (`plasmazoneseffect/shader_internal.h`) — the shader's `iTime`.
+///    (`plasmazoneseffect/shader_internal.h`) — the shader's `iTime`,
+///  - `PhosphorMotionAnimation` (`src/phosphormotionanimation.cpp`) — the
+///    QML-facing bezier sampler, which bounds the same progress before it
+///    reaches a QML property.
 ///
 /// Do NOT apply it to a stateful curve's CurveState::value. That field is the
 /// integrator's own state, fed back into the next `step()`; clamping it would

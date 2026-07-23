@@ -5,6 +5,7 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QTest>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
@@ -111,10 +112,9 @@ private Q_SLOTS:
         // operator== must observe appliesTo: two effects differing ONLY in
         // their declared event classes are not equal. Without the dedicated
         // branch this would falsely compare equal.
-        AnimationShaderEffect c = a;
         AnimationShaderEffect d = a;
         d.appliesTo = QStringList{QStringLiteral("geometry")};
-        QVERIFY(c != d);
+        QVERIFY(a != d);
     }
 
     /// Multipass / wallpaper / depth / buffer fields survive a full
@@ -340,6 +340,9 @@ private Q_SLOTS:
         // throw or smuggle garbage in; the field reduces to universal/valid.
         QJsonObject scalar = obj;
         scalar.insert(QLatin1String("appliesTo"), QStringLiteral("geometry"));
+        // The scalar shape now warns on the journal — expect it so the log
+        // stays clean AND the warning's existence is pinned.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("appliesTo .* is not an array")));
         QVERIFY(AnimationShaderEffect::fromJson(scalar).appliesTo.isEmpty());
 
         QJsonObject mixed;
@@ -480,6 +483,39 @@ private Q_SLOTS:
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopSwitch));
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopPeek));
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::Desktop));
+    }
+
+    /// Compositor-only classification: a pack whose declared classes never
+    /// include `appearance` can only execute in the kwin-effect — the daemon
+    /// skips its warm bake and SurfaceAnimator refuses to attach it. A
+    /// universal pack (empty appliesTo) and any pack declaring `appearance`
+    /// remain daemon-capable.
+    void testShaderEffectIsCompositorOnly()
+    {
+        using PhosphorAnimationShaders::shaderEffectIsCompositorOnly;
+
+        auto effectWith = [](std::initializer_list<QString> classes) {
+            AnimationShaderEffect e;
+            e.id = QStringLiteral("probe");
+            e.fragmentShaderPath = QStringLiteral("effect.frag");
+            e.appliesTo = QStringList(classes);
+            return e;
+        };
+
+        // Universal → daemon-capable.
+        QVERIFY(!shaderEffectIsCompositorOnly(effectWith({})));
+        // Appearance in any combination → daemon-capable.
+        QVERIFY(!shaderEffectIsCompositorOnly(effectWith({QStringLiteral("appearance")})));
+        QVERIFY(!shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry"), QStringLiteral("appearance")})));
+        // Each compositor-only class alone, and combined, → compositor-only.
+        QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("desktop")})));
+        QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry")})));
+        QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("move")})));
+        QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry"), QStringLiteral("move")})));
+        // Default-constructed (invalid) effect: empty appliesTo → not
+        // compositor-only, so runLeg's unknown-id resolve stays a plain
+        // no-shader leg rather than tripping the compositor-only refusal.
+        QVERIFY(!shaderEffectIsCompositorOnly(AnimationShaderEffect{}));
     }
 };
 

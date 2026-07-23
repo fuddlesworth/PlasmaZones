@@ -3,8 +3,8 @@
 //
 // Bounce transition — the window drops in from above its frame and
 // settles with a decaying bounce. Inspired by liixini/shaders' niri
-// bounce (https://github.com/liixini/shaders/tree/main/bounce); the
-// oscillation is reworked here so the motion reads as an actual bounce.
+// bounce; the oscillation is reworked here so the motion reads as an
+// actual bounce.
 //
 // MOTION MODEL — the window is rigidly translated along its own
 // vertical axis by `offset`, the height (measured in window-heights) it

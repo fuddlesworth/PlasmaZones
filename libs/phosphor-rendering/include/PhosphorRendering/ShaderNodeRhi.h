@@ -638,6 +638,12 @@ private:
     /// the source provider's QRhiTexture comes from a different QRhi than our
     /// own (cross-window provider). Prevents log spam.
     bool m_warnedForeignRhi = false;
+    /// One-shot latches for the audio-spectrum diagnostics. Both conditions
+    /// persist across frames by design (an oversized vector stays oversized;
+    /// the create() retry is per-frame), so without a latch each would log at
+    /// spectrum cadence. Cleared in releaseRhiResources() beside the RHI latch.
+    bool m_warnedAudioTruncated = false;
+    bool m_warnedAudioCreateFailed = false;
     /// 1×1 transparent fallback texture used when a source provider is set
     /// but has not yet produced a usable QRhiTexture (or its texture lives
     /// on a foreign QRhi). Bound at slot 0 instead of falling through to

@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-FileCopyrightText: gl-transitions contributors
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Desktop Slide — full-screen virtual-desktop push. Both desktops translate in
@@ -9,7 +10,6 @@
 #include <desktop_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     // Direction: follow the actual switch (iSwitchDelta via switchDirection)
     // when p_followSwitch is on, so switching left slides left and switching
     // down slides down; the configured p_dirX / p_dirY vector is the fallback
@@ -37,7 +37,4 @@ vec4 pTransition(vec2 uv, float t) {
     // reveal the incoming desktop sliding in behind.
     float fromSide = step(0.0, p.x) * step(p.x, 1.0) * step(0.0, p.y) * step(p.y, 1.0);
     return mix(getToColor(f), getFromColor(f), fromSide);
-#else
-    return vec4(0.0);
-#endif
 }

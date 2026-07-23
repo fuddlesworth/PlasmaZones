@@ -1,24 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Snap transition — ported from liixini/shaders niri shader
-// (https://github.com/liixini/shaders/tree/main/snap). Thanos-style
-// snap — the surface shatters into 10 randomized layers that fly toward
-// a vanishing point. Asymmetric direction and re-form curves.
+// Snap transition — a Thanos-style snap where the surface shatters into
+// 10 randomized layers that fly toward a vanishing point, with asymmetric
+// direction and re-form curves. Inspired by liixini/shaders' niri snap
+// shader.
 //
-// Niri's snap ships asymmetric close.glsl/open.glsl — close blows
-// pixels OUT toward `target = vec2(1.0, 0.0)` driven by `p` (loop
-// progresses 0→1), open snaps pixels BACK FROM target driven by
-// `rp = 1.0 - p` (loop progresses 1→0). This is a pIn/pOut pair: the
-// harness feeds forward 0→1 `t` to both legs (so each branch's niri `p`
-// is just `t`) and dispatches the matching body by leg direction
-// (`windowFadingIn`).
+// The legs are asymmetric — close blows pixels OUT toward
+// `target = vec2(1.0, 0.0)` driven by `p` (loop progresses 0→1), open
+// snaps pixels BACK FROM target driven by `rp = 1.0 - p` (loop progresses
+// 1→0). This is a pIn/pOut pair: the harness feeds forward 0→1 `t` to both
+// legs (so each branch's `p` is just `t`) and dispatches the matching body
+// by leg direction (`windowFadingIn`).
 //
-// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
-// == texture coords here), so the matrix multiply is dropped and
-// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
-// rewritten to `texture` (GLSL 4.50 core) inline. niri's
-// `niri_random_seed` is replaced by `surfaceSeed()` from `<noise.glsl>`.
+// Geometry and texture coordinates coincide here, so
+// `texture(uTexture0, uv)` samples directly, and per-instance variation
+// comes from `surfaceSeed()` in `<noise.glsl>`.
 
 // The harness supplies #version, <animation_uniforms.glsl>, the in/out,
 // and main(). noise.glsl is pack-specific, so it stays here.
@@ -27,18 +24,18 @@
 // p_targetX / p_targetY / p_layerSpread / p_layerStagger
 // (customParams[0].xyzw) are generated from metadata.json. Both legs share
 // the same params. `p_layerSpread` controls the per-layer x-jitter range
-// (default 0.16 reproduces niri's `-0.08 + lh * 0.16`, y scaled to half for
-// niri's 2:1 x:y ratio). The 10-iteration loop bound stays a literal — GLSL
+// (default 0.16 gives a `-0.08 + lh * 0.16` x-jitter, y scaled to half for
+// a 2:1 x:y ratio). The 10-iteration loop bound stays a literal — GLSL
 // requires a constant for-loop bound and the matching `floor(... * num_layers)`
 // step must agree, so num_layers cannot be a runtime parameter.
 
 // `uv` is vTexCoord; `t` is the forward 0→1 leg progress (the harness applies
-// legProgress()); `windowFadingIn` selects the niri open vs close body. The
+// legProgress()); `windowFadingIn` selects the open vs close body. The
 // per-layer convergence ease uses `tt` (named to avoid shadowing `t`).
 vec4 snapBody(vec2 uv, float t, bool windowFadingIn) {
     vec4 result;
     if (!windowFadingIn) {
-        // ── niri close.glsl body (forward progress p = t) ──
+        // ── close-leg body (forward progress p = t) ──
         float p = t;
         float seed = surfaceSeed() * 100.0;
 
@@ -77,7 +74,7 @@ vec4 snapBody(vec2 uv, float t, bool windowFadingIn) {
 
         result = base_color * base_alpha + inner * (1.0 - base_alpha);
     } else {
-        // ── niri open.glsl body (forward progress p = t) ──
+        // ── open-leg body (forward progress p = t) ──
         float p = t;
         float seed = surfaceSeed() * 100.0;
         float rp = 1.0 - p;

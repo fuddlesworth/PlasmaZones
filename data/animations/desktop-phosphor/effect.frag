@@ -37,8 +37,6 @@ vec3 fluxGradient(float t) {
     return c;
 }
 
-#ifdef PLASMAZONES_KWIN
-
 // Distance from p to segment ab.
 float sdSegment(vec2 p, vec2 a, vec2 b) {
     vec2 pa = p - a;
@@ -64,8 +62,9 @@ vec2 graphNodePos(vec2 cell) {
 // idiom) so proj spans exactly [0,1] corner-to-corner for ANY direction. The
 // old fixed * 0.7071 was sized for the diagonal only: an axis-aligned switch
 // (the common left/right case under p_followSwitch) compressed proj to
-// [0.15, 0.85], so the first node lit at t ≈ 0.12 and the flood was done by
-// t ≈ 0.79 — the same dead head/tail phosphor-peek had, which an ease-out
+// [0.15, 0.85], so the first node lit at t ≈ 0.11 and the flood was done by
+// t ≈ 0.89 worst-case (same basis as the 0.98 budget figure below) — the
+// same dead head/tail phosphor-peek had, which an ease-out
 // progress curve stretches into a visible hang on a settled screen. The
 // activation window's budget [0.02, 0.77] is sized against the flood: the
 // slowest pixel clears at a_max + (0.12 + 1.13) / floodSpeed ≈ 0.98, so the
@@ -79,14 +78,11 @@ float nodeActivation(vec2 nodePos, vec2 dir, vec2 extent) {
     return 0.02 + proj * 0.61 + stagger * 0.14;
 }
 
-#endif // PLASMAZONES_KWIN
-
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     // ── Graph space: aspect-corrected uv scaled by circuit density, same
     // construction as phosphor-flux's signal-graph layer. ──
     vec2 res = resolutionSafe();
-    float aspect = res.x / max(res.y, 1.0);
+    float aspect = res.x / res.y; // res is resolutionSafe(): each axis already floored at 1.0
     float scale = max(p_graphScale, 2.0);
     vec2 extent = vec2(aspect, 1.0) * scale;
     vec2 q = uv * extent;
@@ -97,12 +93,16 @@ vec4 pTransition(vec2 uv, float t) {
     // fallback and the forced direction when it is off. The default (1, 1)
     // keeps the brand's top-left-to-bottom-right diagonal.
     vec2 cfg = vec2(p_dirX, p_dirY);
-    vec2 dir = normalize(((p_followSwitch > 0.5) ? switchDirection(cfg) : cfg)
-                         + vec2(1.0e-6, 0.0));
+    // Zero-direction guard: fall back to the brand diagonal instead of
+    // epsilon-nudging into normalize (tiny opposing components can still
+    // cancel a nudge into NaN — same guard idiom as phosphor-peek).
+    vec2 rawDir = (p_followSwitch > 0.5) ? switchDirection(cfg) : cfg;
+    vec2 dir = dot(rawDir, rawDir) > 1.0e-6 ? normalize(rawDir) : normalize(vec2(1.0, 1.0));
 
-    // Feature sizes in graph units, derived from pixels so traces stay
-    // hairline and pulses stay compact at any resolution.
-    float pxInGraph = scale / max(res.y, 1.0);
+    // Feature sizes in graph units, derived from DEVICE pixels (iResolution is
+    // device-sized on the desktop pass), so traces stay hairline and pulses
+    // compact at any resolution — finer on a scaled output.
+    float pxInGraph = scale / res.y;
     float lineW  = 1.5 * pxInGraph;
     float nodeR  = 3.0 * pxInGraph;
     float pulseR = 5.0 * pxInGraph;
@@ -205,7 +205,8 @@ vec4 pTransition(vec2 uv, float t) {
 
     // reveal: 0 = still outgoing desktop .. 1 = incoming desktop. The
     // completion floor guarantees a clean t = 1 endpoint even for a pixel
-    // pathologically far from every gated node.
+    // pathologically far from every node (the worst-case activation plus
+    // travel time lands at ~0.98).
     float reveal = smoothstep(0.0, 0.12, m);
     reveal = max(reveal, smoothstep(0.92, 1.0, t));
 
@@ -220,7 +221,14 @@ vec4 pTransition(vec2 uv, float t) {
     float sparkle = 0.9 + 0.2 * classicHash(floor(uv * res / 2.0)
                                             + floor(float(iFrame) * 0.2));
     vec3 frontCol = fluxGradient(clamp(t * 1.5 - 0.15, 0.0, 1.0));
-    col += frontCol * front * front * clamp(p_glow, 0.0, 2.0) * 0.5 * sparkle;
+    // Fade the rim in over the first 5% of the leg: the band's -0.30 lead
+    // puts the earliest-activating nodes inside it already at t=0, and an
+    // ungated rim pops in on the very first frame against the previously
+    // plain desktop. The settle side needs no gate (front is negligible by
+    // t=1), and a full env gate would extinguish the rim on the last-landing
+    // fronts, so gate the ramp-in only.
+    float frontIn = smoothstep(0.0, 0.05, t);
+    col += frontCol * front * front * frontIn * clamp(p_glow, 0.0, 2.0) * 0.5 * sparkle;
 
     // Additive circuit, gated by the global envelope and dimmed where the
     // incoming desktop has already settled so it never lingers as residue.
@@ -228,9 +236,11 @@ vec4 pTransition(vec2 uv, float t) {
                   * mix(1.0, 0.25, reveal) * clamp(p_glow * 0.5 + 0.5, 0.0, 1.5);
 
     // Two opaque desktops blended stay opaque — the pass draws with blending
-    // off and replaces the screen, so alpha is a constant 1.
-    return vec4(clamp(col, 0.0, 1.0), 1.0);
-#else
-    return vec4(0.0);
-#endif
+    // off and replaces the screen, so alpha is a constant 1. No upper clamp:
+    // crossFade is convex over the two captures, the settle dimmer is
+    // multiplicative in [0.25, 1], and the rim + circuit terms only add
+    // non-negative colour — clamping would crush HDR capture values the
+    // blend never created (the crush phosphor-peek's tail comment warns
+    // about).
+    return vec4(col, 1.0);
 }

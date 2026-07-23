@@ -15,7 +15,6 @@
 // without re-premultiplying, so this returns rgb already scaled by alpha,
 // plus an additive cyan front glow (rgb > alpha is intentional emissive).
 
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
 // ── Hex helpers ────────────────────────────────────────────────────────────
@@ -43,7 +42,11 @@ vec4 pTransition(vec2 uv, float t)
     vec2 scaled   = px / hexSize;
     vec2 hex      = hexLocal(scaled);
     float d       = hexDist(hex);
-    vec2 cellId   = floor((scaled - hex) / vec2(1.0, 1.732));
+    // Hash the cell's own center. A floor() of the center over the row pitch
+    // collapses each base-lattice hex and its offset-lattice diagonal
+    // neighbour onto one id, so adjacent pairs would pop and stutter in
+    // lockstep; the raw center is unique per hex.
+    vec2 cellId   = scaled - hex;
     float cellRand = niriHash(cellId);
 
     // ── Per-cell reveal threshold: diagonal data sweep blended with random
@@ -65,7 +68,11 @@ vec4 pTransition(vec2 uv, float t)
 
     // Per-cell flicker on the front: cells stutter as they snap in. Driven by
     // iFrame (monotonic on BOTH legs — see glitch) so the reverse leg gets a
-    // fresh stutter rather than a reverse replay.
+    // fresh stutter rather than a reverse replay. Accepted trade-off, same as
+    // phosphor-vortex's spin: an iFrame-keyed rate is refresh-rate dependent,
+    // so the stutter runs ~2.4x faster at 144 Hz than at 60 Hz. Keying it to
+    // iTime instead would make the stutter replay in reverse on the close leg,
+    // which reads worse than the rate variance.
     float flick        = niriHash(cellId + floor(float(iFrame) * 0.25));
     float frontFlicker = mix(1.0, 0.35 + 0.65 * flick, edge);
 

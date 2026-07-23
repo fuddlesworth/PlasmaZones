@@ -36,9 +36,13 @@
 // also differs: the kwin path multiplies `position` by
 // `modelViewProjectionMatrix`, the daemon emits clip-space directly.
 // See `kKwinDefaultVertexSource` in
-// `kwin-effect/plasmazoneseffect/shader_transitions.cpp` and
+// `kwin-effect/plasmazoneseffect/shader_textures.cpp` and
 // `kDefaultVertexShaderSource` in
-// `libs/phosphor-rendering/src/shadereffect.cpp`.
+// `libs/phosphor-rendering/src/shadereffect.cpp`. The desktop-switch pass
+// is a THIRD source of the same invariant: `kDesktopQuadVertexSource`
+// (`kwin-effect/transitions/desktoptransitionshader.cpp`) passes texCoord
+// through unflipped and gets Y-down from the blend quad's own vertex
+// texcoords instead.
 //
 // Surface texture: the redirected surface is stored in a Y-up texture
 // on the kwin path (KWin's bottom-origin FBO) and a Y-down texture on
@@ -53,12 +57,13 @@
 // `static_assert(offsetof(...))` in `<PhosphorShaders/BaseUniforms.h>`
 // for every BASE field declared below (through iIsReversed at 660); the
 // anchor-extension tail (iSurfaceScreenPos .. iAnchorRectInTexture,
-// bytes 672-719, 720 total) is supplied by AnimationUniformExtension and pinned by
-// the size static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
+// bytes 672-719, 720 total) is supplied by AnimationUniformExtension and
+// pinned by the size static_asserts in
+// `<PhosphorAnimation/AnimationUniformExtension.h>`.
 // If any assert fails after a C++-side change, this header has to move
 // in lockstep. The bake test in
-// `tests/unit/ui/test_animation_shader_bake.cpp` surfaces GLSL-side
-// drift by running `qsb` over every built-in shader.
+// `tests/unit/ui/shaders/test_animation_shader_bake.cpp` surfaces
+// GLSL-side drift by running `qsb` over every daemon-eligible shader.
 
 #ifndef PLASMAZONES_ANIMATION_UNIFORMS_GLSL
 #define PLASMAZONES_ANIMATION_UNIFORMS_GLSL
@@ -101,11 +106,12 @@ uniform vec4 customColors[16];
 // `iAudioSpectrumSize` is likewise absent from THIS header on the kwin
 // branch, but it is not a dead end: the opt-in audio module
 // (data/animations/shared/audio.glsl) declares it as a default-block
-// uniform alongside the `uAudioSpectrum` sampler, and paint_pipeline.cpp
-// pushes both per frame for packs that include the module. A pack that
-// reaches for it WITHOUT the module still gets the compile error.
+// uniform alongside the `uAudioSpectrum` sampler, and
+// paint_shader_window.cpp pushes both per frame for packs that include
+// the module. A pack that reaches for it WITHOUT the module still gets
+// the compile error.
 // `iTextureResolution[4]` IS populated on the kwin path: the per-effect
-// uTexture<N> setter loop in `paint_pipeline.cpp::paintWindow` writes the
+// uTexture<N> setter loop in `paint_shader_window.cpp` writes the
 // pixel size of each user texture into this uniform array before
 // `drawWindow`. Listed here distinct from the "absent on kwin" set above
 // (iChannelResolution, iAudioSpectrumSize) so a future reader doesn't
@@ -175,11 +181,13 @@ uniform float iWindowOpacity;
 //
 // Lifecycle: populated on every leg attach (alongside `iAnchorPosInFbo`
 // / `iAnchorSize`) and on every geometry change while the leg is live.
-// kwin-effect: `paint_pipeline.cpp::paintWindow`'s
+// kwin-effect: `paint_shader_window.cpp`'s
 // `cached->iAnchorRectInTextureLoc` setUniform site writes the value
-// computed by `ShaderInternal::computeTextureSubRect(frameGeo,
-// expandedGeo)`. Daemon: `SurfaceAnimator::syncShaderGeometryNow` pushes
-// it through `AnimationUniformExtension`. Both stamp the value before
+// computed by `ShaderInternal::computeTextureSubRect(anchorGeo,
+// expandedGeo)` for surface-extent legs; anchor-extent legs carry the
+// (0, 0, 1, 1) identity. Daemon:
+// `SurfaceAnimator::syncShaderGeometryNow` pushes it through
+// `AnimationUniformExtension`. Both stamp the value before
 // the first painted frame, so a fragment never sees the GL default
 // `vec4(0)` — `surfaceColor` would otherwise sample the corner texel
 // for every pixel and flash a one-frame solid colour.
@@ -283,7 +291,11 @@ layout(std140, binding = 0) uniform AnimationUniforms {
     int _appField0;              // offset 88  — consumer escape-hatch int (daemon-only)
     int _appField1;              // offset 92  — consumer escape-hatch int (daemon-only)
     vec4 iMouse;                 // offset 96  — cursor position in shader-local pixels
-                                 //              (.xy = position, (-1,-1) when off-region)
+                                 //              (.xy = position, (-1,-1) when off-region;
+                                 //              .zw = kwin-path position normalised to the
+                                 //              frame size, negative under the same
+                                 //              off-region sentinel — see kIMouse in
+                                 //              AnimationShaderContract.h)
     vec4 iDate;                  // offset 112 — year, month, day, seconds-since-midnight
     vec4 customParams[8];        // offset 128 (128 bytes) — per-effect float/int/bool parameter slots
     vec4 customColors[16];       // offset 256 (256 bytes) — per-effect color parameter slots
@@ -316,9 +328,10 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              in logical-screen pixels;
                                  //              .zw = (screenWidth, screenHeight).
                                  //              Populated by SurfaceAnimator (daemon)
-                                 //              and paint_pipeline (kwin-effect) once
-                                 //              per leg attach + on every anchor /
-                                 //              window geometry change.
+                                 //              and paint_shader_window.cpp
+                                 //              (kwin-effect) once per leg attach +
+                                 //              on every anchor / window geometry
+                                 //              change.
     vec2 iAnchorSize;            // offset 688 (8 bytes) — anchor (card) pixel size
                                  //              in logical pixels. Decoupled from
                                  //              iResolution because Qt's QQuickItem
@@ -472,6 +485,25 @@ vec2 surfacePadRel() {
 #endif
 }
 
+// NOTE on the pad-widened card mask. Several geometry packs hand-inline the
+// same four lines against this pad:
+//     vec2 pad = surfacePadRel();
+//     vec2 fw = max(fwidth(cuv), vec2(1.0e-4));
+//     vec2 edge = min(smoothstep(vec2(0.0), fw, cuv + pad),
+//                     smoothstep(vec2(0.0), fw, 1.0 + pad - cuv));
+//     float mask = edge.x * edge.y;
+// A shared helper does NOT belong in this header: `fwidth()` is a
+// fragment-stage function, and this header is included by the VERTEX stage
+// too (shared/animation.vert and nearly every per-pack effect.vert), so a
+// file-scope helper calling fwidth() here fails those vertex compiles.
+//
+// The fragment-only home already exists: `boundaryMaskAA(uv, pad)` in
+// shared/noise.glsl, which no vertex shader includes. bounce and fly-in use
+// it. It differs from the inline form only in where the AA band sits — it
+// centres the band on the geometric edge, the inline form biases it inside —
+// so packs that gate on `mask <= 0.0` would drop a slightly different set of
+// fragments if migrated. Migrate deliberately, not mechanically.
+
 // ─── Direction helpers (T1.5) ──────────────────────────────────────────
 // A transition plays forward (in: window.open / snapIn / show) or reverse
 // (out: window.close / snapOut / hide). The runtime exposes that as
@@ -480,8 +512,9 @@ vec2 surfacePadRel() {
 // daemon UBO and the kwin default-block branch, so a shader uses them
 // identically on either runtime.
 
-// Direction as a clean boolean — replaces the `iIsReversed == 1` exact-
-// equality test (branching on `!= 0` was the documented footgun).
+// Direction as a clean boolean. Packs used to hand-inline the comparison at
+// every use site; this gives the contract ONE named form, so a pack can no
+// longer spell the test differently from its siblings.
 #define p_reversed (iIsReversed == 1)
 
 // Un-flipped, always-forward 0→1 leg progress. Bundled shaders used to
@@ -514,7 +547,7 @@ vec2 resolutionSafe() {
 // guarded default below is identity.
 //
 // The kwin-effect WINDOW-animation path overrides it before this header
-// is included: shader_transitions.cpp splices KWin's colormanagement.glsl
+// is included: shader_textures.cpp splices KWin's colormanagement.glsl
 // plus `#define PZ_FINALIZE_COLOR(c) pzFinalizeColor(c)` right after
 // `#version`, converting the shader's sRGB output into the output's
 // blending space. Installing a shader via OffscreenEffect::setShader
