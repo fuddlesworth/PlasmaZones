@@ -118,12 +118,13 @@ public:
     /// Surface origin in **logical** screen pixels (.xy) plus host
     /// screen dimensions (.zw). Pushed by SurfaceAnimator on every leg
     /// attach and on each anchor / window geometry signal. Logical-
-    /// pixel units; `iResolution` lands in the UBO multiplied by DPR
-    /// (`shadereffect.cpp::syncCustomNode`) so its units differ —
-    /// shaders that need FBO size to be in the SAME unit as the
-    /// extension fields should read it from `.zw` here (which mirrors
-    /// the QQuickWindow's contentItem size and equals the wl_surface
-    /// rect for screen-sized OSD / popup surfaces on the daemon path).
+    /// pixel units — the same unit `iResolution` carries on this path,
+    /// because this extension's `requiresPhysicalResolution()` returns
+    /// false and `shadereffect.cpp::syncCustomNode` therefore skips the
+    /// DPR multiply. `.zw` mirrors the QQuickWindow's contentItem size
+    /// and equals the wl_surface rect for screen-sized OSD / popup
+    /// surfaces on the daemon path, so it is an equivalent screen-size
+    /// source when a shader wants it independent of the FBO bounds.
     /// Initial value (0,0,0,0) — vertex shaders that read `.zw` for
     /// screen size MUST guard against zero (`max(.z, 1.0)`) to avoid
     /// NaN before the first push lands.
@@ -149,9 +150,10 @@ public:
     /// `syncShaderGeometryNow`. Logical-pixel units to keep magic-
     /// constant tuning that consumes this as a standalone pixel count
     /// stable across DPR settings (broken-glass's `uSize`, tv-glitch's
-    /// row offsets). Shaders that need to compute ratios involving FBO
-    /// size should pair this with `iSurfaceScreenPos.zw` (also
-    /// logical), NOT with `iResolution` (physical).
+    /// row offsets). Ratios against `iSurfaceScreenPos.zw` or against
+    /// `iResolution` are both unit-consistent here — the animation
+    /// path publishes `iResolution` in logical pixels too (see
+    /// `requiresPhysicalResolution()` above).
     void setIAnchorSize(const QSizeF& size)
     {
         QMutexLocker lock(&m_mutex);

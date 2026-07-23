@@ -631,8 +631,9 @@ Consequences for Tier 1:
 - **T1.2 validation must bake both branches.** A valid animation shader is one that
   compiles **with and without** `PLASMAZONES_KWIN`. The validator should compile
   both; there is already `tests/unit/ui/shaders/test_animation_shader_bake.cpp` baking every
-  built-in animation shader through `qsb` — extend that harness rather than
-  duplicating it, and have the CLI share its code.
+  daemon-eligible animation shader's vertex stage through `qsb` (fragment / UBO
+  coverage lives in `test_animation_shader_preamble_bake`) — extend those
+  harnesses rather than duplicating them, and have the CLI share their code.
 - **Multipass / wallpaper are daemon-only** on this path (the kwin
   `OffscreenEffect` is single-pass). The validator should *warn*, not error, when an
   animation shader uses daemon-only features — they degrade to single-pass on the

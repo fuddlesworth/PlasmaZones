@@ -33,6 +33,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <memory>
 
 using PlacementEngineBase = PhosphorEngine::PlacementEngineBase;
 

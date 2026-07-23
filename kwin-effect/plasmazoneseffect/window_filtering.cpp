@@ -681,10 +681,12 @@ bool PlasmaZonesEffect::isDaemonReady(const char* methodName) const
 
 KWin::EffectWindow* PlasmaZonesEffect::getActiveWindow() const
 {
-    // Prefer KWin's active (focused) window when it is manageable and on current desktop
+    // Prefer KWin's active (focused) window when it is manageable and on current
+    // desktop. Skip a close-grabbed dying window here for the same reason the
+    // fallback loop does — it must not become the navigation / snap-assist anchor.
     KWin::EffectWindow* active = KWin::effects->activeWindow();
-    if (active && active->isOnCurrentActivity() && active->isOnCurrentDesktop() && !active->isMinimized()
-        && shouldHandleWindow(active)) {
+    if (active && !active->isDeleted() && active->isOnCurrentActivity() && active->isOnCurrentDesktop()
+        && !active->isMinimized() && shouldHandleWindow(active)) {
         return active;
     }
     // Fallback: topmost manageable window on current desktop (e.g. when activeWindow() is

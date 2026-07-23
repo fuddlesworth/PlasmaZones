@@ -307,7 +307,6 @@ private Q_SLOTS:
         auto* surface = f.create(std::move(cfg));
         QVERIFY(surface);
 
-        bool completed = false;
         // We can't directly hook the animator's onComplete (it's invoked
         // from inside Surface::Impl::driveWarmOrShow via the captured
         // lambda). Instead we observe the QQuickItem's opacity reaching
@@ -315,7 +314,6 @@ private Q_SLOTS:
         // value and the runLeg's pendingLegs counter then erases the
         // tracking entry.
         surface->show();
-        Q_UNUSED(completed);
 
         QQuickItem* target = animatedItem(surface);
         QVERIFY(target);
@@ -464,11 +462,12 @@ private Q_SLOTS:
         delete surface;
     }
 
-    /// Regression: beginShow superseding a mid-flight beginHide must pick
-    /// up from the live opacity instead of jumping back to 0. Pre-fix,
-    /// the show path hardcoded fromOpacity=0; with the live-from change
-    /// a re-show while the hide is at 0.5 fades 0.5→1.0, not 0.5→0→1.0.
-    void show_after_partial_hide_starts_from_live_opacity()
+    /// A re-show over a partially-faded target must reset to 0 and fade
+    /// up, never resume from the stale partial opacity: beginShow
+    /// hardcodes fromOpacity=0 (surfaceanimator.cpp) to prevent ghost
+    /// frames when geometry changes between hide and show. Only the
+    /// HIDE side reads live opacity (hide-while-showing supersession).
+    void show_after_partial_hide_resets_to_zero()
     {
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
