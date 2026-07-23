@@ -29,8 +29,8 @@ Item {
 
     // ── Data properties ───────────────────────────────────────────────────
     property bool success: true
-    property string action: "" // one of the tokens handled by messageText(): "rotate", "move", "span", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "snap_assist", "snap_all", "swap_vs", "rotate_vs"
-    property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/unfloated)
+    property string action: "" // one of the tokens handled by successMessage() / failureMessage(): "rotate", "move", "span", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "snap_assist", "snap_all", "swap_vs", "rotate_vs"
+    property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/tiled/unfloated/overflow)
     property var zones: []
     property var highlightedZoneIds: [] // Zone IDs involved (target zones)
     property string sourceZoneId: "" // Source zone for move/swap operations
@@ -267,44 +267,44 @@ Item {
         if (action === "rotate") {
             const arrow = (reason === "clockwise") ? "↻" : "↺";
             if (windowCount > 1)
-                return arrow + " " + i18np("Rotated %n window", "Rotated %n windows", windowCount);
+                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", arrow, i18np("Rotated %n window", "Rotated %n windows", windowCount));
             else
-                return arrow + " " + i18n("Rotated");
+                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", arrow, i18n("Rotated"));
         } else if (action === "move") {
             const moveArrow = directionArrow(reason);
             if (targetZoneNumber > 0)
-                return moveArrow + " " + i18n("Zone %1", targetZoneNumber);
+                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", moveArrow, i18n("Zone %1", targetZoneNumber));
 
-            return moveArrow + " " + i18n("Moved");
+            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", moveArrow, i18n("Moved"));
         } else if (action === "span") {
             // reason format: "grow:right", "shrink:left", or "snap:right"
             // (the last one when span snapped a previously unsnapped window)
             const spanArrow = directionArrow(reason);
             if (reason.indexOf("grow") === 0) {
                 if (targetZoneNumber > 0)
-                    return spanArrow + " " + i18n("Extended into Zone %1", targetZoneNumber);
+                    return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", spanArrow, i18n("Extended into Zone %1", targetZoneNumber));
 
-                return spanArrow + " " + i18n("Span extended");
+                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", spanArrow, i18n("Span extended"));
             }
             if (reason.indexOf("snap") === 0) {
                 if (targetZoneNumber > 0)
-                    return spanArrow + " " + i18n("Snapped into Zone %1", targetZoneNumber);
+                    return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", spanArrow, i18n("Snapped into Zone %1", targetZoneNumber));
 
-                return spanArrow + " " + i18n("Snapped");
+                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", spanArrow, i18n("Snapped"));
             }
-            return spanArrow + " " + i18n("Span reduced");
+            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", spanArrow, i18n("Span reduced"));
         } else if (action === "focus") {
             const focusArrow = directionArrow(reason);
             if (targetZoneNumber > 0)
-                return focusArrow + " " + i18n("Focus on Zone %1", targetZoneNumber);
+                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", focusArrow, i18n("Focus on Zone %1", targetZoneNumber));
 
-            return focusArrow + " " + i18n("Focus");
+            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", focusArrow, i18n("Focus"));
         } else if (action === "swap") {
             const swapArrow = directionArrow(reason);
             if (sourceZoneNumber > 0 && targetZoneNumber > 0)
-                return swapArrow + " " + i18n("Zone %1 ↔ Zone %2", sourceZoneNumber, targetZoneNumber);
+                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", swapArrow, i18n("Zone %1 ↔ Zone %2", sourceZoneNumber, targetZoneNumber));
 
-            return swapArrow + " " + i18n("Swapped");
+            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", swapArrow, i18n("Swapped"));
         } else if (action === "push") {
             if (targetZoneNumber > 0)
                 return i18n("→ Zone %1", targetZoneNumber);
@@ -351,10 +351,10 @@ Item {
             return i18n("Layout refreshed");
         } else if (action === "swap_vs") {
             const vsSwapArrow = directionArrow(reason);
-            return vsSwapArrow + " " + i18n("Virtual screens swapped");
+            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", vsSwapArrow, i18n("Virtual screens swapped"));
         } else if (action === "rotate_vs") {
             const vsRotateArrow = (reason === "clockwise") ? "↻" : "↺";
-            return vsRotateArrow + " " + i18n("Virtual screens rotated");
+            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", vsRotateArrow, i18n("Virtual screens rotated"));
         } else {
             return i18n("Action completed");
         }
@@ -399,7 +399,7 @@ Item {
             const id = zone.zoneId || zone.id || "";
             // Compare normalized UUIDs to handle format differences
             if (normalizeUuid(id) === normalizedTarget)
-                return zone.zoneNumber !== undefined ? zone.zoneNumber : (i + 1);
+                return zone.zoneNumber > 0 ? zone.zoneNumber : (i + 1);
         }
         return -1;
     }

@@ -3,8 +3,8 @@
 
 /**
  * @file test_settings_registry_contract.cpp
- * @brief Every setting the KWin effect fetches over D-Bus must be registered in
- *        SettingsAdaptor's getter registry.
+ * @brief Every setting reachable through SettingsAdaptor's getter registry must
+ *        actually be registered there.
  *
  * This is a tripwire for a silent-failure class that has already shipped once.
  *
@@ -226,8 +226,10 @@ private Q_SLOTS:
      *
      * Q_PROPERTY reflection closes that hole with no list to maintain: every
      * property whose name ends in "Shortcut" must resolve through getSetting. The
-     * editor-owned `editor*` shortcuts are excluded deliberately; they are read by
-     * the editor's own config store, never over this bus.
+     * The `editor*` prefix is reserved: the editor keeps its own shortcuts in
+     * its own config store (src/editor/controller/settings.cpp) and never reads
+     * them over this bus, so any such property added to Settings later would be
+     * out of scope here. None exist today, so the clause excludes nothing yet.
      */
     void testEveryShortcutPropertyIsRegistered()
     {

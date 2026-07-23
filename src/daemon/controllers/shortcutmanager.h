@@ -191,11 +191,25 @@ private:
 
     /// Clears the in-flight flag, replays deferred settings/adhoc work, and
     /// publishes the catalog. Runs from Registry::ready or, if the backend
-    /// never answers, from the fallback timer; idempotent either way.
-    void settleRegistration();
+    /// never answers, from the fallback timer. Settles the batch identified by
+    /// @p generation only, and only once, so a late arrival on either path is
+    /// a no-op rather than a second publish.
+    void settleRegistration(quint64 generation);
 
     /// How long to wait for the backend's ready() before settling anyway.
-    static constexpr int kRegistrationSettleTimeoutMs = 5000;
+    ///
+    /// Sized as a pathological bound, not a typical one: PortalBackend only
+    /// emits ready() when the portal answers BindShortcuts, and that Response
+    /// can sit behind an interactive permission dialog with no latency
+    /// guarantee (see portalbackend.cpp's handleBindShortcutsResponse). A
+    /// short timeout would settle a healthy-but-slow portal mid-flight, which
+    /// is exactly the race the pending-op queue exists to prevent.
+    static constexpr int kRegistrationSettleTimeoutMs = 60000;
+
+    /// Identifies the current registration batch. Incremented by every
+    /// registerShortcuts()/unregisterShortcuts(), so a fallback timer armed
+    /// for an earlier batch cannot settle a later one.
+    quint64 m_registrationGeneration = 0;
 
     void buildEntries();
     /// Re-applies every entry's current sequence; returns true when any

@@ -487,21 +487,27 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
     // @p direction (its far edge lies beyond the union's) and it sits
     // side-by-side with the union (positive perpendicular overlap — a
     // diagonal zone is not a grow target). Nearest edge gap wins, clamped to
-    // zero so overlapping-zone layouts tie at the edge and break by
-    // perpendicular centre distance, then by travel-axis centre distance —
-    // the same three-key ranking the shared directionalNeighbor raycast uses.
-    // The third key matters for the same reason it does there: overlapping
-    // zones all clamp to gap 0, and without it the tie falls through to list
-    // order, which is direction-asymmetric (zones are stored left-to-right,
-    // so "left" would skip to the farthest zone instead of the nearest).
+    // zero so overlapping-zone layouts tie at the edge, then perpendicular
+    // centre distance, then list order.
+    //
+    // Deliberately TWO keys, where the shared directionalNeighbor raycast has
+    // three (it adds travel-axis centre distance). That third key does not
+    // transfer: DN picks one window to focus, so a nearer centre is simply a
+    // better answer, while span picks the zone whose far edge DEFINES the
+    // extension band that the sweep below then fills. Preferring a
+    // centre-nearer candidate there picks a SHORTER band, and a wider zone
+    // swept into it still unions past that band — leaving an applied
+    // geometry that covers zones outside the member set (worked through on
+    // data/layouts/fibonacci.json: grow-right from the left half picked the
+    // narrow bottom-right zone, then swallowed the full-width top-right one,
+    // so the span covered two zones it did not own). Edge order is the right
+    // ranking for a band-defining pick; centre order is not.
     const int uLo = travelLo(unionRect, horizontal);
     const int uHi = travelHi(unionRect, horizontal);
     const int uPerpCenter = horizontal ? unionRect.center().y() : unionRect.center().x();
-    const int uTravelCenter = horizontal ? unionRect.center().x() : unionRect.center().y();
     int bestIndex = -1;
     int bestGap = 0;
     int bestPerp = 0;
-    int bestAxis = 0;
     for (int i = 0; i < candidates.size(); ++i) {
         const QRect& r = candidates[i].second;
         if (perpendicularOverlap(unionRect, r, horizontal) <= 0) {
@@ -533,13 +539,10 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
         }
         const int gap = positive ? qMax(0, travelLo(r, horizontal) - uHi) : qMax(0, uLo - travelHi(r, horizontal));
         const int perp = qAbs((horizontal ? r.center().y() : r.center().x()) - uPerpCenter);
-        const int axis = qAbs((horizontal ? r.center().x() : r.center().y()) - uTravelCenter);
-        if (bestIndex < 0 || gap < bestGap || (gap == bestGap && perp < bestPerp)
-            || (gap == bestGap && perp == bestPerp && axis < bestAxis)) {
+        if (bestIndex < 0 || gap < bestGap || (gap == bestGap && perp < bestPerp)) {
             bestIndex = i;
             bestGap = gap;
             bestPerp = perp;
-            bestAxis = axis;
         }
     }
 
@@ -589,7 +592,15 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
             // always joins its own extension.
             const QRect overlap = band.intersected(candidateRect);
             const bool beyondJitter = overlap.width() > kSpanEdgeTolerancePx && overlap.height() > kSpanEdgeTolerancePx;
-            if (i == bestIndex || beyondJitter) {
+            // The winner's trailing-edge test applies to swept candidates too:
+            // a zone that starts behind the span's trailing edge is united
+            // WHOLE, so admitting it here would move the applied geometry
+            // against the pressed direction by an unbounded amount and defeat
+            // the guard above.
+            const bool sweepStartsWithinSpan = positive
+                ? (travelLo(candidateRect, horizontal) >= uLo - kSpanEdgeTolerancePx)
+                : (travelHi(candidateRect, horizontal) <= uHi + kSpanEdgeTolerancePx);
+            if (i == bestIndex || (beyondJitter && sweepStartsWithinSpan)) {
                 result.zoneIds.append(candidates[i].first);
                 newUnion = newUnion.united(candidateRect);
             }

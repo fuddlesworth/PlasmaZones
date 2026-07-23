@@ -358,7 +358,7 @@ void Daemon::emitBridgeMissingWarning(const QString& diagnosis)
     notify << QStringLiteral("PlasmaZones") // app_name
            << 0u // replaces_id
            << QStringLiteral("plasmazones") // app_icon
-           << PhosphorI18n::tr("PlasmaZones: window manager integration inactive") // summary
+           << PhosphorI18n::tr("Window manager integration is inactive") // summary
            << body // body
            << QStringList() // actions
            << QVariantMap() // hints

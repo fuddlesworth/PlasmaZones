@@ -16,7 +16,7 @@ everything else over 1150 is scheduled work.
 
 All split plans in §2 were executed on branch `refactor/file-size` in three waves,
 each verified with both build trees (unity and no-unity) and a full ctest run
-(311/311 passing). After remediation, the only C++/QML/Luau source files above
+(311/311 passing at the time of that run; the suite has grown since). After remediation, the only C++/QML/Luau source files above
 the 1150-line ceiling are the six entries in the Exceptions Register below
 (build scripts such as `tests/unit/CMakeLists.txt` and shader sources such as
 `data/overlays/nixos-drift/effect.frag` are outside the policy's scope; sizes as of 2026-07-22:
@@ -24,9 +24,13 @@ StubSettings.h 2338, plasmazoneseffect.h 2163, settings.h 1723, AutotileEngine.h
 1638, windowtrackingadaptor.h 1269, pluau.luau 1189; exception-register line
 counts are as-of snapshots and drift as sanctioned files grow within their
 exception). Everything else is at or
-under 1150; the grace-band list in §4 remains accurate as the set of tolerated
-files with their pre-identified seams. The §4 catalog shows the pre-remediation
-sizes for the historical record.
+under 1150. The §4 catalog is a pre-remediation snapshot kept for the
+historical record, so its line counts and verdicts are as-of that run, not
+current. Files that entered the grace band after it was taken, and are
+tolerated with no action: `libs/phosphor-tile-engine/src/NavigationController.cpp`
+(1012; seam: the cross-surface helpers), `libs/phosphor-snap-engine/src/snapnavigationtargets.cpp`
+(1015; seam: the span resolver), `src/daemon/controllers/shortcutmanager.cpp`
+(1044; seam: the cheatsheet catalog and its family compression).
 
 Verdict legend:
 

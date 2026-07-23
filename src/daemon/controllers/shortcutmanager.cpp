@@ -582,10 +582,14 @@ void ShortcutManager::registerShortcuts()
         m_registry->rebind(e.id, e.currentSeq());
     }
 
+    // Tag this batch so a settle that arrives late (either path) can tell
+    // whether it still refers to the batch it was armed for.
+    const quint64 generation = ++m_registrationGeneration;
+
     connect(
         m_registry.get(), &PhosphorShortcuts::Registry::ready, this,
-        [this] {
-            settleRegistration();
+        [this, generation] {
+            settleRegistration(generation);
         },
         Qt::SingleShotConnection);
 
@@ -594,22 +598,29 @@ void ShortcutManager::registerShortcuts()
     // m_registrationInProgress true forever — every later settings rebind
     // silently defers and every adhoc grab queues undrained, which kills the
     // picker / snap-assist Escape binding for the rest of the session.
-    // Settling late is harmless: the ready() connection is single-shot and
-    // settleRegistration is idempotent.
-    QTimer::singleShot(kRegistrationSettleTimeoutMs, this, [this] {
-        if (!m_registrationInProgress) {
+    QTimer::singleShot(kRegistrationSettleTimeoutMs, this, [this, generation] {
+        if (generation != m_registrationGeneration || !m_registrationInProgress) {
+            // Superseded by a later registerShortcuts()/unregisterShortcuts(),
+            // or already settled by ready(). Settling here would clear the
+            // in-flight flag of a DIFFERENT, still-pending batch.
             return;
         }
         qCWarning(lcShortcuts) << "Shortcut backend never reported ready after" << kRegistrationSettleTimeoutMs
                                << "ms — settling registration anyway";
-        settleRegistration();
+        settleRegistration(generation);
     });
 
     m_registry->flush();
 }
 
-void ShortcutManager::settleRegistration()
+void ShortcutManager::settleRegistration(quint64 generation)
 {
+    if (generation != m_registrationGeneration || !m_registrationInProgress) {
+        // Stale (a newer batch owns the manager) or already settled. Running
+        // the body again would re-publish the catalog for no change, which
+        // the cheatsheet re-pushes as visible churn.
+        return;
+    }
     m_registrationInProgress = false;
     qCInfo(lcShortcuts) << "Registered" << m_entries.size() << "shortcuts";
     bool modelAlreadyEmitted = false;
@@ -655,6 +666,8 @@ void ShortcutManager::unregisterShortcuts()
 {
     m_registrationInProgress = false;
     m_settingsDirty = false;
+    // Supersede any armed fallback settle: its generation no longer matches.
+    ++m_registrationGeneration;
     // Adhoc ops queued behind an in-flight initial batch belong to UI
     // contexts (e.g. an overlay's Escape grab) that no longer exist after
     // teardown; replaying them on the next registerShortcuts() would

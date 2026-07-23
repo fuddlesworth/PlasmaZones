@@ -121,6 +121,59 @@ private Q_SLOTS:
         QVERIFY(foundMasterFeedback);
     }
 
+    /**
+     * Screen-scoped operations must act on the screen the shortcut targeted,
+     * even when that screen's state carries no tracked focus (focus arrived
+     * via a floating, snapped, or never-tracked window). Before the fix,
+     * tiledWindowsForFocusedScreen required a non-empty focusedWindow() on the
+     * hinted screen and otherwise fell through to a hash-ordered scan, so
+     * rotate and swap-with-master mutated whichever screen happened to have a
+     * tracked focus.
+     */
+    void testNavigation_hintedScreenWithoutTrackedFocus_isStillTheTarget()
+    {
+        const QString hinted = QStringLiteral("DP-2");
+        const QString other = QStringLiteral("eDP-1");
+
+        QScopedPointer<AutotileEngine> engine(
+            new AutotileEngine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry()));
+        engine->setAutotileScreens({other, hinted});
+        // "other" gets the tracked focus; "hinted" gets windows but no focus.
+        for (int i = 1; i <= 3; ++i) {
+            engine->windowOpened(QStringLiteral("other%1").arg(i), other);
+        }
+        for (int i = 1; i <= 3; ++i) {
+            engine->windowOpened(QStringLiteral("hint%1").arg(i), hinted);
+        }
+        QCoreApplication::processEvents();
+        engine->tilingStateForScreen(other)->setFocusedWindow(QStringLiteral("other1"));
+        engine->windowFocused(QStringLiteral("other1"), other);
+
+        // The daemon hints the target screen on every autotile shortcut.
+        engine->setActiveScreenHint(hinted);
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
+
+        const QStringList otherBefore = engine->tilingStateForScreen(other)->tiledWindows();
+        engine->rotateWindowOrder(true);
+
+        // The hinted screen rotated; the focused-elsewhere screen did not.
+        QCOMPARE(engine->tilingStateForScreen(hinted)->tiledWindows(),
+                 (QStringList{QStringLiteral("hint3"), QStringLiteral("hint1"), QStringLiteral("hint2")}));
+        QCOMPARE(engine->tilingStateForScreen(other)->tiledWindows(), otherBefore);
+
+        bool sawRotate = false;
+        for (const auto& args : feedbackSpy) {
+            if (args.at(1).toString() == QStringLiteral("rotate")) {
+                sawRotate = true;
+                QCOMPARE(args.at(0).toBool(), true);
+                // The OSD must name the screen that actually rotated.
+                QCOMPARE(args.at(5).toString(), hinted);
+                break;
+            }
+        }
+        QVERIFY(sawRotate);
+    }
+
     void testNavigation_swapFocusedInDirection_successReasonIsDirection()
     {
         // Pins the feedback-reason contract: a successful directional swap

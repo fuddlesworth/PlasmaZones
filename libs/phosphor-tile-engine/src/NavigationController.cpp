@@ -102,18 +102,11 @@ void NavigationController::swapFocusedWithMaster()
 
 void NavigationController::rotateWindowOrder(bool clockwise)
 {
-    // Rotation acts on the active screen's whole window ORDER, so it resolves
-    // through resolveActiveState rather than tiledWindowsForFocusedScreen:
-    // the latter skips the active screen when that screen's state has no
-    // focused window (focus arrived via a floating, snapped, or never-tracked
-    // window) and falls through to a hash-ordered scan, which would rotate a
-    // different screen than the shortcut targeted while the OSD still names
-    // the intended one.
     QString screenId;
-    PhosphorTiles::TilingState* state = resolveActiveState(screenId);
-    const QStringList windows = state ? state->tiledWindows() : QStringList();
+    PhosphorTiles::TilingState* state = nullptr;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
-    if (windows.size() < 2 || !state) {
+    if (!state || windows.size() < 2) {
         Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("nothing_to_rotate"),
                                             QString(), QString(), screenId);
         return; // Nothing to rotate with 0 or 1 window
@@ -155,6 +148,7 @@ void NavigationController::rotateWindowOrder(bool clockwise)
     m_engine->retileAfterOperation(screenId, rotated);
 
     if (rotated) {
+        qCInfo(PhosphorTileEngine::lcTileEngine) << "Rotated windows" << (clockwise ? "clockwise" : "counterclockwise");
         QString reason = QStringLiteral("%1:%2")
                              .arg(clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise"))
                              .arg(windows.size());
@@ -163,8 +157,6 @@ void NavigationController::rotateWindowOrder(bool clockwise)
         Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_rotations"), QString(),
                                             QString(), screenId);
     }
-
-    qCInfo(PhosphorTileEngine::lcTileEngine) << "Rotated windows" << (clockwise ? "clockwise" : "counterclockwise");
 }
 
 QString NavigationController::directionalNeighborWindow(PhosphorTiles::TilingState* state, const QStringList& windows,
@@ -925,14 +917,22 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
         // tracked by autotile — caller will surface no_focus / no_windows.
     }
 
-    // Use the tracked active screen (set by onWindowFocused) to avoid
-    // non-deterministic QHash iteration when multiple screens have focused windows
+    // Use the tracked active screen (set by onWindowFocused, and by the
+    // daemon's setActiveScreenHint on every autotile shortcut) to avoid
+    // non-deterministic QHash iteration when multiple screens have windows.
+    //
+    // The hinted screen wins whenever it HAS tiled windows — deliberately not
+    // gated on a tracked focusedWindow(). Focus can legitimately sit on a
+    // floating, snapped, or never-tracked window there, and requiring a
+    // tracked focus sent every screen-scoped operation (rotate, swap with
+    // master, focus master, cycle) down to the hash-ordered scan below, where
+    // it acted on a DIFFERENT monitor than the shortcut targeted.
     if (!m_engine->m_activeScreen.isEmpty()) {
         const auto key = m_engine->currentKeyForScreen(m_engine->m_activeScreen);
         auto sit = m_engine->m_states.states().constFind(key);
         if (sit != m_engine->m_states.states().constEnd()) {
             PhosphorTiles::TilingState* state = sit.value();
-            if (state && !state->focusedWindow().isEmpty()) {
+            if (state && !state->tiledWindows().isEmpty()) {
                 outScreenId = m_engine->m_activeScreen;
                 outState = state;
                 return state->tiledWindows();

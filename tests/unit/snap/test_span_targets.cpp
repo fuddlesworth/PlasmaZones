@@ -306,6 +306,7 @@ private Q_SLOTS:
     void jitterSliverInBand_doesNotJoinSweep();
     void jitterEdgeCandidate_isNotGrowTarget();
     void growTie_prefersPerpendicularNearerCandidate();
+    void asymmetricStack_growTakesWholeColumnConsistently();
     void gapBearingLayout_growsAcrossGap();
     void diagonalOnlyCandidate_doesNotGrow();
     void overlappingCandidate_beatsDistantZone();
@@ -595,6 +596,38 @@ void TestSpanTargets::growTie_prefersPerpendicularNearerCandidate()
     // sweeps the off-centre candidate too; pin the full set so the sweep
     // outcome in an overlapping tie layout stays deterministic.
     QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[0], f.zoneIds[1], f.zoneIds[2]}));
+}
+
+void TestSpanTargets::asymmetricStack_growTakesWholeColumnConsistently()
+{
+    // The bundled fibonacci layout: full-height left half, then a right half
+    // split into one full-width top zone and a 2x2-ish nest below. Growing
+    // right from the left half must take the WHOLE right column, so the
+    // applied union covers exactly the member zones.
+    //
+    // This is the shape that catches a centre-distance tie-break: ranking the
+    // gap-0, perp-tied candidates by centre would pick the narrow zone 3 over
+    // the full-width zone 2, giving a short band whose sweep still unions
+    // zone 2 whole — a full-screen geometry owning only three of five zones,
+    // with zones 4 and 5 left free for another window to snap underneath.
+    SpanFixture f({QRectF(0.0, 0.0, 0.5, 1.0), QRectF(0.5, 0.0, 0.5, 0.5), QRectF(0.5, 0.5, 0.25, 0.5),
+                   QRectF(0.75, 0.5, 0.25, 0.25), QRectF(0.75, 0.75, 0.25, 0.25)});
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
+
+    auto resolver = f.makeFeedbackResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
+
+    QVERIFY(result.success);
+    QVERIFY(result.grew);
+    QCOMPARE(result.geometry, kScreenRect);
+    // Every zone the applied geometry covers is a member: all five.
+    QCOMPARE(result.zoneIds.size(), 5);
+    for (const QString& id : std::as_const(f.zoneIds)) {
+        QVERIFY2(
+            result.zoneIds.contains(id),
+            qPrintable(QStringLiteral("full-screen span geometry must own every zone it covers; missing %1").arg(id)));
+    }
 }
 
 void TestSpanTargets::gapBearingLayout_growsAcrossGap()
