@@ -540,13 +540,6 @@ private:
     QHash<QString, KWin::EffectWindow*> buildWindowMap() const;
 
     /**
-     * @brief Get the active window if valid, emit navigation feedback on failure
-     * @param action The action name for feedback (e.g., "move", "swap")
-     * @return Valid EffectWindow* or nullptr (feedback already emitted)
-     */
-    KWin::EffectWindow* getValidActiveWindowOrFail(const QString& action);
-
-    /**
      * @brief Free-float geometry to CAPTURE for @p w, correcting for maximize/fullscreen.
      *
      * A maximized or fullscreen window's frameGeometry() is the full-monitor rect.

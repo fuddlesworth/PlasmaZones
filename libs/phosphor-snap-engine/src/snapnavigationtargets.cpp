@@ -57,13 +57,24 @@ PhosphorProtocol::SwapTargetResult swapResult(bool success, const QString& reaso
             x2,      y2,     w2,        h2, zoneId2, screenId, sourceZoneId, targetZoneId, QString()};
 }
 
+// Pre-call contract checks. Target-resolver callers (the WTA slots) are
+// supposed to run validation *before* calling the resolver — dispatcher
+// responsibility, not resolver responsibility. But defensively check here
+// too so a misrouted call returns a clean no-op result instead of crashing.
+bool checkWindowId(const QString& windowId)
+{
+    return !windowId.isEmpty();
+}
+
+bool checkDirection(const QString& direction)
+{
+    return !direction.isEmpty();
+}
+
+} // anonymous namespace
+
 // ═══════════════════════════════════════════════════════════════════════════
-// Stored Screen Validation
-//
-// For virtual screen IDs, verifies both that the backing physical screen
-// is still connected AND that the virtual screen ID is still in the
-// effective screen list (guards against stale IDs after config removal).
-// For physical screen IDs, verifies the screen is connected.
+// Stored Screen Validation (shared with SnapEngine's resolveNavScreen)
 // ═══════════════════════════════════════════════════════════════════════════
 
 bool isStoredScreenValid(PhosphorScreens::ScreenManager* mgr, const QString& storedScreen)
@@ -80,22 +91,6 @@ bool isStoredScreenValid(PhosphorScreens::ScreenManager* mgr, const QString& sto
     }
     return PhosphorScreens::ScreenIdentity::findByIdOrName(storedScreen) != nullptr;
 }
-
-// Pre-call contract checks. Target-resolver callers (the WTA slots) are
-// supposed to run validation *before* calling the resolver — dispatcher
-// responsibility, not resolver responsibility. But defensively check here
-// too so a misrouted call returns a clean no-op result instead of crashing.
-bool checkWindowId(const QString& windowId)
-{
-    return !windowId.isEmpty();
-}
-
-bool checkDirection(const QString& direction)
-{
-    return !direction.isEmpty();
-}
-
-} // anonymous namespace
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Construction
@@ -660,8 +655,10 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
     QString targetZoneId = m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
         // No adjacent zone on this output — try focusing into the adjacent
-        // output's entry zone. Focus may cross to an autotile screen, so the
-        // neighbour's mode is not gated (requireSnapNeighbour=false).
+        // output's entry zone. The neighbour's mode is not gated
+        // (requireSnapNeighbour=false), but the landing below still needs a
+        // snap-tracked occupant, so an autotile neighbour dead-ends to
+        // no_adjacent_zone anyway.
         const PhosphorProtocol::MoveTargetResult cross =
             crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/false);
         if (cross.success) {

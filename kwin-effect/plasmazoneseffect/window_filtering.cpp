@@ -58,17 +58,6 @@ QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap() const
     return windowMap;
 }
 
-KWin::EffectWindow* PlasmaZonesEffect::getValidActiveWindowOrFail(const QString& action)
-{
-    KWin::EffectWindow* activeWindow = getActiveWindow();
-    if (!activeWindow || !shouldHandleWindow(activeWindow)) {
-        qCDebug(lcEffect) << "No valid active window for" << action;
-        emitNavigationFeedback(false, action, QStringLiteral("no_window"));
-        return nullptr;
-    }
-    return activeWindow;
-}
-
 QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback)
 {
     // A maximized or fullscreen window's frameGeometry() is the full-monitor rect.

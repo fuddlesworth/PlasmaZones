@@ -89,8 +89,11 @@ Item {
                 if (reason === "not_snapped")
                     return i18n("Window is not in a zone");
 
-                if (reason === "no_window_in_zone")
+                if (reason === "no_window_in_zone" || reason === "no_neighbor")
                     return i18n("No window in that direction");
+
+                if (reason === "swap_failed")
+                    return i18n("Could not move the window");
 
                 if (action === "span" && reason === "not_supported")
                     return i18n("Spanning is not available in autotile mode");
@@ -181,17 +184,22 @@ Item {
                 if (reason === "not_snapped")
                     return i18n("Window is not in a zone");
 
+                if (reason === "swap_failed")
+                    return i18n("Could not swap windows");
+
                 if (isInternalReason)
                     return unavailableText;
 
                 return i18n("Nothing to swap");
             } else if (action === "snap_assist") {
-                return noWindowText;
+                // Sole live reason is window_not_found: the picked window
+                // vanished before placement.
+                return i18n("That window is no longer available");
             } else if (action === "snap_all") {
                 if (reason === "no_unsnapped_windows")
                     return i18n("All windows are already in zones");
 
-                return unavailableText;
+                return i18n("Could not snap windows to zones");
             } else if (action === "swap_vs") {
                 if (reason === "no_subdivision" || reason === "not_virtual")
                     return i18n("No virtual screen split on this monitor");
@@ -221,9 +229,15 @@ Item {
                 return i18n("No virtual screens to rotate");
             } else if (action === "focus_master")
                 return i18n("No windows to focus");
-            else if (action === "swap_master")
-                return reason === "already_master" ? i18n("Already in main position") : i18n("Nothing to swap");
-            else
+            else if (action === "swap_master") {
+                if (reason === "already_master")
+                    return i18n("Already in main position");
+
+                if (reason === "no_focus")
+                    return noWindowText;
+
+                return i18n("Nothing to swap");
+            } else
                 return i18n("Failed");
         }
         // Success messages with zone numbers

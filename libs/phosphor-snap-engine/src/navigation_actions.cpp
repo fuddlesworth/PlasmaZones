@@ -75,24 +75,11 @@ QString resolveNavScreen(INavigationStateProvider* navState, const QString& wind
     if (service && !windowId.isEmpty()) {
         const QString zoneId = service->zoneForWindow(windowId);
         if (!zoneId.isEmpty()) {
+            // Shared validation rule — see isStoredScreenValid in
+            // snapnavigationtargets.h for the virtual-vs-physical semantics.
             const QString storedScreen = service->screenForWindow(windowId);
-            if (!storedScreen.isEmpty()) {
-                if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
-                    const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
-                    // Bare presence checks — the returned QScreen* is
-                    // intentionally unused; the call validates that the
-                    // identifier still resolves on the live screen set.
-                    if (PhosphorScreens::ScreenIdentity::findByIdOrName(physId)) {
-                        // `service` is already non-null per the outer
-                        // guard above; no need to re-check it here.
-                        auto* mgr = service->screenManager();
-                        if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
-                            return storedScreen;
-                        }
-                    }
-                } else if (PhosphorScreens::ScreenIdentity::findByIdOrName(storedScreen)) {
-                    return storedScreen;
-                }
+            if (isStoredScreenValid(service->screenManager(), storedScreen)) {
+                return storedScreen;
             }
         }
     }
@@ -264,7 +251,9 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
 
 bool SnapEngine::tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId)
 {
-    if (!m_crossSurfaceResolver || !m_globals) {
+    // m_globals is a ctor invariant (never null); only the late-bound
+    // cross-surface resolver is genuinely optional here.
+    if (!m_crossSurfaceResolver) {
         return false;
     }
     const int targetDesktop =
@@ -410,7 +399,9 @@ void SnapEngine::spanFocusedInDirection(const QString& direction, const Navigati
 
 bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId)
 {
-    if (!m_crossSurfaceResolver || !m_globals) {
+    // Same ctor invariant as tryCrossDesktopFocus: only the resolver is
+    // late-bound and optional.
+    if (!m_crossSurfaceResolver) {
         return false;
     }
     const int targetDesktop =
@@ -460,8 +451,10 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         // matching slot / invalid geometry): fall back to a bare desktop
         // re-stamp + move. The window relocates but keeps its slot memory for
         // when its own layout is restored — graceful degradation.
-        SnapState* moveState = stateForWindow(windowId);
-        if (!moveState || !moveState->reassignDesktop(windowId, targetDesktop)) {
+        // stateForWindow never returns null (untracked windows resolve to
+        // the global holder); reassignDesktop fails there, which is the
+        // intended no-op for an untracked window.
+        if (!stateForWindow(windowId)->reassignDesktop(windowId, targetDesktop)) {
             return false;
         }
         Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);

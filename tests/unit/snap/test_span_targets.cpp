@@ -51,6 +51,7 @@ public:
     QHash<QString, QStringList> spanOfWindow; // windowId -> zoneIds
     QHash<QString, QRect> zoneGeo; // "zone|screen" -> rect
     QVector<QPair<QStringList, QString>> multiZoneAssignments; // recorded (zoneIds, screen) commits
+    QVector<QPair<QString, bool>> snapIntents; // recorded recordSnapIntent calls
 
     QStringList zonesForWindow(const QString& w) const override
     {
@@ -117,8 +118,9 @@ public:
     {
         return {};
     }
-    void recordSnapIntent(const QString&, bool) override
+    void recordSnapIntent(const QString& windowId, bool snapped) override
     {
+        snapIntents.append({windowId, snapped});
     }
     bool isWindowFloating(const QString&) const override
     {
@@ -676,6 +678,9 @@ void TestSpanTargets::engineSpan_growCommitsAndAppliesGeometry()
     QCOMPARE(geoSpy.at(0).at(4).toInt(), 540);
     QCOMPARE(geoSpy.at(0).at(5).toString(), f.zoneIds[0]);
     QCOMPARE(geoSpy.at(0).at(6).toString(), kScreen);
+    QCOMPARE(geoSpy.at(0).at(7).toBool(), false);
+
+    QCOMPARE(f.wts.snapIntents, (QVector<QPair<QString, bool>>{{QStringLiteral("w1"), true}}));
 }
 
 QTEST_MAIN(TestSpanTargets)

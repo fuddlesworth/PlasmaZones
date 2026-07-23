@@ -856,7 +856,15 @@ QVariantList ShortcutManager::cheatsheetModel() const
                 compressible = false;
                 break;
             }
-            const QString seq = rows[idx].value(QLatin1String("triggers")).toStringList().value(0);
+            const QStringList memberTriggers = rows[idx].value(QLatin1String("triggers")).toStringList();
+            // A member carrying an alternate binding must not compress: the
+            // compressed row shows a single combined chip, so the extra
+            // binding would silently vanish from the sheet.
+            if (memberTriggers.size() != 1) {
+                compressible = false;
+                break;
+            }
+            const QString seq = memberTriggers.first();
             const int split = seq.lastIndexOf(QLatin1Char('+'));
             if (split <= 0 || seq.mid(split + 1) != family.expectedLastTokens[m]) {
                 compressible = false;

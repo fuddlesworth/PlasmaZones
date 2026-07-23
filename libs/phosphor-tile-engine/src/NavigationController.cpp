@@ -546,7 +546,10 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     if (!targetWindow.isEmpty()) {
         const bool swapped = state->swapWindowsById(focused, targetWindow);
         m_engine->retileAfterOperation(screenId, swapped);
-        Q_EMIT m_engine->navigationFeedback(swapped, action, direction, QString(), QString(), screenId);
+        // On failure the OSD needs a structured reason, not the raw direction
+        // (which the failure branches would misread as a boundary condition).
+        Q_EMIT m_engine->navigationFeedback(swapped, action, swapped ? direction : QStringLiteral("swap_failed"),
+                                            QString(), QString(), screenId);
         return;
     }
 
@@ -593,7 +596,9 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     }
     const bool swapped = state->swapWindowsById(focused, windows.at(targetIndex));
     m_engine->retileAfterOperation(screenId, swapped);
-    Q_EMIT m_engine->navigationFeedback(swapped, action, direction, QString(), QString(), screenId);
+    // Same structured failure reason as the geometry path above.
+    Q_EMIT m_engine->navigationFeedback(swapped, action, swapped ? direction : QStringLiteral("swap_failed"), QString(),
+                                        QString(), screenId);
 }
 
 void NavigationController::focusInDirection(const QString& direction, const QString& action,

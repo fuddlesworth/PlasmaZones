@@ -1076,6 +1076,8 @@ private:
     // m_rotateDebounce above. One timer for both ops: rapid alternation
     // between swap and rotate is not a user pattern.
     QElapsedTimer m_virtualScreenDebounce;
+    /// connectLayoutSignals' per-start connection; severed by handle in stop() (init-time registry connects survive).
+    QMetaObject::Connection m_layoutAssignedStartConn;
 
     // Last autotile window order per (screen, desktop, activity), captured when
     // leaving autotile. Used to re-seed the autotile engine with the same order

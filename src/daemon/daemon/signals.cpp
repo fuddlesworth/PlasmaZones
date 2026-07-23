@@ -604,27 +604,28 @@ void Daemon::connectLayoutSignals()
     // layout themselves, and calling it here with QSignalBlocker steals
     // the activeLayoutChanged transition, leaving the resnap buffer
     // empty. Desktop switches sync active layout via syncModeFromAssignments().
-    connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
-            [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
-                updateAutotileScreens();
-                updateLayoutFilter();
+    m_layoutAssignedStartConn =
+        connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
+                [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
+                    updateAutotileScreens();
+                    updateLayoutFilter();
 
-                // Sync unified controller cycling index when assignment affects current desktop.
-                const int curDesktop = currentDesktopForScreen(screenId);
-                if (virtualDesktop != 0 && virtualDesktop != curDesktop) {
-                    return;
-                }
-                if (!m_unifiedLayoutController || !m_layoutManager) {
-                    return;
-                }
-                const QString focusedScreenId = m_unifiedLayoutController->currentScreenName();
-                if (focusedScreenId.isEmpty() || focusedScreenId != screenId) {
-                    return;
-                }
-                const QString assignmentId =
-                    m_layoutManager->assignmentIdForScreen(focusedScreenId, curDesktop, currentActivity());
-                m_unifiedLayoutController->syncFromExternalState(assignmentId);
-            });
+                    // Sync unified controller cycling index when assignment affects current desktop.
+                    const int curDesktop = currentDesktopForScreen(screenId);
+                    if (virtualDesktop != 0 && virtualDesktop != curDesktop) {
+                        return;
+                    }
+                    if (!m_unifiedLayoutController || !m_layoutManager) {
+                        return;
+                    }
+                    const QString focusedScreenId = m_unifiedLayoutController->currentScreenName();
+                    if (focusedScreenId.isEmpty() || focusedScreenId != screenId) {
+                        return;
+                    }
+                    const QString assignmentId =
+                        m_layoutManager->assignmentIdForScreen(focusedScreenId, curDesktop, currentActivity());
+                    m_unifiedLayoutController->syncFromExternalState(assignmentId);
+                });
 
     // Connect unified layout controller signals for OSD display
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this,

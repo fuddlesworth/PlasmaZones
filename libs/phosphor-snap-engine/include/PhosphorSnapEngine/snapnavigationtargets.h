@@ -17,6 +17,10 @@ namespace PhosphorZones {
 class LayoutRegistry;
 }
 
+namespace PhosphorScreens {
+class ScreenManager;
+}
+
 namespace PhosphorEngine {
 class ICrossSurfaceResolver;
 }
@@ -47,6 +51,14 @@ struct SpanTargetResult
     /// true when the span grew into new zone(s), false when it retracted.
     bool grew = false;
 };
+
+/// True when @p storedScreen still resolves on the live screen set: a
+/// physical id must be connected; a virtual id additionally needs its backing
+/// physical output present AND continued membership in @p mgr's effective
+/// screen list (guards against stale ids after a config removal). Shared by
+/// the resolver's stored-screen preference and SnapEngine's resolveNavScreen
+/// so the validation rule lives in one place.
+PHOSPHORSNAPENGINE_EXPORT bool isStoredScreenValid(PhosphorScreens::ScreenManager* mgr, const QString& storedScreen);
 
 /// The edge a neighbour surface is entered from when crossing in @p direction:
 /// crossing "right" lands on the neighbour's LEFT edge, "down" on its TOP, etc.
@@ -142,8 +154,11 @@ public:
     /// neighbour (deferring to the engine's cross-mode handoff) instead of
     /// snapping the window onto a tiled screen. May be empty, in which case no
     /// gating happens and every neighbour is treated as snap-mode (the
-    /// pre-provider behaviour). The FOCUS cross-output path is never gated — it
-    /// may still cross to an autotile screen.
+    /// pre-provider behaviour). The FOCUS cross-output path is never gated
+    /// here, but landing still requires a snap-tracked occupant in the
+    /// neighbour's entry zone (autotile windows are not in windowsInZone),
+    /// so focus toward an autotile output collapses to no_adjacent_zone
+    /// instead of crossing.
     using NeighbourAutotileFn = std::function<bool(const QString& screenId)>;
     void setNeighbourAutotileProvider(NeighbourAutotileFn fn);
 

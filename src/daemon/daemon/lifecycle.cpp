@@ -462,6 +462,46 @@ void Daemon::stop()
         return;
     }
 
+    // start() reconnects these persistent senders on every run
+    // (connectScreenSignals / connectDesktopActivity / connectShortcutSignals /
+    // connectOverlaySignals / initializeAutotile); sever them here or a
+    // stop()→start() cycle stacks duplicate lambda connections and every
+    // shortcut / screen / desktop / overlay signal dispatches its handler
+    // twice on the second run. Scoped per-sender, NOT a blanket
+    // settings-style disconnect, for the reason documented above
+    // teardownIdleConnections(): every connection these senders hold on
+    // `this` is made in per-start code, so severing them is exactly undone
+    // by the next start(). m_layoutManager is the one mixed sender (its
+    // init_services.cpp connections must survive the cycle), so only its
+    // per-start connection is severed, via the tracked handle.
+    if (m_shortcutManager) {
+        m_shortcutManager->disconnect(this);
+    }
+    if (m_screenManager) {
+        m_screenManager->disconnect(this);
+    }
+    if (m_virtualDesktopManager) {
+        m_virtualDesktopManager->disconnect(this);
+    }
+    if (m_activityManager) {
+        m_activityManager->disconnect(this);
+    }
+    if (m_overlayService) {
+        m_overlayService->disconnect(this);
+    }
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->disconnect(this);
+    }
+    disconnect(m_layoutAssignedStartConn);
+
+    // Release the shortcut grabs and the Portal session with the connections:
+    // registerShortcuts() on the next start() lazily recreates the registry
+    // and backend, and starting from an empty entry table avoids the second
+    // run's re-registration warning.
+    if (m_shortcutManager) {
+        m_shortcutManager->unregisterShortcuts();
+    }
+
     // stop() deliberately does NOT unregister the settings-driven entries
     // (`Global`, …), shed the shell-family-seed partition, or clear the
     // low-precedence owner tag. `m_profileRegistry` is a value member, so it
