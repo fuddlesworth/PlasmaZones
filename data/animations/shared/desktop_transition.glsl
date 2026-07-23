@@ -53,8 +53,11 @@
 //     but returns black: iWindowOpacity and iAnchorRectInTexture are both
 //     zero. oldColor() is a different hazard — it lives in
 //     shared/old_content.glsl, which no desktop pack includes, so reaching
-//     for it is a COMPILE error (which the runtime surfaces as a flat-gray
-//     pass, not a black one). Use getFromColor() / getToColor() instead.
+//     for it is a COMPILE error. On THIS pass that does not look like the
+//     daemon's flat-gray swallow: the manager caches a null-shader sentinel
+//     and ABANDONS the transition, so you get an instant desktop cut, a
+//     warning on the journal, and no recompile for the rest of the session.
+//     Use getFromColor() / getToColor() instead.
 // Include AFTER the animation uniform block.
 #ifndef PLASMAZONES_DESKTOP_TRANSITION_GLSL
 #define PLASMAZONES_DESKTOP_TRANSITION_GLSL

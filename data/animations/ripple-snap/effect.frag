@@ -36,7 +36,7 @@ vec4 pTransition(vec2 uv, float t) {
     vec4 oldC = oldColor(cuv);     // captured old frame, native aspect
     vec4 newC = surfaceColor(cuv); // live new content, native aspect
 
-    // Cross-fade old -> new as the move settles, then apply the ripple
+    // Cross-fade old -> new with the rigid travel (complete by IMPACT, before the ripple phase), then apply the ripple
     // shade. The scalar multiply scales alpha too, so on premultiplied
     // colour the wave troughs are deliberately a coverage fade (the
     // backdrop ghosts through slightly) rather than a pigment darken —

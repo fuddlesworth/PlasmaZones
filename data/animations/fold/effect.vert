@@ -93,14 +93,13 @@ void main() {
     // (the grid sits on iToRect). quad-space <-> screen-space is a pure
     // 1:1 translation, so the screen delta applies straight to `position`.
     // POSITION takes the unbounded `ease` (the overshoot IS the bounce); SIZE takes a
-    // bounded copy. Lerping the whole vec4 with `ease`, as this did, extrapolates the
+    // bounded copy. Lerping the whole vec4 with `ease` extrapolates the
     // EXTENT: the engine bounds delivered progress to the overshoot envelope [-1, 2]
     // (legProgress flips a reverse leg's -1 to tt = +2), and even at that ceiling a
     // strong shrink computes rect.zw = 2*to - from: NEGATIVE width and height whenever
     // the window halves or more. `screenPos` then mirrors the card and inflates it: a
-    // flipped, garbage-scaled window. (Before the envelope, elastic reached ease =
-    // 3.45 and produced extents like (-8028, -4257).) This is verbatim the hazard
-    // window-morph guards against, and it belongs here too.
+    // flipped, garbage-scaled window. This is verbatim the hazard window-morph
+    // guards against, and it belongs here too.
     vec4 rect = vec4(mix(iFromRect.xy, iToRect.xy, ease), mix(iFromRect.zw, iToRect.zw, clamp(ease, 0.0, 1.0)));
     vec2 screenPos = rect.xy + duv * rect.zw;
     vec2 toPos = iToRect.xy + cuv * iToRect.zw;

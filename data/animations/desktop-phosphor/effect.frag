@@ -99,8 +99,9 @@ vec4 pTransition(vec2 uv, float t) {
     vec2 rawDir = (p_followSwitch > 0.5) ? switchDirection(cfg) : cfg;
     vec2 dir = dot(rawDir, rawDir) > 1.0e-6 ? normalize(rawDir) : normalize(vec2(1.0, 1.0));
 
-    // Feature sizes in graph units, derived from pixels so traces stay
-    // hairline and pulses stay compact at any resolution.
+    // Feature sizes in graph units, derived from DEVICE pixels (iResolution is
+    // device-sized on the desktop pass), so traces stay hairline and pulses
+    // compact at any resolution — finer on a scaled output.
     float pxInGraph = scale / res.y;
     float lineW  = 1.5 * pxInGraph;
     float nodeR  = 3.0 * pxInGraph;

@@ -492,12 +492,17 @@ vec2 surfacePadRel() {
 //     vec2 edge = min(smoothstep(vec2(0.0), fw, cuv + pad),
 //                     smoothstep(vec2(0.0), fw, 1.0 + pad - cuv));
 //     float mask = edge.x * edge.y;
-// That duplication is NOT an oversight and a shared `cardMask(vec2)` helper
-// does not belong in this header: `fwidth()` is a fragment-stage function,
-// and this header is included by the VERTEX stage too (shared/animation.vert
-// and every per-pack effect.vert). A file-scope helper calling fwidth() here
-// fails every vertex compile in the tree. Keep the mask inline in the frag,
-// or give it a fragment-only shared header if it ever earns one.
+// A shared helper does NOT belong in this header: `fwidth()` is a
+// fragment-stage function, and this header is included by the VERTEX stage
+// too (shared/animation.vert and nearly every per-pack effect.vert), so a
+// file-scope helper calling fwidth() here fails those vertex compiles.
+//
+// The fragment-only home already exists: `boundaryMaskAA(uv, pad)` in
+// shared/noise.glsl, which no vertex shader includes. bounce and fly-in use
+// it. It differs from the inline form only in where the AA band sits — it
+// centres the band on the geometric edge, the inline form biases it inside —
+// so packs that gate on `mask <= 0.0` would drop a slightly different set of
+// fragments if migrated. Migrate deliberately, not mechanically.
 
 // ─── Direction helpers (T1.5) ──────────────────────────────────────────
 // A transition plays forward (in: window.open / snapIn / show) or reverse

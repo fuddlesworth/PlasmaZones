@@ -21,7 +21,8 @@
 #include <noise.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-    // Hex cell identity in constant screen pixels (independent of resolution).
+    // Hex cell identity in constant DEVICE pixels (iResolution is device-sized
+    // on the desktop pass, so the grid is finer on a scaled output).
     float hexSize  = max(p_hexSize, 6.0);
     vec2  px       = uv * resolutionSafe();
     vec2  scaled   = px / hexSize;
@@ -73,7 +74,7 @@ vec4 pTransition(vec2 uv, float t) {
         col.b = crossFade(uv + vec2(-split + jitter, 0.0), reveal).b;
     }
 
-    // Scanline modulation on the front (CRT feel, constant pixel pitch).
+    // Scanline modulation on the front (CRT feel, constant DEVICE-pixel pitch).
     float scan = 0.85 + 0.15 * step(0.5, fract(px.y * 0.5));
     col *= mix(1.0, scan, glitchAmt * edge * 0.7);
 

@@ -75,6 +75,9 @@ vec4 pTransition(vec2 uv, float t) {
     // spec, and (e - 0.5) is negative for half of every leg.
     float d = (e - 0.5) * 3.2;
     float front = exp(-d * d) * mid;
+    // Additive emissive: these deliberately push rgb above alpha, breaking
+    // the premultiplied rgb <= a invariant the cross-fade packs keep. That is
+    // the intended glow, and the clamp below bounds it.
     col.rgb += flux * front * clamp(p_frontGlow, 0.0, 2.0) * 0.55 * col.a;
 
     // Ember sparks shed in the un-settled wake: brief hash twinkles that
