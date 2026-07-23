@@ -545,8 +545,10 @@ inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";
 /// `.xy = (cursorX, cursorY)` relative to the shader surface's origin
 /// (window frame origin on the kwin path; overlay surface origin on
 /// the daemon path); `(-1, -1)` when the cursor is outside the shader's
-/// surface. `.zw` are reserved for click state in the daemon overlay
-/// contract; the kwin path leaves them at 0.
+/// surface. `.zw` on the kwin path carry the same cursor position
+/// normalised to the frame size ([0, 1] inside the window, negative
+/// when the off-surface sentinel applies) — phosphor-vortex reads them;
+/// the daemon overlay contract reserves `.zw` for click state.
 inline constexpr const char* kIMouse = "iMouse";
 
 /// `vec4 customParams[N]` — per-effect declared parameter slots.

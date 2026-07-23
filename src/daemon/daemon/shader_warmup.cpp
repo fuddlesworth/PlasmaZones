@@ -4,9 +4,9 @@
 #include "daemon/daemon.h"
 
 #include "config/settings.h"
+#include "core/interfaces/shaderregistry.h"
 #include "core/platform/logging.h"
 #include "core/resolve/animationbootstrap.h"
-#include "core/interfaces/shaderregistry.h"
 #include "daemon/overlayservice.h"
 #include "daemon/rendering/surfaceshaderitem.h"
 #include "daemon/rendering/zoneentryscaffold.h"
@@ -42,6 +42,7 @@
 #include <algorithm>
 #include <array>
 #include <utility>
+
 namespace PlasmaZones {
 
 // Paths that follow the user's `Settings.animationProfile` slider
@@ -93,7 +94,7 @@ void Daemon::setupAnimationProfiles()
     // in production today but the narrower scope is the correct
     // contract for a registry that may be shared with other consumers.
     PhosphorProfileRegistry& registry = m_profileRegistry;
-    registry.clearOwner(kPlasmaZonesUserProfilesOwnerTag);
+    registry.clearOwner(QString(kPlasmaZonesUserProfilesOwnerTag));
     registry.clearOwner(QString(kShellAnimationFamilySeedsOwnerTag));
     for (const QString* path : kSettingsDrivenProfilePaths) {
         registry.unregisterProfile(*path);

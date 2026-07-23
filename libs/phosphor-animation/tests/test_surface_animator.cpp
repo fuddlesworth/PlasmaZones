@@ -14,8 +14,10 @@
  *   - ctor/dtor lifecycle is clean (no leaked Tracks)
  *
  * Coverage gaps (intentional, NOT bugs):
- *   - `setIsReversed(!isShowLeg)` runtime push at surfaceanimator.cpp:566
- *     and :1344 is not behaviourally tested here. Exercising it would
+ *   - the `setIsReversed(!isShowLeg)` runtime pushes (runLeg's reuse path
+ *     in surfaceanimator_tracks.cpp and the fresh-attach path in
+ *     surfaceanimator_shaderattach.cpp) are not behaviourally tested
+ *     here. Exercising them would
  *     require: (a) a real shader pack on disk that
  *     `AnimationShaderRegistry` can discover, (b) a `ShaderEffect`
  *     instantiated through `attachShaderToAnchor`'s scene-graph path,

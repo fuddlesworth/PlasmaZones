@@ -803,10 +803,21 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
                     for (const QPointer<QQuickItem>& sibling : newHidden) {
                         // Never route the replacement leg's own shader pieces
                         // into its hiddenSiblings — its teardown would then
-                        // wrongly re-show a piece it manages itself.
+                        // wrongly re-show a piece it manages itself. Its
+                        // shaderItem must instead have OUR hide undone (we
+                        // snapshotted it as a visible sibling only if the
+                        // nested attach completed before our walk), or the
+                        // replacement leg renders blank for its whole leg;
+                        // its shaderSource is dropped outright
+                        // (hideAnchorSiblings never hides source items, so a
+                        // match can only be stale).
                         QQuickItem* raw = sibling.data();
-                        if (raw && raw != static_cast<QQuickItem*>(attachIt->second.shaderItem.data())
-                            && raw != static_cast<QQuickItem*>(attachIt->second.shaderSource.data())) {
+                        if (!raw) {
+                            continue;
+                        }
+                        if (raw == static_cast<QQuickItem*>(attachIt->second.shaderItem.data())) {
+                            raw->setVisible(true);
+                        } else if (raw != static_cast<QQuickItem*>(attachIt->second.shaderSource.data())) {
                             attachIt->second.hiddenSiblings.append(sibling);
                         }
                     }
