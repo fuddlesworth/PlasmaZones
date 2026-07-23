@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2025 arch-disciple (niri-shader-collection)
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Honeycomb wipe — a hexagonal-grid radial mask that reveals/hides the
 // surface from the centre outward. Direct port of arch-disciple's niri
