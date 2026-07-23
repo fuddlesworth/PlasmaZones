@@ -1,24 +1,20 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Ripple transition — ported from liixini/shaders niri shader
-// (https://github.com/liixini/shaders/tree/main/ripple). Outward radial
-// ripple — sin-modulated UV displacement with seed-stable per-instance
-// phase. Asymmetric envelope and alpha curves between open and close.
+// Ripple transition — an outward radial ripple with sin-modulated UV
+// displacement and a seed-stable per-instance phase. Inspired by
+// liixini/shaders' niri ripple shader.
 //
-// Niri's ripple ships genuinely different close.glsl and open.glsl
-// bodies — close uses `intensity = p*p` with `alpha = smoothstep(1.0,
-// 0.5, p)`; open uses `intensity = (1-p)*(1-p)` with
-// `alpha = smoothstep(0.0, 0.3, p)`. The runtime's iTime flip alone
-// can't express both curves, so this is a pIn/pOut pair: the harness
-// feeds forward 0→1 `t` to both and dispatches the matching niri body by
-// leg direction (`windowFadingIn`).
+// The open and close legs use genuinely different curves — close uses
+// `intensity = p*p` with `alpha = smoothstep(1.0, 0.5, p)`; open uses
+// `intensity = (1-p)*(1-p)` with `alpha = smoothstep(0.0, 0.3, p)`. The
+// runtime's iTime flip alone can't express both, so this is a pIn/pOut
+// pair: the harness feeds forward 0→1 `t` to both and dispatches the
+// matching body by leg direction (`windowFadingIn`).
 //
-// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
-// == texture coords here), so the matrix multiply is dropped and
-// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
-// rewritten to `texture` (GLSL 4.50 core) inline. niri's
-// `niri_random_seed` is replaced by `surfaceSeed()` from `<noise.glsl>`.
+// Geometry and texture coordinates coincide here, so
+// `texture(uTexture0, uv)` samples directly, and per-instance variation
+// comes from `surfaceSeed()` in `<noise.glsl>`.
 
 // The harness supplies #version, <animation_uniforms.glsl>, the in/out,
 // and main(). noise.glsl is pack-specific, so it stays here.
@@ -29,11 +25,11 @@
 // intensity / alpha curves, not in amplitude or speed.
 
 // `uv` is vTexCoord; `t` is the forward 0→1 leg progress (the harness applies
-// legProgress()); `windowFadingIn` selects the niri open vs close body.
+// legProgress()); `windowFadingIn` selects the open vs close body.
 vec4 rippleBody(vec2 uv, float t, bool windowFadingIn) {
     vec4 result;
     if (!windowFadingIn) {
-        // ── niri close.glsl body (forward progress p = t) ──
+        // ── close-leg body (forward progress p = t) ──
         float p = t;
         float seed = surfaceSeed() * 6.28318;
 
@@ -50,7 +46,7 @@ vec4 rippleBody(vec2 uv, float t, bool windowFadingIn) {
         float alpha = smoothstep(1.0, 0.5, p);
         result = color * alpha;
     } else {
-        // ── niri open.glsl body (forward progress p = t) ──
+        // ── open-leg body (forward progress p = t) ──
         float p = t;
         float seed = surfaceSeed() * 6.28318;
 

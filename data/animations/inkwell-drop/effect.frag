@@ -1,33 +1,28 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Inkwell Drop transition — ported from liixini/shaders niri shader
-// (https://github.com/liixini/shaders/tree/main/inkwell-drop). Drop-
-// and-ripple — a circular ink front spreads from impact with concentric
-// ringed distortion.
+// Inkwell Drop transition — a drop-and-ripple where a circular ink front
+// spreads from impact with concentric ringed distortion. Inspired by
+// liixini/shaders' niri inkwell-drop shader.
 //
-// Niri's inkwell-drop ships symmetric close.glsl/open.glsl. PlasmaZones'
-// runtime flips iTime on reverse legs (1→0 on close, 0→1 on open),
-// so we use the niri OPEN body with `niri_clamped_progress` translated
-// to `clamp(iTime, 0.0, 1.0)` and the runtime flip auto-mirrors the
-// visual on close — no iIsReversed branch needed.
+// Symmetric transition, written as a single `pTransition`. The runtime
+// flips the leg's iTime on reverse legs (0→1 on open, 1→0 on close), so
+// the reveal reads `clamp(iTime, 0.0, 1.0)` directly and the close leg
+// plays in reverse automatically, with no `iIsReversed` branch.
 //
-// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
-// == texture coords here), so the matrix multiply is dropped and
-// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
-// rewritten to `texture` (GLSL 4.50 core) inline.
+// Geometry and texture coordinates coincide here, so
+// `texture(uTexture0, uv)` samples directly.
 //
-// One deviation from the niri body: niri samples the ripple-distorted
-// coord through `clamp(uv + dir * ripple, 0.0, 1.0)`. Pinning off-window
-// UVs to the edge texel via clamp-to-edge smears a border fringe around
-// the ripple front, so we drop the clamp and crop the sampled texels
-// via boundaryMask (see noise.glsl) instead — off-surface stays
-// transparent, no edge-pixel bleed. Same fix as wave-warp / soft-warp-fade.
+// Sampling the ripple-distorted coord through `clamp(uv + dir * ripple,
+// 0.0, 1.0)` pins off-window UVs to the edge texel, which smears a border
+// fringe around the ripple front. Instead the clamp is dropped and the
+// sampled texels are cropped via boundaryMask (see noise.glsl), so
+// off-surface stays transparent with no edge-pixel bleed. Same fix as
+// wave-warp / soft-warp-fade.
 
 #include <noise.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-    // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(t, 0.0, 1.0);
 
     vec2 impact = vec2(p_impactX, p_impactY);
@@ -45,14 +40,14 @@ vec4 pTransition(vec2 uv, float t) {
     float aspx = iResolution.x / max(iResolution.y, 0.0001);
     c.x *= aspx;
     float d = length(c);
-    // Deviation from niri: the front's travel is normalized to THIS
-    // window's farthest corner, measured in the same aspect-corrected
-    // metric as `d`. Niri's bare `front = p * speed` with speed 1.5 was
-    // tuned near a full-screen 16:9 surface (farthest corner ≈ 1.30):
-    // even there the last corner cleared at p ≈ 0.88, and the corner
-    // metric shrinks as the window narrows (≈ 0.89 on a square window),
-    // so the ink was done by p ≈ 0.6 and the rest of the leg sat on a
-    // static frame — the phosphor-peek dead-domain bug, aspect-
+    // The front's travel is normalized to THIS window's farthest corner,
+    // measured in the same aspect-corrected metric as `d`. A bare
+    // `front = p * speed` with speed 1.5 is tuned only near a full-screen
+    // 16:9 surface (farthest corner ≈ 1.30): even there the last corner
+    // clears at p ≈ 0.88, and the corner metric shrinks as the window
+    // narrows (≈ 0.89 on a square window), so the ink would finish by
+    // p ≈ 0.6 and the rest of the leg sit on a static frame — the
+    // phosphor-peek dead-domain bug, aspect-
     // conditioned like the desktop-phosphor projection. With the corner
     // distance factored out, frontSpeed = 1 (the new default) lands the
     // front on the farthest corner exactly at the end of the leg for any
