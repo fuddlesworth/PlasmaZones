@@ -270,6 +270,12 @@ private Q_SLOTS:
     void horizontalBoundary_onVerticalStack_doesNotShrink();
     void unsnapped_snapsIntoEdgeZone();
     void staleMembers_fallBackToEdgeZone();
+    void mixedStaleMembers_dropsDeadIdOnGrow();
+    void unsnappedEmptyLayout_reportsNoZones();
+    void shrinkTolerance_dropsJitteredTrailingBandTogether();
+    void jitterSliverInBand_doesNotJoinSweep();
+    void jitterEdgeCandidate_isNotGrowTarget();
+    void growTie_prefersPerpendicularNearerCandidate();
     void gapBearingLayout_growsAcrossGap();
     void diagonalOnlyCandidate_doesNotGrow();
     void overlappingCandidate_beatsDistantZone();
@@ -432,6 +438,122 @@ void TestSpanTargets::staleMembers_fallBackToEdgeZone()
     QVERIFY(result.grew);
     QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[1]}));
     QVERIFY(!result.zoneIds.contains(QStringLiteral("{dead-zone-id}")));
+}
+
+void TestSpanTargets::mixedStaleMembers_dropsDeadIdOnGrow()
+{
+    // A partially stale span (one live member, one dead id) grows on the live
+    // member alone. The dead id must not be re-included from the raw stored
+    // zone list — it could even become the primary zone the commit keys off.
+    SpanFixture f(quadrants());
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0], QStringLiteral("{dead-zone-id}")};
+
+    auto resolver = f.makeResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
+
+    QVERIFY(result.success);
+    QVERIFY(result.grew);
+    QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[0], f.zoneIds[1]}));
+    QVERIFY(!result.zoneIds.contains(QStringLiteral("{dead-zone-id}")));
+    QCOMPARE(result.geometry, QRect(0, 0, 1920, 540));
+}
+
+void TestSpanTargets::unsnappedEmptyLayout_reportsNoZones()
+{
+    // Unsnapped window and the adjacency resolver knows no entry zone in the
+    // pressed direction (empty layout for this screen): the failure leg must
+    // report no_zones, not crash or claim a direction problem.
+    SpanFixture f(quadrants());
+
+    auto resolver = f.makeResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
+
+    QVERIFY(!result.success);
+    QCOMPARE(result.reason, QStringLiteral("no_zones"));
+}
+
+void TestSpanTargets::shrinkTolerance_dropsJitteredTrailingBandTogether()
+{
+    // The right column is two stacked zones whose right edges disagree by
+    // 1px of rounding jitter (widths 0.4995 vs 0.5 → 1919 vs 1920). Pressing
+    // left must treat both as the same trailing edge and drop them together;
+    // an exact-edge comparison would keep the 1919 zone and leave an
+    // L-shaped span.
+    SpanFixture f({QRectF(0.0, 0.0, 0.5, 1.0), QRectF(0.5, 0.0, 0.4995, 0.5), QRectF(0.5, 0.5, 0.5, 0.5)});
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0], f.zoneIds[1], f.zoneIds[2]};
+
+    auto resolver = f.makeResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("left"), kScreen);
+
+    QVERIFY(result.success);
+    QVERIFY(!result.grew);
+    QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[0]}));
+    QCOMPARE(result.geometry, QRect(0, 0, 960, 1080));
+}
+
+void TestSpanTargets::jitterSliverInBand_doesNotJoinSweep()
+{
+    // A perpendicular neighbour leaking 1px of rounding jitter into the
+    // extension band (its top edge rounds to 539 instead of 540) must not be
+    // swept into the span: only overlaps beyond kSpanEdgeTolerancePx count.
+    SpanFixture f({QRectF(0.0, 0.0, 0.5, 0.5), QRectF(0.5, 0.0, 0.5, 0.5), QRectF(0.5, 0.4995, 0.5, 0.5)});
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
+
+    auto resolver = f.makeResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
+
+    QVERIFY(result.success);
+    QVERIFY(result.grew);
+    QCOMPARE(result.zoneIds, (QStringList{f.zoneIds[0], f.zoneIds[1]}));
+    QCOMPARE(result.geometry, QRect(0, 0, 1920, 540));
+}
+
+void TestSpanTargets::jitterEdgeCandidate_isNotGrowTarget()
+{
+    // A candidate whose far edge exceeds the span's by only 1px of rounding
+    // jitter (1921 vs 1920) shares that edge rather than extending past it.
+    // Treating it as a grow target would produce a visually-null "grow" that
+    // blocks grow-else-retract; the press must report the boundary instead.
+    SpanFixture f({QRectF(0.0, 0.0, 1.0, 0.5), QRectF(0.5, 0.25, 0.5005, 0.5)});
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
+
+    auto resolver = f.makeResolver();
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
+
+    QVERIFY(!result.success);
+    QCOMPARE(result.reason, QStringLiteral("no_adjacent_zone"));
+}
+
+void TestSpanTargets::growTie_prefersPerpendicularNearerCandidate()
+{
+    // Two candidates tie on edge gap (both flush with the member's right
+    // edge); the perpendicular-centre tie-break must pick the aligned one.
+    // The off-centre candidate is inserted FIRST so insertion order alone
+    // would pick it — only the perp comparison selects the aligned zone.
+    // The winner is observable through the success feedback's target zone.
+    SpanFixture f({QRectF(0.0, 0.25, 0.5, 0.5), QRectF(0.5, 0.25, 0.5, 0.75), QRectF(0.5, 0.25, 0.25, 0.5)});
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
+
+    QString feedbackReason;
+    QString feedbackTarget;
+    SnapNavigationTargetResolver resolver(
+        &f.wts, f.registry.get(), &f.adj,
+        [&](bool, const QString&, const QString& reason, const QString&, const QString& targetZoneId, const QString&) {
+            feedbackReason = reason;
+            feedbackTarget = targetZoneId;
+        });
+    const SpanTargetResult result =
+        resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), kScreen);
+
+    QVERIFY(result.success);
+    QVERIFY(result.grew);
+    QCOMPARE(feedbackReason, QStringLiteral("grow:right"));
+    QCOMPARE(feedbackTarget, f.zoneIds[2]);
 }
 
 void TestSpanTargets::gapBearingLayout_growsAcrossGap()

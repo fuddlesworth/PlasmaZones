@@ -17,9 +17,11 @@ everything else over 1150 is scheduled work.
 All split plans in §2 were executed on branch `refactor/file-size` in three waves,
 each verified with both build trees (unity and no-unity) and a full ctest run
 (311/311 passing). After remediation, the only files above the 1150-line ceiling
-are the six entries in the Exceptions Register below (current sizes:
-StubSettings.h 2338, plasmazoneseffect.h 2170, settings.h 1704, AutotileEngine.h
-1635, windowtrackingadaptor.h 1269, pluau.luau 1189). Everything else is at or
+are the six entries in the Exceptions Register below (sizes as of 2026-07-22:
+StubSettings.h 2338, plasmazoneseffect.h 2170, settings.h 1723, AutotileEngine.h
+1635, windowtrackingadaptor.h 1269, pluau.luau 1189; exception-register line
+counts are as-of snapshots and drift as sanctioned files grow within their
+exception). Everything else is at or
 under 1150; the grace-band list in §4 remains accurate as the set of tolerated
 files with their pre-identified seams. The §4 catalog shows the pre-remediation
 sizes for the historical record.
@@ -42,7 +44,7 @@ constraint and the condition under which it should be revisited.
 
 | File | Lines | Constraint | Revisit when |
 |---|---|---|---|
-| `src/config/settings.h` | 1704 | Single Q_OBJECT class with 217 Q_PROPERTY declarations behind `ISettings`. moc requires the whole class declaration in one header. Splitting into domain sub-settings QObjects changes QML property paths, the D-Bus settingsadaptor surface, and the ISettings interface consumed by daemon/editor/settings; that is a cross-cutting refactor, not a file-size fix. | ISettings is ever decomposed into domain sub-objects (long-term direction already noted at settings.h:119). |
+| `src/config/settings.h` | 1723 | Single Q_OBJECT class with 221 Q_PROPERTY declarations behind `ISettings`. moc requires the whole class declaration in one header. Splitting into domain sub-settings QObjects changes QML property paths, the D-Bus settingsadaptor surface, and the ISettings interface consumed by daemon/editor/settings; that is a cross-cutting refactor, not a file-size fix. | ISettings is ever decomposed into domain sub-objects (long-term direction already noted at settings.h:119). |
 | `tests/unit/helpers/StubSettings.h` | 2338 | 309 overrides mirroring the aggregate ISettings surface. Size is a direct mirror of the production interface, not test bloat. Splitting into mixin headers fragments shared member state (documented in-file cross-references) for zero gain. **Dependent exception**: shrinks automatically when settings.h does. | Same trigger as settings.h; then split into per-domain stub mixins along the existing section comments. |
 | `src/dbus/windowtrackingadaptor/windowtrackingadaptor.h` | 1269 | Single moc'd Q_CLASSINFO D-Bus adaptor class (`org.plasmazones.WindowTracking`). Splitting the header means splitting the D-Bus interface itself, a wire-protocol change affecting the KWin effect, phosphorctl, tests, and the checked-in XML. ~60% of the lines are safety-critical bus-exposure doc comments. | A protocol-version bump ever happens anyway; then consider a second adaptor class (query surface) on the same object path. |
 | `kwin-effect/plasmazoneseffect/plasmazoneseffect.h` | 2272 | **Partial exception.** Single Q_OBJECT class deriving KWin::OffscreenEffect; all overrides, signals, and slots must sit in one class declaration. Planned type/state-struct extraction (see §2.1) gets it to roughly 1550–1650; the KWin API puts a floor of ~600–800 lines of unavoidable declarations under it, and the rest of the reduction requires a real delegation refactor (manager objects), tracked as follow-up work, not a quick split. | After the §2.1 extractions land, reassess whether a DecorationManager-style delegation is worth the effort. |

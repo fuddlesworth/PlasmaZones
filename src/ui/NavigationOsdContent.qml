@@ -69,6 +69,18 @@ Item {
                 return i18n("This window is excluded from tiling");
             }
             if (action === "move" || action === "focus" || action === "span") {
+                // Layout-level failures are not a direction problem: telling
+                // the user "no zone in that direction" would suggest another
+                // arrow key could work when no layout is active at all.
+                if (reason === "no_zones" || reason === "no_active_layout")
+                    return i18n("No zone layout on this screen");
+
+                if (reason === "no_window")
+                    return i18n("No window is focused");
+
+                if (reason === "engine_unavailable" || reason === "invalid_direction" || reason === "geometry_error" || reason === "no_zone_detection")
+                    return i18n("Zone navigation is unavailable");
+
                 return i18n("No zone in that direction");
             } else if (action === "push") {
                 return i18n("No empty zone available");
@@ -120,7 +132,7 @@ Item {
             var spanArrow = directionArrow(reason);
             if (reason.indexOf("grow") === 0) {
                 if (targetZoneNumber > 0)
-                    return spanArrow + " " + i18n("Extended into zone %1", targetZoneNumber);
+                    return spanArrow + " " + i18n("Extended into Zone %1", targetZoneNumber);
 
                 return spanArrow + " " + i18n("Span extended");
             }

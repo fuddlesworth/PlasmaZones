@@ -753,7 +753,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
         // Portal backend relays the compositor's trigger_description
         // verbatim, which may be native/localized spelling — without
         // normalization the family compression's token compares silently
-        // fail and the sheet shows all 26 uncompressed rows. A string that
+        // fail and the sheet shows every family-member row uncompressed. A string that
         // doesn't parse stays verbatim (better an odd chip than a lost
         // binding).
         for (QString& t : triggers) {

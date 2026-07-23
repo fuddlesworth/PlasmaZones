@@ -678,12 +678,6 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     qCDebug(lcOverlay) << "showNavigationOsd called: action=" << action << "reason=" << reason << "screen=" << screenId
                        << "success=" << success;
 
-    // Only show OSD for successful actions - failures (no windows, no zones, etc.) don't need feedback
-    if (!success) {
-        qCDebug(lcOverlay) << "Skipping navigation OSD for failure:" << action << reason;
-        return;
-    }
-
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
     QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
     if (!physScreen) {
@@ -726,7 +720,12 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
                                                QStringLiteral("swap_master"),  QStringLiteral("master_ratio"),
                                                QStringLiteral("master_count"), QStringLiteral("retile"),
                                                QStringLiteral("swap_vs"),      QStringLiteral("rotate_vs")};
-    const bool needsLayout = !noLayoutActions.contains(action);
+    // Failure OSDs never need layout/zone data: every failure branch in
+    // NavigationOsdContent.qml renders plain text (and reasons like
+    // "no_zones" / "no_active_layout" fire precisely when no layout is
+    // resolvable), so gating them on a layout would drop the feedback the
+    // engine emitted them for.
+    const bool needsLayout = success && !noLayoutActions.contains(action);
     PhosphorZones::Layout* screenLayout = resolveScreenLayout(effectiveId);
     if ((needsLayout && !screenLayout) || (screenLayout && screenLayout->zones().isEmpty() && needsLayout)) {
         qCDebug(lcOverlay) << "No layout or zones for navigation OSD: screen=" << effectiveId

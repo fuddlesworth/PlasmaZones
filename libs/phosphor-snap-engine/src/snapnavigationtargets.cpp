@@ -502,7 +502,12 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
         if (perpendicularOverlap(unionRect, r, horizontal) <= 0) {
             continue;
         }
-        const bool extends = positive ? (travelHi(r, horizontal) > uHi) : (travelLo(r, horizontal) < uLo);
+        // Tolerance mirrors shrink-band membership: a candidate whose far
+        // edge exceeds the union's by only rounding jitter is the same edge,
+        // not a grow target - without this, a 1-2px sliver registers as a
+        // gap-0 "grow" that adds a jitter zone and blocks grow-else-retract.
+        const bool extends = positive ? (travelHi(r, horizontal) > uHi + kSpanEdgeTolerancePx)
+                                      : (travelLo(r, horizontal) < uLo - kSpanEdgeTolerancePx);
         if (!extends) {
             continue;
         }
@@ -551,9 +556,18 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
             result.zoneIds.append(m.first);
         }
         QRect newUnion = unionRect;
-        for (const auto& [candidateId, candidateRect] : std::as_const(candidates)) {
-            if (!band.intersected(candidateRect).isEmpty()) {
-                result.zoneIds.append(candidateId);
+        for (int i = 0; i < candidates.size(); ++i) {
+            const QRect& candidateRect = candidates[i].second;
+            // Sweep membership needs more than rounding jitter: zone rects
+            // rounded from relative geometry can leak 1-2px into the band
+            // (see kSpanEdgeTolerancePx), and an exact intersection test
+            // would let such a sliver of a perpendicular neighbour silently
+            // join the span. The winner is exempt - it defines the band and
+            // always joins its own extension.
+            const QRect overlap = band.intersected(candidateRect);
+            const bool beyondJitter = overlap.width() > kSpanEdgeTolerancePx && overlap.height() > kSpanEdgeTolerancePx;
+            if (i == bestIndex || beyondJitter) {
+                result.zoneIds.append(candidates[i].first);
                 newUnion = newUnion.united(candidateRect);
             }
         }

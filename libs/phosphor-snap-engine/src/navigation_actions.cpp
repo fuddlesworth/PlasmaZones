@@ -207,7 +207,10 @@ bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QStrin
     if (isWindowExcluded(windowId)) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << action << ":" << windowId << "excluded by rule, appId:" << appId;
-        Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
+        // The appId stays in the log only: the fourth argument is the
+        // source-zone-id slot, and smuggling a non-zone token through it
+        // invites consumers to misparse it as a zone.
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), QString(), QString(), screenId);
         return true;
     }
     return false;
@@ -342,6 +345,11 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
     if (!geo.isValid()) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine)
             << "SnapEngine::moveFocusedInDirection: invalid geometry from nav result";
+        // Same success-OSD correction as spanFocusedInDirection: the
+        // resolver emitted "move" success at resolve time, so a bail here
+        // must tell the user the move did not land.
+        Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("geometry_error"), QString(), QString(),
+                                  result.screenName);
         return;
     }
     commitSnap(windowId, result.zoneId, result.screenName);
@@ -387,6 +395,11 @@ void SnapEngine::spanFocusedInDirection(const QString& direction, const Navigati
     if (!result.geometry.isValid() || result.zoneIds.isEmpty()) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine)
             << "SnapEngine::spanFocusedInDirection: invalid span result from resolver";
+        // The resolver already announced success on the OSD at resolve time;
+        // correct the record so the user isn't told a span happened that was
+        // never committed.
+        Q_EMIT navigationFeedback(false, QStringLiteral("span"), QStringLiteral("geometry_error"), QString(), QString(),
+                                  result.screenName);
         return;
     }
     commitMultiZoneSnap(windowId, result.zoneIds, result.screenName);

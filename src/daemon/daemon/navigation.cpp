@@ -183,14 +183,16 @@ void Daemon::handleMove(NavigationDirection direction)
 
 void Daemon::handleSpan(NavigationDirection direction)
 {
-    // Debounce keyboard auto-repeat. Unlike move, span is not monotonic:
-    // once the grow direction hits the layout boundary the same keypress
-    // shrinks the opposite edge, so a held key would grow to the edge and
-    // then collapse the span back to a single zone.
+    // Thin keyboard auto-repeat to one span step per debounce window.
+    // Unlike move, span is not monotonic: once the grow direction hits the
+    // layout boundary the same keypress shrinks the opposite edge, so
+    // unthrottled repeat would grow to the edge and collapse the span at
+    // full repeat rate. Full prevention would need press/repeat
+    // discrimination the shortcut backend doesn't expose; the window slows
+    // the walk enough for the user to release the key.
     if (m_spanDebounce.isValid() && m_spanDebounce.elapsed() < kShortcutDebounceMs) {
         return;
     }
-    m_spanDebounce.restart();
 
     NavigationContext ctx;
     auto* nav =
@@ -206,6 +208,10 @@ void Daemon::handleSpan(NavigationDirection direction)
     if (isFocusedContextGated(ctx.screenId)) {
         return;
     }
+    // Restart only when the press actually dispatches: a press rejected by
+    // the guards above must not consume the window and swallow a valid
+    // press that follows within it.
+    m_spanDebounce.restart();
     nav->spanFocusedInDirection(dirStr, ctx);
 }
 

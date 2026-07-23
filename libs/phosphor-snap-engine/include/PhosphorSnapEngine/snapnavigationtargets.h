@@ -81,8 +81,10 @@ inline QString oppositeCrossingDirection(const QString& direction)
  *   reads from them. It does not mutate their state.
  * - It never touches D-Bus or Qt signals directly — navigation
  *   feedback (OSD data) is emitted through a std::function callback
- *   wired at construction time. The adaptor forwards that callback
- *   to its own navigationFeedback signal.
+ *   wired at construction time. In production the sole construction
+ *   site is SnapEngine::ensureTargetResolver, which forwards the
+ *   callback to SnapEngine::navigationFeedback (relayed onward via
+ *   SnapAdaptor to WindowTrackingAdaptor::navigationFeedback).
  * - Validation failures (empty windowId, empty direction) are
  *   considered pre-call contract violations and return an early
  *   noSnap-equivalent result; the adaptor's dispatcher is expected
@@ -100,10 +102,11 @@ inline QString oppositeCrossingDirection(const QString& direction)
 class PHOSPHORSNAPENGINE_EXPORT SnapNavigationTargetResolver
 {
 public:
-    /// Callback shape matching WindowTrackingAdaptor::navigationFeedback.
-    /// Invoked by the resolver whenever a target computation succeeds or
-    /// fails in a user-visible way. The adaptor wires this to its own
-    /// navigationFeedback signal at construction time.
+    /// Callback shape matching SnapEngine::navigationFeedback (and the
+    /// WindowTrackingAdaptor signal it is ultimately relayed to). Invoked
+    /// by the resolver whenever a target computation succeeds or fails in
+    /// a user-visible way. SnapEngine::ensureTargetResolver wires this to
+    /// SnapEngine::navigationFeedback at construction time.
     using FeedbackFn =
         std::function<void(bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
                            const QString& targetZoneId, const QString& screenId)>;
