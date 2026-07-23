@@ -30,9 +30,9 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "config/settings.h"
-#include <QGuiApplication>
-#include <QScreen>
 #include <QTimer>
+
+#include <algorithm>
 
 using PlacementEngineBase = PhosphorEngine::PlacementEngineBase;
 

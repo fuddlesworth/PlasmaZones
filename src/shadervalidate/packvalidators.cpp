@@ -51,9 +51,48 @@ int validatePack(const QString& packDir, QTextStream& out)
     const QString name = QFileInfo(packDir).fileName();
 
     QString parseErr;
-    const ShaderRegistry::ShaderInfo info = ShaderRegistry::parsePackMetadata(packDir, &parseErr);
+    ShaderRegistry::ShaderInfo info = ShaderRegistry::parsePackMetadata(packDir, &parseErr);
     if (!parseErr.isEmpty()) {
         out << name << "\n  metadata      ERROR\n    " << parseErr << "\n  → 1 error\n\n";
+        return 1;
+    }
+
+    // The `fragmentShader` / `bufferShaders` / `vertexShader` paths come from
+    // the user-editable metadata.json (parsePackMetadata resolves them against
+    // the pack dir without confinement), so confine each to the pack dir before
+    // it is opened and fed to glslang — the same guard the animation and
+    // surface validators apply. Zone packs have no `builtin:` buffer tokens
+    // (that resolver is surface-only), so every path must stay inside the pack.
+    // An empty path is left as-is (that stage is simply absent).
+    const auto confineToPack = [&packDir](QString& path) -> bool {
+        if (path.isEmpty()) {
+            return true;
+        }
+        const auto confined = confinedPackPath(packDir, path);
+        if (!confined) {
+            return false;
+        }
+        path = *confined;
+        return true;
+    };
+    if (!confineToPack(info.sourcePath)) {
+        out << name
+            << "\n  metadata      ERROR\n    fragmentShader path escapes the pack directory (path traversal "
+               "rejected)\n  → 1 error\n\n";
+        return 1;
+    }
+    for (QString& buf : info.bufferShaderPaths) {
+        if (!confineToPack(buf)) {
+            out << name
+                << "\n  metadata      ERROR\n    bufferShaders path escapes the pack directory (path traversal "
+                   "rejected)\n  → 1 error\n\n";
+            return 1;
+        }
+    }
+    if (!confineToPack(info.vertexShaderPath)) {
+        out << name
+            << "\n  metadata      ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n  "
+               "→ 1 error\n\n";
         return 1;
     }
 

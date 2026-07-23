@@ -104,7 +104,7 @@ Key code paths this design touches:
 - **Compile-result reporting:** `ShaderRegistry::reportShaderBakeFinished()`
   (`shaderregistry.cpp:403`) already emits
   `shaderCompilationFinished(id, success, error)`.
-- **Install:** `src/settings/shaderpackinstaller.{h,cpp}` — validated, size-capped,
+- **Install:** `src/settings/services/shaderpackinstaller.{h,cpp}` — validated, size-capped,
   symlink-rejecting, atomic-rename install of a dropped pack.
 
 The pieces needed for every improvement below **already exist**; the work is
@@ -519,7 +519,7 @@ full-frame + `main()` triad covers everything else cleanly.)
   action stamps out. (A power user who wants the `main()` loop, or a full-frame
   `pImage`, can write those instead — see T1.4.)
 - Add `createFromTemplate(name)` to the shader page controller
-  (`src/settings/animationspagecontroller_shaders.cpp`), copying the template into
+  (`src/settings/pages/animationspagecontroller_shaders.cpp`), copying the template into
   the user dir via the existing `ShaderPackInstaller` path — mirroring the
   algorithms page's create/duplicate affordance. Wire a "Create shader…" /
   "Duplicate" button into `ShaderBrowserPage.qml`.
