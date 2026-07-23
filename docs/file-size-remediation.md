@@ -29,7 +29,7 @@ historical record, so its line counts and verdicts are as-of that run, not
 current. Files that entered the grace band after it was taken, and are
 tolerated with no action: `libs/phosphor-tile-engine/src/NavigationController.cpp`
 (1108; seam: the cross-surface helpers), `libs/phosphor-snap-engine/src/snapnavigationtargets.cpp`
-(1090; seam: the span resolver), `src/daemon/controllers/shortcutmanager.cpp`
+(1095; seam: the span resolver), `src/daemon/controllers/shortcutmanager.cpp`
 (1063; seam: the cheatsheet catalog and its family compression),
 `kwin-effect/plasmazoneseffect/lifecycle_wiring.cpp` (1134) and
 `kwin-effect/plasmazoneseffect/paint_shader_window.cpp` (1019), both created by
