@@ -194,6 +194,15 @@ void Daemon::handleSpan(NavigationDirection direction)
     // full repeat rate. Full prevention would need press/repeat
     // discrimination the shortcut backend doesn't expose; the window slows
     // the walk enough for the user to release the key.
+    //
+    // One timer covers all four directions, so a deliberate reversal inside
+    // the window (grow right, then grow left within kShortcutDebounceMs) is
+    // dropped too. That is accepted: the reversal corrects a press whose
+    // result the user has not seen yet, and per-direction timers would let
+    // auto-repeat on one arrow chain past a boundary flip while the opposite
+    // arrow was still settling. m_virtualScreenDebounce reasons about
+    // alternation differently because its two ops are not each other's
+    // inverse.
     if (m_spanDebounce.isValid() && m_spanDebounce.elapsed() < kShortcutDebounceMs) {
         return;
     }

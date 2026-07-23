@@ -169,8 +169,10 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
         return swapResult(false, reason, QString(), 0, 0, 0, 0, QString(), QString(), 0, 0, 0, 0, QString(),
                           sourceScreenId, currentZoneId, QString());
     };
-    // m_service is a ctor invariant; only the late-bound resolvers are optional.
-    if (!m_crossSurface || !m_zoneAdjacency) {
+    // hasDependencies() is the release pair for the ctor asserts; the rest are
+    // late-bound resolvers and genuinely optional. Same shape as
+    // crossOutputEntryTarget.
+    if (!hasDependencies() || !m_crossSurface || !m_zoneAdjacency) {
         return fail(QString());
     }
     const QString neighborScreen = m_crossSurface->neighborOutputInDirection(sourceScreenId, direction);
@@ -513,10 +515,13 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
     // the pick is deterministic rather than dependent on the layout's zone
     // enumeration order.
     //
-    // No bundled layout in data/layouts/ currently reaches a gap-and-perp
-    // double tie, so this key changes no in-tree winner; it exists so that an
-    // authored layout that does tie cannot have its result decided by JSON
-    // ordering. growDoubleTie_prefersFarthestFarEdge in
+    // Gap-and-perp double ties are common in-tree: 13 of them across 8 bundled
+    // layouts, including fibonacci, focus and master-stack. On every one of
+    // those the farthest-far-edge candidate is also the first-enumerated one,
+    // so the key changes no winner today. That agreement is the reason to make
+    // it explicit rather than to leave it out: without the key the result rests
+    // on JSON ordering, and reordering a layout's zones would silently flip it.
+    // growDoubleTie_prefersFarthestFarEdge in
     // tests/unit/snap/test_span_targets.cpp is the coverage.
     //
     // The perpendicular centre key stays: it disambiguates stacked
@@ -592,7 +597,7 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
         // that are not in the set — inherent to bounding-rect spans, and
         // identical to what a drag multi-zone snap of the same set would
         // produce. This is the norm on master-stack-shaped layouts rather than
-        // a corner case: 13 of the 26 bundled layouts hit it, and on
+        // a corner case: 12 of the 26 bundled layouts hit it, and on
         // master-stack.json a single grow-left from Stack 1 picks Master and
         // produces the whole screen while Stack 2 and Stack 3 stay unowned and
         // separately snappable. data/layouts/bsp.json is the mild version,
