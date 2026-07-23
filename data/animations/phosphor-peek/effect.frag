@@ -139,9 +139,7 @@ vec4 pTransition(vec2 uv, float t) {
     // output's colorDescription and converting again would double-transform
     // (see the kFinalizeColorBlock note in shader_textures.cpp).
     //
-    // This deliberately diverges from desktop-phosphor and desktop-aretha,
-    // which DO clamp their additive glow. Their clamp is the anomaly: on an HDR
-    // output it crushes capture values the blend never created. Do not "restore"
-    // it here for consistency.
+    // No upper clamp, matching desktop-phosphor and desktop-aretha: a clamp
+    // here would crush HDR capture values the blend never created.
     return vec4(col, 1.0);
 }

@@ -88,6 +88,10 @@ vec4 pTransition(vec2 uv, float t) {
     col += edgeCol * frontGlow * (0.35 + 0.65 * hexLine);
 
     // Two opaque desktops blended stay opaque — the pass draws with blending
-    // off and replaces the screen, so alpha is a constant 1.
-    return vec4(clamp(col, 0.0, 1.0), 1.0);
+    // off and replaces the screen, so alpha is a constant 1. No upper clamp:
+    // the reveal blend is convex over the two captures, the scanline term is
+    // multiplicative in (0, 1], and the edge glow only adds non-negative
+    // colour — clamping would crush HDR capture values the blend never
+    // created (the anomaly phosphor-peek's tail comment warns about).
+    return vec4(col, 1.0);
 }

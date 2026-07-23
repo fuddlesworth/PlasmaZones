@@ -793,9 +793,19 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
             // the hidden siblings and wind the pieces down.
             auto attachIt = m_tracks.find(TrackKey{surface, target});
             if (attachIt == m_tracks.end() || attachIt->second.generation != legGeneration) {
-                for (const QPointer<QQuickItem>& sibling : newHidden) {
-                    if (sibling) {
-                        sibling->setVisible(true);
+                // Route the staged hidden siblings by what replaced us: a
+                // live replacement slot with its own shader leg still needs
+                // them hidden (its hideAnchorSiblings only recorded
+                // still-visible siblings, so ones WE hid are in neither
+                // list) — hand them to that track for its teardown to
+                // restore. Otherwise restore them now.
+                if (attachIt != m_tracks.end() && attachIt->second.shaderItem) {
+                    attachIt->second.hiddenSiblings += newHidden;
+                } else {
+                    for (const QPointer<QQuickItem>& sibling : newHidden) {
+                        if (sibling) {
+                            sibling->setVisible(true);
+                        }
                     }
                 }
                 PendingReuseShader transient;
@@ -906,8 +916,15 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
 
     if (hasShaderLeg) {
         auto it = m_tracks.find(TrackKey{surface, target});
-        if (it == m_tracks.end() || it->second.generation != legGeneration || !it->second.shaderTime
-            || !it->second.shaderItem) {
+        if (it == m_tracks.end() || it->second.generation != legGeneration) {
+            return;
+        }
+        if (!it->second.shaderTime || !it->second.shaderItem) {
+            // Unreachable today (nothing between the attach-block write and
+            // here can null the pieces while the generation matches), but a
+            // bare return would strand pendingLegs and pin the driver —
+            // complete the leg instead, matching the false-start discipline.
+            legCompleted(surface, target);
             return;
         }
         const QString shaderLegProfilePath = shaderProfilePath.isEmpty() ? opacityProfilePath : shaderProfilePath;
@@ -1045,8 +1062,13 @@ void SurfaceAnimator::Private::legCompleted(PhosphorLayer::Surface* surface, QQu
 
     // Shader-exclusive hide: the surface stayed at full opacity while
     // the shader ran. Now snap to the terminal opacity (0.0 for hide)
-    // so the surface actually disappears.
-    if (snapTarget) {
+    // so the surface actually disappears. Skip the snap when the
+    // sibling restore inside teardownShaderLeg re-entered
+    // beginShow/beginHide and installed a FRESH track for this target —
+    // the nested leg owns the opacity now, and stamping our retained
+    // terminal value over its pre-state would run its whole leg from
+    // the wrong base (e.g. a nested shader show forced transparent).
+    if (snapTarget && m_tracks.find(TrackKey{surface, snapTarget.data()}) == m_tracks.end()) {
         snapTarget->setOpacity(snapOpacity);
     }
     if (onComplete) {

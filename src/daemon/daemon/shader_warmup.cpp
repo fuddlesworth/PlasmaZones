@@ -2,48 +2,42 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemon/daemon.h"
-#include "helpers.h"
 
-#include <QFutureWatcher>
-#include <QPointer>
-#include <QStandardPaths>
-#include <QtConcurrent>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <array>
+#include "config/settings.h"
+#include "core/platform/logging.h"
+#include "core/resolve/animationbootstrap.h"
+#include "core/interfaces/shaderregistry.h"
+#include "daemon/overlayservice.h"
+#include "daemon/rendering/surfaceshaderitem.h"
+#include "daemon/rendering/zoneentryscaffold.h"
+#include "daemon/rendering/zoneshadernoderhi.h"
 
+#include <PhosphorAnimation/AnimationShaderEffect.h>
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
-#include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorShaders/ShaderEntryPoint.h>
+#include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
-#include "daemon/overlayservice.h"
-#include "daemon/rendering/surfaceshaderitem.h"
-#include "daemon/rendering/zoneentryscaffold.h"
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QFutureWatcher>
+#include <QPointer>
+#include <QStandardPaths>
+#include <QTimer>
+#include <QtConcurrent>
 
-#include "config/configbackends.h"
-#include "config/configdefaults.h"
-#include "config/settingsconfigstore.h"
-#include "config/settings.h"
-#include "core/types/baselinecleanup.h"
-#include "core/types/constants.h"
-#include "core/resolve/crosssurfaceresolver.h"
-#include "core/resolve/animationbootstrap.h"
-#include "core/resolve/screenmoderouter.h"
-#include "core/utils/geometryutils.h"
-#include "core/utils/utils.h"
-#include "core/platform/logging.h"
-#include "core/interfaces/shaderregistry.h"
-#include "common/screenidresolver.h"
-#include "common/layoutbundlebuilder.h"
-
+#include <algorithm>
+#include <array>
+#include <utility>
 namespace PlasmaZones {
 
 // Paths that follow the user's `Settings.animationProfile` slider

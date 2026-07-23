@@ -10,15 +10,12 @@
 
 #include "packvalidatorcommon.h"
 
-#include "daemon/rendering/zoneentryscaffold.h"
-
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
-#include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
@@ -40,7 +37,6 @@
 using PhosphorAnimationShaders::AnimationShaderEffect;
 using PhosphorAnimationShaders::AnimationShaderRegistry;
 using PhosphorRendering::ShaderCompiler;
-using PhosphorShaders::ShaderIncludeResolver;
 using PhosphorShaders::ShaderRegistry;
 using PhosphorSurfaceShaders::SurfaceShaderEffect;
 using PhosphorSurfaceShaders::SurfaceShaderRegistry;

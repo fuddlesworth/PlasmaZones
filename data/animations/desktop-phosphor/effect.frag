@@ -235,6 +235,11 @@ vec4 pTransition(vec2 uv, float t) {
                   * mix(1.0, 0.25, reveal) * clamp(p_glow * 0.5 + 0.5, 0.0, 1.5);
 
     // Two opaque desktops blended stay opaque — the pass draws with blending
-    // off and replaces the screen, so alpha is a constant 1.
-    return vec4(clamp(col, 0.0, 1.0), 1.0);
+    // off and replaces the screen, so alpha is a constant 1. No upper clamp:
+    // crossFade is convex over the two captures, the settle dimmer is
+    // multiplicative in [0.25, 1], and the rim + circuit terms only add
+    // non-negative colour — clamping would crush HDR capture values the
+    // blend never created (the anomaly phosphor-peek's tail comment warns
+    // about).
+    return vec4(col, 1.0);
 }

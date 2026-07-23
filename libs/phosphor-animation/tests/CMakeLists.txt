@@ -150,3 +150,4 @@ function(pal_add_test _name)
 endfunction()
 
 pal_add_test(pal_test_surface_animator test_surface_animator.cpp)
+pal_add_test(pal_test_surface_animator_reentrancy test_surface_animator_reentrancy.cpp)
