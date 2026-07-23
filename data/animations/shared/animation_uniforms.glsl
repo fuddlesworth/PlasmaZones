@@ -179,8 +179,9 @@ uniform float iWindowOpacity;
 // `cached->iAnchorRectInTextureLoc` setUniform site writes the value
 // computed by `ShaderInternal::computeTextureSubRect(anchorGeo,
 // expandedGeo)` for surface-extent legs; anchor-extent legs carry the
-// (0, 0, 1, 1) identity. Daemon: `SurfaceAnimator::syncShaderGeometryNow` pushes
-// it through `AnimationUniformExtension`. Both stamp the value before
+// (0, 0, 1, 1) identity. Daemon:
+// `SurfaceAnimator::syncShaderGeometryNow` pushes it through
+// `AnimationUniformExtension`. Both stamp the value before
 // the first painted frame, so a fragment never sees the GL default
 // `vec4(0)` — `surfaceColor` would otherwise sample the corner texel
 // for every pixel and flash a one-frame solid colour.
@@ -284,7 +285,11 @@ layout(std140, binding = 0) uniform AnimationUniforms {
     int _appField0;              // offset 88  — consumer escape-hatch int (daemon-only)
     int _appField1;              // offset 92  — consumer escape-hatch int (daemon-only)
     vec4 iMouse;                 // offset 96  — cursor position in shader-local pixels
-                                 //              (.xy = position, (-1,-1) when off-region)
+                                 //              (.xy = position, (-1,-1) when off-region;
+                                 //              .zw = kwin-path position normalised to the
+                                 //              frame size, negative under the same
+                                 //              off-region sentinel — see kIMouse in
+                                 //              AnimationShaderContract.h)
     vec4 iDate;                  // offset 112 — year, month, day, seconds-since-midnight
     vec4 customParams[8];        // offset 128 (128 bytes) — per-effect float/int/bool parameter slots
     vec4 customColors[16];       // offset 256 (256 bytes) — per-effect color parameter slots

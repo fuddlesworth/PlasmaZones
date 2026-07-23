@@ -630,7 +630,7 @@ Consequences for Tier 1:
   compile" as two steps so both runtimes share step one.
 - **T1.2 validation must bake both branches.** A valid animation shader is one that
   compiles **with and without** `PLASMAZONES_KWIN`. The validator should compile
-  both; there is already `tests/unit/ui/test_animation_shader_bake.cpp` baking every
+  both; there is already `tests/unit/ui/shaders/test_animation_shader_bake.cpp` baking every
   built-in animation shader through `qsb` — extend that harness rather than
   duplicating it, and have the CLI share its code.
 - **Multipass / wallpaper are daemon-only** on this path (the kwin

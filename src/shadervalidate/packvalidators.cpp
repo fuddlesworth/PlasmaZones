@@ -195,15 +195,25 @@ int validatePack(const QString& packDir, QTextStream& out)
 // real compile error, never an error of its own.
 static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
 {
-    static const QStringList kCompositorOnlySamplers = {QStringLiteral("uOldWindow"), QStringLiteral("uFromDesktop"),
-                                                        QStringLiteral("uToDesktop")};
+    struct SamplerMatcher
+    {
+        QString name;
+        // Word-boundary match so a longer identifier (e.g.
+        // "uOldWindowFallback") can't count as a use of the sampler.
+        QRegularExpression wordRe;
+    };
+    static const auto kCompositorOnlySamplers = [] {
+        QList<SamplerMatcher> matchers;
+        for (const QString& name :
+             {QStringLiteral("uOldWindow"), QStringLiteral("uFromDesktop"), QStringLiteral("uToDesktop")}) {
+            matchers.append({name, QRegularExpression(QStringLiteral("\\b") + name + QStringLiteral("\\b"))});
+        }
+        return matchers;
+    }();
     QStringList used;
-    for (const QString& sampler : kCompositorOnlySamplers) {
-        // Word-boundary match so a comment mentioning a longer identifier
-        // (e.g. "uOldWindowFallback") can't count as a use of the sampler.
-        const QRegularExpression wordRe(QStringLiteral("\\b") + sampler + QStringLiteral("\\b"));
-        if (expandedSource.contains(wordRe)) {
-            used << sampler;
+    for (const SamplerMatcher& sampler : kCompositorOnlySamplers) {
+        if (expandedSource.contains(sampler.wordRe)) {
+            used << sampler.name;
         }
     }
     return used;
