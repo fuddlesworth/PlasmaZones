@@ -159,6 +159,12 @@ ColumnLayout {
     /// Description of the currently-picked shader. Empty when nothing is
     /// picked or the pack ships no description.
     readonly property string shaderDescription: (_shaderEffect && typeof _shaderEffect.description === "string") ? _shaderEffect.description : ""
+    /// Whether the picker has anything to offer. False while the shader
+    /// registry is still loading (or absent), which is a state the empty
+    /// slot and the setter caption BOTH have to agree about: telling the
+    /// user to set a pack below while the picker holds only "None" is an
+    /// instruction they cannot follow.
+    readonly property bool _anyPackAvailable: availableShaders && availableShaders.length > 0
     /// Wire-format curve string the rule / profile schema expects.
     readonly property string curveString: {
         if (timingMode === CurvePresets.timingModeSpring)
@@ -451,7 +457,8 @@ ColumnLayout {
         Layout.leftMargin: Kirigami.Units.largeSpacing
         Layout.rightMargin: Kirigami.Units.largeSpacing
         visible: root.shaderLegSupported && root.shaderEffectId.length === 0
-        text: i18n("No shader pack. Set one below.")
+        // Points at the setter only when the setter can actually serve.
+        text: root._anyPackAvailable ? i18n("No shader pack. Set one below.") : i18n("No shader pack.")
         wrapMode: Text.WordWrap
         opacity: 0.7
     }
@@ -657,7 +664,7 @@ ColumnLayout {
             if (root.shaderEffectId.length > 0)
                 return i18n("Swap this event's pack for another, or clear it");
 
-            if (!root.availableShaders || root.availableShaders.length === 0)
+            if (!root._anyPackAvailable)
                 return i18n("No shader packs are available for this event");
 
             return i18n("Apply a shader pack to this event");

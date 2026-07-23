@@ -61,6 +61,13 @@ ColumnLayout {
     // every host refresh and churn its currentValues rebind (same hoist as
     // ActionRow's _emptyShaderParams).
     readonly property var _emptyParams: ({})
+    // Whether the catalog has anything to offer. False while the shader
+    // registry is still loading (or absent), which the empty-state hint and
+    // the add row's caption BOTH have to agree about: an empty chain with an
+    // empty catalog is "nothing is installed", NOT "everything is already in
+    // the chain", and telling the user to add one below is an instruction
+    // they cannot follow.
+    readonly property bool _anyPackAvailable: availableShaders && availableShaders.length > 0
 
     signal chainChangeRequested(var newChain)
     signal paramChangeRequested(string packId, string paramId, var value)
@@ -131,7 +138,8 @@ ColumnLayout {
     Label {
         Layout.fillWidth: true
         visible: !root.chain || root.chain.length === 0
-        text: root.showAddRow ? i18n("No decoration packs. Add one below.") : i18n("No decoration packs. Matched windows render undecorated.")
+        // Points at the add row only when the add row can actually serve.
+        text: !root.showAddRow ? i18n("No decoration packs. Matched windows render undecorated.") : (root._anyPackAvailable ? i18n("No decoration packs. Add one below.") : i18n("No decoration packs."))
         wrapMode: Text.WordWrap
         opacity: 0.7
     }
@@ -320,7 +328,18 @@ ColumnLayout {
         // Referenced by explicit id, not `parent`, because SettingsRow may
         // reparent the button into its own content layout.
         readonly property var _addable: root._addableEffects()
-        description: _addable.length > 0 ? i18n("Stack another pack onto this surface's chain") : i18n("All installed packs are already in the chain")
+        // "All installed packs are already in the chain" is only true when
+        // packs ARE installed. With an empty catalog the exhausted-list
+        // wording is a false claim, so the two cases are told apart.
+        description: {
+            if (addPackRow._addable.length > 0)
+                return i18n("Stack another pack onto this surface's chain");
+
+            if (!root._anyPackAvailable)
+                return i18n("No decoration packs are installed");
+
+            return i18n("All installed packs are already in the chain");
+        }
 
         PZCommon.CategoryMenuButton {
             // SettingsRow lays its default children out in a plain Row
