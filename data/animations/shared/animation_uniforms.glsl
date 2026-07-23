@@ -53,8 +53,9 @@
 // `static_assert(offsetof(...))` in `<PhosphorShaders/BaseUniforms.h>`
 // for every BASE field declared below (through iIsReversed at 660); the
 // anchor-extension tail (iSurfaceScreenPos .. iAnchorRectInTexture,
-// bytes 672-719, 720 total) is supplied by AnimationUniformExtension and pinned by
-// the size static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
+// bytes 672-719, 720 total) is supplied by AnimationUniformExtension and
+// pinned by the size static_asserts in
+// `<PhosphorAnimation/AnimationUniformExtension.h>`.
 // If any assert fails after a C++-side change, this header has to move
 // in lockstep. The bake test in
 // `tests/unit/ui/shaders/test_animation_shader_bake.cpp` surfaces
@@ -488,8 +489,9 @@ vec2 surfacePadRel() {
 // daemon UBO and the kwin default-block branch, so a shader uses them
 // identically on either runtime.
 
-// Direction as a clean boolean — replaces the `iIsReversed == 1` exact-
-// equality test (branching on `!= 0` was the documented footgun).
+// Direction as a clean boolean. Packs used to hand-inline the comparison at
+// every use site; this gives the contract ONE named form, so a pack can no
+// longer spell the test differently from its siblings.
 #define p_reversed (iIsReversed == 1)
 
 // Un-flipped, always-forward 0→1 leg progress. Bundled shaders used to

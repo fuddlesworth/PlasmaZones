@@ -5,7 +5,8 @@
 //
 // Unlike window-morph (a single output-spanning quad that does the whole
 // move in the fragment stage), flow runs on a tessellated grid that
-// apply() builds over the window's DESTINATION frame rect (metadata
+// apply() builds over the window's padded composite canvas, with texcoords
+// kept DESTINATION-frame-relative (metadata
 // `geometryGrid` controls the per-axis cell count). Anchoring the grid to
 // the window keeps deformation resolution constant regardless of zone
 // size, and lets this vertex stage displace each cell so the window

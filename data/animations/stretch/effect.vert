@@ -9,7 +9,8 @@
 // Entirely in-plane — no faked depth — but it needs the grid because the
 // stretch varies across the window (a 4-vertex quad could only scale
 // uniformly). Runs on the same window-relative grid as the other geometry
-// effects: apply() builds an NxN grid over the destination frame rect
+// effects: apply() builds an NxN grid over the padded composite canvas
+// with destination-frame-relative texcoords
 // (metadata `geometryGrid`) and this stage displaces each vertex.
 //
 // Each vertex rides a back-ease (easeOutBack) that overshoots its target

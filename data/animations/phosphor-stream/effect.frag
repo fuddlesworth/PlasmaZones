@@ -41,8 +41,10 @@ vec4 pTransition(vec2 uv, float t) {
     float e = clamp(vFlow.z, 0.0, 1.0);
     float lane = vFlow.w;
 
-    // Feathered window mask in card space — the grid spans the whole
-    // output, so only cells inside the card carry window content. The card
+    // Feathered window mask in card space — the grid spans the padded
+    // decoration canvas (paint_capture.cpp sets it to the layer's canvasGeo,
+    // falling back to the frame rect), so cuv runs past [0, 1] into the halo
+    // band rather than covering the whole output. The card
     // runs past [0, 1] by the decoration chain's outer margin: that band is
     // the halo the compositor composited into the padded canvas, which
     // surfaceColor() resolves through its layer remap, so the mask includes

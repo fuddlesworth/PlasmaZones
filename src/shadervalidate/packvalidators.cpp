@@ -308,6 +308,19 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         }
         eff.fragmentShaderPath = *confined;
     }
+    // The optional `vertexShader` path is user-editable metadata too, so it
+    // gets the same traversal guard as the fragment before the stage bake
+    // below ever opens it.
+    if (!eff.vertexShaderPath.isEmpty()) {
+        const auto confinedVert = confinedPackPath(packDir, eff.vertexShaderPath);
+        if (!confinedVert) {
+            out << name
+                << "\n  metadata      ERROR\n    vertexShader path escapes the pack directory (path traversal "
+                   "rejected)\n  → 1 error\n\n";
+            return 1;
+        }
+        eff.vertexShaderPath = *confinedVert;
+    }
     if (!eff.isValid()) {
         out << name << "\n  metadata      ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
         return 1;
@@ -386,6 +399,12 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     if (!QFile::exists(eff.fragmentShaderPath)) {
         lints << QStringLiteral("fragment shader missing: %1").arg(fragLabel);
     }
+    // A declared-but-absent vertexShader would silently fall back to
+    // shared/animation.vert at runtime, hiding the author's typo. Same lint
+    // the surface validator applies.
+    if (!eff.vertexShaderPath.isEmpty() && !QFile::exists(eff.vertexShaderPath)) {
+        lints << QStringLiteral("vertex shader missing: %1").arg(QFileInfo(eff.vertexShaderPath).fileName());
+    }
 
     if (lints.isEmpty()) {
         out << "  metadata      OK\n";
@@ -402,11 +421,11 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // (default-block uniforms, unbound samplers) that the strict SPIR-V
     // target rejects by design, and the daemon never loads them.
     if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
-        out << "  " << fragLabel.leftJustified(14) << "SKIP (compositor-only pack; kwin-path GLSL)\n";
+        out << "  " << fragLabel.leftJustified(15) << "SKIP (compositor-only pack; kwin-path GLSL)\n";
     } else if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  " << fragLabel.leftJustified(14) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
+            out << "  " << fragLabel.leftJustified(15) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
             ++errors;
         } else {
             const QString raw = QString::fromUtf8(frag.readAll());
@@ -423,7 +442,7 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
             const QString expanded = ShaderCompiler::expandSource(
                 assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
             if (expanded.isEmpty()) {
-                out << "  " << fragLabel.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
+                out << "  " << fragLabel.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;
             } else {
                 const QString spliced =
@@ -444,6 +463,50 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                                "a PLASMAZONES_KWIN guard must declare a compositor-only appliesTo — "
                                "omit \"appearance\")\n";
                     }
+                }
+            }
+        }
+    }
+
+    // ── vertex stage ──
+    // The daemon warm-bake compiles the pack's own effect.vert, falling back to
+    // shared/animation.vert (shader_warmup.cpp). Without baking it here a broken
+    // animation vert — or a regression in the shared vert every pack inherits —
+    // passes the shader_validate_bundled CI gate and only fails at runtime. The
+    // sibling zone and surface validators have always baked their vert stage.
+    if (!PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
+        const QString animIncludeDir = QFileInfo(packDir).absolutePath() + QStringLiteral("/shared");
+        QString vertPath = eff.vertexShaderPath;
+        if (vertPath.isEmpty()) {
+            const QString sharedVert = animIncludeDir + QStringLiteral("/animation.vert");
+            if (QFile::exists(sharedVert)) {
+                vertPath = sharedVert;
+            }
+        }
+        if (!vertPath.isEmpty() && QFile::exists(vertPath)) {
+            const QString vertLabel = QFileInfo(vertPath).fileName();
+            QFile vertFile(vertPath);
+            if (!vertFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                out << "  " << vertLabel.leftJustified(15) << "ERROR\n    cannot read " << vertPath << "\n";
+                ++errors;
+            } else {
+                const QString rawVert = QString::fromUtf8(vertFile.readAll());
+                QString vertErr;
+                const QString expandedVert = ShaderCompiler::expandSource(rawVert, QFileInfo(vertPath).absolutePath(),
+                                                                          {animIncludeDir}, &vertErr);
+                if (expandedVert.isEmpty()) {
+                    out << "  " << vertLabel.leftJustified(15) << "ERROR\n    include expansion failed: " << vertErr
+                        << "\n";
+                    ++errors;
+                } else {
+                    // Same p_<id> preamble splice the fragment stage gets: a
+                    // vertex-driven pack (wobble, phosphor-stream) reads its
+                    // params in the VERT, and the runtime splices there too.
+                    const QString splicedVert =
+                        PhosphorShaders::spliceAfterVersion(expandedVert, AnimationShaderRegistry::paramPreamble(eff));
+                    const ShaderCompiler::Result vertResult =
+                        ShaderCompiler::compile(splicedVert.toUtf8(), QShader::VertexStage);
+                    errors += reportCompile(out, vertLabel, vertResult, declaredParamNames(eff.parameters));
                 }
             }
         }
@@ -647,7 +710,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  " << fragLabel.leftJustified(14) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
+            out << "  " << fragLabel.leftJustified(15) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
             ++errors;
         } else {
             const QString raw = QString::fromUtf8(frag.readAll());
@@ -669,7 +732,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString expanded = ShaderCompiler::expandSource(
                 assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
             if (expanded.isEmpty()) {
-                out << "  " << fragLabel.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
+                out << "  " << fragLabel.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;
             } else {
                 const QString spliced =
@@ -706,7 +769,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString label = QFileInfo(buf).fileName();
             QFile bufFile(buf);
             if (!bufFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << label.leftJustified(14) << "ERROR\n    cannot read " << buf << "\n";
+                out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << buf << "\n";
                 ++errors;
                 continue;
             }
@@ -715,7 +778,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString expanded =
                 ShaderCompiler::expandSource(rawBuf, QFileInfo(buf).absolutePath(), bufferIncludePaths, &err);
             if (expanded.isEmpty()) {
-                out << "  " << label.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
+                out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;
             } else {
                 const ShaderCompiler::Result result =
@@ -765,7 +828,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString label = QFileInfo(vertPath).fileName();
             QFile vertFile(vertPath);
             if (!vertFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << label.leftJustified(14) << "ERROR\n    cannot read " << vertPath << "\n";
+                out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << vertPath << "\n";
                 ++errors;
             } else {
                 const QString rawVert = QString::fromUtf8(vertFile.readAll());
@@ -773,7 +836,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 const QString expanded =
                     ShaderCompiler::expandSource(rawVert, QFileInfo(vertPath).absolutePath(), includePaths, &err);
                 if (expanded.isEmpty()) {
-                    out << "  " << label.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
+                    out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
                     ++errors;
                 } else {
                     const ShaderCompiler::Result result =

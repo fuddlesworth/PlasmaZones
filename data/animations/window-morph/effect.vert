@@ -8,11 +8,17 @@
 // kwin-effect expands the drawn quad to the window's output for
 // `fboExtent: "surface"`, so this quad covers the whole output and the
 // fragment can paint the morphing rect anywhere between the old and new
-// frames. Mirrors the other surface-extent vertex shaders (morph, bounce).
+// frames.
+//
+// COMPOSITOR-ONLY by design: unlike the surface-extent verts in morph and
+// bounce, this file has no `#ifdef PLASMAZONES_KWIN` split and leaves
+// `modelViewProjectionMatrix` unguarded, which the strict SPIR-V bake
+// rejects. That is safe only because this pack's appliesTo is ["geometry"]
+// — `shaderEffectIsCompositorOnly()` is true, so the daemon never bakes it.
+// Do NOT copy this shape into a pack that declares "appearance"; take the
+// dual-branch form from morph/bounce instead.
 
 #version 450
-
-#include <animation_uniforms.glsl>
 
 layout(location = 0) in vec2 position;
 layout(location = 1) in vec2 texCoord;

@@ -61,6 +61,16 @@ pre-commit:
         sh -c 'bin=build/bin/plasmazones-shader-validate;
         if [ -x "$bin" ]; then exec "$bin" --quiet data/overlays;
         else echo "plasmazones-shader-validate not built (build/bin/) — skipping shader validation; build the target to enable this local gate" >&2; fi'
+    shader-validate-animation:
+      glob: "data/animations/**/*.{frag,vert,glsl,json}"
+      # Animation packs are the third authoring model and have their own CI
+      # gate (shader_validate_animations); without a local hook, edits under
+      # data/animations/** were the only shader tree with no pre-commit
+      # validation. Same best-effort skip when the binary isn't built.
+      run: >
+        sh -c 'bin=build/bin/plasmazones-shader-validate;
+        if [ -x "$bin" ]; then exec "$bin" --quiet --animation data/animations;
+        else echo "plasmazones-shader-validate not built (build/bin/) — skipping animation shader validation; build the target to enable this local gate" >&2; fi'
     shader-validate-surface:
       glob: "data/surface/**/*.{frag,vert,glsl,json}"
       # Surface (decoration) packs use a distinct authoring model, so validate

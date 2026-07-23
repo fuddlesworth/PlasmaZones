@@ -32,6 +32,20 @@
 // packs are excluded from the daemon's SPIR-V bake entirely, so the samplers
 // are declared unguarded: KWin's GLShader binds them by uniform location +
 // glActiveTexture, so no layout(binding) qualifier is needed.
+//
+// WHAT IS ACTUALLY BOUND ON THIS PASS. DesktopTransitionManager caches and
+// pushes exactly: uFromDesktop, uToDesktop, iTime, iResolution, iFrame,
+// iSwitchDelta, plus the customParams / customColors pools behind p_<id>.
+// EVERY other uniform the animation contract declares stays at the GL
+// default of zero here. Two consequences worth stating, because both
+// COMPILE cleanly and then render wrong:
+//   - iIsReversed is never bound, so `p_reversed` is permanently false and
+//     `legProgress()` returns raw iTime. Direction on this pass comes ONLY
+//     from the iTime sweep (the peek SHOW leg runs time backwards — see the
+//     endpoint note above), never from the reversed flag.
+//   - surfaceColor() / oldColor() are per-WINDOW helpers. They compile here
+//     but return black, because iWindowOpacity and iAnchorRectInTexture are
+//     both zero. Use getFromColor() / getToColor() instead.
 // Include AFTER the animation uniform block.
 #ifndef PLASMAZONES_DESKTOP_TRANSITION_GLSL
 #define PLASMAZONES_DESKTOP_TRANSITION_GLSL

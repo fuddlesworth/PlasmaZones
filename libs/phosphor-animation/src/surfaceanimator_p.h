@@ -260,7 +260,12 @@ public:
                 const QString& opacityProfilePath, qreal fromScale, qreal toScale, const QString& scaleProfilePath,
                 const QString& shaderEffectId, const QString& shaderProfilePath, const QVariantMap& shaderParameters,
                 ISurfaceAnimator::CompletionCallback onComplete);
-    void legCompleted(PhosphorLayer::Surface* surface, QQuickItem* target);
+    /// @p expectedGeneration, when non-zero, retires a leg only if the slot
+    /// still holds that generation. False-start call sites (AnimatedValue::
+    /// start() returning false) MUST pass it: start()'s value write can fire
+    /// a synchronous QML handler that cancels and installs a fresh leg, and
+    /// an unguarded decrement would then retire the NEW leg early.
+    void legCompleted(PhosphorLayer::Surface* surface, QQuickItem* target, quint64 expectedGeneration = 0);
     void tickAll();
     void pushDynamicShaderUniforms(Track& track, qreal deltaSecs);
     void seedShaderUniformsAtAttach(Track& track);

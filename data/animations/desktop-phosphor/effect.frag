@@ -82,7 +82,7 @@ vec4 pTransition(vec2 uv, float t) {
     // ── Graph space: aspect-corrected uv scaled by circuit density, same
     // construction as phosphor-flux's signal-graph layer. ──
     vec2 res = resolutionSafe();
-    float aspect = res.x / max(res.y, 1.0);
+    float aspect = res.x / res.y; // res is resolutionSafe(): each axis already floored at 1.0
     float scale = max(p_graphScale, 2.0);
     vec2 extent = vec2(aspect, 1.0) * scale;
     vec2 q = uv * extent;
@@ -101,7 +101,7 @@ vec4 pTransition(vec2 uv, float t) {
 
     // Feature sizes in graph units, derived from pixels so traces stay
     // hairline and pulses stay compact at any resolution.
-    float pxInGraph = scale / max(res.y, 1.0);
+    float pxInGraph = scale / res.y;
     float lineW  = 1.5 * pxInGraph;
     float nodeR  = 3.0 * pxInGraph;
     float pulseR = 5.0 * pxInGraph;

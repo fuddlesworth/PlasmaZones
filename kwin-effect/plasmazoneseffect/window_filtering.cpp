@@ -358,8 +358,17 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // window-event shader on them is always wrong. Hard-excluded with
     // no toggle and ahead of the rule-override path, mirroring the
     // structural rejections `shouldHandleWindow()` already applies.
+    //
+    // Our OWN surfaces (the daemon's layer-shell overlays, the editor
+    // toplevel) and portal dialogs are rejected here for the same reason
+    // shouldHandleWindow() and shouldDecorateWindow() reject them: animating
+    // our own UI redirects it through OffscreenEffect and makes the overlay
+    // that is drawing the animation itself animate. shouldAnimateWindow is
+    // the ONLY filter on the tryBeginShaderForEvent path (window_lifecycle),
+    // so omitting them here is not covered elsewhere.
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isSkipSwitcher()
-        || isPlasmaShellSurface(windowClass)) {
+        || isPlasmaShellSurface(windowClass) || isOwnOverlayClass(windowClass)
+        || isXdgDesktopPortalSurface(windowClass)) {
         return false;
     }
 

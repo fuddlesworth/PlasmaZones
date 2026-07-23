@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace PhosphorAnimationLayer {
 
@@ -868,7 +869,14 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         legCompleted(surface, target);
     } else {
         auto it = m_tracks.find(TrackKey{surface, target});
-        if (it == m_tracks.end() || it->second.generation != legGeneration || !it->second.opacity) {
+        if (it == m_tracks.end() || it->second.generation != legGeneration) {
+            return;
+        }
+        if (!it->second.opacity) {
+            // Unreachable today, but a bare return would strand pendingLegs
+            // and pin the driver — complete the leg instead, matching the
+            // shader block's discipline below.
+            legCompleted(surface, target, legGeneration);
             return;
         }
         const bool opacityStarted =
@@ -900,17 +908,22 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         // Complete the leg explicitly or the track hangs with
         // pendingLegs stuck and the consumer's onComplete never fires.
         if (!opacityStarted) {
-            legCompleted(surface, target);
+            legCompleted(surface, target, legGeneration);
         }
     }
 
     if (hasScaleLeg) {
         auto it = m_tracks.find(TrackKey{surface, target});
-        if (it == m_tracks.end() || it->second.generation != legGeneration || !it->second.scale) {
+        if (it == m_tracks.end() || it->second.generation != legGeneration) {
             // The opacity leg's start() (or a synchronous callback)
             // cancelled — or replaced — the entry; let it stand. The
             // generation check stops this superseded leg from restarting
             // a replacement slot's scale AV with stale from/to values.
+            return;
+        }
+        if (!it->second.scale) {
+            // Unreachable today; complete rather than strand pendingLegs.
+            legCompleted(surface, target, legGeneration);
             return;
         }
         const bool scaleStarted = it->second.scale->start(fromScale, toScale,
@@ -932,7 +945,7 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         // spec.onComplete — complete the leg explicitly (see the opacity
         // leg's matching block).
         if (!scaleStarted) {
-            legCompleted(surface, target);
+            legCompleted(surface, target, legGeneration);
         }
     }
 
@@ -946,7 +959,7 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
             // here can null the pieces while the generation matches), but a
             // bare return would strand pendingLegs and pin the driver —
             // complete the leg instead, matching the false-start discipline.
-            legCompleted(surface, target);
+            legCompleted(surface, target, legGeneration);
             return;
         }
         const QString shaderLegProfilePath = shaderProfilePath.isEmpty() ? opacityProfilePath : shaderProfilePath;
@@ -1032,7 +1045,7 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         // leg's matching block). Unreachable for the 0→1 / 1→0 iTime
         // endpoints in practice, kept for the rejected-endpoint case.
         if (!shaderStarted) {
-            legCompleted(surface, target);
+            legCompleted(surface, target, legGeneration);
         }
     }
 
@@ -1049,10 +1062,17 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
 /// because legCompleted runs from inside the spec.onComplete of
 /// the very AV — AnimatedValue::advance()'s re-entrancy contract
 /// forbids destroying *this from within a spec callback.
-void SurfaceAnimator::Private::legCompleted(PhosphorLayer::Surface* surface, QQuickItem* target)
+void SurfaceAnimator::Private::legCompleted(PhosphorLayer::Surface* surface, QQuickItem* target,
+                                            quint64 expectedGeneration)
 {
     const auto it = m_tracks.find(TrackKey{surface, target});
     if (it == m_tracks.end()) {
+        return;
+    }
+    if (expectedGeneration != 0 && it->second.generation != expectedGeneration) {
+        // A synchronous callback replaced the slot between our caller's
+        // decision and this call; the leg we were retiring is already gone
+        // and the decrement would belong to someone else's track.
         return;
     }
     --it->second.pendingLegs;

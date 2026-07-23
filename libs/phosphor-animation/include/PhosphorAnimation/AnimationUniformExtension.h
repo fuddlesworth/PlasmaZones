@@ -10,6 +10,7 @@
 
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPointF>
 #include <QSizeF>
 #include <QVector4D>
 

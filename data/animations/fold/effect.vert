@@ -6,7 +6,8 @@
 // The window concertinas along its travel axis (creases run perpendicular
 // to the direction of motion), folding up mid-flight and unfolding flat
 // into the destination zone. Runs on the same window-relative grid as the
-// flow effect: apply() builds an NxN grid over the destination frame rect
+// flow effect: apply() builds an NxN grid over the padded composite canvas
+// with destination-frame-relative texcoords
 // (metadata `geometryGrid`), and this stage displaces each vertex.
 //
 // Geometry is computed in card space (an orthonormal travel/perp basis),

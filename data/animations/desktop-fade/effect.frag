@@ -9,6 +9,8 @@
 #include <desktop_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-    float a = smoothstep(0.0, 1.0, clamp(t, 0.0, 1.0));
+    // smoothstep saturates on its own outside [0,1] (see the no-clamp roster
+    // in desktop_transition.glsl), so no separate clamp is needed here.
+    float a = smoothstep(0.0, 1.0, t);
     return crossFade(uv, a);
 }

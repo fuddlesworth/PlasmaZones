@@ -162,14 +162,17 @@ constexpr float MaxShaderTimeDeltaSeconds = 0.1f;
 ///
 /// It must be enforced by the CONSUMERS rather than inside `Curve::evaluate`,
 /// because a third-party curve supplies its own `evaluate()` and would simply
-/// not call it. Both consumers bound against it, and they have to agree: the
+/// not call it. All three consumers bound against it, and they have to agree: the
 /// shader and the geometry animator are handed the same curve for the same
 /// window on the same event, so a bound applied to one and not the other would
 /// render the pixels and the window frame at different overshoots.
 ///  - `AnimatedValue` (`AnimatedValue.h`, `AnimatedValue_geometric.h`) — the
 ///    geometry animator, at the lerp and at the swept-bounds sampler,
 ///  - `ShaderInternal::clampProgressForCurve`
-///    (`plasmazoneseffect/shader_internal.h`) — the shader's `iTime`.
+///    (`plasmazoneseffect/shader_internal.h`) — the shader's `iTime`,
+///  - `PhosphorMotionAnimation` (`src/phosphormotionanimation.cpp`) — the
+///    QML-facing bezier sampler, which bounds the same progress before it
+///    reaches a QML property.
 ///
 /// Do NOT apply it to a stateful curve's CurveState::value. That field is the
 /// integrator's own state, fed back into the next `step()`; clamping it would

@@ -316,6 +316,14 @@ void Daemon::publishActiveAnimationProfile()
                     qCWarning(lcCore) << "animation profile publish: registry reports loader ownership of" << *path
                                       << "but has no entry — publishing settings defaults instead";
                     reg.registerProfile(*path, settingsProfile, pathOwner);
+                    // Seed an EMPTY raw-JSON base for this path. Without it the
+                    // next publish tick misses the raw cache again, re-resolves,
+                    // and caches the settings profile we just wrote as the "raw
+                    // JSON" merge base — every field then reads as user-authored
+                    // and later slider moves are silently dropped. An empty base
+                    // makes the merge resolve every field from live settings,
+                    // which is the correct behaviour when there is no user JSON.
+                    m_rawJsonProfiles.insert(*path, PhosphorAnimation::Profile{});
                     continue;
                 }
                 rawIt = m_rawJsonProfiles.insert(*path, *owned);

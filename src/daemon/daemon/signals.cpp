@@ -111,9 +111,13 @@ void Daemon::initializeAutotile()
         // Must check isModeSpecificFloated BEFORE clearing the marker.
         connect(m_autotileEngine.get(), &PlacementEngineBase::windowsReleased, this,
                 [this](const QStringList& windowIds, const QSet<QString>& releasedScreenIds) {
+                    // Clear unconditionally: entries from a previous release
+                    // batch are stale the moment a new one arrives, and leaving
+                    // them behind because the adaptor happens to be null would
+                    // leak them into the next toggle.
+                    m_pendingSnapFloatRestores.clear();
                     if (m_windowTrackingAdaptor) {
                         PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-                        m_pendingSnapFloatRestores.clear();
                         for (const QString& windowId : windowIds) {
                             // Only process windows whose current WTS screen is one of the
                             // screens being released. A window that moved to a different
@@ -398,6 +402,11 @@ void Daemon::initializeAutotile()
                 if (m_snapEngine) {
                     qCWarning(lcDaemon) << "Snap engine is not a SnapEngine — autotile→snap resnap skipped";
                 }
+                // The resnap path below is what normally consumes
+                // m_pendingSnapFloatRestores. Bailing without draining leaves
+                // them to be wiped by the next windowsReleased clear(), so the
+                // user's snap-mode floats never come back — emit them here.
+                emitPendingSnapFloatRestoresForResnapBuffer();
             } else if (applied && wasAutotile && concreteSnap) {
                 // Build exclusion set: windows that fit into the target layout's zones
                 // will be zone-snapped by the resnap D-Bus signal. Without excluding them,
@@ -610,6 +619,14 @@ void Daemon::connectLayoutSignals()
     // layout themselves, and calling it here with QSignalBlocker steals
     // the activeLayoutChanged transition, leaving the resnap buffer
     // empty. Desktop switches sync active layout via syncModeFromAssignments().
+    // connectLayoutSignals()/connectOverlaySignals() re-run on every start(),
+    // but these senders are NOT torn down in stop() — without dropping the
+    // prior connection first, a stop()/start() cycle stacks duplicates and
+    // every handler below runs twice. Qt::UniqueConnection cannot help: it is
+    // documented not to apply to lambda/functor connections, which these are.
+    // Disconnecting this exact (sender, signal, receiver) triple is precise —
+    // it leaves connections made elsewhere from the same sender alone.
+    disconnect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this, nullptr);
     connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
             [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
                 updateAutotileScreens();
@@ -727,6 +744,9 @@ void Daemon::connectOverlaySignals()
 
     // Connect Snap Assist selection: fetch authoritative zone geometry from service (same as
     // keyboard navigation) to avoid overlay coordinate drift/overlap bugs, then forward to effect
+    // Same restart-duplication guard as connectLayoutSignals — m_overlayService
+    // survives stop().
+    disconnect(m_overlayService.get(), &IOverlayService::snapAssistWindowSelected, this, nullptr);
     connect(
         m_overlayService.get(), &IOverlayService::snapAssistWindowSelected, this,
         [this](const QString& windowId, const QString& zoneId, const QString& geometryJson, const QString& screenId) {
@@ -771,20 +791,23 @@ void Daemon::connectOverlaySignals()
         });
 
     // Connect navigation feedback signal to show OSD (manual mode: from WindowTrackingAdaptor via KWin effect)
-    connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
-            [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
-                   const QString& targetZoneId, const QString& screenId) {
-                // Suppress resnap OSD when triggered by a mode/layout change
-                // (layout switch OSD already provides feedback)
-                if (m_suppressResnapOsd > 0
-                    && (action == QLatin1String("resnap") || action == QLatin1String("retile"))) {
-                    m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
-                    return;
-                }
-                if (m_settings && m_settings->showNavigationOsd()) {
+    disconnect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this, nullptr);
+    connect(
+        m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
+        [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
+               const QString& targetZoneId, const QString& screenId) {
+            // Suppress resnap OSD when triggered by a mode/layout change
+            // (layout switch OSD already provides feedback)
+            if (m_suppressResnapOsd > 0 && (action == QLatin1String("resnap") || action == QLatin1String("retile"))) {
+                m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
+                return;
+            }
+            if (m_settings && m_settings->showNavigationOsd()) {
+                if (m_overlayService) {
                     m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenId);
                 }
-            });
+            }
+        });
 
     // Note: AutotileEngine::navigationFeedbackRequested is relayed through
     // WindowTrackingAdaptor::navigationFeedback via setEngines(), so both engines
@@ -798,9 +821,10 @@ void Daemon::connectOverlaySignals()
     // window operation. During snap assist continuation, the window stays visible (keyboard
     // grab released) so this handler fires and destroys it; showContinuationIfNeeded() then
     // creates a fresh one. For non-continuation selections, this provides the final cleanup.
+    disconnect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowZoneChanged, this, nullptr);
     connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowZoneChanged, this,
             [this](const QString& /*windowId*/, const QString& /*zoneId*/) {
-                if (m_overlayService->isSnapAssistVisible()) {
+                if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
             });
@@ -813,8 +837,11 @@ void Daemon::connectOverlaySignals()
     // in-process here instead of re-exposing a D-Bus surface no external
     // caller was wiring up.
     if (m_windowDragAdaptor) {
+        // PMF slot, so Qt::UniqueConnection is available here (unlike the
+        // lambda connections above) and keeps a restart from fanning each
+        // close out twice.
         connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification, m_windowDragAdaptor,
-                &WindowDragAdaptor::handleWindowClosed);
+                &WindowDragAdaptor::handleWindowClosed, Qt::UniqueConnection);
     }
 }
 
@@ -840,7 +867,9 @@ void Daemon::finalizeStartup()
     }
 
     // Signal that daemon is fully initialized and ready for queries
-    Q_EMIT m_layoutAdaptor->daemonReady();
+    if (m_layoutAdaptor) {
+        Q_EMIT m_layoutAdaptor->daemonReady();
+    }
 
     // Explicitly broadcast settingsChanged so the KWin effect re-fetches all
     // settings (including activation triggers) after daemonReady.  The effect's

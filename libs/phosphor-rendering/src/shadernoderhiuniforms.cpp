@@ -331,7 +331,18 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     // Audio spectrum texture: resize if needed, upload when dirty
     if (m_audioSpectrumDirty && m_audioSpectrumTexture && m_audioSpectrumSampler) {
         const int bars = m_audioSpectrum.size();
-        const QSize targetSize = bars > 0 ? QSize(bars, 1) : QSize(1, 1);
+        QSize targetSize = bars > 0 ? QSize(bars, 1) : QSize(1, 1);
+        // Clamp against the device limit for the same reason the user-texture
+        // path does: a spectrum wider than TextureSizeMax would fail create()
+        // on every frame, and this block's failure path returns BEFORE the
+        // user-texture, source-provider and wallpaper blocks below — one
+        // oversized spectrum would starve every other texture upload.
+        const int audioSizeMax = rhi->resourceLimit(QRhi::TextureSizeMax);
+        if (audioSizeMax > 0 && targetSize.width() > audioSizeMax) {
+            qCWarning(lcShaderNode) << "audio spectrum bar count" << targetSize.width()
+                                    << "exceeds device TextureSizeMax" << audioSizeMax << ", clamping";
+            targetSize.setWidth(audioSizeMax);
+        }
         if (m_audioSpectrumTexture->pixelSize() != targetSize) {
             // Build the resized texture into a local and only swap it in on a
             // successful create(), so a failed resize keeps the previous working
@@ -350,8 +361,13 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 return;
             }
         }
-        m_audioSpectrumDirty = false;
+        // Clear dirty only once a batch is in hand: nextResourceUpdateBatch()
+        // returns null when Qt's 64-batch pool is exhausted, and clearing
+        // first would drop the upload with nothing left to re-arm it.
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+        if (batch) {
+            m_audioSpectrumDirty = false;
+        }
         if (batch && bars > 0) {
             QImage img(bars, 1, QImage::Format_RGBA8888);
             for (int i = 0; i < bars; ++i) {
@@ -435,11 +451,12 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 return;
             }
         }
-        // Clear dirty AFTER successful create so a transient failure above
-        // keeps the slot scheduled for retry.
-        m_userTextureDirty[i] = false;
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
+            // Clear dirty AFTER a successful create AND once a batch is in
+            // hand: a null batch (Qt's 64-batch pool exhausted) must leave the
+            // slot scheduled, or the upload is dropped with nothing to re-arm.
+            m_userTextureDirty[i] = false;
             if (!img.isNull() && img.width() > 0 && img.height() > 0) {
                 ubatch->uploadTexture(m_userTextures[i].get(), img);
             } else {
@@ -551,9 +568,12 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 return;
             }
         }
-        m_wallpaperDirty = false;
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
+            // Same batch-in-hand rule as the audio and user-texture paths: the
+            // wallpaper texture is allocated once at node init, so a dropped
+            // upload with dirty already cleared blanks it for the node's life.
+            m_wallpaperDirty = false;
             if (!img.isNull() && img.width() > 0 && img.height() > 0) {
                 ubatch->uploadTexture(m_wallpaperTexture.get(), img);
             } else {

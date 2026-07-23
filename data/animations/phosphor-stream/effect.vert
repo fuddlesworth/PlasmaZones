@@ -4,7 +4,8 @@
 // Phosphor Stream vertex shader — the Phosphor set's geometry pack: the
 // window pours into its zone as separated luminous streams.
 //
-// Built on flow's grid mechanics (the grid sits on the DESTINATION rect;
+// Built on flow's grid mechanics (the grid sits on the padded composite
+// canvas with DESTINATION-frame-relative texcoords;
 // each vertex's displacement is the pull back toward iFromRect, vanishing
 // as its region arrives) with one addition: LANES. The card is cut into
 // strips parallel to the travel axis, and each lane runs its own slightly

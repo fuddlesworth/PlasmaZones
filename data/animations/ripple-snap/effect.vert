@@ -7,7 +7,8 @@
 // then on arrival a decaying wave travels across the grid from the leading
 // edge — the edge that hit the zone boundary — like a sheet snapping taut.
 // Runs on the same window-relative grid as flow/fold: apply() builds an
-// NxN grid over the destination frame rect (metadata `geometryGrid`) and
+// NxN grid over the padded composite canvas with frame-relative texcoords
+// (metadata `geometryGrid`) and
 // this stage displaces each vertex.
 //
 // The wave is a transverse (in-plane, perpendicular-to-travel) ripple so
