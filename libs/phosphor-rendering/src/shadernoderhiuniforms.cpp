@@ -5,14 +5,7 @@
 
 #include <PhosphorRendering/ShaderCompiler.h>
 
-#include <QDateTime>
-#include <QFileInfo>
-#include <QQuickWindow>
-#include <cmath>
-#include <cstring>
 #include <type_traits>
-
-#include <rhi/qshaderbaker.h>
 
 namespace PhosphorRendering {
 
@@ -331,18 +324,14 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     // Audio spectrum texture: resize if needed, upload when dirty
     if (m_audioSpectrumDirty && m_audioSpectrumTexture && m_audioSpectrumSampler) {
         const int bars = m_audioSpectrum.size();
-        QSize targetSize = bars > 0 ? QSize(bars, 1) : QSize(1, 1);
-        // Clamp against the device limit for the same reason the user-texture
-        // path does: a spectrum wider than TextureSizeMax would fail create()
-        // on every frame, and this block's failure path returns BEFORE the
-        // user-texture, source-provider and wallpaper blocks below — one
-        // oversized spectrum would starve every other texture upload.
-        const int audioSizeMax = rhi->resourceLimit(QRhi::TextureSizeMax);
-        if (audioSizeMax > 0 && targetSize.width() > audioSizeMax) {
-            qCWarning(lcShaderNode) << "audio spectrum bar count" << targetSize.width()
-                                    << "exceeds device TextureSizeMax" << audioSizeMax << ", clamping";
-            targetSize.setWidth(audioSizeMax);
-        }
+        // No TextureSizeMax clamp here, unlike the user-texture path below: a
+        // user-supplied PNG can be any size, but the spectrum length is
+        // producer-capped at PhosphorAudio::Defaults::MaxBars (256) and
+        // neither setAudioSpectrum overload can grow the vector, so it cannot
+        // approach any device limit. A clamp would also have to shrink the
+        // uploaded QImage in lockstep — the texture extent and the image
+        // extent must agree — for a case that cannot occur.
+        const QSize targetSize = bars > 0 ? QSize(bars, 1) : QSize(1, 1);
         if (m_audioSpectrumTexture->pixelSize() != targetSize) {
             // Build the resized texture into a local and only swap it in on a
             // successful create(), so a failed resize keeps the previous working

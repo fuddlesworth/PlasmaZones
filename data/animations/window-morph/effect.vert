@@ -10,10 +10,12 @@
 // fragment can paint the morphing rect anywhere between the old and new
 // frames.
 //
-// COMPOSITOR-ONLY by design: unlike the surface-extent verts in morph and
-// bounce, this file has no `#ifdef PLASMAZONES_KWIN` split and leaves
+// COMPOSITOR-ONLY by design, as with every geometry/move-class vert in this
+// tree (flow, fold, ripple-snap, stretch, phosphor-stream, wobble): this file
+// has no `#ifdef PLASMAZONES_KWIN` split and leaves
 // `modelViewProjectionMatrix` unguarded, which the strict SPIR-V bake
-// rejects. That is safe only because this pack's appliesTo is ["geometry"]
+// rejects. The daemon-eligible verts (morph, bounce) carry the dual-branch
+// form instead. That is safe only because this pack's appliesTo is ["geometry"]
 // — `shaderEffectIsCompositorOnly()` is true, so the daemon never bakes it.
 // Do NOT copy this shape into a pack that declares "appearance"; take the
 // dual-branch form from morph/bounce instead.

@@ -107,9 +107,13 @@ vec4 pTransition(vec2 uv, float t) {
     // pulled a different depth along its ray so the smear reads as motion
     // blur INTO the vortex. Angle-striped gating (constant along each ray)
     // tears the smear into discrete streamlines feeding the cloud, and a
-    // noise erosion front eats the content as it nears the cursor. The
-    // whole body fades out as the dissolve completes, so at full hold the
-    // window is GONE. ──
+    // noise erosion front breaks the smear up as it nears the cursor. Note
+    // the erosion term rides the per-tap WEIGHTS, and the accumulator is
+    // renormalised by those same weights — so a uniform erosion across the
+    // six taps cancels and only inter-tap variance survives (that variance
+    // is the visible break-up). What actually fades the body is `holdBody`
+    // below. The whole body fades out as the dissolve completes, so at full
+    // hold the window is GONE. ──
     float holdBody = 1.0 - dEase;
     if (holdBody > 0.003) {
         float suction = clamp(p_suction, 0.0, 1.0);

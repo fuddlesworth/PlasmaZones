@@ -13,12 +13,12 @@
 // streams into its zone instead of sliding rigidly: the edge facing the
 // destination settles first, trailing rows lag by SPREAD and catch up.
 //
-// apply() emits texcoords as the card uv (v = 0 at the window's top), so
-// the card uv IS the incoming texCoord — no screen-position
-// reconstruction. The grid sits on the destination rect (iToRect), so a
-// vertex's natural position already equals its settled position; the
-// displacement is purely the pull back toward the old rect (iFromRect),
-// which vanishes as the region arrives.
+// apply() emits texcoords relative to the destination FRAME (v = 0 at the
+// window's top before KWin's upload flip — see the re-flip note in main()).
+// Because the texcoords are destination-frame-relative, a vertex's natural
+// position already equals its settled position, so the displacement below is
+// purely the pull back toward the old rect (iFromRect), which vanishes as
+// the region arrives.
 
 #version 450
 

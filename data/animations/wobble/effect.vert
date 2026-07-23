@@ -13,6 +13,13 @@
 // wobbles like cloth, no rigid tail. p_strength scales the deflection;
 // p_maxBend caps a violent fling.
 
+// COMPOSITOR-ONLY by design (appliesTo: ["move"]): this vert leaves
+// `modelViewProjectionMatrix` unguarded AND reads `iMoveMesh`, which exists
+// only in the PLASMAZONES_KWIN branch of animation_uniforms.glsl — a
+// stricter kwin dependency than the other geometry verts. The strict SPIR-V
+// bake would reject both, which is safe only because
+// shaderEffectIsCompositorOnly() keeps this pack off the daemon path.
+
 #version 450
 
 #include <animation_uniforms.glsl>

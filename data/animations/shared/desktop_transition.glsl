@@ -24,9 +24,10 @@
 // pack must hold its endpoints for a t just outside the range. Clamping t up
 // front is the simplest way and most packs do it. Feeding t through a padded
 // smoothstep works too, since smoothstep saturates on its own — desktop-wipe,
-// desktop-circle, desktop-dissolve, desktop-aretha and desktop-phosphor take
-// that route and need no clamp of their own. Either way is fine; what is NOT
-// fine is a pack that only holds its endpoints for t exactly 0 and 1.
+// desktop-circle, desktop-dissolve, desktop-aretha, desktop-phosphor and
+// desktop-fade take that route and need no clamp of their own. Either way is
+// fine; what is NOT fine is a pack that only holds its endpoints for t
+// exactly 0 and 1.
 //
 // Desktop transitions only ever run in the kwin-effect, and compositor-only
 // packs are excluded from the daemon's SPIR-V bake entirely, so the samplers
@@ -36,6 +37,10 @@
 // WHAT IS ACTUALLY BOUND ON THIS PASS. DesktopTransitionManager caches and
 // pushes exactly: uFromDesktop, uToDesktop, iTime, iResolution, iFrame,
 // iSwitchDelta, plus the customParams / customColors pools behind p_<id>.
+// NOTE iResolution carries DEVICE pixels on this pass (the manager uploads
+// viewport.deviceSize()), unlike the per-window path where it is logical.
+// Aspect ratios are unaffected; anything deriving a PIXEL-scale feature size
+// from it renders that feature at device scale on a scaled output.
 // EVERY other uniform the animation contract declares stays at the GL
 // default of zero here. Two consequences worth stating, because both
 // COMPILE cleanly and then render wrong:
@@ -43,9 +48,13 @@
 //     `legProgress()` returns raw iTime. Direction on this pass comes ONLY
 //     from the iTime sweep (the peek SHOW leg runs time backwards — see the
 //     endpoint note above), never from the reversed flag.
-//   - surfaceColor() / oldColor() are per-WINDOW helpers. They compile here
-//     but return black, because iWindowOpacity and iAnchorRectInTexture are
-//     both zero. Use getFromColor() / getToColor() instead.
+//   - surfaceColor() is a per-WINDOW helper. It is in scope (the entry
+//     prologue always includes animation_uniforms.glsl) and compiles here,
+//     but returns black: iWindowOpacity and iAnchorRectInTexture are both
+//     zero. oldColor() is a different hazard — it lives in
+//     shared/old_content.glsl, which no desktop pack includes, so reaching
+//     for it is a COMPILE error (which the runtime surfaces as a flat-gray
+//     pass, not a black one). Use getFromColor() / getToColor() instead.
 // Include AFTER the animation uniform block.
 #ifndef PLASMAZONES_DESKTOP_TRANSITION_GLSL
 #define PLASMAZONES_DESKTOP_TRANSITION_GLSL

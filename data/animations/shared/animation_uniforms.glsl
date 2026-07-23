@@ -38,7 +38,11 @@
 // See `kKwinDefaultVertexSource` in
 // `kwin-effect/plasmazoneseffect/shader_textures.cpp` and
 // `kDefaultVertexShaderSource` in
-// `libs/phosphor-rendering/src/shadereffect.cpp`.
+// `libs/phosphor-rendering/src/shadereffect.cpp`. The desktop-switch pass
+// is a THIRD source of the same invariant: `kDesktopQuadVertexSource`
+// (`kwin-effect/transitions/desktoptransitionshader.cpp`) passes texCoord
+// through unflipped and gets Y-down from the blend quad's own vertex
+// texcoords instead.
 //
 // Surface texture: the redirected surface is stored in a Y-up texture
 // on the kwin path (KWin's bottom-origin FBO) and a Y-down texture on
@@ -480,6 +484,20 @@ vec2 surfacePadRel() {
     return vec2(0.0);
 #endif
 }
+
+// NOTE on the pad-widened card mask. Several geometry packs hand-inline the
+// same four lines against this pad:
+//     vec2 pad = surfacePadRel();
+//     vec2 fw = max(fwidth(cuv), vec2(1.0e-4));
+//     vec2 edge = min(smoothstep(vec2(0.0), fw, cuv + pad),
+//                     smoothstep(vec2(0.0), fw, 1.0 + pad - cuv));
+//     float mask = edge.x * edge.y;
+// That duplication is NOT an oversight and a shared `cardMask(vec2)` helper
+// does not belong in this header: `fwidth()` is a fragment-stage function,
+// and this header is included by the VERTEX stage too (shared/animation.vert
+// and every per-pack effect.vert). A file-scope helper calling fwidth() here
+// fails every vertex compile in the tree. Keep the mask inline in the frag,
+// or give it a fragment-only shared header if it ever earns one.
 
 // ─── Direction helpers (T1.5) ──────────────────────────────────────────
 // A transition plays forward (in: window.open / snapIn / show) or reverse
