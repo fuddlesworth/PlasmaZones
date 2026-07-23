@@ -89,6 +89,26 @@ public:
      */
     QVariantList cheatsheetModel() const;
 
+    /// One collapsible cheatsheet family: parallel id / expected-final-token
+    /// lists, the combined row label, and the tail token for the merged chip.
+    struct CheatsheetFamily
+    {
+        QStringList ids;
+        QStringList expectedLastTokens;
+        QString combinedLabel;
+        QString tailToken;
+    };
+
+    /**
+     * Pure family-compression pass over cheatsheet rows (static so tests can
+     * drive it without a shortcut backend). A family collapses into one row
+     * when every member is assigned, carries exactly one trigger, ends in its
+     * expected token, and shares the modifier prefix; any deviation keeps the
+     * individual rows. Returns the surviving rows, unsorted.
+     */
+    static QVariantList compressCheatsheetFamilies(QVector<QVariantMap> rows,
+                                                   const QVector<CheatsheetFamily>& families);
+
 Q_SIGNALS:
     /**
      * The cheatsheet catalog's contents changed: a sequence was rebound
@@ -165,7 +185,9 @@ private:
     };
 
     void buildEntries();
-    void rebindAll();
+    /// Re-applies every entry's current sequence; returns true when any
+    /// binding actually differed from the registry's stored sequence.
+    bool rebindAll();
     void drainPendingAdhocOps();
 
     Settings* m_settings = nullptr;

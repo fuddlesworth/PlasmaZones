@@ -471,9 +471,11 @@ void Daemon::stop()
     // settings-style disconnect, for the reason documented above
     // teardownIdleConnections(): every connection these senders hold on
     // `this` is made in per-start code, so severing them is exactly undone
-    // by the next start(). m_layoutManager is the one mixed sender (its
-    // init_services.cpp connections must survive the cycle), so only its
-    // per-start connection is severed, via the tracked handle.
+    // by the next start(). Connections whose sender or receiver falls outside
+    // the sweep (m_layoutManager is a mixed sender whose init_services.cpp
+    // connections must survive; the WTA-to-drag-adaptor fan-out has a
+    // non-daemon receiver; one m_settings connection is per-start) are
+    // tracked in m_perStartConnections and severed individually below.
     if (m_shortcutManager) {
         m_shortcutManager->disconnect(this);
     }
@@ -492,7 +494,10 @@ void Daemon::stop()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->disconnect(this);
     }
-    disconnect(m_layoutAssignedStartConn);
+    for (const QMetaObject::Connection& conn : std::as_const(m_perStartConnections)) {
+        disconnect(conn);
+    }
+    m_perStartConnections.clear();
 
     // Release the shortcut grabs and the Portal session with the connections:
     // registerShortcuts() on the next start() lazily recreates the registry

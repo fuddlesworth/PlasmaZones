@@ -616,10 +616,14 @@ void ShortcutManager::updateShortcuts()
     if (m_entries.isEmpty()) {
         return;
     }
-    rebindAll();
+    // settingsChanged fires for every settings save; only a save that
+    // actually moved a shortcut sequence needs a backend flush or a
+    // cheatsheet refresh (a visible sheet re-pushes its model on the emit,
+    // so over-notifying is user-visible churn, not just wasted work).
+    if (!rebindAll()) {
+        return;
+    }
     m_registry->flush();
-    // Sequences may have changed with the settings — cheap to over-notify,
-    // consumers re-query lazily.
     Q_EMIT cheatsheetModelChanged();
 }
 
@@ -746,7 +750,6 @@ QVariantList ShortcutManager::cheatsheetModel() const
 {
     QVector<QVariantMap> rows;
     rows.reserve(m_entries.size());
-    QHash<QString, int> rowIndexById;
     for (const auto& e : m_entries) {
         const CatalogMeta meta = catalogMetaForId(e.id);
         QStringList triggers;
@@ -775,7 +778,6 @@ QVariantList ShortcutManager::cheatsheetModel() const
         row.insert(QStringLiteral("triggers"), triggers);
         row.insert(QStringLiteral("assigned"), !triggers.isEmpty());
         row.insert(QStringLiteral("mode"), QString::fromLatin1(meta.mode));
-        rowIndexById.insert(e.id, rows.size());
         rows.push_back(row);
     }
 
@@ -788,13 +790,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // chip is a range token ("1…9") or "Arrows". Any deviation — a member
     // unassigned, a rebind off-pattern — falls back to the individual rows,
     // because a compressed row would then lie about what the keys do.
-    struct FamilySpec
-    {
-        QStringList ids;
-        QStringList expectedLastTokens;
-        QString combinedLabel;
-        QString tailToken;
-    };
+    using FamilySpec = CheatsheetFamily;
     const QStringList arrowTokens{QStringLiteral("Left"), QStringLiteral("Right"), QStringLiteral("Up"),
                                   QStringLiteral("Down")};
     const QString arrowsTail = PhosphorI18n::tr("Arrows");
@@ -837,6 +833,23 @@ QVariantList ShortcutManager::cheatsheetModel() const
          arrowsTail},
     };
 
+    QVariantList out = compressCheatsheetFamilies(rows, families);
+    // Category blocks in display order; stable sort keeps the table's
+    // hand-authored order within each category.
+    std::stable_sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
+        return a.toMap().value(QLatin1String("categoryOrder")).toInt()
+            < b.toMap().value(QLatin1String("categoryOrder")).toInt();
+    });
+    return out;
+}
+
+QVariantList ShortcutManager::compressCheatsheetFamilies(QVector<QVariantMap> rows,
+                                                         const QVector<CheatsheetFamily>& families)
+{
+    QHash<QString, int> rowIndexById;
+    for (int i = 0; i < rows.size(); ++i) {
+        rowIndexById.insert(rows[i].value(QLatin1String("id")).toString(), i);
+    }
     QSet<int> removedIndices;
     for (const auto& family : families) {
         // The two lists are parallel arrays; a mismatched spec would index
@@ -896,20 +909,20 @@ QVariantList ShortcutManager::cheatsheetModel() const
             out.push_back(rows[i]);
         }
     }
-    // Category blocks in display order; stable sort keeps the table's
-    // hand-authored order within each category.
-    std::stable_sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
-        return a.toMap().value(QLatin1String("categoryOrder")).toInt()
-            < b.toMap().value(QLatin1String("categoryOrder")).toInt();
-    });
     return out;
 }
 
-void ShortcutManager::rebindAll()
+bool ShortcutManager::rebindAll()
 {
+    bool anyChanged = false;
     for (const auto& e : std::as_const(m_entries)) {
-        m_registry->rebind(e.id, e.currentSeq());
+        const QKeySequence seq = e.currentSeq();
+        if (m_registry->shortcut(e.id) != seq) {
+            anyChanged = true;
+        }
+        m_registry->rebind(e.id, seq);
     }
+    return anyChanged;
 }
 
 void ShortcutManager::buildEntries()

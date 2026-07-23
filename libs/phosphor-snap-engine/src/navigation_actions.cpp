@@ -46,8 +46,6 @@
 #include "snapenginelogging.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
-#include <PhosphorIdentity/VirtualScreenId.h>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorSnapEngine {
 

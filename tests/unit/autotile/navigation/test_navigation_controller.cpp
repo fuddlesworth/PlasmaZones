@@ -121,6 +121,35 @@ private Q_SLOTS:
         QVERIFY(foundMasterFeedback);
     }
 
+    void testNavigation_swapFocusedInDirection_successReasonIsDirection()
+    {
+        // Pins the feedback-reason contract: a successful directional swap
+        // reports the bare direction (the OSD arrow token), never the
+        // structured swap_failed failure reason. swapWindowsById cannot fail
+        // for ids drawn from the state's own window list, so the failure leg
+        // is defensive; this pins the reachable side of the ternary.
+        const QString screen = QStringLiteral("eDP-1");
+        QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 2, QStringLiteral("win1")));
+
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = QStringLiteral("win1");
+        ctx.screenId = screen;
+        engine->swapFocusedInDirection(QStringLiteral("right"), ctx);
+
+        bool foundSwapFeedback = false;
+        for (const auto& args : feedbackSpy) {
+            if (args.at(1).toString() == QStringLiteral("swap")) {
+                foundSwapFeedback = true;
+                QCOMPARE(args.at(0).toBool(), true);
+                QCOMPARE(args.at(2).toString(), QStringLiteral("right"));
+                break;
+            }
+        }
+        QVERIFY(foundSwapFeedback);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Span (snap-mode concept, reported as unsupported)
     // ═══════════════════════════════════════════════════════════════════════════

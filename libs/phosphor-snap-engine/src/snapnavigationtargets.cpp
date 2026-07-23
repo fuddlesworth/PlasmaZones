@@ -9,7 +9,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "snapenginelogging.h"
 #include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/Zone.h>
 
 #include <QRect>

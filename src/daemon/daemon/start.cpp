@@ -741,9 +741,12 @@ void Daemon::connectShortcutSignals()
                 });
     }
     if (m_settings) {
-        connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
+        // Tracked handle: m_settings is deliberately excluded from stop()'s
+        // per-sender sweep (its ctor/init connections must survive), so this
+        // per-start connection is severed individually.
+        m_perStartConnections.append(connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
             refreshCheatsheetIfVisible();
-        });
+        }));
     }
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
         // Release the shared Escape grab only when no other consumer (snap

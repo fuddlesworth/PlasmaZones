@@ -604,7 +604,7 @@ void Daemon::connectLayoutSignals()
     // layout themselves, and calling it here with QSignalBlocker steals
     // the activeLayoutChanged transition, leaving the resnap buffer
     // empty. Desktop switches sync active layout via syncModeFromAssignments().
-    m_layoutAssignedStartConn =
+    m_perStartConnections.append(
         connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
                 [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
                     updateAutotileScreens();
@@ -625,7 +625,7 @@ void Daemon::connectLayoutSignals()
                     const QString assignmentId =
                         m_layoutManager->assignmentIdForScreen(focusedScreenId, curDesktop, currentActivity());
                     m_unifiedLayoutController->syncFromExternalState(assignmentId);
-                });
+                }));
 
     // Connect unified layout controller signals for OSD display
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this,
@@ -807,8 +807,11 @@ void Daemon::connectOverlaySignals()
     // in-process here instead of re-exposing a D-Bus surface no external
     // caller was wiring up.
     if (m_windowDragAdaptor) {
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification, m_windowDragAdaptor,
-                &WindowDragAdaptor::handleWindowClosed);
+        // Tracked handle: stop()'s per-sender sweep severs only connections
+        // whose RECEIVER is the daemon, so this adaptor-to-adaptor connection
+        // would otherwise stack one duplicate per stop()/start() cycle.
+        m_perStartConnections.append(connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification,
+                                             m_windowDragAdaptor, &WindowDragAdaptor::handleWindowClosed));
     }
 }
 

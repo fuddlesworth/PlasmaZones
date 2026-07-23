@@ -1427,7 +1427,7 @@ Q_SIGNALS:
     // unqualified `Q_EMIT xChanged()` (which resolves to the derived
     // signal). All editor / fillOnDrop / filterLayoutsByAspectRatio /
     // virtualScreenConfigs signals live on ISettings and are inherited
-    // here — see src/core/isettings.h.
+    // here — see src/core/interfaces/isettings.h.
 
 private:
     /// Installs the QEvent::ApplicationPaletteChange filter on the application

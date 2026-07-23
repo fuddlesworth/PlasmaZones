@@ -462,6 +462,18 @@ target_link_libraries(test_snap_assist_thumbnail_provider
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick PhosphorProtocol::PhosphorProtocol)
 add_test(NAME test_snap_assist_thumbnail_provider COMMAND test_snap_assist_thumbnail_provider)
 
+# Cheatsheet family compression: compiles the daemon source directly because
+# ShortcutManager lives in the plasmazonesd executable, not plasmazones_core.
+# The test drives only the static compressCheatsheetFamilies helper, so no
+# shortcut backend or Settings instance is constructed at runtime.
+add_executable(test_cheatsheet_compression
+    daemon/test_cheatsheet_compression.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+)
+target_link_libraries(test_cheatsheet_compression
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
+add_test(NAME test_cheatsheet_compression COMMAND test_cheatsheet_compression)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Layout Tests (core, zones)
 # ═══════════════════════════════════════════════════════════════════════════════

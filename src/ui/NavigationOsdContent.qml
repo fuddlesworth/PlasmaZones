@@ -187,6 +187,12 @@ Item {
                 if (reason === "swap_failed")
                     return i18n("Could not swap windows");
 
+                if (reason === "no_neighbor")
+                    return i18n("No window in that direction");
+
+                if (reason === "no_adjacent_zone")
+                    return i18n("No zone in that direction");
+
                 if (isInternalReason)
                     return unavailableText;
 

@@ -27,7 +27,8 @@ P_STORE_GET(QString, nextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, QS
 P_STORE_SET_STRING(setNextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, nextLayoutShortcutChanged)
 
 // The quickLayoutN and snapToZoneN indexed wrappers live in triggers.cpp;
-// each dispatches to its per-index key via ConfigDefaults::quickLayoutKey(n).
+// each dispatches to its per-index key via ConfigDefaults::quickLayoutKey(n)
+// and ConfigDefaults::snapToZoneKey(n) respectively.
 
 // Navigation shortcuts.
 P_STORE_GET(QString, moveWindowLeftShortcut, shortcutsGlobalGroup, moveWindowLeftKey, QString)
