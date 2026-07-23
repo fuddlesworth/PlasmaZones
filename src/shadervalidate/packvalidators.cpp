@@ -498,7 +498,7 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     }
 
     // ── vertex stage ──
-    // The daemon warm-bake compiles the pack's own effect.vert, falling back to
+    // The daemon warm-bake compiles the pack's declared vertexShader, falling back to
     // shared/animation.vert (shader_warmup.cpp). Without baking it here a broken
     // animation vert — or a regression in the shared vert every pack inherits —
     // passes the shader_validate_bundled CI gate and only fails at runtime. The

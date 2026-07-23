@@ -390,23 +390,11 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 fragPath = QLatin1Char(':') + shaderSource().path();
             }
 
-            // Resolve vertex shader: per-shader zone.vert > shared/zone.vert from include paths.
-            QString vertPath;
-            if (!fragPath.isEmpty()) {
-                const QString dir = QFileInfo(fragPath).absolutePath();
-                const QString vertLocal = dir + QStringLiteral("/zone.vert");
-                if (QFile::exists(vertLocal)) {
-                    vertPath = vertLocal;
-                } else {
-                    for (const QString& incDir : shaderIncludePaths()) {
-                        const QString candidate = incDir + QStringLiteral("/zone.vert");
-                        if (QFile::exists(candidate)) {
-                            vertPath = candidate;
-                            break;
-                        }
-                    }
-                }
-            }
+            // Resolve vertex shader: per-shader zone.vert > zone.vert from the
+            // include paths. Shared with the daemon warm bake via
+            // resolveZoneVertexPath so the two cannot pick different files —
+            // the resolved path is part of the bake-cache key.
+            const QString vertPath = resolveZoneVertexPath(fragPath, shaderIncludePaths());
 
             node->setShaderIncludePaths(shaderIncludePaths());
             // T1.4: install the zone entry-point scaffold so a pack authored as

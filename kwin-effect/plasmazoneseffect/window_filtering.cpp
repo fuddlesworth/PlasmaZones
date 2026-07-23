@@ -371,6 +371,12 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
 
     const QString windowClass = w->windowClass();
 
+    // NOTE: unlike shouldHandleWindow and shouldDecorateWindow, this gate
+    // deliberately has NO isDeleted() bail. slotWindowClosed calls
+    // tryBeginShaderForEvent BEFORE the id-cache scrub, and a window.close
+    // animation genuinely needs the id — adding the guard here would kill
+    // close transitions. Do not "complete the refactor" by adding one.
+    //
     // Structural non-window surfaces — panels (docks), the desktop,
     // plasmoid / Plasma-shell surfaces, and other special or
     // skip-switcher windows are never application windows; a

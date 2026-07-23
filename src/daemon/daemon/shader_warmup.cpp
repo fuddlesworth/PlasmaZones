@@ -454,37 +454,15 @@ void Daemon::setupShaderWarmBakes()
             if (!reg) {
                 return;
             }
-            // Resolve the vertex stage EXACTLY as ZoneShaderItem does at load
-            // (zoneshaderitem.cpp): `<fragdir>/zone.vert`, else the first
-            // `zone.vert` found walking each overlay root's `shared` subdir
-            // and then the root itself. Two details matter and an earlier
-            // attempt got both wrong:
-            //   - searchPaths() yields the overlay ROOTS; the shared vert
-            //     lives at `<root>/shared/zone.vert`, so probing only
-            //     `<root>/zone.vert` never matches and every pack without its
-            //     own vert silently went unbaked (26 of the 27 bundled packs).
-            //   - the live loader IGNORES the metadata `vertexShader` field
-            //     for zone packs, so preferring it here would warm a different
-            //     file than the runtime compiles and the bake-cache key (which
-            //     includes the vert path) would never be hit.
-            const QString localVert = QFileInfo(info.sourcePath).absolutePath() + QStringLiteral("/zone.vert");
-            QString zoneVertPath;
-            if (QFile::exists(localVert)) {
-                zoneVertPath = localVert;
-            } else {
-                for (const QString& incDir : reg->searchPaths()) {
-                    for (const QString& candidate :
-                         {incDir + QStringLiteral("/shared/zone.vert"), incDir + QStringLiteral("/zone.vert")}) {
-                        if (QFile::exists(candidate)) {
-                            zoneVertPath = candidate;
-                            break;
-                        }
-                    }
-                    if (!zoneVertPath.isEmpty()) {
-                        break;
-                    }
-                }
-            }
+            // Resolve the vertex stage through the SHARED resolver so the warm
+            // bake can never pick a different file than the live load — the
+            // resolved path is folded into the bake-cache key, so any
+            // divergence silently wastes the bake. Two earlier attempts here
+            // diverged (wrong directory level; then reversed root priority,
+            // because ShaderRegistry::searchPaths() is reverse(locateAll)),
+            // which is why this now goes through one helper instead of
+            // re-deriving the walk.
+            const QString zoneVertPath = resolveZoneVertexPath(info.sourcePath);
             if (zoneVertPath.isEmpty() || !QFile::exists(zoneVertPath)) {
                 return;
             }

@@ -116,7 +116,16 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
             state.channelResolution[i][1] = 1.0f;
         }
     }
-    state.audioSpectrumSize = static_cast<int>(m_audioSpectrum.size());
+    // Publish the SAME count the texture upload truncates to. audio.glsl's
+    // audioBar() validates barIndex against this then texelFetch()es — and an
+    // out-of-range texelFetch is undefined in GLSL (unlike texture(), it does
+    // not clamp) — so advertising more bars than the texture is wide would be
+    // a real out-of-bounds read, not a cosmetic mismatch.
+    {
+        const int audioDeviceMax = rhi->resourceLimit(QRhi::TextureSizeMax);
+        const int rawSize = static_cast<int>(m_audioSpectrum.size());
+        state.audioSpectrumSize = (audioDeviceMax > 0) ? qMin(rawSize, audioDeviceMax) : rawSize;
+    }
 
     // User texture resolutions (bindings 7-10) — resolved node-side.
     for (int i = 0; i < kMaxUserTextures; ++i) {
@@ -331,9 +340,13 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         // `uploadBars` drives BOTH the texture extent and the QImage below, so
         // the two can never disagree.
         const int deviceMax = rhi->resourceLimit(QRhi::TextureSizeMax);
-        const int rawBars = m_audioSpectrum.size();
+        const int rawBars = static_cast<int>(m_audioSpectrum.size());
         const int uploadBars = (deviceMax > 0) ? qMin(rawBars, deviceMax) : rawBars;
-        if (uploadBars < rawBars) {
+        if (uploadBars < rawBars && !m_warnedAudioTruncated) {
+            // Latch: this block re-runs at spectrum cadence (~60 Hz), and an
+            // oversized vector stays oversized — without the latch it floods
+            // the journal. Same shape as m_warnedForeignRhi.
+            m_warnedAudioTruncated = true;
             qCWarning(lcShaderNode) << "audio spectrum has" << rawBars << "bars, exceeding device TextureSizeMax"
                                     << deviceMax << "— truncating";
         }
@@ -348,8 +361,13 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             // stranding a non-created texture with dirty already cleared.
             std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
             if (!resized->create()) {
-                qCWarning(lcShaderNode) << "audio spectrum texture create() failed for size" << targetSize
-                                        << ", keeping previous texture; will retry next frame";
+                if (!m_warnedAudioCreateFailed) {
+                    // Latched for the same reason: the retry is per-frame by
+                    // design, so an unrecoverable size would log every frame.
+                    m_warnedAudioCreateFailed = true;
+                    qCWarning(lcShaderNode) << "audio spectrum texture create() failed for size" << targetSize
+                                            << ", keeping previous texture; will retry next frame";
+                }
                 // Fall THROUGH rather than return: this block sits above the
                 // user-texture, source-provider, fallback and wallpaper
                 // uploads, and a persistently failing spectrum would otherwise
@@ -636,6 +654,8 @@ void ShaderNodeRhi::releaseRhiResources()
     m_lastSourceRhiTexture = nullptr;
     m_sourceSamplerFailed = false; // re-attempt sampler creation on next prepare()
     m_warnedForeignRhi = false; // re-warn (once) after device reset
+    m_warnedAudioTruncated = false;
+    m_warnedAudioCreateFailed = false;
     m_transparentFallbackTexture.reset();
     m_transparentFallbackTextureNeedsUpload = false;
 

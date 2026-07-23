@@ -7,6 +7,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QFile>
 #include <QStandardPaths>
 
 inline void appendUniquePath(QStringList& paths, const QString& path)

@@ -160,25 +160,40 @@ vec4 pTransition(vec2 uv, float t) {
     float cloudGain = smoothstep(0.1, 0.75, dEase) * clamp(p_glow, 0.0, 2.0);
     if (cloudGain > 0.003) {
         float cloudR = max(p_cloudSize, 20.0) / anchor.y;
+        const int kGhosts = 6;
         // Radial early-out. This is an fboExtent:"surface" pack, so the quad
         // spans the whole output and anchorRemap pushes auv far past [0,1] for
         // a small window on a large screen — without this gate every fragment
         // pays 6 iterations of sin/pow/exp/atan plus a 4-stop gradient for the
         // entire duration of a drag, on an effect already documented as
-        // GPU-bound. The ghost centres ride iMoveTrail, so bound the test by
-        // the farthest ghost offset rather than the cursor alone.
-        vec2 farOffPc = (iMoveTrail[12] / anchor) * vec2(aspect, 1.0);
-        float nearR = max(length(pc - cpc) - length(farOffPc), 0.0) / cloudR;
-        // Same 0.003 visibility floor cloudGain already uses: beyond this the
-        // brightest term (exp(-r^2*1.4) + core) is below one 8-bit step.
-        if (exp(-nearR * nearR * 1.4) + exp(-nearR * nearR * 8.0) * 0.9 < 0.003) {
+        // GPU-bound.
+        //
+        // The bound must be CONSERVATIVE. iMoveTrail holds absolute frame
+        // origins by AGE (slot 0 newest, one per 15 ms), NOT by distance — on
+        // a reversal drag an intermediate slot can sit far outside the newest
+        // and the oldest. So take the max offset over exactly the six slots
+        // the loop below reads; bounding by any single slot can cull a
+        // fragment sitting on another ghost's centre.
+        float maxOffPc = 0.0;
+        for (int k = 0; k < kGhosts; ++k) {
+            vec2 offPc = (iMoveTrail[int(float(k) / float(kGhosts - 1) * 12.0)] / anchor) * vec2(aspect, 1.0);
+            maxOffPc = max(maxOffPc, length(offPc));
+        }
+        // Triangle inequality: gr >= (|pc - cpc| - maxOff) / cloudR for every
+        // ghost, so nearR is a true lower bound on each ghost's gr.
+        float nearR = max(length(pc - cpc) - maxOffPc, 0.0) / cloudR;
+        // Threshold the EMITTED contribution, not one unweighted term: the
+        // falloff is scaled by fil (peaks ~1.30), summed over the ghosts
+        // (Sum(w) <= 2.56 with a compact trail) and then by cloudGain * 0.45.
+        // Fold those in so the cut is below one 8-bit step of real output.
+        float peakFall = exp(-nearR * nearR * 1.4) * 1.30 + exp(-nearR * nearR * 8.0) * 0.9;
+        if (peakFall * 2.56 * cloudGain * 0.45 < 1.0 / 255.0) {
             outC.rgb = clamp(outC.rgb, 0.0, 1.0);
             return outC;
         }
         vec3 cloudC = vec3(0.0);
         float cloudA = 0.0;
 
-        const int kGhosts = 6;
         for (int g = 0; g < kGhosts; ++g) {
             float gf = float(g) / float(kGhosts - 1);
 

@@ -240,7 +240,7 @@ inline constexpr const char* kIAudioSpectrumSize = "iAudioSpectrumSize";
 inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";
 
 /// `vec4 customParams[N]` — per-effect declared parameter slots.
-/// Cross-runtime element-name lookup constant: used by the kwin-effect's
+/// Cross-runtime element-name lookup constant: mirrored by (not consumed from) the kwin-effect's
 /// `glGetUniformLocation("customParams[N]")` calls and as a
 /// documentation anchor for shader authors. Symmetric with
 /// `kCustomColorsArray` below.
@@ -248,7 +248,7 @@ inline constexpr const char* kCustomParamsArray = "customParams";
 
 /// `vec4 customColors[N]` — per-effect declared color parameter slots.
 /// Cross-runtime element-name lookup constant, symmetric with
-/// `kCustomParamsArray` above: used by the kwin-effect's
+/// `kCustomParamsArray` above: mirrored by (not consumed from) the kwin-effect's
 /// `glGetUniformLocation("customColors[N]")` calls and as a
 /// documentation anchor for shader authors.
 ///

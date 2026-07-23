@@ -638,7 +638,7 @@ void Daemon::connectLayoutSignals()
     // connections below only. initializeAutotile() has BOTH problems and is
     // not covered here: its engine handlers hang off m_autotileEngine (which
     // stop() resets and only initEnginesAndWiring() recreates, so they are
-    // LOST on a bare start()), while its seven shortcut lambdas hang off
+    // LOST on a bare start()), while its eight shortcut lambdas hang off
     // m_shortcutManager (ctor-owned, never reset — so on a stop()+init()+
     // start() cycle they DUPLICATE and each autotile shortcut fires twice).
     // Both want the same treatment as the four here.
