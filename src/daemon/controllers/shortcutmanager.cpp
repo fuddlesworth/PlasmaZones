@@ -517,6 +517,13 @@ ShortcutManager::ShortcutManager(Settings* settings, QObject* parent)
     , m_settings(settings)
 {
     Q_ASSERT(settings);
+    if (!settings) {
+        // Release-build pair for the assert above. Every Entry::currentSeq
+        // lambda captures this pointer raw, so continuing would defer the
+        // crash to the first rebindAll() instead of failing here.
+        qCCritical(lcShortcuts) << "ShortcutManager constructed without Settings — shortcuts disabled";
+        return;
+    }
 
     // Backend + Registry are NOT created here — they're created lazily in
     // registerShortcuts() so unregisterShortcuts() can fully release the

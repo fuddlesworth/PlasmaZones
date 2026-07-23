@@ -198,13 +198,19 @@ private:
 
     /// How long to wait for the backend's ready() before settling anyway.
     ///
-    /// Sized as a pathological bound, not a typical one: PortalBackend only
-    /// emits ready() when the portal answers BindShortcuts, and that Response
-    /// can sit behind an interactive permission dialog with no latency
-    /// guarantee (see portalbackend.cpp's handleBindShortcutsResponse). A
-    /// short timeout would settle a healthy-but-slow portal mid-flight, which
-    /// is exactly the race the pending-op queue exists to prevent.
-    static constexpr int kRegistrationSettleTimeoutMs = 60000;
+    /// Sized against the slowest HEALTHY backend rather than a typical one:
+    /// PortalBackend answers ready() synchronously on its error paths, but on
+    /// the happy path it defers to the BindShortcuts Response, which can sit
+    /// behind an interactive permission dialog with no latency guarantee (see
+    /// portalbackend.cpp's handleBindShortcutsResponse). Settling early would
+    /// drain queued adhoc grabs into a still-in-flight batch.
+    ///
+    /// The cost of waiting is real, so this is not set arbitrarily high:
+    /// until it fires, settings rebinds defer and adhoc grabs queue, which
+    /// leaves the picker / snap-assist Escape binding dead. Matched to the
+    /// compositor-bridge watchdog, the project's other "a healthy system
+    /// answered long ago" bound.
+    static constexpr int kRegistrationSettleTimeoutMs = 20000;
 
     /// Identifies the current registration batch. Incremented by every
     /// registerShortcuts()/unregisterShortcuts(), so a fallback timer armed

@@ -100,6 +100,32 @@ public:
      */
     int windowOrderIndexOnScreen(const QString& screenId, const QString& windowId) const;
 
+    /**
+     * @brief Resolve the screen a navigation operation should act on, with its
+     *        state and tiled-window list.
+     *
+     * Three tiers, all restricted to autotile screens on the current
+     * desktop/activity:
+     *   1. `explicitWindowId` — locate the state containing that window. The
+     *      daemon may know the true focused window even when the engine's
+     *      per-state focusedWindow() tracker is stale.
+     *   2. The active-screen hint (`onWindowFocused`, and the daemon's
+     *      `setActiveScreenHint` on every autotile shortcut), accepted
+     *      whenever that screen HAS tiled windows. Deliberately NOT gated on
+     *      a tracked focusedWindow(): focus can sit on a floating, snapped,
+     *      or never-tracked window there, and requiring one sent every
+     *      screen-scoped operation to tier 3 and onto the wrong monitor.
+     *   3. A scan of the remaining states, preferring one that also holds the
+     *      focus, then the primary screen.
+     *
+     * The name is historical — resolution is hint-first and gated on tiled
+     * windows, not on focus. Consumers that genuinely need a focused window
+     * (swap-with-master, directional swap) check `state->focusedWindow()`
+     * themselves and report `no_focus`.
+     */
+    QStringList tiledWindowsForFocusedScreen(QString& outScreenId, PhosphorTiles::TilingState*& outState,
+                                             const QString& explicitWindowId = QString());
+
 private:
     /**
      * @brief Resolve active screen for navigation feedback
@@ -121,17 +147,6 @@ private:
      * @brief Helper to emit focus request for a window at calculated index
      */
     void emitFocusRequestAtIndex(int indexOffset, bool useFirst = false);
-
-    /**
-     * @brief Helper to get tiled windows and state for focus operations.
-     *
-     * When `explicitWindowId` is non-empty, locate the state that contains
-     * that window first — the daemon may know the true focused window even
-     * when the engine's per-state focusedWindow() tracker is stale. Falls
-     * through to the focused-screen lookup if the window isn't in any state.
-     */
-    QStringList tiledWindowsForFocusedScreen(QString& outScreenId, PhosphorTiles::TilingState*& outState,
-                                             const QString& explicitWindowId = QString());
 
     /**
      * @brief Pick the tiled window spatially adjacent to @p focused in

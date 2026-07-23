@@ -52,29 +52,13 @@ void AutotileEngine::moveFocusedToPosition(int position)
 
 void AutotileEngine::toggleFocusedWindowFloat()
 {
-    // Resolve the focused screen — same logic as NavigationController::tiledWindowsForFocusedScreen
-    // but we only need the screen name and state (not the tiled windows list).
+    // Resolve the target screen through the SHARED helper rather than a local
+    // copy: a hand-copied clone drifted out of sync once already, keeping the
+    // focus gate that made screen-scoped operations act on the wrong monitor.
+    // The focus requirement stays here, as the consumer's own check below.
     QString screenId;
     PhosphorTiles::TilingState* state = nullptr;
-
-    if (!m_activeScreen.isEmpty() && m_states.containsKey(currentKeyForScreen(m_activeScreen))) {
-        PhosphorTiles::TilingState* s = m_states.stateForKey(currentKeyForScreen(m_activeScreen));
-        if (s && !s->focusedWindow().isEmpty()) {
-            screenId = m_activeScreen;
-            state = s;
-        }
-    }
-    if (!state) {
-        for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
-            if (it.value() && !it.value()->focusedWindow().isEmpty()
-                && it.key().desktop == currentKeyForScreen(it.key().screenId).desktop
-                && it.key().activity == m_context.currentActivity()) {
-                screenId = it.key().screenId;
-                state = it.value();
-                break;
-            }
-        }
-    }
+    m_navigation->tiledWindowsForFocusedScreen(screenId, state);
 
     if (!state) {
         qCWarning(PhosphorTileEngine::lcTileEngine) << "toggleFocusedWindowFloat: no state found for focused screen"

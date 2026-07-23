@@ -225,7 +225,8 @@ private Q_SLOTS:
      * happened to the span quad.
      *
      * Q_PROPERTY reflection closes that hole with no list to maintain: every
-     * property whose name ends in "Shortcut" must resolve through getSetting. The
+     * property whose name ends in "Shortcut" must resolve through getSetting.
+     *
      * The `editor*` prefix is reserved: the editor keeps its own shortcuts in
      * its own config store (src/editor/controller/settings.cpp) and never reads
      * them over this bus, so any such property added to Settings later would be

@@ -15,15 +15,16 @@
 # as if the block were still inline).
 find_package(Qt6LinguistTools QUIET)
 
-# Source files for lupdate string extraction (daemon + autotile + editor)
-set(PLASMAZONESD_I18N_SOURCES
-    ${CMAKE_SOURCE_DIR}/src/daemon/main.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/daemon.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/daemon/osd.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/overlayservice.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
-    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/windowdragadaptor.cpp
-    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/drag.cpp
+# Source files for lupdate string extraction (daemon + autotile + editor).
+#
+# Globbed rather than hand-listed: an explicit list silently drops strings
+# when code moves between files, with nothing failing to signal it.
+# src/daemon/daemon/lifecycle.cpp carried a user-facing notification that was
+# never extracted for exactly that reason — the daemon.cpp split moved it out
+# of a listed file. A glob cannot develop that gap.
+file(GLOB_RECURSE PLASMAZONESD_I18N_SOURCES
+    "${CMAKE_SOURCE_DIR}/src/daemon/*.cpp"
+    "${CMAKE_SOURCE_DIR}/src/dbus/*.cpp"
 )
 file(GLOB PLASMAZONESD_QML "${CMAKE_SOURCE_DIR}/src/ui/*.qml")
 

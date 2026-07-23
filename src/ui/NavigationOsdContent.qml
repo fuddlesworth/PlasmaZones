@@ -265,49 +265,49 @@ Item {
     /// direction arrows the reason token carries.
     function successMessage(): string {
         if (action === "rotate") {
-            const arrow = (reason === "clockwise") ? "↻" : "↺";
+            const arrow = rotationArrow(reason);
             if (windowCount > 1)
-                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", arrow, i18np("Rotated %n window", "Rotated %n windows", windowCount));
+                return glyphed(arrow, i18np("Rotated %n window", "Rotated %n windows", windowCount));
             else
-                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", arrow, i18n("Rotated"));
+                return glyphed(arrow, i18n("Rotated"));
         } else if (action === "move") {
             const moveArrow = directionArrow(reason);
             if (targetZoneNumber > 0)
-                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", moveArrow, i18n("Zone %1", targetZoneNumber));
+                return glyphed(moveArrow, i18n("Zone %1", targetZoneNumber));
 
-            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", moveArrow, i18n("Moved"));
+            return glyphed(moveArrow, i18n("Moved"));
         } else if (action === "span") {
             // reason format: "grow:right", "shrink:left", or "snap:right"
             // (the last one when span snapped a previously unsnapped window)
             const spanArrow = directionArrow(reason);
             if (reason.indexOf("grow") === 0) {
                 if (targetZoneNumber > 0)
-                    return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", spanArrow, i18n("Extended into Zone %1", targetZoneNumber));
+                    return glyphed(spanArrow, i18n("Extended into Zone %1", targetZoneNumber));
 
-                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", spanArrow, i18n("Span extended"));
+                return glyphed(spanArrow, i18n("Span extended"));
             }
             if (reason.indexOf("snap") === 0) {
                 if (targetZoneNumber > 0)
-                    return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", spanArrow, i18n("Snapped into Zone %1", targetZoneNumber));
+                    return glyphed(spanArrow, i18n("Snapped into Zone %1", targetZoneNumber));
 
-                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", spanArrow, i18n("Snapped"));
+                return glyphed(spanArrow, i18n("Snapped"));
             }
-            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", spanArrow, i18n("Span reduced"));
+            return glyphed(spanArrow, i18n("Span reduced"));
         } else if (action === "focus") {
             const focusArrow = directionArrow(reason);
             if (targetZoneNumber > 0)
-                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", focusArrow, i18n("Focus on Zone %1", targetZoneNumber));
+                return glyphed(focusArrow, i18n("Focus on Zone %1", targetZoneNumber));
 
-            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", focusArrow, i18n("Focus"));
+            return glyphed(focusArrow, i18n("Focus"));
         } else if (action === "swap") {
             const swapArrow = directionArrow(reason);
             if (sourceZoneNumber > 0 && targetZoneNumber > 0)
-                return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", swapArrow, i18n("Zone %1 ↔ Zone %2", sourceZoneNumber, targetZoneNumber));
+                return glyphed(swapArrow, i18n("Zone %1 ↔ Zone %2", sourceZoneNumber, targetZoneNumber));
 
-            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", swapArrow, i18n("Swapped"));
+            return glyphed(swapArrow, i18n("Swapped"));
         } else if (action === "push") {
             if (targetZoneNumber > 0)
-                return i18n("→ Zone %1", targetZoneNumber);
+                return glyphed("→", i18n("Zone %1", targetZoneNumber));
 
             return i18n("Window pushed");
         } else if (action === "restore") {
@@ -351,10 +351,10 @@ Item {
             return i18n("Layout refreshed");
         } else if (action === "swap_vs") {
             const vsSwapArrow = directionArrow(reason);
-            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", vsSwapArrow, i18n("Virtual screens swapped"));
+            return glyphed(vsSwapArrow, i18n("Virtual screens swapped"));
         } else if (action === "rotate_vs") {
-            const vsRotateArrow = (reason === "clockwise") ? "↻" : "↺";
-            return i18nc("@info:status direction glyph, then the message it labels", "%1 %2", vsRotateArrow, i18n("Virtual screens rotated"));
+            const vsRotateArrow = rotationArrow(reason);
+            return glyphed(vsRotateArrow, i18n("Virtual screens rotated"));
         } else {
             return i18n("Action completed");
         }
@@ -405,6 +405,19 @@ Item {
     }
 
     // Helper: direction string ("left","right","up","down") → arrow character
+    /// Prefix @p text with @p glyph as one translatable unit, so translators
+    /// control the order and RTL locales mirror it. One call site for the
+    /// context string, so it cannot fork into near-duplicate msgids.
+    function glyphed(glyph: string, text: string): string {
+        return i18nc("@info:status glyph, then the message it labels", "%1 %2", glyph, text);
+    }
+
+    /// Rotation direction glyph. Separate from directionArrow, which maps the
+    /// four travel directions.
+    function rotationArrow(dir: string): string {
+        return dir === "clockwise" ? "↻" : "↺";
+    }
+
     function directionArrow(dir: string): string {
         // Cross-surface moves prefix the direction with the surface they cross:
         // "screen:left", "desktop:right". Strip it to the bare token so the

@@ -149,6 +149,11 @@ private Q_SLOTS:
         engine->tilingStateForScreen(other)->setFocusedWindow(QStringLiteral("other1"));
         engine->windowFocused(QStringLiteral("other1"), other);
 
+        // The discriminating premise: the hinted screen has windows but no
+        // tracked focus. If window-open ever seeds focus, this assertion fails
+        // loudly rather than the test silently covering nothing.
+        QVERIFY(engine->tilingStateForScreen(hinted)->focusedWindow().isEmpty());
+
         // The daemon hints the target screen on every autotile shortcut.
         engine->setActiveScreenHint(hinted);
         QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
@@ -346,11 +351,17 @@ private Q_SLOTS:
     // Fallback behavior
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testNavigation_tiledWindowsForFocusedScreen_fallbackToPrimary()
+    void testNavigation_noTrackedFocus_stillResolvesAScreenWithTiledWindows()
     {
-        // When no window has focus, focusNext/focusPrevious should still work
-        // if there is a screen with tiled windows. Without a PhosphorScreens::ScreenManager,
-        // the fallback returns empty — no crash expected.
+        // No focused window anywhere and no active-screen hint: the resolver's
+        // scan tier still finds the autotile screen that HAS tiled windows, so
+        // focus cycling works instead of dropping the press. Selecting on
+        // tracked focus instead would return nothing here — and, with two
+        // screens, could return one whose layout is empty while another holds
+        // the windows.
+        //
+        // No ScreenManager is wired, so this also covers the primary-screen
+        // fallback being absent without crashing.
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
@@ -358,16 +369,14 @@ private Q_SLOTS:
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
-        // No focused window set, no m_activeScreen set
 
         QSignalSpy focusSpy(&engine, &AutotileEngine::activateWindowRequested);
-
-        // Without PhosphorScreens::ScreenManager, the primary screen fallback in
-        // tiledWindowsForFocusedScreen returns empty. No crash expected.
         engine.focusNext();
 
-        // No focus request since no focused window and no primary screen
-        QCOMPARE(focusSpy.count(), 0);
+        // Index 0 is the implied starting point with no tracked focus, so
+        // "next" is the second window.
+        QCOMPARE(focusSpy.count(), 1);
+        QCOMPARE(focusSpy.first().first().toString(), QStringLiteral("win2"));
     }
 
     void testNavigation_resolveActiveScreen_fallback()

@@ -486,31 +486,39 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
     // A candidate qualifies when it genuinely enlarges the union toward
     // @p direction (its far edge lies beyond the union's) and it sits
     // side-by-side with the union (positive perpendicular overlap — a
-    // diagonal zone is not a grow target). Nearest edge gap wins, clamped to
-    // zero so overlapping-zone layouts tie at the edge, then perpendicular
-    // centre distance, then list order.
+    // diagonal zone is not a grow target). Ranked by nearest edge gap
+    // (clamped to zero so overlapping-zone layouts tie at the edge), then
+    // perpendicular centre distance, then FARTHEST far edge.
     //
-    // Deliberately TWO keys, where the shared directionalNeighbor raycast has
-    // three (it adds travel-axis centre distance). That third key does not
-    // transfer: DN picks one window to focus, so a nearer centre is simply a
-    // better answer, while span picks the zone whose far edge DEFINES the
-    // extension band that the sweep below then fills. Preferring a
-    // centre-nearer candidate there picks a SHORTER band, and a wider zone
-    // swept into it still unions past that band — leaving an applied
-    // geometry that covers zones outside the member set (worked through on
-    // data/layouts/fibonacci.json: grow-right from the left half picked the
-    // narrow bottom-right zone, then swallowed the full-width top-right one,
-    // so the span covered two zones it did not own). Edge order is the right
-    // ranking for a band-defining pick; centre order is not.
+    // The third key differs from the shared directionalNeighbor raycast,
+    // which breaks the same tie by travel-axis centre distance. DN picks one
+    // window to focus, so a nearer centre is simply a better answer; span
+    // picks the zone whose far edge DEFINES the extension band the sweep
+    // below then fills, and a centre-nearer candidate yields a SHORTER band
+    // that a wider swept zone still unions past — leaving geometry covering
+    // zones outside the member set (data/layouts/fibonacci.json: grow-right
+    // from the left half picks the narrow bottom-right zone, then swallows
+    // the full-width top-right one, owning three of five zones). Choosing
+    // the farthest far edge makes the band a travel-axis superset of every
+    // gap-and-perp-tied alternative, so the pick is deterministic rather
+    // than dependent on the layout's zone enumeration order.
+    //
+    // The perpendicular centre key stays: it disambiguates stacked
+    // neighbours, and it is the far-edge key below that governs band length.
     const int uLo = travelLo(unionRect, horizontal);
     const int uHi = travelHi(unionRect, horizontal);
     const int uPerpCenter = horizontal ? unionRect.center().y() : unionRect.center().x();
     int bestIndex = -1;
     int bestGap = 0;
     int bestPerp = 0;
+    int bestReach = 0;
     for (int i = 0; i < candidates.size(); ++i) {
         const QRect& r = candidates[i].second;
-        if (perpendicularOverlap(unionRect, r, horizontal) <= 0) {
+        // Same jitter allowance as every other edge predicate here: a zone
+        // that is diagonal in intent can overlap by a pixel or two of
+        // relative-geometry rounding, and admitting it unions its WHOLE rect
+        // perpendicular to the press.
+        if (perpendicularOverlap(unionRect, r, horizontal) <= kSpanEdgeTolerancePx) {
             continue;
         }
         // Tolerance mirrors shrink-band membership: a candidate whose far
@@ -539,10 +547,15 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
         }
         const int gap = positive ? qMax(0, travelLo(r, horizontal) - uHi) : qMax(0, uLo - travelHi(r, horizontal));
         const int perp = qAbs((horizontal ? r.center().y() : r.center().x()) - uPerpCenter);
-        if (bestIndex < 0 || gap < bestGap || (gap == bestGap && perp < bestPerp)) {
+        // How far this candidate would push the leading edge, oriented so a
+        // larger value is always the longer band in either direction.
+        const int reach = positive ? travelHi(r, horizontal) : -travelLo(r, horizontal);
+        if (bestIndex < 0 || gap < bestGap || (gap == bestGap && perp < bestPerp)
+            || (gap == bestGap && perp == bestPerp && reach > bestReach)) {
             bestIndex = i;
             bestGap = gap;
             bestPerp = perp;
+            bestReach = reach;
         }
     }
 
@@ -556,11 +569,17 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
         //
         // Bounding-rect semantics: the applied geometry is the union of the
         // member rects, matching multiZoneGeometry everywhere else in the
-        // codebase. When an added zone extends past the band's perpendicular
-        // extent (irregular or overlapping layouts), the union can therefore
-        // overlap zones that are not in the set — inherent to bounding-rect
-        // spans, and identical to what a drag multi-zone snap of the same
-        // set would produce. The band is deliberately NOT iterated to a
+        // codebase. When an added zone extends past the band's PERPENDICULAR
+        // extent (irregular layouts), the union can therefore overlap zones
+        // that are not in the set — inherent to bounding-rect spans, and
+        // identical to what a drag multi-zone snap of the same set would
+        // produce. data/layouts/bsp.json is the bundled example: growing
+        // right from zone 1 sweeps a zone taller than the band, so the union
+        // reaches the screen edge while zone 4 stays unowned and another
+        // window can still snap under the span. The travel axis is bounded
+        // (the far-edge tie-break and startsWithinSpan see to that); the
+        // perpendicular axis is not, and closing it would need the fixpoint
+        // flood-fill rejected below. The band is deliberately NOT iterated to a
         // fixpoint: flood-filling would swallow overlapping zones the user
         // never aimed at (see ZoneDetector::detectMultiZone's matching
         // choice for the drag path).

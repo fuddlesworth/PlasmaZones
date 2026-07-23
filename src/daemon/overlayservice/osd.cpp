@@ -714,8 +714,10 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // no feedback. The duplicate this window catches (one action arriving on
     // both the Qt and D-Bus paths) does not apply to span, which has a single
     // relay. Span FAILURES stay eligible: their reasons are direction-stable
-    // too, so held auto-repeat at a boundary would re-show the same message
-    // at the debounce rate.
+    // too, so leaving them exempt would re-show the same message at the
+    // 100 ms shortcut debounce rate. (The window halves that to ~200 ms
+    // rather than suppressing the repeat outright — the dedup clock is only
+    // stamped on a shown OSD, so a suppressed one does not extend it.)
     const QString actionKey = action + QLatin1Char(':') + reason;
     const bool dedupEligible = !(success && action == QLatin1String("span"));
     if (dedupEligible && actionKey == m_lastNavigationActionKey && effectiveId == m_lastNavigationScreenId
