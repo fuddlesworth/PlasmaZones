@@ -50,7 +50,7 @@ constraint and the condition under which it should be revisited.
 | `libs/phosphor-tile-engine/include/PhosphorTileEngine/AutotileEngine.h` | 1761 | **Partial exception.** Single Q_OBJECT class; 1174 of 1761 lines are Doxygen prose. Nested-struct extraction plus doc trimming (see §2.2) lands it around 1100–1200. Any residual over 1150 is documentation on a language-atomic class declaration. | After the §2.2 extraction lands, if still over ceiling, accept the remainder. |
 
 Grace-band headers that look like exceptions but are merely TOLERATED (single-class
-headers under 1150, no action): `src/daemon/daemon.h` (1149), `src/daemon/overlayservice.h`
+headers under 1150, no action): `src/daemon/daemon.h` (1150), `src/daemon/overlayservice.h`
 (1137), `src/settings/controller/settingscontroller.h` (1149),
 `PhosphorZones/LayoutRegistry.h` (1119), `PhosphorSnapEngine/SnapEngine.h` (1079).
 Warning for daemon.h: it now sits exactly at 1150 after one round of doc-essay
