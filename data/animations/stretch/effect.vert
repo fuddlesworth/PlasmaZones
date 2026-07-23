@@ -78,9 +78,17 @@ void main() {
     vec2 centerPos = mix(fromC, toC, eC);
 
     // Per-vertex along-travel position (stretched), then thin perpendicular.
+    // Split translation from extent (fold's guard, same hazard): the back-
+    // ease overshoot rides the per-vertex CENTRE translation (which is the
+    // stagger stretch and the bounce), while the vertex's offset within the
+    // rect interpolates on a clamped copy — an extrapolated extent factor
+    // goes negative on an extreme shrink (destination span under ~12% of the
+    // source) and locally mirrors the card at the overshoot peak.
     vec2 fromPos = iFromRect.xy + cuv * iFromRect.zw;
     vec2 toPos = iToRect.xy + cuv * iToRect.zw;
-    vec2 alongPos = mix(fromPos, toPos, e);
+    vec2 fromRel = fromPos - fromC;
+    vec2 toRel = toPos - toC;
+    vec2 alongPos = mix(fromC, toC, e) + mix(fromRel, toRel, clamp(e, 0.0, 1.0));
 
     vec2 rel = alongPos - centerPos;
     float alongComp = dot(rel, dir);

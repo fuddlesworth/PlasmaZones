@@ -92,6 +92,6 @@ vec4 pTransition(vec2 uv, float t) {
     // the reveal blend is convex over the two captures, the scanline term is
     // multiplicative in (0, 1], and the edge glow only adds non-negative
     // colour — clamping would crush HDR capture values the blend never
-    // created (the anomaly phosphor-peek's tail comment warns about).
+    // created (the crush phosphor-peek's tail comment warns about).
     return vec4(col, 1.0);
 }

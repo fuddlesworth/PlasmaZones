@@ -239,7 +239,7 @@ vec4 pTransition(vec2 uv, float t) {
     // crossFade is convex over the two captures, the settle dimmer is
     // multiplicative in [0.25, 1], and the rim + circuit terms only add
     // non-negative colour — clamping would crush HDR capture values the
-    // blend never created (the anomaly phosphor-peek's tail comment warns
+    // blend never created (the crush phosphor-peek's tail comment warns
     // about).
     return vec4(col, 1.0);
 }

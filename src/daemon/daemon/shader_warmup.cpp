@@ -30,8 +30,12 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
+#include <QLatin1StringView>
+#include <QList>
 #include <QPointer>
 #include <QStandardPaths>
+#include <QString>
+#include <QStringList>
 #include <QTimer>
 #include <QtConcurrent>
 
@@ -80,8 +84,9 @@ void Daemon::setupAnimationProfiles()
     // always empty when we get here — the narrow-clear is a no-op in
     // current code paths.
     //
-    // Narrow the clear to the two partitions we publish under: the
-    // loader-owned user-JSON partition (clearOwner by tag) and each
+    // Narrow the clear to the three partitions we publish under: the
+    // loader-owned user-JSON partition (clearOwner by tag), the shell
+    // animation-family seed partition (clearOwner by its tag), and each
     // individual settings-driven path (unregisterProfile per path).
     // Wholesale `clear()` would also evict any other consumer's
     // entries if they happened to register before us — not a concern

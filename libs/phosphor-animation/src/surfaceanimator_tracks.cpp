@@ -800,7 +800,16 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
                 // list) — hand them to that track for its teardown to
                 // restore. Otherwise restore them now.
                 if (attachIt != m_tracks.end() && attachIt->second.shaderItem) {
-                    attachIt->second.hiddenSiblings += newHidden;
+                    for (const QPointer<QQuickItem>& sibling : newHidden) {
+                        // Never route the replacement leg's own shader pieces
+                        // into its hiddenSiblings — its teardown would then
+                        // wrongly re-show a piece it manages itself.
+                        QQuickItem* raw = sibling.data();
+                        if (raw && raw != static_cast<QQuickItem*>(attachIt->second.shaderItem.data())
+                            && raw != static_cast<QQuickItem*>(attachIt->second.shaderSource.data())) {
+                            attachIt->second.hiddenSiblings.append(sibling);
+                        }
+                    }
                 } else {
                     for (const QPointer<QQuickItem>& sibling : newHidden) {
                         if (sibling) {
