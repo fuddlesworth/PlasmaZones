@@ -351,6 +351,11 @@ vec4 pImage(vec2 fragCoord) {
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect       = zoneRects[i];
+        // Skip degenerate rects, as every sibling pack's loop does. A zero-size
+        // zone collapses zoneSdf() to a point, and the rim glow around it still
+        // renders, so an unguarded loop paints a stray blob where the others
+        // draw nothing.
+        if (rect.z <= 0.0 || rect.w <= 0.0) continue;
         vec4 fillColor  = zoneFillColors[i];
         vec4 borderCol  = zoneBorderColors[i];
         vec4 params     = zoneParams[i];

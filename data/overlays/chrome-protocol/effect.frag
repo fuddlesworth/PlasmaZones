@@ -858,8 +858,14 @@ vec4 pImage(vec2 fragCoord) {
     // Per-zone: gate visibility, apply vitality, draw border + glow
     vec4 result = vec4(0.0);
     for (int i = 0; i < zoneCount && i < 64; i++) {
+        // Skip degenerate rects, as every sibling pack's loop does. A zero-size
+        // zone collapses zoneSdf() to a point, and the distance field around it
+        // still drives the glow, so an unguarded loop paints a stray blob where
+        // the others draw nothing.
+        vec4 rect = zoneRects[i];
+        if (rect.z <= 0.0 || rect.w <= 0.0) continue;
         result = blendOver(result, renderZoneChrome(
-            vFragCoord, zoneRects[i], zoneFillColors[i], zoneBorderColors[i],
+            vFragCoord, rect, zoneFillColors[i], zoneBorderColors[i],
             zoneParams[i], sceneCol, g, zoneParams[i].z > 0.5));
     }
 
