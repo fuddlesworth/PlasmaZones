@@ -128,8 +128,10 @@ private Q_SLOTS:
         // Hard-fail rather than QSKIP: this is the ONLY pin that the generated
         // p_<id> macro and translateAnimationParams agree on a lane, so a
         // rename or removal of the fixture pack must break the build, not
-        // silently evaporate the cross-check. (A missing source tree entirely
-        // is already handled by the _data() functions above.)
+        // silently evaporate the cross-check. Note this slot is NOT
+        // data-driven, so the _data() source-tree QSKIPs do not cover it —
+        // running with data/animations absent fails here rather than skipping,
+        // which is the intended trade for keeping the pin honest.
         QVERIFY2(QFileInfo::exists(dir + QStringLiteral("/metadata.json")),
                  "the bounce pack is this test's lane-agreement fixture and must exist");
         const AnimationShaderEffect eff = loadEffect(dir);

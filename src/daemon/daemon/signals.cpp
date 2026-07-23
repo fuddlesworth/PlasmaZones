@@ -3,12 +3,9 @@
 
 #include "daemon/daemon.h"
 #include "helpers.h"
-#include "macros.h"
 #include "config/settings.h"
 #include "core/platform/logging.h"
-#include "core/resolve/screenmoderouter.h"
 #include "core/types/constants.h"
-#include "core/utils/utils.h"
 #include "daemon/controllers/shortcutmanager.h"
 #include "daemon/controllers/unifiedlayoutcontroller.h"
 #include "daemon/overlayservice.h"
@@ -16,7 +13,6 @@
 #include "dbus/settingsadaptor/settingsadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
-#include "dbus/zonedetectionadaptor.h"
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
@@ -39,6 +35,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 using PlacementEngineBase = PhosphorEngine::PlacementEngineBase;
 
@@ -406,6 +403,12 @@ void Daemon::initializeAutotile()
                 // m_pendingSnapFloatRestores. Bailing without draining leaves
                 // them to be wiped by the next windowsReleased clear(), so the
                 // user's snap-mode floats never come back — emit them here.
+                //
+                // NOTE this helper emits only the float half and drops the
+                // snap-zone entries, on the assumption that an in-flight
+                // resnap consumes those. No resnap runs on THIS bail, so the
+                // zone entries are dropped deliberately: without a SnapEngine
+                // there is nothing that could apply them.
                 emitPendingSnapFloatRestoresForResnapBuffer();
             } else if (applied && wasAutotile && concreteSnap) {
                 // Build exclusion set: windows that fit into the target layout's zones
@@ -621,33 +624,45 @@ void Daemon::connectLayoutSignals()
     // empty. Desktop switches sync active layout via syncModeFromAssignments().
     // connectLayoutSignals()/connectOverlaySignals() re-run on every start(),
     // but these senders are NOT torn down in stop() — without dropping the
-    // prior connection first, a stop()/start() cycle stacks duplicates and
-    // every handler below runs twice. Qt::UniqueConnection cannot help: it is
-    // documented not to apply to lambda/functor connections, which these are.
-    // Disconnecting this exact (sender, signal, receiver) triple is precise —
-    // it leaves connections made elsewhere from the same sender alone.
-    disconnect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this, nullptr);
-    connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
-            [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
-                updateAutotileScreens();
-                updateLayoutFilter();
+    // prior connections, a stop()/start() cycle stacks duplicates and every
+    // handler below runs twice. Drop exactly the handles WE installed last
+    // time: a (sender, signal, receiver) disconnect would also delete other
+    // call sites' handlers on the same signals (initLayoutAndSettingsWiring()
+    // connects layoutAssigned from the ctor, and that never re-runs).
+    // Qt::UniqueConnection is not available — it does not apply to the
+    // lambda/functor connections used here.
+    // This is the FIRST of the pair start() calls (lifecycle.cpp), so the
+    // clear lives here and connectOverlaySignals() only appends.
+    //
+    // m_layoutManager is constructed in the Daemon ctor and never reset, so it
+    // is non-null on every path that reaches here; the guards elsewhere in
+    // this file cover members that stop() DOES reset.
+    for (const QMetaObject::Connection& c : std::as_const(m_restartScopedConnections)) {
+        disconnect(c);
+    }
+    m_restartScopedConnections.clear();
+    m_restartScopedConnections << connect(
+        m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
+        [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
+            updateAutotileScreens();
+            updateLayoutFilter();
 
-                // Sync unified controller cycling index when assignment affects current desktop.
-                const int curDesktop = currentDesktopForScreen(screenId);
-                if (virtualDesktop != 0 && virtualDesktop != curDesktop) {
-                    return;
-                }
-                if (!m_unifiedLayoutController || !m_layoutManager) {
-                    return;
-                }
-                const QString focusedScreenId = m_unifiedLayoutController->currentScreenName();
-                if (focusedScreenId.isEmpty() || focusedScreenId != screenId) {
-                    return;
-                }
-                const QString assignmentId =
-                    m_layoutManager->assignmentIdForScreen(focusedScreenId, curDesktop, currentActivity());
-                m_unifiedLayoutController->syncFromExternalState(assignmentId);
-            });
+            // Sync unified controller cycling index when assignment affects current desktop.
+            const int curDesktop = currentDesktopForScreen(screenId);
+            if (virtualDesktop != 0 && virtualDesktop != curDesktop) {
+                return;
+            }
+            if (!m_unifiedLayoutController || !m_layoutManager) {
+                return;
+            }
+            const QString focusedScreenId = m_unifiedLayoutController->currentScreenName();
+            if (focusedScreenId.isEmpty() || focusedScreenId != screenId) {
+                return;
+            }
+            const QString assignmentId =
+                m_layoutManager->assignmentIdForScreen(focusedScreenId, curDesktop, currentActivity());
+            m_unifiedLayoutController->syncFromExternalState(assignmentId);
+        });
 
     // Connect unified layout controller signals for OSD display
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this,
@@ -744,10 +759,8 @@ void Daemon::connectOverlaySignals()
 
     // Connect Snap Assist selection: fetch authoritative zone geometry from service (same as
     // keyboard navigation) to avoid overlay coordinate drift/overlap bugs, then forward to effect
-    // Same restart-duplication guard as connectLayoutSignals — m_overlayService
-    // survives stop().
-    disconnect(m_overlayService.get(), &IOverlayService::snapAssistWindowSelected, this, nullptr);
-    connect(
+    // Same restart-duplication guard as connectLayoutSignals (see there).
+    m_restartScopedConnections << connect(
         m_overlayService.get(), &IOverlayService::snapAssistWindowSelected, this,
         [this](const QString& windowId, const QString& zoneId, const QString& geometryJson, const QString& screenId) {
             // Resolve screen ID; fall back to primary screen
@@ -791,8 +804,7 @@ void Daemon::connectOverlaySignals()
         });
 
     // Connect navigation feedback signal to show OSD (manual mode: from WindowTrackingAdaptor via KWin effect)
-    disconnect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this, nullptr);
-    connect(
+    m_restartScopedConnections << connect(
         m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
         [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
                const QString& targetZoneId, const QString& screenId) {
@@ -821,13 +833,12 @@ void Daemon::connectOverlaySignals()
     // window operation. During snap assist continuation, the window stays visible (keyboard
     // grab released) so this handler fires and destroys it; showContinuationIfNeeded() then
     // creates a fresh one. For non-continuation selections, this provides the final cleanup.
-    disconnect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowZoneChanged, this, nullptr);
-    connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowZoneChanged, this,
-            [this](const QString& /*windowId*/, const QString& /*zoneId*/) {
-                if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
-                    m_overlayService->hideSnapAssist();
-                }
-            });
+    m_restartScopedConnections << connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowZoneChanged, this,
+                                          [this](const QString& /*windowId*/, const QString& /*zoneId*/) {
+                                              if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
+                                                  m_overlayService->hideSnapAssist();
+                                              }
+                                          });
 
     // Mid-drag close cleanup: WindowDragAdaptor holds transient drag state
     // (m_draggedWindowId, m_pendingSnapDragWindowId, m_snapAssistPendingWindowId,

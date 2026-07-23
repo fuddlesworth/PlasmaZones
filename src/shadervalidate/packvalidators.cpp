@@ -156,16 +156,25 @@ int validatePack(const QString& packDir, QTextStream& out)
         lints << QStringLiteral("fragment shader missing: %1").arg(QFileInfo(info.sourcePath).fileName());
     }
     // A declared-but-absent vertexShader silently falls back to the shared
-    // zone.vert below, hiding the author's typo — same lint the animation and
-    // surface validators apply.
-    if (!info.vertexShaderPath.isEmpty() && !QFile::exists(info.vertexShaderPath)) {
-        lints << QStringLiteral("vertex shader missing: %1").arg(QFileInfo(info.vertexShaderPath).fileName());
+    // zone.vert below, hiding the author's typo. Read the RAW metadata: unlike
+    // the animation and surface parsers, ShaderRegistry::parsePackMetadata
+    // only assigns vertexShaderPath when the file EXISTS, so linting the
+    // parsed struct could never fire.
+    {
+        QFile rawMeta(QDir(packDir).filePath(QStringLiteral("metadata.json")));
+        if (rawMeta.open(QIODevice::ReadOnly)) {
+            const QString declaredVert =
+                QJsonDocument::fromJson(rawMeta.readAll()).object().value(QLatin1String("vertexShader")).toString();
+            if (!declaredVert.isEmpty() && !QFile::exists(QDir(packDir).filePath(declaredVert))) {
+                lints << QStringLiteral("vertex shader missing: %1").arg(declaredVert);
+            }
+        }
     }
 
     if (lints.isEmpty()) {
-        out << "  metadata      OK\n";
+        out << "  metadata       OK\n";
     } else {
-        out << "  metadata      ERROR\n";
+        out << "  metadata       ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;
@@ -415,9 +424,9 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     }
 
     if (lints.isEmpty()) {
-        out << "  metadata      OK\n";
+        out << "  metadata       OK\n";
     } else {
-        out << "  metadata      ERROR\n";
+        out << "  metadata       ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;
@@ -507,13 +516,16 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                         << "\n";
                     ++errors;
                 } else {
-                    // Same p_<id> preamble splice the fragment stage gets: a
-                    // vertex-driven pack (wobble, phosphor-stream) reads its
-                    // params in the VERT, and the runtime splices there too.
-                    const QString splicedVert =
-                        PhosphorShaders::spliceAfterVersion(expandedVert, AnimationShaderRegistry::paramPreamble(eff));
+                    // NO p_<id> preamble splice here: the runtime splices only
+                    // the FRAGMENT stage (loadFragmentShader and
+                    // warmShaderBakeCacheForPaths both do; loadVertexShader
+                    // does not). Splicing it here would let a daemon-path vert
+                    // that reads p_<id> pass this gate and then fail at runtime
+                    // with an undeclared identifier. Vertex-driven packs read
+                    // their params inside `#ifdef PLASMAZONES_KWIN`, which this
+                    // Vulkan-dialect bake does not take.
                     const ShaderCompiler::Result vertResult =
-                        ShaderCompiler::compile(splicedVert.toUtf8(), QShader::VertexStage);
+                        ShaderCompiler::compile(expandedVert.toUtf8(), QShader::VertexStage);
                     errors += reportCompile(out, vertLabel, vertResult, declaredParamNames(eff.parameters));
                 }
             }
@@ -697,9 +709,9 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     }
 
     if (lints.isEmpty()) {
-        out << "  metadata      OK\n";
+        out << "  metadata       OK\n";
     } else {
-        out << "  metadata      ERROR\n";
+        out << "  metadata       ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;

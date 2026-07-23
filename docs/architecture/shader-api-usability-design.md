@@ -5,8 +5,9 @@
 
 ## Status
 
-**Tier 1 implemented** (T1.1–T1.5, with the T1.2 CLI zone-only as noted in A4; all
-bundled animation + zone packs migrated, offline validator + CI gate landed). Tiers 2–3 remain proposed. This document covers
+**Tier 1 implemented** (T1.1–T1.5; all bundled animation + zone packs migrated,
+and the offline validator now covers overlay, animation and surface packs with
+a CI gate each). Tiers 2–3 remain proposed. This document covers
 the full scope across all tiers; the Tier-2/3 sections are the forward design.
 
 Pack counts throughout this document reflect the v3.1 tree at design time (53
@@ -87,22 +88,22 @@ packs live in `data/overlays/` (installed to `…/share/plasmazones/overlays/`).
 Key code paths this design touches:
 
 - **Metadata parse + slot mapping:** `libs/phosphor-shaders/src/shaderregistry.cpp`
-  - `parseShaderMetadata()` (`:83`) reads every metadata field, including each
-    parameter's explicit `slot` (`:198`).
-  - `ParameterInfo::uniformName()` (`:41`) is the single point that maps
+  - `parseShaderMetadata()` reads every metadata field, including each
+    parameter's explicit `slot`.
+  - `ParameterInfo::uniformName()` is the single point that maps
     `(type, slot)` → uniform key (`customParams3_x`, `customColor1`, `uTexture0`).
-  - `translateParamsToUniforms()` (`:850`) turns stored param values into the
+  - `translateParamsToUniforms()` turns stored param values into the
     uniform-key map handed to the renderer.
 - **Include expansion:** `libs/phosphor-shaders/src/shaderincluderesolver.cpp`
-  - `expandIncludes()` (`:122`) recursively inlines `#include <common.glsl>` etc.
+  - `expandIncludes()` recursively inlines `#include <common.glsl>` etc.
     from the search paths. *(Originally concatenated without `#line` directives;
     T1.3 added the `#line` emission that maps diagnostics to the author's file.)*
 - **Compilation (headless, CPU):** `libs/phosphor-rendering/src/shadercompiler.cpp`
-  - `compileFromFile(path, includePaths)` (`:170`) → `loadAndExpand()` →
+  - `compileFromFile(path, includePaths)` → `loadAndExpand()` →
     `compile()` → `QShaderBaker` (glslang). Returns `{ QShader, success, error }`.
     No GPU context required — glslang runs on CPU.
 - **Compile-result reporting:** `ShaderRegistry::reportShaderBakeFinished()`
-  (`shaderregistry.cpp:403`) already emits
+  (`shaderregistry.cpp`) already emits
   `shaderCompilationFinished(id, success, error)`.
 - **Install:** `src/settings/services/shaderpackinstaller.{h,cpp}` — validated, size-capped,
   symlink-rejecting, atomic-rename install of a dropped pack.
@@ -223,7 +224,7 @@ synthesizes a `#define` preamble from the parameter list:
 body. The clean seam is the compile path: after `ShaderCompiler::loadAndExpand()`
 inlines `common.glsl` (which declares the UBO), the caller prepends the preamble
 to the author's portion before calling `compile()`. Concretely, the renderer-side
-call sites that invoke `compileFromFile` (`zoneshadernoderhicore`, `ShaderEffect`)
+call sites that invoke `compileFromFile` (`zoneshadernoderhi`, `ShaderEffect`)
 ask the registry for `generatedParamPreamble(shaderId)` and splice it in. Because
 `#define` is pure text substitution, exact placement only needs to precede *use*;
 inserting immediately after the `common.glsl` include block is simplest and
@@ -365,7 +366,7 @@ metadata" hint comes from cross-referencing the generated preamble's symbols.)
 **Goal:** glslang errors point at the author's file and line, not the expanded
 blob — turning D2's "unmapped runtime error" into an actionable message.
 
-**Mechanism.** In `expandIncludesRecursive()` (`shaderincluderesolver.cpp:32`),
+**Mechanism.** In `expandIncludesRecursive()` (`shaderincluderesolver.cpp`),
 emit `#line <n> <source-index>` (or filename via the GL_GOOGLE_cpp_style_line
 extension if the bake targets accept it; otherwise integer source indices plus a
 printed index→path legend) at each include boundary and on return to the parent.
@@ -556,8 +557,8 @@ Restructure shader docs to mirror `luau-algorithm-authoring.md`:
 Promote the editor's `ZoneShaderRenderer`-based live preview into
 `ShaderBrowserDetailDialog.qml` so a user can scrub parameters and watch the
 effect without leaving the settings app or assigning it to an event first. The
-renderer and parameter editor (`ShaderParameterEditor.qml` /
-`ShaderParameterRow.qml`) are already shared components — this is wiring plus a
+renderer and parameter editor (`ParameterEditor.qml` /
+`ParameterRow.qml`) are already shared components — this is wiring plus a
 transient (non-persisted) param session in the detail dialog.
 
 #### T3.2 — In-app compile feedback (and, later, a source pane)
@@ -625,7 +626,7 @@ Consequences for Tier 1:
   sites.** The generated param preamble and any generated `main()`/entry wrapper
   must be produced by a shared, runtime-agnostic component (the registry is the
   natural owner) and injected on **both** the RHI path *and* the kwin-effect
-  source-assembly path (`shader_textures.cpp`), after that path's `#version` /
+  source-assembly path (`shader_transitions.cpp`), after that path's `#version` /
   `PLASMAZONES_KWIN` prepend. Treat "emit the generated GLSL" and "splice it into a
   compile" as two steps so both runtimes share step one.
 - **T1.2 validation must bake both branches.** A valid animation shader is one that
@@ -720,9 +721,10 @@ single `pTransition` and keeps its current auto-mirror behaviour.
   and kwin-effect paths.
 - Animation packs are gated by `test_animation_shader_preamble_bake.cpp`, which
   bakes every pack through the full runtime assembly (entry scaffold + `p_<id>`
-  preamble) on the daemon path. *(As shipped, the `plasmazones-shader-validate`
-  CLI is zone-only; an animation CLI mode and a kwin-branch `PLASMAZONES_KWIN`
-  bake remain future work.)*
+  preamble) on the daemon path. *(The `plasmazones-shader-validate` CLI now has
+  `--overlay` / `--animation` / `--surface` modes, each with its own CI gate,
+  and the kwin-branch `PLASMAZONES_KWIN` bake landed as
+  `test_animation_shader_kwin_bake`.)*
 - An author can write `pTransition` (symmetric) or `pIn`/`pOut` (asymmetric) with
   no `iIsReversed` handling; `p_reversed` and `legProgress()` exist for authors who
   keep `main()`.
@@ -814,8 +816,8 @@ that closes the cross-app gap.
   it compile and render; packs that define `main()` are wrapped/used unchanged.
 - `plasmazones-shader-validate <pack>` reports per-stage OK/errors over
   `data/overlays/*`, runs in CI (`shader_validate_bundled`), and exits non-zero on
-  failure. *(Animation packs are gated equivalently by
-  `test_animation_shader_preamble_bake`; an animation CLI mode is future work.)*
+  failure. *(Animation packs are gated by both
+  `test_animation_shader_preamble_bake` and the CLI's `--animation` mode.)*
 - glslang errors reference the author's file/line.
 - All 26 zone packs migrated to the named-param + entry-point API and render
   identically (25 via pImage/pZone; magnetic-field keeps its custom-vertex main()).

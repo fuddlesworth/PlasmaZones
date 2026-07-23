@@ -844,6 +844,16 @@ private:
     /// stop()→start() cycle — and so a re-armed service cannot stack duplicates.
     QList<QMetaObject::Connection> m_idleConnections;
 
+    /// Connections installed by connectLayoutSignals() / connectOverlaySignals().
+    /// Both functions re-run on every start(), but their senders survive stop(),
+    /// so a restart would stack duplicate handlers. We disconnect these exact
+    /// handles on re-entry rather than the (sender, signal, receiver) triple:
+    /// other call sites install their OWN handlers on the same signals — e.g.
+    /// initLayoutAndSettingsWiring() connects layoutAssigned from the ctor — and
+    /// a triple-wide disconnect would silently delete those too. Qt::UniqueConnection
+    /// is not an option here: it does not apply to lambda/functor connections.
+    QList<QMetaObject::Connection> m_restartScopedConnections;
+
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;

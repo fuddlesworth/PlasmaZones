@@ -59,7 +59,7 @@ pre-commit:
       # than blocking the commit; CI's shader_validate_bundled is the hard gate.
       run: >
         sh -c 'bin=build/bin/plasmazones-shader-validate;
-        if [ -x "$bin" ]; then exec "$bin" --quiet data/overlays;
+        if [ -x "$bin" ]; then exec "$bin" --quiet --overlay data/overlays;
         else echo "plasmazones-shader-validate not built (build/bin/) — skipping shader validation; build the target to enable this local gate" >&2; fi'
     shader-validate-animation:
       glob: "data/animations/**/*.{frag,vert,glsl,json}"
