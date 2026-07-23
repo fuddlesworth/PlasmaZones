@@ -808,6 +808,21 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_STRING("snapAllWindowsShortcut", snapAllWindowsShortcut, setSnapAllWindowsShortcut)
         REGISTER_CONCRETE_STRING("layoutPickerShortcut", layoutPickerShortcut, setLayoutPickerShortcut)
         REGISTER_CONCRETE_STRING("toggleLayoutLockShortcut", toggleLayoutLockShortcut, setToggleLayoutLockShortcut)
+
+        // Virtual screen shortcuts
+        REGISTER_CONCRETE_STRING("swapVirtualScreenLeftShortcut", swapVirtualScreenLeftShortcut,
+                                 setSwapVirtualScreenLeftShortcut)
+        REGISTER_CONCRETE_STRING("swapVirtualScreenRightShortcut", swapVirtualScreenRightShortcut,
+                                 setSwapVirtualScreenRightShortcut)
+        REGISTER_CONCRETE_STRING("swapVirtualScreenUpShortcut", swapVirtualScreenUpShortcut,
+                                 setSwapVirtualScreenUpShortcut)
+        REGISTER_CONCRETE_STRING("swapVirtualScreenDownShortcut", swapVirtualScreenDownShortcut,
+                                 setSwapVirtualScreenDownShortcut)
+        REGISTER_CONCRETE_STRING("rotateVirtualScreensClockwiseShortcut", rotateVirtualScreensClockwiseShortcut,
+                                 setRotateVirtualScreensClockwiseShortcut)
+        REGISTER_CONCRETE_STRING("rotateVirtualScreensCounterclockwiseShortcut",
+                                 rotateVirtualScreensCounterclockwiseShortcut,
+                                 setRotateVirtualScreensCounterclockwiseShortcut)
     }
 
 // Clean up macros (local scope)

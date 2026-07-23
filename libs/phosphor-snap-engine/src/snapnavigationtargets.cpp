@@ -323,14 +323,11 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
                              cross.zoneId, cross.screenName);
                 return cross;
             }
-            // Defer the boundary decision (and its feedback) to the caller when a
-            // cross-surface resolver is present: SnapEngine may cross to an
-            // adjacent desktop, which doesn't fit a zone-target result. Without a
-            // resolver, emit the boundary feedback here as before.
-            if (!m_crossSurface) {
-                emitFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId,
-                             QString(), effectiveScreenId);
-            }
+            // Defer the boundary decision AND its feedback to the caller:
+            // SnapEngine tries the cross-mode and cross-desktop axes and
+            // emits the boundary feedback itself when they fail, in every
+            // configuration — emitting here too would double the OSD when
+            // no cross-surface resolver is wired.
             return moveResult(false, QStringLiteral("no_adjacent_zone"), QString(), QRect(), currentZoneId,
                               effectiveScreenId);
         }
@@ -581,7 +578,12 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
             const bool inTrailingBand = positive ? (travelLo(memberRect, horizontal) <= uLo + kSpanEdgeTolerancePx)
                                                  : (travelHi(memberRect, horizontal) >= uHi - kSpanEdgeTolerancePx);
             if (inTrailingBand) {
-                removedZoneId = memberId;
+                // Record the FIRST removed member (members preserve span
+                // order) so the feedback's target zone is deterministic
+                // when the band drops several zones at once.
+                if (removedZoneId.isEmpty()) {
+                    removedZoneId = memberId;
+                }
                 continue;
             }
             kept.append(memberId);
@@ -665,13 +667,10 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
         // "no_adjacent_zone" reason: from the caller's perspective there is no
         // window to land on that way, so it should try the desktop axis next. The
         // reason intentionally does not distinguish the empty-zone case.
-        // Defer the boundary decision (and feedback) to the caller when a
-        // cross-surface resolver is present — SnapEngine may focus a window on
-        // the adjacent desktop. Without one, emit the boundary feedback here.
-        if (!m_crossSurface) {
-            emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
-                         effectiveScreenId);
-        }
+        // Defer the boundary decision AND its feedback to the caller —
+        // SnapEngine tries the cross-desktop axis and emits the boundary
+        // feedback itself when it fails, in every configuration (see the
+        // matching note in getMoveTargetForWindow).
         return focusResult(false, QStringLiteral("no_adjacent_zone"), QString(), currentZoneId, QString(),
                            effectiveScreenId);
     }
@@ -851,13 +850,10 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
                          cross.targetZoneId, cross.screenName);
             return cross;
         }
-        // Defer the boundary decision (and its feedback) to the caller when a
-        // cross-surface resolver is present: SnapEngine may cross to an adjacent
-        // desktop. Without a resolver, emit the boundary feedback here as before.
-        if (!m_crossSurface) {
-            emitFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
-                         effectiveScreenId);
-        }
+        // Defer the boundary decision AND its feedback to the caller —
+        // SnapEngine tries the cross-mode axis and emits the boundary
+        // feedback itself when it fails, in every configuration (see the
+        // matching note in getMoveTargetForWindow).
         return swapResult(false, QStringLiteral("no_adjacent_zone"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0,
                           0, 0, QString(), effectiveScreenId, currentZoneId, QString());
     }
