@@ -42,7 +42,16 @@ file(GLOB_RECURSE PLASMAZONES_I18N_QML CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/kcm/*.qml"
 )
 
-set(_all_i18n_sources ${PLASMAZONES_I18N_SOURCES} ${PLASMAZONES_I18N_QML})
+# QML is NOT handed to lupdate directly. lupdate's QML parser only recognizes
+# qsTr()/qsTranslate(), and our QML calls i18n()/i18nc()/i18np()/i18ncp() via
+# PhosphorLocalizedContext, so lupdate read every .qml and extracted nothing:
+# the whole QML UI was untranslatable for as long as this file has existed.
+# scripts/qml-i18n-stubs.py transcribes each call into a C++ stub that lupdate
+# does understand, and those stubs go to lupdate instead. See that script for
+# why -tr-function-alias cannot express the shape we need.
+set(_qml_stub_dir "${CMAKE_SOURCE_DIR}/translations/.qml-stubs")
+
+set(_all_i18n_sources ${PLASMAZONES_I18N_SOURCES})
 
 # Collect per-language .ts files (plasmazones_de.ts, plasmazones_fr.ts, etc.)
 # Flat layout: translations/plasmazones_<lang>.ts → plasmazones_<lang>.qm
@@ -50,20 +59,34 @@ file(GLOB TRANSLATION_TS_FILES "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.t
 # Exclude the English source template from compilation (it has no translations)
 list(FILTER TRANSLATION_TS_FILES EXCLUDE REGEX "plasmazones_en\\.ts$")
 
-# --- update-ts target: lupdate scans source directly ---
-# PhosphorI18n::tr() uses Q_DECLARE_TR_FUNCTIONS(plasmazones) - lupdate
-# recognizes tr() natively.  No custom scripts or intermediate files.
-if(Qt6LinguistTools_FOUND)
+# --- update-ts target ---
+# PhosphorI18n::tr() uses Q_DECLARE_TR_FUNCTIONS(plasmazones), so lupdate
+# recognizes the C++ side natively. QML goes through the stub step first.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Qt6LinguistTools_FOUND AND Python3_Interpreter_FOUND)
     # All .ts files to update (en template + per-language)
     file(GLOB _all_ts_files "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
 
+    # The stub list is only known after the script runs, so lupdate is pointed
+    # at the whole stub tree via the @list file the script writes.
     add_custom_target(update-ts
         COMMENT "Updating .ts translation files from source (lupdate)"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${_qml_stub_dir}
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/qml-i18n-stubs.py
+            --source-root ${CMAKE_SOURCE_DIR}
+            --out-dir ${_qml_stub_dir}
+            --list ${_qml_stub_dir}/stubs.txt
+            ${PLASMAZONES_I18N_QML}
         COMMAND Qt6::lupdate
             -I ${CMAKE_SOURCE_DIR}/src
             ${_all_i18n_sources}
+            "@${_qml_stub_dir}/stubs.txt"
             -ts ${_all_ts_files}
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+elseif(Qt6LinguistTools_FOUND)
+    add_custom_target(update-ts
+        COMMAND ${CMAKE_COMMAND} -E echo "Python3 not found; needed to extract i18n() from QML"
     )
 else()
     add_custom_target(update-ts
