@@ -213,7 +213,12 @@ void ZoneShaderItem::parseZoneData()
         ++index;
     }
 
-    // Update zone counts
+    // Update zone counts. parseZoneData is a pure recompute helper; emitting
+    // the zoneCount / highlightedCount NOTIFY signals is the CALLER's job.
+    // setZones() captures the old counts and emits on change (setters.cpp);
+    // the geometryChange and componentComplete callers deliberately do not,
+    // because a resolution re-parse leaves the count invariant and the initial
+    // parse predates any binding observer. Emitting here would double-fire.
     m_zoneCount = newRects.size();
     m_highlightedCount = highlightedCount;
 

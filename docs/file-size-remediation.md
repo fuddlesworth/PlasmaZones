@@ -56,6 +56,10 @@ headers under 1150, no action): `src/daemon/daemon.h` (1150), `src/daemon/overla
 Warning for daemon.h: it now sits exactly at 1150 after one round of doc-essay
 trimming, so any further declaration must be paid for by trimming again.
 
+Completed split: `src/daemon/daemon/signals.cpp` (was 1088) had
+`initializeAutotile()` extracted to `src/daemon/daemon/autotile_init.cpp`,
+leaving 625 and 568 lines respectively.
+
 `src/ui/PassiveOverlayShell.qml` (1047) is TOLERATED but flagged **near-exception**:
 C++ (`OverlayService`) writes properties directly onto its slot Items and inner
 Components resolve them via QML lexical scope by design. Splitting it breaks that
@@ -353,7 +357,6 @@ list; missing QML files in `qt6_add_qml_module` fail at runtime, not build time.
 | 1099 | libs/phosphor-config/src/jsonbackend.cpp | TOLERATED (trivial seam: JsonGroup) |
 | 1090 | src/daemon/daemon/start.cpp | TOLERATED (easy seam: shortcuts.cpp / virtual_screens.cpp) |
 | 1089 | tests/unit/settings/stores/test_profilestore.cpp | TOLERATED |
-| 625 | src/daemon/daemon/signals.cpp | DONE — initializeAutotile() extracted to daemon/autotile_init.cpp (568) |
 | 1087 | src/editor/qml/PropertyPanel.qml | TOLERATED (twinFormLayouts obstacle) |
 | 1080 | src/settings/stores/profilestore.cpp | TOLERATED (seam: CRUD partial) |
 | 1079 | libs/phosphor-snap-engine/include/PhosphorSnapEngine/SnapEngine.h | TOLERATED |

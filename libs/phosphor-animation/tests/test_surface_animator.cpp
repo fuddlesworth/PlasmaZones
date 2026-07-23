@@ -43,8 +43,6 @@
 #include <QFile>
 #include <QTemporaryDir>
 
-#include <PhosphorAnimation/AnimationShaderRegistry.h>
-
 class TestSurfaceAnimator : public QObject
 {
     Q_OBJECT
