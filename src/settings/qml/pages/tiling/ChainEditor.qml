@@ -299,7 +299,7 @@ ColumnLayout {
 
     // ── Add row ──────────────────────────────────────────────────────────
     // Compact right-aligned pack picker in a labelled SettingsRow, matching the
-    // animation "Shader effect" selector (PZCommon.CategoryMenuButton) rather
+    // animation "Set shader" selector (PZCommon.CategoryMenuButton) rather
     // than a full-width dropdown bar. It is an ACTION, not a persistent
     // selection: selecting a pack appends it to the chain, so currentId stays
     // empty and the button always shows its placeholder.
