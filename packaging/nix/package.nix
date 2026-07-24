@@ -144,6 +144,17 @@ stdenv.mkDerivation (finalAttrs: {
     kdePackages.kcmutils          # KCMUtils: KDE System Settings module support
     kdePackages.kglobalaccel      # KGlobalAccel: system-wide keyboard shortcuts
 
+    # Kirigami: a pure *runtime* QML dependency. Nothing in the CMake build
+    # looks for it (there is no find_package(KF6 ... Kirigami)) and QML imports
+    # are not resolved at build time, so leaving it out still produces a
+    # green `nix build` — the settings app and editor then fail at startup on
+    # `import org.kde.kirigami`, which every one of their QML files does. It
+    # belongs in buildInputs so wrapQtAppsHook puts it on QML_IMPORT_PATH.
+    # kcmutils propagates only qtdeclarative, so it does not arrive
+    # transitively. This attribute is the wrapper derivation that also
+    # propagates qqc2-desktop-style, Kirigami's own runtime style dependency.
+    kdePackages.kirigami
+
     # ── KWin (for the C++ effect plugin) ─────────────────────────────────────
     # The kwin-effect/ subdirectory compiles a plugin that is loaded directly
     # by KWin. KWin exposes a private Effects API that the plugin links against.
