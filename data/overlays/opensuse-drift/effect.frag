@@ -343,7 +343,6 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
-    vec2 halfSize = rectSize * 0.5;
 
     vec2 p = fragCoord - center;
     float d = zoneShape.d;
@@ -896,7 +895,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float depthDarken = smoothstep(0.0, edgeFadeStart, innerDist);
         col *= mix(0.8, 1.0, 1.0 - depthDarken * 0.2);
 
-        float innerGlow = exp(-innerDist / 12.0);
+        float innerGlow = exp(-innerDist / zoneLen(12.0));
         float edgeAngle = atan(p.y, p.x);
         float iriT = edgeAngle / TAU + time * 0.05 + midsEnv * 0.2;
         vec3 edgeIriCol = triStopPalette(iriT, palSecondary, palAccent, palGlow);

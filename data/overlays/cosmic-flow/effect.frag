@@ -46,7 +46,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
     float fillOpacity = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float borderGlow = p_borderGlow >= 0.0 ? p_borderGlow : 0.3;
-    float edgeFadeStart = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float edgeFadeStart = zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0);
     float borderBrightness = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.3;
 
     float audioReact = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
@@ -175,7 +175,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         col *= mix(0.65, 1.0, 1.0 - depthDarken * 0.3);
 
         // Bright inner glow near the border (exponential falloff from edge)
-        float innerGlow = exp(-innerDist / 14.0);
+        float innerGlow = exp(-innerDist / zoneLen(14.0));
         vec3 glowColor = iqPalette(r * contrast + 0.1, palA, palB, palC, palD);
         float glowStrength = innerGlowStr;
         col += glowColor * innerGlow * glowStrength;

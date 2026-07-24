@@ -578,8 +578,6 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
-    vec2 p        = fragCoord - center;
     vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
     localUV = clamp(localUV, 0.0, 1.0);
 
@@ -679,10 +677,6 @@ vec4 arethaZoneGlow(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted) 
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
 
-    vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
-    vec2 p        = fragCoord - center;
     float d = zoneShape.d;
 
     float glowExtent = vitalityScale(10.0, 28.0, vitality);

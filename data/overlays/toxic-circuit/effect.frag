@@ -19,7 +19,6 @@
  *   p_glitchAmount = glitchAmount (0.0-0.5) - Digital corruption intensity
  *   p_glowStrength = glowStrength (0.5-3.0) - Neon glow intensity
  *   p_smogDensity = smogDensity (0.0-0.5) - Atmospheric haze
- *   customParams[1].z = chromaShift (0.0-15.0) - Chromatic aberration
  *   p_fillOpacity = fillOpacity (0.3-0.9) - Inner fill darkness
  *   p_primaryColor - Primary color (default #39FF14)
  *   p_secondaryColor - Secondary color (default #BF00FF)
@@ -222,7 +221,6 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     float glitchAmount = p_glitchAmount >= 0.0 ? p_glitchAmount : 0.08;
     float glowStrength = p_glowStrength >= 0.0 ? p_glowStrength : 1.0;
     float smogDensity = p_smogDensity >= 0.0 ? p_smogDensity : 0.1;
-    float chromaShift = customParams[1].z >= 0.0 ? customParams[1].z : 3.0;
     float fillOpacity = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.7;
     float edgeGlowStrength = p_edgeGlowStrength >= 0.0 ? p_edgeGlowStrength : 0.35;
     float mouseInfluenceStrength = p_mouseInfluenceStrength >= 0.0 ? p_mouseInfluenceStrength : 1.5;
@@ -257,8 +255,6 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         glitchAmount *= 1.0 + brownout * 0.6;
         // Glow: voltage sets baseline trace luminance (surge effect adds spatial bass response)
         glowStrength *= mix(0.4, 1.0, voltage);
-        // Chroma: overvoltage causes chromatic stress on the traces
-        chromaShift *= 1.0 + overvoltage * 0.7;
     }
 
     vec2 rectPos = zoneRectPos(rect);
@@ -288,7 +284,6 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     bgColor = mix(bgColor, vec3(0.15, 0.0, 0.25), vitalityScale(0.0, 1.0, vitality));
 
     glowStrength *= vitalityScale(0.5, 2.2, vitality);
-    chromaShift *= vitalityScale(0.6, 1.8, vitality);
     dripIntensity *= vitalityScale(0.5, 2.0, vitality);
     circuitDensity *= vitalityScale(0.8, 1.0, vitality);
     pulseSpeed *= vitalityScale(0.7, 1.5, vitality);

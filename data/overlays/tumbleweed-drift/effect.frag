@@ -690,7 +690,7 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
         float depthDarken = smoothstep(0.0, pEdgeFadeStart(), innerDist);
         col *= mix(0.6, 1.0, 1.0 - depthDarken * 0.35);
 
-        float innerGlow = exp(-innerDist / 12.0);
+        float innerGlow = exp(-innerDist / zoneLen(12.0));
         float edgeAngle = atan(p.y, p.x);
         float iriT = edgeAngle / TAU + time * 0.05;
         vec3 iriCol = triStopPalette(iriT, palSecondary, palAccent, palGlow);

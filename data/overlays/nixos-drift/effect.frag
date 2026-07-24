@@ -1013,8 +1013,13 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
             // Angular position of this cell around the zone center
             vec2 cellWorld = hid * hexScale * iResolution;
-            float cellAngle = atan(cellWorld.y - center.y / max(iResolution.y, 1.0),
-                                   cellWorld.x - center.x / max(iResolution.x, 1.0));
+            // Both terms are device px. The divisions that used to sit here
+            // bound tighter than the subtraction, so this took `cellWorld
+            // minus a 0-to-1 value` and the angle came out about the screen
+            // origin rather than the zone centre, sweeping the activation
+            // wave around the top-left corner of the display.
+            float cellAngle = atan(cellWorld.y - center.y,
+                                   cellWorld.x - center.x);
             float cellPhase = (cellAngle + PI) / TAU;  // 0..1
 
             // Activation wave sweeps around the zone perimeter

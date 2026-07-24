@@ -631,7 +631,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         col *= mix(0.7, 1.0, vignette);
 
         // Subtle inner glow
-        col += palPrimary * exp(-innerDist / 10.0) * innerGlowStr * 0.5;
+        col += palPrimary * exp(-innerDist / zoneLen(10.0)) * innerGlowStr * 0.5;
 
         // Periodic pulse ring sweeping inward (every ~4 seconds)
         float ringPhase = fract(time * 0.25);

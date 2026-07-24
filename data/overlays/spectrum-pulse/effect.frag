@@ -23,7 +23,6 @@
  *   [1].z = colorMix         — audio-driven primary↔accent shift (0–1)
  *   [1].w = idleAnimation    — animation when silent (0–2)
  *   [2].x = veinIntensity    — energy vein / tendril brightness (0–1)
- *   [2].y = radialWaves      — bass radial wave strength (0–1)
  *   [2].z = gridIntensity    — grid / mesh overlay brightness (0–0.5)
  *   [2].w = fillOpacity      — zone interior fill opacity (0–1)
  *
@@ -100,7 +99,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float colorMix      = p_colorMix >= 0.0 ? p_colorMix : 0.5;
     float idleAnim      = p_idleAnimation >= 0.0 ? p_idleAnimation : 1.0;
     float veinIntensity = p_veinIntensity >= 0.0 ? p_veinIntensity : 0.5;
-    float radialWaveStr = customParams[2].y >= 0.0 ? customParams[2].y : 1.0;
     float gridOpacity   = p_gridOpacity >= 0.0 ? p_gridOpacity : 0.15;
     float fillOpacity   = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float gridRes       = p_gridResolution >= 0.0 ? p_gridResolution : 20.0;
@@ -160,7 +158,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         result.a   = fillOpacity;
 
         // Inner glow: exponential falloff from border edge
-        float innerGlow = exp(-innerDist / 30.0) * 0.3 * intensity;
+        float innerGlow = exp(-innerDist / zoneLen(30.0)) * 0.3 * intensity;
         // Slight color variation on inner glow
         vec3 glowTint = mix(activeColor, accent, innerGlow * 0.5);
         result.rgb += glowTint * innerGlow;

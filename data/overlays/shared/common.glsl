@@ -193,6 +193,28 @@ float zoneBorderWidth(float widthLogical) {
     return max(widthLogical * uZoneScale, 1.0);
 }
 
+// Any other length a pack expresses in logical px, converted to the device-px
+// space the SDF and fragCoord live in. Use this for glow radii, edge-fade
+// distances, inner-glow falloffs, and every other hard-coded pixel constant
+// that sits beside a zoneSdf() radius or a zoneBorderWidth().
+//
+// It matters that these agree. zoneSdf() and zoneBorderWidth() make the corner
+// radius and the border track the display scale; a neighbouring constant left
+// in raw device px does not, so on a 2x display the border doubles in physical
+// thickness while its glow stays put and the proportions the pack was tuned at
+// drift apart. Before those two helpers existed every length was uniformly
+// wrong in the same direction, which hid the mismatch — making two of them
+// right is what exposes it.
+//
+// Note this is NOT pxScale(). pxScale() is 1080p-relative and answers "what
+// fraction of the screen is this?", which is the right question for a
+// full-screen background pattern. zoneLen() answers "how big is this on the
+// user's display?", which is the right question for anything measured against
+// a zone edge.
+float zoneLen(float logicalPx) {
+    return logicalPx * uZoneScale;
+}
+
 // 2D rotation matrix. mat2 is column-major, so p * rot(a) rotates by +a,
 // while rot(a) * p applies the transpose (rotation by -a). The *drift fbm
 // keeps its historical matrix-first rot(a) * uv form; the pass-shader flow
