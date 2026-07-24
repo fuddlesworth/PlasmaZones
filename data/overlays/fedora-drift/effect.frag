@@ -250,7 +250,6 @@ vec3 networkNodes(vec2 uv, float time, float bassEnv, float midsEnv, float trebl
     // Current cell
     vec2 p = uv * gridSize;
     vec2 id = floor(p);
-    vec2 f = fract(p);
 
     // Check 3x3 neighborhood for nodes and connections
     for (int dy = -1; dy <= 1; dy++) {

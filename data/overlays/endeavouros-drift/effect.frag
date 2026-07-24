@@ -5,18 +5,18 @@
  * ENDEAVOUROS DRIFT - Fragment Shader (Tri-Sail Fleet)
  *
  * Wind current background: six flowing current lines plus three parallax sail silhouettes
- * connected by proximity lines, over a warm purple-to-coral gradient wash.
+ *  at three depths, over a warm purple-to-coral gradient wash.
  * Three overlapping sail SDF shapes with per-sail coloring, simplex noise
  * interior flow, per-sail bass pulses, summit convergence glow, and
  * shared-edge highlights.
  *
- * Logo geometry: 3 overlapping sail polygons (26+16+16 vertices)
+ * Logo geometry: 3 overlapping sail polygons (60+36+37 vertices)
  * from the EndeavourOS logo.
  *
  * Audio reactivity:
  *   Bass  = wind currents strengthen, sail pulses, summit glow
  *   Mids  = interior noise churn, palette warmth drift
- *   Treble = dots twinkle, edge sparks, shared-edge flare
+ *   Treble = grid flicker, edge sparks, shared-edge flare
  *
  * The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
  * the vTexCoord/vFragCoord ins, and the fragColor out. audio.glsl is
@@ -105,8 +105,6 @@ const vec2 EOS_PURP_POLY[37] = vec2[37](
     vec2(0.658812, 0.195824), vec2(0.616693, 0.137721), vec2(0.584496, 0.094757)
 );
 
-const vec2 EOS_AABB_LO = vec2(0.013, 0.094);
-const vec2 EOS_AABB_HI = vec2(0.987, 0.906);
 
 // Per-sail tight AABBs (computed from vertex data + 0.005 padding)
 const vec2 BLUE_AABB_LO = vec2(0.066, 0.090);

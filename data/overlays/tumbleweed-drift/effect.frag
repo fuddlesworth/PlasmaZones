@@ -30,7 +30,6 @@ float pNoiseScale()      { return p_noiseScale >= 0.0 ? p_noiseScale : 3.5;  }
 float pWindDirection()   { return p_windDirection >= 0.0 ? p_windDirection : 0.3;  }
 float pBrightness()      { return p_brightness >= 0.0 ? p_brightness : 0.7;  }
 float pContrast()        { return p_contrast >= 0.0 ? p_contrast : 0.9;  }
-// slot 6 reserved
 float pInnerGlowStr()    { return p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.4;  }
 float pFillOpacity()     { return p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85; }
 float pBorderGlow()      { return p_borderGlow >= 0.0 ? p_borderGlow : 0.35; }
@@ -912,19 +911,45 @@ vec4 pImage(vec2 fragCoord) {
     float midsEnv   = hasAudio ? smoothstep(0.05, 0.30, mids)   * audioReact : idlePulse * 0.6;
     float trebleEnv = hasAudio ? smoothstep(0.06, 0.35, treble) * audioReact : 0.0;
 
-    // Render the desert scene + drifting Tumbleweed logos once in
-    // overlay-space. Each zone below renders a window onto this shared
-    // scene plus its own border/glow/vitality treatment.
-    vec3 sceneCol = renderGlobalScene(fragCoord, bassEnv, midsEnv, trebleEnv);
-
+    // Bound the scene before paying for it. renderGlobalScene() is by far the
+    // most expensive thing in this pack: the wind field, three particle layers,
+    // five sand streams, three dust devils, a four-octave erosion FBM, the storm
+    // band, the shimmer and sparkle fields, plus up to eight logo instances each
+    // carrying a 150-vertex multi-subpath SDF. Its result is consumed ONLY
+    // inside renderTumbleweedZone, so on a fragment no zone reaches it is
+    // computed in full and thrown away. Layouts routinely leave the screen
+    // partly uncovered, and this runs per fragment of every draw on the
+    // compositor path.
+    //
+    // The bound is the furthest anything paints beyond a zone edge, which is the
+    // outer glow at zoneLen(22 + 5) for the highlighted, fully-pushed case. The
+    // pre-pass repeats the same zoneSdf() the render loop runs but stops at the
+    // distance, so it costs a few ALU ops against the whole desert.
+    //
+    // Labels are deliberately left outside the gate: they are sampled from
+    // uZoneLabels in screen space and never go through the zone SDF.
+    float minDist = 1e30;
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
+        minDist = min(minDist, zoneSdf(fragCoord, rect, zoneParams[i].x).d);
+    }
 
-        vec4 zoneColor = renderTumbleweedZone(fragCoord, rect, zoneFillColors[i],
-            zoneBorderColors[i], zoneParams[i], sceneCol, zoneParams[i].z > 0.5,
-            bassEnv, hasAudio);
-        color = blendOver(color, zoneColor);
+    if (minDist < zoneLen(27.0)) {
+        // Render the desert scene + drifting Tumbleweed logos once in
+        // overlay-space. Each zone below renders a window onto this shared
+        // scene plus its own border/glow/vitality treatment.
+        vec3 sceneCol = renderGlobalScene(fragCoord, bassEnv, midsEnv, trebleEnv);
+
+        for (int i = 0; i < zoneCount && i < 64; i++) {
+            vec4 rect = zoneRects[i];
+            if (rect.z <= 0.0 || rect.w <= 0.0) continue;
+
+            vec4 zoneColor = renderTumbleweedZone(fragCoord, rect, zoneFillColors[i],
+                zoneBorderColors[i], zoneParams[i], sceneCol, zoneParams[i].z > 0.5,
+                bassEnv, hasAudio);
+            color = blendOver(color, zoneColor);
+        }
     }
 
     if (pShowLabels() > 0.5)

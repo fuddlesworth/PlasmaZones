@@ -11,7 +11,7 @@
 // Two-tone coloring: alternating light/dark arms from SVG gradients.
 //   Dark arms (#415E9A -> #5277C3)  Light arms (#699AD7 -> #7EBAE4)
 //
-// Logo effects (12 layers, all unique):
+// Logo effects (11 layers, all unique):
 //   Frost crystallization halo (ice dendrites growing from edges),
 //   hex-shaped bass shockwave rings, interior hex micro-lattice,
 //   convergence spiral vortex, crystal refraction beams (6-axis prism),
