@@ -114,7 +114,11 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
     float d = zoneShape.d;
-    if (d > zoneLen(30.0)) return vec4(0.0);
+    // Bound covers the glow AND the border band: per-zone border width comes
+    // from layout JSON unclamped, so a hand-authored width past 30 logical px
+    // would otherwise have its frame sliced at a fixed radius.
+    float strokeWpx = zoneBorderWidth(params.y);
+    if (d > max(zoneLen(35.0), strokeWpx * 2.0)) return vec4(0.0);
 
     float iconScale = getIconScale();
     float strokeW   = getStrokeWidth();
@@ -128,7 +132,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float bloomStr  = getBloomStr();
     float bgStr     = getBackgroundStr();
     float veinStr   = getVeinStr();
-    float zoneTint  = getZoneTint();
+    float zoneTintAmt = getZoneTint();
 
     float vitality = zoneVitality(isHighlighted);
     float angle    = atan(p.y, p.x);
@@ -367,7 +371,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         }
 
         // ── Zone fill color tint ──────────────────────────────────────────
-        col = mix(col, col * zoneFillHue(fillColor), zoneTint);
+        col = mix(col, col * zoneFillHue(fillColor), zoneTintAmt);
 
         // Vitality
         col = vitalityDesaturate(col, vitality);
@@ -423,11 +427,12 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
         float borderAlpha = border * vitalityScale(0.8, 0.95, vitality);
         result.rgb = mix(result.rgb, borderCol, borderAlpha);
-        result.a = max(result.a, border * 0.96);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow: chromatic gradient ───────────────────────────────────
-    if (d > 0.0 && d < zoneLen(24.0)) {
+    // 3.5 falloffs of the widest lobe, matching the rest of the catalog.
+    if (d > 0.0 && d < zoneLen(vitalityScale(5.0, 10.0, vitality)) * 3.5) {
         // Named for what expGlow(d, falloff, strength) actually takes. The old
         // names had them the other way round, so the line below read as
         // widening the falloff when it brightens the glow.

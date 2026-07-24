@@ -290,10 +290,12 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         // === LAYER 4: Mint Sparkles ===
         // Bigger, brighter, with 4-point star shape
         {
-            // +/-1 ring only. Cell size is 1/sparkleGridDensity (>= 0.0625 UV) and the
-        // maximum sparkle reach is pointSize*4 (<= 0.072 UV), so the outer ring of a
-        // 5x5 gather can never contribute; it was doing 25 iterations of hash work
-        // for the 9 that matter, per fragment, inside every zone.
+            // +/-1 ring only. The gaussian core dies well inside one cell
+        // (6e-6 at the boundary), so it needs no help. The star ray does NOT:
+        // its reach can exceed the cell size, so it is explicitly windowed to
+        // the gather below rather than trusted to fall off in time. A 5x5
+        // gather was doing 25 iterations of hash work per fragment inside every
+        // zone for the 9 that actually contribute.
         for (int sy = -1; sy <= 1; sy++) {
             for (int sx = -1; sx <= 1; sx++) {
                     vec2 cell = floor(globalUV * sparkleGridDensity) + vec2(float(sx), float(sy));
@@ -392,7 +394,7 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         }
 
         result.rgb = mix(result.rgb, borderClr, border * 0.9);
-        result.a = max(result.a, border * 0.95);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // === Outer glow (both states, vitality-modulated) ===

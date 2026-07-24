@@ -451,7 +451,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, FROST_SILVER);
 
     float vitality = isHighlighted ? 1.0 : 0.3;
-    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
+    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStrength;
 
     float flowAngle = flowDirection * TAU;
     vec2 flowDir = vec2(cos(flowAngle), sin(flowAngle));

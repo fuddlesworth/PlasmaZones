@@ -176,7 +176,7 @@ void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderEffect* 
     // size in pixels regardless of fboExtentKind.
     //
     // Units: LOGICAL pixels (no DPR multiplication). iResolution lands
-    // in the UBO multiplied by DPR (`shadereffect.cpp::syncCustomNode`)
+    // in the UBO multiplied by DPR (`shadereffect.cpp::effectiveResolutionScale`)
     // so its units differ from the extension fields here. Shaders that
     // need to compute ratios involving FBO size MUST source the FBO
     // size from `iSurfaceScreenPos.zw` (also logical) — see the fly-in

@@ -9,7 +9,7 @@
  * Rich domain-warped FBM background, per-facet audio reactivity,
  * bass shockwaves, and organic motion.
  *
- * Logo geometry: 12 vertices, 7 teal facets + cyan polygon body, 3 circles.
+ * Logo geometry: 11 vertices, 7 teal facets + cyan polygon body, 3 circles.
  * Cyan body uses a proper polygon SDF for the concave "C" silhouette.
  * Coordinates normalized 0-1 from the official SVG.
  *
@@ -65,7 +65,6 @@ float sdPolygon11(vec2 p, vec2 v[11]) {
 // ═══════════════════════════════════════════════════════════════
 
 const vec2 V0  = vec2(0.2217, 0.1054);
-const vec2 V1  = vec2(0.2415, 0.1074);
 const vec2 V2  = vec2(0.7073, 0.1074);
 const vec2 V3  = vec2(0.5894, 0.3112);
 const vec2 V4  = vec2(0.3368, 0.3112);

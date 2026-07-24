@@ -19,10 +19,6 @@ namespace PhosphorRendering {
  */
 constexpr int MaxZones = 64;
 
-// Re-export so consumers that pull in this header get the full set of shader
-// constants without an extra include.
-using PhosphorShaders::kShaderTimeWrap;
-
 /**
  * @brief GPU uniform buffer layout — BaseUniforms + zone extension.
  *
@@ -61,10 +57,16 @@ struct alignas(16) ZoneShaderUniforms
     float _pad_after_zoneScale[3] = {};
 };
 
+/// Size of the zone extension region: four vec4[MaxZones] arrays, plus the
+/// uZoneScale scalar and the std140 tail pad that rounds it to 16 bytes.
+/// Derived rather than spelled as a literal so bumping MaxZones cannot leave
+/// the assert below asserting the old size.
+inline constexpr std::size_t kZoneExtensionBytes = 4 * sizeof(float[MaxZones][4]) + 4 * sizeof(float);
+
 // Exact, not a bound. Every member offset below is pinned exactly, so a loose
 // `<= 8192` would be the one assert that let an accidental growth through.
-static_assert(sizeof(ZoneShaderUniforms) == sizeof(PhosphorShaders::BaseUniforms) + 4112,
-              "ZoneShaderUniforms must be BaseUniforms plus the 4112-byte zone extension");
+static_assert(sizeof(ZoneShaderUniforms) == sizeof(PhosphorShaders::BaseUniforms) + kZoneExtensionBytes,
+              "ZoneShaderUniforms must be BaseUniforms plus the zone extension region");
 static_assert(offsetof(ZoneShaderUniforms, base) == 0, "base must be at offset 0");
 static_assert(offsetof(ZoneShaderUniforms, zoneRects) == sizeof(PhosphorShaders::BaseUniforms),
               "zoneRects must follow BaseUniforms with no gap");

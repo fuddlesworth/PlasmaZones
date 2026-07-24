@@ -174,7 +174,12 @@ void main() {
 
     float edgeDist = zoneEdgeSDF(fragCoord);
 
-    if (edgeDist < edgeW * 2.0) {
+    // The mids boost below widens its own falloff by up to (1 + audioR), so the
+    // gate has to cover the widened band as well. Gating on the unwidened width
+    // cut the boost at 37% of its peak and left a hard ring, which this buffer
+    // then advected across frames through the feedback pass.
+    float midsWiden = (hasAudio && mids > 0.05) ? (1.0 + mids * audioR) : 1.0;
+    if (edgeDist < edgeW * 2.0 * midsWiden) {
         float falloff = exp(-edgeDist / max(edgeW, 1.0));
 
         float flicker = noise2D((uv - 0.5) * 6.0 + vec2(t * 0.4, t * -0.3));
@@ -189,7 +194,7 @@ void main() {
 
         // Mids: widen effective emission range (edges breathe with mid-range)
         if (hasAudio && mids > 0.05) {
-            float midsBoost = exp(-edgeDist / max(edgeW * (1.0 + mids * audioR), 1.0));
+            float midsBoost = exp(-edgeDist / max(edgeW * midsWiden, 1.0));
             emission += midsBoost * mids * audioR * intensity * 0.03;
         }
 

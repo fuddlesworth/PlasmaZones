@@ -288,16 +288,17 @@ vec3 zoneFillHue(vec4 fillColor) {
     // for a mix TOWARD the hue, or for a colorWithFallback chain, where white
     // is a perfectly valid non-empty colour and suppresses the next fallback.
     // Most consumers should NOT call this directly — use zoneTint() below, which
-    // owns the common weighted-blend shape and its zero-alpha case. The direct
-    // callers left are the ones with their own shape, and each gates on the
-    // alpha at the call site and says so: neon-venom (weighted sum),
-    // spectrum-pulse (fallback chain), prismata, nexus-cascade and liquid-canvas
-    // (mix toward the hue). Do not restate that list as a count — it was wrong
-    // twice, which is why the common case became a helper.
-    // The remaining consumers are the `c*0.85 + hue*0.15` and `hue*luminance(c)`
-    // families, where white is a slight lift or desaturation rather than a
-    // no-op. Both are cosmetic at zero opacity and strictly better than the
-    // darken-to-black they replaced.
+    // owns the common weighted-blend shape and its zero-alpha case. Two shape
+    // families call this directly WITHOUT gating, and both are deliberate: the
+    // multiplicative `mix(c, c * hue, w)` form, where white is a true identity,
+    // and the `mix(c, hue * luminance(c), w)` form, where white collapses to a
+    // 7-15% desaturation. That second one is cosmetic at zero opacity and
+    // strictly better than the darken-to-black it replaced. Every direct caller
+    // with any OTHER shape (a weighted sum, a mix toward the hue, a
+    // colorWithFallback chain) gates on the alpha at its own call site and says
+    // so. Do not restate the callers as a list or a count — that enumeration
+    // was wrong three times running, which is why the common case became a
+    // helper in the first place.
     return fillColor.a > 1e-3 ? fillColor.rgb / fillColor.a : vec3(1.0);
 }
 

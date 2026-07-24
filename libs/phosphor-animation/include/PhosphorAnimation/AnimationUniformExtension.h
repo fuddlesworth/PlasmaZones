@@ -125,7 +125,7 @@ public:
     /// attach and on each anchor / window geometry signal. Logical-
     /// pixel units — the same unit `iResolution` carries on this path,
     /// because this extension's `requiresPhysicalResolution()` returns
-    /// false and `shadereffect.cpp::syncCustomNode` therefore skips the
+    /// false and `shadereffect.cpp::effectiveResolutionScale` therefore skips the
     /// DPR multiply. `.zw` mirrors the QQuickWindow's contentItem size
     /// and equals the wl_surface rect for screen-sized OSD / popup
     /// surfaces on the daemon path, so it is an equivalent screen-size

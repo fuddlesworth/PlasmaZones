@@ -50,7 +50,6 @@ float pLogoSizeMin()     { return p_logoSizeMin >= 0.0 ? p_logoSizeMin : 0.4;  }
 float pLogoSizeMax()     { return p_logoSizeMax >= 0.0 ? p_logoSizeMax : 1.0;  }
 float pLogoSpin()        { return p_logoSpin >= 0.0 ? p_logoSpin : 0.3;  }
 float pIdleStrength()    { return p_idleStrength >= 0.0 ? p_idleStrength : 0.6;  }
-float pShowLabels()      { return p_showLabels >= 0.0 ? p_showLabels : 1.0;  }
 float pSparkleIntensity(){ return p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;  }
 
 // ─── Palette ───────────────────────────────────────────────────────
@@ -967,7 +966,7 @@ vec4 pImage(vec2 fragCoord) {
         }
     }
 
-    if (pShowLabels() > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeTumbleweedLabels(color, fragCoord, bass, mids, treble, hasAudio);
 
     return color;

@@ -210,6 +210,8 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     // Screen-space UV for continuous field across all zones
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     vec2 mouseGlobal = iMouse.xy / max(iResolution, vec2(1.0));
+    // Shared by the interior radial effects and the outer-glow bound below.
+    float mouseDist = length(globalUV - mouseGlobal);
 
     float d = zoneShape.d;
 
@@ -315,9 +317,6 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         // Energy distortion - enhanced by vertex displacement
         float distortion = energyDistortion(globalUV, mouseGlobal, t, distortionAmount);
         distortion += vDistortAmount * 0.3;
-
-        // Distance from mouse for radial effects
-        float mouseDist = length(globalUV - mouseGlobal);
 
         // Central glow around mouse - enhanced by vertex influence
         float mouseGlow = exp(-mouseDist * 8.0) * glowIntensity;
@@ -462,7 +461,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         borderClr += coronaBorderGlow;
 
         result.rgb = mix(result.rgb, borderClr, border * 0.9);
-        result.a = max(result.a, border * 0.95);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // Outer glow influenced by mouse proximity and vertex deformation
@@ -470,7 +469,6 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     // hoisted so they cannot drift. They used to coincide when the cursor sat on
     // the zone (mouseInfluence -> 1), cutting the gradient at exp(-1) = 37% and
     // leaving a hard ring at a fixed radius.
-    float mouseDist = length(globalUV - mouseGlobal);
     float mouseInfluence = exp(-mouseDist * 3.0);
     float glowSize = zoneLen(15.0 + mouseInfluence * 10.0 + vDistortAmount * 5.0);
     if (d > 0.0 && d < glowSize * 3.5) {

@@ -158,7 +158,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         if (isHighlighted) {
             col *= 1.08;
         } else {
-            float lum = dot(col, vec3(0.299, 0.587, 0.114));
+            float lum = luminance(col);
             col = mix(col, vec3(lum), 0.15);
             col *= 0.82 + idlePulse * 0.08;
         }
@@ -178,7 +178,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         col += glowColor * innerGlow * glowStrength;
 
         // Zone fill color tint — let per-zone color influence the palette
-        col = mix(col, zoneFillHue(fillColor) * dot(col, vec3(0.299, 0.587, 0.114)), 0.2);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.2);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -194,7 +194,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         vec3 borderCol = iqPalette(borderFlow * contrast, palA, palB, palC, palD);
         // Zone border color tint — let per-zone color influence the palette
         vec3 zoneBorderTint = colorWithFallback(borderColor.rgb, borderCol);
-        borderCol = mix(borderCol, zoneBorderTint * dot(borderCol, vec3(0.299, 0.587, 0.114)), 0.3);
+        borderCol = mix(borderCol, zoneBorderTint * luminance(borderCol), 0.3);
         borderCol *= borderBrightness;
 
         // Highlighted border is brighter and pulses with cosmic breath
@@ -204,7 +204,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
             float borderBass = hasAudio ? 1.0 + smoothstep(0.1, 0.4, bass) * 0.25 : 1.0;
             borderCol *= breathe * borderBass;
         } else {
-            float lum = dot(borderCol, vec3(0.299, 0.587, 0.114));
+            float lum = luminance(borderCol);
             borderCol = mix(borderCol, vec3(lum), 0.3);
             borderCol *= 0.6;
         }

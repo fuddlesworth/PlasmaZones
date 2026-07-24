@@ -68,11 +68,13 @@ Common flags:
 | `--fps` | `30` | frame rate (drives `iTime` advancement) |
 | `--out` | `<id>.webm` | output path; extension picks the format |
 | `--audio-mode` | `sine` | one of `silent`, `sine`, `noise`, `sweep` |
-| `--shader-dir` | `data/overlays/` then `/usr/share/...` | where to find shader bundles |
-| `--layout-dir` | `data/layouts/` then `/usr/share/...` | where to find layout JSONs |
+| `--shader-dir` | `data/overlays/`, then the XDG data dirs | where to find shader bundles |
+| `--layout-dir` | `data/layouts/`, then the XDG data dirs | where to find layout JSONs |
+| `--still-highlight` | `0` (cycling) | pin one zone, by its zone number, as the only highlighted zone |
 
 Shared GLSL (`shared/common.glsl`, `audio.glsl`, `zone.vert`) resolves from the
-source tree first, then the XDG data dirs, then `/usr/share`. That is the
+source tree first, then the XDG data dirs (which include `/usr/share` on a
+normal system). That is the
 opposite of the daemon's order, on purpose. The daemon is the installed program
 and should prefer installed data. This tool exists to check the tree you are
 editing, so an installed copy taking precedence would mean previewing the last
@@ -104,7 +106,7 @@ output, the renderer feeds a synthetic spectrum:
   Useful to verify that low / mid / high buckets light up the
   expected visual elements.
 
-The bar count matches the runtime CAVA default (256).
+The bar count matches the runtime default (64).
 
 ## Batch wrapper
 

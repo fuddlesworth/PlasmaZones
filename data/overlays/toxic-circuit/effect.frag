@@ -588,17 +588,17 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         }
 
         result.rgb = mix(result.rgb, borderRGB, border);
-        result.a = max(result.a, border * 0.98);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // Outer toxic glow (vitality-modulated)
     // 3.5 falloffs, not an independently tuned constant. At the old 60 against a
     // 40 falloff the gradient was cut at 22% of peak and then multiplied by a
     // glow strength that reaches 6.6, which is a blatant ring.
-    float outerGlowRange = zoneLen(vitalityScale(20.0, 40.0, vitality)) * 3.5;
+    float glowFalloff2   = zoneLen(vitalityScale(20.0, 40.0, vitality));
+    float outerGlowRange = glowFalloff2 * 3.5;
     if (d > 0.0 && d < outerGlowRange) {
         float glowFalloff1 = zoneLen(vitalityScale(10.0, 20.0, vitality));
-        float glowFalloff2 = zoneLen(vitalityScale(20.0, 40.0, vitality));
 
         float glow1 = expGlow(d, glowFalloff1, vitalityScale(0.3, 0.7, vitality));
         float glow2 = expGlow(d, glowFalloff2, vitalityScale(0.15, 0.4, vitality));
@@ -614,6 +614,11 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             // above, which is zoneLen() too.
             float ringDist = mod(d - iTime * zoneLen(25.0), zoneLen(20.0));
             float ring = smoothstep(zoneLen(2.5), 0.0, ringDist) * smoothstep(0.0, zoneLen(1.0), ringDist);
+            // Attenuate with the same exponential the band is bounded by. The
+            // ring is periodic, so without this its amplitude is undiminished
+            // at the bound and the outermost repetition is sliced off flat,
+            // which is the artifact widening the bound was meant to remove.
+            ring *= exp(-d / max(glowFalloff2, 1.0));
             glowColor += accentColor * ring * 1.2 * ringStr;
             glow1 += ring * 0.3 * ringStr;
         }

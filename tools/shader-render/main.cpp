@@ -69,6 +69,26 @@ QString resolveLayoutPath(const QString& layoutArg, const QString& layoutDir)
     return QDir(layoutDir).filePath(layoutArg + QLatin1String(".json"));
 }
 
+// First existing <xdg-data-dir>/plasmazones/<subdir>, or an empty string.
+//
+// GenericDataLocation, NOT AppDataLocation: AppDataLocation appends the
+// APPLICATION name, so this probed <xdg>/plasmazones-shader-render/<subdir>,
+// a directory that never exists, and the whole user tier silently resolved
+// nothing. The daemon's trustedShaderRoots() uses the generic tier, and a
+// preview that cannot see a pack the daemon loads is the divergence this tool
+// exists to avoid.
+QString xdgPlasmaZonesDir(const QString& subdir)
+{
+    const QString suffix = QStringLiteral("/plasmazones/") + subdir;
+    const QStringList roots = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    for (const QString& root : roots) {
+        const QString candidate = root + suffix;
+        if (QDir(candidate).exists())
+            return candidate;
+    }
+    return {};
+}
+
 QString defaultShaderDir()
 {
     // Prefer in-tree data/overlays for development; fall back to
@@ -76,8 +96,7 @@ QString defaultShaderDir()
     const QString cwd = QDir(QStringLiteral("data/overlays")).absolutePath();
     if (QDir(cwd).exists())
         return cwd;
-    const QString xdg = QStandardPaths::locate(QStandardPaths::AppDataLocation, QStringLiteral("overlays"),
-                                               QStandardPaths::LocateDirectory);
+    const QString xdg = xdgPlasmaZonesDir(QStringLiteral("overlays"));
     if (!xdg.isEmpty())
         return xdg;
     return QStringLiteral("/usr/share/plasmazones/overlays");
@@ -88,8 +107,7 @@ QString defaultLayoutDir()
     const QString cwd = QDir(QStringLiteral("data/layouts")).absolutePath();
     if (QDir(cwd).exists())
         return cwd;
-    const QString xdg = QStandardPaths::locate(QStandardPaths::AppDataLocation, QStringLiteral("layouts"),
-                                               QStandardPaths::LocateDirectory);
+    const QString xdg = xdgPlasmaZonesDir(QStringLiteral("layouts"));
     if (!xdg.isEmpty())
         return xdg;
     return QStringLiteral("/usr/share/plasmazones/layouts");
@@ -162,25 +180,24 @@ int main(int argc, char* argv[])
                                     QStringLiteral("mode"), QStringLiteral("sine"));
     parser.addOption(audioModeOpt);
 
-    QCommandLineOption shaderDirOpt(
-        QStringLiteral("shader-dir"),
-        QStringLiteral("Directory containing <id>/metadata.json. "
-                       "Defaults to data/overlays/ in the cwd, then /usr/share/plasmazones/overlays/."),
-        QStringLiteral("path"), defaultShaderDir());
+    QCommandLineOption shaderDirOpt(QStringLiteral("shader-dir"),
+                                    QStringLiteral("Directory containing <id>/metadata.json. "
+                                                   "Defaults to data/overlays/ in the cwd, then the XDG data dirs."),
+                                    QStringLiteral("path"), defaultShaderDir());
     parser.addOption(shaderDirOpt);
 
-    QCommandLineOption layoutDirOpt(
-        QStringLiteral("layout-dir"),
-        QStringLiteral("Directory containing <id>.json layout files. "
-                       "Defaults to data/layouts/ in the cwd, then /usr/share/plasmazones/layouts/."),
-        QStringLiteral("path"), defaultLayoutDir());
+    QCommandLineOption layoutDirOpt(QStringLiteral("layout-dir"),
+                                    QStringLiteral("Directory containing <id>.json layout files. "
+                                                   "Defaults to data/layouts/ in the cwd, then the XDG data dirs."),
+                                    QStringLiteral("path"), defaultLayoutDir());
     parser.addOption(layoutDirOpt);
 
     QCommandLineOption stillHighlightOpt(
         QStringLiteral("still-highlight"),
-        QStringLiteral("Pin a specific zone (1-based zone number) as the only highlighted zone "
-                       "for every frame. Disables the cycling demo schedule. Useful for thumbnail "
-                       "captures that want a deterministic hero zone. Defaults to 0 (cycling)."),
+        QStringLiteral("Pin one zone, selected by the zone number shown on it in the editor, as "
+                       "the only highlighted zone for every frame. Disables the cycling demo "
+                       "schedule. Useful for thumbnail captures that want a deterministic hero "
+                       "zone. Defaults to 0 (cycling)."),
         QStringLiteral("ZONE_NUMBER"), QStringLiteral("0"));
     parser.addOption(stillHighlightOpt);
 

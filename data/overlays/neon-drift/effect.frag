@@ -748,14 +748,18 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         }
 
         result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow ───────────────────────────────────────────
     float bassGlowPush = hasAudio ? bassEnv * 2.5 : idlePulse * 5.0;
-    float glowRadius = zoneLen(mix(10.0, 20.0, vitality) + bassGlowPush);
+    // Derive the bound from the falloff rather than from an independent radius:
+    // the old pairing cut the glow at 1.6 falloffs when dormant (20% of peak),
+    // which reads as a hard circle around every zone at high borderGlow.
+    float glowFalloff = zoneLen(8.0);
+    float glowRadius = glowFalloff * 3.5 + zoneLen(bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, zoneLen(8.0), borderGlow);
+        float glow = expGlow(d, glowFalloff, borderGlow);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.06) + midsEnv * 0.1;
         vec3 glowCol = mix(

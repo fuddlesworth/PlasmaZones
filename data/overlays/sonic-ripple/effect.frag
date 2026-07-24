@@ -68,9 +68,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         rotSpeed *= 3.0;        // spin faster
     } else {
         // Dormant: desaturated, dimmer, slower
-        primary = mix(primary, vec3(dot(primary, vec3(0.299, 0.587, 0.114))), 0.5); // desaturate
-        accent = mix(accent, vec3(dot(accent, vec3(0.299, 0.587, 0.114))), 0.5);
-        bassCol = mix(bassCol, vec3(dot(bassCol, vec3(0.299, 0.587, 0.114))), 0.5);
+        primary = mix(primary, vec3(luminance(primary)), 0.5); // desaturate
+        accent = mix(accent, vec3(luminance(accent)), 0.5);
+        bassCol = mix(bassCol, vec3(luminance(bassCol)), 0.5);
         glowIntensity *= 0.5;
         reactivity *= 0.6;
         rotSpeed *= 0.5;        // barely moving
@@ -229,8 +229,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
         // Nebula as the base layer
         // Light identity tint from the zone's configured fill colour, at the
-        // sibling packs' weight. This pack was the last one still discarding
-        // both of its per-zone colour parameters.
+        // sibling packs' weight. This pack used to discard both of its per-zone
+        // colour parameters.
         result.rgb = zoneTint(nebColor * nebBright, fillColor, 0.35);
 
         // Add spectrum rings on top
@@ -423,7 +423,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // Addends share baseGlowR's zoneLen() basis.
     float bassGlowR = zoneLen(mix(2.0, 6.0, vitality));
     float glowRadius = baseGlowR + bassGlowR * (hasAudio ? bass * reactivity : idlePulse) + zoneLen(5.0) * energy;
-    if (d > 0.0 && d < glowRadius) {
+        // Bound at 1.75x the radius, i.e. 3.5 falloffs of the WIDE lobe
+        // (glowRadius * 0.5), which is the constant the catalog standardised on.
+        // Gating at glowRadius itself cut that lobe at exp(-2) = 13.5% of its
+        // peak and left a hard ring at a fixed distance from every zone.
+    if (d > 0.0 && d < glowRadius * 1.75) {
         float glow1 = expGlow(d, glowRadius * 0.2, glowIntensity * mix(0.12, 0.35, vitality));
         float glow2 = expGlow(d, glowRadius * 0.5, glowIntensity * mix(0.04, 0.12, vitality));
 

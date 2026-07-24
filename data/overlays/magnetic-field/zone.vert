@@ -33,11 +33,16 @@ void main() {
     // and defaulted to 1.0 where 0.4 was meant.
     float distortionAmount = customParams[1].z >= 0.0 ? customParams[1].z : 0.4;
     
-    // Mouse position in normalized coordinates
+    // Mouse position in normalized coordinates. iMouse.zw is fragCoord space,
+    // and texCoord is the other orientation (texCoord.y == 1.0 - iMouse.w at
+    // the same point), so normalising the vertex through vFragCoord instead of
+    // texCoord is what keeps both stages agreeing. Reading texCoord here made
+    // every mouse-driven vertex effect track the cursor mirrored about the
+    // horizontal midline while this pack's own fragment stage did not.
     vec2 mouseNorm = iMouse.zw;
     
-    // Current vertex position (normalized 0-1)
-    vec2 vertexNorm = texCoord;
+    // Current vertex position (normalized 0-1), same orientation as iMouse.zw
+    vec2 vertexNorm = vFragCoord / max(iResolution, vec2(1.0));
     
     // Calculate distance and direction to mouse
     vec2 toMouse = mouseNorm - vertexNorm;

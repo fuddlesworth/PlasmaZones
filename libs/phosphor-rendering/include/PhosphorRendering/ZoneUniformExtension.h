@@ -157,8 +157,15 @@ private:
         float zoneFillColors[MaxZones][4];
         float zoneBorderColors[MaxZones][4];
         float zoneParams[MaxZones][4];
-        float zoneScale;
-        float _pad_after_zoneScale[3];
+        // Defaulted to identity for the same reason ZoneShaderUniforms::zoneScale
+        // is: the two structs are asserted binary-identical below, so a value-
+        // initialised `ZoneExtensionData d{}` on any path that skips the
+        // constructor's memset-then-seed would otherwise carry a zero scale, and
+        // a zero scale multiplies every corner radius and border width to
+        // nothing. The constructor still seeds it explicitly, because the memset
+        // there runs after this default and would zero it again.
+        float zoneScale = 1.0f;
+        float _pad_after_zoneScale[3] = {};
     };
 
     static_assert(sizeof(ZoneExtensionData) == MaxZones * 4 * sizeof(float) * 4 + 4 * sizeof(float),

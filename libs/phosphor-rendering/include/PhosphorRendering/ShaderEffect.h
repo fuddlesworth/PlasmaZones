@@ -42,6 +42,10 @@ class ShaderNodeRhi;
 /// in shadereffect.cpp.
 inline constexpr int kMaxUserTextureSlots = 4;
 
+/// Default per-axis rasterisation size for an SVG user texture, used until a
+/// slot's shader param overrides it.
+inline constexpr int kDefaultUserTextureSvgSize = 1024;
+
 /**
  * @brief QQuickItem that renders a fullscreen fragment shader via Qt RHI.
  *
@@ -896,7 +900,10 @@ private:
     /// behaviour — sized to be sharp at the typical zone-icon scale
     /// without the 4× cost a 4096 default would impose on the common
     /// case (a 200×200 px logo doesn't need a 16 MP rasterisation).
-    std::array<int, kMaxUserTextureSlots> m_userTextureSvgSizes = {1024, 1024, 1024, 1024};
+    // Filled with kDefaultUserTextureSvgSize by the constructor rather than a
+    // brace list, so bumping kMaxUserTextureSlots cannot silently zero-fill the
+    // new slots (qBound would then rasterise them at the 64 px floor).
+    std::array<int, kMaxUserTextureSlots> m_userTextureSvgSizes{};
     /// Set by `setUserTexture` to flag that a directly-pushed QImage now
     /// occupies one of the user-texture slots (path cache cleared). Honoured
     /// by `setShaderParams`: when the incoming params map is byte-equal to

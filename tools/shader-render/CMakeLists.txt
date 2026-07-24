@@ -61,8 +61,8 @@ target_link_libraries(plasmazones-shader-render PRIVATE
     PhosphorWayland::PhosphorWayland
     PhosphorAudio::PhosphorAudio
     # The daemon's zone entry scaffold (zoneEntryPrologue / zoneEntryCandidates)
-    # and ZoneShaderItem live here; the tool installs the same scaffold so its
-    # shader assembly matches the runtime byte-for-byte (see renderer.cpp).
+    # lives here. The tool installs the same scaffold so its shader assembly
+    # matches the runtime byte-for-byte (see renderer.cpp).
     plasmazones_rendering
 )
 

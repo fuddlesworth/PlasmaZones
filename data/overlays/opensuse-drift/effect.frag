@@ -1115,8 +1115,7 @@ vec4 pImage(vec2 fragCoord) {
 
     // metadata declares showLabels bool/default true, so the slot is always
     // populated and the sentinel arm this used to carry was unreachable.
-    float showLabelsVal = p_showLabels;
-    if (showLabelsVal > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeSuseLabels(color, fragCoord, bass, mids, treble, hasAudio);
 
     return color;

@@ -296,12 +296,19 @@ QStringList shaderIncludePaths()
     // shared zone.vert fallback (see resolveZoneVertexShader) wouldn't find
     // anything either.
     QStringList paths;
-    const auto pushRoot = [&paths](const QString& root) {
-        const QString sharedDir = root + QStringLiteral("/shared");
-        if (QDir(sharedDir).exists()) {
-            paths.append(sharedDir);
+    // Existence-filtered and deduped, matching the daemon's appendUniquePath.
+    // Without both, an XDG_DATA_DIRS that repeats a directory (or the common
+    // case where <root> itself is absent but <root>/shared was checked) puts
+    // nonexistent and duplicate entries into the include path, so the list the
+    // preview compiles against stops being byte-identical to the daemon's.
+    const auto pushPath = [&paths](const QString& path) {
+        if (!path.isEmpty() && QDir(path).exists() && !paths.contains(path)) {
+            paths.append(path);
         }
-        paths.append(root);
+    };
+    const auto pushRoot = [&pushPath](const QString& root) {
+        pushPath(root + QStringLiteral("/shared"));
+        pushPath(root);
     };
     // Source tree FIRST, unlike the daemon this otherwise mirrors. The daemon
     // is the installed program and must prefer installed data; this tool exists
@@ -322,7 +329,7 @@ QStringList shaderIncludePaths()
 
     // GenericDataLocation + "plasmazones/overlays", matching the daemon's
     // trustedShaderRoots(). This used to be AppDataLocation + "/overlays", which
-    // appends the APPLICATION name, and the tool never sets one — so it probed
+    // appends the APPLICATION name ("plasmazones-shader-render"), so it probed
     // <xdg>/plasmazones-shader-render/overlays, a directory that does not exist,
     // and the whole user tier silently resolved nothing. A pack the user
     // installed under ~/.local/share/plasmazones/overlays was live in the daemon
@@ -332,7 +339,7 @@ QStringList shaderIncludePaths()
         pushRoot(dir + QStringLiteral("/plasmazones/overlays"));
     }
     // No explicit /usr/share entry: GenericDataLocation already ends with the
-    // XDG_DATA_DIRS list, which includes it, and pushRoot does not dedupe.
+    // XDG_DATA_DIRS list, which includes it on a normal system.
     // No libs/phosphor-*/shaders entry. There used to be one naming
     // "libs/phosphor-rendering/shaders", which has never existed, so it
     // resolved nothing in any invocation. Repointing it at the real
@@ -656,13 +663,26 @@ int Renderer::render(const RenderOptions& opts)
     auto zoneExt = std::make_shared<PhosphorRendering::ZoneUniformExtension>();
     auto runtimeZones = toRuntimeZones(opts.zones);
 
-    // Resolve --still-highlight ZONE_NUMBER. When in range, pin that zone as
-    // the only highlighted one for the entire run; the per-frame schedule is
-    // then a no-op. Out-of-range values fall back to cycling so the caller
-    // gets a usable preview instead of an empty-handed render.
-    const int stillIdx = (opts.stillHighlightZone >= 1 && opts.stillHighlightZone <= runtimeZones.size())
-        ? opts.stillHighlightZone - 1
-        : -1;
+    // Resolve --still-highlight ZONE_NUMBER. Matched against the zone's OWN
+    // zoneNumber, not its position: zone numbers are a value the zone carries
+    // and are free to be reordered or non-contiguous, so an index match would
+    // silently pin the wrong zone on any such layout. When it matches, that
+    // zone is the only highlighted one for the entire run and the per-frame
+    // schedule is a no-op. An unmatched number falls back to cycling so the
+    // caller gets a usable preview instead of an empty-handed render.
+    int stillIdx = -1;
+    if (opts.stillHighlightZone >= 1) {
+        for (int z = 0; z < runtimeZones.size(); ++z) {
+            if (runtimeZones[z].zoneNumber == opts.stillHighlightZone) {
+                stillIdx = z;
+                break;
+            }
+        }
+        if (stillIdx < 0) {
+            qCWarning(lcRenderer) << "--still-highlight" << opts.stillHighlightZone
+                                  << "matches no zone number in this layout; falling back to the cycling schedule";
+        }
+    }
     if (stillIdx >= 0) {
         for (int z = 0; z < runtimeZones.size(); ++z)
             runtimeZones[z].isHighlighted = (z == stillIdx);

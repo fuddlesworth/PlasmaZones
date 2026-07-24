@@ -161,6 +161,8 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
 {
     setFlag(ItemHasContents, true);
 
+    m_userTextureSvgSizes.fill(kDefaultUserTextureSvgSize);
+
     // When the scene graph is invalidated (e.g. window hide on Vulkan destroys
     // the QRhi), release GPU resources from the render node and mark shader
     // dirty so it reinitializes on the next show().
@@ -848,9 +850,15 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
         // Scene graph deleted the previous node (e.g. releaseResources), or first call.
         m_renderNode.store(nullptr, std::memory_order_release);
         node = createShaderNode();
-        m_renderNode.store(node, std::memory_order_release);
         freshNode = true;
     }
+    // Register unconditionally, not only on the fresh-node path. windowChanged
+    // clears m_renderNode, and a reuse-path frame after that would otherwise
+    // leave it null forever, so the destructor's `node && window()` guard would
+    // never sever the node's item back-pointer. QQuickItemPrivate::derefWindow()
+    // makes that sequence unreachable today, but the guard must not depend on
+    // it. One release store per frame is unmeasurable.
+    m_renderNode.store(node, std::memory_order_release);
 
     // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper, user textures) ──
     syncBasePropertiesToNode(node);
@@ -916,6 +924,14 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                     qCWarning(lcShaderNode) << "Fragment shader load failed:" << fragPath << "—" << errorMsg;
                     setError(errorMsg);
                 }
+            } else {
+                // The URL passed isLocalShaderUrl() but carries no usable path
+                // (a host-only file:// URL, or a qrc: URL with an empty path).
+                // m_shaderDirty has already been consumed above, so returning
+                // silently here would pin the item at Status::Loading forever
+                // with an empty errorLog and no retry on any later frame.
+                qCWarning(lcShaderNode) << "Shader URL resolved to an empty local path:" << m_shaderSource;
+                setError(QStringLiteral("Shader URL resolved to an empty local path: ") + m_shaderSource.toString());
             }
         } else {
             // Source cleared — stop rendering old shader

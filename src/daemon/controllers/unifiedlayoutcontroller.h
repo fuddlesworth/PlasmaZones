@@ -266,6 +266,10 @@ private:
 
     QString m_currentLayoutId;
     QString m_currentScreenName;
+    // Change-guard only: layouts() resolves the desktop per-screen from the
+    // layout manager, so this value never reaches the list builder. It exists
+    // so setCurrentVirtualDesktop can invalidate the cache on a real change
+    // rather than on every desktop-changed signal.
     int m_currentVirtualDesktop = 1;
     QString m_currentActivity;
     bool m_includeManualLayouts = true;

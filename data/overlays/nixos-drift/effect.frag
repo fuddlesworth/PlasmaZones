@@ -237,7 +237,7 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
     vec3 col = vec3(0.0);
 
     // Precompute dot positions (Lissajous orbits with unique seeds)
-    vec2 dots[20];
+    vec2 dots[CONSTELLATION_COUNT];
     for (int i = 0; i < CONSTELLATION_COUNT; i++) {
         float fi = float(i);
         float h1 = hash21(vec2(fi * 7.13, 3.91));
@@ -558,7 +558,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, NIX_GLOW);
 
     float vitality = isHighlighted ? 1.0 : 0.3;
-    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
+    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStrength;
 
     float flowAngle = flowDirection * TAU;
     vec2 flowDir = vec2(cos(flowAngle), sin(flowAngle));
@@ -1202,7 +1202,6 @@ vec4 compositeNixosLabels(vec4 color, vec2 fragCoord,
         // branches — like real ice crystal growth on a cold surface.
         // No other shader has angular dendritic growth on labels.
         {
-            float frostStr = 0.0;
             vec3 frostCol = vec3(0.0);
             float frostAngle = atan(uv.y - 0.5, uv.x - 0.5);
             for (int fi = 0; fi < 6; fi++) {
@@ -1230,9 +1229,7 @@ vec4 compositeNixosLabels(vec4 color, vec2 fragCoord,
                 vec3 rCol = triStopPalette(float(fi) / 6.0 + time * 0.04,
                                         palAccent, palGlow, palSecondary);
                 frostCol += rCol * ray;
-                frostStr += ray;
             }
-            frostStr *= haloEdge;
             color.rgb += frostCol * haloEdge * 0.5;
         }
 
@@ -1343,8 +1340,7 @@ vec4 pImage(vec2 fragCoord) {
         color = blendOver(color, zoneColor);
     }
 
-    float showLabelsVal = p_showLabels;
-    if (showLabelsVal > 0.5) {
+    if (p_showLabels > 0.5) {
         color = compositeNixosLabels(color, fragCoord, bass, mids, treble, hasAudio);
     }
 

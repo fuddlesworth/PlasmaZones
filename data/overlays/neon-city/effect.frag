@@ -13,7 +13,8 @@
 
 // ─── Per-zone rendering ─────────────────────────────────────────────
 
-vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
+vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, vec4 fillColor, vec4 borderColor,
+                bool isHighlighted,
                 float bass, float mids, float treble, float overall, bool hasAudio)
 {
     // Corner radius: logical px to device px, clamped to half the zone's smaller side.
@@ -31,7 +32,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
     float dofStrength  = p_dofStrength >= 0.0 ? p_dofStrength : 0.35;
     float edgeGlow     = p_edgeGlow >= 0.0 ? p_edgeGlow : 1.4;
 
-    vec3 accent  = colorWithFallback(p_accentColor.rgb, vec3(0.50, 1.50, 2.00));
+    // The zone's own border colour wins over the pack accent when the user has
+    // set one, matching voxel-terrain (this pack's structural twin). Falling
+    // through to the pack default keeps every existing layout looking the same.
+    vec3 accent  = colorWithFallback(borderColor.rgb,
+                                     colorWithFallback(p_accentColor.rgb, vec3(0.50, 1.50, 2.00)));
     vec3 bassCol = colorWithFallback(p_bassColor.rgb, vec3(0.00, 0.00, 1.50));
     vec3 lightC  = colorWithFallback(p_lightColor.rgb, vec3(0.80, 0.45, 0.18));
 
@@ -163,7 +168,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
             sceneRgb = mix(vec3(lum), sceneRgb, 0.45);
             sceneRgb *= 0.4;
         }
-        result.rgb = sceneRgb;
+        // Fold in the zone's own fill colour as a light identity tint, the same
+        // shape every other pack uses. zoneTint() returns sceneRgb untouched
+        // when the fill is fully transparent.
+        result.rgb = zoneTint(sceneRgb, fillColor, 0.35);
         result.a   = fillOpacity;
 
         // Inner edge glow — SDF-based tint that rides the zone's rim.
@@ -325,7 +333,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
         + (hasAudio ? aBass * zoneLen(5.0) : timeSin(pulseRate) * zoneLen(2.0));
     glowRadius += energy * zoneLen(4.0);
 
-    if (d > 0.0 && d < glowRadius) {
+        // Bound at 1.75x the radius, i.e. 3.5 falloffs of the WIDE lobe
+        // (glowRadius * 0.5), which is the constant the catalog standardised on.
+        // Gating at glowRadius itself cut that lobe at exp(-2) = 13.5% of its
+        // peak and left a hard ring at a fixed distance from every zone.
+    if (d > 0.0 && d < glowRadius * 1.75) {
         float glow1 = expGlow(d, glowRadius * 0.2, edgeGlow * mix(0.08, 0.25, vitality));
         float glow2 = expGlow(d, glowRadius * 0.5, edgeGlow * mix(0.03, 0.08, vitality));
 
@@ -365,6 +377,7 @@ vec4 pImage(vec2 fragCoord) {
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
 
         vec4 zoneColor = renderZone(fragCoord, rect, zoneParams[i],
+            zoneFillColors[i], zoneBorderColors[i],
             zoneParams[i].z > 0.5,
             bass, mids, treble, overall, hasAudio);
 

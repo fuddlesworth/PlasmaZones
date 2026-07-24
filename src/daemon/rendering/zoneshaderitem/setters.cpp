@@ -3,9 +3,6 @@
 
 #include "daemon/rendering/zoneshaderitem.h"
 
-#include "core/types/constants.h"
-#include "core/platform/logging.h"
-
 #include <QMutexLocker>
 
 namespace PlasmaZones {
@@ -25,9 +22,19 @@ void ZoneShaderItem::setZones(const QVariantList& zones)
     const int oldHighlightedCount = m_highlightedCount;
 
     m_zones = zones;
+    // Re-clamp the hover index BEFORE the parse. A shrinking list leaves a
+    // stale index out of range, and a later grow past that index would make
+    // parseZoneData highlight a zone the cursor is nowhere near.
+    const int oldHover = m_hoveredZoneIndex;
+    if (m_hoveredZoneIndex >= m_zones.size()) {
+        m_hoveredZoneIndex = -1;
+    }
     parseZoneData();
 
     Q_EMIT zonesChanged();
+    if (m_hoveredZoneIndex != oldHover) {
+        Q_EMIT hoveredZoneIndexChanged();
+    }
 
     // Only emit count signals if counts actually changed
     if (m_zoneCount != oldZoneCount) {

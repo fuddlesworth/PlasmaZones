@@ -82,8 +82,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float vitality = isHighlighted ? 1.0 : 0.25;
 
     if (!isHighlighted) {
-        primary = mix(primary, vec3(dot(primary, vec3(0.299, 0.587, 0.114))), 0.6);
-        accent  = mix(accent, vec3(dot(accent, vec3(0.299, 0.587, 0.114))), 0.6);
+        primary = mix(primary, vec3(luminance(primary)), 0.6);
+        accent  = mix(accent, vec3(luminance(accent)), 0.6);
         reactivity   *= 0.5;
         contourScale *= 0.55;
         glowWidth    *= 0.7;

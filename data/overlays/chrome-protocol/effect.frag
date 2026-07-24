@@ -760,6 +760,14 @@ vec3 renderGlobalScene(vec2 fragCoord, GlobalParams g) {
 // zone can reach.
 const float kOuterGlowReach = 50.0;
 
+// The reach above bounds the GLOW. A zone's border width comes from layout JSON
+// unclamped (only the settings UI caps it), and softBorder is non-zero out to
+// the full width, so a hand-authored border wider than the reach would be
+// sliced at a fixed radius. Every bound folds this in.
+float zoneOuterReach(float borderWidthLogical) {
+    return max(kOuterGlowReach * uZoneScale, zoneBorderWidth(borderWidthLogical) * 2.0);
+}
+
 // Per-zone chrome: fill (from global scene with vitality), border, glow.
 vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                       vec4 zParams, vec3 sceneCol, GlobalParams g, bool isHighlighted) {
@@ -831,8 +839,8 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     // Outer glow. Reach and falloff are zoneLen(), not pxScale(): they sit
     // directly on a border that zoneBorderWidth() scales by the display scale,
     // and a 1080p-relative glow beside a display-scaled border drifts apart
-    // from it on any HiDPI output. kOuterGlowReach is the pImage bound too.
-    if (d > 0.0 && d < kOuterGlowReach * uZoneScale) {
+    // from it on any HiDPI output. zoneOuterReach() is the pImage bound too.
+    if (d > 0.0 && d < zoneOuterReach(zParams.y)) {
         float rim = exp(-d / zoneLen(8.0 + g.aBass * 10.0)) * edgeGlow * vitality;
         vec3 rimCol = mix(zChromeCol, zDataCol, g.aBass * 0.35);
         result = blendOver(result, vec4(rimCol * rim * highlightBoost, rim * 0.5));
@@ -897,7 +905,7 @@ vec4 pImage(vec2 fragCoord) {
     // The pre-pass is the same zoneSdf() the render loop below runs, but it
     // stops at the distance rather than shading, so the duplicate cost is a few
     // ALU ops against up to three raymarches.
-    float minDist = 1e30;
+    float minDist = 1e30; // distance MINUS each zone's own reach, so < 0 means "in range"
     for (int i = 0; i < zoneCount && i < 64; i++) {
         // Skip degenerate rects, as every sibling pack's loop does. A zero-size
         // zone collapses zoneSdf() to a point, and the distance field around it
@@ -905,16 +913,21 @@ vec4 pImage(vec2 fragCoord) {
         // the others draw nothing.
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
-        minDist = min(minDist, zoneSdf(fragCoord, rect, zoneParams[i].x).d);
+        // Track the distance RELATIVE to each zone's own reach, so a zone with
+        // an unusually wide border widens the pre-pass bound rather than being
+        // clipped by a bound sized for its neighbours.
+        minDist = min(minDist, zoneSdf(fragCoord, rect, zoneParams[i].x).d - zoneOuterReach(zoneParams[i].y));
     }
-    // Beyond that reach every renderZoneChrome branch is already inert: the
+    // minDist is now signed against each zone's own reach, so a negative value
+    // means some zone can still contribute. Beyond it every renderZoneChrome
+    // branch is already inert: the
     // fill needs d < 0, softBorder() is 0 outside the border band, and the glow
     // is explicitly gated on the same bound. So skipping both the scene and the
     // loop changes no pixel. The labels below are NOT skipped — their halo is
     // sampled from uZoneLabels in screen space and does not go through the zone
     // SDF, so an early return out of pImage would clip it.
     vec4 result = vec4(0.0);
-    if (minDist < kOuterGlowReach * uZoneScale) {
+    if (minDist < 0.0) {
         // Render the HUD scene once in screen-space — shared across all zones
         vec3 sceneCol = renderGlobalScene(fragCoord, g);
 

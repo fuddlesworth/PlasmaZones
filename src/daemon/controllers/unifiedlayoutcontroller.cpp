@@ -2,19 +2,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "unifiedlayoutcontroller.h"
+
+#include "config/settings.h"
+#include "core/platform/logging.h"
+#include "core/types/constants.h"
+#include "core/utils/utils.h"
+
+#include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorLayoutApi/ILayoutSource.h>
 // Full definition required: the header stores a QPointer<ScreenManager> (only
 // forward-declared there), and QPointer construction/deref needs the complete
 // QObject-derived type. Previously satisfied transitively via the Unity build;
 // included directly so it doesn't depend on jumbo-grouping order.
 #include <PhosphorScreens/Manager.h>
-#include <PhosphorEngine/PlacementEngineBase.h>
-#include "config/settings.h"
-#include "core/types/constants.h"
-#include <PhosphorZones/LayoutRegistry.h>
-#include "core/platform/logging.h"
-#include "core/utils/utils.h"
-#include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 namespace PlasmaZones {
 
@@ -127,8 +129,9 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
         // Law-of-Demeter reach-through engine->algorithmRegistry().
         // Per-output virtual desktops (#648): resolve the current screen's own
         // desktop, not the global active one.
-        const int desktop = m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName)
-                                            : m_currentVirtualDesktop;
+        // buildUnifiedLayoutList returns an empty list outright when the layout
+        // manager is null, so the fallback arm's value is never observable.
+        const int desktop = m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName) : 0;
         m_cachedLayouts = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
             m_layoutManager, m_algorithmRegistry, m_currentScreenName, desktop, m_currentActivity,
             m_includeManualLayouts, m_includeAutotileLayouts,
@@ -241,10 +244,11 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
         // including the "autotile:<algo>" form, which is the property that
         // matters: findCurrentIndex() compares it against the preview ids, and an
         // autotile-assigned screen has to yield an autotile id. It is NOT
-        // "empty on a miss" — like layoutForScreen it falls through to the
-        // level-1 global defaults (snap provider, then autotile provider), so an
+        // "empty on a miss": it falls through to the level-1 global defaults,
+        // consulting the snap provider and then the autotile provider, so an
         // unassigned screen with a configured default still gets that default's
-        // id. Empty means both providers missed.
+        // id. (layoutForScreen consults only the snap provider, which is why it
+        // is the wrong call here.) Empty means both providers missed.
         //
         // Written unconditionally so an empty screen name, or a null registry,
         // clears rather than leaving the previous screen's id latched.
@@ -311,7 +315,9 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
             Q_EMIT autotileApplied(preview.displayName, 0);
             return true;
         }
-        qCWarning(lcDaemon) << "applyEntry: autotile engine not available for" << preview.id;
+        qCWarning(lcDaemon) << "applyEntry: cannot apply autotile entry" << preview.id << "- autotile engine is"
+                            << (m_autotileEngine ? "present" : "null") << "and layout manager is"
+                            << (m_layoutManager ? "present" : "null");
         return false;
     }
 
@@ -336,7 +342,11 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
             Q_EMIT layoutApplied(layout);
             return true;
         }
+        qCWarning(lcDaemon) << "applyEntry: no layout found for id" << preview.id;
+        return false;
     }
+    qCWarning(lcDaemon) << "applyEntry: cannot apply manual entry" << preview.id << "-"
+                        << (uuidOpt ? "layout manager is null" : "id is not a valid UUID");
     return false;
 }
 

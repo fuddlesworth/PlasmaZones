@@ -86,7 +86,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float shapeSize     = p_shapeSize >= 0.0 ? p_shapeSize : 0.26;
     float sparkleChance = p_sparkleChance >= 0.0 ? p_sparkleChance : 0.04;
     float speed         = p_speed >= 0.0 ? p_speed : 1.25;
-    float reactivity    = p_reactivity >= 0.0 ? p_reactivity : 1.0;
+    float reactivity    = p_reactivity >= 0.0 ? p_reactivity : 1.5;
     float fillOpacity   = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.9;
 
     // Colors — fallbacks match the original ShaderToy palette
@@ -324,7 +324,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // Glow radius pulses with bass beat but uses a smoothed envelope, not raw value
     float bassEnvelope = hasAudio ? smoothstep(0.2, 0.7, bass) * bass * reactivity : idlePulse;
     float glowRadius = baseGlowR + bassGlowR * bassEnvelope + zoneLen(5.0) * energy;
-    if (d > 0.0 && d < glowRadius) {
+        // Bound at 1.75x the radius, i.e. 3.5 falloffs of the WIDE lobe
+        // (glowRadius * 0.5), which is the constant the catalog standardised on.
+        // Gating at glowRadius itself cut that lobe at exp(-2) = 13.5% of its
+        // peak and left a hard ring at a fixed distance from every zone.
+    if (d > 0.0 && d < glowRadius * 1.75) {
         float glowStr = mix(0.12, 0.35, vitality);
         float glow1 = expGlow(d, glowRadius * 0.2, glowStr);
         float glow2 = expGlow(d, glowRadius * 0.5, glowStr * 0.35);
@@ -361,7 +365,7 @@ vec4 compositeMosaicLabels(vec4 color, vec2 fragCoord,
     vec3 shapeTint = colorWithFallback(p_shapeTint.rgb, vec3(1.0, 1.0, 0.949));
     float posterLevels = p_posterize >= 0.0 ? p_posterize : 8.0;
     posterLevels = max(posterLevels, 1.0);
-    float reactivity = p_reactivity >= 0.0 ? p_reactivity : 1.0;
+    float reactivity = p_reactivity >= 0.0 ? p_reactivity : 1.5;
 
     float labelGlowSpread = p_leadSpread >= 0.0 ? p_leadSpread : 2.0;
     float labelBright = p_tileIntensity >= 0.0 ? p_tileIntensity : 0.7;

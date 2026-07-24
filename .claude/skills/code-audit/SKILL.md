@@ -3,6 +3,11 @@ name: "Code Audit"
 description: "Audits uncommitted changes, branches, or PRs for bugs, edge cases, SOLID/DRY/SRP, architecture, security, performance, and CLAUDE.md violations — then automatically fixes ALL issues and re-audits in a loop until clean. Use when: audit, review, code review, review this PR, check code, look over this, inspect code, or any variation."
 ---
 
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Code Audit
 
 **This skill is a LOOP. You analyze, fix ALL findings (every severity), re-read files from disk, re-analyze, and repeat until zero findings remain. Stopping after one pass is a failure to follow instructions.**

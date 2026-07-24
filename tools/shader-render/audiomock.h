@@ -39,7 +39,11 @@ namespace PlasmaZones::ShaderRender {
 class AudioMock
 {
 public:
-    static constexpr int kBarCount = PhosphorAudio::Defaults::MaxBars;
+    // DefaultBarCount, not MaxBars. Parity with the runtime is this tool's whole
+    // premise, and IAudioSpectrumProvider defaults barCount to DefaultBarCount,
+    // so feeding MaxBars gave the preview a different bucket distribution (and a
+    // different iAudioSpectrumSize) from a default daemon.
+    static constexpr int kBarCount = PhosphorAudio::Defaults::DefaultBarCount;
 
     virtual ~AudioMock() = default;
 
