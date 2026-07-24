@@ -239,6 +239,14 @@ float zoneLen(float logicalPx) {
 //
 // The epsilon floor matters. A fully transparent zone has a == 0 and rgb == 0,
 // and 0/0 is a NaN that would travel out through the fragment colour.
+//
+// This is about the HUE only, and stays necessary even though .a itself no
+// longer feeds the fill alpha. Packs set their fill alpha from their own
+// fillOpacity parameter, catalog-wide, so activeOpacity does not reach the
+// output alpha. It is still baked into rgb by the daemon, though, so a pack
+// that tinted with the raw rgb would darken as the user raised transparency
+// while the alpha stayed put. Dividing it back out is what keeps the tint the
+// colour the user picked.
 vec3 zoneFillHue(vec4 fillColor) {
     return fillColor.rgb / max(fillColor.a, 1e-3);
 }

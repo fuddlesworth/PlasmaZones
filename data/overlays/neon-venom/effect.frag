@@ -308,7 +308,11 @@ vec4 renderNeonVenomZone(
     vec3 borderFinal = mix(borderTint, borderColor.rgb, 0.3) * (1.0 + audioPulse * 0.6);
     col = mix(col, borderFinal * glowStr, borderFactor);
 
-    float alpha = inside * fillOpacity * fillColor.a;
+    // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
+    // The zone's activeOpacity arrives in fillColor.a, but only four packs
+    // ever multiplied it in, so it was inert in the other 23 and the split
+    // just made the same setting behave differently per pack.
+    float alpha = inside * fillOpacity;
     alpha = max(alpha, borderFactor * borderColor.a);
     alpha = max(alpha, rim * 0.5);
 

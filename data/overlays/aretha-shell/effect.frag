@@ -592,7 +592,11 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
         // Base color
         vec3 baseColor = getBackgroundColor();
-        float bgAlpha = fillColor.a > 0.01 ? fillColor.a : getFillOpacity();
+        // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
+        // The zone's activeOpacity arrives in fillColor.a, but only four packs
+        // ever multiplied it in, so it was inert in the other 23 and the split
+        // just made the same setting behave differently per pack.
+        float bgAlpha = getFillOpacity();
 
         // Layer 1: Color Grade
         vec3 gradedBg = colorGrade(baseColor);

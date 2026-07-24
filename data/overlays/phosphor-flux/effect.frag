@@ -397,7 +397,11 @@ vec4 renderFluxZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         vec3 navy = getBackgroundColor();
         vec3 deep = navy * 0.42;  // ≈ #050916 from the default navy
         vec3 baseColor = mix(navy, deep, smoothstep(0.0, 1.0, screenUV.y));
-        float bgAlpha = fillColor.a > 0.01 ? fillColor.a : getFillOpacity();
+        // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
+        // The zone's activeOpacity arrives in fillColor.a, but only four packs
+        // ever multiplied it in, so it was inert in the other 23 and the split
+        // just made the same setting behave differently per pack.
+        float bgAlpha = getFillOpacity();
 
         vec3 fx = vec3(0.0);
 

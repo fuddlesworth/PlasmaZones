@@ -812,7 +812,11 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         }
 
         col *= highlightBoost;
-        result = vec4(col, fillOpacity * fillColor.a);
+        // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
+        // The zone's activeOpacity arrives in fillColor.a, but only four packs
+        // ever multiplied it in, so it was inert in the other 23 and the split
+        // just made the same setting behave differently per pack.
+        result = vec4(col, fillOpacity);
     }
 
     // Border
