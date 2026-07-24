@@ -324,7 +324,10 @@ vec3 signalGraph(vec2 screenUV, float t, float diag,
 vec3 shellStrokes(float d, float diag, float t, vec2 rectSize,
                   float bass, bool hasAudio) {
     float count   = clamp(getShellCount(), 0.0, 4.0);
-    float spacing = getShellSpacing() * pxScale();
+    // zoneLen(), not pxScale(): the shells are insets measured against `d`, the
+    // device-px zone SDF, so a 1080p-relative step would drift away from the
+    // rounded corner it nests inside as the display scale changes.
+    float spacing = zoneLen(getShellSpacing());
     float alpha   = getShellOpacity();
     float pulseSpd = getShellPulseSpeed();
 
@@ -345,7 +348,7 @@ vec3 shellStrokes(float d, float diag, float t, vec2 rectSize,
         if (inset > maxInset) break;
 
         // Stroke of the inset rounded rect: |d + inset| ≈ 0.
-        float stroke = 1.0 - smoothstep(0.8, 2.2, abs(d + inset));
+        float stroke = 1.0 - smoothstep(zoneLen(0.8), zoneLen(2.2), abs(d + inset));
 
         // Containment breath: a slow pulse travelling inward shell by shell.
         float breath = 0.65 + 0.35 * sin(t * pulseSpd - float(k) * 1.2);
@@ -378,7 +381,7 @@ vec4 renderFluxZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
 
     float d = zoneShape.d;

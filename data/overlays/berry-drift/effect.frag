@@ -12,21 +12,10 @@
  * All pattern/animation uses fragCoord (screen space) so blobs flow
  * seamlessly across zone boundaries.
  *
- * Parameters (customParams):
- *   [0].x = speed          (0.06)  global animation speed
- *   [0].y = blobScale      (10)    blob count (3–16)
- *   [0].z = blobSoftness   (0.4)   smin k for blob merging
- *   [0].w = glowIntensity  (0.5)   bloom glow around blobs
- *   [1].x = fillOpacity    (0.90)  zone fill opacity
- *   [1].y = sparkleStr     (0.6)   sparkle brightness
- *   [1].z = sparkleSize    (1.0)   sparkle point size
- *   [1].w = audioSens      (1.0)   audio sensitivity
- *   [2].x = driftSpeed     (0.8)   blob drift speed
- *   [2].y = mintIntensity  (0.4)   mint sparkle color intensity
- *   [2].z = bloomWidth     (0.06)  glow falloff width
- *   [2].w = vignetteStr    (0.15)  edge darkening
- *   [3].x = blobSizeMin    (0.05)  minimum blob radius
- *   [3].y = blobSizeMax    (0.14)  maximum blob radius
+ * Parameters are declared in metadata.json and read here through the
+ * generated p_<id> accessors. The slot table that used to sit here listed
+ * customParams indices that the pack stopped using and drifted out of date
+ * as parameters were added, so it is not restated.
  *
  * Colors (customColors):
  *   [0] = berryPink   #ff6b9d  primary pink
@@ -137,9 +126,7 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
     float borderWidth = zoneBorderWidth(params.y);
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
     vec2 p = fragCoord - center;
     float d = zoneShape.d;
 
@@ -368,6 +355,11 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
         // Dormant desaturation
         result.rgb = vitalityDesaturate(result.rgb, vitality);
+        // Light identity tint from the zone's configured fill colour, at the
+        // sibling packs' weight. borderColor is already consumed below;
+        // fillColor was the only half of the pair this pack discarded, so the
+        // per-zone fill colour did nothing at all here.
+        result.rgb = mix(result.rgb, result.rgb * 0.85 + fillColor.rgb * 0.15, 0.35);
         result.a = fillOpacity;
     }
 
@@ -396,7 +388,10 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
     // === Outer glow (both states, vitality-modulated) ===
     if (d > 0.0) {
-        float glowR = vitalityScale(12.0, 24.0, vitality) + (hasAudio ? bass * audioSens * vitalityScale(4.0, 8.0, vitality) : idlePulse * vitalityScale(3.0, 8.0, vitality));
+        // Bound and falloff share the zoneLen() basis. When only the falloff
+        // scaled, a 2x display doubled it to 8-16 px inside a bound still at
+        // 12-24 px, slicing the gradient at ~22% and ringing every zone.
+        float glowR = zoneLen(vitalityScale(12.0, 24.0, vitality) + (hasAudio ? bass * audioSens * vitalityScale(4.0, 8.0, vitality) : idlePulse * vitalityScale(3.0, 8.0, vitality)));
         float breathe = 1.0 + vitalityScale(0.05, 0.15, vitality) * sin(iTime * 2.0);
         glowR *= breathe;
         if (d < glowR) {

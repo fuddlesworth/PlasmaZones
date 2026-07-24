@@ -10,7 +10,9 @@
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PARAMETERS  (customParams slots 0-21, customColors slots 0-7)
+// PARAMETERS  (declared in metadata.json, read via the generated p_<id>
+// accessors below; the slot-range note that used to sit here counted only
+// the parameters the pack had at the time and drifted as more were added)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 float getSpeed()           { return p_speed >= 0.0 ? p_speed : 0.08; }
@@ -576,10 +578,6 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
     float borderWidth  = zoneBorderWidth(params.y);
 
-    vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
-    localUV = clamp(localUV, 0.0, 1.0);
 
     float d = zoneShape.d;
 

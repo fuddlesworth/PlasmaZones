@@ -281,9 +281,7 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float flowCenterY   = p_focalPointY >= -1.5 ? p_focalPointY : 0.5;
     float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.5;
 
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
     float d = zoneShape.d;

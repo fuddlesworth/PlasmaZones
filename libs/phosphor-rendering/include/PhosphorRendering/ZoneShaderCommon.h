@@ -4,16 +4,13 @@
 #pragma once
 
 #include <PhosphorShaders/BaseUniforms.h>
-#include <PhosphorShaders/IUniformExtension.h>
 
 #include <QColor>
 #include <QRectF>
 #include <QVector>
 #include <QVector4D>
 
-#include <atomic>
 #include <cstddef>
-#include <cstring>
 
 namespace PhosphorRendering {
 
@@ -64,7 +61,10 @@ struct alignas(16) ZoneShaderUniforms
     float _pad_after_zoneScale[3] = {};
 };
 
-static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds expected size");
+// Exact, not a bound. Every member offset below is pinned exactly, so a loose
+// `<= 8192` would be the one assert that let an accidental growth through.
+static_assert(sizeof(ZoneShaderUniforms) == sizeof(PhosphorShaders::BaseUniforms) + 4112,
+              "ZoneShaderUniforms must be BaseUniforms plus the 4112-byte zone extension");
 static_assert(offsetof(ZoneShaderUniforms, base) == 0, "base must be at offset 0");
 static_assert(offsetof(ZoneShaderUniforms, zoneRects) == sizeof(PhosphorShaders::BaseUniforms),
               "zoneRects must follow BaseUniforms with no gap");
@@ -126,7 +126,10 @@ struct ZoneRect
     float height = 0.0f;
     int zoneNumber = 0;
     bool highlighted = false;
-    float borderRadius = 8.0f;
+    // 0, matching ZoneData::borderRadius on the same path. An 8 px default here
+    // would be exactly the per-pack corner floor the shared zoneSdf() removed:
+    // a configured radius of 0 has to mean square corners, not "round by 8".
+    float borderRadius = 0.0f;
     float borderWidth = 2.0f;
 };
 

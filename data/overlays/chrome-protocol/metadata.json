@@ -103,15 +103,6 @@
             "default": true
         },
         {
-            "id": "reservedC2w",
-            "name": "Reserved",
-            "group": "Overlays",
-            "type": "float",
-            "default": 0.0,
-            "min": 0.0,
-            "max": 1.0
-        },
-        {
             "id": "staticNoise",
             "name": "Static Noise Floor",
             "group": "Atmosphere",
@@ -173,15 +164,6 @@
             "default": 48,
             "min": 16,
             "max": 96
-        },
-        {
-            "id": "reservedC4w",
-            "name": "Reserved",
-            "group": "Appearance",
-            "type": "float",
-            "default": 0.0,
-            "min": 0.0,
-            "max": 1.0
         },
         {
             "id": "labelGlowSpread",

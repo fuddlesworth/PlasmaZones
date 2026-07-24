@@ -270,15 +270,15 @@ vec3 networkNodes(vec2 uv, float time, float bassEnv, float midsEnv, float trebl
 
             // Node dot
             float dotSize = 0.08 + bassEnv * 0.04;
-            float dot = smoothstep(dotSize, dotSize * 0.15, dist);
+            float dotMask = smoothstep(dotSize, dotSize * 0.15, dist);
             float dotGlow = exp(-dist * 4.0) * 0.08;
 
             // Treble flash on random nodes
             float flash = trebleEnv * 0.3 * step(0.85, hash21(nid + floor(time * 0.7)));
-            dot *= 0.7 + flash;
+            dotMask *= 0.7 + flash;
 
             vec3 nodeCol = mix(palPrimary, palAccent, h);
-            col += nodeCol * (dot + dotGlow) * particleStr;
+            col += nodeCol * (dotMask + dotGlow) * particleStr;
 
             // Connections to neighbors — skip if node is far from this pixel
             // (connections span at most ~1.4 units; lineWidth ≈ 0.03)
@@ -327,7 +327,7 @@ vec3 dotMatrix(vec2 uv, float scale, float time, float bassEnv, float midsEnv, f
 
     float dist = length(f);
     float radius = 0.08 + bassEnv * 0.03;
-    float dot = smoothstep(radius, radius * 0.3, dist);
+    float dotMask = smoothstep(radius, radius * 0.3, dist);
 
     // Diagonal brightness wave — mids modulate amplitude
     float wave = 0.4 + (0.3 + midsEnv * 0.2) * sin(id.x * 0.4 + id.y * 0.3 + time * 0.6);
@@ -337,7 +337,7 @@ vec3 dotMatrix(vec2 uv, float scale, float time, float bassEnv, float midsEnv, f
     float glow = exp(-dist * 8.0) * 0.06;
 
     vec3 dotCol = mix(palPrimary, palAccent, wave);
-    return dotCol * (dot * wave + glow);
+    return dotCol * (dotMask * wave + glow);
 }
 
 
@@ -437,9 +437,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.5;
 
     // ── Zone geometry ───────────────────────────────────────────
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
     float d = zoneShape.d;
@@ -633,15 +631,20 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // Subtle inner glow
         col += palPrimary * exp(-innerDist / zoneLen(10.0)) * innerGlowStr * 0.5;
 
-        // Periodic pulse ring sweeping inward (every ~4 seconds)
+        // Periodic pulse ring sweeping inward (every ~4 seconds). Travel
+        // distance and ring thickness are zoneLen() like the vignette and inner
+        // glow above, so the sweep keeps its depth relative to the fade it
+        // rides inside instead of covering half of it on a 2x display.
         float ringPhase = fract(time * 0.25);
-        float ringPos = ringPhase * 60.0;
-        float ring = exp(-(innerDist - ringPos) * (innerDist - ringPos) * 0.05) * (1.0 - ringPhase);
+        float ringPos = ringPhase * zoneLen(60.0);
+        float ringOff = (innerDist - ringPos) / zoneLen(4.47);  // 1/sqrt(0.05)
+        float ring = exp(-ringOff * ringOff) * (1.0 - ringPhase);
 
         // Bass-triggered extra ring
         float bassRingPhase = fract(time * 0.7);
-        float bassRingPos = bassRingPhase * 42.0;
-        float bassRing = exp(-(innerDist - bassRingPos) * (innerDist - bassRingPos) * 0.08) * bassEnv * (1.0 - bassRingPhase);
+        float bassRingPos = bassRingPhase * zoneLen(42.0);
+        float bassRingOff = (innerDist - bassRingPos) / zoneLen(3.54);  // 1/sqrt(0.08)
+        float bassRing = exp(-bassRingOff * bassRingOff) * bassEnv * (1.0 - bassRingPhase);
 
         col += palAccent * (ring * 0.3 + bassRing * 0.5);
 

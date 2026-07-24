@@ -103,24 +103,33 @@ float drawFont(vec2 p, int ch) {
 }
 
 // ──
-// 7 ring SDFs — PRESERVED VERBATIM from the original Shadertoy source.
+// 7 ring SDFs — geometry preserved from the original Shadertoy source. The one
+// change is the time source: the rings read gRingTime instead of iTime, so the
+// pack's "Animation Speed" setting reaches them. That setting is declared in
+// metadata.json and was previously read by nothing, leaving the user a slider
+// that did nothing. Everything else in the ring bodies is as-imported.
+//
+// Set once per fragment in pImage, before anything can call into a ring.
+// Reading it from a ring before that assignment would be a bug, but the
+// raymarch is the only caller and it runs strictly after.
 // Each ring is a 2D slice; the raymarcher extrudes in Z (see GetDist).
 // ──
+float gRingTime = 0.0;
 
 float ring0(vec2 p) {
     vec2 prevP = p;
-    p *= Rot(radians(-iTime * 30.0 + 50.0));
+    p *= Rot(radians(-gRingTime * 30.0 + 50.0));
     p = DF(p, 16.0);
     p -= vec2(0.35);
     float d = sdBox(p * Rot(radians(45.0)), vec2(0.005, 0.03));
     p = prevP;
-    p *= Rot(radians(-iTime * 30.0 + 50.0));
+    p *= Rot(radians(-gRingTime * 30.0 + 50.0));
     float deg = 165.0;
     d = max(dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d);
     d = max(dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d);
 
     p = prevP;
-    p *= Rot(radians(iTime * 30.0 + 30.0));
+    p *= Rot(radians(gRingTime * 30.0 + 30.0));
     float d2 = abs(length(p) - 0.55) - 0.015;
     d2 = max(-(abs(p.x) - 0.4), d2);
     d = min(d, d2);
@@ -128,18 +137,18 @@ float ring0(vec2 p) {
     d = min(d, abs(length(p) - 0.55) - 0.001);
 
     p = prevP;
-    p *= Rot(radians(-iTime * 50.0 + 30.0));
-    p += sin(p * 25.0 - radians(iTime * 80.0)) * 0.01;
+    p *= Rot(radians(-gRingTime * 50.0 + 30.0));
+    p += sin(p * 25.0 - radians(gRingTime * 80.0)) * 0.01;
     d = min(d, abs(length(p) - 0.65) - 0.0001);
 
     p = prevP;
-    float a = radians(-sin(iTime * 1.2)) * 120.0 + radians(-70.0);
+    float a = radians(-sin(gRingTime * 1.2)) * 120.0 + radians(-70.0);
     p.x += cos(a) * 0.58;
     p.y += sin(a) * 0.58;
     d = min(d, abs(sdTri(p * Rot(-a) * Rot(radians(90.0)), vec2(0.03), radians(45.0))) - 0.003);
 
     p = prevP;
-    a = radians(sin(iTime * 1.3)) * 100.0 + radians(-10.0);
+    a = radians(sin(gRingTime * 1.3)) * 100.0 + radians(-10.0);
     p.x += cos(a) * 0.58;
     p.y += sin(a) * 0.58;
     d = min(d, abs(sdTri(p * Rot(-a) * Rot(radians(90.0)), vec2(0.03), radians(45.0))) - 0.003);
@@ -150,7 +159,7 @@ float ring1(vec2 p) {
     vec2 prevP = p;
     float size = 0.45, deg = 140.0, thick = 0.02;
     float d = abs(length(p) - size) - thick;
-    p *= Rot(radians(iTime * 60.0));
+    p *= Rot(radians(gRingTime * 60.0));
     d = max(dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d);
     d = max(dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d);
     return min(d, abs(length(prevP) - size) - 0.001);
@@ -158,7 +167,7 @@ float ring1(vec2 p) {
 
 float ring2(vec2 p) {
     float size = 0.3, deg = 120.0, thick = 0.02;
-    p *= Rot(-radians(sin(iTime * 2.0) * 90.0));
+    p *= Rot(-radians(sin(gRingTime * 2.0) * 90.0));
     float d = abs(length(p) - size) - thick;
     d = max(dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d);
     d = max(dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d);
@@ -169,7 +178,7 @@ float ring2(vec2 p) {
 }
 
 float ring3(vec2 p) {
-    p *= Rot(radians(-iTime * 80.0 - 120.0));
+    p *= Rot(radians(-gRingTime * 80.0 - 120.0));
     vec2 prevP = p;
     float deg = 140.0;
     p = DF(p, 6.0);
@@ -190,7 +199,7 @@ float ring3(vec2 p) {
 }
 
 float ring4(vec2 p) {
-    p *= Rot(radians(iTime * 75.0 - 220.0));
+    p *= Rot(radians(gRingTime * 75.0 - 220.0));
     float deg = 20.0;
     float d = abs(length(p) - 0.25) - 0.01;
     p = DF(p, 2.0);
@@ -201,7 +210,7 @@ float ring4(vec2 p) {
 }
 
 float ring5(vec2 p) {
-    p *= Rot(radians(-iTime * 70.0 + 170.0));
+    p *= Rot(radians(-gRingTime * 70.0 + 170.0));
     vec2 prevP = p;
     float deg = 150.0;
     float d = abs(length(p) - 0.16) - 0.02;
@@ -218,18 +227,18 @@ float ring5(vec2 p) {
 
 float ring6(vec2 p) {
     vec2 prevP = p;
-    p *= Rot(radians(iTime * 72.0 + 110.0));
+    p *= Rot(radians(gRingTime * 72.0 + 110.0));
     float d = abs(length(p) - 0.95) - 0.001;
     d = max(-(abs(p.x) - 0.4), d);
     d = max(-(abs(p.y) - 0.4), d);
 
     p = prevP;
-    p *= Rot(radians(-iTime * 30.0 + 50.0));
+    p *= Rot(radians(-gRingTime * 30.0 + 50.0));
     p = DF(p, 16.0);
     p -= vec2(0.6);
     float d2 = sdBox(p * Rot(radians(45.0)), vec2(0.02, 0.03));
     p = prevP;
-    p *= Rot(radians(-iTime * 30.0 + 50.0));
+    p *= Rot(radians(-gRingTime * 30.0 + 50.0));
     float deg = 155.0;
     d2 = max(-dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d2);
     d2 = max(-dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d2);
@@ -605,6 +614,7 @@ struct GlobalParams {
     vec3 scanCol;
     vec3 bgCol;
     float ringScale;
+    float ringBaseThick;
     float thickPulse;
     float audioReact;
     float bassBreath;
@@ -657,11 +667,15 @@ vec3 renderGlobalScene(vec2 fragCoord, GlobalParams g) {
         col = mix(col, gridCol, bgMask * g.bgStrength);
     }
 
-    // Thickness cycle — 30s alternation between thick (0.03) and thin (0.007)
+    // Thickness cycle — 30s alternation between thick and thin. The thick end
+    // is the pack's "Ring Base Thickness" setting rather than a hard-coded
+    // 0.03, which is what that setting was declared for; the thin end keeps its
+    // original ratio to it (0.007 / 0.03) so the cycle's shape is unchanged at
+    // the default.
     float frame = mod(iTime, 30.0);
-    float thickness = 0.03;
-    const float maxThick = 0.03;
-    const float minThick = 0.007;
+    float maxThick = g.ringBaseThick;
+    float minThick = maxThick * (0.007 / 0.03);
+    float thickness = maxThick;
     if (frame >= 10.0 && frame < 20.0) {
         float tt = getTime(frame - 10.0, 1.5);
         thickness = (maxThick + minThick) - cubicInOut(tt) * maxThick;
@@ -740,6 +754,12 @@ vec3 renderGlobalScene(vec2 fragCoord, GlobalParams g) {
     return pow(max(col, 0.0), vec3(0.9545));
 }
 
+// Furthest a zone paints beyond its own edge, in logical px. The outer glow is
+// the only thing that reaches outside the rect, so this bounds a fragment's
+// entire contribution — pImage uses it to skip the raymarch on fragments no
+// zone can reach.
+const float kOuterGlowReach = 50.0;
+
 // Per-zone chrome: fill (from global scene with vitality), border, glow.
 vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                       vec4 zParams, vec3 sceneCol, GlobalParams g, bool isHighlighted) {
@@ -753,7 +773,6 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     float d       = zoneShape.d;
-    float px      = pxScale();
 
     float vitality = zoneVitality(isHighlighted);
     vec3 zChromeCol = vitalityDesaturate(g.chromeCol, vitality);
@@ -805,9 +824,12 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         result = blendOver(result, vec4(borderFinal * borderFactor, borderFactor * borderColor.a));
     }
 
-    // Outer glow
-    if (d > 0.0 && d < 50.0 * px) {
-        float rim = exp(-d / ((8.0 + g.aBass * 10.0) * px)) * edgeGlow * vitality;
+    // Outer glow. Reach and falloff are zoneLen(), not pxScale(): they sit
+    // directly on a border that zoneBorderWidth() scales by the display scale,
+    // and a 1080p-relative glow beside a display-scaled border drifts apart
+    // from it on any HiDPI output. kOuterGlowReach is the pImage bound too.
+    if (d > 0.0 && d < kOuterGlowReach * uZoneScale) {
+        float rim = exp(-d / zoneLen(8.0 + g.aBass * 10.0)) * edgeGlow * vitality;
         vec3 rimCol = mix(zChromeCol, zDataCol, g.aBass * 0.35);
         result = blendOver(result, vec4(rimCol * rim * highlightBoost, rim * 0.5));
     }
@@ -819,6 +841,10 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 // ──
 
 vec4 pImage(vec2 fragCoord) {
+    // The ring SDFs' time base. Set before anything can reach a ring, so the
+    // pack's Animation Speed setting drives the whole rotating array.
+    gRingTime = iTime * p_animSpeed;
+
     bool hasAudio = iAudioSpectrumSize > 0;
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
@@ -831,6 +857,7 @@ vec4 pImage(vec2 fragCoord) {
     g.scanCol      = colorWithFallback(p_scanColor.rgb, vec3(0.918, 0.965, 1.000));
     g.bgCol        = colorWithFallback(p_bgColor.rgb, vec3(0.027, 0.043, 0.071));
     g.ringScale    = p_ringScale;
+    g.ringBaseThick = p_ringBaseThick;
     g.thickPulse   = p_thicknessPulse;
     g.audioReact   = p_audioReactivity;
     g.bassBreath   = p_bassBreath;
@@ -850,11 +877,19 @@ vec4 pImage(vec2 fragCoord) {
     g.aTreble = hasAudio ? treble  * g.audioReact : 0.0;
     g.aAll    = hasAudio ? overall * g.audioReact : 0.0;
 
-    // Render the HUD scene once in screen-space — shared across all zones
-    vec3 sceneCol = renderGlobalScene(vFragCoord, g);
-
-    // Per-zone: gate visibility, apply vitality, draw border + glow
-    vec4 result = vec4(0.0);
+    // Bound the raymarch before paying for it. renderGlobalScene() is the most
+    // expensive thing in the pack: one RayMarchT at g.stepCount, where every
+    // step evaluates all seven ring SDFs, plus two more marches for chromatic
+    // aberration whenever bass or surge is up. Its result is consumed ONLY
+    // inside renderZoneChrome's `d < 0.0` fill branch, so on a fragment no zone
+    // reaches it is computed and then discarded. Layouts routinely leave gaps,
+    // and this runs on the compositor path for every fragment of every draw, so
+    // the discarded work is most of the pack's cost on a partial layout.
+    //
+    // The pre-pass is the same zoneSdf() the render loop below runs, but it
+    // stops at the distance rather than shading, so the duplicate cost is a few
+    // ALU ops against up to three raymarches.
+    float minDist = 1e30;
     for (int i = 0; i < zoneCount && i < 64; i++) {
         // Skip degenerate rects, as every sibling pack's loop does. A zero-size
         // zone collapses zoneSdf() to a point, and the distance field around it
@@ -862,9 +897,27 @@ vec4 pImage(vec2 fragCoord) {
         // the others draw nothing.
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
-        result = blendOver(result, renderZoneChrome(
-            vFragCoord, rect, zoneFillColors[i], zoneBorderColors[i],
-            zoneParams[i], sceneCol, g, zoneParams[i].z > 0.5));
+        minDist = min(minDist, zoneSdf(vFragCoord, rect, zoneParams[i].x).d);
+    }
+    // Beyond that reach every renderZoneChrome branch is already inert: the
+    // fill needs d < 0, softBorder() is 0 outside the border band, and the glow
+    // is explicitly gated on the same bound. So skipping both the scene and the
+    // loop changes no pixel. The labels below are NOT skipped — their halo is
+    // sampled from uZoneLabels in screen space and does not go through the zone
+    // SDF, so an early return out of pImage would clip it.
+    vec4 result = vec4(0.0);
+    if (minDist < kOuterGlowReach * uZoneScale) {
+        // Render the HUD scene once in screen-space — shared across all zones
+        vec3 sceneCol = renderGlobalScene(vFragCoord, g);
+
+        // Per-zone: gate visibility, apply vitality, draw border + glow
+        for (int i = 0; i < zoneCount && i < 64; i++) {
+            vec4 rect = zoneRects[i];
+            if (rect.z <= 0.0 || rect.w <= 0.0) continue;
+            result = blendOver(result, renderZoneChrome(
+                vFragCoord, rect, zoneFillColors[i], zoneBorderColors[i],
+                zoneParams[i], sceneCol, g, zoneParams[i].z > 0.5));
+        }
     }
 
     // Labels: HUD designation plate. The body stays in [0,1] color space

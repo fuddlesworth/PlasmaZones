@@ -127,4 +127,21 @@ if(BUILD_TESTING)
         COMMAND test_shader_render_metadataloader
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+
+    # These two targets live outside tests/unit, so the TEST_LAUNCHER loop
+    # there (which iterates only its own directory's tests) does not reach
+    # them and they would run on the ambient session bus. Neither links
+    # Qt6::DBus today, so nothing can hang right now, but the repo's rule is
+    # that a test gets the isolated bus, and the next test added beside these
+    # would silently opt out of it. Same launcher and same config file as
+    # tests/unit/CMakeLists.txt, with the same graceful skip when
+    # dbus-run-session or CMake 3.29 is unavailable.
+    find_program(_pz_sr_dbus_run_session dbus-run-session)
+    if(_pz_sr_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
+        foreach(_pz_sr_test test_shader_render_layoutloader test_shader_render_metadataloader)
+            set_target_properties(${_pz_sr_test} PROPERTIES
+                TEST_LAUNCHER
+                "${_pz_sr_dbus_run_session};--config-file=${CMAKE_SOURCE_DIR}/tests/unit/test-session-bus.conf;--")
+        endforeach()
+    endif()
 endif()

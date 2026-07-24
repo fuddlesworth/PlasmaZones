@@ -685,7 +685,8 @@ protected:
      *
      * 1.0 when the installed extension reports
      * `requiresPhysicalResolution() == false` (the animation path keeps
-     * iResolution logical), otherwise the window's effective device-pixel
+     * iResolution logical), and 1.0 whenever the item has no window or the
+     * window has no screen. Otherwise the window's effective device-pixel
      * ratio. See the extended rationale at the call site in
      * syncBasePropertiesToNode().
      *
@@ -764,6 +765,22 @@ private:
     /// from the previous frame and advances iTime / iTimeDelta / iFrame.
     void onPlayingTick();
 
+    // ── Output-scale plumbing ────────────────────────────────────────
+    /// Re-subscribe to the signals that change effectiveResolutionScale():
+    /// the window's screen, and that screen's device-pixel ratio. Called
+    /// from itemChange when the item moves between windows.
+    ///
+    /// Without this, a scale change only reaches the GPU on a frame that
+    /// something else already scheduled. Moving an overlay to a
+    /// differently-scaled screen at the same logical size dirties nothing:
+    /// geometryChange() sees no logical-size change, and itemChange() does
+    /// not report screen moves. An animated pack masks it because playing=true
+    /// ticks every frame anyway, but a static pack keeps painting at the old
+    /// scale until an unrelated event dirties the item. This covers
+    /// iResolution and the zone extension's scale together, since both
+    /// derive from effectiveResolutionScale().
+    void updateScaleConnections();
+
     // ── Animation state ──────────────────────────────────────────────
     // Field order minimises padding: 8-byte (qreal/QSizeF/QPointF) members
     // grouped together, followed by 4-byte (int), trailing 1-byte bool.
@@ -777,6 +794,8 @@ private:
     bool m_isReversed = false;
     bool m_playing = false;
     QMetaObject::Connection m_playingConnection;
+    QMetaObject::Connection m_windowScreenConnection;
+    QMetaObject::Connection m_screenDprConnection;
 
     // ── Shader source ────────────────────────────────────────────────
     QUrl m_shaderSource;

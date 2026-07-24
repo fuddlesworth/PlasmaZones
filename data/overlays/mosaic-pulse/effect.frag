@@ -10,17 +10,10 @@
  * HSL color variation, sparkles, grid lines, and dithered posterization.
  * Bass drives per-tile hue scatter, mids shift hue directionally, treble triggers tile pops and sparkles.
  *
- * Parameters (customParams):
- *   [0].x = gridDensity     — number of vertical tiles
- *   [0].y = edgeSoftness    — shape edge anti-alias width
- *   [0].z = gridLineWeight  — grid line darkness (0=none, 1=full)
- *   [0].w = posterize       — color quantization levels
- *   [1].x = shapeChance     — probability a cell gets a shape (0-1)
- *   [1].y = shapeSize       — base shape radius
- *   [1].z = sparkleChance   — probability a cell gets a sparkle (0-1)
- *   [1].w = speed           — animation speed multiplier
- *   [2].x = reactivity      — audio sensitivity multiplier
- *   [2].y = fillOpacity     — zone fill alpha
+ * Parameters are declared in metadata.json and read here through the
+ * generated p_<id> accessors. The slot table that used to sit here listed
+ * customParams indices that the pack stopped using and drifted out of date
+ * as parameters were added, so it is not restated.
  *
  * Colors:
  *   p_hueCenter = hue center  (default: steel blue #4488cc)
@@ -115,9 +108,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     }
 
     // Zone geometry
-    vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
     float d       = zoneShape.d;
 
@@ -271,12 +263,15 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             col *= 0.7;
         }
 
-        result.rgb = col;
+        // Light identity tint from the zone's configured fill colour, at the
+        // sibling packs' weight. Without it the per-zone colour a user sets in
+        // appearance settings does nothing at all in this pack.
+        result.rgb = mix(col, col * 0.85 + fillColor.rgb * 0.15, 0.35);
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
 
         // Inner edge glow — pulses with ripple rings near zone edges
         float edgeRipple = hasAudio ? audioRipple * 0.8 : 0.0;
-        float innerGlow = exp(d / mix(25.0, 12.0, vitality)) * mix(0.04, 0.15, vitality) * (1.0 + edgeRipple);
+        float innerGlow = exp(d / zoneLen(mix(25.0, 12.0, vitality))) * mix(0.04, 0.15, vitality) * (1.0 + edgeRipple);
         result.rgb += hueCenter * innerGlow;
     }
 
@@ -288,7 +283,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float angle = atan(p.x, -p.y) / TAU + 0.5;
 
         float borderEnergy = 1.0 + energy * mix(0.2, 1.0, vitality) + idlePulse * 0.3;
-        vec3 coreColor = hueCenter * mix(1.0, 2.0, vitality) * borderEnergy;
+        // Folds in the zone's configured border colour so the setting is not
+        // inert here, at the same weight the sibling packs use.
+        vec3 coreColor = mix(hueCenter, borderColor.rgb, 0.3) * mix(1.0, 2.0, vitality) * borderEnergy;
 
         float flowSpeed = mix(0.3, 2.0, vitality);
         float flowRange = mix(0.1, 0.4, vitality);
@@ -316,10 +313,13 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // ── Outer glow ──────────────────────────────────────────
 
     float baseGlowR = zoneLen(mix(8.0, 20.0, vitality));
-    float bassGlowR = mix(3.0, 6.0, vitality);
+    // Both addends share baseGlowR's zoneLen() basis. Left raw they would keep
+    // their device-px size while the base doubled on a 2x display, shrinking
+    // the audio response to half the proportion the pack was tuned at.
+    float bassGlowR = zoneLen(mix(3.0, 6.0, vitality));
     // Glow radius pulses with bass beat but uses a smoothed envelope, not raw value
     float bassEnvelope = hasAudio ? smoothstep(0.2, 0.7, bass) * bass * reactivity : idlePulse;
-    float glowRadius = baseGlowR + bassGlowR * bassEnvelope + 5.0 * energy;
+    float glowRadius = baseGlowR + bassGlowR * bassEnvelope + zoneLen(5.0) * energy;
     if (d > 0.0 && d < glowRadius) {
         float glowStr = mix(0.12, 0.35, vitality);
         float glow1 = expGlow(d, glowRadius * 0.2, glowStr);

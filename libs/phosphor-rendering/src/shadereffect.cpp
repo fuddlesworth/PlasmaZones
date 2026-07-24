@@ -13,6 +13,7 @@
 #include <QMutexLocker>
 #include <QPainter>
 #include <QQuickWindow>
+#include <QScreen>
 #include <QSvgRenderer>
 
 #include <cmath>
@@ -674,11 +675,14 @@ void ShaderEffect::setError(const QString& error)
 
 void ShaderEffect::setStatus(Status newStatus)
 {
-    Status expected = m_status.load(std::memory_order_acquire);
-    if (expected == newStatus) {
+    // Single atomic swap, not load-compare-store. Status is written from the
+    // render thread and read from the GUI thread, so a split read and write
+    // lets two concurrent transitions both pass the compare and emit
+    // statusChanged() twice, or interleave into a transition nobody reports.
+    const Status previous = m_status.exchange(newStatus, std::memory_order_acq_rel);
+    if (previous == newStatus) {
         return;
     }
-    m_status.store(newStatus, std::memory_order_release);
     Q_EMIT statusChanged();
 }
 
@@ -954,6 +958,41 @@ void ShaderEffect::itemChange(ItemChange change, const ItemChangeData& value)
         // parented to a window would never tick — the connection in
         // setPlaying short-circuits when window() is null.
         updatePlayingConnection();
+        // Same for the output-scale subscriptions: they hang off the window
+        // and its screen, so they have to follow the item between windows.
+        updateScaleConnections();
+    }
+}
+
+void ShaderEffect::updateScaleConnections()
+{
+    // Tear down unconditionally before re-establishing, so moving between
+    // windows cannot leave a connection to the previous one behind.
+    QObject::disconnect(m_windowScreenConnection);
+    m_windowScreenConnection = {};
+    QObject::disconnect(m_screenDprConnection);
+    m_screenDprConnection = {};
+
+    QQuickWindow* w = window();
+    if (!w) {
+        // Not parented yet. itemChange(ItemSceneChange) re-calls us once the
+        // item has a window.
+        return;
+    }
+
+    // The window moving to another screen changes effectiveDevicePixelRatio.
+    // Re-subscribe to the new screen's own ratio signal at the same time.
+    m_windowScreenConnection = QObject::connect(w, &QWindow::screenChanged, this, [this]() {
+        updateScaleConnections();
+        update();
+    });
+
+    // A screen can also have its scale changed in place, without the window
+    // ever moving.
+    if (QScreen* s = w->screen()) {
+        m_screenDprConnection = QObject::connect(s, &QScreen::physicalDotsPerInchChanged, this, [this]() {
+            update();
+        });
     }
 }
 

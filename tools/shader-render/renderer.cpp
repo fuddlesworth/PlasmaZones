@@ -297,12 +297,27 @@ QStringList shaderIncludePaths()
         }
         paths.append(root);
     };
+    // Source tree FIRST, unlike the daemon this otherwise mirrors. The daemon
+    // is the installed program and must prefer installed data; this tool exists
+    // to validate the tree you are editing, so an installed copy shadowing it
+    // is the one outcome that makes the tool worthless.
+    //
+    // It was that way round: with the package installed, every pack rendered
+    // against /usr/share's shared/common.glsl while the pack .frag files came
+    // from data/overlays. A helper added to the tree but not yet installed was
+    // therefore missing at preview time, and the pack failed to compile with
+    // "no matching overloaded function found" for a function plainly sitting in
+    // the file the author was looking at. The preview was silently a render of
+    // the last install, not of the working tree.
+    //
+    // data/overlays only exists when run from the source tree, so this entry is
+    // simply absent for an installed invocation and the order below applies.
+    pushRoot(QStringLiteral("data/overlays"));
     const QStringList xdg = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
     for (const QString& dir : xdg) {
         pushRoot(dir + QStringLiteral("/overlays"));
     }
     pushRoot(QStringLiteral("/usr/share/plasmazones/overlays"));
-    pushRoot(QStringLiteral("data/overlays"));
     paths.append(QStringLiteral("libs/phosphor-rendering/shaders"));
     return paths;
 }
@@ -631,6 +646,14 @@ int Renderer::render(const RenderOptions& opts)
     }
 
     zoneExt->updateFromZones(runtimeZones);
+    // Push the same scale the daemon's ZoneShaderItem does. It is provably
+    // 1.0 today because the render target's DPR is pinned to 1.0 above, which
+    // is also what the base uses for iResolution — but nothing links those two
+    // 1.0s, and the preview only mirrors the daemon while they agree. Deriving
+    // it from dpr keeps the corner radii and border widths correct if a --dpr
+    // or --scale option is ever added, instead of silently previewing every
+    // length at 1/dpr of what the daemon renders.
+    zoneExt->setScale(static_cast<float>(dpr));
     effect->setUniformExtension(zoneExt);
 
     // Initial zone counts. For the cycling schedule, highlightedCount and

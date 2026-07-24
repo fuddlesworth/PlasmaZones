@@ -57,9 +57,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float fbmRot = p_fbmRotation >= 0.0 ? p_fbmRotation : 0.5;
 
     // Convert rect to pixel coordinates
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     // Position relative to zone center
     vec2 p = fragCoord - center;

@@ -306,9 +306,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
     float gradAngle   = p_gradientAngle >= 0.0 ? p_gradientAngle : 0.6;
     float idleStrength = p_idleStrength >= 0.0 ? p_idleStrength : 0.5;
 
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
     float d = zoneShape.d;

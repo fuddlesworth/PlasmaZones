@@ -8,6 +8,7 @@
 
 #include <QMutex>
 #include <QMutexLocker>
+#include <QtNumeric>
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -113,7 +114,15 @@ public:
     /// overlay moves to a differently-scaled screen. Guarded by the same mutex
     /// and only marks dirty on an actual change, so a per-frame call from the
     /// sync phase costs nothing.
-    void setScale(float scale)
+    ///
+    /// @return false if @p scale was rejected as out of contract, true
+    ///         otherwise (including a no-op re-set of the current value).
+    ///         Rejection keeps the last good scale, which renders correctly but
+    ///         is indistinguishable from working code, so the caller is
+    ///         expected to report it. The check cannot log here: this library's
+    ///         logging category is private to its src/ tree, and the caller
+    ///         owns a category that names the actual subsystem anyway.
+    bool setScale(float scale)
     {
         // Reject values that would make the shader silently disappear rather
         // than degrade. The GLSL multiplies every radius and border width by
@@ -124,14 +133,15 @@ public:
         // positive and finite, so anything else is a caller bug; keep the last
         // good scale instead of rendering a lie.
         if (!(scale > 0.0f) || std::isinf(scale)) {
-            return;
+            return false;
         }
         QMutexLocker lock(&m_mutex);
         if (qFuzzyCompare(m_data.zoneScale, scale)) {
-            return;
+            return true;
         }
         m_data.zoneScale = scale;
         m_dirty.store(true, std::memory_order_release);
+        return true;
     }
 
 private:

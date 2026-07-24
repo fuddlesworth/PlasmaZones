@@ -235,8 +235,9 @@ void ZoneShaderItem::updateHoveredHighlightOnly()
 {
     // Precondition: m_zoneData must be populated by a prior setZones/parseZoneData call.
     if (m_zoneData.rects.size() != static_cast<qsizetype>(m_zones.size())) {
-        qCWarning(lcOverlay) << "updateHoveredHighlightOnly: zone data out of sync (rects=" << m_zoneData.rects.size()
-                             << "zones=" << m_zones.size() << ") - setZones must be called first";
+        qCWarning(PlasmaZones::lcOverlay)
+            << "updateHoveredHighlightOnly: zone data out of sync (rects=" << m_zoneData.rects.size()
+            << "zones=" << m_zones.size() << ") - setZones must be called first";
         return;
     }
     // Pre-compute highlight flags outside the mutex to avoid blocking the render
@@ -466,7 +467,16 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // overlay to a differently-scaled screen changes the ratio without
     // touching zone contents, and setScale() early-outs when the value is
     // unchanged, so the steady-state cost is a mutex lock and a compare.
-    m_zoneExtension->setScale(static_cast<float>(effectiveResolutionScale()));
+    // A rejected scale keeps the last good value, which still renders and so
+    // looks exactly like working code. Report it once rather than never: the
+    // symptom is corners and borders quietly stuck at the previous screen's
+    // scale, which nobody would think to trace back to here.
+    if (!m_zoneExtension->setScale(static_cast<float>(effectiveResolutionScale())) && !m_loggedBadScale) {
+        m_loggedBadScale = true;
+        qCWarning(PlasmaZones::lcOverlay)
+            << "ZoneShaderItem: rejected out-of-contract zone scale" << effectiveResolutionScale()
+            << "- keeping the last good value. Corner radii and border widths will not track this screen.";
+    }
 
     // ── Sync zone data to the node AFTER shader is ready ─────────────
     //
@@ -482,8 +492,20 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // while the extension lives for the lifetime of this item.
     if (m_zoneDataDirty.load()) {
         if (node->isShaderReady()) {
-            m_zoneDataDirty.exchange(false);
+            m_zoneDataDirty.store(false);
             PhosphorRendering::ZoneDataSnapshot snapshot = getZoneDataSnapshot();
+
+            // The UBO's zone arrays are fixed at MaxZones, and both the
+            // extension writer and setZoneCounts clamp to it, so an oversized
+            // layout truncates rather than corrupting. Truncation is silent
+            // everywhere else in the chain though, and the symptom is zones
+            // that simply do not appear, so say so once.
+            if (snapshot.zoneCount > PhosphorRendering::MaxZones && !m_loggedZoneOverflow) {
+                m_loggedZoneOverflow = true;
+                qCWarning(PlasmaZones::lcOverlay)
+                    << "ZoneShaderItem: layout has" << snapshot.zoneCount << "zones but the shader UBO holds"
+                    << PhosphorRendering::MaxZones << "- the excess will not be rendered.";
+            }
 
             QVector<PhosphorRendering::ZoneData> zoneDataVec;
             zoneDataVec.reserve(snapshot.zoneCount);

@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <QTest>
+#include <QFile>
 #include <QObject>
 #include <QColor>
 #include <QRectF>
+#include <QRegularExpression>
 #include <QVector>
 
 #include <cstring>
+#include <limits>
 #include <vector>
 
 #include <PhosphorRendering/ZoneShaderCommon.h>
@@ -48,6 +51,7 @@ private Q_SLOTS:
     void scale_rejectsNonPositiveAndNonFinite();
     void requiresPhysicalResolution_isTrue();
     void layout_matchesZoneShaderUniformsOffsets();
+    void layout_matchesGlslUboDeclaration();
 };
 
 namespace {
@@ -495,6 +499,99 @@ void TestZoneUniformExtension::layout_matchesZoneShaderUniformsOffsets()
         }
     }
     QCOMPARE(std::memcmp(actual.data(), expectedZoneStart, ext.extensionSize()), 0);
+}
+
+void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
+{
+    // The class comment above says the byte layout "MUST match the GLSL UBO
+    // declaration in common.glsl exactly", and until this test nothing checked
+    // it. Every other assertion in this file compares C++ against C++: the
+    // offsetof static_asserts in ZoneUniformExtension.h already make
+    // layout_matchesZoneShaderUniformsOffsets() unable to fail without a
+    // compile error first. So the whole suite passed while MaxZones and the
+    // GLSL array dimensions disagreed, or while a member was inserted ahead of
+    // uZoneScale — either of which renders all 27 overlay packs as garbage with
+    // no build error, because std140 offsets are decided independently on each
+    // side and never cross-checked.
+    //
+    // Parse the real file rather than restating the layout, so the test tracks
+    // whatever the shaders actually compile against.
+    QFile glsl(QStringLiteral(P_SOURCE_DIR "/data/overlays/shared/common.glsl"));
+    QVERIFY2(glsl.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(glsl.errorString()));
+    const QString source = QString::fromUtf8(glsl.readAll());
+
+    // Isolate the ZoneUniforms block body.
+    const int blockStart = source.indexOf(QLatin1String("uniform ZoneUniforms"));
+    QVERIFY2(blockStart >= 0, "ZoneUniforms block not found in common.glsl");
+    const int bodyStart = source.indexOf(QLatin1Char('{'), blockStart);
+    const int bodyEnd = source.indexOf(QLatin1Char('}'), bodyStart);
+    QVERIFY(bodyStart >= 0 && bodyEnd > bodyStart);
+    const QString body = source.mid(bodyStart + 1, bodyEnd - bodyStart - 1);
+
+    // std140 layout only depends on member type, order and array length, so
+    // that triple is exactly what has to agree. Comments carry none of it.
+    static const QRegularExpression memberRe(QStringLiteral(R"(^\s*(\w+)\s+(\w+)\s*(?:\[\s*(\d+)\s*\])?\s*;)"),
+                                             QRegularExpression::MultilineOption);
+
+    struct Member
+    {
+        QString type;
+        QString name;
+        int arrayLen; // 0 == not an array
+    };
+    QVector<Member> members;
+    auto it = memberRe.globalMatch(body);
+    while (it.hasNext()) {
+        const auto m = it.next();
+        members.append({m.captured(1), m.captured(2), m.captured(3).isEmpty() ? 0 : m.captured(3).toInt()});
+    }
+
+    // The GLSL block declares the WHOLE UBO: BaseUniforms first, then the zone
+    // extension. Only the extension tail is this class's contract, so locate
+    // where it starts rather than asserting over the base's members, which
+    // belong to PhosphorShaders and are pinned on that side.
+    const QVector<Member> expectedTail = {
+        {QStringLiteral("vec4"), QStringLiteral("zoneRects"), MaxZones},
+        {QStringLiteral("vec4"), QStringLiteral("zoneFillColors"), MaxZones},
+        {QStringLiteral("vec4"), QStringLiteral("zoneBorderColors"), MaxZones},
+        {QStringLiteral("vec4"), QStringLiteral("zoneParams"), MaxZones},
+        {QStringLiteral("float"), QStringLiteral("uZoneScale"), 0},
+    };
+
+    int tailStart = -1;
+    for (int i = 0; i < members.size(); ++i) {
+        if (members[i].name == QLatin1String("zoneRects")) {
+            tailStart = i;
+            break;
+        }
+    }
+    QVERIFY2(tailStart >= 0, "zoneRects not found in the ZoneUniforms block");
+
+    // Exactly the expected tail, and nothing after it. A member appended past
+    // uZoneScale would land in the 12 std140 pad bytes the C++ struct declares
+    // as _pad_after_zoneScale, silently reading garbage.
+    QCOMPARE(members.size() - tailStart, expectedTail.size());
+    for (int i = 0; i < expectedTail.size(); ++i) {
+        const Member& actualMember = members[tailStart + i];
+        QCOMPARE(actualMember.type, expectedTail[i].type);
+        QCOMPARE(actualMember.name, expectedTail[i].name);
+        // Catches MaxZones drifting away from the hard-coded [64] in the GLSL.
+        QCOMPARE(actualMember.arrayLen, expectedTail[i].arrayLen);
+    }
+
+    // Independently recompute the std140 size of the extension region from the
+    // parsed declaration and check it against what the C++ side reports. vec4,
+    // and every array element, is 16-byte strided; the trailing scalar takes 4
+    // and the block rounds up to a 16-byte multiple from there.
+    int glslSize = 0;
+    for (int i = tailStart; i < members.size(); ++i) {
+        glslSize += members[i].arrayLen > 0 ? members[i].arrayLen * 16 : 4;
+    }
+    glslSize = (glslSize + 15) / 16 * 16;
+
+    ZoneUniformExtension ext;
+    QCOMPARE(ext.extensionSize(), glslSize);
+    QCOMPARE(ext.extensionSize(), 4112);
 }
 
 QTEST_APPLESS_MAIN(TestZoneUniformExtension)

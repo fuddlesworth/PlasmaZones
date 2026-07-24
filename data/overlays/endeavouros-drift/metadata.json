@@ -44,15 +44,6 @@
             "max": 8
         },
         {
-            "id": "orbitRadius",
-            "name": "Orbit Radius",
-            "group": "Constellation",
-            "type": "float",
-            "default": 5.0,
-            "min": 1.0,
-            "max": 12.0
-        },
-        {
             "id": "lineStrength",
             "name": "Line Brightness",
             "group": "Constellation",
@@ -186,15 +177,6 @@
             "default": 0.6,
             "min": 0.0,
             "max": 1.57
-        },
-        {
-            "id": "packetDirection",
-            "name": "Connection Threshold",
-            "group": "Effects",
-            "type": "float",
-            "default": 0.25,
-            "min": 0.0,
-            "max": 1.0
         },
         {
             "id": "logoScale",

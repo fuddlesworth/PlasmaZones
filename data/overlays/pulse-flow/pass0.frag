@@ -73,13 +73,12 @@ void main() {
     vec2 res = max(iResolution.xy, vec2(1.0));
     vec2 uv = fragCoord / res;
     float aspect = res.x / res.y;
-    float pxs = pxScale();
 
     // ── First frame: seed initial state ─────────────────────────────────────
     if (iFrame == 0) {
         float energy = 0.0;
         float edgeDist = zoneEdgeSDF(fragCoord);
-        energy += smoothstep(40.0 * pxs, 0.0, edgeDist) * 0.3;
+        energy += smoothstep(zoneLen(40.0), 0.0, edgeDist) * 0.3;
         energy += noise2D(uv * 8.0) * 0.05;
         fragColor = vec4(clamp(energy, 0.0, 1.0), energy, 0.0, 1.0);
         return;
@@ -88,7 +87,10 @@ void main() {
     // ── Parameters ──────────────────────────────────────────────────────────
     float intensity   = getIntensity();
     float persistence = getPersistence();
-    float edgeW       = getEdgeWidth() * pxs;
+    // zoneLen(), matching the corner arcs this band hugs: zoneEdgeSDF() is
+    // built on zoneSdf(), so a pxScale() band width would sit on a differently
+    // scaled edge than the one it is measured from.
+    float edgeW       = zoneLen(getEdgeWidth());
     float feedbackStr = getFeedbackStr();
     float driftSpd    = getDriftSpeed();
     float rotSpd      = getRotationSpeed();

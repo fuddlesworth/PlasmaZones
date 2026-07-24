@@ -340,9 +340,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float camoStr       = p_camouflageShimmer >= 0.0 ? p_camouflageShimmer : 0.25;
     float eyeBeamStr    = p_eyeBeamStrength >= 0.0 ? p_eyeBeamStrength : 0.5;
 
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
     float d = zoneShape.d;
@@ -537,7 +535,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 vec2 seed = vec2(hash11(fi * 7.3), hash11(fi * 11.1 + 5.0));
 
                 vec2 pos = seed;
-                for (int step = 0; step < 3; step++) {
+                for (int si = 0; si < 3; si++) {
                     pos += curlNoiseFwd(pos * 3.0, time * windSpeed + fi) * 0.015;
                 }
                 pos = fract(pos);
@@ -910,7 +908,9 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float border = softBorder(d, borderWidth);
     if (border > 0.0) {
         float angle = atan(p.y, p.x) * 2.0;
-        ScaleCell borderCell = hexScaleGrid(vec2(angle, d * 0.1), 4.0);
+        // d is device px; dividing by a zoneLen() keeps the scale-pattern pitch
+        // across the border tracking the same scale as zoneBorderWidth() above.
+        ScaleCell borderCell = hexScaleGrid(vec2(angle, d / zoneLen(10.0)), 4.0);
         float borderPattern = smoothstep(0.0, 0.04, borderCell.edgeDist);
         vec3 borderFilm = thinFilm(borderCell.cellHash, 0.4 + time * 0.08 + midsEnv * 0.15);
 

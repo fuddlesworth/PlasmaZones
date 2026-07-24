@@ -8,7 +8,6 @@
 // included directly so it doesn't depend on jumbo-grouping order.
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
-#include <PhosphorScreens/Manager.h>
 #include "config/settings.h"
 #include "core/types/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>
@@ -39,10 +38,7 @@ UnifiedLayoutController::UnifiedLayoutController(PhosphorZones::LayoutRegistry* 
         connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
                 [this](PhosphorZones::Layout* layout) {
                     if (layout) {
-                        QString newId = layout->id().toString();
-                        if (m_currentLayoutId != newId) {
-                            setCurrentLayoutId(newId);
-                        }
+                        setCurrentLayoutId(layout->id().toString());
                     }
                 });
     }
@@ -200,11 +196,11 @@ void UnifiedLayoutController::cycle(bool forward)
 void UnifiedLayoutController::syncFromExternalState(const QString& overrideId)
 {
     if (!overrideId.isEmpty()) {
-        m_currentLayoutId = overrideId;
+        setCurrentLayoutId(overrideId);
     } else if (m_layoutManager && m_layoutManager->activeLayout()) {
-        m_currentLayoutId = m_layoutManager->activeLayout()->id().toString();
+        setCurrentLayoutId(m_layoutManager->activeLayout()->id().toString());
     } else {
-        m_currentLayoutId.clear();
+        setCurrentLayoutId(QString());
     }
 }
 
@@ -222,7 +218,7 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
             PhosphorZones::Layout* screenLayout =
                 m_layoutManager->layoutForScreen(screenId, desktop, m_currentActivity);
             if (screenLayout) {
-                m_currentLayoutId = screenLayout->id().toString();
+                setCurrentLayoutId(screenLayout->id().toString());
             }
         }
     }

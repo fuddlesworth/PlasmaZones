@@ -16,12 +16,10 @@
  * radius at that angle = spectrum amplitude. One morphing blob defined
  * by all 256 bars. Best with 256 spectrum bars in KCM settings.
  *
- * Parameters (customParams):
- *   [0].x = reactivity       — audio sensitivity (0.5–3)
- *   [0].y = contourScale     — how far spectrum extends from base (0.2–0.6)
- *   [0].z = baseRadius       — minimum contour radius when silent (0.05–0.3)
- *   [0].w = glowWidth       — width of contour glow (0.02–0.1)
- *   [1].x = idleAnimation    — star pulse when no audio (0–2)
+ * Parameters are declared in metadata.json and read here through the
+ * generated p_<id> accessors. The slot table that used to sit here listed
+ * customParams indices that the pack stopped using and drifted out of date
+ * as parameters were added, so it is not restated.
  *
  * Colors:
  *   p_primaryColor = primary (low freq, default: cyan)
@@ -58,9 +56,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float auroraRays   = p_auroraRayCount >= 0.0 ? p_auroraRayCount : 12.0;
 
     // Zone geometry -- KEEP for cutout, border, edge effects
-    vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;  // KEEP for border/glow angle
     float d       = zoneShape.d;
 
@@ -180,6 +176,12 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             nebBright *= 1.0 - smoothstep(0.0, 1.3, r) * 0.25;
 
             result.rgb = nebColor * nebBright;
+            // Light identity tint from the zone's configured fill colour, the
+            // same weight the sibling packs use. Without it the per-zone colour
+            // a user sets in appearance settings does nothing at all in this
+            // pack, which reads as the setting being broken rather than as a
+            // pack that owns its palette.
+            result.rgb = mix(result.rgb, result.rgb * 0.85 + fillColor.rgb * 0.15, 0.35);
             result.a = mix(fillOpacity * 0.59, fillOpacity, vitality);
         }
 
@@ -321,7 +323,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
             // Audio-reactive border energy
             float borderEnergy = 1.0 + energy * mix(0.2, 1.0, vitality) + idlePulse * 0.3;
-            vec3 coreColor = primary * mix(0.6, 1.8, vitality) * borderEnergy;
+            // Folds in the zone's configured border colour at the sibling
+            // packs' weight, so the setting is not inert here.
+            vec3 coreColor = mix(primary, borderColor.rgb, 0.3) * mix(0.6, 1.8, vitality) * borderEnergy;
 
             // Flowing highlights: animated angular noise
             float flowSpeed = mix(0.3, 2.0, vitality);

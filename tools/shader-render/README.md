@@ -32,7 +32,9 @@ cmake -B build -DBUILD_TOOLS=ON
 cmake --build build --target plasmazones-shader-render
 ```
 
-It links `Qt6::Quick`, `PhosphorRendering`, and `PhosphorWayland`.
+It links `Qt6::Quick` plus `PhosphorRendering`, `PhosphorShaders`,
+`PhosphorWayland`, `PhosphorAudio`, and the daemon's
+`plasmazones_rendering` target.
 For headless CI it works under software Vulkan
 (`VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json)`),
 or fall back to OpenGL with `QSG_RHI_BACKEND=opengl`.
@@ -63,6 +65,15 @@ Common flags:
 | `--audio-mode` | `sine` | one of `silent`, `sine`, `noise`, `sweep` |
 | `--shader-dir` | `data/overlays/` then `/usr/share/...` | where to find shader bundles |
 | `--layout-dir` | `data/layouts/` then `/usr/share/...` | where to find layout JSONs |
+
+Shared GLSL (`shared/common.glsl`, `audio.glsl`, `zone.vert`) resolves from the
+source tree first, then the XDG data dirs, then `/usr/share`. That is the
+opposite of the daemon's order, on purpose. The daemon is the installed program
+and should prefer installed data. This tool exists to check the tree you are
+editing, so an installed copy taking precedence would mean previewing the last
+install instead of your working copy. It was that way round, and a helper added
+to `shared/common.glsl` but not yet installed made every pack that called it
+fail to compile against a function plainly present in the file on screen.
 
 Output formats are picked by extension:
 
@@ -139,7 +150,8 @@ Known gaps to verify on first run:
   `QQuickRenderControl::polishAndSync() + render()` which works
   for simple `ShaderEffect`s but may need explicit
   `beginFrame()`/`endFrame()` (Qt 6.6+) for clean ping-pong
-  between the buffer textures. See `renderer.cpp` TODO.
+  between the buffer textures. The ping-pong setup lives in
+  `buildOffscreenTarget` and the frame loop in `renderFrames`.
 - **Depth-buffered shaders** — `useDepthBuffer = true` flag is
   forwarded; the corresponding offscreen depth attachment is
   set up by `ShaderNodeRhi`, but verify visually against a real

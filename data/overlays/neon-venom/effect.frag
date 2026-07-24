@@ -192,7 +192,6 @@ vec4 renderNeonVenomZone(
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
-    float px = pxScale();
 
     // Corner radius: logical px to device px, clamped to half the zone's smaller side.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
@@ -217,12 +216,13 @@ vec4 renderNeonVenomZone(
     // Early-out, placed after the audio and mouse terms because the rim glow's
     // reach depends on them. The rim below decays over rimFalloff, so bound at
     // four falloff lengths and the border band, which leaves the rim at ~2%
-    // where it is cut. The old bound was a flat 60 * px, sized for the resting
-    // falloff of 10 * px; audioReactivity (max 2) and mouseInfluence (max 4)
-    // push rimFalloff to 80 * px, where 60 * px sliced the gradient at ~47% and
-    // left a hard ring. These terms are a few cheap ALU ops, well below the
-    // vein FBM the early-out protects.
-    float rimFalloff = (10.0 + audioPulse * 15.0 + mouseFx * 10.0) * px;
+    // where it is cut. The old bound was a flat 60 logical px, sized for the
+    // resting falloff of 10. audioReactivity (max 2) and mouseInfluence (max 4)
+    // push rimFalloff to 80, where a bound of 60 sliced the gradient at ~47%
+    // and left a hard ring. These terms are a few cheap ALU ops, well below the
+    // vein FBM the early-out protects. rimFalloff is zoneLen() so it shares a
+    // basis with borderWidth in the bound below, which zoneBorderWidth() scales.
+    float rimFalloff = zoneLen(10.0 + audioPulse * 15.0 + mouseFx * 10.0);
     if (sdf > borderWidth * 2.0 + rimFalloff * 4.0) return vec4(0.0);
 
     // ─── Vein network ────────────────────────────────────────────────

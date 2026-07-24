@@ -81,7 +81,7 @@ vec3 chromaticSample(float baseVal, float edgeDist, float strength) {
 
 vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                         vec4 params, bool isHighlighted,
-                        float bass, float mids, float treble, float overall, bool hasAudio) {
+                        float bass, float mids, float treble, bool hasAudio) {
     // Corner radius: logical px to device px, clamped to half the zone's smaller side.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
@@ -89,7 +89,7 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
     vec2 p = fragCoord - center;
 
     float d = zoneShape.d;
@@ -406,7 +406,6 @@ vec4 pImage(vec2 fragCoord) {
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
     float treble  = getTrebleSoft();
-    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
@@ -416,7 +415,7 @@ vec4 pImage(vec2 fragCoord) {
         bool isHighlighted = zoneParams[i].z > 0.5;
         vec4 zoneColor = renderPrismataZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], isHighlighted,
-            bass, mids, treble, overall, hasAudio);
+            bass, mids, treble, hasAudio);
         color = blendOver(color, zoneColor);
     }
 

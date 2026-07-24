@@ -29,9 +29,9 @@ replaces it with three cooperating pieces:
 
 A second pair of types specialises the base node for the **zone-overlay**
 case: `ZoneShaderNodeRhi` adds a labels texture binding and zone counts
-in the base UBO, and `ZoneUniformExtension` writes zone rects, fill /
-border colours, per-zone parameters, and the logical-to-device scale the shader
-applies to the lengths among them, into the UBO tail. They are
+in the base UBO, and `ZoneUniformExtension` writes zone rects, fill and
+border colours, per-zone parameters, and the logical-to-device scale for the
+lengths among them (corner radius and border width) into the UBO tail. They are
 optional. Non-zone shader effects use `ShaderEffect` + `ShaderNodeRhi`
 directly.
 
@@ -43,7 +43,7 @@ directly.
 | `PhosphorRendering::ShaderNodeRhi`        | The QRhi-backed scene-graph node it owns |
 | `PhosphorRendering::ShaderCompiler`       | GLSL to SPIR-V pipeline with on-disk cache |
 | `PhosphorRendering::ZoneShaderNodeRhi`    | Zone-aware subclass: labels texture + zone counts in `BaseUniforms::appField0/1` |
-| `PhosphorRendering::ZoneShaderCommon`     | Shared layout constants (`MaxZones`, GLSL-matching struct) |
+| `PhosphorRendering::ZoneShaderUniforms`   | The GLSL-matching UBO struct, with `MaxZones` and the offset asserts, in `ZoneShaderCommon.h` |
 | `PhosphorRendering::ZoneUniformExtension` | `IUniformExtension` writing zone rects / colours / params / scale |
 
 ## Typical use

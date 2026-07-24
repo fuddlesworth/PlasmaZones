@@ -53,7 +53,7 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
     vec2 p = fragCoord - center;
     vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
 
@@ -186,9 +186,11 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         // The ring expands and fades rather than uniform glow growth.
         if (hasAudio) {
             float waveCycle = fract(iTime * 1.2);
-            float waveRadius = waveCycle * 18.0; // ring expands up to 18px
-            float waveBand = exp(-abs(d - waveRadius) * 0.5) * (1.0 - waveCycle);
-            glowRadius += waveBand * bassEnvelope * 8.0;
+            // zoneLen() throughout, matching the glowRadius it feeds: the ring
+            // expands up to 18 logical px.
+            float waveRadius = waveCycle * zoneLen(18.0);
+            float waveBand = exp(-abs(d - waveRadius) / zoneLen(2.0)) * (1.0 - waveCycle);
+            glowRadius += waveBand * bassEnvelope * zoneLen(8.0);
             glowFalloff += waveBand * bass * 0.4;
         }
         float glow = expGlow(d, glowRadius, glowFalloff);

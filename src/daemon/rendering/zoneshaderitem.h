@@ -222,6 +222,16 @@ private:
     // Dirty flags for render thread synchronization
     std::atomic<bool> m_zoneDataDirty{false};
     std::atomic<int> m_dataVersion{0};
+
+    // One-shot latch for the rejected-scale warning. updatePaintNode runs every
+    // frame, and a scale that is wrong once is wrong every frame after, so an
+    // unlatched warning would fill the log at the refresh rate. Only ever
+    // touched from the sync phase with the GUI thread blocked, so a plain bool
+    // is enough.
+    bool m_loggedBadScale = false;
+
+    // Same latch, for a layout with more zones than the UBO can hold.
+    bool m_loggedZoneOverflow = false;
 };
 
 } // namespace PlasmaZones

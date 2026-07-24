@@ -689,6 +689,10 @@ add_test(NAME test_surface_shader_item COMMAND test_surface_shader_item)
 # required - guards against silent C++/GLSL UBO drift after a struct refactor.
 add_executable(test_zone_uniform_extension ui/zones/test_zone_uniform_extension.cpp)
 target_link_libraries(test_zone_uniform_extension PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate plasmazones_rendering)
+# layout_matchesGlslUboDeclaration parses the real data/overlays/shared/common.glsl,
+# so the C++ struct is pinned to the declaration the packs actually compile against
+# rather than only to itself.
+target_compile_definitions(test_zone_uniform_extension PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_zone_uniform_extension COMMAND test_zone_uniform_extension)
 
 # Bake-check the VERTEX stage of every daemon-eligible animation pack (plus

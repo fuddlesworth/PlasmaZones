@@ -21,38 +21,21 @@ layout(location = 0) out vec4 fragColor;
  * Creates a magnetic/gravitational field effect that reacts to mouse position.
  * The field lines bend toward the cursor, creating an interactive visual.
  *
- * Parameters (customParams[0]):
- *   x = fieldStrength (0.0-2.0) - How strongly the field reacts to mouse
- *   y = waveSpeed (0.0-3.0) - Speed of field wave animations
- *   z = rippleSize (0.0-1.0) - Size of ripple effects from mouse
- *   w = glowIntensity (0.0-1.0) - Intensity of glow effects
- *
- * Parameters (customParams[1]):
- *   x = particleCount (10-100) - Number of field particles
- *   y = particleSize (0.5-3.0) - Size of particles
- *   z = trailLength (0.0-1.0) - Length of particle trails
- *   w = distortionAmount (0.0-1.0) - Amount of field distortion
+ * Parameters are declared in metadata.json and read through the generated
+ * p_<id> accessors. The customParams slot tables that used to sit here
+ * listed 8 of the 19 parameters the pack now reads, and the slot framing
+ * no longer matches how they are accessed.
  */
 
-// Noise functions
-float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float c = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
-    
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
+// Kept local rather than calling common.glsl's fbm(): the shared one rotates
+// each octave and offsets by vec2(180.0) with a 0.55 gain, which is a
+// different field from this pack's plain doubling at 0.5. The noise() this
+// used to carry WAS byte-identical to noise2D() and is gone.
 float fbm(vec2 p) {
     float f = 0.0;
     float amp = 0.5;
     for (int i = 0; i < 4; i++) {
-        f += amp * noise(p);
+        f += amp * noise2D(p);
         p *= 2.0;
         amp *= 0.5;
     }
@@ -215,12 +198,9 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     // Overall = Field density/visibility (NOT a simple multiplier)
     // Affects rendering thresholds and particle visibility
     float fieldDensity = hasAudio ? 0.4 + overall * 0.9 * audioReactivity : 1.0;
-    float visibleParticleCount = particleCount * fieldDensity;
     float fieldLineThreshold = mix(0.6, 0.15, fieldDensity); // lower = more lines visible
 
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
     vec2 p = fragCoord - center;
 
     // Screen-space UV for continuous field across all zones
@@ -243,6 +223,12 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     glowIntensity *= vitalityScale(0.4, 1.3, vitality);
     particleCount *= vitalityScale(0.5, 1.0, vitality);
     distortionAmount *= vitalityScale(0.5, 1.0, vitality);
+
+    // Derived AFTER the vitality scaling above, not before it. Computed early
+    // this was a dead write: the vitality factor landed on particleCount, which
+    // nothing read afterwards, so dormant zones never thinned their particle
+    // field the way the surrounding three lines intend.
+    float visibleParticleCount = particleCount * fieldDensity;
 
     float t = iTime * waveSpeed;
 
@@ -271,7 +257,11 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         bg += fieldColor * vDistortAmount * 0.02;
 
         // Field lines emanating from mouse position (polarity flip from bass)
-        float lines = fieldLines(globalUV, mouseGlobal, fieldStrength * 0.5, t, waveSpeed, polarityFlip);
+        // iTime, not t: t already carries waveSpeed, and fieldLines multiplies
+        // its time by the speed argument again, so passing both squared the
+        // knob (9x at the slider's max of 3, and slower than the rest of the
+        // pack below 1).
+        float lines = fieldLines(globalUV, mouseGlobal, fieldStrength * 0.5, iTime, waveSpeed, polarityFlip);
         // Field density controls line visibility threshold
         lines = smoothstep(fieldLineThreshold, fieldLineThreshold + 0.3, lines) * lines;
 
@@ -418,7 +408,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
                 arc *= arcFade;
 
                 // Flickering intensity (electrical discharge is unstable)
-                float flicker = 0.7 + 0.3 * noise(vec2(angle * 5.0 + iTime * 15.0, iTime * 10.0));
+                float flicker = 0.7 + 0.3 * noise2D(vec2(angle * 5.0 + iTime * 15.0, iTime * 10.0));
                 arc *= flicker;
 
                 // Corona color: bright electric blue-white core with purple fringe
@@ -438,7 +428,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     }
 
     // Border with energy effect - enhanced by vertex displacement
-    float effectiveBorderWidth = borderWidth + vDistortAmount * 2.0;
+    float effectiveBorderWidth = borderWidth + vDistortAmount * zoneLen(2.0);
     float border = softBorder(d, effectiveBorderWidth);
     if (border > 0.0) {
 

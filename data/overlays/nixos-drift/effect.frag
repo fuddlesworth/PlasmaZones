@@ -542,9 +542,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.6;
 
     // -- Zone geometry --------------------------------------------
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
     float d = zoneShape.d;
@@ -994,14 +992,22 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         float vignette = smoothstep(0.0, edgeFadeStart, innerDist);
         col *= mix(0.85, 1.0, vignette);
 
-        // Crisp inner edge line (not soft exponential glow)
-        float edgeLine = smoothstep(3.0, 1.0, innerDist) * innerGlowStr * 0.6;
+        // Crisp inner edge line (not soft exponential glow). zoneLen() like the
+        // edge fade above, so the line keeps its physical width on a HiDPI
+        // output instead of thinning to half of it.
+        float edgeLine = smoothstep(zoneLen(3.0), zoneLen(1.0), innerDist) * innerGlowStr * 0.6;
         col += palSecondary * edgeLine;
 
-        // Hex cell tessellation in the border region (innerDist < 25px)
-        if (innerDist < 25.0) {
+        // Hex cell tessellation in the border region (innerDist < 25 logical px)
+        if (innerDist < zoneLen(25.0)) {
             // Hex grid in pixel space along the border
-            float hexScale = 0.08;  // size of hex cells in normalized coords
+            // Cell size in normalized screen coords, deliberately NOT zoneLen().
+            // The band the cells fill is a distance from the zone edge and
+            // scales with the display; the cells themselves are a background
+            // tessellation, so they keep the same count across the screen at any
+            // resolution. That is the pxScale question, not the zoneLen one
+            // (see the note on both helpers in shared/common.glsl).
+            float hexScale = 0.08;
             vec2 borderUV = fragCoord / max(iResolution, vec2(1.0));
             vec2 hp = borderUV / hexScale;
 
@@ -1036,7 +1042,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             cellBright += bassFlash;
 
             // Only show in border region, fading inward
-            float borderMask = smoothstep(25.0, 0.0, innerDist) * smoothstep(0.0, 5.0, innerDist);
+            float borderMask = smoothstep(zoneLen(25.0), 0.0, innerDist) * smoothstep(0.0, zoneLen(5.0), innerDist);
 
             // Hex cell shape mask
             float hexE = max(abs(hgv.x), abs(hgv.x * 0.5 + hgv.y * 0.866025));

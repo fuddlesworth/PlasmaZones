@@ -71,7 +71,7 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
     vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
 
@@ -173,9 +173,11 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // Bass: expanding glow wavefront
         if (hasAudio) {
             float waveCycle = fract(iTime * 1.0);
-            float waveRadius = waveCycle * 16.0;
-            float waveBand = exp(-abs(d - waveRadius) * 0.5) * (1.0 - waveCycle);
-            glowRadius += waveBand * bass * bass * 6.0;
+            // Wavefront travel, band width and radius bump all zoneLen(), so
+            // the ring keeps its reach relative to the glow it rides on.
+            float waveRadius = waveCycle * zoneLen(16.0);
+            float waveBand = exp(-abs(d - waveRadius) / zoneLen(2.0)) * (1.0 - waveCycle);
+            glowRadius += waveBand * bass * bass * zoneLen(6.0);
             glowFalloff += waveBand * bass * 0.3;
         }
 

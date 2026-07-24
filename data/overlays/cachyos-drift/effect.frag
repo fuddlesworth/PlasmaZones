@@ -335,9 +335,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float flowCenterX   = p_flowCenterX >= -1.5 ? p_flowCenterX : 0.4;
     float flowCenterY   = p_flowCenterY >= -1.5 ? p_flowCenterY : 0.5;
 
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
     float d = zoneShape.d;

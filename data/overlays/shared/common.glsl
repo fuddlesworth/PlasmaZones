@@ -187,10 +187,17 @@ ZoneSDF zoneSdf(vec2 fragCoord, vec4 rect, float radiusLogical) {
 }
 // Border width in device px: the pack's logical-px width (zoneParams[i].y)
 // scaled by uZoneScale, so a border keeps its physical thickness across
-// output scales the same way a decoration pack's width does. Floored at one
-// device pixel so a hairline never vanishes entirely on a fractional scale.
+// output scales the same way a decoration pack's width does.
+//
+// A width the user actually asked for is floored at one device pixel, so a
+// thin border never falls below a pixel and flickers out on a fractional
+// scale. A width of exactly 0 is not a thin border, it is the user turning
+// the border off, and it returns 0. Without that split the floor would do to
+// the border what the per-pack `max(params.x, N)` floors did to the corner
+// radius: make the configured value unreachable at one end of its range.
+// borderWidthMin() is 0, so 0 is a legal setting and has to mean something.
 float zoneBorderWidth(float widthLogical) {
-    return max(widthLogical * uZoneScale, 1.0);
+    return widthLogical <= 0.0 ? 0.0 : max(widthLogical * uZoneScale, 1.0);
 }
 
 // Any other length a pack expresses in logical px, converted to the device-px

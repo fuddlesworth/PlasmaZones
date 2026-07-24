@@ -111,7 +111,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
     float d = zoneShape.d;
     if (d > zoneLen(30.0)) return vec4(0.0);
@@ -434,8 +434,8 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         // Gentle bass wavefront expansion
         if (hasAudio) {
             float waveCycle = fract(t * 0.7);
-            float waveRadius = waveCycle * 16.0;
-            float waveBand = exp(-abs(d - waveRadius) * 0.6) * (1.0 - waveCycle);
+            float waveRadius = waveCycle * zoneLen(16.0);
+            float waveBand = exp(-abs(d - waveRadius) / zoneLen(1.667)) * (1.0 - waveCycle);
             glowRadius += waveBand * bass * 3.0;
             glowFalloff += waveBand * bass * 0.15;
         }

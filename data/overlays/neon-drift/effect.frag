@@ -430,9 +430,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float gearSpin      = p_gearSpin >= 0.0 ? p_gearSpin : 0.15;
     float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.5;
 
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
     float d = zoneShape.d;
@@ -446,7 +444,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, vec3(0.239, 0.859, 0.761));
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, vec3(0.878, 1.0, 0.969));
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
 
     float flowAngle = flowDirection * TAU;
@@ -728,7 +726,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         borderCol *= borderBrightness;
 
         // Neon tube effect on border
-        float borderNeon = exp(-abs(d) * 8.0) * 0.3;
+        float borderNeon = exp(-abs(d) / zoneLen(0.125)) * 0.3;
         borderCol += palAccent * borderNeon;
 
         if (isHighlighted) {

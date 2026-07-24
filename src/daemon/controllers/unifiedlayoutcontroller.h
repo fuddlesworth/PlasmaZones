@@ -145,7 +145,10 @@ public:
      * @brief Synchronize current layout ID from external state
      *
      * Call this when layout changes from other sources (zone selector, D-Bus).
-     * Updates internal tracking without triggering signals.
+     * Routes through setCurrentLayoutId(), so it emits currentLayoutIdChanged()
+     * when the value actually moves. It has to: a property that declares NOTIFY
+     * but mutates silently on some of its paths leaves observers latched on a
+     * stale value, which is worse than having no NOTIFY at all.
      *
      * @param overrideId If non-empty, use this as the current layout ID instead
      *                   of querying the global active layout. Used for per-desktop
@@ -217,9 +220,12 @@ Q_SIGNALS:
     /**
      * @brief Emitted when the current layout ID changes.
      *
-     * Backs the currentLayoutId Q_PROPERTY. Without it the property is a
-     * read-only view over a value that demonstrably mutates, so any QML
-     * binding would latch the first value it saw and never update.
+     * Backs the currentLayoutId Q_PROPERTY, which would otherwise be a
+     * read-only view over a value that demonstrably mutates. Declared for
+     * property completeness: the controller is a C++-only object today, held by
+     * the daemon and never registered with QML or connected to, so this has no
+     * consumer yet. Every path that writes m_currentLayoutId goes through
+     * setCurrentLayoutId() so that stays true when one appears.
      */
     void currentLayoutIdChanged();
 

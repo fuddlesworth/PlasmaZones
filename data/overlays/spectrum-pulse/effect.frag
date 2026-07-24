@@ -13,18 +13,10 @@
  * energy pulses race around the perimeter with the beat, spectrum data
  * paints a flowing aurora, treble fires off edge sparks.
  *
- * Parameters (customParams):
- *   [0].x = glowIntensity    — border glow brightness (1–5)
- *   [0].y = reactivity       — audio sensitivity (0.5–3)
- *   [0].z = waveHeight       — spectrum aurora height (0.05–0.4)
- *   [0].w = bassExpand       — bass glow expansion (0–3)
- *   [1].x = flowSpeed        — border energy flow speed (0.5–4)
- *   [1].y = plasmaDetail     — edge plasma turbulence (0–2)
- *   [1].z = colorMix         — audio-driven primary↔accent shift (0–1)
- *   [1].w = idleAnimation    — animation when silent (0–2)
- *   [2].x = veinIntensity    — energy vein / tendril brightness (0–1)
- *   [2].z = gridIntensity    — grid / mesh overlay brightness (0–0.5)
- *   [2].w = fillOpacity      — zone interior fill opacity (0–1)
+ * Parameters are declared in metadata.json and read here through the
+ * generated p_<id> accessors. The slot table that used to sit here listed
+ * customParams indices that the pack stopped using and drifted out of date
+ * as parameters were added, so it is not restated.
  *
  * Colors:
  *   p_primaryColor = primary neon (default: cyan)
@@ -104,9 +96,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float gridRes       = p_gridResolution >= 0.0 ? p_gridResolution : 20.0;
 
     // Zone geometry
-    vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
     float d       = zoneShape.d;
 
@@ -282,7 +273,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float travelPulse = pow(0.5 + 0.5 * sin(travelPhase * TAU * 3.0), 4.0);
 
         float borderBright = intensity * (flowPulse + plasma + travelPulse * 0.25);
-        vec3 coreColor = activeColor * borderBright;
+        // Folds in the zone's configured border colour so the setting is not
+        // inert here. fillColor is already consumed above; borderColor was the
+        // only half of the pair this pack discarded.
+        vec3 coreColor = mix(activeColor, borderColor.rgb, 0.3) * borderBright;
 
         // White-hot neon center (toned down so user color shows through)
         coreColor = mix(coreColor, vec3(1.0), core * 0.35);

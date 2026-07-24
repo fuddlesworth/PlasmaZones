@@ -25,22 +25,15 @@
  */
 
 
-float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(
-        mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
-        mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
-        f.y
-    );
-}
-
+// Kept local rather than calling common.glsl's fbm(): the shared one rotates
+// each octave and offsets by vec2(180.0) with a 0.55 gain, a different field
+// from this pack's plain doubling at 0.5. The noise() this used to carry WAS
+// byte-identical to noise2D() and is gone.
 float fbm(vec2 p, int octaves) {
     float f = 0.0;
     float amp = 0.5;
     for (int i = 0; i < octaves; i++) {
-        f += amp * noise(p);
+        f += amp * noise2D(p);
         p *= 2.0;
         amp *= 0.5;
     }
@@ -117,7 +110,7 @@ float circuitPattern(vec2 uv, float density, float time) {
     float vPulse = sin(uv.y * 30.0 + time * 3.0) * 0.5 + 0.5;
 
     // Selective trace visibility based on noise
-    float traceNoise = noise(uv * density * 0.5 + time * 0.1);
+    float traceNoise = noise2D(uv * density * 0.5 + time * 0.1);
     float traceVisible = step(0.3, traceNoise);
 
     circuit = (hTrace * hPulse + vTrace * vPulse) * traceVisible;
@@ -259,7 +252,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
     vec2 p = fragCoord - center;
 
     float d = zoneShape.d;
@@ -405,7 +398,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             // ARC EFFECT: bright sparks jumping between adjacent nodes.
             // Uses high-frequency spatial noise modulated by bass impulse to
             // create brief, jagged arc lines radiating from node centers.
-            float arcNoise = noise(glitchedUV * circuitDensity * 4.0 + iTime * 12.0);
+            float arcNoise = noise2D(glitchedUV * circuitDensity * 4.0 + iTime * 12.0);
             float arcLine = smoothstep(0.55, 0.8, arcNoise) * bassHit;
             // Arcs only appear near nodes (within ~2 grid cells)
             float arcMask = smoothstep(0.6, 0.0, length(fract(glitchedUV * circuitDensity) - 0.5));
@@ -430,20 +423,20 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
 
             // Cascade wavefront: expanding ring but ONLY visible on traces.
             // Multiple staggered wavefronts for a rolling surge feel.
-            float cascadeColor = 0.0;
+            float cascadeAmount = 0.0;
             for (int ci = 0; ci < 3; ci++) {
                 float cif = float(ci);
                 float waveRadius = fract(iTime * (1.0 + cif * 0.3) + cif * 0.33) * 0.8;
                 float waveDist = length(globalUV - 0.5);
                 float wave = smoothstep(0.04, 0.0, abs(waveDist - waveRadius));
                 wave *= smoothstep(0.8, 0.0, waveRadius); // fade as it expands
-                cascadeColor += wave * (1.0 - cif * 0.25);
+                cascadeAmount += wave * (1.0 - cif * 0.25);
             }
-            cascadeColor *= onTrace * bassHit;
+            cascadeAmount *= onTrace * bassHit;
 
             // Surge color: starts as primary, bleaches toward white at peak
             vec3 surgeColor = mix(primaryColor, vec3(1.0), bassHit * 0.5);
-            baseColor += surgeColor * cascadeColor * 0.7;
+            baseColor += surgeColor * cascadeAmount * 0.7;
         }
 
         // MIDS SIGNAL PROPAGATION: data packets traveling along traces.
@@ -494,7 +487,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         }
 
         // Inner edge glow (fresnel-like) - toned down
-        float edgeDist = -d / 50.0;
+        float edgeDist = -d / zoneLen(50.0);
         float fresnel = pow(1.0 - clamp(edgeDist, 0.0, 1.0), 3.0);
         baseColor += mix(primaryColor, secondaryColor, fresnel) * fresnel * edgeGlowStrength;
 
@@ -544,7 +537,10 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             baseColor += accentColor * vitalityScale(0.02, 0.15, vitality);
         }
 
-        result.rgb = baseColor;
+        // Light identity tint from the zone's configured fill colour, at the
+        // sibling packs' weight. borderColor is already consumed below;
+        // fillColor was the only half of the pair this pack discarded.
+        result.rgb = mix(baseColor, baseColor * 0.85 + fillColor.rgb * 0.15, 0.35);
         result.a = fillOpacity;
     }
 
@@ -607,8 +603,11 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         // Pulsing ring effect (vitality-modulated)
         float ringStr = vitalityScale(0.0, 1.0, vitality);
         if (ringStr > 0.01) {
-            float ringDist = mod(d - iTime * 25.0, 20.0);
-            float ring = smoothstep(2.5, 0.0, ringDist) * smoothstep(0.0, 1.0, ringDist);
+            // Period, thickness and travel speed all zoneLen(), so the ring
+            // train keeps its spacing and apparent speed inside the glow band
+            // above, which is zoneLen() too.
+            float ringDist = mod(d - iTime * zoneLen(25.0), zoneLen(20.0));
+            float ring = smoothstep(zoneLen(2.5), 0.0, ringDist) * smoothstep(0.0, zoneLen(1.0), ringDist);
             glowColor += accentColor * ring * 1.2 * ringStr;
             glow1 += ring * 0.3 * ringStr;
         }

@@ -57,9 +57,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
 
     float px = pxScale();
 
-    vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
     float d       = zoneShape.d;
 
@@ -169,8 +167,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
         result.a   = fillOpacity;
 
         // Inner edge glow — SDF-based tint that rides the zone's rim.
-        // Fade distance scales with resolution via pxScale().
-        float innerGlow = exp(d / (mix(28.0, 14.0, vitality) * px))
+        // Fade distance is zoneLen(), not pxScale(): it is measured against the
+        // zone edge, so it has to track the display scale the corner radius and
+        // border width now use rather than the 1080p-relative resolution.
+        float innerGlow = exp(d / zoneLen(mix(28.0, 14.0, vitality)))
                         * mix(0.04, 0.12, vitality);
         innerGlow *= edgeGlow * (0.5 + energy * 0.4 + aMids * 0.25);
         vec3 innerCol = mix(accent, bassCol, clamp(energy, 0.0, 1.0));
@@ -311,13 +311,15 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
     }
 
     // ── Outer glow ───────────────────────────────────────────
-    // baseGlowR scales with pxScale() for resolution-independent angular
-    // reach (16px at 1080p == 32px at 4K).
-    float baseGlowR  = mix(6.0, 16.0, vitality) * px;
+    // The outer glow is measured from the zone edge, so it is zoneLen() like
+    // the border and corner radius beside it, not pxScale(). Under pxScale a 4K
+    // monitor at scale 1 drew a 1x border with a 2x glow, and a 1080p monitor
+    // at scale 2 drew the reverse.
+    float baseGlowR  = zoneLen(mix(6.0, 16.0, vitality));
     float pulseRate  = 0.8 * (hasAudio ? 1.0 : idleSpeed);
     float glowRadius = baseGlowR
-        + (hasAudio ? aBass * 5.0 : timeSin(pulseRate) * 2.0 * px);
-    glowRadius += energy * 4.0 * px;
+        + (hasAudio ? aBass * zoneLen(5.0) : timeSin(pulseRate) * zoneLen(2.0));
+    glowRadius += energy * zoneLen(4.0);
 
     if (d > 0.0 && d < glowRadius) {
         float glow1 = expGlow(d, glowRadius * 0.2, edgeGlow * mix(0.08, 0.25, vitality));

@@ -18,15 +18,10 @@
  * The entire pattern slowly rotates and breathes with overall energy.
  * Edge spectrum bars remain zone-local, painting along each zone's walls.
  *
- * Parameters (customParams):
- *   [0].x = reactivity       — audio sensitivity multiplier
- *   [0].y = ringCount        — how many spectrum rings to draw
- *   [0].z = (unused)
- *   [0].w = ringSpeed        — ring expansion speed
- *   [1].x = rotationSpeed    — slow rotation of the pattern
- *   [1].y = idleAnimation    — animation when no audio
- *   [1].z = glowIntensity    — overall glow brightness
- *   [1].w = fillOpacity      — zone fill alpha
+ * Parameters are declared in metadata.json and read here through the
+ * generated p_<id> accessors. The slot table that used to sit here listed
+ * customParams indices that the pack stopped using and drifted out of date
+ * as parameters were added, so it is not restated.
  *
  * Colors:
  *   p_primaryColor = primary (default: cyan)
@@ -85,7 +80,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // Zone geometry — KEEP for cutout, border, edge effects
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;  // KEEP for border/glow angle
     vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
     float d       = zoneShape.d;
@@ -320,7 +315,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
 
         // Inner edge glow — highlighted gets a stronger inward glow
-        float innerGlow = exp(d / mix(25.0, 12.0, vitality)) * mix(0.06, 0.2, vitality) * glowIntensity * (1.0 + energy);
+        float innerGlow = exp(d / zoneLen(mix(25.0, 12.0, vitality))) * mix(0.06, 0.2, vitality) * glowIntensity * (1.0 + energy);
         result.rgb += primary * innerGlow;
 
         // ── Zone label: Resonance Lens ───────────────────────
@@ -413,8 +408,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // ── Outer glow ──────────────────────────────────────────
 
     float baseGlowR = zoneLen(mix(8.0, 20.0, vitality));
-    float bassGlowR = mix(2.0, 6.0, vitality);
-    float glowRadius = baseGlowR + bassGlowR * (hasAudio ? bass * reactivity : idlePulse) + 5.0 * energy;
+    // Addends share baseGlowR's zoneLen() basis.
+    float bassGlowR = zoneLen(mix(2.0, 6.0, vitality));
+    float glowRadius = baseGlowR + bassGlowR * (hasAudio ? bass * reactivity : idlePulse) + zoneLen(5.0) * energy;
     if (d > 0.0 && d < glowRadius) {
         float glow1 = expGlow(d, glowRadius * 0.2, glowIntensity * mix(0.12, 0.35, vitality));
         float glow2 = expGlow(d, glowRadius * 0.5, glowIntensity * mix(0.04, 0.12, vitality));
