@@ -174,10 +174,6 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     }
 
     // Outer glow
-    // Bound by the falloff this gates rather than a constant: at three
-    // e-folds the glow is ~5% of peak, so the cut is invisible, and a later
-    // change to glowRadius carries the guard with it instead of silently
-    // clipping the way pulse-flow's hard-coded bound did.
     float glowRadius = zoneLen(mix(5.0, 9.0, vitality));
     // The gate covers the ENLARGED radius. The bass wavefront below adds up
     // to zoneLen(8.0) to glowRadius AFTER this test, so gating on the base

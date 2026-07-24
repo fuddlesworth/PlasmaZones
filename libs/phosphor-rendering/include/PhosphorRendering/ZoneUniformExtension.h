@@ -29,10 +29,11 @@ namespace PhosphorRendering {
  *
  * @par Threading
  * write() runs on the render thread during prepare(); updateFromZones() runs
- * on the GUI thread (typically from updatePaintNode's sync phase). Sync phase
- * is meant to block the render thread, but some Qt render loops can advance
- * through prepare() before the next sync fires, so m_mutex serialises reads
- * and writes of m_data to prevent torn copies.
+ * during the sync phase (updatePaintNode), which is ALSO the render thread,
+ * with the GUI thread blocked — not the GUI thread, despite the name. Sync is
+ * meant to block, but some Qt render loops can advance through prepare()
+ * before the next sync fires, so m_mutex serialises reads and writes of
+ * m_data to prevent torn copies.
  */
 class ZoneUniformExtension : public PhosphorShaders::IUniformExtension
 {
@@ -68,9 +69,10 @@ public:
         m_dirty.store(false, std::memory_order_release);
     }
 
-    /// Update zone data from a vector of ZoneData. Called on the GUI thread
-    /// (typically from updatePaintNode's sync phase). Mutex-guarded against
-    /// a concurrent write() on the render thread — see class Threading note.
+    /// Update zone data from a vector of ZoneData. Called from the sync phase
+    /// (updatePaintNode), which runs on the render thread with the GUI thread
+    /// blocked. Mutex-guarded against a concurrent write() — see the class
+    /// Threading note for why blocking is not sufficient on its own.
     void updateFromZones(const QVector<ZoneData>& zones)
     {
         QMutexLocker lock(&m_mutex);
@@ -136,6 +138,9 @@ public:
             return false;
         }
         QMutexLocker lock(&m_mutex);
+        // qFuzzyCompare is undefined with a zero operand. Safe here only
+        // because the guard above rejects zero/negative/NaN and zoneScale is
+        // seeded to 1.0f, so neither argument can be 0.
         if (qFuzzyCompare(m_data.zoneScale, scale)) {
             return true;
         }

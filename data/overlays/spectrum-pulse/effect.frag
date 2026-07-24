@@ -104,9 +104,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // Screen-space UV: continuous across zones (0-1 over entire screen)
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
 
-    // Screen-space angle (from screen center, for interior effects)
-    vec2 screenCenter = iResolution.xy * 0.5;
-    vec2 sp = fragCoord - screenCenter;
 
     // Colors
     vec3 primary  = colorWithFallback(p_primaryColor.rgb, zoneFillHue(fillColor));
@@ -255,13 +252,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // ── Border (neon core with energy flow) ────────────────────
 
     // zoneStrokeWidth re-floors the derived stroke at one device pixel.
-
     // zoneBorderWidth() floors the border itself, but scaling that down
-
     // puts it straight back under a pixel, where it shimmers out on a
-
     // fractional scale. A width of 0 still passes through as 0.
-
     float coreWidth = zoneStrokeWidth(borderWidth * 0.7);
     float core = softBorder(d, coreWidth);
     if (core > 0.0) {

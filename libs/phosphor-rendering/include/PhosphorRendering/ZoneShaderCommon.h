@@ -76,32 +76,6 @@ static_assert(offsetof(ZoneShaderUniforms, zoneScale)
               "zoneScale must follow zoneParams with no gap (std140 scalar after vec4 array)");
 
 /**
- * @brief UBO region offsets for partial updates (reduces GPU bandwidth).
- *
- * Extends PhosphorShaders::UboRegions with zone-specific regions.
- */
-namespace ZoneShaderUboRegions {
-
-// Re-export base regions
-using namespace PhosphorShaders::UboRegions;
-
-// Scene header: iResolution through end of BaseUniforms (before zone arrays).
-// Used when scene data changes but zone data hasn't.
-constexpr size_t K_SCENE_HEADER_OFFSET = offsetof(ZoneShaderUniforms, base.iResolution);
-constexpr size_t K_SCENE_HEADER_SIZE = sizeof(PhosphorShaders::BaseUniforms) - K_SCENE_HEADER_OFFSET;
-
-// Scene data: iResolution through end of zone arrays. Used when zone data changes.
-constexpr size_t K_SCENE_DATA_OFFSET = offsetof(ZoneShaderUniforms, base.iResolution);
-constexpr size_t K_SCENE_DATA_SIZE = sizeof(ZoneShaderUniforms) - K_SCENE_DATA_OFFSET;
-
-// Zone extension region (zoneRects/zoneFillColors/zoneBorderColors/zoneParams,
-// then the trailing zoneScale scalar and its std140 pad).
-constexpr size_t K_ZONE_EXTENSION_OFFSET = sizeof(PhosphorShaders::BaseUniforms);
-constexpr size_t K_ZONE_EXTENSION_SIZE = sizeof(ZoneShaderUniforms) - sizeof(PhosphorShaders::BaseUniforms);
-
-} // namespace ZoneShaderUboRegions
-
-/**
  * @brief Per-zone payload pushed into the UBO each frame.
  */
 struct ZoneData

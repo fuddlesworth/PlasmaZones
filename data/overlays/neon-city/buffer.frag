@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-FileCopyrightText: nikitamashchenko
+// SPDX-FileCopyrightText: 2026 nikitamashchenko (https://www.shadertoy.com/)
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // NOTE FOR MAINTAINERS: the body below is adapted from a Shadertoy work

@@ -285,14 +285,17 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             outerGlow *= vitalityScale(0.5, 1.3, vitality);
             innerColor = mix(innerColor, berryPink, vitalityScale(0.0, 0.3, vitality));
             result.rgb += innerColor * innerGlow + outerColor * outerGlow;
-            result.a = max(result.a, innerGlow * 0.6);
-        }
+            }
 
         // === LAYER 4: Mint Sparkles ===
         // Bigger, brighter, with 4-point star shape
         {
-            for (int sy = -2; sy <= 2; sy++) {
-                for (int sx = -2; sx <= 2; sx++) {
+            // +/-1 ring only. Cell size is 1/sparkleGridDensity (>= 0.0625 UV) and the
+        // maximum sparkle reach is pointSize*4 (<= 0.072 UV), so the outer ring of a
+        // 5x5 gather can never contribute; it was doing 25 iterations of hash work
+        // for the 9 that matter, per fragment, inside every zone.
+        for (int sy = -1; sy <= 1; sy++) {
+            for (int sx = -1; sx <= 1; sx++) {
                     vec2 cell = floor(globalUV * sparkleGridDensity) + vec2(float(sx), float(sy));
                     vec2 cellHash = hash22(cell);
                     vec2 sparklePos = (cell + cellHash) / sparkleGridDensity;

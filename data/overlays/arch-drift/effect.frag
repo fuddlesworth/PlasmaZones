@@ -81,7 +81,11 @@ float dataPacket(vec2 uv, float pathY, float time, float seed) {
 
     // Bright head + fading trail
     float head = smoothstep(0.008, 0.0, dist);
-    float trail = exp(-max(uv.x - packetX, 0.0) * 30.0) * smoothstep(0.01, 0.0, abs(uv.y - pathY));
+    // packetX - uv.x, not the reverse. The step() gate below passes exactly
+    // where uv.x <= packetX, which is where the old operand clamped to 0, so
+    // exp() evaluated to a constant 1 across the whole passing region and the
+    // "fading trail" was a flat streak running back to the edge of the path.
+    float trail = exp(-max(packetX - uv.x, 0.0) * 30.0) * smoothstep(0.01, 0.0, abs(uv.y - pathY));
     trail *= step(0.0, packetX - uv.x); // trail only behind
 
     return head * 3.0 + trail * 0.5;

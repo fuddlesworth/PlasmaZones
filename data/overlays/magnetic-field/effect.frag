@@ -431,7 +431,10 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         // Light identity tint from the zone's configured fill colour, at the
         // sibling packs' weight. Without it this pack discarded the setting.
         result.rgb = mix(result.rgb, result.rgb * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
-        result.a = fillOpacity + vDistortAmount * 0.05;
+        // fillOpacity alone, matching the other 26 packs. The distortion addend was
+    // unbounded (vDistortAmount is length(displacement) * 50 from the vert) and
+    // relied on clampFragColor to save it.
+    result.a = fillOpacity;
     }
 
     // Border with energy effect - enhanced by vertex displacement

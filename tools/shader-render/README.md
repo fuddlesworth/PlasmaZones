@@ -72,8 +72,7 @@ Common flags:
 | `--layout-dir` | `data/layouts/` then `/usr/share/...` | where to find layout JSONs |
 
 Shared GLSL (`shared/common.glsl`, `audio.glsl`, `zone.vert`) resolves from the
-source tree first, then the XDG data dirs, then `/usr/share`, with a final
-`libs/phosphor-rendering/shaders` fallback the daemon does not have. That is the
+source tree first, then the XDG data dirs, then `/usr/share`. That is the
 opposite of the daemon's order, on purpose. The daemon is the installed program
 and should prefer installed data. This tool exists to check the tree you are
 editing, so an installed copy taking precedence would mean previewing the last

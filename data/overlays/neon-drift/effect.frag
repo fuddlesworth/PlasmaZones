@@ -726,7 +726,10 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         borderCol *= borderBrightness;
 
         // Neon tube effect on border
-        float borderNeon = exp(-abs(d) / zoneLen(0.125)) * 0.3;
+        // Floored at a device pixel: a 0.125-px falloff only contributes within
+        // ~0.3 px of the edge, so the tube core aliased instead of reading as a
+        // stroke, and scaling it down further on a 2x display made it worse.
+        float borderNeon = exp(-abs(d) / max(zoneLen(0.125), 1.0)) * 0.3;
         borderCol += palAccent * borderNeon;
 
         if (isHighlighted) {

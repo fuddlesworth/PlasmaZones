@@ -278,13 +278,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // ── Border ──────────────────────────────────────────────
 
     // zoneStrokeWidth re-floors the derived stroke at one device pixel.
-
     // zoneBorderWidth() floors the border itself, but scaling that down
-
     // puts it straight back under a pixel, where it shimmers out on a
-
     // fractional scale. A width of 0 still passes through as 0.
-
     float coreWidth = zoneStrokeWidth(borderWidth * mix(0.5, 0.9, vitality));
     float core = softBorder(d, coreWidth);
     if (core > 0.0) {

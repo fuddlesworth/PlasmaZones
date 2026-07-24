@@ -276,7 +276,13 @@ float zoneEdgeBand(float deviceWidth, float minLogical) {
 // while the alpha stayed put. Dividing it back out is what keeps the tint the
 // colour the user picked.
 vec3 zoneFillHue(vec4 fillColor) {
-    return fillColor.rgb / max(fillColor.a, 1e-3);
+    // A fully transparent zone has a == 0 AND rgb == 0, so the quotient would
+    // be 0/1e-3 = black, and every consumer would tint TOWARD BLACK rather than
+    // leaving the colour alone. That used to be moot because a zone at opacity
+    // 0 was invisible, but the fill alpha comes from the pack's own fillOpacity
+    // now, so the zone is still drawn. White is the identity for the multiply
+    // and mix forms every consumer uses, so it makes the tint a no-op instead.
+    return fillColor.a > 1e-3 ? fillColor.rgb / fillColor.a : vec3(1.0);
 }
 
 // 2D rotation matrix. mat2 is column-major, so p * rot(a) rotates by +a,

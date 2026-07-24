@@ -61,7 +61,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // the glow alone is not enough: glowRadius goes down to 2 while the border
     // reaches zoneBorderWidth() = up to 10 logical px. Both terms are now on
     // the same zoneLen() basis, so the max() actually compares like with like.
-    if (d > max(zoneLen(getGlowRadius()) * 2.5 + zoneLen(5.0), borderWidth)) return vec4(0.0);
+    if (d > max((zoneLen(getGlowRadius()) + zoneLen(5.0)) * 2.5, borderWidth)) return vec4(0.0);
 
     float fillOpacity = getFillOpacity();
 
@@ -174,7 +174,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // While it was on pxScale the border doubled on a 2x display and the glow it
     // sits inside did not.
     float maxGlow = getGlowRadius();
-    if (d > 0.0 && d < zoneLen(maxGlow) * 2.5 + zoneLen(5.0)) {
+    if (d > 0.0 && d < (zoneLen(maxGlow) + zoneLen(5.0)) * 2.5) {
         float glowRadius = zoneLen(vitalityScale(maxGlow * 0.5, maxGlow, vitality));
         float glowFalloff = vitalityScale(0.25, 0.5, vitality);
 

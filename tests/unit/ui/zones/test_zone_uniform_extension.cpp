@@ -28,6 +28,10 @@ using PhosphorRendering::ZoneUniformExtension;
  * match the GLSL UBO declaration in common.glsl exactly. Any reordering or
  * stride change here silently breaks rendering with no compiler error — so
  * these tests exercise the byte layout directly, without any Qt RHI / GPU.
+ *
+ * layout_matchesGlslUboDeclaration additionally READS the shader source via
+ * P_SOURCE_DIR, so this binary is not relocatable: it needs the source tree,
+ * not just an install.
  */
 class TestZoneUniformExtension : public QObject
 {
@@ -517,7 +521,12 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
     // Parse the real file rather than restating the layout, so the test tracks
     // whatever the shaders actually compile against.
     QFile glsl(QStringLiteral(P_SOURCE_DIR "/data/overlays/shared/common.glsl"));
-    QVERIFY2(glsl.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(glsl.errorString()));
+    // Opened first: QVERIFY2 takes both arguments as function-call arguments,
+    // whose evaluation order C++ leaves unsequenced, so errorString() could be
+    // sampled before open() ran and report nothing.
+    if (!glsl.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QFAIL(qPrintable(glsl.errorString()));
+    }
     const QString source = QString::fromUtf8(glsl.readAll());
 
     // Anchor on the FULL qualifier, not just the block name. Dropping `std140`
@@ -558,6 +567,36 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
     while (it.hasNext()) {
         const auto m = it.next();
         members.append({m.captured(1), m.captured(2), m.captured(3).isEmpty() ? 0 : m.captured(3).toInt()});
+    }
+
+    // The parse must be TOTAL. A declaration the regex does not recognise is
+    // otherwise dropped SILENTLY, and a dropped member still occupies std140
+    // space, so the head walk and the size compare both stay green while every
+    // pack reads shifted bytes. Three shapes do this: a declaration wrapped
+    // across two lines, comma-separated declarators (`float a, b;`), and a
+    // precision qualifier (`highp vec4 foo;`). Requiring every non-comment,
+    // non-blank line to have been consumed turns each of them into a failure
+    // that names the offending line instead of a silent pass.
+    {
+        int consumed = 0;
+        const QStringList bodyLines = body.split(QLatin1Char('\n'));
+        for (const QString& rawLine : bodyLines) {
+            // Strip a trailing line comment, then test what is left.
+            QString code = rawLine;
+            const int commentAt = code.indexOf(QLatin1String("//"));
+            if (commentAt >= 0) {
+                code.truncate(commentAt);
+            }
+            if (code.trimmed().isEmpty()) {
+                continue;
+            }
+            ++consumed;
+            QVERIFY2(memberRe.match(code).hasMatch(),
+                     qPrintable(QStringLiteral("unparsed line in the ZoneUniforms block, so a member would be "
+                                               "silently dropped from the layout check: '%1'")
+                                    .arg(code.trimmed())));
+        }
+        QCOMPARE(members.size(), consumed);
     }
 
     // std140 sizing, by declared type. Needed for the head-region check below:
@@ -609,7 +648,12 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
     // pinned too. Inserting, removing or reordering a base member shifts the
     // entire extension region in std140 while leaving extensionSize() and the
     // tail comparison identical, which breaks all 27 packs with nothing failing.
-    // BaseUniforms, member for member. The size walk below would pass a swap of
+    // The GLSL VIEW of BaseUniforms, member for member. Two deliberate
+    // differences from the C++ struct: zoneCount/highlightedCount are the
+    // overlay family's names for appField0/appField1, and BaseUniforms'
+    // trailing iIsReversed is absent because the overlay family never reads
+    // it and the block's round-up to 16 absorbs it either way.
+    // The size walk below would pass a swap of
     // two same-size adjacent members (iTimeDelta with iFrame, say), which shifts
     // nothing but makes every pack read the wrong 4 bytes for both, with no
     // build error. Identity has to be pinned, not just the total.
@@ -699,8 +743,12 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
     glslSize = (glslSize + 15) / 16 * 16;
 
     ZoneUniformExtension ext;
+    // No literal 4112 here: the compare above derives it from the parsed
+    // GLSL, extensionSize_matchesZoneShaderUniformsRegion derives it from
+    // MaxZones, and ZoneShaderCommon.h static_asserts it at compile time. A
+    // fourth hard-code would fail a deliberate, consistent MaxZones change
+    // on both sides for no defect.
     QCOMPARE(ext.extensionSize(), glslSize);
-    QCOMPARE(ext.extensionSize(), 4112);
 }
 
 QTEST_APPLESS_MAIN(TestZoneUniformExtension)

@@ -807,10 +807,13 @@ private:
     /// Assigned on both arms of the version split: the window's DPR notifier
     /// on 6.11+, the screen-change signal below that.
     QMetaObject::Connection m_scaleConnection;
-#if QT_VERSION < QT_VERSION_CHECK(6, 11, 0)
-    /// Pre-6.11 only. On 6.11+ the single connection above covers this case.
+    /// Pre-6.11 only: on 6.11+ the single connection above covers this case and
+    /// this stays default-constructed. Declared UNCONDITIONALLY even so. This
+    /// is an exported class in a shared library whose supported Qt range spans
+    /// the 6.11 boundary, and a member that exists only on one side of a
+    /// version check shifts every later member's offset between translation
+    /// units built against different Qt minors.
     QMetaObject::Connection m_screenDprConnection;
-#endif
 
     // ── Shader source ────────────────────────────────────────────────
     QUrl m_shaderSource;

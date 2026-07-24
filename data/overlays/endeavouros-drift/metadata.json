@@ -234,7 +234,7 @@
         },
         {
             "id": "orbitCenterX",
-            "name": "Sail Centre X",
+            "name": "Sail Center X",
             "group": "Wind",
             "type": "float",
             "default": 0.5,
@@ -243,7 +243,7 @@
         },
         {
             "id": "orbitCenterY",
-            "name": "Sail Centre Y",
+            "name": "Sail Center Y",
             "group": "Wind",
             "type": "float",
             "default": 0.5,

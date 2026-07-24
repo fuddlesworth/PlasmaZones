@@ -972,10 +972,10 @@ void ShaderEffect::updateScaleConnections()
     // windows cannot leave a connection to the previous one behind.
     QObject::disconnect(m_scaleConnection);
     m_scaleConnection = {};
-#if QT_VERSION < QT_VERSION_CHECK(6, 11, 0)
+    // Unconditional: a default-constructed Connection disconnects cleanly, and
+    // on 6.11+ this is simply always that.
     QObject::disconnect(m_screenDprConnection);
     m_screenDprConnection = {};
-#endif
 
     QQuickWindow* w = window();
     if (!w) {
@@ -1013,6 +1013,15 @@ void ShaderEffect::updateScaleConnections()
         });
     }
 #endif
+
+    // Kick a frame on the establish path too, exactly as
+    // updatePlayingConnection() does. The window we just attached to may have a
+    // different scale from the one last pushed to the node, and no change
+    // signal fires for that: it is a change from OUR side, not the window's.
+    // Leaning on QQuickItem's own add-to-window dirtying would be the same
+    // "some later frame happens to repaint" assumption this function exists to
+    // remove.
+    update();
 }
 
 void ShaderEffect::componentComplete()

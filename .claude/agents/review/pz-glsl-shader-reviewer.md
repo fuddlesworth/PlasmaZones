@@ -32,3 +32,18 @@ A uniform or helper from one family used in another is a finding; verify against
 ## Pack metadata and hygiene
 - Pack JSON (`name`/`description`, uniform/param declarations) must match the shader source: every declared param used, every used param declared. Descriptions are user-facing prose per CLAUDE.md rules.
 - SPDX on every shader file. Licensing is split by home: reusable helper homes are LGPL-2.1-or-later (`libs/phosphor-shaders/**`, shared easing/noise helpers such as `data/animations/shared/easing.glsl`); pack-specific and other `data/` shaders are GPL-3.0-or-later (e.g. `data/overlays/shared/common.glsl`). Check the sibling files' existing headers before flagging, and flag GPL creeping into an LGPL helper home.
+
+- **Overlay scale contract (PR #841).** Every length an overlay pack expresses in
+  logical px must reach device px through the shared helpers in
+  `data/overlays/shared/common.glsl`: `zoneSdf()` for the corner radius,
+  `zoneBorderWidth()` for the border, `zoneLen()` for every other length
+  measured against a zone edge (glow reach, edge fade, travelling rings),
+  `zoneStrokeWidth()` for a stroke derived by scaling the border down, and
+  `zoneEdgeBand()` for an effect that merely sits near the edge and must not
+  die when the border is set to 0. A raw device-px constant sitting beside one
+  of those IS a finding, because the two then drift apart on a scaled display.
+  `pxScale()` is 1080p-relative and answers a different question, so it belongs
+  only to full-screen background patterns. Per-pack `max(radius, N)` corner
+  floors are forbidden. `zoneFillColors[i].rgb` is PREMULTIPLIED by the zone's
+  opacity, so a tint must go through `zoneFillHue()`; `zoneBorderColors[i]` is
+  not premultiplied.

@@ -120,7 +120,7 @@ At the start of every pass ≥ 2, re-read it and echo one line before doing anyt
 LOOP STATE: pass N of ≤8 · P partitions · X findings open · next: step 9 fresh read · DO NOT YIELD (Rule 0)
 ```
 
-This list is the coverage checklist for steps 9 and 12. Every file here MUST be read fully and analyzed. Skipping any file is a skill failure.
+The step 1.5 inventory is the coverage checklist for steps 9 and 12. Every file here MUST be read fully and analyzed. Skipping any file is a skill failure.
 
 ### 2. Read Project Rules
 
@@ -375,22 +375,22 @@ Evaluate in order. This predicate is the ONLY thing that may end the loop — no
 
 Before writing the final report, answer each question explicitly:
 
-0a. **Rule 0 audit.** Did I end a turn anywhere between step 4 and here — to ask permission, present options, report progress, or confirm the next pass? If yes, that was a violation. Note it plainly in the final report's Summary rather than hiding it; the user needs to know the loop ran discontinuously and why.
+1. **Rule 0 audit.** Did I end a turn anywhere between step 4 and here — to ask permission, present options, report progress, or confirm the next pass? If yes, that was a violation. Note it plainly in the final report's Summary rather than hiding it; the user needs to know the loop ran discontinuously and why.
 
-0b. **State-file audit.** Does `audit-state.json` contain any finding with `status: "open"`? If yes, I am not at step 11.5 — return to step 4. Does every `descoped` entry carry a `descope_reason` AND a `raised_pass` at least two passes old? A fresh finding marked `descoped` is a skipped finding, and the verdict cannot be CLEAN.
+2. **State-file audit.** Does `audit-state.json` contain any finding with `status: "open"`? If yes, I am not at step 11.5 — return to step 4. Does every `descoped` entry carry a `descope_reason` AND a `raised_pass` at least two passes old? A fresh finding marked `descoped` is a skipped finding, and the verdict cannot be CLEAN.
 
-0. **Pass-count audit.** For every pass N ≥ 2, count the agent dispatches. Did I dispatch the SAME number of partition reviewers that step 2.5 established for Pass 1? If any pass was partial (fewer agents, a focused verifier, a single re-check, a grep-only walk in place of agent dispatch) — that pass is INVALID per step 8.5. Re-run the missing partitions and continue the loop before writing the final report. Do NOT classify a partial pass as "clean" — partial passes have no verdict at all.
+3. **Pass-count audit.** For every pass N ≥ 2, count the agent dispatches. Did I dispatch the SAME number of partition reviewers that step 2.5 established for Pass 1? If any pass was partial (fewer agents, a focused verifier, a single re-check, a grep-only walk in place of agent dispatch) — that pass is INVALID per step 8.5. Re-run the missing partitions and continue the loop before writing the final report. Do NOT classify a partial pass as "clean" — partial passes have no verdict at all.
 
-1. Did I read every file in the inventory FULLY? (Compare step 1.5 inventory to actual Read calls.)
-2. Did I analyze every file against every step-3 dimension — not just the dimensions where I expected findings? Including refactor-completeness, comment-code synchronization, defensive-code pair audit, side-effect completeness?
-3. For partitioned scopes: did every reviewer agent return concrete findings (or explicitly "none")? If any agent crashed, returned generic boilerplate, or covered fewer files than its partition listed, that partition was not audited.
-4. Did I assume prior pass coverage instead of re-reading? (Anti-trust rule from step 1.)
-5. Are the file counts in step 12's `Files in Scope` and `Files Fully Read` going to match? If not, I have not finished.
-6. For every refactor-shape finding I raised (introduced an accessor, renamed an API, extracted a helper), did I `ast-grep` / `grep` the WHOLE repo for the old pattern and either fix or descope every match — not just the matches inside my partition?
-7. For every numeric or named claim in any comment I edited or left in place this pass ("WHY ONLY THESE FOUR", "the other nine", "see ::engineFor"), did I verify the claim against current code? Stale comment counts and dangling method references in the diff are findings I'm supposed to catch.
-8. For every `Q_ASSERT` / runtime-guard / late-bound dependency I touched, did I verify the release-build pair? Asymmetric guard coverage = real LOW (sometimes MEDIUM) finding I should have raised.
-9. For every store mutation in this PR that affects rendered output, did I trace forward to confirm a corresponding repaint / damage / update signal? "It works because the next frame happens to re-paint" is not a verification.
-10. For every new or non-trivially modified public function in this PR, did I `ast-grep` / `grep` for callers? Dead helpers introduced by a fix are real findings.
+4. Did I read every file in the inventory FULLY? (Compare step 1.5 inventory to actual Read calls.)
+5. Did I analyze every file against every step-3 dimension — not just the dimensions where I expected findings? Including refactor-completeness, comment-code synchronization, defensive-code pair audit, side-effect completeness?
+6. For partitioned scopes: did every reviewer agent return concrete findings (or explicitly "none")? If any agent crashed, returned generic boilerplate, or covered fewer files than its partition listed, that partition was not audited.
+7. Did I assume prior pass coverage instead of re-reading? (Anti-trust rule from step 1.)
+8. Are the file counts in step 12's `Files in Scope` and `Files Fully Read` going to match? If not, I have not finished.
+9. For every refactor-shape finding I raised (introduced an accessor, renamed an API, extracted a helper), did I `ast-grep` / `grep` the WHOLE repo for the old pattern and either fix or descope every match — not just the matches inside my partition?
+10. For every numeric or named claim in any comment I edited or left in place this pass ("WHY ONLY THESE FOUR", "the other nine", "see ::engineFor"), did I verify the claim against current code? Stale comment counts and dangling method references in the diff are findings I'm supposed to catch.
+11. For every `Q_ASSERT` / runtime-guard / late-bound dependency I touched, did I verify the release-build pair? Asymmetric guard coverage = real LOW (sometimes MEDIUM) finding I should have raised.
+12. For every store mutation in this PR that affects rendered output, did I trace forward to confirm a corresponding repaint / damage / update signal? "It works because the next frame happens to re-paint" is not a verification.
+13. For every new or non-trivially modified public function in this PR, did I `ast-grep` / `grep` for callers? Dead helpers introduced by a fix are real findings.
 
 If any answer is "no," "skipped," "I assumed," or "partially," return to step 9 and complete the missing work. Only proceed to step 12 when every answer is "yes."
 

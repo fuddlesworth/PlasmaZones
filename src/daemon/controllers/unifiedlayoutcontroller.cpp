@@ -210,18 +210,34 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
         m_currentScreenName = screenId;
         m_cacheValid = false;
 
-        // Sync current layout ID to what's actually assigned to this screen
-        // (not the global active layout, which may belong to a different screen)
-        if (m_layoutManager && !screenId.isEmpty()) {
+        // Sync the current layout ID to what is actually ASSIGNED to this
+        // screen, not the global active layout, which may belong to another.
+        //
+        // assignmentIdForScreen, not layoutForScreen. layoutForScreen falls
+        // back to defaultLayout() on a cascade miss and consults only the snap
+        // provider, so it answers a different question: it never returns null
+        // for an unassigned screen (it hands back the default layout's UUID as
+        // if it were the assignment), and on a screen assigned an
+        // "autotile:<algo>" id it returns a manual Layout* instead. Either way
+        // m_currentLayoutId ends up holding something that is not this screen's
+        // assignment, findCurrentIndex() then misses under the autotile filter,
+        // and the next cycle() jumps to the wrong entry.
+        //
+        // assignmentIdForScreen returns the stored id verbatim (a manual UUID
+        // or the "autotile:" form) and is genuinely empty on a total miss,
+        // which is what the clear below is for. It is also what both
+        // syncFromExternalState callers already pass in.
+        //
+        // Cleared unconditionally, including for an empty screenId: a screen
+        // with no name has no assignment by definition, and leaving the
+        // previous screen's id latched is the stale-id bug this exists to stop.
+        if (m_layoutManager) {
             // Per-output virtual desktops (#648): this screen's own desktop.
-            const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
-            PhosphorZones::Layout* screenLayout =
-                m_layoutManager->layoutForScreen(screenId, desktop, m_currentActivity);
-            // Clear when the screen has no assignment rather than leaving the
-            // PREVIOUS screen's id in place. findCurrentIndex() feeds cycle()
-            // off this value, so a stale id made cycling on an unassigned
-            // screen resume from the other screen's position.
-            setCurrentLayoutId(screenLayout ? screenLayout->id().toString() : QString());
+            const int desktop = screenId.isEmpty() ? m_currentVirtualDesktop
+                                                   : m_layoutManager->currentVirtualDesktopForScreen(screenId);
+            setCurrentLayoutId(screenId.isEmpty()
+                                   ? QString()
+                                   : m_layoutManager->assignmentIdForScreen(screenId, desktop, m_currentActivity));
         }
     }
 }

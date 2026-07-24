@@ -596,7 +596,6 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // Base color
         vec3 baseColor = getBackgroundColor();
         // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
-        // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
         float bgAlpha = getFillOpacity();
         // The fill COLOUR is separate and was being discarded entirely. Light
         // identity tint at the sibling packs' weight, through zoneFillHue()
