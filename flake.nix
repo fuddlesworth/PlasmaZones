@@ -20,15 +20,21 @@
   description = "FancyZones-style window tiling and autotiling for KDE Plasma 6.7+";
 
   inputs = {
-    # Normally tracks nixos-unstable for the most current KDE Frameworks and
-    # KWin packages. Temporarily pinned to the nixpkgs master commit that landed
-    # Plasma 6.7 / KWin 6.7 (NixOS/nixpkgs#520160) because the nixos-unstable
-    # channel still ships KWin 6.6.5 and our kwin-effect requires the 6.7 effect
-    # API. Revert to "github:NixOS/nixpkgs/nixos-unstable" once the channel has
-    # advanced past Plasma 6.7 (the weekly update-flake-lock job will do this).
+    # Tracks nixos-unstable for the most current KDE Frameworks and KWin
+    # packages. The kwin-effect requires the Plasma 6.7 effect API, which the
+    # channel has shipped since it advanced to KWin 6.7.
+    #
+    # This input was briefly pinned to an explicit master rev while the channel
+    # was still on KWin 6.6.5. Do not reach for that again without knowing the
+    # cost: `nix flake update` re-resolves an input against its flake ref, and a
+    # ref carrying an explicit rev resolves to itself, so the weekly
+    # update-flake-lock job silently stops advancing nixpkgs for as long as the
+    # pin is in place. A rev pin is a manual-revert commitment, not a temporary
+    # one.
+    #
     # If you need a stable channel, use nixos-24.11 or later, but be aware that
     # stable channels may lag behind upstream KDE releases.
-    nixpkgs.url = "github:NixOS/nixpkgs/c190319055bb5c31acfd7bb8356ce9ab05cb2b36";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
   outputs =
