@@ -27,8 +27,8 @@ set(PHOSPHORSCRIPTING_VERSION "0.1.0")
 
 # Pinned vendored Luau. To bump: drop the new extern/luau-<ver>.tar.gz in,
 # update both lines, and delete the old tarball.
-set(PHOSPHORSCRIPTING_LUAU_VERSION "0.723")
-set(PHOSPHORSCRIPTING_LUAU_SHA256 "74bf6b8842e00d236d390f9431205c73d0cf887c973f9d0656396bbf1eb987bd")
+set(PHOSPHORSCRIPTING_LUAU_VERSION "0.730")
+set(PHOSPHORSCRIPTING_LUAU_SHA256 "448d720df65d393f4c61c7d2b2ddde8c772de55c23760603a9ada43a752aef70")
 
 if(NOT PROJECT_VERSION)
     project(PhosphorScripting VERSION ${PHOSPHORSCRIPTING_VERSION} LANGUAGES CXX)
@@ -110,7 +110,7 @@ else()
         # project's global exception settings. Luau also breaks under unity builds
         # (same-named file-local symbols collide), and is STATIC, so it must be
         # PIC to link into our shared lib. Override on the vendored targets only.
-        # Luau.Common is NOT header-only in 0.723: it is a compiled STATIC
+        # Luau.Common is NOT header-only in 0.730: it is a compiled STATIC
         # library (BytecodeWire/StringUtils/TimeTrace TUs) inside the PUBLIC
         # link closure of both Luau.VM and Luau.Compiler, so it needs every
         # override below — most critically -fexceptions (its TUs sit in the
