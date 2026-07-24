@@ -300,13 +300,12 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // ── Outer glow (bass-reactive expansion) ──────────────────
 
     float glowRadius = zoneLen(20.0 + 5.0 * bassHit + 8.0 * idlePulse);
-        // Bound at 1.75x the radius, i.e. 3.5 falloffs of the WIDE lobe
-        // (glowRadius * 0.5), which is the constant the catalog standardised on.
-        // Gating at glowRadius itself cut that lobe at exp(-2) = 13.5% of its
-        // peak and left a hard ring at a fixed distance from every zone.
-    if (d > 0.0 && d < glowRadius * 1.75) {
-        float glow1 = expGlow(d, glowRadius * 0.2, intensity * 0.35);
-        float glow2 = expGlow(d, glowRadius * 0.5, intensity * 0.12);
+    // Both lobes have their pedestal at the bound subtracted (expGlowBounded),
+    // so they reach exactly 0 at glowRadius and the gate cuts nothing. The wide
+    // lobe would otherwise still be at exp(-2) = 13.5% of its peak there.
+    if (d > 0.0 && d < glowRadius) {
+        float glow1 = expGlowBounded(d, glowRadius * 0.2, intensity * 0.35, glowRadius);
+        float glow2 = expGlowBounded(d, glowRadius * 0.5, intensity * 0.12, glowRadius);
 
         // Flowing color using seamless angular noise
         float glowAngle = atan(p.x, -p.y);

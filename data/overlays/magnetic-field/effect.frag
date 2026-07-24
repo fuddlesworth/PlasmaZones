@@ -278,22 +278,31 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         float particles = fieldParticles(globalUV, mouseGlobal, t, visibleParticleCount, particleSize);
 
         // ── Energy connections between nearby particles ─────────────
-        float connections = 0.0;
-        for (float i = 0.0; i < 25.0; i++) {
-            if (i >= visibleParticleCount) break;
-            float ai = i * 2.399 + t * (0.5 + hash21(vec2(i, 0.0)) * 0.5);
-            float ri = 0.05 + hash21(vec2(i, 1.0)) * 0.15;
-            float si = 0.8 + hash21(vec2(i, 2.0)) * 0.4;
-            vec2 pi = mouseGlobal + vec2(cos(ai * si), sin(ai * si)) * ri;
-            pi += vec2(sin(t * 3.0 + i), cos(t * 2.0 + i * 1.5)) * 0.02;
+        // Particle positions depend only on the index and the clock, never on
+        // globalUV, so they are evaluated ONCE per fragment rather than once per
+        // pair. The pair loop below is O(n²) at up to 300 iterations, and
+        // re-deriving pj inside it cost ~325 position evaluations (each 3 hash21
+        // plus 4 trig) where 25 do. This runs per decorated window per frame on
+        // the compositor path, so the difference is real.
+        vec2 particlePos[25];
+        for (int pi_i = 0; pi_i < 25; pi_i++) {
+            if (float(pi_i) >= visibleParticleCount) break;
+            float fi = float(pi_i);
+            float ai = fi * 2.399 + t * (0.5 + hash21(vec2(fi, 0.0)) * 0.5);
+            float ri = 0.05 + hash21(vec2(fi, 1.0)) * 0.15;
+            float si = 0.8 + hash21(vec2(fi, 2.0)) * 0.4;
+            particlePos[pi_i] = mouseGlobal + vec2(cos(ai * si), sin(ai * si)) * ri
+                              + vec2(sin(t * 3.0 + fi), cos(t * 2.0 + fi * 1.5)) * 0.02;
+        }
 
-            for (float j = i + 1.0; j < 25.0; j++) {
-                if (j >= visibleParticleCount) break;
-                float aj = j * 2.399 + t * (0.5 + hash21(vec2(j, 0.0)) * 0.5);
-                float rj = 0.05 + hash21(vec2(j, 1.0)) * 0.15;
-                float sj = 0.8 + hash21(vec2(j, 2.0)) * 0.4;
-                vec2 pj = mouseGlobal + vec2(cos(aj * sj), sin(aj * sj)) * rj;
-                pj += vec2(sin(t * 3.0 + j), cos(t * 2.0 + j * 1.5)) * 0.02;
+        float connections = 0.0;
+        for (int ii = 0; ii < 25; ii++) {
+            if (float(ii) >= visibleParticleCount) break;
+            vec2 pi = particlePos[ii];
+
+            for (int jj = ii + 1; jj < 25; jj++) {
+                if (float(jj) >= visibleParticleCount) break;
+                vec2 pj = particlePos[jj];
 
                 float pairDist = length(pi - pj);
                 if (pairDist > 0.15) continue; // only connect nearby particles
@@ -344,7 +353,10 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         vec2 gridUV = globalUV + vDisplacement * 0.08;
         vec2 grid = abs(fract(gridUV * gridFreq) - 0.5);
         float gridLine = smoothstep(0.48, 0.5, max(grid.x, grid.y)) * 0.05;
-        fx += fieldColor * gridLine * (1.0 - mouseDist) * fieldDensity;
+        // max(), not a bare subtraction: mouseDist is a screen-space UV distance
+        // reaching ~1.41 at opposite corners, so (1.0 - mouseDist) went negative
+        // over the far third of the screen and SUBTRACTED the grid colour there.
+        fx += fieldColor * gridLine * max(1.0 - mouseDist, 0.0) * fieldDensity;
 
         // Strain lines - show direction of pull
         float strainAngle = atan(vDisplacement.y, vDisplacement.x);
@@ -434,7 +446,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         // Light identity tint from the zone's configured fill colour, at the
         // sibling packs' weight. Without it this pack discarded the setting.
         result.rgb = zoneTint(result.rgb, fillColor, 0.35);
-        // fillOpacity alone, matching the other 26 packs. The distortion addend was
+        // fillOpacity alone, matching the rest of the catalog. The distortion addend was
     // unbounded (vDistortAmount is length(displacement) * 50 from the vert) and
     // relied on clampFragColor to save it.
     result.a = fillOpacity;
@@ -460,7 +472,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         vec3 coronaBorderGlow = vec3(0.6, 0.75, 1.0) * coronaIntensity * 0.4;
         borderClr += coronaBorderGlow;
 
-        result.rgb = mix(result.rgb, borderClr, border * 0.9);
+        result.rgb = mix(result.rgb, borderClr, (border * 0.9) * borderColor.a);
         result.a = max(result.a, border * borderColor.a);
     }
 

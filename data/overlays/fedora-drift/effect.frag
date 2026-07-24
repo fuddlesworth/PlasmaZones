@@ -26,7 +26,7 @@ const vec3 FROST_SILVER = vec3(0.831, 0.937, 1.000);   // #D4EFFF
 
 
 // fbm(), sdSegment(), and the tri-stop palette (triStopPalette) come from
-// common.glsl. neonFlicker() comes from logo-drift.glsl.
+// common.glsl. neonFlicker(), driftInstanceUV() and gatherLabelHalo()/LabelHalo come from logo-drift.glsl.
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -39,7 +39,7 @@ const vec3 FROST_SILVER = vec3(0.831, 0.937, 1.000);   // #D4EFFF
 
 const vec2 LOGO_CENTER = vec2(0.50, 0.50);
 
-// Kept for anti-aliasing and glow references elsewhere
+// Kept for the anti-aliasing smoothstep below
 const float TUBE_HW = 0.0425;
 
 // Approximate center-of-mass of the logo (for flow-line orbits)
@@ -450,7 +450,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, FROST_ICE);
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, FROST_SILVER);
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStrength;
 
     float flowAngle = flowDirection * TAU;
@@ -685,15 +685,20 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
             borderCol *= 0.7;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow ──────────────────────────────────────────────
     float bassGlowPush = hasAudio ? bassEnv * 2.5 : idlePulse * 5.0;
-    float glowRadius = zoneLen(mix(10.0, 20.0, vitality) + bassGlowPush);
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(10.0, 20.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, zoneLen(8.0), borderGlow);
+        float glow = expGlowBounded(d, zoneLen(8.0), borderGlow, glowRadius);
         float oAngle = atan(p.y, p.x);
         float glowT = angularNoise(oAngle, 1.5, time * 0.06) + midsEnv * 0.1;
         vec3 glowCol = triStopPalette(glowT, palPrimary, palSecondary, palAccent);

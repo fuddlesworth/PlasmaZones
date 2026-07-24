@@ -221,16 +221,20 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     float h4 = hash21(vec2(float(idx) * 9.77, 17.53));
     float roam = 0.30;
     float f1 = 0.06 + float(idx) * 0.017, f2 = 0.04 + float(idx) * 0.013;
+    // timeSin/timeCos, not raw sin/cos on wrapped iTime: this drives the logo's
+    // POSITION, ROTATION and SCALE, so a wrap discontinuity teleports and
+    // re-orients every instance in one frame. The single-instance branch above
+    // and the shared driftInstanceUV() already do it this way.
     vec2 drift = vec2(
-        sin(time * f1 + h1 * TAU) * roam + sin(time * f1 * 2.1 + h3 * TAU) * roam * 0.25,
-        cos(time * f2 + h2 * TAU) * roam * 0.85 + cos(time * f2 * 1.5 + h4 * TAU) * roam * 0.2);
+        timeSin(f1, h1 * TAU) * roam + timeSin(f1 * 2.1, h3 * TAU) * roam * 0.25,
+        timeCos(f2, h2 * TAU) * roam * 0.85 + timeCos(f2 * 1.5, h4 * TAU) * roam * 0.2);
     uv -= drift;
-    float rotAng = sin(time * (0.07 + float(idx) * 0.019) + h4 * TAU) * wobbleAmp * 0.33;
+    float rotAng = timeSin(0.07 + float(idx) * 0.019, h4 * TAU) * wobbleAmp * 0.33;
     vec2 lp = uv - vec2(0.5);
     uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
-    instScale *= 1.0 + sin(time * (0.4 + float(idx) * 0.09) + h1 * TAU) * 0.012;
+    instScale *= 1.0 + timeSin(0.4 + float(idx) * 0.09, h1 * TAU) * 0.012;
     uv = (uv - 0.5) / instScale + LOGO_CENTER;
     return uv;
 }
@@ -298,7 +302,7 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, ARCH_ICE);
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, ARCH_SNOW);
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStrength;
 
     float flowAngle = flowDirection * TAU;
@@ -716,9 +720,11 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             // ── Multi-layer glow ─────────────────────────────────
             if (fDist > -0.01 && fDist < 0.20) {
                 float clampedDist = max(fDist, 0.0);
-                float glow1 = exp(-clampedDist * 80.0) * 0.45;
-                float glow2 = exp(-clampedDist * 22.0) * 0.2;
-                float glow3 = exp(-clampedDist * 7.0) * 0.1;
+                // Pedestal-subtracted at the 0.20 gate so each lobe reaches exactly 0
+                // there instead of being clipped with part of its peak still left.
+                float glow1 = max(exp(-clampedDist * 80.0) - exp(-0.20 * 80.0), 0.0) * 0.45;
+                float glow2 = max(exp(-clampedDist * 22.0) - exp(-0.20 * 22.0), 0.0) * 0.2;
+                float glow3 = max(exp(-clampedDist * 7.0) - exp(-0.20 * 7.0), 0.0) * 0.1;
                 vec3 edgeCol = paletteSweep(time * 0.1 + iLogoUV.y * 0.6 + float(li) * 0.25,
                                              palPrimary, palSecondary, palAccent, palGlow, midsEnv);
                 float flare = 1.0 + bassEnv * 0.5;
@@ -788,15 +794,20 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             borderCol *= 0.55;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow ───────────────────────────────────────────────
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 5.0;
-    float glowRadius = zoneLen(mix(10.0, 18.0, vitality) + bassGlowPush);
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(10.0, 18.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, zoneLen(7.0), borderGlow);
+        float glow = expGlowBounded(d, zoneLen(7.0), borderGlow, glowRadius);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.06) + midsEnv * 0.1;
         vec3 glowCol = paletteSweep(glowT, palPrimary, palSecondary, palAccent, palGlow, midsEnv);

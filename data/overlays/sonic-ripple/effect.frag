@@ -59,7 +59,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // ── Highlighted vs dormant ──────────────────────────────
     // Highlighted zones are fully alive; non-highlighted are subdued/dormant.
     // A "vitality" factor (0-1) drives all the differences.
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
 
     if (isHighlighted) {
         // Vivid dual-color palette — keep both colors active
@@ -423,13 +423,12 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // Addends share baseGlowR's zoneLen() basis.
     float bassGlowR = zoneLen(mix(2.0, 6.0, vitality));
     float glowRadius = baseGlowR + bassGlowR * (hasAudio ? bass * reactivity : idlePulse) + zoneLen(5.0) * energy;
-        // Bound at 1.75x the radius, i.e. 3.5 falloffs of the WIDE lobe
-        // (glowRadius * 0.5), which is the constant the catalog standardised on.
-        // Gating at glowRadius itself cut that lobe at exp(-2) = 13.5% of its
-        // peak and left a hard ring at a fixed distance from every zone.
-    if (d > 0.0 && d < glowRadius * 1.75) {
-        float glow1 = expGlow(d, glowRadius * 0.2, glowIntensity * mix(0.12, 0.35, vitality));
-        float glow2 = expGlow(d, glowRadius * 0.5, glowIntensity * mix(0.04, 0.12, vitality));
+    // Both lobes have their pedestal at the bound subtracted (expGlowBounded),
+    // so they reach exactly 0 at glowRadius and the gate cuts nothing. The wide
+    // lobe would otherwise still be at exp(-2) = 13.5% of its peak there.
+    if (d > 0.0 && d < glowRadius) {
+        float glow1 = expGlowBounded(d, glowRadius * 0.2, glowIntensity * mix(0.12, 0.35, vitality), glowRadius);
+        float glow2 = expGlowBounded(d, glowRadius * 0.5, glowIntensity * mix(0.04, 0.12, vitality), glowRadius);
 
         vec3 glowColor = primary;
         // Highlighted: dual-color glow

@@ -78,7 +78,11 @@ vec3 catmullRom(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float t) {
 
 // ─── Neon flicker envelope (fedora, neon) ────────────────────────────────────
 float neonFlicker(float time, float seed, float trebleEnv) {
-    float base = 0.94 + 0.06 * sin(time * 8.0 + seed * 100.0);
+    // timeSin, not sin(time * 8.0): this is a phase animation, and it is the
+    // last raw-time site in an otherwise fully converted shared helper. The
+    // amplitude is small, but the helper is included by several packs and is
+    // the wrong place to leave the pattern the others were converted away from.
+    float base = 0.94 + 0.06 * timeSin(8.0, seed * 100.0);
     float buzz = step(0.97, noise2D(vec2(time * 4.0, seed * 7.0))) * 0.2;
     float trebleBuzz = trebleEnv * step(0.93, noise2D(vec2(time * 5.0, seed * 13.0))) * 0.25;
     return clamp(base - buzz - trebleBuzz, 0.6, 1.0);

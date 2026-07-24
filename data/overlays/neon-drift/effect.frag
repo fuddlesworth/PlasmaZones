@@ -747,7 +747,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             borderCol *= 0.7;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
         result.a = max(result.a, border * borderColor.a);
     }
 

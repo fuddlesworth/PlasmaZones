@@ -393,7 +393,7 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             borderClr = mix(borderClr, vec3(1.0), bassFlash * 0.2);
         }
 
-        result.rgb = mix(result.rgb, borderClr, border * 0.9);
+        result.rgb = mix(result.rgb, borderClr, (border * 0.9) * borderColor.a);
         result.a = max(result.a, border * borderColor.a);
     }
 

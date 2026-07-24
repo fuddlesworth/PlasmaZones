@@ -10,7 +10,7 @@
  * interior flow, per-sail bass pulses, summit convergence glow, and
  * shared-edge highlights.
  *
- * Logo geometry: 3 overlapping sail polygons (60+36+37 vertices)
+ * Logo geometry: 3 overlapping sail polygons (59+35+37 vertices)
  * from the EndeavourOS logo.
  *
  * Audio reactivity:
@@ -43,9 +43,13 @@ const vec2 LOGO_CENTER = vec2(0.583, 0.52);
 // =========================================================================
 //  ENDEAVOUROS LOGO -- 3 overlapping sail polygons
 // =========================================================================
-// Blue sail (#7f7fff) -- 60 vertices (12 samples per bezier curve)
-const int EOS_BLUE_N = 60;
-const vec2 EOS_BLUE_POLY[60] = vec2[60](
+// Blue sail (#7f7fff) -- 59 vertices (12 samples per bezier curve)
+// The closing vertex is NOT repeated: the loop below wraps j from N-1 to 0,
+// so a duplicated first==last point would give e == vec2(0.0) and a 0/0 in
+// dot(w, e) / dot(e, e), producing a NaN for every fragment that clears the
+// AABB early-out.
+const int EOS_BLUE_N = 59;
+const vec2 EOS_BLUE_POLY[59] = vec2[59](
     vec2(0.584496, 0.094757),
     vec2(0.611989, 0.133082), vec2(0.648179, 0.183808), vec2(0.689898, 0.244353),
     vec2(0.733979, 0.312132), vec2(0.777254, 0.384561), vec2(0.816557, 0.459057),
@@ -66,12 +70,12 @@ const vec2 EOS_BLUE_POLY[60] = vec2[60](
     vec2(0.961333, 0.806811), vec2(0.986440, 0.747353), vec2(0.984292, 0.676193),
     vec2(0.959877, 0.596740), vec2(0.918182, 0.512403), vec2(0.864197, 0.426592),
     vec2(0.802909, 0.342717), vec2(0.739307, 0.264186), vec2(0.678378, 0.194410),
-    vec2(0.625112, 0.136797), vec2(0.584496, 0.094757)
+    vec2(0.625112, 0.136797)
 );
 
-// Coral sail (#ff7f7f) -- 36 vertices
-const int EOS_RED_N = 36;
-const vec2 EOS_RED_POLY[36] = vec2[36](
+// Coral sail (#ff7f7f) -- 35 vertices
+const int EOS_RED_N = 35;
+const vec2 EOS_RED_POLY[35] = vec2[35](
     vec2(0.583492, 0.094432),
     vec2(0.566080, 0.108444), vec2(0.531030, 0.145373), vec2(0.481992, 0.200617),
     vec2(0.422618, 0.269578), vec2(0.356558, 0.347654), vec2(0.287461, 0.430246),
@@ -84,7 +88,7 @@ const vec2 EOS_RED_POLY[36] = vec2[36](
     vec2(0.220597, 0.667784), vec2(0.265943, 0.595109), vec2(0.316253, 0.513755),
     vec2(0.368874, 0.428407), vec2(0.421152, 0.343748), vec2(0.470432, 0.264463),
     vec2(0.514060, 0.195238), vec2(0.549383, 0.140755), vec2(0.573746, 0.105700),
-    vec2(0.584496, 0.094757), vec2(0.583492, 0.094432)
+    vec2(0.584496, 0.094757)
 );
 
 // Purple sail (#7f3fbf) -- 37 vertices
@@ -231,9 +235,11 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     float h1=hash21(vec2(float(idx)*7.31,3.17)), h2=hash21(vec2(float(idx)*13.71,7.23));
     float h3=hash21(vec2(float(idx)*5.13,11.37)), h4=hash21(vec2(float(idx)*9.77,17.53));
     float f1=0.06+float(idx)*0.017, f2=0.04+float(idx)*0.013;
-    uv -= vec2(sin(time*f1+h1*TAU)*0.3+sin(time*f1*2.1+h3*TAU)*0.075,
-               cos(time*f2+h2*TAU)*0.255+cos(time*f2*1.5+h4*TAU)*0.06);
-    float ra = sin(time*(0.07+float(idx)*0.019)+h4*TAU) * wobbleAmp * 0.33;
+    // timeSin/timeCos for the same reason arch-drift uses them here: this drives
+    // instance position and rotation, so a wrap would teleport every logo.
+    uv -= vec2(timeSin(f1, h1*TAU)*0.3 + timeSin(f1*2.1, h3*TAU)*0.075,
+               timeCos(f2, h2*TAU)*0.255 + timeCos(f2*1.5, h4*TAU)*0.06);
+    float ra = timeSin(0.07+float(idx)*0.019, h4*TAU) * wobbleAmp * 0.33;
     vec2 lp = uv - 0.5;
     uv = vec2(lp.x*cos(ra)-lp.y*sin(ra), lp.x*sin(ra)+lp.y*cos(ra)) + 0.5;
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
@@ -317,7 +323,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, EOS_CORAL);
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, EOS_GLOW);
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStrength;
 
     float bassEnv   = hasAudio ? smoothstep(0.02, 0.25, bass) * audioReact : 0.0;
@@ -636,9 +642,11 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
             // -- Multi-layer glow --
             if (unionDist > -0.01 && unionDist < 0.20) {
                 float clampedDist = max(unionDist, 0.0);
-                float glow1 = exp(-clampedDist * 60.0) * 0.5;
-                float glow2 = exp(-clampedDist * 18.0) * 0.25;
-                float glow3 = exp(-clampedDist * 5.0) * 0.12;
+                // Pedestal-subtracted at the 0.20 gate so each lobe reaches exactly 0
+                // there instead of being clipped with part of its peak still left.
+                float glow1 = max(exp(-clampedDist * 60.0) - exp(-0.20 * 60.0), 0.0) * 0.5;
+                float glow2 = max(exp(-clampedDist * 18.0) - exp(-0.20 * 18.0), 0.0) * 0.25;
+                float glow3 = max(exp(-clampedDist * 5.0) - exp(-0.20 * 5.0), 0.0) * 0.12;
                 vec3 edgeCol = paletteSweep(time * 0.1 + iLogoUV.y * 0.5 + float(li) * 0.25,
                                              palPrimary, palSecondary, palAccent, palGlow, midsEnv);
                 float flare = 1.0 + bassEnv * 0.4;
@@ -708,15 +716,20 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
             borderCol *= 0.55;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // -- Outer glow --
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 5.0;
-    float glowRadius = zoneLen(mix(10.0, 18.0, vitality) + bassGlowPush);
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(10.0, 18.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, zoneLen(7.0), borderGlow);
+        float glow = expGlowBounded(d, zoneLen(7.0), borderGlow, glowRadius);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.06) + midsEnv * 0.1;
         vec3 glowCol = paletteSweep(glowT, palPrimary, palSecondary, palAccent, palGlow, midsEnv);

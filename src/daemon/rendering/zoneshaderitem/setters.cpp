@@ -22,13 +22,17 @@ void ZoneShaderItem::setZones(const QVariantList& zones)
     const int oldHighlightedCount = m_highlightedCount;
 
     m_zones = zones;
-    // Re-clamp the hover index BEFORE the parse. A shrinking list leaves a
-    // stale index out of range, and a later grow past that index would make
-    // parseZoneData highlight a zone the cursor is nowhere near.
+    // Re-derive the effective hover index from the REQUESTED one before the
+    // parse. The two QML bindings (zones, hoveredZoneIndex) evaluate in an
+    // unspecified order, so both orderings have to work: on a shrink the stale
+    // effective index has to drop to -1, and on a grow an index that arrived
+    // while the list was still short has to come back. Keeping the request
+    // separately is what makes the second case possible — clamping destroyed it,
+    // and the binding will not re-push a value that has not itself changed.
     const int oldHover = m_hoveredZoneIndex;
-    if (m_hoveredZoneIndex >= m_zones.size()) {
-        m_hoveredZoneIndex = -1;
-    }
+    m_hoveredZoneIndex = (m_requestedHoveredZoneIndex >= 0 && m_requestedHoveredZoneIndex < m_zones.size())
+        ? m_requestedHoveredZoneIndex
+        : -1;
     parseZoneData();
 
     Q_EMIT zonesChanged();
@@ -49,6 +53,9 @@ void ZoneShaderItem::setZones(const QVariantList& zones)
 
 void ZoneShaderItem::setHoveredZoneIndex(int index)
 {
+    // Remember the request even when it is currently out of range, so a later
+    // setZones that grows the list can honour it. See setZones for why.
+    m_requestedHoveredZoneIndex = index < 0 ? -1 : index;
     // Clamp to valid range: -1 (none) or 0..(zoneCount-1)
     const int clamped = (index < 0 || index >= m_zones.size()) ? -1 : index;
     if (m_hoveredZoneIndex == clamped) {

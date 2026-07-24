@@ -60,14 +60,6 @@ constexpr std::array<QLatin1String, kMaxUserTextureSlots> kUserTextureSvgSizeKey
 // (`kMaxSvgPixelBytes`) are public `static constexpr` members on
 // `ShaderEffect` so consumers (UI sliders, validators, tests) can mirror the
 // clamp without hardcoding the value. See ShaderEffect.h for the contract.
-//
-// `kDefaultSvgRasteriseSize` is implementation-internal: it's the value a
-// reset path (e.g. `setUserTexture`) writes back into the per-slot
-// SVG-size array, mirroring the in-class member initialiser. Exposing it
-// publicly would invite consumers to rely on the default rather than
-// setting an explicit `uTextureN_svgSize`, which is the wrong default for
-// most embedding scenarios outside zone icons.
-static constexpr int kDefaultSvgRasteriseSize = 1024;
 
 // ============================================================================
 // Shader Parameters / Buffer Setters
@@ -582,7 +574,9 @@ void ShaderEffect::setUserTexture(int slot, const QImage& image)
     // the load, but the prior svgSize/wrap would persist). Reset both to
     // their library defaults so each setUserTexture pushes a fully-fresh
     // slot.
-    m_userTextureSvgSizes[slot] = kDefaultSvgRasteriseSize;
+    // The same constant the constructor fills the array with, so a reset and a
+    // fresh item agree by construction.
+    m_userTextureSvgSizes[slot] = kDefaultUserTextureSvgSize;
     m_userTextureWraps[slot] = QStringLiteral("clamp");
     update();
 }

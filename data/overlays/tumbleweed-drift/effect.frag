@@ -382,11 +382,12 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
             timeCos(0.23) * 0.010 + timeCos(0.13) * 0.005
         );
         uv -= drift;
-        // Rolling rotation
-        float rotAng = time * spinRate * 0.8;
+        // Rolling rotation. Built from timeCos/timeSin, not cos/sin of a raw
+        // wrapped-iTime angle, which would snap the spin at every wrap.
+        float rc = timeCos(spinRate * 0.8, 0.0);
+        float rs = timeSin(spinRate * 0.8, 0.0);
         vec2 lp = uv - vec2(0.5);
-        uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-                   lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
+        uv = vec2(lp.x * rc - lp.y * rs, lp.x * rs + lp.y * rc) + vec2(0.5);
         float breathe = 1.0 + timeSin(0.8) * 0.015;
         float springT = fract(time * 1.5);
         float spring = 1.0 + bassEnv * 0.1 * exp(-springT * 6.0) * cos(springT * 20.0);
@@ -409,11 +410,13 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     );
     uv -= drift;
 
-    // Rolling rotation — tumbleweeds spin as they drift
-    float rotAng = time * spinRate * (0.8 + h3 * 0.4) + float(idx) * 1.047;
+    // Rolling rotation — tumbleweeds spin as they drift. Same wrap-safe build
+    // as the single-instance branch above.
+    float spinSpeed = spinRate * (0.8 + h3 * 0.4);
+    float rc = timeCos(spinSpeed, float(idx) * 1.047);
+    float rs = timeSin(spinSpeed, float(idx) * 1.047);
     vec2 lp = uv - vec2(0.5);
-    uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-               lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
+    uv = vec2(lp.x * rc - lp.y * rs, lp.x * rs + lp.y * rc) + vec2(0.5);
 
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
     float breathe = 1.0 + timeSin(0.6 + float(idx) * 0.13, h1 * TAU) * 0.015;
@@ -550,7 +553,9 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
         if (logoD > 0.1) continue;
 
         // Light casting (warm glow in sand haze)
-        float lightCast = exp(-max(logoD, 0.0) * 12.0) * 0.35;
+        // Pedestal-subtracted at the enclosing continue gate, so the cast fades to
+            // nothing rather than being cut at a fixed radius.
+            float lightCast = max(exp(-max(logoD, 0.0) * 12.0) - exp(-0.1 * 12.0), 0.0) * 0.35;
         vec3 logoLight = triStopPalette(time * 0.15 + iLogoUV.y + float(li) * 0.3,
                                             palGlow, palAccent, palSecondary);
         col += logoLight * lightCast * instIntensity * (1.0 + bassEnv * 0.8) * depthFactor;
@@ -597,9 +602,12 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
             }
 
             // Multi-layer glow
-            float glow1 = exp(-max(logoD, 0.0) * 60.0) * 0.6;
-            float glow2 = exp(-max(logoD, 0.0) * 20.0) * 0.35;
-            float glow3 = exp(-max(logoD, 0.0) * 6.0) * 0.18;
+            // Pedestal-subtracted at the enclosing gate, so each lobe reaches exactly 0
+            // there. The widest one was being cut with most of its peak still left,
+            // painting a hard ring around every logo instance.
+float glow1 = max(exp(-max(logoD, 0.0) * 60) - exp(-0.03 * 60), 0.0) * 0.6;
+            float glow2 = max(exp(-max(logoD, 0.0) * 20) - exp(-0.03 * 20), 0.0) * 0.35;
+            float glow3 = max(exp(-max(logoD, 0.0) * 6) - exp(-0.03 * 6), 0.0) * 0.18;
             vec3 edgeCol = triStopPalette(time * 0.2 + iLogoUV.y + float(li) * 0.2,
                                               palGlow, palAccent, palSecondary);
             float flare = 1.0 + bassEnv * 0.8;
@@ -649,7 +657,7 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
 
 vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                           vec4 params, vec3 sceneCol, bool isHighlighted,
-                          float bassEnv, bool hasAudio) {
+                          float bassEnv, float idlePulse, bool hasAudio) {
     // Corner radius: logical px to device px, clamped to half the zone's smaller side.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
@@ -659,7 +667,6 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
     float fillOpacity  = pFillOpacity();
     float contrast     = pContrast();
 
-    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * pIdleStrength();
 
     vec3 palSecondary = colSecondary();
     vec3 palAccent    = colAccent();
@@ -726,16 +733,21 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
             borderCol *= 0.55;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow with angular noise ──────────────────────────────
 
     float bassGlowPush = hasAudio ? bassEnv * 5.0 : idlePulse * 5.0;
-    float glowRadius = zoneLen(mix(10.0, 22.0, vitality) + bassGlowPush);
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(10.0, 22.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && pBorderGlow() > 0.01) {
-        float glow = expGlow(d, zoneLen(7.0), pBorderGlow());
+        float glow = expGlowBounded(d, zoneLen(7.0), pBorderGlow(), glowRadius);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.08);
         vec3 glowCol = triStopPalette(glowT, palSecondary, palAccent, palGlow);
@@ -961,7 +973,7 @@ vec4 pImage(vec2 fragCoord) {
 
             vec4 zoneColor = renderTumbleweedZone(fragCoord, rect, zoneFillColors[i],
                 zoneBorderColors[i], zoneParams[i], sceneCol, zoneParams[i].z > 0.5,
-                bassEnv, hasAudio);
+                bassEnv, idlePulse, hasAudio);
             color = blendOver(color, zoneColor);
         }
     }

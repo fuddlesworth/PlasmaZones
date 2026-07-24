@@ -90,7 +90,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     palD += vec3(colorShift);
 
     // ── Vitality system ─────────────────────────────────────
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
 
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(iTime * 0.8 * PI)) * 0.5;
 
@@ -192,9 +192,13 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float angle = atan(p.y, p.x) * 2.0;
         float borderFlow = fbm(vec2(sin(angle), cos(angle)) * 2.0 + time * 0.5, 3, 0.5, 0.6);
         vec3 borderCol = iqPalette(borderFlow * contrast, palA, palB, palC, palD);
-        // Zone border color tint — let per-zone color influence the palette
-        vec3 zoneBorderTint = colorWithFallback(borderColor.rgb, borderCol);
-        borderCol = mix(borderCol, zoneBorderTint * luminance(borderCol), 0.3);
+        // Zone border color tint — let per-zone color influence the palette.
+        // Gated on the colour actually being set: with no border colour the
+        // fallback collapses to borderCol and the mix darkens the border toward
+        // its own luminance-scaled self, so the "unset" path was not an
+        // identity and every layout got a dimmer border than the palette says.
+        float borderTintW = length(borderColor.rgb) >= 0.01 ? 0.3 : 0.0;
+        borderCol = mix(borderCol, borderColor.rgb * luminance(borderCol), borderTintW);
         borderCol *= borderBrightness;
 
         // Highlighted border is brighter and pulses with cosmic breath
@@ -209,8 +213,8 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
             borderCol *= 0.6;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // Outer glow

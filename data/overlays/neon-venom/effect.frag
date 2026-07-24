@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <audio.glsl>
+#include <logo-drift.glsl>
 
 /*
  * NEON VENOM — Organic Bioluminescent Overlay
@@ -11,34 +12,9 @@
  * Rising toxic bubbles, venomous mist, and living vein networks create a
  * biological/organic feel distinct from digital circuit aesthetics.
  *
- * Parameters:
- *   p_veinScale = veinScale         — Vein network scale
- *   p_veinSpeed = veinSpeed         — Pulse animation speed (all effects)
- *   p_veinSharpness = veinSharpness     — How sharp/defined veins are
- *   p_veinWarp = veinWarp          — Domain warp intensity
- *   p_poolIntensity = poolIntensity     — Acid pool surface effect
- *   p_bubbleCount = bubbleCount       — Number of rising bubbles
- *   p_bubbleSpeed = bubbleSpeed       — Bubble rise speed
- *   p_fillOpacity = fillOpacity       — Zone fill opacity
- *   p_glowStrength = glowStrength      — Neon glow intensity
- *   p_mistDensity = mistDensity       — Atmospheric venom mist
- *   p_audioReactivity = audioReactivity   — Audio response strength
- *   p_sparkIntensity = sparkIntensity    — Audio spark strength
- *   p_labelGlowSpread = labelGlowSpread
- *   p_labelBrightness = labelBrightness
- *   p_labelAudioReact = labelAudioReact
- *   p_edgeGlow = edgeGlow
- *   p_warpOctaves = warpOctaves
- *   p_showLabels = showLabels
- *   p_poolSpeed = poolSpeed         — Pool/caustic animation speed
- *   p_surgeThreshold = surgeThreshold    — Bass level to trigger vein surge
- *   p_mouseInfluence = mouseInfluence    — Cursor interaction strength
- *   p_bubbleSize = bubbleSize        — Bubble size multiplier
- *   p_veinFineDetail = veinFineDetail    — Fine vein detail blend
- *   p_venomColor   — Venom green (default #39FF14)
- *   p_acidColor   — Acid purple (default #BF00FF)
- *   p_glowColor   — Glow highlight (default #CCFF00)
- *   p_mistColor   — Mist tint (default #0D001A)
+ * Parameters are declared in metadata.json and read through the generated
+ * p_<id> accessors. A table here only drifts, which is why the sibling packs
+ * each deleted theirs.
  */
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -314,7 +290,7 @@ vec4 renderNeonVenomZone(
 
     // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
     // The zone's activeOpacity arrives in fillColor.a, but only four packs
-    // ever multiplied it in, so it was inert in the other 23 and the split
+    // ever multiplied it in, so it was inert catalog-wide and the split
     // just made the same setting behave differently per pack.
     float alpha = inside * fillOpacity;
     alpha = max(alpha, borderFactor * borderColor.a);
@@ -393,7 +369,7 @@ vec4 pImage(vec2 fragCoord) {
         vec2 luv = labelsUv(fragCoord);
         vec2 texelSize = 1.0 / max(iResolution, vec2(1.0));
         vec4 labels = texture(uZoneLabels, luv);
-        float spread = labelSpread * pxScale();
+        float spread = zoneLen(labelSpread);
         float t = iTime * p_veinSpeed; // veinSpeed
 
         bool hasAudio = iAudioSpectrumSize > 0;
@@ -401,40 +377,18 @@ vec4 pImage(vec2 fragCoord) {
         float trebleMod = hasAudio ? treble * labelReact : 0.0;
 
         // ── Multi-layer halo sampling ────────────────────────────────
-        float haloTight = 0.0, haloWide = 0.0, haloVWide = 0.0;
-        float haloR = 0.0, haloG = 0.0, haloB = 0.0;
-        // Chromatic offset: green/purple venom split
+        // The shared gather, not a local copy. The local one had drifted to a
+        // different tight weight (0.5 vs 0.6) and a different very-wide divisor
+        // (22 vs 20), so it was neither the shared kernel nor documented as a
+        // deliberate variation, while still paying the same 75 fetches.
         vec2 chromOff = vec2(texelSize.x * 2.5, texelSize.y * 0.5);
-        for (int dy = -2; dy <= 2; dy++) {
-            for (int dx = -2; dx <= 2; dx++) {
-                vec2 off = vec2(float(dx), float(dy)) * texelSize;
-                float r2 = float(dx * dx + dy * dy);
-                float wTight = exp(-r2 * 0.5);
-                float wWide = exp(-r2 * 0.2);
-                float wVWide = exp(-r2 * 0.1);
-
-                float s = texture(uZoneLabels, luv + off * spread).a;
-                haloTight += s * wTight;
-                haloWide += s * wWide;
-                haloVWide += s * wVWide;
-
-                // No haloG fetch: green samples the same texel with the same
-                // weight as haloWide above, so it is copied out after the loop.
-                haloR += texture(uZoneLabels, luv + off * spread + chromOff).a * wWide;
-                haloB += texture(uZoneLabels, luv + off * spread - chromOff).a * wWide;
-            }
-        }
-        haloTight /= 10.0;
-        haloWide /= 16.5;
-        haloVWide /= 22.0;
-        // The chroma channels accumulate on the same wWide kernel as haloWide,
-        // so they need the same divisor. Left raw they carried the full weight
-        // sum (~16.5x) into the additive bloom below and bleached every label
-        // halo to a flat clamped colour. The shared gatherLabelHalo() this loop
-        // duplicates divides by 16.5 for exactly this reason.
-        haloR /= 16.5;
-        haloG = haloWide;  // same texel, same weight, same divisor
-        haloB /= 16.5;
+        LabelHalo halo = gatherLabelHalo(luv, texelSize, spread, chromOff);
+        float haloTight = halo.tight;
+        float haloWide = halo.wide;
+        float haloVWide = halo.vWide;
+        float haloR = halo.chroma.r;
+        float haloG = halo.chroma.g;
+        float haloB = halo.chroma.b;
 
         // Bioluminescent flicker: organic irregular pulsing
         float bioFlicker = 0.8 + 0.12 * sin(t * 5.7 + luv.x * 20.0)

@@ -598,8 +598,9 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
         float bgAlpha = getFillOpacity();
         // The fill COLOUR is separate and was being discarded entirely. Light
-        // identity tint at the sibling packs' weight, through zoneFillHue()
-        // because zoneFillColors[i].rgb arrives premultiplied.
+        // identity tint at the sibling packs' weight, through zoneTint(), which
+        // owns the un-premultiply of zoneFillColors[i].rgb and the zero-alpha
+        // case. Do not call zoneFillHue() directly for this shape.
         baseColor = zoneTint(baseColor, fillColor, 0.35);
 
         // Layer 1: Color Grade
@@ -668,7 +669,7 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         edgeColor *= pulse;
         edgeColor = vitalityDesaturate(edgeColor, vitality);
 
-        result.rgb = mix(result.rgb, edgeColor, border * vitalityScale(0.5, 0.8, vitality));
+        result.rgb = mix(result.rgb, edgeColor, (border * vitalityScale(0.5, 0.8, vitality)) * borderColor.a);
         result.a = max(result.a, border * borderColor.a);
     }
 

@@ -71,7 +71,7 @@ struct ZoneCtx {
     bool  isHighlighted; // zoneParams[i].z > 0.5
 };
 
-// Shader time-wrap period — must match kShaderTimeWrap in zoneshadercommon.h
+// Shader time-wrap period — must match kShaderTimeWrap in BaseUniforms.h
 // iTime is wrapped into [0, K_TIME_WRAP); iTimeHi is the floor-offset. Without
 // wrapping, float32 ULP would grow past one frame at ~36h uptime and kill any
 // animation driven purely by iTime.
@@ -416,9 +416,29 @@ float softBorder(float d, float borderWidth) {
     return 1.0 - smoothstep(0.0, borderWidth, borderDist);
 }
 
+// BORDER ALPHA CONTRACT. zoneBorderColors[i] arrives STRAIGHT, not premultiplied
+// (unlike zoneFillColors[i], which carries activeOpacity in its rgb). Its alpha
+// is the user's border-colour alpha, and the catalog-wide decision is that it
+// fades the whole border: every pack scales BOTH its rgb mix weight and its
+// alpha contribution by borderColor.a. Scaling only the alpha, which is what
+// most packs did before, left the band painting at full strength over the fill
+// and fading only where it overhung the zone edge.
+
 // Exponential falloff glow (e.g. outer glow: d > 0 outside zone)
 float expGlow(float d, float falloff, float strength) {
     return exp(-d / max(falloff, 0.001)) * strength;
+}
+
+// expGlow with its pedestal at `bound` subtracted, so the term reaches exactly
+// 0 there instead of being clipped at whatever residual the gate happens to
+// land on. Use this whenever a glow sits inside an `if (d < bound)`: a bare
+// expGlow cut at 2 falloffs still has 13.5% of its peak left, which paints a
+// hard ring at a fixed distance from every zone. Widening the gate instead is
+// the wrong trade — it only shrinks the step, and the shaded annulus grows with
+// the square of the widening on a path that runs per decorated window per frame.
+float expGlowBounded(float d, float falloff, float strength, float bound) {
+    float f = max(falloff, 0.001);
+    return max(exp(-d / f) * strength - exp(-bound / f) * strength, 0.0);
 }
 
 // Color with fallback when unset (length < 0.01)

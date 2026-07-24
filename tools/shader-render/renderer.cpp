@@ -325,7 +325,10 @@ QStringList shaderIncludePaths()
     //
     // data/overlays only exists when run from the source tree, so this entry is
     // simply absent for an installed invocation and the order below applies.
-    pushRoot(QStringLiteral("data/overlays"));
+    // Absolutised: every other entry in this list is absolute, and a relative
+    // include path is the one entry that can silently resolve somewhere else if
+    // the process cwd is not the source tree.
+    pushRoot(QDir(QStringLiteral("data/overlays")).absolutePath());
 
     // GenericDataLocation + "plasmazones/overlays", matching the daemon's
     // trustedShaderRoots(). This used to be AppDataLocation + "/overlays", which

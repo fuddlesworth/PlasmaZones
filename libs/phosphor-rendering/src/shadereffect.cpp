@@ -835,10 +835,12 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
 
     if (width() <= 0 || height() <= 0) {
         if (oldNode) {
-            if (ShaderNodeRhi* node = m_renderNode.load(std::memory_order_acquire)) {
-                node->invalidateItem();
-                m_renderNode.store(nullptr, std::memory_order_release);
-            }
+            // Invalidate oldNode DIRECTLY, not the tracked pointer: if
+            // m_renderNode were ever null while oldNode is live, keying off the
+            // tracked pointer would delete the node without severing its item
+            // back-pointer. Both subclass overrides already do it this way.
+            static_cast<ShaderNodeRhi*>(oldNode)->invalidateItem();
+            m_renderNode.store(nullptr, std::memory_order_release);
             delete oldNode;
         }
         return nullptr;
@@ -922,6 +924,13 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                         errorMsg = QStringLiteral("Shader loading failed");
                     }
                     qCWarning(lcShaderNode) << "Fragment shader load failed:" << fragPath << "—" << errorMsg;
+                    // Drop the node's shader before reporting. On the node-REUSE
+                    // path a previously good bake is still resident, so
+                    // isShaderReady() stays true and the status block below
+                    // would set Ready again three lines later, leaving the item
+                    // claiming Ready while errorLog holds a real failure.
+                    node->setFragmentShaderSource(QString());
+                    node->invalidateShader();
                     setError(errorMsg);
                 }
             } else {
@@ -931,6 +940,10 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                 // silently here would pin the item at Status::Loading forever
                 // with an empty errorLog and no retry on any later frame.
                 qCWarning(lcShaderNode) << "Shader URL resolved to an empty local path:" << m_shaderSource;
+                // Same reuse-path clobber as the load-failure arm above: drop
+                // the resident bake so isShaderReady() cannot revert the error.
+                node->setFragmentShaderSource(QString());
+                node->invalidateShader();
                 setError(QStringLiteral("Shader URL resolved to an empty local path: ") + m_shaderSource.toString());
             }
         } else {

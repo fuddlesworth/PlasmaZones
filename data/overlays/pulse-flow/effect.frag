@@ -163,8 +163,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             borderFlow = mix(borderFlow, activeGlow * borderEnergy, mids * audioR * 0.3);
         }
 
-        result.rgb = mix(result.rgb, borderFlow, border * vitalityScale(0.8, 0.95, vitality));
-        result.a = max(result.a, border * 0.95);
+        result.rgb = mix(result.rgb, borderFlow, (border * vitalityScale(0.8, 0.95, vitality)) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow with bass wavefronts ─────────────────────────────────

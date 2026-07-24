@@ -32,11 +32,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, vec4 fillColor, vec4 bor
     float dofStrength  = p_dofStrength >= 0.0 ? p_dofStrength : 0.35;
     float edgeGlow     = p_edgeGlow >= 0.0 ? p_edgeGlow : 1.4;
 
-    // The zone's own border colour wins over the pack accent when the user has
-    // set one, matching voxel-terrain (this pack's structural twin). Falling
-    // through to the pack default keeps every existing layout looking the same.
-    vec3 accent  = colorWithFallback(borderColor.rgb,
-                                     colorWithFallback(p_accentColor.rgb, vec3(0.50, 1.50, 2.00)));
+    vec3 accent  = colorWithFallback(p_accentColor.rgb, vec3(0.50, 1.50, 2.00));
     vec3 bassCol = colorWithFallback(p_bassColor.rgb, vec3(0.00, 0.00, 1.50));
     vec3 lightC  = colorWithFallback(p_lightColor.rgb, vec3(0.80, 0.45, 0.18));
 
@@ -60,7 +56,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, vec4 fillColor, vec4 bor
         energy   *= 0.5;
     }
 
-    float px = pxScale();
 
     vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
@@ -222,8 +217,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, vec4 fillColor, vec4 bor
             }
 
             // Gaussian halo — pixel radius scaled by pxScale() so angular
-            // reach is resolution-independent.
-            vec2 haloReach = texel * 3.5 * px;
+            // reach is resolution-independent. Computed here, the only place it
+            // is used, rather than unconditionally at the top of renderZone.
+            vec2 haloReach = texel * 3.5 * pxScale();
             float halo = 0.0;
             for (int hy = -2; hy <= 2; hy++) {
                 for (int hx = -2; hx <= 2; hx++) {
@@ -295,7 +291,13 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, vec4 fillColor, vec4 bor
         // Slow 0.5Hz color sweep — must use timeSin() (wrap would snap).
         // When no audio, idleSpeed scales the sweep rate.
         float sweepRate = 0.5 * (hasAudio ? 1.0 : idleSpeed);
-        vec3 coreColor = mix(accent, bassCol, 0.5 + 0.5 * timeSin(sweepRate))
+        // The zone's own border colour folds in HERE, at the border stroke and at
+        // the sibling packs' weight of 0.3 — not into `accent`, which is a
+        // scene-wide palette variable feeding the silhouettes, haze, label halo
+        // and outer glow. buffer.frag renders that scene full-screen with no
+        // zone to key off, so a scene-wide fold could never be consistent.
+        vec3 borderAccent = mix(accent, colorWithFallback(borderColor.rgb, accent), 0.3);
+        vec3 coreColor = mix(borderAccent, bassCol, 0.5 + 0.5 * timeSin(sweepRate))
                         * edgeGlow * borderEnergy;
 
         float flowRate = mix(0.3, 1.5, vitality) * (hasAudio ? 1.0 : idleSpeed);
@@ -333,13 +335,12 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, vec4 fillColor, vec4 bor
         + (hasAudio ? aBass * zoneLen(5.0) : timeSin(pulseRate) * zoneLen(2.0));
     glowRadius += energy * zoneLen(4.0);
 
-        // Bound at 1.75x the radius, i.e. 3.5 falloffs of the WIDE lobe
-        // (glowRadius * 0.5), which is the constant the catalog standardised on.
-        // Gating at glowRadius itself cut that lobe at exp(-2) = 13.5% of its
-        // peak and left a hard ring at a fixed distance from every zone.
-    if (d > 0.0 && d < glowRadius * 1.75) {
-        float glow1 = expGlow(d, glowRadius * 0.2, edgeGlow * mix(0.08, 0.25, vitality));
-        float glow2 = expGlow(d, glowRadius * 0.5, edgeGlow * mix(0.03, 0.08, vitality));
+    // Both lobes have their pedestal at the bound subtracted (expGlowBounded),
+    // so they reach exactly 0 at glowRadius and the gate cuts nothing. The wide
+    // lobe would otherwise still be at exp(-2) = 13.5% of its peak there.
+    if (d > 0.0 && d < glowRadius) {
+        float glow1 = expGlowBounded(d, glowRadius * 0.2, edgeGlow * mix(0.08, 0.25, vitality), glowRadius);
+        float glow2 = expGlowBounded(d, glowRadius * 0.5, edgeGlow * mix(0.03, 0.08, vitality), glowRadius);
 
         vec3 glowColor = mix(accent, bassCol, clamp(energy * 0.8, 0.0, 1.0));
         if (isHighlighted) {

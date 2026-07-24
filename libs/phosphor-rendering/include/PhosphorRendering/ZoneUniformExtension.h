@@ -20,9 +20,9 @@ namespace PhosphorRendering {
  *
  * Appends zone arrays (zoneRects, zoneFillColors, zoneBorderColors, zoneParams)
  * plus the trailing zoneScale scalar after BaseUniforms in the UBO. Total
- * extension size: MaxZones * 4 * sizeof(float) * 4 + 16 = 4112 bytes (the
- * scalar plus the 12 pad bytes std140 needs to close the block on a 16-byte
- * boundary).
+ * extension size is `kZoneExtensionBytes` (ZoneShaderCommon.h): the four arrays,
+ * plus the scalar and the 12 pad bytes std140 needs to close the block on a
+ * 16-byte boundary.
  *
  * The zone data layout matches the GLSL UBO declaration in common.glsl exactly,
  * and is binary-compatible with the zone region of ZoneShaderUniforms.
@@ -40,12 +40,15 @@ class ZoneUniformExtension : public PhosphorShaders::IUniformExtension
 public:
     ZoneUniformExtension()
     {
-        std::memset(&m_data, 0, sizeof(m_data));
-        // Identity scale until the item reports the real device-pixel ratio.
-        // A zeroed scale would multiply every radius and border width to 0,
-        // so the first frames of a fresh overlay would render square-cornered
-        // and border-less before the first setScale() lands.
-        m_data.zoneScale = 1.0f;
+        // Value-initialise rather than memset: the default member initialisers
+        // on ZoneExtensionData make it non-trivially-default-constructible, so a
+        // memset trips -Wclass-memaccess in every including TU. `= {}` zeroes
+        // the arrays AND applies the zoneScale = 1.0f default, which is the
+        // identity the shader needs until the item reports the real
+        // device-pixel ratio. A zeroed scale would multiply every radius and
+        // border width to 0, so a fresh overlay's first frames would render
+        // square-cornered and border-less before the first setScale() lands.
+        m_data = {};
     }
 
     int extensionSize() const override
@@ -158,17 +161,15 @@ private:
         float zoneBorderColors[MaxZones][4];
         float zoneParams[MaxZones][4];
         // Defaulted to identity for the same reason ZoneShaderUniforms::zoneScale
-        // is: the two structs are asserted binary-identical below, so a value-
-        // initialised `ZoneExtensionData d{}` on any path that skips the
-        // constructor's memset-then-seed would otherwise carry a zero scale, and
-        // a zero scale multiplies every corner radius and border width to
-        // nothing. The constructor still seeds it explicitly, because the memset
-        // there runs after this default and would zero it again.
+        // is, and the constructor now relies on it: a zero scale multiplies
+        // every corner radius and border width to nothing, so a zone renders
+        // square-cornered and border-less rather than failing visibly. The two
+        // structs are asserted binary-identical below, so both need it.
         float zoneScale = 1.0f;
         float _pad_after_zoneScale[3] = {};
     };
 
-    static_assert(sizeof(ZoneExtensionData) == MaxZones * 4 * sizeof(float) * 4 + 4 * sizeof(float),
+    static_assert(sizeof(ZoneExtensionData) == kZoneExtensionBytes,
                   "ZoneExtensionData must be MaxZones * 4 arrays * 4 floats, plus the "
                   "zoneScale scalar and its std140 tail pad");
     // Field offsets must match the GLSL UBO layout in common.glsl exactly.

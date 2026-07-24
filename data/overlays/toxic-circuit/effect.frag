@@ -587,7 +587,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             borderRGB *= 1.0 + mouseInfluence * 0.4;
         }
 
-        result.rgb = mix(result.rgb, borderRGB, border);
+        result.rgb = mix(result.rgb, borderRGB, (border) * borderColor.a);
         result.a = max(result.a, border * borderColor.a);
     }
 
@@ -668,12 +668,15 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
 
                     // Chromatic aberration concentrated at the spark point:
                     // red shifts one way, blue the other, creating a sharp split
-                    float sparkChroma = trebleSpike * 4.0;
-                    vec2 sparkOffset = vec2(sparkChroma / rectSize.x, 0.0);
+                    // Expressed directly in cell-fraction units, the space
+                    // cellFrac lives in. Dividing an audio quantity by the zone
+                    // width in device px mixed three unit systems and made the
+                    // split silently weaken as the zone or the display grew.
+                    float sparkChroma = trebleSpike * 0.02;
                     vec3 sparkColor = arcColorParam * sparkBright * 1.3 + vec3(0.15) * sparkBright;
                     // Slight spatial offset for R vs B to simulate chroma split
-                    float rShift = smoothstep(0.06, 0.0, abs(cellFrac.x - 0.5 + sparkOffset.x * 20.0));
-                    float bShift = smoothstep(0.06, 0.0, abs(cellFrac.x - 0.5 - sparkOffset.x * 20.0));
+                    float rShift = smoothstep(0.06, 0.0, abs(cellFrac.x - 0.5 + sparkChroma));
+                    float bShift = smoothstep(0.06, 0.0, abs(cellFrac.x - 0.5 - sparkChroma));
                     sparkColor.r *= max(rShift * vJunc, junctionProx);
                     sparkColor.b *= max(bShift * vJunc, junctionProx);
 

@@ -81,7 +81,7 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
     vec3 borderClr = colorWithFallback(borderColor.rgb, vec3(0.4, 0.6, 0.9));
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
 
     // ---- Inside zone ----
     if (d < 0.0) {
@@ -160,8 +160,8 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
                             accentTrace * 0.25 * (fillColor.a > 1e-3 ? 1.0 : 0.0));
         }
 
-        result.rgb = mix(result.rgb, flowColor, borderAlpha);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, flowColor, (borderAlpha) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ---- Outer glow ----

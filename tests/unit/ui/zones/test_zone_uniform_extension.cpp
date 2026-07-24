@@ -56,6 +56,7 @@ private Q_SLOTS:
     void requiresPhysicalResolution_isTrue();
     void layout_matchesZoneShaderUniformsOffsets();
     void layout_matchesGlslUboDeclaration();
+    void scaleHelpers_matchTheirDocumentedGuards();
 };
 
 namespace {
@@ -221,10 +222,11 @@ void TestZoneUniformExtension::write_overflow_truncatesToMaxZones()
         Vec4 r = readVec4(buf, 0, i);
         QCOMPARE(r.x, static_cast<float>(i));
     }
-    // Buffer is extensionSize() wide (the zone arrays plus the scale tail) — past-end writes would
-    // have overflowed and corrupted memory; the static_assert in the header
-    // backs this up at compile time, but we still want a runtime check that
-    // updateFromZones doesn't index past MaxZones.
+    // This asserts TRUNCATION only: that the first MaxZones slots hold what was
+    // asked for. It does NOT detect a past-end write — that is silent UB, and
+    // these assertions stay true under an updateFromZones that runs off the end
+    // of the array. write_overflow_doesNotWritePastBufferEnd is the test that
+    // actually proves that, via its 0xAA guard bytes.
 }
 
 void TestZoneUniformExtension::write_overflow_doesNotWritePastBufferEnd()
@@ -773,6 +775,69 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
     // fourth hard-code would fail a deliberate, consistent MaxZones change
     // on both sides for no defect.
     QCOMPARE(ext.extensionSize(), glslSize);
+}
+
+void TestZoneUniformExtension::scaleHelpers_matchTheirDocumentedGuards()
+{
+    // layout_matchesGlslUboDeclaration() pins the UBO BLOCK. Nothing pinned the
+    // helper BODIES, and this PR's headline claims rest on three of them: the
+    // corner-radius clamp (a radius larger than half a narrow zone used to
+    // collapse that zone into a sliver), zoneBorderWidth's zero-versus-floor
+    // split (width 0 means the border is off, not one pixel), and zoneLen's
+    // uZoneScale multiply (the whole point of the scale uniform). Deleting any
+    // of the three left the entire suite green, so a changelog guarantee had no
+    // test that could fail on it.
+    //
+    // Source-level assertions, not a GPU render: the packs are validated
+    // separately by shader_validate_bundled, and what is at risk here is a
+    // careless edit to the shared prologue rather than a compile failure.
+    QFile glsl(QStringLiteral(P_SOURCE_DIR "/data/overlays/shared/common.glsl"));
+    if (!glsl.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QFAIL(qPrintable(glsl.errorString()));
+    }
+    const QString source = QString::fromUtf8(glsl.readAll());
+
+    // Comments stripped FIRST, then all whitespace. Stripping whitespace alone
+    // would let an assertion match text inside a comment that merely quotes the
+    // expression, which is exactly how a doc block could keep this test green
+    // after the code it describes was deleted.
+    QString compact = source;
+    compact.remove(QRegularExpression(QStringLiteral("/\\*.*?\\*/"), QRegularExpression::DotMatchesEverythingOption));
+    compact.remove(QRegularExpression(QStringLiteral("//[^\n]*")));
+    compact.remove(QRegularExpression(QStringLiteral("\\s+")));
+
+    // zoneSdf: the radius is scaled AND clamped to the zone's smaller half-side.
+    // Without the upper bound, sdRoundedBox is evaluated with a radius larger
+    // than the box and the zone renders as a sliver.
+    QVERIFY2(
+        compact.contains(QStringLiteral("z.radius=clamp(radiusLogical*uZoneScale,0.0,min(z.halfSize.x,z.halfSize.y))")),
+        "zoneSdf() must clamp the scaled corner radius to min(halfSize.x, halfSize.y)");
+
+    // zoneBorderWidth: 0 means OFF and must return 0; anything else is floored
+    // at one device pixel so a thin border cannot flicker out on a fractional
+    // scale. Collapsing the two arms in either direction makes one end of the
+    // configured range unreachable.
+    QVERIFY2(compact.contains(QStringLiteral("returnwidthLogical<=0.0?0.0:max(widthLogical*uZoneScale,1.0)")),
+             "zoneBorderWidth() must return 0 for a width of 0 and floor any other width at 1 device px");
+
+    // zoneLen: the plain logical-to-device multiply every other zone-edge length
+    // in the catalog goes through. Returning logicalPx unscaled compiles, renders
+    // and is wrong on every HiDPI display.
+    QVERIFY2(compact.contains(QStringLiteral("floatzoneLen(floatlogicalPx){returnlogicalPx*uZoneScale;}")),
+             "zoneLen() must multiply by uZoneScale");
+
+    // zoneStrokeWidth and zoneEdgeBand are the derived pair; both exist so a
+    // pack that scales a border down does not go sub-pixel.
+    QVERIFY2(compact.contains(QStringLiteral("returndeviceWidth<=0.0?0.0:max(deviceWidth,1.0)")),
+             "zoneStrokeWidth() must preserve 0 and floor anything else at 1 device px");
+    QVERIFY2(compact.contains(QStringLiteral("returnmax(deviceWidth,zoneLen(minLogical))")),
+             "zoneEdgeBand() must floor a derived band at its logical minimum");
+
+    // zoneFillHue's epsilon: zoneFillColors[i].rgb is premultiplied, so
+    // un-premultiplying a fully transparent fill is 0/0. The guard is what keeps
+    // a NaN out of the fragment colour.
+    QVERIFY2(compact.contains(QStringLiteral("returnfillColor.a>1e-3?fillColor.rgb/fillColor.a:vec3(1.0)")),
+             "zoneFillHue() must guard the un-premultiply against a zero alpha");
 }
 
 QTEST_APPLESS_MAIN(TestZoneUniformExtension)

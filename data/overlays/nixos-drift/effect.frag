@@ -557,7 +557,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, NIX_SKY);
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, NIX_GLOW);
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStrength;
 
     float flowAngle = flowDirection * TAU;
@@ -670,9 +670,14 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             // Circular vignette for the logo area
             float logoVignette = 1.0 - smoothstep(0.35, 0.55, logoR);
 
-            // Snowflake can spin freely (it is 6-fold symmetric)
-            float wobble = time * logoSpin * 0.5 + float(li) * 1.047;
-            vec2 rotP = logoP * rot(wobble);
+            // Snowflake can spin freely (it is 6-fold symmetric). The angle is
+            // built from timeCos/timeSin rather than rot(time * k): a raw
+            // wrapped-iTime angle makes every instance jump orientation in one
+            // frame at the wrap.
+            float spinSpeed = logoSpin * 0.5;
+            float wc = timeCos(spinSpeed, float(li) * 1.047);
+            float ws = timeSin(spinSpeed, float(li) * 1.047);
+            vec2 rotP = logoP * mat2(wc, -ws, ws, wc);
 
             float ringBreath = 1.0 + midsEnv * 0.3;
 
@@ -932,8 +937,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                     // Build propagation: depth-dependent activation
                     float depth = (fg + 0.5) / 3.0;
                     float built = smoothstep(depth - 0.15, depth, buildFront);
-                    float building = smoothstep(0.0, 0.1,
-                        abs(depth - buildFront)) < 0.5 ? 1.0 : 0.0;
+                    float building = step(abs(depth - buildFront), 0.05);
 
                     float branchGlow = smoothstep(lineWidth, lineWidth * 0.2, segDist);
                     branchGlow *= built;
@@ -1097,15 +1101,20 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             borderCol *= 0.6;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // -- Outer glow: crisp hex-shaped, not soft FBM fog -----------
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 3.0;
-    float glowRadius = zoneLen(mix(8.0, 16.0, vitality) + bassGlowPush);
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(8.0, 16.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, zoneLen(10.0), borderGlow);
+        float glow = expGlowBounded(d, zoneLen(10.0), borderGlow, glowRadius);
         // 6-fold modulated glow — hex-shaped falloff
         float oAngle = atan(p.y, p.x);
         float hexShape = 0.7 + 0.3 * cos(oAngle * 3.0 + time * 0.3);

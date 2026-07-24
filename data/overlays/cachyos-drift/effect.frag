@@ -347,7 +347,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, vec3(0.0, 1.0, 0.8));
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, vec3(0.13, 1.0, 0.71));
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * 0.5;
 
     float flowAngle = flowDirection * TAU;
@@ -441,7 +441,9 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             if (iLogo.dist > 0.08) continue;
 
             // ── Light casting (neon sign in fog) ──────────────────
-            float lightCast = exp(-max(iLogo.dist, 0.0) * 15.0) * 0.25;
+            // Pedestal-subtracted at the enclosing continue gate, so the cast fades to
+            // nothing rather than being cut at a fixed radius.
+            float lightCast = max(exp(-max(iLogo.dist, 0.0) * 15.0) - exp(-0.08 * 15.0), 0.0) * 0.25;
             vec3 logoLight = triStopPalette(time * 0.08 + iLogoUV.y + float(li) * 0.3,
                                            palGlow, palPrimary, palAccent);
             col += logoLight * lightCast * instIntensity * (1.0 + bassEnv * 0.2) * depthFactor;
@@ -507,9 +509,12 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                 }
 
                 // ── Multi-layer glow ──────────────────────────────
-                float glow1 = exp(-max(iLogo.dist, 0.0) * 80.0) * 0.5;
-                float glow2 = exp(-max(iLogo.dist, 0.0) * 25.0) * 0.25;
-                float glow3 = exp(-max(iLogo.dist, 0.0) * 8.0) * 0.12;
+                // Pedestal-subtracted at the enclosing gate, so each lobe reaches exactly 0
+                // there. The widest one was being cut with most of its peak still left,
+                // painting a hard ring around every logo instance.
+float glow1 = max(exp(-max(iLogo.dist, 0.0) * 80) - exp(-0.03 * 80), 0.0) * 0.5;
+                float glow2 = max(exp(-max(iLogo.dist, 0.0) * 25) - exp(-0.03 * 25), 0.0) * 0.25;
+                float glow3 = max(exp(-max(iLogo.dist, 0.0) * 8) - exp(-0.03 * 8), 0.0) * 0.12;
                 vec3 edgeCol = triStopPalette(time * 0.12 + iLogoUV.y + float(li) * 0.2,
                                              palGlow, palPrimary, palAccent);
                 float flare = 1.0 + bassEnv * 0.6;
@@ -621,15 +626,20 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             borderCol *= 0.55;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow ───────────────────────────────────────────
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 5.0;
-    float glowRadius = zoneLen(mix(10.0, 18.0, vitality) + bassGlowPush);
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(10.0, 18.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, zoneLen(7.0), borderGlow);
+        float glow = expGlowBounded(d, zoneLen(7.0), borderGlow, glowRadius);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.08) + midsEnv * 0.15;
         vec3 glowCol = triStopPalette(glowT, palPrimary, palSecondary, palAccent);

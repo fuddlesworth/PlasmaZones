@@ -9,12 +9,9 @@
 #include <PhosphorRendering/ZoneUniformExtension.h>
 #include <PhosphorShaders/IUniformExtension.h>
 
-#include "zoneshadernoderhi.h"
-
 #include <plasmazones_rendering_export.h>
 #include <QMutex>
 #include <QVariantList>
-#include <QVector>
 #include <atomic>
 #include <memory>
 
@@ -190,6 +187,10 @@ private:
     int m_zoneCount = 0;
     int m_highlightedCount = 0;
     int m_hoveredZoneIndex = -1;
+    /// The last index setHoveredZoneIndex was ASKED for, kept unclamped. The
+    /// effective m_hoveredZoneIndex is re-derived from it whenever the zone list
+    /// changes, so a hover that arrived before the list grew is not lost.
+    int m_requestedHoveredZoneIndex = -1;
 
     // Labels texture (main thread writes, render thread reads via updatePaintNode)
     PhosphorRendering::ZoneLabelTexture m_labelsTexture;

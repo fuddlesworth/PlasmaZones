@@ -7,7 +7,8 @@
 
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
-#include "core/types/constants.h"
+
+#include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorRendering/ZoneShaderCommon.h>

@@ -69,7 +69,7 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     vec3 borderClr = colorWithFallback(borderColor.rgb, vec3(0.5, 0.6, 1.0));
 
     // Vitality system: highlighted = vivid/energetic, dormant = desaturated/dim
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
 
     // ── Bass = Cascade Chain-Reaction Chromatic ────────────────────────
     // Bass triggers a signal that propagates from zone center outward along
@@ -174,8 +174,8 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             flowColor = mix(flowColor, zoneFillHue(fillColor) * borderEnergy, accentTrace * 0.3 * hueMix);
         }
 
-        result.rgb = mix(result.rgb, flowColor, borderAlpha);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, flowColor, (borderAlpha) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // Outer glow

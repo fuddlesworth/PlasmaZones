@@ -765,7 +765,7 @@ const float kOuterGlowReach = 50.0;
 // the full width, so a hand-authored border wider than the reach would be
 // sliced at a fixed radius. Every bound folds this in.
 float zoneOuterReach(float borderWidthLogical) {
-    return max(kOuterGlowReach * uZoneScale, zoneBorderWidth(borderWidthLogical) * 2.0);
+    return max(zoneLen(kOuterGlowReach), zoneBorderWidth(borderWidthLogical) * 2.0);
 }
 
 // Per-zone chrome: fill (from global scene with vitality), border, glow.
@@ -822,7 +822,7 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         col *= highlightBoost;
         // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
         // The zone's activeOpacity arrives in fillColor.a, but only four packs
-        // ever multiplied it in, so it was inert in the other 23 and the split
+        // ever multiplied it in, so it was inert catalog-wide and the split
         // just made the same setting behave differently per pack.
         result = vec4(col, fillOpacity);
     }
@@ -958,7 +958,7 @@ vec4 pImage(vec2 fragCoord) {
         vec2 luv = labelsUv(fragCoord);
         vec2 texPx = 1.0 / max(iResolution, vec2(1.0));
         vec4 labels = texture(uZoneLabels, luv);
-        float spread = labelSpread * pxScale();
+        float spread = zoneLen(labelSpread);
         float bassMod = hasAudio ? bass * labelReact : 0.0;
 
         // Tight Gaussian halo — 5x5 kernel, narrow falloff so glow sits

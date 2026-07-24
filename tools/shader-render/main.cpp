@@ -96,10 +96,10 @@ QString defaultShaderDir()
     const QString cwd = QDir(QStringLiteral("data/overlays")).absolutePath();
     if (QDir(cwd).exists())
         return cwd;
-    const QString xdg = xdgPlasmaZonesDir(QStringLiteral("overlays"));
-    if (!xdg.isEmpty())
-        return xdg;
-    return QStringLiteral("/usr/share/plasmazones/overlays");
+    // No hardcoded /usr/share tier: GenericDataLocation already ends with the
+    // XDG_DATA_DIRS list, which contains it. A second spelling of a path the
+    // walk above already covers is just a second thing to keep in sync.
+    return xdgPlasmaZonesDir(QStringLiteral("overlays"));
 }
 
 QString defaultLayoutDir()
@@ -107,10 +107,10 @@ QString defaultLayoutDir()
     const QString cwd = QDir(QStringLiteral("data/layouts")).absolutePath();
     if (QDir(cwd).exists())
         return cwd;
-    const QString xdg = xdgPlasmaZonesDir(QStringLiteral("layouts"));
-    if (!xdg.isEmpty())
-        return xdg;
-    return QStringLiteral("/usr/share/plasmazones/layouts");
+    // No hardcoded /usr/share tier: GenericDataLocation already ends with the
+    // XDG_DATA_DIRS list, which contains it. A second spelling of a path the
+    // walk above already covers is just a second thing to keep in sync.
+    return xdgPlasmaZonesDir(QStringLiteral("layouts"));
 }
 
 } // namespace

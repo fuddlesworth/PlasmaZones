@@ -140,6 +140,7 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
             PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts),
             m_autotileLayoutSource);
 
+        m_cachedScreenDesktop = desktop;
         m_cacheValid = true;
     }
     return m_cachedLayouts;
@@ -264,8 +265,17 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
 
 void UnifiedLayoutController::setCurrentVirtualDesktop(int desktop)
 {
-    if (m_currentVirtualDesktop != desktop) {
+    // Invalidate on a change of EITHER the global desktop (this member) or the
+    // current screen's own desktop, which is what layouts() actually keys the
+    // cache on. Only the global currentDesktopChanged handler calls this, and
+    // the per-output screenDesktopChanged path reaches the controller through
+    // setters that early-return when nothing they own changed, so guarding on
+    // the global value alone would leave a stale list on a per-output switch.
+    const int screenDesktop =
+        m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName) : 0;
+    if (m_currentVirtualDesktop != desktop || m_cachedScreenDesktop != screenDesktop) {
         m_currentVirtualDesktop = desktop;
+        m_cachedScreenDesktop = screenDesktop;
         m_cacheValid = false;
     }
 }

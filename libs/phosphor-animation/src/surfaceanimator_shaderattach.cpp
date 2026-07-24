@@ -175,12 +175,13 @@ void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderEffect* 
     // item's bounds. Vertex shaders read this for the visible card's
     // size in pixels regardless of fboExtentKind.
     //
-    // Units: LOGICAL pixels (no DPR multiplication). iResolution lands
-    // in the UBO multiplied by DPR (`shadereffect.cpp::effectiveResolutionScale`)
-    // so its units differ from the extension fields here. Shaders that
-    // need to compute ratios involving FBO size MUST source the FBO
-    // size from `iSurfaceScreenPos.zw` (also logical) — see the fly-in
-    // vertex shader for the canonical pattern. Shaders that consume
+    // Units: LOGICAL pixels. iResolution is logical on this path too:
+    // AnimationUniformExtension::requiresPhysicalResolution() is false, so
+    // `shadereffect.cpp::effectiveResolutionScale` returns 1.0 and no DPR
+    // multiply happens. Ratios against `iResolution` and against
+    // `iSurfaceScreenPos.zw` are therefore both unit-consistent with the
+    // extension fields here — see the fly-in vertex shader for the
+    // canonical pattern. Shaders that consume
     // `iAnchorSize` as a standalone pixel count (broken-glass's
     // `uSize`, tv-glitch's row offsets) want the logical value because
     // the magic-constant tuning was done against logical dimensions.

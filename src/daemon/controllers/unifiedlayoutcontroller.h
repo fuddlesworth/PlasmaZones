@@ -50,7 +50,8 @@ class Settings;
  *
  * Usage:
  * @code
- * auto *controller = new UnifiedLayoutController(layoutManager, settings, parent);
+ * auto *controller = new UnifiedLayoutController(layoutManager, settings, screenManager,
+ *                                                algorithmRegistry, autotileEngine, parent);
  * controller->applyLayoutById(layoutId);
  * controller->cycleNext();
  * connect(controller, &UnifiedLayoutController::layoutApplied, this, &Daemon::showLayoutOsd);
@@ -270,12 +271,21 @@ private:
     // layout manager, so this value never reaches the list builder. It exists
     // so setCurrentVirtualDesktop can invalidate the cache on a real change
     // rather than on every desktop-changed signal.
+    //
+    // It tracks the GLOBAL desktop while the cache is keyed on the CURRENT
+    // SCREEN's desktop, so the two are only incidentally correlated. The setter
+    // therefore invalidates on either changing, not on this member alone.
     int m_currentVirtualDesktop = 1;
+
     QString m_currentActivity;
     bool m_includeManualLayouts = true;
     bool m_includeAutotileLayouts = false;
     mutable QVector<PhosphorLayout::LayoutPreview> m_cachedLayouts;
     mutable bool m_cacheValid = false;
+    /// The per-screen desktop the cached list was built for, so the invalidation
+    /// guard keys on the same thing layouts() does. Mutable for the same reason
+    /// the cache itself is: layouts() is const and fills it lazily.
+    mutable int m_cachedScreenDesktop = -1;
 };
 
 } // namespace PlasmaZones

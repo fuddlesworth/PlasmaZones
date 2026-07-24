@@ -9,7 +9,7 @@
  *   - Thin-film interference iridescence (nanocrystal color shifting)
  *   - Turing pattern overlays (organic chameleon markings)
  *   - Curl noise dust particles (Tumbleweed desert wind)
- *   - 82-vertex polygon SDF Geeko logo extracted from official SVG
+ *   - 81-vertex polygon SDF Geeko logo extracted from official SVG
  *
  * Audio reactivity (organic — modulates existing animation):
  *   Bass  = scale breathing + color metamorphosis speed + dust wind
@@ -110,12 +110,16 @@ vec2 curlNoiseFwd(vec2 p, float time) {
 
 
 // ═══════════════════════════════════════════════════════════════
-//  GEEKO LOGO — 82-vertex polygon extracted from official SVG
+//  GEEKO LOGO — 81-vertex polygon extracted from official SVG
 //  Winding-number SDF (Inigo Quilez) with AABB early-out
 // ═══════════════════════════════════════════════════════════════
 
-const int GEEKO_N = 82;
-const vec2 GEEKO[82] = vec2[82](
+// The closing vertex is NOT repeated: the loop below wraps j from N-1 to 0,
+// so a duplicated first==last point would give e == vec2(0.0) and a 0/0 in
+// dot(w, e) / dot(e, e), producing a NaN for every fragment that clears the
+// AABB early-out.
+const int GEEKO_N = 81;
+const vec2 GEEKO[81] = vec2[81](
     vec2(0.9871, 0.4367),
     vec2(0.9934, 0.4318),
     vec2(0.9790, 0.3832),
@@ -196,8 +200,7 @@ const vec2 GEEKO[82] = vec2[82](
     vec2(0.7621, 0.4030),
     vec2(0.8399, 0.4466),
     vec2(0.9022, 0.4644),
-    vec2(0.9391, 0.4609),
-    vec2(0.9871, 0.4367)
+    vec2(0.9391, 0.4609)
 );
 
 const vec2 GEEKO_CENTER = vec2(0.4189, 0.5347);
@@ -211,7 +214,7 @@ const vec2  GEEKO_PUPIL_R    = vec2(0.018, 0.012);     // pupil semi-axes (horiz
 
 // Polygon SDF with AABB early-out (winding-number sign rule)
 float sdGeeko(vec2 p) {
-    // AABB: polygon spans x=[0.007,0.993], y=[0.256,0.744]
+    // AABB: polygon spans x=[0.008,0.994], y=[0.256,0.745] (rounded outward)
     vec2 dLo = vec2(0.007, 0.256) - p;
     vec2 dHi = p - vec2(0.993, 0.744);
     vec2 outside = max(max(dLo, dHi), vec2(0.0));
@@ -353,7 +356,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, SUSE_TURQ);
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, SUSE_GLOW);
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStr;
 
     float flowAngle = flowDirection * TAU;
@@ -420,7 +423,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
         // Scale gap color — veins visible through gaps between scales
         vec3 gapCol = palPrimary * 0.3 + veinCol * veins * veinPulse;
-        float rimStrength = mix(0.3, 1.0, gridScale / 0.6);
+        float rimStrength = mix(0.3, 1.0, clamp(gridScale / 0.6, 0.0, 1.0));
         vec3 col = mix(gapCol, scaleCol * scaleHighlight * brightness, scaleRim * rimStrength);
 
         // ── Per-cell interior shapes (living scales) ──────────
@@ -767,8 +770,11 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 }
 
                 // ── Multi-layer glow ──────────────────────────────
-                float glow1 = exp(-max(fDist, 0.0) * 80.0) * 0.45;
-                float glow2 = exp(-max(fDist, 0.0) * 25.0) * 0.2;
+                // Pedestal-subtracted at the enclosing gate, so each lobe reaches exactly 0
+                // there. The widest one was being cut with most of its peak still left,
+                // painting a hard ring around every logo instance.
+float glow1 = max(exp(-max(fDist, 0.0) * 80) - exp(-0.005 * 80), 0.0) * 0.45;
+                float glow2 = max(exp(-max(fDist, 0.0) * 25) - exp(-0.005 * 25), 0.0) * 0.2;
                 float glow3 = exp(-max(fDist, 0.0) * 8.0) * 0.1;
                 vec3 edgeCol = triStopPalette(time * 0.06 + iLogoUV.y + float(li) * 0.2,
                                             palGlow, palSecondary, palAccent);
@@ -932,15 +938,20 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             borderCol *= 0.55;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow ───────────────────────────────────────────
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 5.0;
-    float glowRadius = zoneLen(mix(10.0, 18.0, vitality) + bassGlowPush);
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(10.0, 18.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, zoneLen(7.0), borderGlow);
+        float glow = expGlowBounded(d, zoneLen(7.0), borderGlow, glowRadius);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.08) + midsEnv * 0.15;
         vec3 glowCol = triStopPalette(glowT, palSecondary, palAccent, palGlow);

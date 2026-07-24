@@ -273,8 +273,8 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         borderClr = mix(borderClr, accent, vitalityScale(0.05, 0.4, vitality));
         borderClr *= vitalityScale(0.8, 1.1, vitality);
         borderClr = vitalityDesaturate(borderClr, vitality);
-        result.rgb = mix(result.rgb, borderClr, border * 0.9);
-        result.a = max(result.a, border * 0.95);
+        result.rgb = mix(result.rgb, borderClr, (border * 0.9) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // Outer glow (both states, vitality-modulated)

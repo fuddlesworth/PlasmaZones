@@ -396,6 +396,37 @@ private Q_SLOTS:
         QCOMPARE(item.hoveredZoneIndex(), 2);
     }
 
+    void testZoneShaderItem_hoveredZoneIndexReDerivedOnZoneListChange()
+    {
+        // The two QML bindings (zones, hoveredZoneIndex) evaluate in an
+        // unspecified order, so setZones has to re-derive the effective hover
+        // from the last REQUESTED index in both directions.
+        ZoneShaderItem item;
+        item.setIResolution(QSizeF(1920, 1080));
+        item.setZones(makeFourZoneLayout());
+        item.setHoveredZoneIndex(3);
+        QCOMPARE(item.hoveredZoneIndex(), 3);
+
+        QSignalSpy hoverSpy(&item, &ZoneShaderItem::hoveredZoneIndexChanged);
+
+        // Shrink past the hovered index: it must drop, not stay stale.
+        QVariantList two;
+        two.append(makeZone(0, 0, 960, 1080, 1, false));
+        two.append(makeZone(960, 0, 960, 1080, 2, false));
+        item.setZones(two);
+        QCOMPARE(item.hoveredZoneIndex(), -1);
+        QCOMPARE(hoverSpy.count(), 1);
+        // Nothing is highlighted by hover any more, and neither test zone
+        // carries its own highlight flag.
+        QCOMPARE(item.highlightedCount(), 0);
+
+        // Grow again: the request that arrived while the list was short has to
+        // come back, or the highlight is lost until the cursor moves.
+        item.setZones(makeFourZoneLayout());
+        QCOMPARE(item.hoveredZoneIndex(), 3);
+        QCOMPARE(hoverSpy.count(), 2);
+    }
+
     void testZoneShaderItem_setShaderParamsAppliesFloatSlots()
     {
         ZoneShaderItem item;
