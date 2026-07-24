@@ -360,11 +360,12 @@ or relocate existing keys — do not for pure additions. No ad-hoc per-key fallb
 PlasmaZones has a rules engine (`libs/phosphor-rules/`) where each rule is a `MatchExpression`
 (the WHEN side, over `Field`/`Operator`/value predicates) plus a list of `RuleAction{type, params}`
 (the THEN side, dispatched through the process-wide `ActionRegistry`). Scrolling mode must integrate
-with it at three levels. **Follow the additive invariant from `docs/rule-expansion-plan.md`: every
-consumer reads `rule-slot ?? config-getter` — config stays the authoritative global default and
-rules layer additive overrides on top. No config group is retired and no `RuleSet::SchemaVersion`
-bump.** (That plan's own action list is already fully shipped; scrolling is a new additive tier
-layered the same way.)
+with it at three levels. **Follow the additive invariant the existing rule vocabulary was built on:
+every consumer reads `rule-slot ?? config-getter` — config stays the authoritative global default
+and rules layer additive overrides on top. No config group is retired and no
+`RuleSet::SchemaVersion` bump.** Per-screen behavior is expressed as a `WHEN ScreenId Equals <edid>`
+rule over the global config default, not as a new per-screen config store. Scrolling is a new
+additive tier layered exactly the same way.
 
 **(a) Assigning a screen/context to Scrolling — already works, do not rebuild.** Mode assignment
 is persisted *as rules*. `ContextRuleBridge::makeAssignmentRule`/`makeAssignmentActions` emit a

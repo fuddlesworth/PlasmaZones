@@ -66,9 +66,8 @@ Luau host (sandbox, watchdog, marshalling) lives in
 | `PhosphorTiles::AutotilePreviewRender`       | Paint-a-thumbnail helper for the algorithm picker |
 
 The `pluau` standard library (`src/pluau/pluau.luau`) and its type stubs (`src/pluau/pluau.d.luau`)
-are the Luau-side API surface. See
-[`docs/architecture/luau-algorithm-authoring.md`](../../docs/architecture/luau-algorithm-authoring.md)
-for the authoring guide.
+are the Luau-side API surface. See the
+[tiling algorithm authoring guide](https://phosphor-works.github.io/guides/tiling/).
 
 ## Typical use
 
