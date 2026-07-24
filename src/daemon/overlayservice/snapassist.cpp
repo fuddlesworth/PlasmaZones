@@ -2,19 +2,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "internal.h"
-#include "../overlayservice.h"
-#include "../../core/logging.h"
+#include "daemon/overlayservice.h"
+#include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include "../../core/utils.h"
+#include "core/utils/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../snapassistthumbnailprovider.h"
-#include "../dmabuftextureprovider.h"
-#include "../dmabuffencewaiter.h"
+#include "daemon/rendering/snapassistthumbnailprovider.h"
+#include "daemon/rendering/dmabuftextureprovider.h"
+#include "daemon/rendering/dmabuffencewaiter.h"
 #include <QGuiApplication>
 #include <QImage>
 #include <QQuickWindow>

@@ -14,123 +14,34 @@
  *   - ctor/dtor lifecycle is clean (no leaked Tracks)
  *
  * Coverage gaps (intentional, NOT bugs):
- *   - `setIsReversed(!isShowLeg)` runtime push at surfaceanimator.cpp:566
- *     and :1344 is not behaviourally tested here. Exercising it would
- *     require: (a) a real shader pack on disk that
- *     `AnimationShaderRegistry` can discover, (b) a `ShaderEffect`
- *     instantiated through `attachShaderToAnchor`'s scene-graph path,
- *     and (c) reading the `isReversed` Q_PROPERTY off the dynamically-
- *     constructed item — substantial infrastructure that exceeds this
- *     unit-test layer's mock surface. The contract IS verified at the
- *     compile / bake layer: `test_animation_shader_bake` runs every
- *     shipped shader through SPIR-V with the canonical UBO including
- *     `iIsReversed`. The runtime push is mechanical (`shaderItem->
+ *   - the `setIsReversed(!isShowLeg)` runtime pushes (runLeg's reuse path
+ *     in surfaceanimator_tracks.cpp and the fresh-attach path in
+ *     surfaceanimator_shaderattach.cpp) are not behaviourally tested
+ *     here. Exercising them would
+ *     require reading the `isReversed` Q_PROPERTY off the dynamically-
+ *     constructed ShaderEffect. (A discoverable pack and an attached
+ *     ShaderEffect are both cheap — see
+ *     beginShow_refuses_compositor_only_pack below, which builds a pack in a
+ *     QTemporaryDir, and note attachShaderToAnchor falls back to the target
+ *     when no tagged anchor exists. Only the property read is real work.) The contract IS verified at the
+ *     compile / bake layer: `test_animation_shader_preamble_bake` runs
+ *     every daemon-eligible shader's fragment stage through SPIR-V with
+ *     the canonical UBO including `iIsReversed` (compositor-only packs
+ *     get the default-block equivalent via
+ *     `test_animation_shader_kwin_bake`'s KWin-branch compile, when a
+ *     desktop-GL 4.5 context is available). The runtime push is mechanical (`shaderItem->
  *     setIsReversed(!isShowLeg)`) — when extending behavioural coverage
  *     here, mock the ShaderEffect output via a `QQuickItem` subclass
  *     exposing the `isReversed` Q_PROPERTY and have the test's content
  *     item host one tagged `shaderAnchor: true`.
  */
-#include <PhosphorAnimation/SurfaceAnimator.h>
-
-#include <PhosphorAnimation/Curve.h>
-#include <PhosphorAnimation/Easing.h>
-#include <PhosphorAnimation/PhosphorProfileRegistry.h>
-#include <PhosphorAnimation/Profile.h>
+#include "SurfaceAnimatorTestHarness.h"
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
-#include <PhosphorLayer/PhosphorLayer.h>
-#include <PhosphorShellPatterns/Patterns.h>
-
-#include "mocks/mockscreenprovider.h"
-#include "mocks/mocktransport.h"
-
-#include <QQuickItem>
-#include <QQuickWindow>
-#include <QSignalSpy>
-#include <QTest>
-
-#include <chrono>
-#include <thread>
-
-using namespace PhosphorAnimationLayer;
-using PhosphorAnimation::PhosphorProfileRegistry;
-using PhosphorAnimation::Profile;
-using PhosphorLayer::Surface;
-using PhosphorLayer::SurfaceFactory;
-
-namespace {
-
-/// Build a Profile with explicit duration + an OutCubic-shaped Easing
-/// curve. Tests use a short duration (15ms) so the spin-wait at the end
-/// of show/hide takes a few frames at most.
-Profile makeProfile(int durationMs)
-{
-    Profile p;
-    p.duration = durationMs;
-    auto easing = std::make_shared<PhosphorAnimation::Easing>();
-    easing->type = PhosphorAnimation::Easing::Type::CubicBezier;
-    easing->x1 = 0.215;
-    easing->y1 = 0.61;
-    easing->x2 = 0.355;
-    easing->y2 = 1.0;
-    p.curve = easing;
-    return p;
-}
-
-/// Spin the event loop until @p predicate returns true or @p timeoutMs elapses.
-/// Wraps the QtQuickClock + AnimatedValue tick path so tests can wait for
-/// async completion without arbitrary fixed sleeps.
-//
-// `chrono::time_point::operator<` in libstdc++ is implemented via a
-// `<=>` constraint that, on some libstdc++ versions, falls through a
-// `std::common_comparison_category` SFINAE expression containing a
-// literal `0`, tripping `-Wzero-as-null-pointer-constant` at every
-// instantiation. Suppress locally — the comparison itself is correct,
-// the warning is a libstdc++ template-expansion artefact.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wzero-as-null-pointer-constant"
-template<typename Predicate>
-bool waitFor(Predicate p, int timeoutMs = 1000)
-{
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
-    while (std::chrono::steady_clock::now() < deadline) {
-        if (p()) {
-            return true;
-        }
-        QTest::qWait(5);
-    }
-    return p();
-}
-#pragma GCC diagnostic pop
-
-SurfaceAnimator::Config defaultsForTesting()
-{
-    SurfaceAnimator::Config c;
-    c.showProfile = QStringLiteral("test.show");
-    c.hideProfile = QStringLiteral("test.hide");
-    return c;
-}
-
-/// Resolve the QQuickItem the animator drives: when SurfaceConfig::contentItem
-/// is provided, the Surface parents it under window->contentItem() and the
-/// animator drives the inner item (`m_rootItem`). Reading the wrong item is
-/// a common test foot-gun — centralise the lookup so every show/hide test
-/// reads the same child the animator writes.
-QQuickItem* animatedItem(Surface* surface)
-{
-    if (!surface || !surface->window()) {
-        return nullptr;
-    }
-    auto* parent = surface->window()->contentItem();
-    if (!parent) {
-        return nullptr;
-    }
-    const auto children = parent->childItems();
-    return children.isEmpty() ? parent : children.first();
-}
-
-} // namespace
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 
 class TestSurfaceAnimator : public QObject
 {
@@ -363,7 +274,9 @@ private Q_SLOTS:
 
         // Cancel the in-flight long animation so we get a clean slate.
         anim.cancel(surface);
-        target->setOpacity(1.0); // reset for the supersession-aware fresh-show check
+        // Clear the cancelled mid-fade state so the second show starts from
+        // clean values (beginShow hardcodes fromOpacity=0 regardless).
+        target->setOpacity(1.0);
         target->setScale(1.0);
 
         // Reload the profile to a 20ms duration — same path, new shape.
@@ -403,7 +316,6 @@ private Q_SLOTS:
         auto* surface = f.create(std::move(cfg));
         QVERIFY(surface);
 
-        bool completed = false;
         // We can't directly hook the animator's onComplete (it's invoked
         // from inside Surface::Impl::driveWarmOrShow via the captured
         // lambda). Instead we observe the QQuickItem's opacity reaching
@@ -411,7 +323,6 @@ private Q_SLOTS:
         // value and the runLeg's pendingLegs counter then erases the
         // tracking entry.
         surface->show();
-        Q_UNUSED(completed);
 
         QQuickItem* target = animatedItem(surface);
         QVERIFY(target);
@@ -516,76 +427,6 @@ private Q_SLOTS:
         delete surface;
     }
 
-    /// Regression: a synchronous cancel(surface) re-entered from inside
-    /// the pre-state-set QML chain (target->setOpacity firing
-    /// opacityChanged → consumer slot → cancel) must be honoured.
-    /// Pre-fix the slot was installed AFTER the synchronous setOpacity,
-    /// so cancelTracking saw an empty m_tracks, did nothing, and runLeg
-    /// then installed a fresh slot the consumer wanted gone — silently
-    /// dropping the cancel intent and starting an unwanted animation.
-    /// Post-fix the slot is installed BEFORE the pre-state writes, so
-    /// the re-entrant cancel finds an AV-less entry, erases it cleanly,
-    /// and the post-write re-find detects the erasure and bails.
-    void cancel_during_prestate_setOpacity_is_honoured()
-    {
-        PhosphorLayer::Testing::MockTransport t;
-        PhosphorLayer::Testing::MockScreenProvider s;
-        SurfaceAnimator anim(m_registry, defaultsForTesting());
-        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
-        deps.animator = &anim;
-        SurfaceFactory f(deps);
-
-        PhosphorLayer::SurfaceConfig cfg;
-        cfg.role = PhosphorShellPatterns::Modal();
-        cfg.contentItem = std::make_unique<QQuickItem>();
-        cfg.screen = s.primary();
-        cfg.keepMappedOnHide = true;
-        cfg.debugName = QStringLiteral("cancel-during-prestate");
-
-        auto* surface = f.create(std::move(cfg));
-        QVERIFY(surface);
-        surface->warmUp();
-        QQuickItem* target = animatedItem(surface);
-        QVERIFY(target);
-
-        // Force opacity ≠ 0 so the upcoming runLeg's setOpacity(0) actually
-        // emits opacityChanged (Qt's qFuzzyCompare suppresses no-op writes).
-        target->setOpacity(1.0);
-
-        // Connect a one-shot opacityChanged handler that calls cancel
-        // synchronously from inside the QML signal chain — exactly the
-        // re-entry pattern this fix is designed to honour.
-        bool cancelled = false;
-        int onCompleteFires = 0;
-        QMetaObject::Connection conn = QObject::connect(target, &QQuickItem::opacityChanged, target, [&]() {
-            if (cancelled) {
-                return;
-            }
-            cancelled = true;
-            anim.cancel(surface);
-        });
-
-        anim.beginShow(surface, target, [&onCompleteFires]() {
-            ++onCompleteFires;
-        });
-
-        QObject::disconnect(conn);
-
-        // The synchronous setOpacity inside runLeg fired opacityChanged,
-        // our slot called cancel, and runLeg should have detected the
-        // erasure on its post-state-set re-find and bailed. So:
-        //   - cancelled is true (the slot ran)
-        //   - opacity has NOT been driven further (no animation started)
-        //   - onComplete never fires
-        QVERIFY(cancelled);
-        const qreal opAfter = target->opacity();
-        QTest::qWait(100); // would let any started animation tick
-        QCOMPARE(target->opacity(), opAfter);
-        QCOMPARE(onCompleteFires, 0);
-
-        delete surface;
-    }
-
     /// cancel mid-flight stops the AnimatedValue and does not produce a
     /// completion callback. After cancel, opacity stays at whatever
     /// value the animation left it at (no snap-to-target).
@@ -630,11 +471,12 @@ private Q_SLOTS:
         delete surface;
     }
 
-    /// Regression: beginShow superseding a mid-flight beginHide must pick
-    /// up from the live opacity instead of jumping back to 0. Pre-fix,
-    /// the show path hardcoded fromOpacity=0; with the live-from change
-    /// a re-show while the hide is at 0.5 fades 0.5→1.0, not 0.5→0→1.0.
-    void show_after_partial_hide_starts_from_live_opacity()
+    /// A re-show over a partially-faded target must reset to 0 and fade
+    /// up, never resume from the stale partial opacity: beginShow
+    /// hardcodes fromOpacity=0 (surfaceanimator.cpp) to prevent ghost
+    /// frames when geometry changes between hide and show. Only the
+    /// HIDE side reads live opacity (hide-while-showing supersession).
+    void show_after_partial_hide_resets_to_zero()
     {
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
@@ -681,9 +523,9 @@ private Q_SLOTS:
     }
 
     /// Fresh first show (no prior animation, target opacity defaulted to
-    /// 1.0 by QQuickItem) must reset to 0 and fade up. Otherwise the
-    /// supersession-aware live-from path would observe opacity==1.0 and
-    /// run a no-op fade-from-1-to-1.
+    /// 1.0 by QQuickItem) must reset to 0 and fade up: beginShow always
+    /// hardcodes fromOpacity=0 (surfaceanimator.cpp), so the QQuickItem
+    /// default 1.0 never turns the fade-in into a no-op fade-from-1-to-1.
     void show_fresh_starts_from_zero()
     {
         PhosphorLayer::Testing::MockTransport t;
@@ -709,10 +551,9 @@ private Q_SLOTS:
         QVERIFY(target);
 
         // After show kicks the runLeg synchronously, target opacity must
-        // be 0.0 — the fresh-show path picked the configured fromOpacity
-        // because the live opacity (QQuickItem default 1.0) was at the
-        // terminal value. Without the supersession-aware reset this would
-        // be 1.0 and we'd see no fade-in.
+        // be 0.0 — beginShow's hardcoded fromOpacity=0 overrides the
+        // QQuickItem default of 1.0. If show ever read the live opacity
+        // instead, this would be 1.0 and we'd see no fade-in.
         QCOMPARE(target->opacity(), 0.0);
         QVERIFY(waitFor(
             [target] {
@@ -840,8 +681,9 @@ private Q_SLOTS:
     /// can call `anim.cancel(surface)` — which routes through
     /// cancelTracking. Pre-fix, cancelTracking destroyed the
     /// AnimatedValue at scope exit (local unique_ptr), tearing it down
-    /// while `advance()` was still on the stack. AnimatedValue.h:547
-    /// forbids this — `advance()` accesses `*this` after the callback
+    /// while `advance()` was still on the stack. AnimatedValue::
+    /// advance()'s re-entrancy contract forbids this — `advance()`
+    /// accesses `*this` after the callback
     /// returns (e.g. the m_isComplete branch).
     ///
     /// The fix parks cancelled AnimatedValues in m_pendingDestroy
@@ -1182,6 +1024,98 @@ private Q_SLOTS:
                      },
                      500),
                  "show animation must complete even when shaderEffectId doesn't resolve in the registry");
+
+        delete surface;
+    }
+
+    /// runLeg REFUSES to attach a compositor-only pack (appliesTo omitting
+    /// "appearance") on the daemon path: such a pack is authored against the
+    /// kwin classic-GL dialect and would fail the strict SPIR-V bake at first
+    /// paint, stalling the leg. It is reachable through a picker-legal config,
+    /// so the refusal is load-bearing.
+    ///
+    /// The observable is the PRE-STATE write, not the shader item: a surviving
+    /// shader leg snaps opacity straight to its terminal value and suppresses
+    /// the scale leg entirely, while a refused one leaves the plain
+    /// opacity+scale legs to write their `from` values. Asserting on shader
+    /// attachment instead would be vacuous — attachShaderToAnchor falls back
+    /// to the target when no tagged anchor exists, so something attaches
+    /// either way.
+    void beginShow_refuses_compositor_only_pack()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString packDir = tmp.path() + QStringLiteral("/compositor-only-probe");
+        QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("compositor-only-probe")));
+        {
+            // Schema-complete or the scan silently drops the pack.
+            QFile meta(packDir + QStringLiteral("/metadata.json"));
+            QVERIFY(meta.open(QIODevice::WriteOnly));
+            meta.write(R"({"id":"compositor-only-probe","name":"Probe","description":"probe",)"
+                       R"("author":"test","version":"1.0","category":"Test",)"
+                       R"("fragmentShader":"effect.frag","parameters":[],"appliesTo":["geometry"]})");
+        }
+        {
+            QFile frag(packDir + QStringLiteral("/effect.frag"));
+            QVERIFY(frag.open(QIODevice::WriteOnly));
+            frag.write("void main(){}\n");
+        }
+
+        PhosphorAnimationShaders::AnimationShaderRegistry shaderRegistry;
+        shaderRegistry.addSearchPath(tmp.path());
+        shaderRegistry.refresh();
+        const auto eff = shaderRegistry.effect(QStringLiteral("compositor-only-probe"));
+        QVERIFY2(eff.isValid(), "fixture pack must resolve");
+        QVERIFY2(PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff), "fixture must be compositor-only");
+
+        SurfaceAnimator::Config cfg;
+        cfg.showProfile = QStringLiteral("test.show");
+        cfg.hideProfile = QStringLiteral("test.hide");
+        cfg.showScaleProfile = QStringLiteral("test.scale-show");
+        cfg.showScaleFrom = 0.5;
+        cfg.showShaderEffectId = QStringLiteral("compositor-only-probe");
+        cfg.showShaderProfile = QStringLiteral("test.show");
+        SurfaceAnimator anim(m_registry, cfg);
+        anim.setAnimationShaderRegistry(&shaderRegistry);
+
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig sc;
+        sc.role = PhosphorShellPatterns::Modal();
+        sc.contentItem = std::make_unique<QQuickItem>();
+        sc.screen = s.primary();
+        sc.keepMappedOnHide = true;
+        sc.debugName = QStringLiteral("compositor-only-probe");
+
+        auto* surface = f.create(std::move(sc));
+        QVERIFY(surface);
+        surface->warmUp();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        int fires = 0;
+        anim.beginShow(surface, target, [&fires]() {
+            ++fires;
+        });
+
+        // Refused => plain-leg pre-state. A surviving shader leg would snap
+        // opacity to 1.0 here and never write scale at all.
+        QCOMPARE(target->opacity(), 0.0);
+        QCOMPARE(target->scale(), 0.5);
+
+        QVERIFY(waitFor(
+            [target] {
+                return target->opacity() >= 0.999 && target->scale() >= 0.999;
+            },
+            500));
+        QVERIFY(waitFor(
+            [&fires] {
+                return fires == 1;
+            },
+            500));
 
         delete surface;
     }

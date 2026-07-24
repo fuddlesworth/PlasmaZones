@@ -10,7 +10,9 @@
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PARAMETERS  (customParams slots 0-21, customColors slots 0-7)
+// PARAMETERS  (declared in metadata.json, read via the generated p_<id>
+// accessors below; the slot-range note that used to sit here counted only
+// the parameters the pack had at the time and drifted as more were added)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 float getSpeed()           { return p_speed >= 0.0 ? p_speed : 0.08; }
@@ -30,7 +32,7 @@ float getAudioSensitivity(){ return p_audioSensitivity >= 0.0 ? p_audioSensitivi
 float getFillOpacity()     { return p_fillOpacity >= 0.0 ? p_fillOpacity : 0.95; }
 float getDataSurgeIntensity() { return p_dataSurgeIntensity >= 0.0 ? p_dataSurgeIntensity : 1.0; }
 
-// Tri-Hex parameters (customParams[4] and customParams[5])
+// Tri-Hex parameters
 float getTriLineThickness() { return p_triLineThickness >= 0.0 ? p_triLineThickness : 0.03; }
 float getTriLineOpacity()   { return p_triLineOpacity >= 0.0 ? p_triLineOpacity : 0.25; }
 float getTriFillOpacity()   { return p_triFillOpacity >= 0.0 ? p_triFillOpacity : 0.12; }
@@ -73,7 +75,7 @@ vec3 getTriLineColor() { vec3 c = p_triLineColor.rgb; return length(c) > 0.01 ? 
 // LAYER 1: NEON COLOR GRADE  (from original, unchanged)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-vec3 colorGrade(vec3 color, float t) {
+vec3 colorGrade(vec3 color) {
     float GRADE_INTENSITY = getGradeIntensity();
     float GRADE_SATURATION = getGradeSaturation();
     float lum = luminance(color);
@@ -120,8 +122,8 @@ vec2 hexCoord(vec2 uv) {
 // TRI-HEX OVERLAY  (triangular regions between hexagons at vertex junctions)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-vec3 triHexOverlay(vec2 hex, float d, vec2 hexId, vec2 hexCenter, float t,
-                   float bass, float mids, float treble, float overall) {
+vec3 triHexOverlay(vec2 hex, float d, vec2 hexCenter, float t,
+                   float bass, float treble) {
     float triLineThick = getTriLineThickness();
     float triLineAlpha = getTriLineOpacity();
     float triFillAlpha = getTriFillOpacity();
@@ -225,7 +227,10 @@ vec3 hexGrid(vec2 pixelCoord, float t, vec2 screenUV,
     bool hasAudio = iAudioSpectrumSize > 0;
 
     // Hex grid in pixel space (size stays constant regardless of zone size)
-    vec2 scaledUV = pixelCoord / HEX_PIXEL_SIZE;
+    // zoneLen(): HEX_PIXEL_SIZE is a logical-px setting divided into a
+    // device-px fragCoord, so without it the cells halved in physical size on
+    // a 2x display while the border and corner around them kept theirs.
+    vec2 scaledUV = pixelCoord / max(zoneLen(HEX_PIXEL_SIZE), 1.0);
     vec2 hex = hexCoord(scaledUV);
     float d = hexDist(hex);
 
@@ -306,7 +311,7 @@ vec3 hexGrid(vec2 pixelCoord, float t, vec2 screenUV,
     }
 
     // Tri-hex overlay: animated triangles between hexagons (at vertex junctions)
-    vec3 triHex = triHexOverlay(hex, d, hexId, hexCenter, t, bass, mids, treble, overall);
+    vec3 triHex = triHexOverlay(hex, d, hexCenter, t, bass, treble);
 
     return gridColor * gridIntensity * HEX_OPACITY + triHex;
 }
@@ -571,17 +576,13 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float SPEED = getSpeed();
     float vitality = zoneVitality(isHighlighted);
 
-    float borderRadius = max(params.x, 4.0);
-    float borderWidth  = max(params.y, 1.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
-    vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
-    vec2 p        = fragCoord - center;
-    vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
-    localUV = clamp(localUV, 0.0, 1.0);
 
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     vec4 result = vec4(0.0);
 
@@ -594,10 +595,16 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
         // Base color
         vec3 baseColor = getBackgroundColor();
-        float bgAlpha = fillColor.a > 0.01 ? fillColor.a : getFillOpacity();
+        // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
+        float bgAlpha = getFillOpacity();
+        // The fill COLOUR is separate and was being discarded entirely. Light
+        // identity tint at the sibling packs' weight, through zoneTint(), which
+        // owns the un-premultiply of zoneFillColors[i].rgb and the zero-alpha
+        // case. Do not call zoneFillHue() directly for this shape.
+        baseColor = zoneTint(baseColor, fillColor, 0.35);
 
         // Layer 1: Color Grade
-        vec3 gradedBg = colorGrade(baseColor, t * 10.0);
+        vec3 gradedBg = colorGrade(baseColor);
         float gradeStrength = 0.5;
         if (hasAudio) {
             // Network overload: energy pushes color grading toward clipped/overexposed
@@ -662,7 +669,7 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         edgeColor *= pulse;
         edgeColor = vitalityDesaturate(edgeColor, vitality);
 
-        result.rgb = mix(result.rgb, edgeColor, border * vitalityScale(0.5, 0.8, vitality));
+        result.rgb = mix(result.rgb, edgeColor, (border * vitalityScale(0.5, 0.8, vitality)) * borderColor.a);
         result.a = max(result.a, border * borderColor.a);
     }
 
@@ -673,17 +680,15 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 // doesn't darken an adjacent zone's fill during blendOver compositing.
 vec4 arethaZoneGlow(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted) {
     float vitality = zoneVitality(isHighlighted);
-    float borderRadius = max(params.x, 4.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
 
-    vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
-    vec2 p        = fragCoord - center;
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
-    float glowExtent = vitalityScale(10.0, 28.0, vitality);
+    float glowExtent = zoneLen(vitalityScale(10.0, 28.0, vitality));
     if (d > 0.0 && d < glowExtent) {
-        float glowSize = vitalityScale(4.0, 8.0, vitality);
+        float glowSize = zoneLen(vitalityScale(4.0, 8.0, vitality));
         float glowStr = vitalityScale(0.12, 0.4, vitality);
         float glow = expGlow(d, glowSize, glowStr);
         vec3 glowColor = vitalityDesaturate(getArethaCyan(), vitality);
@@ -697,7 +702,7 @@ vec4 arethaZoneGlow(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted) 
 // ═══════════════════════════════════════════════════════════════════════════════
 
 vec4 compositeArethaLabels(vec4 color, vec2 fragCoord,
-                           float bass, float treble, bool hasAudio) {
+                           float bass, bool hasAudio) {
     vec2 uv = labelsUv(fragCoord);
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
@@ -808,6 +813,6 @@ vec4 pImage(vec2 fragCoord) {
     }
 
     if (p_showLabels > 0.5)
-        color = compositeArethaLabels(color, fragCoord, bass, treble, hasAudio);
+        color = compositeArethaLabels(color, fragCoord, bass, hasAudio);
     return color;
 }

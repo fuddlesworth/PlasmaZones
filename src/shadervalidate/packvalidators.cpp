@@ -10,14 +10,12 @@
 
 #include "packvalidatorcommon.h"
 
-#include "../daemon/rendering/zoneentryscaffold.h"
-
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
-#include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
@@ -27,9 +25,11 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
@@ -39,7 +39,6 @@
 using PhosphorAnimationShaders::AnimationShaderEffect;
 using PhosphorAnimationShaders::AnimationShaderRegistry;
 using PhosphorRendering::ShaderCompiler;
-using PhosphorShaders::ShaderIncludeResolver;
 using PhosphorShaders::ShaderRegistry;
 using PhosphorSurfaceShaders::SurfaceShaderEffect;
 using PhosphorSurfaceShaders::SurfaceShaderRegistry;
@@ -52,9 +51,41 @@ int validatePack(const QString& packDir, QTextStream& out)
     const QString name = QFileInfo(packDir).fileName();
 
     QString parseErr;
-    const ShaderRegistry::ShaderInfo info = ShaderRegistry::parsePackMetadata(packDir, &parseErr);
+    ShaderRegistry::ShaderInfo info = ShaderRegistry::parsePackMetadata(packDir, &parseErr);
     if (!parseErr.isEmpty()) {
-        out << name << "\n  metadata      ERROR\n    " << parseErr << "\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    " << parseErr << "\n  → 1 error\n\n";
+        return 1;
+    }
+
+    // The `fragmentShader` / `bufferShaders` / `vertexShader` paths come from
+    // the user-editable metadata.json (parsePackMetadata resolves them against
+    // the pack dir without confinement), so confine each to the pack dir before
+    // it is opened and fed to glslang — the same guard the animation and
+    // surface validators apply. Zone packs have no `builtin:` buffer tokens
+    // (that resolver is surface-only), so every path must stay inside the pack.
+    // An empty path is left as-is (that stage is simply absent).
+    const auto confineToPack = [&packDir](QString& path) {
+        return confinePackPathInPlace(packDir, path);
+    };
+    if (!confineToPack(info.sourcePath)) {
+        out << name
+            << "\n  metadata       ERROR\n    fragmentShader path escapes the pack directory (path traversal "
+               "rejected)\n  → 1 error\n\n";
+        return 1;
+    }
+    for (QString& buf : info.bufferShaderPaths) {
+        if (!confineToPack(buf)) {
+            out << name
+                << "\n  metadata       ERROR\n    bufferShaders path escapes the pack directory (path traversal "
+                   "rejected)\n  → 1 error\n\n";
+            return 1;
+        }
+    }
+    if (!confineToPack(info.vertexShaderPath)) {
+        out << name
+            << "\n  metadata       ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n "
+               " "
+               "→ 1 error\n\n";
         return 1;
     }
 
@@ -117,6 +148,17 @@ int validatePack(const QString& packDir, QTextStream& out)
             }
         }
 
+        // The runtime caps buffer passes at 4 (parseShaderMetadata's qMin) and
+        // drops the surplus with only a journal warning — exactly the
+        // "runtime hid the author error" class this block lints for.
+        // Compare the RAW declared array against the cap, not the non-empty
+        // subset: parseShaderMetadata iterates qMin(rawSize, 4) and only then
+        // skips empties, so ["", "a", "b", "c", "d"] silently loses "d".
+        if (declared.size() > 4) {
+            lints << QStringLiteral("too many buffer shaders: %1 declared, cap is 4 (surplus dropped at load)")
+                         .arg(static_cast<int>(declared.size()));
+        }
+
         const double rawScale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
         if (rawScale < 0.125 || rawScale > 1.0) {
             lints << QStringLiteral("bufferScale out of range [0.125, 1.0]: %1 (clamped at load)").arg(rawScale);
@@ -125,11 +167,26 @@ int validatePack(const QString& packDir, QTextStream& out)
     if (!QFile::exists(info.sourcePath)) {
         lints << QStringLiteral("fragment shader missing: %1").arg(QFileInfo(info.sourcePath).fileName());
     }
+    // A declared-but-absent vertexShader silently falls back to the shared
+    // zone.vert below, hiding the author's typo. Read the RAW metadata: unlike
+    // the animation and surface parsers, ShaderRegistry::parsePackMetadata
+    // only assigns vertexShaderPath when the file EXISTS, so linting the
+    // parsed struct could never fire.
+    {
+        QFile rawMeta(QDir(packDir).filePath(QStringLiteral("metadata.json")));
+        if (rawMeta.open(QIODevice::ReadOnly)) {
+            const QString declaredVert =
+                QJsonDocument::fromJson(rawMeta.readAll()).object().value(QLatin1String("vertexShader")).toString();
+            if (!declaredVert.isEmpty() && !QFile::exists(QDir(packDir).filePath(declaredVert))) {
+                lints << QStringLiteral("vertex shader missing: %1").arg(declaredVert);
+            }
+        }
+    }
 
     if (lints.isEmpty()) {
-        out << "  metadata      OK\n";
+        out << "  metadata       OK\n";
     } else {
-        out << "  metadata      ERROR\n";
+        out << "  metadata       ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;
@@ -178,6 +235,48 @@ int validatePack(const QString& packDir, QTextStream& out)
     return errors;
 }
 
+// Which of the compositor-only shared-helper samplers the (include-expanded)
+// fragment source references. shared/old_content.glsl and
+// shared/desktop_transition.glsl declare these binding-less, which the strict
+// SPIR-V bake rejects — so when a daemon-eligible pack's compile fails with
+// the binding-less-sampler diagnostic AND its source pulls one of these in,
+// the likely root cause is a metadata bug (missing compositor-only
+// appliesTo), not a GLSL bug, and deserves a hint that says so. The source
+// scan alone is NOT a lint: daemon-capable packs legitimately reference these
+// samplers inside `#ifdef PLASMAZONES_KWIN` branches, which the preprocessor
+// strips before they can fail the bake — hence the hint is gated on the
+// compile actually failing with glslang's binding diagnostic (which does not
+// echo the offending identifier, so the source scan supplies the name). The
+// combination is still heuristic — a pack whose OWN binding-less sampler
+// fails while a guarded compositor-sampler reference coexists would draw the
+// hint spuriously — which is why this stays an advisory hint appended to the
+// real compile error, never an error of its own.
+static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
+{
+    struct SamplerMatcher
+    {
+        QString name;
+        // Word-boundary match so a longer identifier (e.g.
+        // "uOldWindowFallback") can't count as a use of the sampler.
+        QRegularExpression wordRe;
+    };
+    static const auto kCompositorOnlySamplers = [] {
+        QList<SamplerMatcher> matchers;
+        for (const QString& name :
+             {QStringLiteral("uOldWindow"), QStringLiteral("uFromDesktop"), QStringLiteral("uToDesktop")}) {
+            matchers.append({name, QRegularExpression(QStringLiteral("\\b") + name + QStringLiteral("\\b"))});
+        }
+        return matchers;
+    }();
+    QStringList used;
+    for (const SamplerMatcher& sampler : kCompositorOnlySamplers) {
+        if (expandedSource.contains(sampler.wordRe)) {
+            used << sampler.name;
+        }
+    }
+    return used;
+}
+
 // Validate one ANIMATION pack directory (data/animations/*). Reproduces the
 // animation runtime's fragment assembly on the daemon (Qt-RHI) path — the entry
 // scaffold (pTransition / pIn+pOut, or a pass-through main()), the generated
@@ -187,22 +286,25 @@ int validatePack(const QString& packDir, QTextStream& out)
 // The kwin-effect classic-GL path (`#define PLASMAZONES_KWIN`, default-block
 // uniforms) is NOT baked here: QShaderBaker compiles Vulkan-dialect GLSL and
 // rejects default-block uniforms, so the kwin branch needs a separate
-// OpenGL-target compiler. The PLASMAZONES_KWIN uniform plumbing lives entirely
-// in the shared animation_uniforms.glsl — identical for every pack — while each
-// pack's authored body is fully covered by the daemon bake here.
+// OpenGL-target compiler. Compositor-only packs (desktop / geometry / move
+// classes — see shaderEffectIsCompositorOnly) are authored against that kwin
+// dialect directly and never run on the daemon, so only their metadata is
+// linted here; their compile coverage is test_animation_shader_kwin_bake.
+// Daemon-capable packs get the full stage compile below.
+
 int validateAnimationPack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();
 
     QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
     if (!metaFile.open(QIODevice::ReadOnly)) {
-        out << name << "\n  metadata      ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
         return 1;
     }
     QJsonParseError perr{};
     const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll(), &perr);
     if (doc.isNull() || !doc.isObject()) {
-        out << name << "\n  metadata      ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
         return 1;
     }
 
@@ -219,14 +321,27 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         const auto confined = confinedPackPath(packDir, eff.fragmentShaderPath);
         if (!confined) {
             out << name
-                << "\n  metadata      ERROR\n    fragmentShader path escapes the pack directory (path traversal "
+                << "\n  metadata       ERROR\n    fragmentShader path escapes the pack directory (path traversal "
                    "rejected)\n  → 1 error\n\n";
             return 1;
         }
         eff.fragmentShaderPath = *confined;
     }
+    // The optional `vertexShader` path is user-editable metadata too, so it
+    // gets the same traversal guard as the fragment before the stage bake
+    // below ever opens it.
+    if (!eff.vertexShaderPath.isEmpty()) {
+        const auto confinedVert = confinedPackPath(packDir, eff.vertexShaderPath);
+        if (!confinedVert) {
+            out << name
+                << "\n  metadata       ERROR\n    vertexShader path escapes the pack directory (path traversal "
+                   "rejected)\n  → 1 error\n\n";
+            return 1;
+        }
+        eff.vertexShaderPath = *confinedVert;
+    }
     if (!eff.isValid()) {
-        out << name << "\n  metadata      ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
         return 1;
     }
     const QString fragLabel = QFileInfo(eff.fragmentShaderPath).fileName();
@@ -255,6 +370,47 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                 << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no p_ define)").arg(p.id);
         }
     }
+    // Lint appliesTo tokens from the RAW metadata (fromJson silently drops
+    // unknown tokens with only a runtime journal warning). A typo matters
+    // doubly here: a compositor-only pack whose every token is misspelled
+    // degrades to universal, escapes the compositor-only skip below, and
+    // fails the daemon stage compile with an opaque GLSL error instead of
+    // a metadata diagnostic. Token handling mirrors fromJson exactly:
+    // trimmed comparison against the ProfilePaths vocabulary constants,
+    // empty / whitespace-only tokens skipped silently.
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        static const QStringList kAnimAppliesToTokens = {PP::EventClassGeometry, PP::EventClassAppearance,
+                                                         PP::EventClassDesktop, PP::EventClassMove};
+        const QJsonValue appliesToValue = doc.object().value(QLatin1String("appliesTo"));
+        // A present-but-non-array appliesTo (e.g. a bare string) is ignored
+        // wholesale by fromJson's .toArray() and the pack silently becomes
+        // universal — a plausible author typo worth a shape diagnostic.
+        if (!appliesToValue.isUndefined() && !appliesToValue.isArray()) {
+            lints << QStringLiteral("appliesTo must be an array of tokens (ignored at load; pack becomes universal)");
+        }
+        const QJsonArray declaredAppliesTo = appliesToValue.toArray();
+        for (const QJsonValue& v : declaredAppliesTo) {
+            const QString token = v.toString().trimmed();
+            if (token.isEmpty()) {
+                // fromJson drops these without even a journal warning, so a
+                // stray "" entry is the one appliesTo typo that leaves no
+                // runtime trace at all — and an array that validates down to
+                // empty makes the pack universal.
+                lints << QStringLiteral(
+                    "empty appliesTo token (dropped at load with no runtime warning; an "
+                    "appliesTo that validates down to empty makes the pack universal)");
+                continue;
+            }
+            if (!kAnimAppliesToTokens.contains(token)) {
+                lints << QStringLiteral(
+                             "unknown appliesTo token '%1' (dropped at load; an appliesTo that "
+                             "validates down to empty makes the pack universal; valid tokens are "
+                             "geometry/appearance/desktop/move)")
+                             .arg(token);
+            }
+        }
+    }
     // Texture lints mirror parseEffect's parse-time journal warnings. fromJson
     // silently drops these from the in-memory struct, so read the RAW metadata
     // textures array (same as parseEffect) rather than eff.textures.
@@ -272,11 +428,17 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     if (!QFile::exists(eff.fragmentShaderPath)) {
         lints << QStringLiteral("fragment shader missing: %1").arg(fragLabel);
     }
+    // A declared-but-absent vertexShader would silently fall back to
+    // shared/animation.vert at runtime, hiding the author's typo. Same lint
+    // the surface validator applies.
+    if (!eff.vertexShaderPath.isEmpty() && !QFile::exists(eff.vertexShaderPath)) {
+        lints << QStringLiteral("vertex shader missing: %1").arg(QFileInfo(eff.vertexShaderPath).fileName());
+    }
 
     if (lints.isEmpty()) {
-        out << "  metadata      OK\n";
+        out << "  metadata       OK\n";
     } else {
-        out << "  metadata      ERROR\n";
+        out << "  metadata       ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;
@@ -284,10 +446,15 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     }
 
     // ── stage compile (reproduce the daemon runtime fragment assembly) ──
-    if (QFile::exists(eff.fragmentShaderPath)) {
+    // Skipped for compositor-only packs: their source is kwin classic-GL
+    // (default-block uniforms, unbound samplers) that the strict SPIR-V
+    // target rejects by design, and the daemon never loads them.
+    if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
+        out << "  " << fragLabel.leftJustified(15) << "SKIP (compositor-only pack; kwin-path GLSL)\n";
+    } else if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  " << fragLabel.leftJustified(14) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
+            out << "  " << fragLabel.leftJustified(15) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
             ++errors;
         } else {
             const QString raw = QString::fromUtf8(frag.readAll());
@@ -304,13 +471,75 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
             const QString expanded = ShaderCompiler::expandSource(
                 assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
             if (expanded.isEmpty()) {
-                out << "  " << fragLabel.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
+                out << "  " << fragLabel.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;
             } else {
                 const QString spliced =
                     PhosphorShaders::spliceAfterVersion(expanded, AnimationShaderRegistry::paramPreamble(eff));
                 const ShaderCompiler::Result result = ShaderCompiler::compile(spliced.toUtf8(), QShader::FragmentStage);
                 errors += reportCompile(out, fragLabel, result, declaredParamNames(eff.parameters));
+                // A binding-less-sampler failure in a pack that pulls in the
+                // compositor-only shared helpers is a metadata bug in disguise
+                // — point the author at the real fix instead of leaving the
+                // opaque GLSL error. (glslang's diagnostic does not name the
+                // sampler, so match the failure mode + the source reference.)
+                if (!result.success && result.error.contains(QLatin1String("requires layout(binding"))) {
+                    const QStringList kwinOnly = compositorOnlySamplersUsed(expanded);
+                    if (!kwinOnly.isEmpty()) {
+                        out << "    (hint: " << kwinOnly.join(QStringLiteral(", "))
+                            << " is declared by the compositor-only shared/old_content.glsl / "
+                               "shared/desktop_transition.glsl helpers; packs that use them outside "
+                               "a PLASMAZONES_KWIN guard must declare a compositor-only appliesTo — "
+                               "omit \"appearance\")\n";
+                    }
+                }
+            }
+        }
+    }
+
+    // ── vertex stage ──
+    // The daemon warm-bake compiles the pack's declared vertexShader, falling back to
+    // shared/animation.vert (shader_warmup.cpp). Without baking it here a broken
+    // animation vert — or a regression in the shared vert every pack inherits —
+    // passes the shader_validate_bundled CI gate and only fails at runtime. The
+    // sibling zone and surface validators have always baked their vert stage.
+    if (!PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
+        const QString animIncludeDir = QFileInfo(packDir).absolutePath() + QStringLiteral("/shared");
+        QString vertPath = eff.vertexShaderPath;
+        if (vertPath.isEmpty()) {
+            const QString sharedVert = animIncludeDir + QStringLiteral("/animation.vert");
+            if (QFile::exists(sharedVert)) {
+                vertPath = sharedVert;
+            }
+        }
+        if (!vertPath.isEmpty() && QFile::exists(vertPath)) {
+            const QString vertLabel = QFileInfo(vertPath).fileName();
+            QFile vertFile(vertPath);
+            if (!vertFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                out << "  " << vertLabel.leftJustified(15) << "ERROR\n    cannot read " << vertPath << "\n";
+                ++errors;
+            } else {
+                const QString rawVert = QString::fromUtf8(vertFile.readAll());
+                QString vertErr;
+                const QString expandedVert = ShaderCompiler::expandSource(rawVert, QFileInfo(vertPath).absolutePath(),
+                                                                          {animIncludeDir}, &vertErr);
+                if (expandedVert.isEmpty()) {
+                    out << "  " << vertLabel.leftJustified(15) << "ERROR\n    include expansion failed: " << vertErr
+                        << "\n";
+                    ++errors;
+                } else {
+                    // NO p_<id> preamble splice here: the runtime splices only
+                    // the FRAGMENT stage (loadFragmentShader and
+                    // warmShaderBakeCacheForPaths both do; loadVertexShader
+                    // does not). Splicing it here would let a daemon-path vert
+                    // that reads p_<id> pass this gate and then fail at runtime
+                    // with an undeclared identifier. Vertex-driven packs read
+                    // their params inside `#ifdef PLASMAZONES_KWIN`, which this
+                    // Vulkan-dialect bake does not take.
+                    const ShaderCompiler::Result vertResult =
+                        ShaderCompiler::compile(expandedVert.toUtf8(), QShader::VertexStage);
+                    errors += reportCompile(out, vertLabel, vertResult, declaredParamNames(eff.parameters));
+                }
             }
         }
     }
@@ -341,13 +570,13 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
 
     QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
     if (!metaFile.open(QIODevice::ReadOnly)) {
-        out << name << "\n  metadata      ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
         return 1;
     }
     QJsonParseError perr{};
     const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll(), &perr);
     if (doc.isNull() || !doc.isObject()) {
-        out << name << "\n  metadata      ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
         return 1;
     }
 
@@ -358,20 +587,12 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // confinedPackPath) before it is opened and fed to glslang: a
     // `../../../etc/...` or absolute path must be rejected, not compiled. An
     // empty path is left as-is (that stage is simply absent).
-    const auto confineToPack = [&packDir](QString& path) -> bool {
-        if (path.isEmpty()) {
-            return true;
-        }
-        const auto confined = confinedPackPath(packDir, path);
-        if (!confined) {
-            return false;
-        }
-        path = *confined;
-        return true;
+    const auto confineToPack = [&packDir](QString& path) {
+        return confinePackPathInPlace(packDir, path);
     };
     if (!confineToPack(eff.fragmentShaderPath)) {
         out << name
-            << "\n  metadata      ERROR\n    fragmentShader path escapes the pack directory (path traversal "
+            << "\n  metadata       ERROR\n    fragmentShader path escapes the pack directory (path traversal "
                "rejected)\n  → 1 error\n\n";
         return 1;
     }
@@ -386,19 +607,20 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         }
         if (!confineToPack(b)) {
             out << name
-                << "\n  metadata      ERROR\n    bufferShaders path escapes the pack directory (path traversal "
+                << "\n  metadata       ERROR\n    bufferShaders path escapes the pack directory (path traversal "
                    "rejected)\n  → 1 error\n\n";
             return 1;
         }
     }
     if (!confineToPack(eff.vertexShaderPath)) {
         out << name
-            << "\n  metadata      ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n  "
+            << "\n  metadata       ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n "
+               " "
                "→ 1 error\n\n";
         return 1;
     }
     if (!eff.isValid()) {
-        out << name << "\n  metadata      ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
+        out << name << "\n  metadata       ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
         return 1;
     }
     const QString fragLabel = QFileInfo(eff.fragmentShaderPath).fileName();
@@ -500,9 +722,9 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     }
 
     if (lints.isEmpty()) {
-        out << "  metadata      OK\n";
+        out << "  metadata       OK\n";
     } else {
-        out << "  metadata      ERROR\n";
+        out << "  metadata       ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;
@@ -513,7 +735,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  " << fragLabel.leftJustified(14) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
+            out << "  " << fragLabel.leftJustified(15) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
             ++errors;
         } else {
             const QString raw = QString::fromUtf8(frag.readAll());
@@ -535,7 +757,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString expanded = ShaderCompiler::expandSource(
                 assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
             if (expanded.isEmpty()) {
-                out << "  " << fragLabel.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
+                out << "  " << fragLabel.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;
             } else {
                 const QString spliced =
@@ -572,7 +794,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString label = QFileInfo(buf).fileName();
             QFile bufFile(buf);
             if (!bufFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << label.leftJustified(14) << "ERROR\n    cannot read " << buf << "\n";
+                out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << buf << "\n";
                 ++errors;
                 continue;
             }
@@ -581,7 +803,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString expanded =
                 ShaderCompiler::expandSource(rawBuf, QFileInfo(buf).absolutePath(), bufferIncludePaths, &err);
             if (expanded.isEmpty()) {
-                out << "  " << label.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
+                out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;
             } else {
                 const ShaderCompiler::Result result =
@@ -631,7 +853,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString label = QFileInfo(vertPath).fileName();
             QFile vertFile(vertPath);
             if (!vertFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << label.leftJustified(14) << "ERROR\n    cannot read " << vertPath << "\n";
+                out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << vertPath << "\n";
                 ++errors;
             } else {
                 const QString rawVert = QString::fromUtf8(vertFile.readAll());
@@ -639,7 +861,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 const QString expanded =
                     ShaderCompiler::expandSource(rawVert, QFileInfo(vertPath).absolutePath(), includePaths, &err);
                 if (expanded.isEmpty()) {
-                    out << "  " << label.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
+                    out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
                     ++errors;
                 } else {
                     const ShaderCompiler::Result result =

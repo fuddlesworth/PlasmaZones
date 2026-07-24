@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "dbushelpers.h"
-#include "../core/utils.h"
+#include "core/utils/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../core/geometryutils.h"
+#include "core/utils/geometryutils.h"
 #include <PhosphorZones/Layout.h>
 #include <QGuiApplication>
 #include <QScreen>

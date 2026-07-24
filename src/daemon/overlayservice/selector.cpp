@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "internal.h"
-#include "../overlayservice.h"
-#include "../../core/logging.h"
+#include "daemon/overlayservice.h"
+#include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
@@ -11,12 +11,12 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include "../../core/geometryutils.h"
+#include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
-#include "../../core/utils.h"
+#include "core/utils/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../../core/zoneselectorlayout.h"
-#include "../config/configdefaults.h"
+#include "core/types/zoneselectorlayout.h"
+#include "config/configdefaults.h"
 #include <QCursor>
 #include <QHash>
 #include <QScreen>

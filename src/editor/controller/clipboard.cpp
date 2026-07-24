@@ -7,8 +7,8 @@
 #include "../undo/commands/PasteZonesCommand.h"
 #include "../helpers/ZoneSerialization.h"
 #include "../helpers/BatchOperationScope.h"
-#include "../../core/constants.h"
-#include "../../core/logging.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
 
 #include "phosphor_i18n.h"
 #include <QClipboard>

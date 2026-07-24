@@ -26,7 +26,7 @@ const vec3 FROST_SILVER = vec3(0.831, 0.937, 1.000);   // #D4EFFF
 
 
 // fbm(), sdSegment(), and the tri-stop palette (triStopPalette) come from
-// common.glsl. neonFlicker() comes from logo-drift.glsl.
+// common.glsl. neonFlicker(), driftInstanceUV() and gatherLabelHalo()/LabelHalo come from logo-drift.glsl.
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -39,7 +39,7 @@ const vec3 FROST_SILVER = vec3(0.831, 0.937, 1.000);   // #D4EFFF
 
 const vec2 LOGO_CENTER = vec2(0.50, 0.50);
 
-// Kept for anti-aliasing and glow references elsewhere
+// Kept for the anti-aliasing smoothstep below
 const float TUBE_HW = 0.0425;
 
 // Approximate center-of-mass of the logo (for flow-line orbits)
@@ -250,7 +250,6 @@ vec3 networkNodes(vec2 uv, float time, float bassEnv, float midsEnv, float trebl
     // Current cell
     vec2 p = uv * gridSize;
     vec2 id = floor(p);
-    vec2 f = fract(p);
 
     // Check 3x3 neighborhood for nodes and connections
     for (int dy = -1; dy <= 1; dy++) {
@@ -270,15 +269,15 @@ vec3 networkNodes(vec2 uv, float time, float bassEnv, float midsEnv, float trebl
 
             // Node dot
             float dotSize = 0.08 + bassEnv * 0.04;
-            float dot = smoothstep(dotSize, dotSize * 0.15, dist);
+            float dotMask = smoothstep(dotSize, dotSize * 0.15, dist);
             float dotGlow = exp(-dist * 4.0) * 0.08;
 
             // Treble flash on random nodes
             float flash = trebleEnv * 0.3 * step(0.85, hash21(nid + floor(time * 0.7)));
-            dot *= 0.7 + flash;
+            dotMask *= 0.7 + flash;
 
             vec3 nodeCol = mix(palPrimary, palAccent, h);
-            col += nodeCol * (dot + dotGlow) * particleStr;
+            col += nodeCol * (dotMask + dotGlow) * particleStr;
 
             // Connections to neighbors — skip if node is far from this pixel
             // (connections span at most ~1.4 units; lineWidth ≈ 0.03)
@@ -327,7 +326,7 @@ vec3 dotMatrix(vec2 uv, float scale, float time, float bassEnv, float midsEnv, f
 
     float dist = length(f);
     float radius = 0.08 + bassEnv * 0.03;
-    float dot = smoothstep(radius, radius * 0.3, dist);
+    float dotMask = smoothstep(radius, radius * 0.3, dist);
 
     // Diagonal brightness wave — mids modulate amplitude
     float wave = 0.4 + (0.3 + midsEnv * 0.2) * sin(id.x * 0.4 + id.y * 0.3 + time * 0.6);
@@ -337,7 +336,7 @@ vec3 dotMatrix(vec2 uv, float scale, float time, float bassEnv, float midsEnv, f
     float glow = exp(-dist * 8.0) * 0.06;
 
     vec3 dotCol = mix(palPrimary, palAccent, wave);
-    return dotCol * (dot * wave + glow);
+    return dotCol * (dotMask * wave + glow);
 }
 
 
@@ -394,8 +393,10 @@ vec3 flowLines(vec2 p, float fDist, float time, float bassEnv, float midsEnv,
 vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
                       bool isHighlighted, float bass, float mids, float treble,
                       bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     // ── Parameters (p_<id> from metadata.json, sentinel-default fallbacks) ──────
     float speed         = p_speed >= 0.0 ? p_speed : 0.12;
@@ -410,7 +411,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
     float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
-    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float edgeFadeStart     = zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0);
     float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
     float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
@@ -435,13 +436,10 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.5;
 
     // ── Zone geometry ───────────────────────────────────────────
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
-    vec2 halfSize = rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
-    float d = sdRoundedBox(p, halfSize, borderRadius);
+    float d = zoneShape.d;
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     float aspect = iResolution.x / max(iResolution.y, 1.0);
     float time = iTime;
@@ -452,8 +450,8 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, FROST_ICE);
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, FROST_SILVER);
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
-    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
+    float vitality = zoneVitality(isHighlighted);
+    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStrength;
 
     float flowAngle = flowDirection * TAU;
     vec2 flowDir = vec2(cos(flowAngle), sin(flowAngle));
@@ -492,7 +490,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // Bass adds turbulence; mids warp the rotation angle
         vec2 cloudUV = centeredUV * 0.5
                      + (flowDir * flowSpeed + normalize(toLogo + 0.001) * pullStrength) * time * 0.2;
-        cloudUV += vec2(sin(time * 2.0), cos(time * 1.5)) * bassEnv * 0.1;
+        cloudUV += vec2(timeSin(2.0, 0.0), timeCos(1.5, 0.0)) * bassEnv * 0.1;
         float clouds = fbm(cloudUV, max(octaves - 2, 3), fbmRot + midsEnv * 0.2);
         vec3 cloudTint = mix(palSecondary, FROST_DEEP, clouds);
         col = mix(col, cloudTint, clouds * 0.25);
@@ -531,7 +529,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
             float logoVignette = 1.0 - smoothstep(0.35, 0.55, logoR);
 
             // Gentle oscillation only — the "f" must stay upright to be recognizable
-            float wobble = sin(time * logoSpin * 2.0 + float(li) * 2.0) * 0.03;
+            float wobble = timeSin(logoSpin * 2.0, float(li) * 2.0) * 0.03;
             float cs = cos(wobble), sn = sin(wobble);
             vec2 rotP = vec2(logoP.x * cs - logoP.y * sn, logoP.x * sn + logoP.y * cs);
 
@@ -580,7 +578,9 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
             // ── SUBTLE OUTER EDGE GLOW (not neon tubes) ─────────
             if (fDist > 0.0 && fDist < 0.05) {
-                float edgeGlow = exp(-fDist * 20.0) * 0.4;
+                // Pedestal-subtracted at the 0.05 gate so the edge glow reaches
+                // exactly 0 there instead of being cut at 37% of its peak.
+                float edgeGlow = max(exp(-fDist * 20.0) - exp(-0.05 * 20.0), 0.0) * 0.4;
                 logoCol += palPrimary * edgeGlow * instIntensity * flicker;
             }
 
@@ -630,22 +630,27 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         col *= mix(0.7, 1.0, vignette);
 
         // Subtle inner glow
-        col += palPrimary * exp(-innerDist / 10.0) * innerGlowStr * 0.5;
+        col += palPrimary * exp(-innerDist / zoneLen(10.0)) * innerGlowStr * 0.5;
 
-        // Periodic pulse ring sweeping inward (every ~4 seconds)
+        // Periodic pulse ring sweeping inward (every ~4 seconds). Travel
+        // distance and ring thickness are zoneLen() like the vignette and inner
+        // glow above, so the sweep keeps its depth relative to the fade it
+        // rides inside instead of covering half of it on a 2x display.
         float ringPhase = fract(time * 0.25);
-        float ringPos = ringPhase * 60.0;
-        float ring = exp(-(innerDist - ringPos) * (innerDist - ringPos) * 0.05) * (1.0 - ringPhase);
+        float ringPos = ringPhase * zoneLen(60.0);
+        float ringOff = (innerDist - ringPos) / zoneLen(4.47);  // 1/sqrt(0.05)
+        float ring = exp(-ringOff * ringOff) * (1.0 - ringPhase);
 
         // Bass-triggered extra ring
         float bassRingPhase = fract(time * 0.7);
-        float bassRingPos = bassRingPhase * 42.0;
-        float bassRing = exp(-(innerDist - bassRingPos) * (innerDist - bassRingPos) * 0.08) * bassEnv * (1.0 - bassRingPhase);
+        float bassRingPos = bassRingPhase * zoneLen(42.0);
+        float bassRingOff = (innerDist - bassRingPos) / zoneLen(3.54);  // 1/sqrt(0.08)
+        float bassRing = exp(-bassRingOff * bassRingOff) * bassEnv * (1.0 - bassRingPhase);
 
         col += palAccent * (ring * 0.3 + bassRing * 0.5);
 
         // Tint with fill color
-        col = mix(col, fillColor.rgb * luminance(col), 0.1);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.1);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -664,11 +669,16 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         borderCol *= borderBrightness;
 
         // Soft glow along border
-        float borderSoftGlow = smoothstep(borderWidth * 2.0, 0.0, abs(d)) * 0.2;
+        // borderWidth, not borderWidth * 2.0. This sits inside `border > 0.0`,
+        // and softBorder() is only non-zero for abs(d) < borderWidth, so the
+        // upper half of a 2x domain was unreachable and the term never fell
+        // below half its range. Matching the domain to the guard makes the
+        // ramp actually span the band it is drawn in.
+        float borderSoftGlow = smoothstep(borderWidth, 0.0, abs(d)) * 0.2;
         borderCol += palAccent * borderSoftGlow;
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.4 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {
@@ -677,15 +687,20 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
             borderCol *= 0.7;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow ──────────────────────────────────────────────
     float bassGlowPush = hasAudio ? bassEnv * 2.5 : idlePulse * 5.0;
-    float glowRadius = mix(10.0, 20.0, vitality) + bassGlowPush;
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(10.0, 20.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, 8.0, borderGlow);
+        float glow = expGlowBounded(d, zoneLen(8.0), borderGlow, glowRadius);
         float oAngle = atan(p.y, p.x);
         float glowT = angularNoise(oAngle, 1.5, time * 0.06) + midsEnv * 0.1;
         vec3 glowCol = triStopPalette(glowT, palPrimary, palSecondary, palAccent);

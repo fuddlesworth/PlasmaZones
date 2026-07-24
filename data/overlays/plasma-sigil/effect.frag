@@ -104,15 +104,20 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                      vec4 params, bool isHighlighted,
                      vec3 cyanCol, vec3 blueCol, vec3 purpleCol, vec3 roseCol,
                      float bass, float mids, float treble, bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth  = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
-    if (d > 30.0) return vec4(0.0);
+    float d = zoneShape.d;
+    // Bound covers the glow AND the border band: per-zone border width comes
+    // from layout JSON unclamped, so a hand-authored width past 30 logical px
+    // would otherwise have its frame sliced at a fixed radius.
+    if (d > max(zoneLen(35.0), borderWidth * 2.0)) return vec4(0.0);
 
     float iconScale = getIconScale();
     float strokeW   = getStrokeWidth();
@@ -126,7 +131,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float bloomStr  = getBloomStr();
     float bgStr     = getBackgroundStr();
     float veinStr   = getVeinStr();
-    float zoneTint  = getZoneTint();
+    float zoneTintAmt = getZoneTint();
 
     float vitality = zoneVitality(isHighlighted);
     float angle    = atan(p.y, p.x);
@@ -365,7 +370,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         }
 
         // ── Zone fill color tint ──────────────────────────────────────────
-        col = mix(col, col * fillColor.rgb, zoneTint);
+        col = mix(col, col * zoneFillHue(fillColor), zoneTintAmt);
 
         // Vitality
         col = vitalityDesaturate(col, vitality);
@@ -401,7 +406,6 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
         // Mids: color cycling between border color and gradient complement
         if (hasAudio && mids > 0.05) {
-            float cyclePhase = fract(t * (0.2 + mids * 0.12));
             vec3 complement = iconGradient(borderPhase + 0.5, cyanCol, blueCol, purpleCol, roseCol);
             borderCol = mix(borderCol, complement * flow, smoothstep(0.05, 0.4, mids) * 0.25);
         }
@@ -421,25 +425,29 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         }
 
         float borderAlpha = border * vitalityScale(0.8, 0.95, vitality);
-        result.rgb = mix(result.rgb, borderCol, borderAlpha);
-        result.a = max(result.a, border * 0.96);
+        result.rgb = mix(result.rgb, borderCol, (borderAlpha) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow: chromatic gradient ───────────────────────────────────
-    if (d > 0.0 && d < 24.0) {
-        float glowRadius  = vitalityScale(5.0, 10.0, vitality);
-        float glowFalloff = vitalityScale(0.3, 0.55, vitality);
+    // 3.5 falloffs of the widest lobe, matching the rest of the catalog.
+    if (d > 0.0 && d < zoneLen(vitalityScale(5.0, 10.0, vitality)) * 3.5) {
+        // Named for what expGlow(d, falloff, strength) actually takes. The old
+        // names had them the other way round, so the line below read as
+        // widening the falloff when it brightens the glow.
+        float glowFalloff  = zoneLen(vitalityScale(5.0, 10.0, vitality));
+        float glowStrength = vitalityScale(0.3, 0.55, vitality);
 
         // Gentle bass wavefront expansion
         if (hasAudio) {
             float waveCycle = fract(t * 0.7);
-            float waveRadius = waveCycle * 16.0;
-            float waveBand = exp(-abs(d - waveRadius) * 0.6) * (1.0 - waveCycle);
-            glowRadius += waveBand * bass * 3.0;
-            glowFalloff += waveBand * bass * 0.15;
+            float waveRadius = waveCycle * zoneLen(16.0);
+            float waveBand = exp(-abs(d - waveRadius) / zoneLen(1.667)) * (1.0 - waveCycle);
+            glowFalloff += waveBand * bass * zoneLen(3.0);
+            glowStrength += waveBand * bass * 0.15;
         }
 
-        float glow = expGlow(d, glowRadius, glowFalloff);
+        float glow = expGlow(d, glowFalloff, glowStrength);
         glow *= vitalityScale(0.3, 1.0, vitality);
 
         float glowPhase = fract(angle / TAU + midsShift * 0.05);
@@ -447,9 +455,9 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
         // Chromatic split outer glow
         vec3 outerGlowCol = vec3(
-            expGlow(d - 1.0, glowRadius, glowFalloff),
+            expGlow(d - zoneLen(1.0), glowFalloff, glowStrength),
             glow,
-            expGlow(d + 1.0, glowRadius, glowFalloff)
+            expGlow(d + zoneLen(1.0), glowFalloff, glowStrength)
         ) * glowColor;
 
         result.rgb += outerGlowCol;
@@ -463,7 +471,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
 vec4 compositeSigilLabels(vec4 color, vec2 fragCoord,
                           vec3 cyanCol, vec3 purpleCol,
-                          float bass, float mids, float treble, bool hasAudio) {
+                          float bass, float treble, bool hasAudio) {
     vec2 uv = labelsUv(fragCoord);
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
@@ -544,7 +552,7 @@ vec4 pImage(vec2 fragCoord) {
 
     if (p_showLabels > 0.5)
         color = compositeSigilLabels(color, fragCoord, cyanCol, purpleCol,
-                                     bass, mids, treble, hasAudio);
+                                     bass, treble, hasAudio);
 
     return color;
 }

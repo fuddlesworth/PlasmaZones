@@ -12,9 +12,9 @@
 // with the shell-host wiring conceptually.
 
 #include "internal.h"
-#include "../overlayservice.h"
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "daemon/overlayservice.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include "phosphor_roles.h"
 #include "phosphor_slot_keys.h"
 
@@ -175,6 +175,8 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
              "selector on this screen");
     wireSlot(PhosphorSlotKeys::MainOverlay(), "mainOverlaySlotItem", PhosphorRoles::ZoneOverlay,
              "main overlay on this screen");
+    wireSlot(PhosphorSlotKeys::Cheatsheet(), "cheatsheetSlotItem", PhosphorRoles::Cheatsheet,
+             "cheatsheet on this screen");
 
     // Wire QML signals → animator-driven slot hide / forward.
     // String-based SIGNAL/SLOT macros are required here because the source
@@ -187,6 +189,7 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
                      SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
     QObject::connect(window, SIGNAL(layoutPickerSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
     QObject::connect(window, SIGNAL(layoutPickerDismissRequested()), this, SLOT(onLayoutPickerDismissRequested()));
+    QObject::connect(window, SIGNAL(cheatsheetDismissRequested()), this, SLOT(onCheatsheetDismissRequested()));
     // No zoneSelectorZoneSelected wiring: the zone-selector slot is input-
     // transparent by design and hit-testing runs in C++ via
     // updateSelectorPosition. ZoneSelectorContent's zone previews declare no
@@ -289,8 +292,8 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // to underlying windows. Post-shell every kbd-None overlay shares the
     // screen-sized shell surface - there's no per-slot input region the
     // daemon can hand to the compositor. The pragmatic split: only MODAL
-    // slots (snap-assist, layout picker) grab input. OSD / main overlay /
-    // zone-selector are purely visual:
+    // slots (snap-assist, layout picker, cheatsheet) grab input. OSD /
+    // main overlay / zone-selector are purely visual:
     //   - OSDs auto-dismiss on a timer; a click-to-dismiss MouseArea
     //     inside the OSD content is the accepted casualty - the
     //     alternative is the daemon eating every click on the screen
@@ -325,8 +328,9 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // real drag-end via dismissOverlayWindow - that is the right edge
     // for the shell to actually unmap when no other slot is up.
     const bool anyVisible = isVisible(s.osdSlot()) || isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot())
-        || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot());
-    const bool anyInputGrabbing = isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot());
+        || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot()) || isVisible(s.cheatsheetSlot());
+    const bool anyInputGrabbing =
+        isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot()) || isVisible(s.cheatsheetSlot());
 
     m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing);
 }

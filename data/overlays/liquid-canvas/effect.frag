@@ -61,25 +61,27 @@ vec4 sampleCanvas(vec2 fragCoord, float iridStr) {
 vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                       vec4 params, bool isHighlighted,
                       float bass, float mids, float treble, bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth  = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
     float fillOpacity  = getFillOpacity();
     float iridStr      = getIridescence();
     float audioReact   = getAudioReact();
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
     vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
 
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     vec4 result = vec4(0.0);
 
     vec3 borderClr = colorWithFallback(borderColor.rgb, vec3(0.4, 0.6, 0.9));
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
 
     // ---- Inside zone ----
     if (d < 0.0) {
@@ -87,7 +89,7 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
         // Zone fill color tint
         float tintAmount = getZoneTint();
-        result.rgb = mix(canvas.rgb, canvas.rgb * fillColor.rgb, tintAmount);
+        result.rgb = mix(canvas.rgb, canvas.rgb * zoneFillHue(fillColor), tintAmount);
         result.a = fillOpacity;
 
         // Vitality: saturation and brightness
@@ -152,24 +154,35 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
         if (isHighlighted) {
             float accentTrace = angularNoise(angle, 6.0, iTime * 2.5);
-            flowColor = mix(flowColor, fillColor.rgb * borderEnergy, accentTrace * 0.25);
+            // Weight zeroed at zero alpha: zoneFillHue returns white there, which
+            // would pull this accent toward white rather than leaving it alone.
+            flowColor = mix(flowColor, zoneFillHue(fillColor) * borderEnergy,
+                            accentTrace * 0.25 * (fillColor.a > 1e-3 ? 1.0 : 0.0));
         }
 
-        result.rgb = mix(result.rgb, flowColor, borderAlpha);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, flowColor, (borderAlpha) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ---- Outer glow ----
-    if (d > 0.0 && d < 22.0) {
-        float glowRadius = mix(5.0, 9.0, vitality);
+    float glowRadius = zoneLen(mix(5.0, 9.0, vitality));
+    // The gate covers the ENLARGED radius. The bass wavefront below adds up
+    // to zoneLen(6.0) to glowRadius AFTER this test, so gating on the base
+    // alone cut the widened glow mid-gradient and rang. Two e-folds past
+    // the enlarged radius leaves ~13% residual, which is invisible; three
+    // pushed the glow visibly further than it reached before this PR and
+    // nearly tripled the annulus this branch shades.
+    if (d > 0.0 && d < (glowRadius + zoneLen(6.0)) * 2.0) {
         float glowFalloff = mix(0.3, 0.55, vitality);
 
         // Bass: expanding glow wavefront
         if (hasAudio) {
             float waveCycle = fract(iTime * 1.0);
-            float waveRadius = waveCycle * 16.0;
-            float waveBand = exp(-abs(d - waveRadius) * 0.5) * (1.0 - waveCycle);
-            glowRadius += waveBand * bass * bass * 6.0;
+            // Wavefront travel, band width and radius bump all zoneLen(), so
+            // the ring keeps its reach relative to the glow it rides on.
+            float waveRadius = waveCycle * zoneLen(16.0);
+            float waveBand = exp(-abs(d - waveRadius) / zoneLen(2.0)) * (1.0 - waveCycle);
+            glowRadius += waveBand * bass * bass * zoneLen(6.0);
             glowFalloff += waveBand * bass * 0.3;
         }
 
@@ -181,8 +194,13 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     }
 
     // ---- Treble: paint splatter sparks near inner edge ----
-    if (hasAudio && treble > 0.06 && d > -borderWidth * 3.0 && d < 0.0) {
-        float edgeProx = smoothstep(-borderWidth * 3.0, 0.0, d);
+    // zoneEdgeBand, not a bare multiple of borderWidth. A configured width
+    // of 0 collapsed this gate to `d > 0.0 && d < 0.0` and took the whole
+    // treble spark feature with it. Turning the border off should not also
+    // turn off a feature that merely sits near the edge.
+    float sparkBand = zoneEdgeBand(borderWidth * 3.0, 6.0);
+    if (hasAudio && treble > 0.06 && d > -sparkBand && d < 0.0) {
+        float edgeProx = smoothstep(-sparkBand, 0.0, d);
         float spark = 0.0;
         for (int si = 0; si < 3; si++) {
             float sparkSpeed = 2.5 + float(si) * 1.5;
@@ -220,6 +238,12 @@ vec4 compositeCanvasLabels(vec4 color, vec2 fragCoord,
             halo += texture(uZoneLabels, uv + vec2(float(dx), float(dy)) * px * labelGlowSpread).a * w;
         }
     }
+    // 9.51 is the true sum of this 5x5 exp(-r^2 * 0.3) kernel, so the halo is
+    // genuinely normalised here. Most sibling packs divide the identical kernel
+    // by 16.5 instead (chrome-protocol 10.5, magnetic-field 16.0), which is not
+    // normalisation but a dimmer intensity choice — a halo about 1.7x fainter
+    // than this one. Both looks are shipped and deliberate; the number is only
+    // confusing if you assume every pack means the same thing by it.
     halo /= 9.51;
 
     // Flow-tinted halo outline

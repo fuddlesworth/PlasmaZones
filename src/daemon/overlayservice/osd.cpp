@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "internal.h"
-#include "../overlayservice.h"
-#include "../../core/logging.h"
+#include "daemon/overlayservice.h"
+#include "core/platform/logging.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorScreens/Manager.h>
-#include "../../core/utils.h"
+#include "core/utils/utils.h"
 #include <QQuickWindow>
 #include <QScreen>
 #include <QSet>
@@ -32,7 +32,7 @@
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
 
-#include "../../core/isettings.h"
+#include "core/interfaces/isettings.h"
 
 #include <QUrl>
 
@@ -678,12 +678,6 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     qCDebug(lcOverlay) << "showNavigationOsd called: action=" << action << "reason=" << reason << "screen=" << screenId
                        << "success=" << success;
 
-    // Only show OSD for successful actions - failures (no windows, no zones, etc.) don't need feedback
-    if (!success) {
-        qCDebug(lcOverlay) << "Skipping navigation OSD for failure:" << action << reason;
-        return;
-    }
-
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
     QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
     if (!physScreen) {
@@ -712,8 +706,21 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // no notification window, etc.) must NOT poison the dedup state,
     // otherwise a failed show silently swallows the next legitimate call
     // within 200 ms.
+    //
+    // Successful span steps are exempt: the reason is direction-stable
+    // ("grow:right" on every step), so consecutive genuine steps produce an
+    // identical key, and the shortcut's own 100 ms debounce is shorter than
+    // this window — a second real step would otherwise commit geometry with
+    // no feedback. The duplicate this window catches (one action arriving on
+    // both the Qt and D-Bus paths) does not apply to span, which has a single
+    // relay. Span FAILURES stay eligible: their reasons are direction-stable
+    // too, so leaving them exempt would re-show the same message at the
+    // 100 ms shortcut debounce rate. (The window halves that to ~200 ms
+    // rather than suppressing the repeat outright — the dedup clock is only
+    // stamped on a shown OSD, so a suppressed one does not extend it.)
     const QString actionKey = action + QLatin1Char(':') + reason;
-    if (actionKey == m_lastNavigationActionKey && effectiveId == m_lastNavigationScreenId
+    const bool dedupEligible = !(success && action == QLatin1String("span"));
+    if (dedupEligible && actionKey == m_lastNavigationActionKey && effectiveId == m_lastNavigationScreenId
         && m_lastNavigationTime.isValid() && m_lastNavigationTime.elapsed() < 200) {
         qCDebug(lcOverlay) << "Skipping duplicate navigation OSD:" << action << reason;
         return;
@@ -721,14 +728,18 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
     // Float, algorithm, rotate, and autotile-only actions don't need layout/zones
-    static const QSet<QString> noLayoutActions{QStringLiteral("float"),        QStringLiteral("algorithm"),
-                                               QStringLiteral("rotate"),       QStringLiteral("focus_master"),
-                                               QStringLiteral("swap_master"),  QStringLiteral("master_ratio"),
-                                               QStringLiteral("master_count"), QStringLiteral("retile"),
-                                               QStringLiteral("swap_vs"),      QStringLiteral("rotate_vs")};
-    const bool needsLayout = !noLayoutActions.contains(action);
+    static const QSet<QString> noLayoutActions{
+        QStringLiteral("float"),       QStringLiteral("rotate"),       QStringLiteral("focus_master"),
+        QStringLiteral("swap_master"), QStringLiteral("master_ratio"), QStringLiteral("master_count"),
+        QStringLiteral("retile"),      QStringLiteral("swap_vs"),      QStringLiteral("rotate_vs")};
+    // Failure OSDs never need layout/zone data: every failure branch in
+    // NavigationOsdContent.qml renders plain text (and reasons like
+    // "no_zones" / "no_active_layout" fire precisely when no layout is
+    // resolvable), so gating them on a layout would drop the feedback the
+    // engine emitted them for.
+    const bool needsLayout = success && !noLayoutActions.contains(action);
     PhosphorZones::Layout* screenLayout = resolveScreenLayout(effectiveId);
-    if ((needsLayout && !screenLayout) || (screenLayout && screenLayout->zones().isEmpty() && needsLayout)) {
+    if (needsLayout && (!screenLayout || screenLayout->zones().isEmpty())) {
         qCDebug(lcOverlay) << "No layout or zones for navigation OSD: screen=" << effectiveId
                            << "layout=" << (screenLayout ? screenLayout->name() : QStringLiteral("null"))
                            << "zones=" << (screenLayout ? screenLayout->zones().size() : 0) << "action=" << action;
@@ -757,8 +768,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     auto* navSurface = navState->shell->shellSurface();
     auto* osdSlot = navState->osdSlot();
 
-    // Process reason field - for rotation/resnap, extract window count
-    // Format: "clockwise:N" or "counterclockwise:N" or "resnap:N" where N is window count
+    // Process reason field - for rotation, extract the window count.
+    // Format: "clockwise:N" or "counterclockwise:N" where N is window count.
     int windowCount = 1;
     QString displayReason = reason;
     if (reason.contains(QLatin1Char(':'))) {

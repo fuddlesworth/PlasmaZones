@@ -1,0 +1,317 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "compositorbridge.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
+
+#include <QLoggingCategory>
+
+#include <PhosphorCompositor/GeometryHelpers.h>
+#include <PhosphorIdentity/WindowId.h>
+
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
+#include <window.h>
+#include <workspace.h>
+
+namespace PlasmaZones {
+
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+
+using namespace PhosphorCompositor;
+
+KWinCompositorBridge::KWinCompositorBridge(PlasmaZonesEffect& effect)
+    : m_effect(effect)
+{
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Window Lookup
+// ═══════════════════════════════════════════════════════════════════════════════
+
+WindowHandle KWinCompositorBridge::findWindowById(const QString& windowId) const
+{
+    return fromEffectWindow(m_effect.findWindowById(windowId));
+}
+
+QVector<WindowHandle> KWinCompositorBridge::findAllWindowsById(const QString& windowId) const
+{
+    const auto windows = m_effect.findAllWindowsById(windowId);
+    QVector<WindowHandle> result;
+    result.reserve(windows.size());
+    for (auto* w : windows) {
+        result.append(fromEffectWindow(w));
+    }
+    return result;
+}
+
+QVector<WindowHandle> KWinCompositorBridge::stackingOrder() const
+{
+    const auto windows = KWin::effects->stackingOrder();
+    QVector<WindowHandle> result;
+    result.reserve(windows.size());
+    for (auto* w : windows) {
+        // Live windows only: close-shader grabs keep deleted windows in
+        // KWin's stacking order for the close-animation duration, and the
+        // bridge interface exposes no liveness query — a compositor-agnostic
+        // consumer (SnapAssistFilter) would otherwise offer dying windows as
+        // candidates and re-pollute the id caches via windowId().
+        if (!w || w->isDeleted()) {
+            continue;
+        }
+        result.append(fromEffectWindow(w));
+    }
+    return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Window Identity
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString KWinCompositorBridge::windowId(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return QString();
+    return m_effect.getWindowId(ew);
+}
+
+QString KWinCompositorBridge::windowScreenId(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return QString();
+    return m_effect.getWindowScreenId(ew);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Window Properties
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QRectF KWinCompositorBridge::frameGeometry(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    // KWin 6.7: EffectWindow::frameGeometry() returns KWin::RectF; convert so
+    // both ternary branches share the QRectF type this bridge exposes.
+    return ew ? QRectF(ew->frameGeometry()) : QRectF();
+}
+
+QSizeF KWinCompositorBridge::minSize(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return QSizeF();
+    auto* kw = ew->window();
+    // KWin internal windows (our own zone overlays / snap-assist surfaces) can
+    // carry a non-null KWin::Window* whose backing QWindow is null; KWin's
+    // InternalWindow::minSize() dereferences it unconditionally and segfaults.
+    // See discussion #511.
+    return (kw && !kw->isInternal()) ? kw->minSize() : QSizeF();
+}
+
+bool KWinCompositorBridge::isMinimized(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    return ew && ew->isMinimized();
+}
+
+bool KWinCompositorBridge::isOnCurrentDesktop(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    return ew && ew->isOnCurrentDesktop();
+}
+
+bool KWinCompositorBridge::isOnCurrentActivity(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    return ew && ew->isOnCurrentActivity();
+}
+
+bool KWinCompositorBridge::hasDecoration(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    return ew && ew->hasDecoration();
+}
+
+bool KWinCompositorBridge::userCanSetNoBorder(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return false;
+    auto* kw = ew->window();
+    return kw && kw->userCanSetNoBorder();
+}
+
+bool KWinCompositorBridge::isNoBorder(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return false;
+    auto* kw = ew->window();
+    return kw && kw->noBorder();
+}
+
+QRectF KWinCompositorBridge::moveResizeGeometry(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return QRectF();
+    auto* kw = ew->window();
+    return kw ? QRectF(kw->moveResizeGeometry()) : QRectF();
+}
+
+WindowInfo KWinCompositorBridge::windowInfo(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    WindowInfo info;
+    if (!ew)
+        return info;
+
+    info.handle = w;
+    info.windowId = m_effect.getWindowId(ew);
+    info.appId = ::PhosphorIdentity::WindowId::extractAppId(info.windowId);
+    info.windowClass = ew->windowClass();
+    info.screenId = m_effect.getWindowScreenId(ew);
+    info.caption = ew->caption();
+    info.icon = ew->icon();
+    info.frameGeometry = ew->frameGeometry();
+    info.isMinimized = ew->isMinimized();
+    info.isFullScreen = ew->isFullScreen();
+    info.isOnCurrentDesktop = ew->isOnCurrentDesktop();
+    info.isOnCurrentActivity = ew->isOnCurrentActivity();
+    info.isNormalWindow = ew->isNormalWindow();
+    // The window's OWN keep-above — pre-rule snapshot while a SetWindowLayer
+    // rule holds the pair. No in-tree WindowInfo consumer reads this field
+    // today; it is kept own-flag-correct so a future engine gate cannot read
+    // a rule's own output back as user state (the applyOwnLayerFlags
+    // invariant every keep-above export shares).
+    info.keepAbove = m_effect.windowOwnKeepAbove(ew);
+    info.pid = ew->pid();
+
+    info.hasDecoration = ew->hasDecoration();
+
+    auto* kw = ew->window();
+    // Skip InternalWindows; see minSize() above (discussion #511).
+    if (kw && !kw->isInternal()) {
+        info.minSize = kw->minSize();
+    }
+
+    return info;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Window Filtering
+// ═══════════════════════════════════════════════════════════════════════════════
+
+bool KWinCompositorBridge::shouldHandleWindow(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return false;
+    return m_effect.shouldHandleWindow(ew);
+}
+
+bool KWinCompositorBridge::isTileableWindow(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return false;
+    return m_effect.isTileableWindow(ew);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Window Actions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void KWinCompositorBridge::moveResize(WindowHandle w, const QRectF& geometry)
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return;
+    auto* kw = ew->window();
+    if (kw) {
+        kw->moveResize(geometry);
+    }
+}
+
+void KWinCompositorBridge::setNoBorder(WindowHandle w, bool noBorder)
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return;
+    auto* kw = ew->window();
+    if (kw) {
+        kw->setNoBorder(noBorder);
+    }
+}
+
+void KWinCompositorBridge::setMaximized(WindowHandle w, bool maximized)
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return;
+    auto* kw = ew->window();
+    if (kw) {
+        kw->maximize(maximized ? KWin::MaximizeFull : KWin::MaximizeRestore);
+    }
+}
+
+void KWinCompositorBridge::activateWindow(WindowHandle w)
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return;
+    // Showing-desktop guard: Workspace::activateWindow on a hidden window
+    // synchronously cancels a peek, so this carries the same policy as every
+    // direct activateWindow site in the effect (see
+    // PlasmaZonesEffect::isShowingDesktop). Nothing calls this today — real
+    // activations route engine → activateWindowRequested → D-Bus →
+    // slotActivateWindowRequested, which is guarded separately — so the guard is
+    // here to keep the bridge honest the day something does, not because a live
+    // path needs it.
+    if (PlasmaZonesEffect::isShowingDesktop()) {
+        qCDebug(lcEffect) << "bridge activateWindow: dropped during show desktop";
+        return;
+    }
+    KWin::effects->activateWindow(ew);
+}
+
+void KWinCompositorBridge::raiseWindow(WindowHandle w)
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return;
+    auto* kw = ew->window();
+    if (kw) {
+        KWin::Workspace::self()->raiseWindow(kw);
+    }
+}
+
+void KWinCompositorBridge::applyWindowGeometry(WindowHandle w, const QRectF& geometry, bool skipAnimation)
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return;
+    m_effect.applyWindowGeometry(ew, GeometryHelpers::snapToRect(geometry), false, skipAnimation);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// D-Bus / Utility
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QObject* KWinCompositorBridge::asQObject()
+{
+    return &m_effect;
+}
+
+bool KWinCompositorBridge::isDaemonReady() const
+{
+    return m_effect.isDaemonReady("compositor bridge");
+}
+
+void KWinCompositorBridge::invalidateScreenIdCache()
+{
+    m_effect.clearScreenIdCache();
+}
+
+} // namespace PlasmaZones

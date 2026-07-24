@@ -9,9 +9,15 @@
 vec4 pSurface(vec2 uv) {
     vec4 c = surfaceTexel(uv);
 
-    // The tint colour's own alpha scales the wash alongside the strength param,
-    // so a translucent tint colour tints more gently.
-    float tint = clamp(p_tintStrength, 0.0, 1.0) * clamp(p_tintColor.a, 0.0, 1.0);
+    // Strength is the SOLE control over how hard the wash lands — the tint
+    // colour's own alpha is deliberately ignored. Multiplying the two gave one
+    // effect two knobs that silently compounded (a half-alpha colour at half
+    // strength landed at a quarter), which is the double-apply this codebase
+    // forbids: a composite consumer applies alpha exactly once. Both routes
+    // that reach here could hit it — the settings page's tint picker and a
+    // rule's SetTintColor, since the rule builder's colour dialog offers an
+    // alpha channel for every colour action.
+    float tint = clamp(p_tintStrength, 0.0, 1.0);
     if (tint > 0.001) {
         // Premultiply the tint by the surface's coverage so it only lands where
         // the surface is opaque and the mix stays premultiplied.

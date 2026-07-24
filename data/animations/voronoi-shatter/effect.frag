@@ -1,23 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Voronoi Shatter transition — ported from liixini/shaders niri shader
-// (https://github.com/liixini/shaders/tree/main/voronoi-shatter). Voronoi-
-// cell shatter — each shard reveals at its own threshold via per-cell
-// hash.
+// Voronoi Shatter transition — a Voronoi-cell shatter where each shard
+// reveals at its own threshold via a per-cell hash. Inspired by
+// liixini/shaders' niri voronoi-shatter shader.
 //
-// Niri's voronoi-shatter ships symmetric close.glsl/open.glsl.
-// PlasmaZones' runtime flips iTime on reverse legs (1→0 on close, 0→1
-// on open), so we use the niri OPEN body with `niri_clamped_progress`
-// translated to `clamp(iTime, 0.0, 1.0)` and the runtime flip
-// auto-mirrors the visual on close — no iIsReversed branch needed. One
-// timeline deviation from the verbatim body: see the reveal-band
-// comment below.
+// Symmetric transition, written as a single `pTransition`. The runtime
+// flips the leg's iTime on reverse legs (0→1 on open, 1→0 on close), so
+// the reveal reads `clamp(iTime, 0.0, 1.0)` directly and the close leg
+// plays in reverse automatically, with no `iIsReversed` branch. One
+// timeline detail differs; see the reveal-band comment below.
 //
-// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
-// == texture coords here), so the matrix multiply is dropped and
-// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
-// rewritten to `texture` (GLSL 4.50 core) inline.
+// Geometry and texture coordinates coincide here, so
+// `texture(uTexture0, uv)` samples directly.
 
 vec2 vs_hash2(vec2 p) {
     return fract(sin(vec2(dot(p, vec2(127.1, 311.7)),
@@ -25,15 +20,14 @@ vec2 vs_hash2(vec2 p) {
 }
 
 vec4 pTransition(vec2 uv, float t) {
-    // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
 
     // `cellDensity` means "Voronoi cells across the screen": multiplying
     // by iAnchorSize/iSurfaceScreenPos.zw scales the cell count to the
     // fraction of the screen this surface covers, so shard pixel size
-    // stays constant across popup vs. maximized windows. Matches niri's
-    // reference on full-screen (multiplier = 1.0 there).
+    // stays constant across popup vs. maximized windows. The multiplier
+    // is 1.0 when the surface fills the screen.
     vec2 scale = vec2(p_cellDensity) * max(iAnchorSize, vec2(1.0))
                                    / max(iSurfaceScreenPos.zw, vec2(1.0));
     vec2 q = uv * scale;
@@ -50,7 +44,7 @@ vec4 pTransition(vec2 uv, float t) {
         }
     }
     float seed = vs_hash2(cell).x;
-    // Deviation from the verbatim niri body. Niri layers two smoothsteps:
+    // A two-smoothstep layering would set
     // shard_p = smoothstep(seed*0.5, seed*0.5 + spread, p), then
     // reveal = smoothstep(0, softness, shard_p). The outer one saturates
     // once shard_p reaches `softness` — the MIDDLE of the shard's band at

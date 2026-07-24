@@ -684,7 +684,7 @@ private Q_SLOTS:
         }
 
         // Tag::Effect is the SOLE admission gate into the KWin effect's rule
-        // set (the `hasTag(type, Tag::Effect)` loop in shader_transitions.cpp):
+        // set (the `hasTag(type, Tag::Effect)` loop in shader_config_dbus.cpp):
         // a descriptor regression that drops the tag compiles and passes every
         // vocabulary test above while silently never delivering the action.
         // Pin the delivery contract.

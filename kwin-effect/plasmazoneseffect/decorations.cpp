@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -12,8 +12,8 @@
 
 #include <epoxy/gl.h>
 
-#include "../autotilehandler.h"
-#include "../snaphandler.h"
+#include "autotilehandler/autotilehandler.h"
+#include "handlers/snaphandler.h"
 #include "shader_internal.h"
 #include "surface_fold.h"
 #include "shader_resolve.h"
@@ -715,7 +715,7 @@ void PlasmaZonesEffect::updateAllDecorations()
         if (revisited.contains(wid)) {
             continue;
         }
-        KWin::EffectWindow* w = m_windowIdReverse.value(wid);
+        KWin::EffectWindow* w = m_idCaches.windowIdReverse.value(wid);
         if (w && m_shaderManager.findTransition(w)) {
             continue;
         }

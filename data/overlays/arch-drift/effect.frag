@@ -81,7 +81,11 @@ float dataPacket(vec2 uv, float pathY, float time, float seed) {
 
     // Bright head + fading trail
     float head = smoothstep(0.008, 0.0, dist);
-    float trail = exp(-max(uv.x - packetX, 0.0) * 30.0) * smoothstep(0.01, 0.0, abs(uv.y - pathY));
+    // packetX - uv.x, not the reverse. The step() gate below passes exactly
+    // where uv.x <= packetX, which is where the old operand clamped to 0, so
+    // exp() evaluated to a constant 1 across the whole passing region and the
+    // "fading trail" was a flat streak running back to the edge of the path.
+    float trail = exp(-max(packetX - uv.x, 0.0) * 30.0) * smoothstep(0.01, 0.0, abs(uv.y - pathY));
     trail *= step(0.0, packetX - uv.x); // trail only behind
 
     return head * 3.0 + trail * 0.5;
@@ -217,16 +221,20 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     float h4 = hash21(vec2(float(idx) * 9.77, 17.53));
     float roam = 0.30;
     float f1 = 0.06 + float(idx) * 0.017, f2 = 0.04 + float(idx) * 0.013;
+    // timeSin/timeCos, not raw sin/cos on wrapped iTime: this drives the logo's
+    // POSITION, ROTATION and SCALE, so a wrap discontinuity teleports and
+    // re-orients every instance in one frame. The single-instance branch above
+    // and the shared driftInstanceUV() already do it this way.
     vec2 drift = vec2(
-        sin(time * f1 + h1 * TAU) * roam + sin(time * f1 * 2.1 + h3 * TAU) * roam * 0.25,
-        cos(time * f2 + h2 * TAU) * roam * 0.85 + cos(time * f2 * 1.5 + h4 * TAU) * roam * 0.2);
+        timeSin(f1, h1 * TAU) * roam + timeSin(f1 * 2.1, h3 * TAU) * roam * 0.25,
+        timeCos(f2, h2 * TAU) * roam * 0.85 + timeCos(f2 * 1.5, h4 * TAU) * roam * 0.2);
     uv -= drift;
-    float rotAng = sin(time * (0.07 + float(idx) * 0.019) + h4 * TAU) * wobbleAmp * 0.33;
+    float rotAng = timeSin(0.07 + float(idx) * 0.019, h4 * TAU) * wobbleAmp * 0.33;
     vec2 lp = uv - vec2(0.5);
     uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
-    instScale *= 1.0 + sin(time * (0.4 + float(idx) * 0.09) + h1 * TAU) * 0.012;
+    instScale *= 1.0 + timeSin(0.4 + float(idx) * 0.09, h1 * TAU) * 0.012;
     uv = (uv - 0.5) / instScale + LOGO_CENTER;
     return uv;
 }
@@ -241,8 +249,10 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
                     bool isHighlighted, float bass, float mids, float treble,
                     bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     float speed         = p_speed >= 0.0 ? p_speed : 0.10;
     float flowSpeed     = p_flowSpeed >= 0.0 ? p_flowSpeed : 0.20;
@@ -256,7 +266,7 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
-    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float edgeFadeStart     = zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0);
     float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
     float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
@@ -279,13 +289,10 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float flowCenterY   = p_focalPointY >= -1.5 ? p_focalPointY : 0.5;
     float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.5;
 
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
-    vec2 halfSize = rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
-    float d = sdRoundedBox(p, halfSize, borderRadius);
+    float d = zoneShape.d;
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     float aspect = iResolution.x / max(iResolution.y, 1.0);
     float time = iTime;
@@ -295,11 +302,10 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, ARCH_ICE);
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, ARCH_SNOW);
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
-    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
+    float vitality = zoneVitality(isHighlighted);
+    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStrength;
 
     float flowAngle = flowDirection * TAU;
-    vec2 flowDir = vec2(cos(flowAngle), sin(flowAngle));
 
     float bassEnv   = hasAudio ? smoothstep(0.02, 0.25, bass) * audioReact : 0.0;
     float midsEnv   = hasAudio ? smoothstep(0.02, 0.4, mids) * audioReact : 0.0;
@@ -519,7 +525,9 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 // -- Emerge glow (only when fDist > 0) --
                 if (fDist > 0.0) {
                     float emergeRadius = 0.08 + bassEnv * 0.04;
-                    float emergeFalloff = exp(-fDist / emergeRadius) * 0.3;
+                    // Pedestal-subtracted at the 0.20 outer gate so the glow
+                    // fades to 0 there rather than being cut mid-falloff.
+                    float emergeFalloff = max(exp(-fDist / emergeRadius) - exp(-0.20 / emergeRadius), 0.0) * 0.3;
                     float emergeY = (iLogoUV.y - 0.5) / 0.5;
                     vec3 emergeCol = mix(palPrimary, palGlow, clamp(-emergeY * 0.5 + 0.5, 0.0, 1.0));
                     outerCol += emergeCol * emergeFalloff * instIntensity * depthFactor;
@@ -714,9 +722,11 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             // ── Multi-layer glow ─────────────────────────────────
             if (fDist > -0.01 && fDist < 0.20) {
                 float clampedDist = max(fDist, 0.0);
-                float glow1 = exp(-clampedDist * 80.0) * 0.45;
-                float glow2 = exp(-clampedDist * 22.0) * 0.2;
-                float glow3 = exp(-clampedDist * 7.0) * 0.1;
+                // Pedestal-subtracted at the 0.20 gate so each lobe reaches exactly 0
+                // there instead of being clipped with part of its peak still left.
+                float glow1 = max(exp(-clampedDist * 80.0) - exp(-0.20 * 80.0), 0.0) * 0.45;
+                float glow2 = max(exp(-clampedDist * 22.0) - exp(-0.20 * 22.0), 0.0) * 0.2;
+                float glow3 = max(exp(-clampedDist * 7.0) - exp(-0.20 * 7.0), 0.0) * 0.1;
                 vec3 edgeCol = paletteSweep(time * 0.1 + iLogoUV.y * 0.6 + float(li) * 0.25,
                                              palPrimary, palSecondary, palAccent, palGlow, midsEnv);
                 float flare = 1.0 + bassEnv * 0.5;
@@ -753,13 +763,13 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float depthDarken = smoothstep(0.0, edgeFadeStart, innerDist);
         col *= mix(0.6, 1.0, 1.0 - depthDarken * 0.35);
 
-        float innerGlow = exp(-innerDist / 12.0);
+        float innerGlow = exp(-innerDist / zoneLen(12.0));
         float edgeAngle = atan(p.y, p.x);
         float iriT = edgeAngle / TAU + time * 0.04 + midsEnv * 0.15;
         vec3 iriCol = paletteSweep(iriT, palPrimary, palSecondary, palAccent, palGlow, midsEnv);
         col += iriCol * innerGlow * innerGlowStr;
 
-        col = mix(col, fillColor.rgb * luminance(col), 0.15);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.15);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -777,7 +787,7 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         borderCol *= borderBrightness;
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.3 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {
@@ -786,15 +796,20 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             borderCol *= 0.55;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow ───────────────────────────────────────────────
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 5.0;
-    float glowRadius = mix(10.0, 18.0, vitality) + bassGlowPush;
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(10.0, 18.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, 7.0, borderGlow);
+        float glow = expGlowBounded(d, zoneLen(7.0), borderGlow, glowRadius);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.06) + midsEnv * 0.1;
         vec3 glowCol = paletteSweep(glowT, palPrimary, palSecondary, palAccent, palGlow, midsEnv);
@@ -829,7 +844,6 @@ vec4 compositeArchLabels(vec4 color, vec2 fragCoord,
     float time = iTime;
 
     float bassR   = hasAudio ? bass * labelAudioReact   : 0.0;
-    float midsR   = hasAudio ? mids * labelAudioReact   : 0.0;
     float trebleR = hasAudio ? treble * labelAudioReact : 0.0;
 
     // ── 3-pass Gaussian halo ─────────────────────────────────────

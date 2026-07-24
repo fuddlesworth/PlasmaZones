@@ -21,38 +21,21 @@ layout(location = 0) out vec4 fragColor;
  * Creates a magnetic/gravitational field effect that reacts to mouse position.
  * The field lines bend toward the cursor, creating an interactive visual.
  *
- * Parameters (customParams[0]):
- *   x = fieldStrength (0.0-2.0) - How strongly the field reacts to mouse
- *   y = waveSpeed (0.0-3.0) - Speed of field wave animations
- *   z = rippleSize (0.0-1.0) - Size of ripple effects from mouse
- *   w = glowIntensity (0.0-1.0) - Intensity of glow effects
- *
- * Parameters (customParams[1]):
- *   x = particleCount (10-100) - Number of field particles
- *   y = particleSize (0.5-3.0) - Size of particles
- *   z = trailLength (0.0-1.0) - Length of particle trails
- *   w = distortionAmount (0.0-1.0) - Amount of field distortion
+ * Parameters are declared in metadata.json and read through the generated
+ * p_<id> accessors. The customParams slot tables that used to sit here
+ * listed 8 of the 19 parameters the pack now reads, and the slot framing
+ * no longer matches how they are accessed.
  */
 
-// Noise functions
-float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float c = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
-    
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
+// Kept local rather than calling common.glsl's fbm(): the shared one rotates
+// each octave and offsets by vec2(180.0) with a 0.55 gain, which is a
+// different field from this pack's plain doubling at 0.5. The noise() this
+// used to carry WAS byte-identical to noise2D() and is gone.
 float fbm(vec2 p) {
     float f = 0.0;
     float amp = 0.5;
     for (int i = 0; i < 4; i++) {
-        f += amp * noise(p);
+        f += amp * noise2D(p);
         p *= 2.0;
         amp *= 0.5;
     }
@@ -170,8 +153,10 @@ float energyDistortion(vec2 pos, vec2 mousePos, float time, float amount) {
 
 vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted,
                         float bass, float mids, float treble, float overall, bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     // Parameters
     float fieldStrength = p_fieldStrength >= 0.0 ? p_fieldStrength : 1.0;
@@ -208,25 +193,27 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
     // Treble = Corona discharge arc intensity
     float coronaIntensity = smoothstep(0.08, 0.5, treble);
-    float coronaReach = 20.0 + treble * 60.0; // how far arcs extend from edge (pixels)
+    float coronaReach = zoneLen(20.0 + treble * 60.0); // how far arcs extend from edge (pixels)
 
     // Overall = Field density/visibility (NOT a simple multiplier)
     // Affects rendering thresholds and particle visibility
-    float fieldDensity = hasAudio ? 0.4 + overall * 0.9 * audioReactivity : 1.0;
-    float visibleParticleCount = particleCount * fieldDensity;
+    // Clamped: audioReactivity maxes at 2.0, so this reached 2.2 and the mix()
+    // below extrapolated fieldLineThreshold to -0.39, where the smoothstep
+    // returns 1.0 for every input and the visibility gate it describes stops
+    // gating anything.
+    float fieldDensity = hasAudio ? clamp(0.4 + overall * 0.9 * audioReactivity, 0.0, 1.3) : 1.0;
     float fieldLineThreshold = mix(0.6, 0.15, fieldDensity); // lower = more lines visible
 
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
     vec2 p = fragCoord - center;
-    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
 
     // Screen-space UV for continuous field across all zones
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     vec2 mouseGlobal = iMouse.xy / max(iResolution, vec2(1.0));
+    // Shared by the interior radial effects and the outer-glow bound below.
+    float mouseDist = length(globalUV - mouseGlobal);
 
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     // Colors
     vec3 fieldColor = p_fieldColor.rgb;
@@ -242,6 +229,12 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     glowIntensity *= vitalityScale(0.4, 1.3, vitality);
     particleCount *= vitalityScale(0.5, 1.0, vitality);
     distortionAmount *= vitalityScale(0.5, 1.0, vitality);
+
+    // Derived AFTER the vitality scaling above, not before it. Computed early
+    // this was a dead write: the vitality factor landed on particleCount, which
+    // nothing read afterwards, so dormant zones never thinned their particle
+    // field the way the surrounding three lines intend.
+    float visibleParticleCount = particleCount * fieldDensity;
 
     float t = iTime * waveSpeed;
 
@@ -270,7 +263,11 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         bg += fieldColor * vDistortAmount * 0.02;
 
         // Field lines emanating from mouse position (polarity flip from bass)
-        float lines = fieldLines(globalUV, mouseGlobal, fieldStrength * 0.5, t, waveSpeed, polarityFlip);
+        // iTime, not t: t already carries waveSpeed, and fieldLines multiplies
+        // its time by the speed argument again, so passing both squared the
+        // knob (9x at the slider's max of 3, and slower than the rest of the
+        // pack below 1).
+        float lines = fieldLines(globalUV, mouseGlobal, fieldStrength * 0.5, iTime, waveSpeed, polarityFlip);
         // Field density controls line visibility threshold
         lines = smoothstep(fieldLineThreshold, fieldLineThreshold + 0.3, lines) * lines;
 
@@ -281,22 +278,31 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         float particles = fieldParticles(globalUV, mouseGlobal, t, visibleParticleCount, particleSize);
 
         // ── Energy connections between nearby particles ─────────────
-        float connections = 0.0;
-        for (float i = 0.0; i < 25.0; i++) {
-            if (i >= visibleParticleCount) break;
-            float ai = i * 2.399 + t * (0.5 + hash21(vec2(i, 0.0)) * 0.5);
-            float ri = 0.05 + hash21(vec2(i, 1.0)) * 0.15;
-            float si = 0.8 + hash21(vec2(i, 2.0)) * 0.4;
-            vec2 pi = mouseGlobal + vec2(cos(ai * si), sin(ai * si)) * ri;
-            pi += vec2(sin(t * 3.0 + i), cos(t * 2.0 + i * 1.5)) * 0.02;
+        // Particle positions depend only on the index and the clock, never on
+        // globalUV, so they are evaluated ONCE per fragment rather than once per
+        // pair. The pair loop below is O(n²) at up to 300 iterations, and
+        // re-deriving pj inside it cost ~325 position evaluations (each 3 hash21
+        // plus 4 trig) where 25 do. This runs per decorated window per frame on
+        // the compositor path, so the difference is real.
+        vec2 particlePos[25];
+        for (int pi_i = 0; pi_i < 25; pi_i++) {
+            if (float(pi_i) >= visibleParticleCount) break;
+            float fi = float(pi_i);
+            float ai = fi * 2.399 + t * (0.5 + hash21(vec2(fi, 0.0)) * 0.5);
+            float ri = 0.05 + hash21(vec2(fi, 1.0)) * 0.15;
+            float si = 0.8 + hash21(vec2(fi, 2.0)) * 0.4;
+            particlePos[pi_i] = mouseGlobal + vec2(cos(ai * si), sin(ai * si)) * ri
+                              + vec2(sin(t * 3.0 + fi), cos(t * 2.0 + fi * 1.5)) * 0.02;
+        }
 
-            for (float j = i + 1.0; j < 25.0; j++) {
-                if (j >= visibleParticleCount) break;
-                float aj = j * 2.399 + t * (0.5 + hash21(vec2(j, 0.0)) * 0.5);
-                float rj = 0.05 + hash21(vec2(j, 1.0)) * 0.15;
-                float sj = 0.8 + hash21(vec2(j, 2.0)) * 0.4;
-                vec2 pj = mouseGlobal + vec2(cos(aj * sj), sin(aj * sj)) * rj;
-                pj += vec2(sin(t * 3.0 + j), cos(t * 2.0 + j * 1.5)) * 0.02;
+        float connections = 0.0;
+        for (int ii = 0; ii < 25; ii++) {
+            if (float(ii) >= visibleParticleCount) break;
+            vec2 pi = particlePos[ii];
+
+            for (int jj = ii + 1; jj < 25; jj++) {
+                if (float(jj) >= visibleParticleCount) break;
+                vec2 pj = particlePos[jj];
 
                 float pairDist = length(pi - pj);
                 if (pairDist > 0.15) continue; // only connect nearby particles
@@ -320,9 +326,6 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         // Energy distortion - enhanced by vertex displacement
         float distortion = energyDistortion(globalUV, mouseGlobal, t, distortionAmount);
         distortion += vDistortAmount * 0.3;
-
-        // Distance from mouse for radial effects
-        float mouseDist = length(globalUV - mouseGlobal);
 
         // Central glow around mouse - enhanced by vertex influence
         float mouseGlow = exp(-mouseDist * 8.0) * glowIntensity;
@@ -350,7 +353,10 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         vec2 gridUV = globalUV + vDisplacement * 0.08;
         vec2 grid = abs(fract(gridUV * gridFreq) - 0.5);
         float gridLine = smoothstep(0.48, 0.5, max(grid.x, grid.y)) * 0.05;
-        fx += fieldColor * gridLine * (1.0 - mouseDist) * fieldDensity;
+        // max(), not a bare subtraction: mouseDist is a screen-space UV distance
+        // reaching ~1.41 at opposite corners, so (1.0 - mouseDist) went negative
+        // over the far third of the screen and SUBTRACTED the grid colour there.
+        fx += fieldColor * gridLine * max(1.0 - mouseDist, 0.0) * fieldDensity;
 
         // Strain lines - show direction of pull
         float strainAngle = atan(vDisplacement.y, vDisplacement.x);
@@ -374,8 +380,12 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
         // ── MIDS: EM Interference Bands (field-aligned) ───────────────
         if (hasAudio && emBandIntensity > 0.01) {
-            // Compute field direction at this fragment to align bands with field lines
-            vec2 localField = fieldVector(globalUV, mouseGlobal, fieldStrength * 0.5, t, polarityFlip);
+            // Compute field direction at this fragment to align bands with field lines.
+            // iTime, matching the fieldLines() call above. Passing `t` here (which
+            // already carries waveSpeed) advanced this field's turbulence on a
+            // different clock from the lines the bands are supposed to align to, so
+            // at any waveSpeed other than 1 they aligned to a field nobody drew.
+            vec2 localField = fieldVector(globalUV, mouseGlobal, fieldStrength * 0.5, iTime, polarityFlip);
             float fieldAngle = atan(localField.y, localField.x);
             // Project UV perpendicular to the field direction so bands run along field lines
             float bandCoord = globalUV.x * cos(fieldAngle) - globalUV.y * sin(fieldAngle);
@@ -417,7 +427,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
                 arc *= arcFade;
 
                 // Flickering intensity (electrical discharge is unstable)
-                float flicker = 0.7 + 0.3 * noise(vec2(angle * 5.0 + iTime * 15.0, iTime * 10.0));
+                float flicker = 0.7 + 0.3 * noise2D(vec2(angle * 5.0 + iTime * 15.0, iTime * 10.0));
                 arc *= flicker;
 
                 // Corona color: bright electric blue-white core with purple fringe
@@ -433,11 +443,21 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         float vig = 1.0 - length(globalUV - 0.5) * (0.4 - vDistortAmount * 0.1);
 
         result.rgb = bg + fx * vig;
-        result.a = fillOpacity + vDistortAmount * 0.05;
+        // Light identity tint from the zone's configured fill colour, at the
+        // sibling packs' weight. Without it this pack discarded the setting.
+        result.rgb = zoneTint(result.rgb, fillColor, 0.35);
+        // fillOpacity alone, matching the rest of the catalog. The distortion addend was
+    // unbounded (vDistortAmount is length(displacement) * 50 from the vert) and
+    // relied on clampFragColor to save it.
+    result.a = fillOpacity;
     }
 
     // Border with energy effect - enhanced by vertex displacement
-    float effectiveBorderWidth = borderWidth + vDistortAmount * 2.0;
+    // The distortion addend only widens a border that exists. Added
+    // unconditionally it kept the width non-zero, so this was the one pack in
+    // the catalog where setting the border width to 0 did not turn the border
+    // off.
+    float effectiveBorderWidth = borderWidth <= 0.0 ? 0.0 : borderWidth + vDistortAmount * zoneLen(2.0);
     float border = softBorder(d, effectiveBorderWidth);
     if (border > 0.0) {
 
@@ -445,21 +465,25 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         float flow = sin(atan(p.y, p.x) * 8.0 + t * 4.0 + vMouseInfluence * 10.0) * 0.5 + 0.5;
 
         vec3 borderClr = mix(fieldColor, highlightColor, flow * 0.5 + vMouseInfluence * 0.3);
+        // Fold in the zone's configured border colour, as the sibling packs do.
+        borderClr = mix(borderClr, borderColor.rgb, 0.3);
         borderClr *= 0.8 + 0.2 * flow + vDistortAmount * 0.5;
         // Corona discharge bleeds into border during treble
         vec3 coronaBorderGlow = vec3(0.6, 0.75, 1.0) * coronaIntensity * 0.4;
         borderClr += coronaBorderGlow;
 
-        result.rgb = mix(result.rgb, borderClr, border * 0.9);
-        result.a = max(result.a, border * 0.95);
+        result.rgb = mix(result.rgb, borderClr, (border * 0.9) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // Outer glow influenced by mouse proximity and vertex deformation
-    float glowExtent = 25.0 + vDistortAmount * 15.0;
-    if (d > 0.0 && d < glowExtent) {
-        float mouseDist = length(globalUV - mouseGlobal);
-        float mouseInfluence = exp(-mouseDist * 3.0);
-        float glowSize = 15.0 + mouseInfluence * 10.0 + vDistortAmount * 5.0;
+    // Bound derived from the falloff rather than tuned independently, and both
+    // hoisted so they cannot drift. They used to coincide when the cursor sat on
+    // the zone (mouseInfluence -> 1), cutting the gradient at exp(-1) = 37% and
+    // leaving a hard ring at a fixed radius.
+    float mouseInfluence = exp(-mouseDist * 3.0);
+    float glowSize = zoneLen(15.0 + mouseInfluence * 10.0 + vDistortAmount * 5.0);
+    if (d > 0.0 && d < glowSize * 3.5) {
         float glow = exp(-d / glowSize) * (0.3 + mouseInfluence * 0.4 + vMouseInfluence * 0.2);
         result.rgb += fieldColor * glow * 0.4;
         result.a = max(result.a, glow * 0.5);
@@ -471,7 +495,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 // ─── Custom Label Composite ───────────────────────────────────────
 
 vec4 compositeMagneticLabels(vec4 color, vec2 fragCoord,
-                             float bass, float treble, bool hasAudio) {
+                             float bass, bool hasAudio) {
     vec2 uv = labelsUv(fragCoord);
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
@@ -558,7 +582,7 @@ void main() {
     }
 
     if (p_showLabels > 0.5)
-        color = compositeMagneticLabels(color, fragCoord, bass, treble, hasAudio);
+        color = compositeMagneticLabels(color, fragCoord, bass, hasAudio);
 
     fragColor = clampFragColor(color);
 }

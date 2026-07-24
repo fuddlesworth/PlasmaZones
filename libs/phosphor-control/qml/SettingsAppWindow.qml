@@ -27,6 +27,11 @@ Kirigami.ApplicationWindow {
     //* Optional content pinned to the RIGHT of the header-extras row (e.g. a
     //  status toggle), sharing the row with the centered headerExtras.
     property alias headerTrailing: headerTrailingLoader.sourceComponent
+    //* Optional label for the unsaved-changes footer bar, replacing its plain
+    //  "Unsaved changes" when the app can say what Save will actually do
+    //  (e.g. name the profile a pending switch applies). Empty keeps the
+    //  default.
+    property string unsavedChangesMessage
     //* Optional content pinned to the RIGHT of the per-page breadcrumb row
     //  (e.g. a page-scoped overflow/kebab menu). Sits on the same line as the
     //  breadcrumbs, right-aligned; the row already reserves the leading space
@@ -41,6 +46,12 @@ Kirigami.ApplicationWindow {
      *      window.sidebar.currentParentId  // read
      *      window.sidebar.footerContent: Component { ... }
      *      window.sidebar.trailingDelegate: Component { ... }
+     *      window.sidebar.flattenTree            // simple-mode flat rail
+     *      window.sidebar.flatTitleOverrides     // per-leaf flat titles
+     *
+     *  The last two are also read back by this window to keep Breadcrumbs
+     *  in step with the rail, so a consumer must set them through this alias
+     *  rather than on the Sidebar directly.
      *
      *  Underscore-prefixed members on the underlying Sidebar
      *  (`_isExpanded`, `_refreshModel`, `_suppressAccordion`, …) are
@@ -57,7 +68,13 @@ Kirigami.ApplicationWindow {
     property bool closePromptShowsApply: false
     /** Alias to the close-confirmation dialog itself, for consumers
      *  that need to retitle / restyle it. Read-only — the property
-     *  the alias points to is `id: discardDialog` declared below. */
+     *  the alias points to is `id: discardDialog` declared below.
+     *
+     *  Deliberately exported with no in-tree reader: this is a
+     *  consumer-facing slot on a reusable library component, and the
+     *  applications shipped in this repo happen to accept the default
+     *  dialog as-is. Removing it would break out-of-tree consumers that
+     *  restyle the prompt, so it stays part of the contract. */
     property alias closeDialog: discardDialog
     /** Auto-collapses the sidebar to an icon-only rail when the window
      *  is too narrow to comfortably show labels. Threshold is 50
@@ -84,7 +101,7 @@ Kirigami.ApplicationWindow {
      *  user understands the close-was-blocked path instead of being
      *  silently re-prompted with the same dialog on the next close
      *  attempt. Carries the unresolved page ids (best-effort: walks
-     *  the registry and collects each PageController whose isDirty()
+     *  the registry and collects each PageController whose `dirty`
      *  is still true) AND the per-domain error strings collected by
      *  the async batch — consumers can use either: page-id list for
      *  "still unsaved on X, Y" framing, errors list for "%1 said: %2"
@@ -102,21 +119,11 @@ Kirigami.ApplicationWindow {
     /// a consumer toast can name the page(s) that refused the commit
     /// instead of just saying "save failed".
     function collectDirtyPageIds() {
-        const ids = [];
-        if (!root.controller || !root.controller.registry)
-            return ids;
-
-        const entries = root.controller.registry.allPagesData();
-        for (let i = 0; i < entries.length; ++i) {
-            const id = entries[i].id;
-            if (!id)
-                continue;
-
-            const ctrl = root.controller.registry.controller(id);
-            if (ctrl && ctrl.isDirty())
-                ids.push(id);
-        }
-        return ids;
+        // Delegates to C++: isDirty() is not Q_INVOKABLE, so walking the
+        // registry here and calling it threw a TypeError on the first
+        // non-null controller, which killed the applyOnCloseFailed emit and
+        // left the window silently refusing to close.
+        return root.controller ? root.controller.dirtyPageIds() : [];
     }
 
     // Default geometry sized in gridUnits so HiDPI displays (gridUnit ~24-36)
@@ -396,15 +403,19 @@ Kirigami.ApplicationWindow {
                 RowLayout {
                     id: headerExtrasRow
 
+                    // Gated width of the trailing slot — the phantom on the left
+                    // pads the same amount so the centered slot stays
+                    // window-centered. Read via the gated expression rather
+                    // than the Loader's width, which lags one layout-polish
+                    // cycle behind the binding.
+                    readonly property real _trailingWidth: (headerTrailingLoader.item !== null && headerTrailingLoader.item.visible) ? headerTrailingLoader.item.implicitWidth : 0
+
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.largeSpacing
                     spacing: 0
 
                     Item {
-                        // Mirror the trailing Loader's gated-width expression
-                        // rather than reading headerTrailingLoader.width, which
-                        // lags one layout-polish cycle behind the binding.
-                        Layout.preferredWidth: (headerTrailingLoader.item !== null && headerTrailingLoader.item.visible) ? headerTrailingLoader.item.implicitWidth : 0
+                        Layout.preferredWidth: headerExtrasRow._trailingWidth
                     }
 
                     Item {
@@ -567,6 +578,10 @@ Kirigami.ApplicationWindow {
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignVCenter
                             controller: root.controller
+                            // Follow the rail: when it flattens the tree the
+                            // crumb trail collapses to the page title too.
+                            flattenTree: sidebarItem.flattenTree
+                            flatTitleOverrides: sidebarItem.flatTitleOverrides
                         }
 
                         // Page-scoped trailing slot (e.g. a per-page overflow
@@ -605,6 +620,7 @@ Kirigami.ApplicationWindow {
                     UnsavedChangesFooter {
                         Layout.fillWidth: true
                         controller: root.controller
+                        message: root.unsavedChangesMessage
                     }
                 }
             }

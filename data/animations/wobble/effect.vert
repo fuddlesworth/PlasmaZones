@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Wobbly-move vertex shader — thin consumer of the generic soft-body
 // control lattice. All the physics (neighbour-coupled springs, the grip
@@ -13,6 +13,13 @@
 // wobbles like cloth, no rigid tail. p_strength scales the deflection;
 // p_maxBend caps a violent fling.
 
+// COMPOSITOR-ONLY by design (appliesTo: ["move"]): this vert leaves
+// `modelViewProjectionMatrix` unguarded AND reads `iMoveMesh`, which exists
+// only in the PLASMAZONES_KWIN branch of animation_uniforms.glsl — a
+// stricter kwin dependency than the other geometry verts. The strict SPIR-V
+// bake would reject both, which is safe only because
+// shaderEffectIsCompositorOnly() keeps this pack off the daemon path.
+
 #version 450
 
 #include <animation_uniforms.glsl>
@@ -22,7 +29,6 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 
 // Cubic Bernstein basis for a Bezier patch parameter in [0,1].
@@ -49,10 +55,8 @@ vec2 sampleMesh(float s, float t) {
     }
     return acc;
 }
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     // Card uv with y = 0 at the window top (KWin Y-flips window-quad
     // texcoords on upload; re-apply the flip, same as the flow pack). The
     // lattice rows run top (row 0) to bottom, so cuv indexes it directly.
@@ -66,17 +70,11 @@ void main() {
     // Cap so a violent fling cannot fold the window over itself; the clamp
     // preserves direction.
     float m = length(lag);
-    float cap = max(float(p_maxBend), 8.0);
+    float cap = max(p_maxBend, 8.0);
     if (m > cap) {
         lag *= cap / m;
     }
 
     vTexCoord = cuv;
     gl_Position = modelViewProjectionMatrix * vec4(position + lag, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the deformation is compositor-only. Pass the
-    // quad through so the shader still bakes — mirrors flow's daemon branch.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }

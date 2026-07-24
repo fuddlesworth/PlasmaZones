@@ -1,19 +1,26 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <QDebug>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 #include <QUrl>
 
+#include <memory>
+
 #include "PhosphorControl/ApplicationController.h"
 #include "PhosphorControl/ISearchProvider.h"
 #include "PhosphorControl/PageController.h"
+#include "PhosphorControl/PageRegistry.h"
 #include "PhosphorControl/SearchController.h"
 #include "PhosphorControl/SearchEntry.h"
+#include "PhosphorControl/SearchRanker.h"
 
 using PhosphorControl::ApplicationController;
 using PhosphorControl::ISearchProvider;
 using PhosphorControl::PageController;
+using PhosphorControl::PageRegistry;
 using PhosphorControl::SearchController;
 using PhosphorControl::SearchEntry;
 
@@ -52,7 +59,12 @@ public:
         e.pageId = QStringLiteral("rules");
         e.anchor = QStringLiteral("rule:abc");
         e.title = QStringLiteral("Steam");
-        e.subtitle = QStringLiteral("Rules");
+        // Deliberately DISTINCT from the auto-derived subtitle for pageId
+        // "rules": that page is top-level and titled "Rules", so an auto-derive
+        // would produce exactly "Rules". A provider subtitle equal to the
+        // derive can't tell "respected" from "overwritten" apart, which is the
+        // whole point of providerSubtitleRespectedWhenSet.
+        e.subtitle = QStringLiteral("12 active rules");
         return {e};
     }
 };
@@ -70,6 +82,49 @@ public:
         e.title = QStringLiteral("Floaty");
         return {e};
     }
+};
+
+/** Counts SearchController's entry-drop warnings for its lifetime, restoring
+ *  the previous handler on destruction.
+ *
+ *  QTest::ignoreMessage can only pin that a message WAS emitted: an extra,
+ *  unignored warning leaves a test green. The once-per-entry warning gate has
+ *  to be pinned in exactly that direction (a SECOND rebuild must add nothing),
+ *  so it needs a count rather than a queue of expectations. */
+class DropWarningCounter
+{
+public:
+    DropWarningCounter()
+    {
+        s_count = 0;
+        s_previous = qInstallMessageHandler(&DropWarningCounter::handle);
+    }
+    ~DropWarningCounter()
+    {
+        qInstallMessageHandler(s_previous);
+    }
+    DropWarningCounter(const DropWarningCounter&) = delete;
+    DropWarningCounter& operator=(const DropWarningCounter&) = delete;
+
+    int count() const
+    {
+        return s_count;
+    }
+
+private:
+    static void handle(QtMsgType type, const QMessageLogContext& context, const QString& message)
+    {
+        if (type == QtWarningMsg && message.contains(QStringLiteral("dropping search entry"))) {
+            ++s_count;
+            return;
+        }
+        if (s_previous != nullptr) {
+            s_previous(type, context, message);
+        }
+    }
+
+    static inline int s_count = 0;
+    static inline QtMessageHandler s_previous = nullptr;
 };
 
 QStringList resultPageIds(const SearchController& sc)
@@ -104,7 +159,7 @@ class TestSearchController : public QObject
 private Q_SLOTS:
     void init()
     {
-        m_app = new ApplicationController(this);
+        m_app = std::make_unique<ApplicationController>();
         // A non-navigable category (empty qmlSource) + two navigable leaves.
         m_app->registerPage(new StubPage(QStringLiteral("snapping")), {}, QStringLiteral("Snapping"), QUrl());
         m_app->registerPage(new StubPage(QStringLiteral("general")), {}, QStringLiteral("General"),
@@ -115,24 +170,33 @@ private Q_SLOTS:
         m_app->registerPage(new StubPage(QStringLiteral("snapping-appearance-colors")),
                             QStringLiteral("snapping-appearance"), QStringLiteral("Colors"),
                             QUrl(QStringLiteral("qrc:/Colors.qml")));
+        // StubProvider's entities claim pageId "rules", and buildIndex now
+        // drops entries whose pageId is not a registered page (they navigate
+        // nowhere). Register it so the provider cases exercise the provider
+        // path rather than the unregistered-id drop.
+        m_app->registerPage(new StubPage(QStringLiteral("rules")), {}, QStringLiteral("Rules"),
+                            QUrl(QStringLiteral("qrc:/Rules.qml")));
     }
 
     void cleanup()
     {
-        delete m_app;
-        m_app = nullptr;
+        // Sole owner, so the fixture is torn down between test functions
+        // rather than accumulating one controller per test on the QObject
+        // parent. Deliberately unparented: a parented controller plus an
+        // explicit destroy is two owners for one object.
+        m_app.reset();
     }
 
     void findsPageByTitle()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         sc.setQuery(QStringLiteral("general"));
         QVERIFY(resultPageIds(sc).contains(QStringLiteral("general")));
     }
 
     void categoryWithoutQmlIsNotATarget()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         // "snapping" matches the category title AND the leaf's breadcrumb, but
         // only the navigable leaf (not the category id) is ever a result.
         sc.setQuery(QStringLiteral("snapping"));
@@ -143,7 +207,7 @@ private Q_SLOTS:
 
     void breadcrumbFromParentChain()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         sc.setQuery(QStringLiteral("appearance"));
         const QVariantList r = sc.results();
         QVERIFY(!r.isEmpty());
@@ -152,7 +216,7 @@ private Q_SLOTS:
 
     void breadcrumbJoinsAncestorsWithSeparator()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         sc.setQuery(QStringLiteral("colors"));
         const QVariantList r = sc.results();
         QVERIFY(!r.isEmpty());
@@ -167,7 +231,7 @@ private Q_SLOTS:
         // A Setting entry with no subtitle gets the full path to its page
         // (ancestors + the page title), so it reads consistently with page
         // results instead of an author-invented breadcrumb.
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         SearchEntry e;
         e.kind = SearchEntry::Kind::Setting;
         e.pageId = QStringLiteral("snapping-appearance-colors");
@@ -182,9 +246,66 @@ private Q_SLOTS:
                  QStringLiteral("Snapping › Appearance › Colors"));
     }
 
+    void actionEntrySurfacesActionIdWithoutAddress()
+    {
+        // Kind::Action carries an app command id instead of a navigable
+        // address: the result map must expose `actionId` (the QML dispatch
+        // key) and an EMPTY `address` (so the navigate branch can never
+        // swallow an action), and the producer's subtitle must survive the
+        // breadcrumb autofill despite the empty pageId.
+        SearchController sc(m_app.get());
+        SearchEntry e;
+        e.kind = SearchEntry::Kind::Action;
+        e.actionId = QStringLiteral("show-shortcut-overlay");
+        e.title = QStringLiteral("Keyboard Shortcuts");
+        e.subtitle = QStringLiteral("Show the shortcut reference");
+        e.keywords = {QStringLiteral("hotkey")};
+        sc.addEntry(e);
+
+        sc.setQuery(QStringLiteral("hotkey"));
+        bool found = false;
+        for (const QVariant& v : sc.results()) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("title")).toString() == QStringLiteral("Keyboard Shortcuts")) {
+                found = true;
+                QCOMPARE(m.value(QStringLiteral("actionId")).toString(), QStringLiteral("show-shortcut-overlay"));
+                QVERIFY(m.value(QStringLiteral("address")).toString().isEmpty());
+                QCOMPARE(m.value(QStringLiteral("kind")).toInt(), static_cast<int>(SearchEntry::Kind::Action));
+                QCOMPARE(m.value(QStringLiteral("subtitle")).toString(), QStringLiteral("Show the shortcut reference"));
+            }
+        }
+        QVERIFY(found);
+    }
+
+    void actionEntryWithEmptySubtitleSkipsBreadcrumbAutofill()
+    {
+        // An Action with no producer subtitle must stay subtitle-less:
+        // actions are commands, not page-resident targets, so the breadcrumb
+        // autofill (which would run breadcrumbFor on the empty pageId) is
+        // skipped for them entirely.
+        SearchController sc(m_app.get());
+        SearchEntry e;
+        e.kind = SearchEntry::Kind::Action;
+        e.actionId = QStringLiteral("some-command");
+        e.title = QStringLiteral("Bare Command");
+        e.keywords = {QStringLiteral("barecmd")};
+        sc.addEntry(e);
+
+        sc.setQuery(QStringLiteral("barecmd"));
+        bool found = false;
+        for (const QVariant& v : sc.results()) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("title")).toString() == QStringLiteral("Bare Command")) {
+                found = true;
+                QVERIFY(m.value(QStringLiteral("subtitle")).toString().isEmpty());
+            }
+        }
+        QVERIFY(found);
+    }
+
     void keywordEnablesSynonymSearch()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         sc.setPageKeywords(QStringLiteral("general"), {QStringLiteral("color"), QStringLiteral("theme")});
         sc.setQuery(QStringLiteral("color"));
         QVERIFY(resultPageIds(sc).contains(QStringLiteral("general")));
@@ -192,7 +313,7 @@ private Q_SLOTS:
 
     void staticAnchorEntryIsSearchable()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         SearchEntry anchor;
         anchor.kind = SearchEntry::Kind::Setting;
         anchor.pageId = QStringLiteral("general");
@@ -215,9 +336,187 @@ private Q_SLOTS:
         QVERIFY(found);
     }
 
+    void entryWithUnregisteredPageIdIsDropped()
+    {
+        // pageAllowedInCurrentMode returns true for an unknown id on purpose
+        // (tier filter, not an existence check), so a typo'd pageId would
+        // otherwise reach the results and navigate nowhere — the app's mode
+        // gate rejects the id and bounces the user elsewhere.
+        SearchController sc(m_app.get());
+        SearchEntry typo;
+        typo.kind = SearchEntry::Kind::Setting;
+        typo.pageId = QStringLiteral("exclusions"); // folded out long ago
+        typo.anchor = QStringLiteral("whatever");
+        typo.title = QStringLiteral("Ghost setting");
+        sc.addEntry(typo);
+
+        // A VALID entry matching the same query word. Without it the query
+        // matches nothing at all, the result list is empty, and the drop
+        // assertion below is carried entirely by ignoreMessage — "dropped"
+        // would be indistinguishable from "nothing matched".
+        SearchEntry sibling;
+        sibling.kind = SearchEntry::Kind::Setting;
+        sibling.pageId = QStringLiteral("general");
+        sibling.anchor = QStringLiteral("ghostTrail");
+        sibling.title = QStringLiteral("Ghost trail");
+        sc.addEntry(sibling);
+
+        QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression(QStringLiteral("pageId .*exclusions.* is not a registered, navigable page")));
+        sc.setQuery(QStringLiteral("ghost"));
+        QStringList titles;
+        for (const QVariant& v : sc.results()) {
+            titles << v.toMap().value(QStringLiteral("title")).toString();
+        }
+        QVERIFY(titles.contains(QStringLiteral("Ghost trail")));
+        QVERIFY(!titles.contains(QStringLiteral("Ghost setting")));
+    }
+
+    void entryOnRegisteredCategoryPageIsDropped()
+    {
+        // Registered is NOT enough. "snapping" is a real registered page but a
+        // CATEGORY (empty qmlSource): it has no page body, so a result
+        // addressed at it navigates into an empty viewport. The page loop
+        // already applies this rule when auto-deriving entries; this pins the
+        // same rule for static/provider entries, which is a separate branch of
+        // the gate — every other fixture entry targets either a navigable leaf
+        // or an unregistered id, so the registration half alone covers none of
+        // it.
+        SearchController sc(m_app.get());
+        SearchEntry onCategory;
+        onCategory.kind = SearchEntry::Kind::Setting;
+        onCategory.pageId = QStringLiteral("snapping"); // registered, but qmlSource is empty
+        onCategory.anchor = QStringLiteral("whatever");
+        onCategory.title = QStringLiteral("Phantom knob");
+        sc.addEntry(onCategory);
+
+        // Same reason as the unregistered-id test above: a valid entry on the
+        // same query word, so the result list is non-empty and the drop is
+        // distinguishable from a query that simply found nothing.
+        SearchEntry sibling;
+        sibling.kind = SearchEntry::Kind::Setting;
+        sibling.pageId = QStringLiteral("general");
+        sibling.anchor = QStringLiteral("phantomTrail");
+        sibling.title = QStringLiteral("Phantom trail");
+        sc.addEntry(sibling);
+
+        QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression(QStringLiteral("pageId .*snapping.* is not a registered, navigable page")));
+        sc.setQuery(QStringLiteral("phantom"));
+        QStringList titles;
+        for (const QVariant& v : sc.results()) {
+            titles << v.toMap().value(QStringLiteral("title")).toString();
+        }
+        QVERIFY(titles.contains(QStringLiteral("Phantom trail")));
+        QVERIFY(!titles.contains(QStringLiteral("Phantom knob")));
+    }
+
+    void dropWarningIsOncePerEntryNotPerRebuild()
+    {
+        SearchController sc(m_app.get());
+        SearchEntry first;
+        first.kind = SearchEntry::Kind::Setting;
+        first.pageId = QStringLiteral("nowhere"); // never registered
+        first.anchor = QStringLiteral("one");
+        first.title = QStringLiteral("Wraith one");
+        sc.addEntry(first);
+
+        SearchEntry second = first;
+        second.anchor = QStringLiteral("two");
+        second.title = QStringLiteral("Wraith two");
+        sc.addEntry(second);
+
+        DropWarningCounter warnings;
+
+        // Two entries sharing ONE bad pageId: BOTH must be named. Keying the
+        // warned set on the pageId alone names only the first, so a maintainer
+        // fixes that row and the second stays silent for the life of the
+        // process — which is why the key is (pageId, title).
+        sc.setQuery(QStringLiteral("wraith"));
+        QCOMPARE(sc.resultCount(), 0);
+        QCOMPARE(warnings.count(), 2);
+
+        // A second rebuild with the query still live. The DROP is re-evaluated
+        // every rebuild, but the warning must not repeat: this is a static
+        // authoring defect, not a runtime event, and re-warning on every
+        // keystroke-adjacent invalidate buries genuinely new output.
+        m_app->registry()->setShowAdvanced(false);
+        QCOMPARE(sc.resultCount(), 0);
+        QCOMPARE(warnings.count(), 2);
+    }
+
+    void controllerWithoutARegistryIndexesNothing()
+    {
+        // The registry-less fallback returns NOTHING rather than the static
+        // entries: with no registry there is no tier filter, so the condensed
+        // simple pages' rows and their advanced twins would all surface at
+        // once. Nothing else in the suite constructs a controller with a null
+        // app, so this is the only thing standing between that decision and a
+        // `return m_staticEntries;`.
+        SearchController sc(nullptr);
+        SearchEntry e;
+        e.kind = SearchEntry::Kind::Setting;
+        e.pageId = QStringLiteral("general");
+        e.anchor = QStringLiteral("orphan");
+        e.title = QStringLiteral("Orphan setting");
+        sc.addEntry(e);
+
+        sc.setQuery(QStringLiteral("orphan"));
+        QCOMPARE(sc.resultCount(), 0);
+    }
+
+    void limitOfZeroSuppressesTheSuggestion()
+    {
+        // A cap of 0 empties the result list BY THE CAP, not by absence of
+        // matches, so it must not be read as a typo. This is the same
+        // misspelling suggestionOnZeroResultsTypo uses, where the suggestion
+        // is correct — the only difference here is the cap.
+        SearchController sc(m_app.get());
+        sc.setLimit(0);
+        sc.setQuery(QStringLiteral("appearence"));
+        QCOMPARE(sc.resultCount(), 0);
+        QVERIFY(sc.suggestion().isEmpty());
+    }
+
+    void advancedOnlyEntryIsHiddenInSimpleMode()
+    {
+        // SearchEntry::advancedOnly is the ONLY thing keeping an advanced row
+        // off the simple-mode result list when its owning page is visible in
+        // BOTH modes (the page-tier gate cannot help there). Roughly 25
+        // catalogue rows depend on it, so without this test deleting the
+        // `!e.advancedOnly ||` clause in SearchController::tierAllows passes
+        // the whole suite.
+        SearchController sc(m_app.get());
+        SearchEntry advanced;
+        advanced.kind = SearchEntry::Kind::Setting;
+        advanced.pageId = QStringLiteral("general"); // Always tier — visible in both modes
+        advanced.anchor = QStringLiteral("borderScope");
+        advanced.title = QStringLiteral("Apply borders to");
+        advanced.advancedOnly = true;
+        sc.addEntry(advanced);
+
+        const auto titles = [&sc]() {
+            QStringList out;
+            for (const QVariant& v : sc.results()) {
+                out << v.toMap().value(QStringLiteral("title")).toString();
+            }
+            return out;
+        };
+
+        m_app->registry()->setShowAdvanced(true);
+        sc.setQuery(QStringLiteral("borders"));
+        QVERIFY(titles().contains(QStringLiteral("Apply borders to")));
+
+        m_app->registry()->setShowAdvanced(false);
+        sc.setQuery(QStringLiteral("borders"));
+        QVERIFY(!titles().contains(QStringLiteral("Apply borders to")));
+    }
+
     void providerEntitiesAreSearchable()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         StubProvider provider;
         sc.registerProvider(&provider);
         sc.setQuery(QStringLiteral("steam"));
@@ -235,7 +534,7 @@ private Q_SLOTS:
     {
         // A provider entity with no subtitle gets the full page path, exactly
         // like a static Setting entry.
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         StubProviderNoSubtitle provider;
         sc.registerProvider(&provider);
         sc.setQuery(QStringLiteral("floaty"));
@@ -245,18 +544,20 @@ private Q_SLOTS:
     void providerSubtitleRespectedWhenSet()
     {
         // A provider-supplied subtitle (e.g. a rule's match summary) is
-        // never overwritten by the auto-derive.
-        SearchController sc(m_app);
+        // never overwritten by the auto-derive. The stub's subtitle is chosen
+        // to differ from the path auto-derive ("Rules") so this can fail if the
+        // respect branch is removed.
+        SearchController sc(m_app.get());
         StubProvider provider;
         sc.registerProvider(&provider);
         sc.setQuery(QStringLiteral("steam"));
-        QCOMPARE(subtitleForTitle(sc, QStringLiteral("Steam")), QStringLiteral("Rules"));
+        QCOMPARE(subtitleForTitle(sc, QStringLiteral("Steam")), QStringLiteral("12 active rules"));
     }
 
     void registerProviderDedupes()
     {
         // Registering the same provider twice must not double its entries.
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         StubProvider provider;
         sc.registerProvider(&provider);
         sc.registerProvider(&provider);
@@ -274,7 +575,7 @@ private Q_SLOTS:
     {
         // The auto-derive is gated on kind != Page: a Page-kind static entry
         // with no subtitle is left as-is (not given a self-including path).
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         SearchEntry e;
         e.kind = SearchEntry::Kind::Page;
         e.pageId = QStringLiteral("snapping-appearance-colors");
@@ -286,7 +587,7 @@ private Q_SLOTS:
 
     void limitCapsResultCount()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         SearchEntry a;
         a.kind = SearchEntry::Kind::Setting;
         a.pageId = QStringLiteral("general");
@@ -304,7 +605,7 @@ private Q_SLOTS:
 
     void invalidateRefreshesActiveQuery()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         sc.setQuery(QStringLiteral("steam"));
         QCOMPARE(sc.resultCount(), 0); // no provider yet
 
@@ -316,7 +617,7 @@ private Q_SLOTS:
 
     void lazyRebuildSeesAddedEntry()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         sc.setQuery(QStringLiteral("alpha"));
         QCOMPARE(sc.resultCount(), 0);
 
@@ -333,7 +634,7 @@ private Q_SLOTS:
 
     void emptyQueryYieldsNoResults()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         sc.setQuery(QStringLiteral("   "));
         QCOMPARE(sc.resultCount(), 0);
         QVERIFY(sc.suggestion().isEmpty());
@@ -341,22 +642,155 @@ private Q_SLOTS:
 
     void suggestionOnZeroResultsTypo()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         sc.setQuery(QStringLiteral("appearence")); // misspelled, no match
         QCOMPARE(sc.resultCount(), 0);
         QCOMPARE(sc.suggestion(), QStringLiteral("Appearance"));
     }
 
+    void searchFoldsAccentsAndFullCase()
+    {
+        // Plain toLower() leaves "Café" unmatched by "cafe". foldForSearch
+        // decomposes, drops combining marks and case-folds, with ß mapped
+        // explicitly (Qt's toCaseFolded is a SIMPLE fold and leaves it alone).
+        // Both the global index and the sidebar rail route through it, so the
+        // two surfaces cannot disagree about what matches.
+        QCOMPARE(PhosphorControl::SearchRanker::foldForSearch(QStringLiteral("Café")), QStringLiteral("cafe"));
+        QCOMPARE(PhosphorControl::SearchRanker::foldForSearch(QStringLiteral("Größe")), QStringLiteral("grosse"));
+        // The CAPITAL sharp s is the case the replace-AFTER-fold ordering
+        // exists for: Qt's toCaseFolded() is a simple fold, so it maps ẞ down
+        // to ß and never to "ss". Replacing before the fold would leave this
+        // as "große", which the "grosse" query would miss.
+        QCOMPARE(PhosphorControl::SearchRanker::foldForSearch(QStringLiteral("GRÖẞE")), QStringLiteral("grosse"));
+        // Already-folded input is a fixed point.
+        QCOMPARE(PhosphorControl::SearchRanker::foldForSearch(QStringLiteral("cafe")), QStringLiteral("cafe"));
+
+        // End to end through the controller.
+        SearchController sc(m_app.get());
+        SearchEntry accented;
+        accented.kind = SearchEntry::Kind::Setting;
+        accented.pageId = QStringLiteral("general");
+        accented.anchor = QStringLiteral("cafeSetting");
+        accented.title = QStringLiteral("Café Mode");
+        sc.addEntry(accented);
+
+        sc.setQuery(QStringLiteral("cafe"));
+        bool found = false;
+        for (const QVariant& v : sc.results()) {
+            if (v.toMap().value(QStringLiteral("title")).toString() == QStringLiteral("Café Mode")) {
+                found = true;
+            }
+        }
+        QVERIFY(found);
+    }
+
     void resultsChangedEmitted()
     {
-        SearchController sc(m_app);
+        SearchController sc(m_app.get());
         QSignalSpy spy(&sc, &SearchController::resultsChanged);
         sc.setQuery(QStringLiteral("general"));
         QCOMPARE(spy.count(), 1);
     }
 
+    void hidesEntriesForPagesTheCurrentModeFilters()
+    {
+        // A result the active tier hides is unreachable: activating it lets
+        // the app's mode gate send the user somewhere else entirely. Both
+        // page entries and page-resident static entries must drop out, and
+        // the index must REBUILD on the flip rather than serving the mode's
+        // set from the session's first query onwards.
+        ApplicationController app;
+        app.registerPage(new StubPage(QStringLiteral("always")), {}, QStringLiteral("Always"),
+                         QUrl(QStringLiteral("qrc:/always.qml")));
+        app.registerPage(new StubPage(QStringLiteral("advanced")), {}, QStringLiteral("Advanced"),
+                         QUrl(QStringLiteral("qrc:/advanced.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+
+        SearchController sc(&app);
+        SearchEntry setting;
+        setting.kind = SearchEntry::Kind::Setting;
+        setting.pageId = QStringLiteral("advanced");
+        setting.title = QStringLiteral("Advanced knob");
+        sc.addEntry(setting);
+
+        // Advanced mode (the registry default): both are reachable.
+        sc.setQuery(QStringLiteral("advanced"));
+        QCOMPARE(sc.resultCount(), 2);
+
+        // Flip to simple WITHOUT touching the query: the live results must
+        // refresh, which only happens if the flip invalidated the index.
+        app.registry()->setShowAdvanced(false);
+        QCOMPARE(sc.resultCount(), 0);
+
+        // And back again.
+        app.registry()->setShowAdvanced(true);
+        QCOMPARE(sc.resultCount(), 2);
+        // Assert WHICH entries survive, not just how many — a future entry
+        // matching "advanced" would otherwise keep the count assertion
+        // passing for the wrong reason.
+        QVERIFY(resultPageIds(sc).contains(QStringLiteral("advanced")));
+
+        // The flip must re-emit so QML's resultCount/results bindings
+        // refresh; a rebuild without the signal leaves the UI stale.
+        QSignalSpy spy(&sc, &SearchController::resultsChanged);
+        app.registry()->setShowAdvanced(false);
+        QVERIFY(spy.count() > 0);
+    }
+
+    void hidesProviderEntriesForHiddenPagesToo()
+    {
+        // The provider loop applies the same tier gate as the static loop.
+        // Pinned separately because a regression reverting only the provider
+        // call site would otherwise ship green — and providers are the
+        // highest-volume entry source in the real app.
+        ApplicationController app;
+        app.registerPage(new StubPage(QStringLiteral("hidden")), {}, QStringLiteral("Hidden"),
+                         QUrl(QStringLiteral("qrc:/hidden.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+
+        class HiddenPageProvider : public ISearchProvider
+        {
+        public:
+            QVector<SearchEntry> searchEntries() const override
+            {
+                SearchEntry e;
+                e.kind = SearchEntry::Kind::Entity;
+                e.pageId = QStringLiteral("hidden");
+                e.title = QStringLiteral("Zebra");
+                return {e};
+            }
+        };
+        HiddenPageProvider provider;
+
+        SearchController sc(&app);
+        sc.registerProvider(&provider);
+
+        sc.setQuery(QStringLiteral("zebra"));
+        QCOMPARE(sc.resultCount(), 1);
+
+        app.registry()->setShowAdvanced(false);
+        QCOMPARE(sc.resultCount(), 0);
+    }
+
+    void reclassifyingAPageRefreshesTheIndex()
+    {
+        // setPageVisibility is the late-reclassification path; the cached
+        // index must learn about it.
+        ApplicationController app;
+        app.registerPage(new StubPage(QStringLiteral("later")), {}, QStringLiteral("Later"),
+                         QUrl(QStringLiteral("qrc:/later.qml")));
+
+        SearchController sc(&app);
+        sc.setQuery(QStringLiteral("later"));
+        QCOMPARE(sc.resultCount(), 1);
+
+        app.registry()->setShowAdvanced(false);
+        app.registry()->setPageVisibility(QStringLiteral("later"), PageRegistry::PageVisibility::AdvancedOnly);
+        QCOMPARE(sc.resultCount(), 0);
+    }
+
 private:
-    ApplicationController* m_app = nullptr;
+    std::unique_ptr<ApplicationController> m_app;
 };
 
 QTEST_MAIN(TestSearchController)

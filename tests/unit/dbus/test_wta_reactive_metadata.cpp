@@ -24,7 +24,7 @@
 #include <QTest>
 #include <memory>
 
-#include "core/interfaces.h"
+#include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
@@ -42,15 +42,15 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorZones/Zone.h>
-#include "dbus/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QUuid>
 
-#include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/LayoutRegistryTestHelpers.h"
-#include "../helpers/StubSettings.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/StubSettings.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;

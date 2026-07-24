@@ -17,7 +17,7 @@
  */
 
 #include "internal.h"
-#include "../overlayservice.h"
+#include "daemon/overlayservice.h"
 #include "qml_property_names.h"
 
 #include <QCursor>

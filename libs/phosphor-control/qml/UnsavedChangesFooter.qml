@@ -30,6 +30,10 @@ ColumnLayout {
     id: root
 
     required property ApplicationController controller
+    /// The bar's label. A host can set a context-aware message when the
+    /// plain default undersells what Save will do (the settings app names
+    /// the profile a pending switch applies). Empty restores the default.
+    property string message
     /// True while an async apply OR discard is in flight; both
     /// action buttons disable on this. Hoisted from per-button
     /// `!applying && !discarding` to dedupe and provide a single
@@ -166,7 +170,8 @@ ColumnLayout {
 
                 QQC2.Label {
                     Layout.fillWidth: true
-                    text: qsTr("Unsaved changes")
+                    text: root.message.length > 0 ? root.message : qsTr("Unsaved changes")
+                    elide: Text.ElideRight
                     color: Kirigami.Theme.neutralTextColor
                 }
 

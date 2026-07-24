@@ -28,8 +28,10 @@
 
 vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted,
                       float bass, float mids, float treble, bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     // Get shader parameters with defaults
     float speed = p_speed >= 0.0 ? p_speed : 0.1;
@@ -44,7 +46,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
     float fillOpacity = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float borderGlow = p_borderGlow >= 0.0 ? p_borderGlow : 0.3;
-    float edgeFadeStart = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float edgeFadeStart = zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0);
     float borderBrightness = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.3;
 
     float audioReact = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
@@ -55,16 +57,13 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float fbmRot = p_fbmRotation >= 0.0 ? p_fbmRotation : 0.5;
 
     // Convert rect to pixel coordinates
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
-    vec2 halfSize = rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     // Position relative to zone center
     vec2 p = fragCoord - center;
 
     // Calculate SDF
-    float d = sdRoundedBox(p, halfSize, borderRadius);
+    float d = zoneShape.d;
 
     // Global screen-space UV for pattern generation -- one continuous field
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
@@ -91,14 +90,13 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     palD += vec3(colorShift);
 
     // ── Vitality system ─────────────────────────────────────
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
 
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(iTime * 0.8 * PI)) * 0.5;
 
     // ── Audio envelopes ────────────────────────────────────────
     float bassEnv   = hasAudio ? smoothstep(0.02, 0.3, bass) * audioReact : 0.0;
     float midsEnv   = hasAudio ? smoothstep(0.02, 0.4, mids) * audioReact : 0.0;
-    float trebleEnv = hasAudio ? smoothstep(0.05, 0.5, treble) * audioReact : 0.0;
 
     // Audio modulates existing animation parameters organically:
     //   bass  → FBM contrast deepening (brighter peaks, darker valleys)
@@ -160,7 +158,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         if (isHighlighted) {
             col *= 1.08;
         } else {
-            float lum = dot(col, vec3(0.299, 0.587, 0.114));
+            float lum = luminance(col);
             col = mix(col, vec3(lum), 0.15);
             col *= 0.82 + idlePulse * 0.08;
         }
@@ -174,13 +172,13 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         col *= mix(0.65, 1.0, 1.0 - depthDarken * 0.3);
 
         // Bright inner glow near the border (exponential falloff from edge)
-        float innerGlow = exp(-innerDist / 14.0);
+        float innerGlow = exp(-innerDist / zoneLen(14.0));
         vec3 glowColor = iqPalette(r * contrast + 0.1, palA, palB, palC, palD);
         float glowStrength = innerGlowStr;
         col += glowColor * innerGlow * glowStrength;
 
         // Zone fill color tint — let per-zone color influence the palette
-        col = mix(col, fillColor.rgb * dot(col, vec3(0.299, 0.587, 0.114)), 0.2);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.2);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -194,32 +192,36 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float angle = atan(p.y, p.x) * 2.0;
         float borderFlow = fbm(vec2(sin(angle), cos(angle)) * 2.0 + time * 0.5, 3, 0.5, 0.6);
         vec3 borderCol = iqPalette(borderFlow * contrast, palA, palB, palC, palD);
-        // Zone border color tint — let per-zone color influence the palette
-        vec3 zoneBorderTint = colorWithFallback(borderColor.rgb, borderCol);
-        borderCol = mix(borderCol, zoneBorderTint * dot(borderCol, vec3(0.299, 0.587, 0.114)), 0.3);
+        // Zone border color tint — let per-zone color influence the palette.
+        // Gated on the colour actually being set: with no border colour the
+        // fallback collapses to borderCol and the mix darkens the border toward
+        // its own luminance-scaled self, so the "unset" path was not an
+        // identity and every layout got a dimmer border than the palette says.
+        float borderTintW = length(borderColor.rgb) >= 0.01 ? 0.3 : 0.0;
+        borderCol = mix(borderCol, borderColor.rgb * luminance(borderCol), borderTintW);
         borderCol *= borderBrightness;
 
         // Highlighted border is brighter and pulses with cosmic breath
         if (isHighlighted) {
-            float breathe = 0.85 + 0.15 * sin(time * 2.5);
+            float breathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             // Bass sends a shockwave pulse along the border
             float borderBass = hasAudio ? 1.0 + smoothstep(0.1, 0.4, bass) * 0.25 : 1.0;
             borderCol *= breathe * borderBass;
         } else {
-            float lum = dot(borderCol, vec3(0.299, 0.587, 0.114));
+            float lum = luminance(borderCol);
             borderCol = mix(borderCol, vec3(lum), 0.3);
             borderCol *= 0.6;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // Outer glow
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 5.0;
-    float glowRadius = mix(12.0, 20.0, vitality) + bassGlowPush;
+    float glowRadius = zoneLen(mix(12.0, 20.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, 8.0, borderGlow);
+        float glow = expGlow(d, zoneLen(8.0), borderGlow);
 
         // Glow color from palette
         float angle = atan(p.y, p.x);

@@ -1,23 +1,24 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Flow vertex shader — grid-deformed window-move ("liquid pour").
 //
 // Unlike window-morph (a single output-spanning quad that does the whole
 // move in the fragment stage), flow runs on a tessellated grid that
-// apply() builds over the window's DESTINATION frame rect (metadata
+// apply() builds over the window's padded composite canvas, with texcoords
+// kept DESTINATION-frame-relative (metadata
 // `geometryGrid` controls the per-axis cell count). Anchoring the grid to
 // the window keeps deformation resolution constant regardless of zone
 // size, and lets this vertex stage displace each cell so the window
 // streams into its zone instead of sliding rigidly: the edge facing the
 // destination settles first, trailing rows lag by SPREAD and catch up.
 //
-// apply() emits texcoords as the card uv (v = 0 at the window's top), so
-// the card uv IS the incoming texCoord — no screen-position
-// reconstruction. The grid sits on the destination rect (iToRect), so a
-// vertex's natural position already equals its settled position; the
-// displacement is purely the pull back toward the old rect (iFromRect),
-// which vanishes as the region arrives.
+// apply() emits texcoords relative to the destination FRAME (v = 0 at the
+// window's top before KWin's upload flip — see the re-flip note in main()).
+// Because the texcoords are destination-frame-relative, a vertex's natural
+// position already equals its settled position, so the displacement below is
+// purely the pull back toward the old rect (iFromRect), which vanishes as
+// the region arrives.
 
 #version 450
 
@@ -28,7 +29,6 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 // Geometry-morph endpoints (logical-screen px, x/y/w/h), pushed by the
 // kwin-effect paint pipeline for any shader that declares them.
@@ -37,10 +37,8 @@ uniform vec4 iToRect;
 // Per-vertex flow handed to the fragment: .xy = card uv, .z = arrival
 // ease (0 = still at the old rect, 1 = settled at the destination).
 layout(location = 1) out vec3 vFlow;
-#endif
 
 void main() {
-#ifdef PLASMAZONES_KWIN
     // apply() emits the grid texcoords as card uv, but KWin's window-quad
     // texcoord convention is Y-flipped on upload (the same reason the
     // single-quad surface path probes handedness), so re-apply the
@@ -85,11 +83,4 @@ void main() {
     vTexCoord = cuv;
     vFlow = vec3(cuv, e);
     gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
-#else
-    // Daemon RHI bake target: the geometry flow is compositor-only. Pass
-    // the quad through so the shader still bakes (and is harmless if ever
-    // run on the daemon path). Mirrors window-morph's daemon branch.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
-#endif
 }

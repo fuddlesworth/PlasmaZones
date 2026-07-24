@@ -12,7 +12,7 @@
 //                           expensive step of the whole fold (it re-enters KWin's
 //                           draw chain) and the reason the capture cache exists.
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include "shader_internal.h"
 #include "surface_fold.h"

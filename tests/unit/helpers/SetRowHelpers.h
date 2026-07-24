@@ -7,7 +7,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-#include "settings/shadersetstore.h"
+#include "settings/stores/shadersetstore.h"
 
 /// The ShaderSetStore row for @p name, or an empty map when no such set is
 /// listed. Callers QVERIFY the result is non-empty BEFORE asserting on a field:

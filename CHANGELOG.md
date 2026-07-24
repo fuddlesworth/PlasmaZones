@@ -5,6 +5,44 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-07-23
+
+### Added
+
+- **Settings profiles**: save your whole configuration and rules as a named profile and switch between them. Before a profile is applied you see a diff of exactly what will change, and applying is staged so nothing is written until you confirm. Profiles inherit from one another, so a profile only records what it changes from its parent ([#793](https://github.com/fuddlesworth/PlasmaZones/pull/793)).
+- **Simple and advanced settings modes**: the settings app now has a simple mode that flattens the sidebar into a single list and trims each page to the settings most people need, with an advanced toggle in the sidebar footer for the full set. New condensed Snapping, Tiling, and Animations pages carry the common controls, and switching modes keeps you on the same setting wherever it exists in both ([#822](https://github.com/fuddlesworth/PlasmaZones/pull/822)).
+- **The whole settings interface is translatable now**: the QML strings that make up the settings UI were never being pulled into the translation catalog, so the interface fell back to English in every language however complete the translation looked. The full UI is now extracted and translated into German, Georgian, Swedish, Dutch, Polish, and Russian ([#840](https://github.com/fuddlesworth/PlasmaZones/pull/840)).
+- **Keyboard zone spanning**: new Span Window shortcuts (Ctrl+Alt+Arrows) grow the focused window's snap into the adjacent zone in that direction, the keyboard counterpart of spanning zones with a drag. Pressing back toward the window shrinks it again, and growing into a column of stacked zones takes the whole column so the window stays rectangular ([#93](https://github.com/fuddlesworth/PlasmaZones/discussions/93), [#838](https://github.com/fuddlesworth/PlasmaZones/pull/838)).
+- **Shortcut cheatsheet overlay**: a new overlay that lists every PlasmaZones global shortcut with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ (rebindable in System Settings) and dismiss it with Escape, a backdrop click, or the shortcut again. The sheet is mode aware. Shortcuts that do nothing in the current tiling mode are hidden, and it updates live when you switch modes or rebind a key. Shortcuts you have unbound stay listed as unassigned so you can discover them ([#810](https://github.com/fuddlesworth/PlasmaZones/pull/810)).
+
+### Changed
+
+- **Per-event animation timing overrides only change the field you edit**: turning on the override for an animation event used to immediately pin the inherited duration and curve as fixed overrides, so the event quietly stopped following the global defaults even though you had changed nothing. The override toggle now just opens the editor and writes nothing, and editing the duration or the curve overrides only that field. Each field shows whether it follows the inherited value or is overridden, with a link to revert it ([#837](https://github.com/fuddlesworth/PlasmaZones/pull/837)).
+- **Animation shader pickers now describe the shader you picked**: choosing a shader for an animation event shows the pack's description, and the description and parameters fold into a collapsible section that opens with a click, the same way decoration packs behave ([#834](https://github.com/fuddlesworth/PlasmaZones/pull/834)).
+- **Picking an animation shader works like picking a decoration pack**: the pack you chose now gets its own named row, with a remove button and its description and parameters behind the same collapsible chevron a decoration surface uses. The picker moved below that row as a "Set shader pack" action, so choosing a pack replaces what is there and choosing None clears it. A pack that is no longer installed now reads as missing instead of showing its internal id. The decoration pages read the same way ([#839](https://github.com/fuddlesworth/PlasmaZones/pull/839)).
+
+### Fixed
+
+- **Switching the tiling algorithm no longer changes your max windows**: picking a different algorithm wrote that algorithm's default window count into the global Max windows setting, which then showed up as an unexpected change in your configuration. Each algorithm's window count is now kept with the algorithm ([#820](https://github.com/fuddlesworth/PlasmaZones/pull/820)).
+- **Windows keep their minimum size in overlapping and stacked layouts**: in the deck, theater, and floating-center layouts a zone could be forced smaller than a window's minimum size. Those layouts now grow an undersized zone to fit. Overlapping layouts also stack in a defined order, so deck keeps the first window on top while cascade and the others bring new windows to the front, and rotating the window order in monocle brings the newly shown window to the top ([#829](https://github.com/fuddlesworth/PlasmaZones/pull/829)).
+- **Layout and shader cards fill the grid and stay readable at any size**: at wide window sizes the last card in each row could wrap and leave an empty slot on the right, and small layout cards shrank their name and badges along with the preview until the text could not be read. The grid now uses the full width, and a layout card's preview scales while its labels keep their own size ([#828](https://github.com/fuddlesworth/PlasmaZones/pull/828)).
+- **The layout right-click menu works again**: right-clicking a layout and choosing "Set as Default" or "Hide from Zone Selector" did nothing, because the menu never received the settings it needed to act on ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+- **Editing a layout no longer scrolls the page back to the top**: hiding a layout, changing its auto-assign, or picking an aspect ratio while scrolled down threw the Layouts page back to the top. The page now holds its position while the cards rebuild. The Shaders pages keep their position across a group or sort change for the same reason ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+- **Layout cards no longer flicker when you change one**: toggling a layout's visibility or auto-assign briefly redrew every card without its badges, and the one you just changed snapped back before it took. Each change now refreshes the list once, with everything in place ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+- **Overlay shaders with a depth buffer render cleanly**: the Neon City and Voxel Terrain overlays asked the graphics driver to read and write the same depth texture in one drawing pass, which it refused ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+- **Zone overlay corners now round like window decorations**: every overlay pack worked out its corners on its own, so they disagreed with the decoration packs and with each other. On a scaled display the corners came out too tight, because the radius was treated as if the display were unscaled. Setting the radius to 0 still left rounded corners, by a different amount in each pack. A radius larger than half a narrow zone collapsed that zone into a sliver instead of rounding it. All 27 overlays now share the geometry the decorations use, so the radius you set is the radius you get, at any display scale. Border widths follow the display scale for the same reason ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Pulse Flow honours its Outer Glow Size setting**: the overlay stopped drawing at the distance the default setting reaches, so raising the slider past its default widened nothing and left a hard edge where the glow was cut ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Berry Drift's Drift Speed setting works**: the slider had no effect on how fast the blobs move. The speed you set was calculated and then dropped before it reached the blobs, which always drifted at a fixed rate ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Neon Venom no longer draws a ring around each zone**: the bioluminescent rim fades out with distance, but the overlay stopped drawing while the fade was still half bright, which showed up as a hard ring. Turning up audio reactivity or cursor influence made it worse, because both widen the fade ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **A border width of zero now turns the border off**: every overlay pack drew at least a one-pixel border no matter how low you set the width, so the bottom of the slider never reached "no border" ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Zone colors apply in six more overlays**: Berry Drift, Mosaic Pulse, Spectrum Bloom, Spectrum Pulse, Toxic Circuit, and Voxel Terrain ignored the fill or border color set for a zone, so changing it did nothing in those packs. They now tint with it the way the other overlays do ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Chrome Protocol's Animation Speed and Ring Base Thickness sliders work**: both were shown in settings and read by nothing, so the rings always turned and thickened at a fixed rate. The overlay is also much cheaper to draw, because it no longer raytraces the console for parts of the screen no zone covers ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Magnetic Field respects its own settings again**: inactive zones were meant to thin out their particle field and did not, and the Wave Speed slider was applied twice to the field lines, so they ran roughly nine times too fast at the top of the range and too slow at the bottom ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Overlay glows keep their proportions on a scaled display**: in 26 of the 27 packs a glow reach, an edge fade, or a travelling ring was measured in raw pixels while the border and corner beside it followed the display scale. On a HiDPI screen the parts drifted apart, and Berry Drift cut its glow off mid-gradient and left a ring ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Settings that did nothing are gone**: EndeavourOS Drift showed an Orbit Radius and a Connection Threshold slider, Chrome Protocol showed two sliders labelled "Reserved", and Berry Drift showed an Animation Speed slider that duplicated its Drift Speed. None of them were read by anything ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Eight overlay descriptions match what they draw**: Fedora Drift described neon tubes against a northern-lights sky when it draws frosted glass over data streams, NixOS Drift described nebula pulse borders when its border is a wave of lighting hexagons, EndeavourOS Drift described a constellation of orbiting dots when it draws wind currents behind parallax sails, Sonic Ripple said its rings start at the zone center when they start at the middle of the screen, Spectrum Bloom said the zone boundary itself morphs when the contour is only seen through the zone, Chrome Protocol said mids drive the ring rotation when they widen the camera orbit, CachyOS Drift said bass shatters the facets when it scatters them, and openSUSE Drift called its Geeko a constructive SDF when it is a single polygon ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **EndeavourOS Drift's sliders are named for what they do**: five sliders and their group were still labelled for an orbiting-dot constellation the overlay does not draw. They now read as Wind Speed, Current Brightness, Sail Brightness, and Sail Center X and Y, with the three that describe the wind and the sail placement grouped under Wind ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+
 ## [3.2.7] - 2026-07-21
 
 ### Fixed
@@ -192,7 +230,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`org.plasmazones.Rules` D-Bus interface** (`dbus/org.plasmazones.Rules.xml`): `getAllRules`, `setAllRules`, `addRule`, `removeRule`, and related lifecycle methods for programmatic rule management.
 - **`phosphor-rules`** LGPL-2.1+ library housing the rule model, parser, and `RuleEvaluator`, so third parties can link the matcher without inheriting GPL.
 - **Snapping focus behavior**: two new opt-in toggles on Snapping → Window → Behavior (both default off). *focus new windows* auto-activates a window when it is auto-placed into a zone on open, and *focus follows mouse* activates the snapped window under the cursor. Brings snapping to parity with the existing autotile focus options.
-- **Zone span toggle mode** ([#563](https://github.com/fuddlesworth/PlasmaZones/issues/563)): an opt-in switch in the Zone Span card so the span modifier can be tapped to start/stop spanning instead of held down for the whole drag (default off, motivated by accessibility).
+- **Zone span toggle mode** ([#563](https://github.com/fuddlesworth/PlasmaZones/discussions/563)): an opt-in switch in the Zone Span card so the span modifier can be tapped to start/stop spanning instead of held down for the whole drag (default off, motivated by accessibility).
 - **Restore floated window positions on login** ([#606](https://github.com/fuddlesworth/PlasmaZones/pull/606)): floated windows are now restored to the monitor and position they closed on after a KWin session restore (previously only *snapped* windows were restored cross-screen). Parallel per-engine toggles (both default **on**), *restore unsnapped windows* under Snapping → Window → Behavior and *restore untiled windows* under Tiling → Behavior, plus an engine-neutral per-window `RestorePosition` rule action let specific windows opt in or out for either mode.
 - **Per-window appearance for snapping**: snapping gains its own border, corner-radius, hide-title-bar, and accent-color settings, mirroring tiling, and the former "Snapping → Appearance" page is renamed **Zones**. Window restore state across daemon restart and logout/login is now backed by a single `WindowPlacementStore` instead of several overlapping mechanisms.
 - **New window-rule actions** for window chrome: per-window border, title-bar, corner-radius, accent-color, gap/padding, and opacity overrides, applied to snapped or floating windows (e.g. "floating windows on monitor 2 → no title bar + red border", "activity Gaming → zero gaps").
@@ -241,7 +279,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **Layouts rendered stretched / ultrawide when editing on a 16:9 or 4K screen** ([#593](https://github.com/fuddlesworth/PlasmaZones/issues/593)): the editor canvas used a fixed-zone bounding box as its aspect reference, so editing an existing layout could distort it while creating a new one rendered correctly. The canvas now references the live screen unless fixed zones genuinely overflow it.
+- **Layouts rendered stretched / ultrawide when editing on a 16:9 or 4K screen** ([#593](https://github.com/fuddlesworth/PlasmaZones/discussions/593)): the editor canvas used a fixed-zone bounding box as its aspect reference, so editing an existing layout could distort it while creating a new one rendered correctly. The canvas now references the live screen unless fixed zones genuinely overflow it.
 - **A zone-spanning window blew up to fullscreen when switching layouts** ([#575](https://github.com/fuddlesworth/PlasmaZones/pull/575)): switching to a layout where the previously-spanned zones are non-contiguous (e.g. Grid 2×2 left column → Master+Stack) unioned them into a screen-sized bounding box. Non-contiguous mapped spans now collapse to the primary zone instead.
 - **KWin effect plugin silently never installed under Nix.** `packaging/nix/package.nix` set `KDE_INSTALL_QTPLUGINDIR` to an absolute path *inside the read-only `qtbase` store output* (`${qt6.qtbase}/lib/qt6/plugins`). A derivation may only write under its own `$out`, so the effect dropped out of the package closure entirely. The daemon ran but zone overlays never appeared on Nix installs. The plugin now installs into the package's own `$out/${qt6.qtbase.qtPluginPrefix}` (the canonical NixOS `lib/qt-6/plugins` layout), where the running KWin discovers it via the system profile's aggregated `QT_PLUGIN_PATH`.
 - **Toggling from autotile back to snapping left windows stuck in their tiled positions** instead of returning to where they were before tiling. The transition fell through to a stale current-assignment resnap that re-pinned the tiled geometry and suppressed the float-back. Windows now float back to their pre-tile positions.
@@ -301,7 +339,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Focus-follows-mouse activated tiled windows underneath an active popup** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#521](https://github.com/fuddlesworth/PlasmaZones/pull/521)): the 3.0.10 FFM fix made auto-focus-follow-mouse consistent for the common case but missed the case where an excluded or untracked window (emoji picker, notification popup, krunner) was active inside a zone. Moving the cursor across the underlying tiled window's visible area still activated that tiled window, sending the just-opened popup straight to the background. `handleCursorMoved` now also checks the currently active window. If it is an excluded app, dialog, popup, keep-above overlay, or below the min-size threshold, FFM pauses on the cursor's screen until a tileable window becomes active.
 - **Stale pending-restore entries for excluded apps grew session.json and logged on every daemon start** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#521](https://github.com/fuddlesworth/PlasmaZones/pull/521)): runtime gates already refused to honor pending restores for excluded apps, but the dead entries persisted on disk in `PendingRestoreQueues` and `AutotilePendingRestores` and reappeared on every restart. Both engines now prune their on-disk queues against the current exclusion lists at startup and whenever the lists change.
-- **Drag artifacts, post-snap flicker, and a gray decoration ring during snap drags** ([#516](https://github.com/fuddlesworth/PlasmaZones/issues/516), [#523](https://github.com/fuddlesworth/PlasmaZones/pull/523)): the zone-preview `PassiveShell` mapped on the Overlay layer fullscreen during a drag, masking KWin's Translucency-while-moving effect. On hybrid Intel+NVIDIA setups (CachyOS, Plasma 6.6.5, NVIDIA 595) this also forced a slower compositional path that produced the visible drag artifacts and post-snap flicker. The PassiveShell role is now downgraded to the Top layer, the same layer KDE's own panels live on, which coexists with the translucency effect. Fullscreen apps on Overlay still draw above the zone preview correctly.
+- **Drag artifacts, post-snap flicker, and a gray decoration ring during snap drags** ([#523](https://github.com/fuddlesworth/PlasmaZones/pull/523)): the zone-preview `PassiveShell` mapped on the Overlay layer fullscreen during a drag, masking KWin's Translucency-while-moving effect. On hybrid Intel+NVIDIA setups (CachyOS, Plasma 6.6.5, NVIDIA 595) this also forced a slower compositional path that produced the visible drag artifacts and post-snap flicker. The PassiveShell role is now downgraded to the Top layer, the same layer KDE's own panels live on, which coexists with the translucency effect. Fullscreen apps on Overlay still draw above the zone preview correctly.
 
 ## [3.0.10] - 2026-05-23
 
@@ -443,7 +481,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Animations settings UI overhaul**: an eight-phase rework adds an `AnimationsPageController` and drill-down sub-pages for OSDs, overlays, shaders, motion sets, app rules, widgets, windows, and side panels. The Shaders page hosts a per-event shader picker backed by a generic shader browser. Motion sets bundle themed overrides users can switch between. A timing-mode toggle on the General page and change detection on save round it out. A separate Snapping → Shaders page exposes the same browser for snap-assist, zone-selector, and layout-picker effects.
 - **Layout ordering for cycling**: the cycle shortcut and zone-selector cycling follow a user-configurable order set under Settings → Snapping → Ordering and Settings → Tiling → Ordering, instead of the implicit save-time order.
 - **Per-mode disable lists**: snapping and autotiling each have their own exclusion lists for monitors, virtual desktops, and activities, replacing the single global disable. The disabled-context OSD explains which exclusion is active so the user can find the toggle.
-- **Native-feeling wheel scroll in settings** ([#405](https://github.com/fuddlesworth/PlasmaZones/issues/405)): every Flickable settings page uses `Kirigami.WheelHandler` so scroll speed matches the rest of Plasma System Settings, while preserving the Flickable drag-to-flick path.
+- **Native-feeling wheel scroll in settings** ([#405](https://github.com/fuddlesworth/PlasmaZones/discussions/405)): every Flickable settings page uses `Kirigami.WheelHandler` so scroll speed matches the rest of Plasma System Settings, while preserving the Flickable drag-to-flick path.
 - **Hold/Toggle controls now work in always-active mode** ([#249](https://github.com/fuddlesworth/PlasmaZones/issues/249)): "Hold to activate" and "Toggle mode" stay enabled when "Activate on every drag" is on, with inverted semantics. The configured trigger deactivates the overlay instead of activating it, so a binding like Right Mouse Button activates when always-active is off and deactivates when on. Esc continues to cancel the drag entirely.
 - **Global "auto-assign new windows for all layouts" toggle** ([#370](https://github.com/fuddlesworth/PlasmaZones/issues/370)): a master switch in Snapping Behavior → Window Handling that forces auto-assign on for every manual layout, regardless of the per-layout icon. Effective behavior is `globalToggle OR layout.autoAssign`, and the default is off so existing semantics are preserved on upgrade. While the global is on, the per-layout toggle is disabled and the Auto/Manual badge in the Layouts grid, layout combo, zone selector, layout picker, and layout OSD shows the effective on state.
 - **Separate "Desktop switch OSD" toggle** ([#372](https://github.com/fuddlesworth/PlasmaZones/issues/372), [#373](https://github.com/fuddlesworth/PlasmaZones/pull/373)): the layout-preview OSD that fires on virtual-desktop change, activity change, and daemon startup is now governed by its own setting, `Snapping.Effects/OsdOnDesktopSwitch`, independent of `OsdOnLayoutSwitch`. Manual layout switches continue to gate on the existing layout-switch toggle. Default is `true` to preserve current behavior. **Upgrade note**: users who previously set `OsdOnLayoutSwitch=false` to silence the startup or VD-switch flash will see those OSDs return on first launch under the new schema. Toggle "Desktop switch OSD" off in Settings → On-Screen Display to restore the old quiet behavior.
@@ -462,9 +500,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **No default layout assignment on brand-new virtual desktops** ([#368](https://github.com/fuddlesworth/PlasmaZones/issues/368)): a fresh virtual desktop had no stored entry in the per-context assignment table, so the cascade fell through to a snap-only `defaultLayout()` that had no concept of mode. Users with autotile configured globally saw new desktops behave as if no mode were set at all: autotile never activated, snapping was disabled, drag overlays did not appear, and windows just floated. The cascade now consults a settings-derived `AssignmentEntry` provider as the final step, applying the user's intended mode and default to fresh desktops.
 - **Autotile shortcut-adjusted ratio and master count did not persist** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): shortcut adjustments to the autotile master ratio and master count updated runtime state but not the config, the per-algorithm saved settings, or Settings, so the change reverted on the next reload. Shortcut-driven adjustments now propagate through all three with signal-blocking so the values survive every propagation path.
-- **Snap-assist showed occupied windows from other virtual desktops** ([#323](https://github.com/fuddlesworth/PlasmaZones/issues/323)): the drag-path occupancy filter walked the live window list without scoping to the current virtual desktop, so a zone that was empty on the user's desktop showed as occupied because a window from another desktop matched it. Now filtered to the current desktop before the occupancy check.
-- **Per-activity layout assignments could be overridden by per-monitor defaults** ([#413](https://github.com/fuddlesworth/PlasmaZones/issues/413)): in the layout registry, the fallback chain resolved monitor defaults before per-activity overrides, so a user-set activity-scoped layout could lose to a monitor default that predated it. Activity assignments now win in the precedence order, matching what the assignments UI implies.
-- **Layouts context menu eventually stopped opening** ([#406](https://github.com/fuddlesworth/PlasmaZones/issues/406)): in the Layouts page, the right-click context menu would silently fail to open after enough show and hide cycles because separator visibility was imperatively flipped on each show, eventually leaving a dead `null`-context binding. Separator visibility is now declarative and the dead null-context guard was removed.
+- **Snap-assist showed occupied windows from other virtual desktops** ([#323](https://github.com/fuddlesworth/PlasmaZones/discussions/323)): the drag-path occupancy filter walked the live window list without scoping to the current virtual desktop, so a zone that was empty on the user's desktop showed as occupied because a window from another desktop matched it. Now filtered to the current desktop before the occupancy check.
+- **Per-activity layout assignments could be overridden by per-monitor defaults** ([#413](https://github.com/fuddlesworth/PlasmaZones/discussions/413)): in the layout registry, the fallback chain resolved monitor defaults before per-activity overrides, so a user-set activity-scoped layout could lose to a monitor default that predated it. Activity assignments now win in the precedence order, matching what the assignments UI implies.
+- **Layouts context menu eventually stopped opening** ([#406](https://github.com/fuddlesworth/PlasmaZones/discussions/406)): in the Layouts page, the right-click context menu would silently fail to open after enough show and hide cycles because separator visibility was imperatively flipped on each show, eventually leaving a dead `null`-context binding. Separator visibility is now declarative and the dead null-context guard was removed.
 - **Cycle-triggered resnap affected windows on other virtual desktops**: the daemon's resnap pass after a cycle shortcut walked every tracked window instead of scoping to the active virtual desktop, so cycling on one VD could nudge windows on another VD that happened to share a layout. Now scoped to the active VD.
 
 ## [2.8.8] - 2026-05-13
@@ -1697,6 +1735,14 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[3.3.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.7...v3.3.0
+[3.2.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.6...v3.2.7
+[3.2.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.5...v3.2.6
+[3.2.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.4...v3.2.5
+[3.2.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.3...v3.2.4
+[3.2.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.2...v3.2.3
+[3.2.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.1...v3.2.2
+[3.2.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.3...v3.2.0
 [3.1.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.2...v3.1.3
 [3.1.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.1...v3.1.2
@@ -1719,7 +1765,13 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [3.0.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.2...v3.0.3
 [3.0.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.0...v3.0.1
-[3.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v3.0.0
+[3.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.8...v3.0.0
+[2.8.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.7...v2.8.8
+[2.8.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.6...v2.8.7
+[2.8.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.5...v2.8.6
+[2.8.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.4...v2.8.5
+[2.8.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.3...v2.8.4
+[2.8.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.2...v2.8.3
 [2.8.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.1...v2.8.2
 [2.8.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.1...v2.8.0
@@ -1750,6 +1802,9 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [2.4.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.3...v2.4.5
 [2.4.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.1...v2.4.2
+[#237]: https://github.com/fuddlesworth/PlasmaZones/discussions/237
+[#235]: https://github.com/fuddlesworth/PlasmaZones/discussions/235
+[#223]: https://github.com/fuddlesworth/PlasmaZones/discussions/223
 [#211]: https://github.com/fuddlesworth/PlasmaZones/discussions/211
 [#249]: https://github.com/fuddlesworth/PlasmaZones/issues/249
 [#251]: https://github.com/fuddlesworth/PlasmaZones/discussions/251
@@ -1784,7 +1839,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [1.15.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.13...v1.15.14
 [1.15.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.12...v1.15.13
 [1.15.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.11...v1.15.12
-[1.15.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.9...v1.15.11
+[1.15.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.10...v1.15.11
+[1.15.10]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.9...v1.15.10
 [1.15.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.8...v1.15.9
 [1.15.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.7...v1.15.8
 [1.15.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.6...v1.15.7
@@ -1793,10 +1849,11 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [1.15.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.3...v1.15.4
 [1.15.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.2...v1.15.3
 [1.15.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.1...v1.15.2
-[1.15.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.1...v1.15.1
+[1.15.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.0...v1.15.1
+[1.15.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.1...v1.15.0
 [1.14.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.0...v1.14.1
 [1.14.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.13.1...v1.14.0
-[1.13.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.2...v1.13.1
+[1.13.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.8...v1.12.0
@@ -1828,7 +1885,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [1.6.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.9...v1.6.0
 [1.5.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.3...v1.5.9
-[1.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.4...v1.5.3
+[1.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.4...v1.5.2
 [1.3.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.1...v1.3.2
@@ -1852,12 +1909,6 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#21]: https://github.com/fuddlesworth/PlasmaZones/pull/21
 [#40]: https://github.com/fuddlesworth/PlasmaZones/pull/40
 [#42]: https://github.com/fuddlesworth/PlasmaZones/pull/42
-[#43]: https://github.com/fuddlesworth/PlasmaZones/pull/43
-[#44]: https://github.com/fuddlesworth/PlasmaZones/pull/44
-[#45]: https://github.com/fuddlesworth/PlasmaZones/pull/45
-[#48]: https://github.com/fuddlesworth/PlasmaZones/pull/48
-[#49]: https://github.com/fuddlesworth/PlasmaZones/pull/49
-[#50]: https://github.com/fuddlesworth/PlasmaZones/pull/50
 [#51]: https://github.com/fuddlesworth/PlasmaZones/pull/51
 [#55]: https://github.com/fuddlesworth/PlasmaZones/pull/55
 [#56]: https://github.com/fuddlesworth/PlasmaZones/pull/56
@@ -1883,29 +1934,22 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#95]: https://github.com/fuddlesworth/PlasmaZones/issues/95
 [#96]: https://github.com/fuddlesworth/PlasmaZones/pull/96
 [#97]: https://github.com/fuddlesworth/PlasmaZones/pull/97
-[#132]: https://github.com/fuddlesworth/PlasmaZones/pull/132
-[#133]: https://github.com/fuddlesworth/PlasmaZones/pull/133
-[#136]: https://github.com/fuddlesworth/PlasmaZones/pull/136
-[#139]: https://github.com/fuddlesworth/PlasmaZones/pull/139
+[#132]: https://github.com/fuddlesworth/PlasmaZones/issues/132
+[#133]: https://github.com/fuddlesworth/PlasmaZones/issues/133
+[#136]: https://github.com/fuddlesworth/PlasmaZones/issues/136
 [#143]: https://github.com/fuddlesworth/PlasmaZones/discussions/143
 [#145]: https://github.com/fuddlesworth/PlasmaZones/issues/145
-[#147]: https://github.com/fuddlesworth/PlasmaZones/issues/147
-[#148]: https://github.com/fuddlesworth/PlasmaZones/issues/148
+[#147]: https://github.com/fuddlesworth/PlasmaZones/pull/147
+[#148]: https://github.com/fuddlesworth/PlasmaZones/pull/148
 [#150]: https://github.com/fuddlesworth/PlasmaZones/issues/150
-[#152]: https://github.com/fuddlesworth/PlasmaZones/issues/152
-[#158]: https://github.com/fuddlesworth/PlasmaZones/issues/158
+[#152]: https://github.com/fuddlesworth/PlasmaZones/discussions/152
+[#158]: https://github.com/fuddlesworth/PlasmaZones/discussions/158
 [#159]: https://github.com/fuddlesworth/PlasmaZones/issues/159
-[#160]: https://github.com/fuddlesworth/PlasmaZones/discussions/160
 [#164]: https://github.com/fuddlesworth/PlasmaZones/issues/164
-[#168]: https://github.com/fuddlesworth/PlasmaZones/issues/168
-[#169]: https://github.com/fuddlesworth/PlasmaZones/pull/169
-[#170]: https://github.com/fuddlesworth/PlasmaZones/pull/170
-[#172]: https://github.com/fuddlesworth/PlasmaZones/issues/172
-[#174]: https://github.com/fuddlesworth/PlasmaZones/pull/174
 [#156]: https://github.com/fuddlesworth/PlasmaZones/discussions/156
 [#166]: https://github.com/fuddlesworth/PlasmaZones/discussions/166
-[#167]: https://github.com/fuddlesworth/PlasmaZones/issues/167
-[#175]: https://github.com/fuddlesworth/PlasmaZones/issues/175
+[#167]: https://github.com/fuddlesworth/PlasmaZones/discussions/167
+[#175]: https://github.com/fuddlesworth/PlasmaZones/discussions/175
 [#176]: https://github.com/fuddlesworth/PlasmaZones/pull/176
 [#179]: https://github.com/fuddlesworth/PlasmaZones/issues/179
 [#180]: https://github.com/fuddlesworth/PlasmaZones/issues/180
@@ -1931,9 +1975,14 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#275]: https://github.com/fuddlesworth/PlasmaZones/discussions/275
 [#274]: https://github.com/fuddlesworth/PlasmaZones/pull/274
 [#276]: https://github.com/fuddlesworth/PlasmaZones/pull/276
-[#277]: https://github.com/fuddlesworth/PlasmaZones/pull/277
 [#278]: https://github.com/fuddlesworth/PlasmaZones/pull/278
-[#279]: https://github.com/fuddlesworth/PlasmaZones/pull/279
 [#280]: https://github.com/fuddlesworth/PlasmaZones/pull/280
 [#281]: https://github.com/fuddlesworth/PlasmaZones/pull/281
 [#282]: https://github.com/fuddlesworth/PlasmaZones/pull/282
+[Discussion #160]: https://github.com/fuddlesworth/PlasmaZones/discussions/160
+[PR #231]: https://github.com/fuddlesworth/PlasmaZones/pull/231
+[PR #238]: https://github.com/fuddlesworth/PlasmaZones/pull/238
+[PR #242]: https://github.com/fuddlesworth/PlasmaZones/pull/242
+[PR #244]: https://github.com/fuddlesworth/PlasmaZones/pull/244
+[PR #245]: https://github.com/fuddlesworth/PlasmaZones/pull/245
+[PR #246]: https://github.com/fuddlesworth/PlasmaZones/pull/246

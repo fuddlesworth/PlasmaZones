@@ -61,16 +61,15 @@ target_link_libraries(plasmazones-shader-render PRIVATE
     PhosphorWayland::PhosphorWayland
     PhosphorAudio::PhosphorAudio
     # The daemon's zone entry scaffold (zoneEntryPrologue / zoneEntryCandidates)
-    # and ZoneShaderItem live here; the tool installs the same scaffold so its
-    # shader assembly matches the runtime byte-for-byte (see renderer.cpp).
+    # lives here. The tool installs the same scaffold so its shader assembly
+    # matches the runtime byte-for-byte (see renderer.cpp).
     plasmazones_rendering
 )
 
-# The tool reuses the daemon's ZoneUniformExtension header so the
-# UBO layout matches the runtime exactly.  This is intentional
-# coupling — if/when the extension moves into a shared library
-# (probably libs/phosphor-wayland), drop this include and add the
-# library to target_link_libraries above.
+# Needed for the daemon's zoneentryscaffold.h, so a pack defining
+# pZone/pImage is assembled here exactly as the daemon assembles it.
+# ZoneUniformExtension no longer needs this path; it comes from the
+# linked PhosphorRendering target.
 target_include_directories(plasmazones-shader-render PRIVATE
     ${CMAKE_SOURCE_DIR}/src/daemon/rendering
 )
@@ -128,4 +127,48 @@ if(BUILD_TESTING)
         COMMAND test_shader_render_metadataloader
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+
+    # These two targets live outside tests/unit, so the TEST_LAUNCHER loop
+    # there (which iterates only its own directory's tests) does not reach
+    # them and they would run on the ambient session bus. Neither links
+    # Qt6::DBus today, so nothing can hang right now, but the repo's rule is
+    # that a test gets the isolated bus, and the next test added beside these
+    # would silently opt out of it. Same launcher and same config file as
+    # tests/unit/CMakeLists.txt, with the same graceful skip when
+    # dbus-run-session or CMake 3.29 is unavailable.
+    # Redirect XDG to the same throwaway tree tests/unit uses. This half matters
+    # more than the bus half: without it a test that touches QStandardPaths
+    # writes into the developer's real ~/.config/plasmazones. Neither loader
+    # does today, which is exactly the argument that was accepted for the bus
+    # isolation below, so apply it here for the same reason.
+    set(_pz_sr_test_home "${CMAKE_BINARY_DIR}/test-xdg")
+    # Created here as well as in tests/unit: relying on that directory to make
+    # them first is an invisible one-way dependency between two sibling trees.
+    file(MAKE_DIRECTORY
+        "${_pz_sr_test_home}/config"
+        "${_pz_sr_test_home}/data"
+        "${_pz_sr_test_home}/state"
+        "${_pz_sr_test_home}/cache")
+    set_tests_properties(test_shader_render_layoutloader test_shader_render_metadataloader PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${_pz_sr_test_home}/config;XDG_DATA_HOME=${_pz_sr_test_home}/data;XDG_STATE_HOME=${_pz_sr_test_home}/state;XDG_CACHE_HOME=${_pz_sr_test_home}/cache")
+
+    # Reuses tests/unit's cache entry rather than caching the same program
+    # under a second name a user could set inconsistently.
+    # Fail at configure time rather than as a confusing launcher error inside
+    # ctest if the shared bus config ever moves.
+    set(_pz_sr_bus_conf "${CMAKE_SOURCE_DIR}/tests/unit/test-session-bus.conf")
+    if(NOT EXISTS "${_pz_sr_bus_conf}")
+        message(FATAL_ERROR "shader-render tests: missing D-Bus isolation config at ${_pz_sr_bus_conf}")
+    endif()
+    find_program(_pz_dbus_run_session dbus-run-session)
+    if(_pz_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
+        foreach(_pz_sr_test test_shader_render_layoutloader test_shader_render_metadataloader)
+            set_target_properties(${_pz_sr_test} PROPERTIES
+                TEST_LAUNCHER
+                "${_pz_dbus_run_session};--config-file=${_pz_sr_bus_conf};--")
+        endforeach()
+    else()
+        message(STATUS "shader-render tests: D-Bus isolation unavailable (needs dbus-run-session + CMake 3.29); "
+                       "running on the ambient session bus")
+    endif()
 endif()

@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
-#include "../autotilehandler.h"
-#include "../dragtracker.h"
-#include "../navigationhandler.h"
-#include "../snaphandler.h"
-#include "../windowanimator.h"
+#include "autotilehandler/autotilehandler.h"
+#include "handlers/dragtracker.h"
+#include "handlers/navigationhandler.h"
+#include "handlers/snaphandler.h"
+#include "compositor/windowanimator.h"
 #include "shader_resolve.h"
 #include "window_query.h"
 
@@ -649,7 +649,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
             m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
         }
         m_dragBypassedForAutotile = false;
-        m_dragActivationDetected = false;
+        m_dragActivation.detected = false;
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);
             m_keyboardGrabbed = true;

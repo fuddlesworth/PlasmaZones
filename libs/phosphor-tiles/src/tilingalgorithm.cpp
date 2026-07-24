@@ -113,6 +113,11 @@ bool TilingAlgorithm::supportsMinSizes() const noexcept
     return true;
 }
 
+QString TilingAlgorithm::overlapStacking() const noexcept
+{
+    return QStringLiteral("lastOnTop");
+}
+
 bool TilingAlgorithm::supportsMemory() const noexcept
 {
     return false;

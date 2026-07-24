@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "../core/constants.h"
-#include "../core/interfaces.h"
+#include "core/types/constants.h"
+#include "core/interfaces/interfaces.h"
 #include "configbackends.h"
 #include "configdefaults.h"
 
@@ -419,6 +419,8 @@ public:
         QString openEditorShortcut READ openEditorShortcut WRITE setOpenEditorShortcut NOTIFY openEditorShortcutChanged)
     Q_PROPERTY(QString openSettingsShortcut READ openSettingsShortcut WRITE setOpenSettingsShortcut NOTIFY
                    openSettingsShortcutChanged)
+    Q_PROPERTY(QString toggleCheatsheetShortcut READ toggleCheatsheetShortcut WRITE setToggleCheatsheetShortcut NOTIFY
+                   toggleCheatsheetShortcutChanged)
     Q_PROPERTY(QString previousLayoutShortcut READ previousLayoutShortcut WRITE setPreviousLayoutShortcut NOTIFY
                    previousLayoutShortcutChanged)
     Q_PROPERTY(
@@ -475,6 +477,16 @@ public:
                    swapWindowUpShortcutChanged)
     Q_PROPERTY(QString swapWindowDownShortcut READ swapWindowDownShortcut WRITE setSwapWindowDownShortcut NOTIFY
                    swapWindowDownShortcutChanged)
+
+    // Span Window Shortcuts (Ctrl+Alt+Arrow)
+    Q_PROPERTY(QString spanWindowLeftShortcut READ spanWindowLeftShortcut WRITE setSpanWindowLeftShortcut NOTIFY
+                   spanWindowLeftShortcutChanged)
+    Q_PROPERTY(QString spanWindowRightShortcut READ spanWindowRightShortcut WRITE setSpanWindowRightShortcut NOTIFY
+                   spanWindowRightShortcutChanged)
+    Q_PROPERTY(QString spanWindowUpShortcut READ spanWindowUpShortcut WRITE setSpanWindowUpShortcut NOTIFY
+                   spanWindowUpShortcutChanged)
+    Q_PROPERTY(QString spanWindowDownShortcut READ spanWindowDownShortcut WRITE setSpanWindowDownShortcut NOTIFY
+                   spanWindowDownShortcutChanged)
 
     // Snap to PhosphorZones::Zone by Number Shortcuts (Meta+Ctrl+1-9)
     Q_PROPERTY(QString snapToZone1Shortcut READ snapToZone1Shortcut WRITE setSnapToZone1Shortcut NOTIFY
@@ -1059,6 +1071,16 @@ public:
     void setAutotileOverflowBehaviorInt(int behavior);
     QStringList lockedScreens() const override;
     void setLockedScreens(const QStringList& screens) override;
+
+private:
+    /// The write half of setLockedScreens, without the pre-write disk refresh.
+    /// The composite read-modify-write path (setContextLocked) refreshes once
+    /// before its read and must NOT refresh again between read and write, or a
+    /// concurrent writer's commit lands in the store only to be overwritten by
+    /// the already-merged list.
+    void writeLockedScreens(const QStringList& screens);
+
+public:
     bool isScreenLocked(const QString& screenIdOrName) const override;
     void setScreenLocked(const QString& screenIdOrName, bool locked) override;
     bool isContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity) const override;
@@ -1131,6 +1153,8 @@ public:
     void setOpenEditorShortcut(const QString& shortcut);
     QString openSettingsShortcut() const;
     void setOpenSettingsShortcut(const QString& shortcut);
+    QString toggleCheatsheetShortcut() const;
+    void setToggleCheatsheetShortcut(const QString& shortcut);
     QString previousLayoutShortcut() const;
     void setPreviousLayoutShortcut(const QString& shortcut);
     QString nextLayoutShortcut() const;
@@ -1189,6 +1213,15 @@ public:
     void setSwapWindowUpShortcut(const QString& shortcut);
     QString swapWindowDownShortcut() const;
     void setSwapWindowDownShortcut(const QString& shortcut);
+
+    QString spanWindowLeftShortcut() const;
+    void setSpanWindowLeftShortcut(const QString& shortcut);
+    QString spanWindowRightShortcut() const;
+    void setSpanWindowRightShortcut(const QString& shortcut);
+    QString spanWindowUpShortcut() const;
+    void setSpanWindowUpShortcut(const QString& shortcut);
+    QString spanWindowDownShortcut() const;
+    void setSpanWindowDownShortcut(const QString& shortcut);
 
     QString snapToZone1Shortcut() const;
     void setSnapToZone1Shortcut(const QString& shortcut);
@@ -1323,6 +1356,35 @@ public:
     /// discardKeys().
     void resetKeys(const ConfigKeyList& keys);
 
+    // ── Settings-profiles support (settings app) ────────────────────────────
+    /// The complete current config as one JSON blob — every schema-declared
+    /// key at its current in-memory value (schema default for never-written
+    /// keys), stamped with `_version`. Thin pass-through to Store::exportToJson.
+    /// Used by the profiles feature to diff the live config against a parent
+    /// profile's resolved blob when saving "current settings as a profile".
+    QJsonObject exportConfigToJson() const;
+
+    /// The schema-defaults config as one JSON blob — every declared key at its
+    /// schema default, stamped with `_version`. This is the root of a profile
+    /// inheritance chain (a profile with no parent stores its delta against
+    /// this). Independent of the current in-memory values.
+    QJsonObject defaultConfigJson() const;
+
+    /// Stage a fully-resolved config blob into memory WITHOUT committing to
+    /// disk. Writes every declared key present in @p fullConfigBlob through the
+    /// store (no sync/commit), then re-emits the Q_PROPERTY NOTIFY signals for
+    /// whatever actually changed — exactly the load() machinery, minus the
+    /// reparse/commit/captureBaseline. The store therefore diverges from the
+    /// committed baseline, so isKeyModified() reports the changed keys as
+    /// unsaved and the settings app's Save footer lights up; the user's Save
+    /// commits them normally. Used to activate a settings profile.
+    ///
+    /// SCOPE: Q_PROPERTY-backed keys only (per Phase 1). Per-screen maps,
+    /// virtual-screen configs, and per-mode disable lists are NOT staged here.
+    /// @return false when the store refused the blob (schema version mismatch)
+    /// — in that case nothing was staged and no signal fired.
+    bool applyConfigOverlayStaged(const QJsonObject& fullConfigBlob);
+
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
     /// Derives the four zone-color keys from the current application palette.
@@ -1365,7 +1427,7 @@ Q_SIGNALS:
     // unqualified `Q_EMIT xChanged()` (which resolves to the derived
     // signal). All editor / fillOnDrop / filterLayoutsByAspectRatio /
     // virtualScreenConfigs signals live on ISettings and are inherited
-    // here — see src/core/isettings.h.
+    // here — see src/core/interfaces/isettings.h.
 
 private:
     /// Installs the QEvent::ApplicationPaletteChange filter on the application

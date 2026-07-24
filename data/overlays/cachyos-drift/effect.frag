@@ -9,7 +9,7 @@
  * Rich domain-warped FBM background, per-facet audio reactivity,
  * bass shockwaves, and organic motion.
  *
- * Logo geometry: 12 vertices, 7 teal facets + cyan polygon body, 3 circles.
+ * Logo geometry: 11 vertices, 7 teal facets + cyan polygon body, 3 circles.
  * Cyan body uses a proper polygon SDF for the concave "C" silhouette.
  * Coordinates normalized 0-1 from the official SVG.
  *
@@ -65,7 +65,6 @@ float sdPolygon11(vec2 p, vec2 v[11]) {
 // ═══════════════════════════════════════════════════════════════
 
 const vec2 V0  = vec2(0.2217, 0.1054);
-const vec2 V1  = vec2(0.2415, 0.1074);
 const vec2 V2  = vec2(0.7073, 0.1074);
 const vec2 V3  = vec2(0.5894, 0.3112);
 const vec2 V4  = vec2(0.3368, 0.3112);
@@ -95,7 +94,7 @@ struct LogoHit {
     float edgeDist;
 };
 
-LogoHit evalLogo(vec2 p, vec2 displacement[12], vec3 palCyan, vec3 palTeal, vec3 palMint, vec3 palGlow) {
+LogoHit evalLogo(vec2 p, vec2 displacement[12], vec3 palCyan, vec3 palTeal) {
     LogoHit hit;
     hit.dist = 1e9;
     hit.facetId = -1;
@@ -202,7 +201,7 @@ LogoHit evalLogo(vec2 p, vec2 displacement[12], vec3 palCyan, vec3 palTeal, vec3
 
 LogoHit evalLogoInstance(vec2 logoUV, int idx, float time,
                          float bassEnv, float logoPulse,
-                         vec3 palCyan, vec3 palTeal, vec3 palMint, vec3 palGlow) {
+                         vec3 palCyan, vec3 palTeal) {
     vec2 displacement[12];
     for (int i = 0; i < 12; i++) {
         float phase = float(i) * 2.39996 + float(idx) * 1.618;
@@ -215,14 +214,14 @@ LogoHit evalLogoInstance(vec2 logoUV, int idx, float time,
         float scatter = bassEnv * logoPulse * 0.06;
         displacement[i] = wobble + scatterDir * scatter;
     }
-    return evalLogo(logoUV, displacement, palCyan, palTeal, palMint, palGlow);
+    return evalLogo(logoUV, displacement, palCyan, palTeal);
 }
 
 // ── Per-instance UV computation ──────────────────────────────────
 // Returns logo-space UV; instScale written via out parameter.
 
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse,
+                       float logoScale, float bassEnv,
                        float sizeMin, float sizeMax, out float instScale) {
     vec2 uv = globalUV;
     uv.x = (uv.x - 0.5) * aspect + 0.5;
@@ -296,8 +295,10 @@ vec3 facetGrid(vec2 p, float scale) {
 vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
                      bool isHighlighted, float bass, float mids, float treble,
                      bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     float speed         = p_speed >= 0.0 ? p_speed : 0.12;
     float flowSpeed     = p_flowSpeed >= 0.0 ? p_flowSpeed : 0.25;
@@ -311,7 +312,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
     float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
-    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float edgeFadeStart     = zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0);
     float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
     float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
@@ -333,13 +334,10 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float flowCenterX   = p_flowCenterX >= -1.5 ? p_flowCenterX : 0.4;
     float flowCenterY   = p_flowCenterY >= -1.5 ? p_flowCenterY : 0.5;
 
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
-    vec2 halfSize = rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
-    float d = sdRoundedBox(p, halfSize, borderRadius);
+    float d = zoneShape.d;
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     float aspect = iResolution.x / max(iResolution.y, 1.0);
     float time = iTime;
@@ -349,7 +347,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, vec3(0.0, 1.0, 0.8));
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, vec3(0.13, 1.0, 0.71));
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * 0.5;
 
     float flowAngle = flowDirection * TAU;
@@ -425,7 +423,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
             vec2 iLogoUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, bassEnv, logoPulse,
+                                              logoScale, bassEnv,
                                               logoSizeMin, logoSizeMax, instScale);
 
             // Bounding check: skip if fragment is far from this logo
@@ -438,12 +436,14 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             float instIntensity = logoIntensity * (0.3 + 0.7 * depthFactor);
 
             LogoHit iLogo = evalLogoInstance(iLogoUV, li, time, bassEnv, logoPulse,
-                                             palPrimary, palSecondary, palAccent, palGlow);
+                                             palPrimary, palSecondary);
 
             if (iLogo.dist > 0.08) continue;
 
             // ── Light casting (neon sign in fog) ──────────────────
-            float lightCast = exp(-max(iLogo.dist, 0.0) * 15.0) * 0.25;
+            // Pedestal-subtracted at the enclosing continue gate, so the cast fades to
+            // nothing rather than being cut at a fixed radius.
+            float lightCast = max(exp(-max(iLogo.dist, 0.0) * 15.0) - exp(-0.08 * 15.0), 0.0) * 0.25;
             vec3 logoLight = triStopPalette(time * 0.08 + iLogoUV.y + float(li) * 0.3,
                                            palGlow, palPrimary, palAccent);
             col += logoLight * lightCast * instIntensity * (1.0 + bassEnv * 0.2) * depthFactor;
@@ -509,9 +509,12 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                 }
 
                 // ── Multi-layer glow ──────────────────────────────
-                float glow1 = exp(-max(iLogo.dist, 0.0) * 80.0) * 0.5;
-                float glow2 = exp(-max(iLogo.dist, 0.0) * 25.0) * 0.25;
-                float glow3 = exp(-max(iLogo.dist, 0.0) * 8.0) * 0.12;
+                // Pedestal-subtracted at the enclosing gate, so each lobe reaches exactly 0
+                // there. The widest one was being cut with most of its peak still left,
+                // painting a hard ring around every logo instance.
+float glow1 = max(exp(-max(iLogo.dist, 0.0) * 80) - exp(-0.03 * 80), 0.0) * 0.5;
+                float glow2 = max(exp(-max(iLogo.dist, 0.0) * 25) - exp(-0.03 * 25), 0.0) * 0.25;
+                float glow3 = max(exp(-max(iLogo.dist, 0.0) * 8) - exp(-0.03 * 8), 0.0) * 0.12;
                 vec3 edgeCol = triStopPalette(time * 0.12 + iLogoUV.y + float(li) * 0.2,
                                              palGlow, palPrimary, palAccent);
                 float flare = 1.0 + bassEnv * 0.6;
@@ -590,13 +593,13 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         float depthDarken = smoothstep(0.0, edgeFadeStart, innerDist);
         col *= mix(0.6, 1.0, 1.0 - depthDarken * 0.35);
 
-        float innerGlow = exp(-innerDist / 12.0);
+        float innerGlow = exp(-innerDist / zoneLen(12.0));
         float edgeAngle = atan(p.y, p.x);
         float iriT = edgeAngle / TAU + time * 0.05 + midsEnv * 0.2;
         vec3 iriCol = triStopPalette(iriT, palPrimary, palSecondary, palAccent);
         col += iriCol * innerGlow * innerGlowStr;
 
-        col = mix(col, fillColor.rgb * luminance(col), 0.15);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.15);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -614,7 +617,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         borderCol *= borderBrightness;
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.3 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {
@@ -623,15 +626,20 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             borderCol *= 0.55;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow ───────────────────────────────────────────
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 5.0;
-    float glowRadius = mix(10.0, 18.0, vitality) + bassGlowPush;
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(10.0, 18.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, 7.0, borderGlow);
+        float glow = expGlowBounded(d, zoneLen(7.0), borderGlow, glowRadius);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.08) + midsEnv * 0.15;
         vec3 glowCol = triStopPalette(glowT, palPrimary, palSecondary, palAccent);

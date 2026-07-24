@@ -14,6 +14,7 @@ return pluau.algorithm {
         id = "stair",
         description = "Stepped staircase arrangement",
         producesOverlappingZones = true,
+        overlapStacking = "lastOnTop",
         supportsMasterCount = false,
         supportsSplitRatio = true,
         defaultSplitRatio = 0.5,

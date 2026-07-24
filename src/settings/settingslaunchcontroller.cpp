@@ -4,7 +4,7 @@
 #include "settingslaunchcontroller.h"
 
 #include "settingsappadaptor.h"
-#include "settingscontroller.h"
+#include "settings/controller/settingscontroller.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 

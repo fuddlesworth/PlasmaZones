@@ -324,7 +324,10 @@ vec3 signalGraph(vec2 screenUV, float t, float diag,
 vec3 shellStrokes(float d, float diag, float t, vec2 rectSize,
                   float bass, bool hasAudio) {
     float count   = clamp(getShellCount(), 0.0, 4.0);
-    float spacing = getShellSpacing() * pxScale();
+    // zoneLen(), not pxScale(): the shells are insets measured against `d`, the
+    // device-px zone SDF, so a 1080p-relative step would drift away from the
+    // rounded corner it nests inside as the display scale changes.
+    float spacing = zoneLen(getShellSpacing());
     float alpha   = getShellOpacity();
     float pulseSpd = getShellPulseSpeed();
 
@@ -345,7 +348,7 @@ vec3 shellStrokes(float d, float diag, float t, vec2 rectSize,
         if (inset > maxInset) break;
 
         // Stroke of the inset rounded rect: |d + inset| ≈ 0.
-        float stroke = 1.0 - smoothstep(0.8, 2.2, abs(d + inset));
+        float stroke = 1.0 - smoothstep(zoneLen(0.8), zoneLen(2.2), abs(d + inset));
 
         // Containment breath: a slow pulse travelling inward shell by shell.
         float breath = 0.65 + 0.35 * sin(t * pulseSpd - float(k) * 1.2);
@@ -371,15 +374,17 @@ vec4 renderFluxZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                     float bass, float mids, float treble, float overall, bool hasAudio)
 {
     float vitality = zoneVitality(isHighlighted);
-    float borderRadius = max(params.x, 4.0);
-    float borderWidth  = max(params.y, 1.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
 
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     float t    = iTime * getSpeed();
     float diag = screenDiag(fragCoord);
@@ -392,7 +397,13 @@ vec4 renderFluxZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         vec3 navy = getBackgroundColor();
         vec3 deep = navy * 0.42;  // ≈ #050916 from the default navy
         vec3 baseColor = mix(navy, deep, smoothstep(0.0, 1.0, screenUV.y));
-        float bgAlpha = fillColor.a > 0.01 ? fillColor.a : getFillOpacity();
+        // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
+        float bgAlpha = getFillOpacity();
+        // The fill COLOUR is separate and was being discarded entirely. Light
+        // identity tint at the sibling packs' weight, through zoneTint(), which
+        // owns the un-premultiply of zoneFillColors[i].rgb and the zero-alpha
+        // case. Do not call zoneFillHue() directly for this shape.
+        baseColor = zoneTint(baseColor, fillColor, 0.35);
 
         vec3 fx = vec3(0.0);
 
@@ -444,8 +455,11 @@ vec4 renderFluxZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         }
 
         edgeColor = vitalityDesaturate(edgeColor, vitality);
-        result.rgb = mix(result.rgb, edgeColor, border * vitalityScale(0.65, 0.95, vitality));
-        result.a = max(result.a, border * max(borderColor.a, 0.85));
+        result.rgb = mix(result.rgb, edgeColor, border * vitalityScale(0.65, 0.95, vitality) * borderColor.a);
+        // borderColor.a straight, no 0.85 floor. The floor meant lowering a
+    // zone's opacity could not fade its frame below 85%, so the setting
+    // stopped working partway down its range.
+    result.a = max(result.a, border * borderColor.a);
     }
 
     return result;
@@ -455,17 +469,15 @@ vec4 renderFluxZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 // from one zone must not darken an adjacent zone's fill during blendOver).
 vec4 fluxZoneGlow(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted) {
     float vitality = zoneVitality(isHighlighted);
-    float borderRadius = max(params.x, 4.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
 
-    vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
-    vec2 p        = fragCoord - center;
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
-    float glowExtent = vitalityScale(12.0, 30.0, vitality);
+    float glowExtent = zoneLen(vitalityScale(12.0, 30.0, vitality));
     if (d > 0.0 && d < glowExtent) {
-        float glowSize = vitalityScale(4.0, 9.0, vitality);
+        float glowSize = zoneLen(vitalityScale(4.0, 9.0, vitality));
         float glowStr  = vitalityScale(0.10, 0.35, vitality) * getGlowStrength();
         float glow = expGlow(d, glowSize, glowStr);
         vec3 glowColor = vitalityDesaturate(fluxGradient(screenDiag(fragCoord)), vitality);

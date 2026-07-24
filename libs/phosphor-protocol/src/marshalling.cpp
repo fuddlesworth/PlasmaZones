@@ -30,7 +30,8 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, WindowGeometryEntry& e
 QDBusArgument& operator<<(QDBusArgument& arg, const TileRequestEntry& e)
 {
     arg.beginStructure();
-    arg << e.windowId << e.x << e.y << e.width << e.height << e.zoneId << e.screenId << e.monocle << e.floating;
+    arg << e.windowId << e.x << e.y << e.width << e.height << e.zoneId << e.screenId << e.monocle << e.floating
+        << e.stacking;
     arg.endStructure();
     return arg;
 }
@@ -38,7 +39,8 @@ QDBusArgument& operator<<(QDBusArgument& arg, const TileRequestEntry& e)
 const QDBusArgument& operator>>(const QDBusArgument& arg, TileRequestEntry& e)
 {
     arg.beginStructure();
-    arg >> e.windowId >> e.x >> e.y >> e.width >> e.height >> e.zoneId >> e.screenId >> e.monocle >> e.floating;
+    arg >> e.windowId >> e.x >> e.y >> e.width >> e.height >> e.zoneId >> e.screenId >> e.monocle >> e.floating
+        >> e.stacking;
     arg.endStructure();
     return arg;
 }

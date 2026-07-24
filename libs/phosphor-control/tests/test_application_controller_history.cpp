@@ -10,6 +10,7 @@
 
 using PhosphorControl::ApplicationController;
 using PhosphorControl::PageController;
+using PhosphorControl::PageRegistry;
 
 // Named namespace (not anonymous) for external linkage — mirrors
 // test_application_controller.cpp; each test is its own executable so
@@ -202,6 +203,97 @@ private Q_SLOTS:
             ++hops;
         }
         QCOMPARE(hops, 64);
+    }
+
+    void skipsEntriesHiddenByTheCurrentMode()
+    {
+        // A history entry the simple/advanced tier hides must be skipped,
+        // not landed on: landing there lets the app's mode gate redirect
+        // straight back out, and that redirect re-records the entry and
+        // clears the forward trail, so Back would loop forever on it.
+        ApplicationController app;
+        registerAbc(app);
+        app.registerPage(new StubPage(QStringLiteral("adv")), {}, QStringLiteral("ADV"),
+                         QUrl(QStringLiteral("qrc:/adv.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+
+        app.setCurrentPageId(QStringLiteral("a"));
+        app.setCurrentPageId(QStringLiteral("adv"));
+        app.setCurrentPageId(QStringLiteral("b"));
+        // Back trail is now [a, adv]; hide the advanced-only entry.
+        app.registry()->setShowAdvanced(false);
+
+        // "adv" is skipped and dropped, landing on "a" instead.
+        QCOMPARE(app.goBack(), QStringLiteral("a"));
+        QVERIFY(!app.canGoBack());
+
+        // Forward retraces the same way: the hidden entry never comes back.
+        QCOMPARE(app.goForward(), QStringLiteral("b"));
+        QVERIFY(!app.canGoForward());
+
+        // With the tier visible again the entry is simply gone (dropped),
+        // which is the documented stale-entry policy.
+        app.registry()->setShowAdvanced(true);
+        QVERIFY(!app.canGoForward());
+    }
+
+    void currentPageOnTheBackStackIsNotAUsableEntry()
+    {
+        // A → X → A leaves the CURRENT page on the back stack (an ordinary
+        // revisit). With X hidden, the only remaining entry is the current
+        // page itself. Without the current-page clause in the shared
+        // predicate, canGoBack() reports true, goBack() then pushes the
+        // current page onto the FORWARD stack and returns its own id having
+        // navigated nowhere — a Back button that appears to work, does not
+        // move, and poisons the forward trail with a self-entry.
+        ApplicationController app;
+        registerAbc(app);
+        app.registerPage(new StubPage(QStringLiteral("adv")), {}, QStringLiteral("ADV"),
+                         QUrl(QStringLiteral("qrc:/adv.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+
+        app.setCurrentPageId(QStringLiteral("a"));
+        app.setCurrentPageId(QStringLiteral("adv"));
+        app.setCurrentPageId(QStringLiteral("a")); // back trail is now [a, adv], current a
+        app.registry()->setShowAdvanced(false); // hides adv
+
+        QVERIFY(!app.canGoBack());
+        QCOMPARE(app.goBack(), QString());
+        QCOMPARE(app.currentPageId(), QStringLiteral("a"));
+        // And the forward trail was not poisoned with a self-entry.
+        QVERIFY(!app.canGoForward());
+    }
+
+    void canGoBackIsFalseWhenEveryEntryIsHidden()
+    {
+        // canGoBack must answer "will goBack() move", not "is the stack
+        // non-empty". A trail of ONLY advanced pages, viewed in simple mode,
+        // is the case where those two answers differ — and the chrome acts on
+        // the flag: the Back button renders `enabled` from it, and
+        // Keys.onShortcutOverride CLAIMS Alt+Left on it, so a false positive
+        // both dead-ends the click and swallows the shortcut.
+        ApplicationController app;
+        registerAbc(app);
+        app.registerPage(new StubPage(QStringLiteral("adv1")), {}, QStringLiteral("ADV1"),
+                         QUrl(QStringLiteral("qrc:/adv1.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+        app.registerPage(new StubPage(QStringLiteral("adv2")), {}, QStringLiteral("ADV2"),
+                         QUrl(QStringLiteral("qrc:/adv2.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::AdvancedOnly);
+
+        // Back trail is entirely advanced-only: [adv1], current adv2.
+        app.setCurrentPageId(QStringLiteral("adv1"));
+        app.setCurrentPageId(QStringLiteral("adv2"));
+        QVERIFY(app.canGoBack());
+
+        // Entering simple mode hides every recorded entry.
+        QSignalSpy spy(&app, &ApplicationController::historyChanged);
+        app.registry()->setShowAdvanced(false);
+        // The capability flips, so the chrome's bindings must be told.
+        QVERIFY(spy.count() >= 1);
+        QVERIFY(!app.canGoBack());
+        // And the flag agrees with what the step actually does.
+        QCOMPARE(app.goBack(), QString());
     }
 };
 

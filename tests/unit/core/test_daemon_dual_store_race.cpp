@@ -34,11 +34,11 @@
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleStore.h>
 
-#include "../../../src/config/configbackends.h"
-#include "../../../src/config/configdefaults.h"
-#include "../../../src/config/settings.h"
+#include "config/configbackends.h"
+#include "config/configdefaults.h"
+#include "config/settings.h"
 
-#include "../helpers/IsolatedConfigGuard.h"
+#include "helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;

@@ -78,7 +78,11 @@ vec3 catmullRom(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float t) {
 
 // ─── Neon flicker envelope (fedora, neon) ────────────────────────────────────
 float neonFlicker(float time, float seed, float trebleEnv) {
-    float base = 0.94 + 0.06 * sin(time * 8.0 + seed * 100.0);
+    // timeSin, not sin(time * 8.0): this is a phase animation, and it is the
+    // last raw-time site in an otherwise fully converted shared helper. The
+    // amplitude is small, but the helper is included by several packs and is
+    // the wrong place to leave the pattern the others were converted away from.
+    float base = 0.94 + 0.06 * timeSin(8.0, seed * 100.0);
     float buzz = step(0.97, noise2D(vec2(time * 4.0, seed * 7.0))) * 0.2;
     float trebleBuzz = trebleEnv * step(0.93, noise2D(vec2(time * 5.0, seed * 13.0))) * 0.25;
     return clamp(base - buzz - trebleBuzz, 0.6, 1.0);
@@ -181,7 +185,7 @@ LabelHalo gatherLabelHalo(vec2 uv, vec2 px, float labelGlowSpread, vec2 chromOff
     float haloTight = 0.0;
     float haloWide = 0.0;
     float haloVWide = 0.0;
-    float haloR = 0.0, haloG = 0.0, haloB = 0.0;
+    float haloR = 0.0, haloB = 0.0;
 
     for (int dy = -2; dy <= 2; dy++) {
         for (int dx = -2; dx <= 2; dx++) {
@@ -197,8 +201,10 @@ LabelHalo gatherLabelHalo(vec2 uv, vec2 px, float labelGlowSpread, vec2 chromOff
             haloWide += s * wWide;
             haloVWide += s * wVWide;
 
+            // No haloG fetch: the green channel samples the same texel with the
+            // same weight as haloWide above, so it is copied out after the loop
+            // instead of costing a second fetch per tap.
             haloR += texture(uZoneLabels, uv + off * labelGlowSpread + chromOff).a * wWide;
-            haloG += texture(uZoneLabels, uv + off * labelGlowSpread).a * wWide;
             haloB += texture(uZoneLabels, uv + off * labelGlowSpread - chromOff).a * wWide;
         }
     }
@@ -207,7 +213,8 @@ LabelHalo gatherLabelHalo(vec2 uv, vec2 px, float labelGlowSpread, vec2 chromOff
     h.tight = haloTight / 10.0;
     h.wide = haloWide / 16.5;
     h.vWide = haloVWide / 20.0;
-    h.chroma = vec3(haloR, haloG, haloB) / 16.5;
+    // Green reuses h.wide: identical texel, identical weight, identical divisor.
+    h.chroma = vec3(haloR / 16.5, h.wide, haloB / 16.5);
     return h;
 }
 

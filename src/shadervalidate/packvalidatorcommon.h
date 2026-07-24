@@ -31,6 +31,13 @@ namespace PlasmaZones::ShaderValidate {
 // deliberately stricter than the runtime.
 std::optional<QString> confinedPackPath(const QString& packDir, const QString& rel);
 
+// In-place confinement: rewrites @p path to its confined absolute form and
+// returns true, or returns false when the path escapes the pack dir. An EMPTY
+// path is left as-is and accepted (that stage is simply absent). All three
+// validators gate every user-editable metadata path through this before
+// opening it.
+bool confinePackPathInPlace(const QString& packDir, QString& path);
+
 // The set of accepted `type` strings for a declared parameter.
 extern const QStringList kValidParamTypes;
 

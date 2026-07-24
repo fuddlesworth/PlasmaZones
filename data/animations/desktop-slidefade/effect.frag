@@ -9,7 +9,6 @@
 #include <desktop_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     // Slide axis follows the actual switch direction when p_followSwitch is
     // on; the configured p_dirX / p_dirY vector is the fallback / override.
     vec2 cfg = vec2(p_dirX, p_dirY);
@@ -25,7 +24,4 @@ vec4 pTransition(vec2 uv, float t) {
     vec4 fromC = getFromColor(uv + ts * off);         // slides toward its exit
     vec4 toC = getToColor(uv - (1.0 - ts) * off);     // slides in from the far side
     return mix(fromC, toC, smoothstep(0.0, 1.0, ts)); // crossfade over the slide
-#else
-    return vec4(0.0);
-#endif
 }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "internal.h"
-#include "../overlayservice.h"
+#include "daemon/overlayservice.h"
 #include "qml_property_names.h"
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
@@ -10,12 +10,12 @@
 
 #include <QQuickItem>
 #include <PhosphorSurfaces/SurfaceManager.h>
-#include "../../core/logging.h"
+#include "core/platform/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "../../core/utils.h"
-#include "../../core/shaderregistry.h"
-#include "../rendering/zonelabeltexturebuilder.h"
+#include "core/utils/utils.h"
+#include "core/interfaces/shaderregistry.h"
+#include "daemon/rendering/zonelabeltexturebuilder.h"
 #include "phosphor_roles.h"
 
 #include <PhosphorLayer/ILayerShellTransport.h>
@@ -237,7 +237,8 @@ QList<QQuickItem*> OverlayService::visibleAudioDecorationSlots() const
     QList<QQuickItem*> out;
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
         const PerScreenOverlayState& st = it.value();
-        for (QQuickItem* slot : {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(), st.zoneSelectorSlot()}) {
+        for (QQuickItem* slot :
+             {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(), st.zoneSelectorSlot(), st.cheatsheetSlot()}) {
             if (slot && slot->isVisible()
                 && slot->property(OverlayQmlPropertyNames::WantsAudioDecoration.data()).toBool()) {
                 out.append(slot);

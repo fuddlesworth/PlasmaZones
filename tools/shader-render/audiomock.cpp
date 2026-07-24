@@ -66,7 +66,11 @@ public:
         const double cyclePos = std::fmod(static_cast<double>(frameIndex) / frameRate, 4.0) / 4.0;
         const double peakPos = (cyclePos < 0.5 ? cyclePos : 1.0 - cyclePos) * 2.0;
         const int peak = static_cast<int>(peakPos * (kBarCount - 1));
-        constexpr int kHalfWidth = 32;
+        // Derived from kBarCount, not absolute: this was 32 when kBarCount was
+        // 256, i.e. a peak spanning a quarter of the spectrum. Left absolute at
+        // 64 bars it spans the whole thing, and "a peak walks bass to treble"
+        // degenerates into a broad ramp that lights every bucket at once.
+        constexpr int kHalfWidth = kBarCount / 8;
         for (int i = 0; i < kBarCount; ++i) {
             const int d = std::abs(i - peak);
             if (d <= kHalfWidth) {

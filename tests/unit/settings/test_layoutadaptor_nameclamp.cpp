@@ -13,14 +13,14 @@
 // them and leave a lone high surrogate that serializes as U+FFFD, which is a
 // name the user never typed reaching disk.
 
-#include "../../../src/core/constants.h"
+#include "core/types/constants.h"
 
-#include "dbus/layoutadaptor.h"
+#include "dbus/layoutadaptor/layoutadaptor.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
-#include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
 
 #include <QtTest>
 

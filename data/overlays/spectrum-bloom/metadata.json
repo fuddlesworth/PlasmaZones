@@ -2,7 +2,7 @@
     "id": "spectrum-bloom",
     "name": "Spectrum Bloom",
     "category": "Audio Visualizer",
-    "description": "A polar spectrum contour where the zone boundary morphs with the full frequency spectrum. Bass to treble maps around the circle, and every bar defines the shape. Works best with 256 spectrum bars. Enable CAVA audio visualization in settings.",
+    "description": "A polar spectrum contour seen through the zone, morphing with the full frequency spectrum. Bass to treble maps around the circle, and every bar defines the shape. Works best with 256 spectrum bars. Enable CAVA audio visualization in settings.",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",

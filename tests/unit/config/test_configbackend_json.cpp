@@ -8,10 +8,10 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
-#include "../../../src/config/configbackends.h"
-#include "../../../src/config/configdefaults.h"
-#include "../../../src/config/perscreenresolver.h"
-#include "../helpers/IsolatedConfigGuard.h"
+#include "config/configbackends.h"
+#include "config/configdefaults.h"
+#include "config/perscreenresolver.h"
+#include "helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;

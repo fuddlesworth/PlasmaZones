@@ -9,6 +9,7 @@ return pluau.algorithm {
         id = "monocle",
         description = "One window fullscreen at a time, cycle through others",
         producesOverlappingZones = true,
+        overlapStacking = "lastOnTop",
         supportsMasterCount = false,
         supportsSplitRatio = false,
         defaultMaxWindows = 4,

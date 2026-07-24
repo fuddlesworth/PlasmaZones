@@ -78,14 +78,32 @@ public:
      *  `goBack()` / `goForward()` move along the recorded trail without
      *  re-recording (they shuffle entries between the two stacks instead).
      *  Both return the page id landed on, or an empty string when there
-     *  was nowhere to go. Stale entries (pages unregistered after being
-     *  visited) are skipped and dropped. History depth is capped at
-     *  kMaxHistoryEntries; the oldest entry falls off first. */
+     *  was nowhere to go. Stale entries are skipped and dropped: pages
+     *  unregistered after being visited, and pages the current
+     *  simple/advanced tier hides (landing on one lets the app's mode gate
+     *  bounce the user to a different page, so the returned id would not
+     *  match where they ended up). The cap of MaxHistoryEntries applies
+     *  when RECORDING ordinary navigation — the oldest entry falls off
+     *  first; a history move only transfers an entry between the two
+     *  stacks, so it conserves total depth. */
     bool canGoBack() const;
     bool canGoForward() const;
     Q_INVOKABLE QString goBack();
     Q_INVOKABLE QString goForward();
 
+private:
+    /// One step along the recorded trail: pop from @p from, push the page
+    /// being left onto @p to, navigate. goBack/goForward differ only in
+    /// which stack is which.
+    QString stepHistory(QStringList& from, QStringList& to);
+    /// True iff a recorded history entry is still somewhere the user can be
+    /// sent: registered, not the current page, and not hidden by the current
+    /// simple/advanced tier. Shared by stepHistory's skip loop AND by
+    /// canGoBack/canGoForward, so the capability flags cannot promise a move
+    /// the step then declines to make.
+    bool isUsableHistoryEntry(const QString& id) const;
+
+public:
     /** Deep-link reveal latch (generic — every settings app built on this
      *  shell gets deep-link-to-anchor for free).
      *
@@ -116,9 +134,18 @@ public:
      *  When `hasDividerAfter` is true the sidebar draws a horizontal
      *  divider line immediately after this row (suppressed while a
      *  search filter is active). Used for visual grouping of long
-     *  flat sections. */
+     *  flat sections.
+     *
+     *  `visibility` declares the page's simple/advanced tier at
+     *  registration — the canonical way to classify a page (see
+     *  PageRegistry::PageVisibility). `counterpartId` names the page's
+     *  other-mode equivalent for mode-flip redirects (see
+     *  PageRegistry::Entry::counterpartId); it may reference a page
+     *  registered later, so it is stored unvalidated. */
     void registerPage(PageController* page, const QString& parentId, const QString& title, const QUrl& qmlSource,
-                      const QString& iconSource = QString(), bool isCollapsible = false, bool hasDividerAfter = false);
+                      const QString& iconSource = QString(), bool isCollapsible = false, bool hasDividerAfter = false,
+                      PageRegistry::PageVisibility visibility = PageRegistry::PageVisibility::Always,
+                      const QString& counterpartId = QString());
 
     /** Register a headless staging domain (no sidebar entry).
      *  Used for cross-cutting state shared across multiple pages. */
@@ -141,6 +168,17 @@ public:
      *  startup (e.g. given a restored activePage of
      *  "snapping-behavior", produces ["snapping"]). */
     Q_INVOKABLE QStringList parentChainFor(const QString& id) const;
+
+    /** Ids of every registered page whose controller is still dirty.
+     *
+     *  Lives here rather than as a QML walk over allPagesData() +
+     *  controller(id): `isDirty()` is NOT Q_INVOKABLE (StagingDomain exposes it
+     *  only through the `dirty` Q_PROPERTY, deliberately, to avoid a duplicate
+     *  metaobject entry), so the QML form threw a TypeError on the first
+     *  non-null controller. The lib has no QML test harness, so that shipped
+     *  green and silently swallowed the apply-on-close failure path it fed.
+     *  In C++ the compiler checks it and a unit test covers it. */
+    Q_INVOKABLE QStringList dirtyPageIds() const;
 
 public Q_SLOTS:
     void applyAll();
@@ -230,7 +268,7 @@ private:
     bool m_navigatingHistory = false;
     /// History depth cap — plenty for a settings session while bounding
     /// worst-case memory for a long-lived window.
-    static constexpr int kMaxHistoryEntries = 64;
+    static constexpr int MaxHistoryEntries = 64;
     // Deep-link reveal latch (see setPendingAnchor). Transient; not page identity.
     QString m_pendingAnchor;
     QString m_pendingAnchorPage;
@@ -306,8 +344,8 @@ private:
     /// signals before synthesising a failure entry per still-pending
     /// domain. Default 60 seconds (see asyncBatchTimeoutMs() /
     /// setAsyncBatchTimeoutMs() for consumer-facing tuning).
-    static constexpr int kDefaultAsyncBatchTimeoutMs = 60'000;
-    int m_asyncBatchTimeoutMs = kDefaultAsyncBatchTimeoutMs;
+    static constexpr int DefaultAsyncBatchTimeoutMs = 60'000;
+    int m_asyncBatchTimeoutMs = DefaultAsyncBatchTimeoutMs;
 };
 
 } // namespace PhosphorControl

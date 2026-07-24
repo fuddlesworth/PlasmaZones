@@ -1,25 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Smoke transition — ported from liixini/shaders niri shader
-// (https://github.com/liixini/shaders/tree/main/smoke). Domain-warped
-// fbm smoke — the surface dissipates into curling smoke. Asymmetric
-// reveal vs. dissolve formula.
+// Smoke transition — domain-warped fbm smoke where the surface dissipates
+// into curling smoke, with an asymmetric reveal vs. dissolve formula.
+// Inspired by liixini/shaders' niri smoke shader.
 //
-// Niri's smoke ships asymmetric close.glsl/open.glsl — the formulas
-// genuinely differ (close uses `dissolve = (1-dist)*1.2 + fluid*0.7;
-// remain = smoothstep(...,p*1.8); tail = smoothstep(1.0,0.8,p)` while
-// open uses `appear = (1-dist*1.2) + (1-fluid)*0.7; reveal =
-// smoothstep(...,(1-p)*1.8)`). This is a pIn/pOut pair: the harness
-// feeds forward 0→1 `t` to both legs (so the niri `p` is just `t` in each
-// branch) and dispatches the matching body by leg direction
-// (`windowFadingIn`).
+// The close and open legs use genuinely different formulas (close uses
+// `dissolve = (1-dist)*1.2 + fluid*0.7; remain = smoothstep(...,p*1.8);
+// tail = smoothstep(1.0,0.8,p)` while open uses
+// `appear = (1-dist*1.2) + (1-fluid)*0.7; reveal = smoothstep(...,(1-p)*1.8)`).
+// This is a pIn/pOut pair: the harness feeds forward 0→1 `t` to both legs
+// (so `p` is just `t` in each branch) and dispatches the matching body by
+// leg direction (`windowFadingIn`).
 //
-// niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
-// == texture coords here), so the matrix multiply is dropped and
-// `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
-// rewritten to `texture` (GLSL 4.50 core) inline. niri's
-// `niri_random_seed` is replaced by `surfaceSeed()` from `<noise.glsl>`.
+// Geometry and texture coordinates coincide here, so
+// `texture(uTexture0, uv)` samples directly, and per-instance variation
+// comes from `surfaceSeed()` in `<noise.glsl>`.
 
 // The harness supplies #version, <animation_uniforms.glsl>, the in/out,
 // and main(). noise.glsl is pack-specific, so it stays here.
@@ -29,7 +25,7 @@
 // p_smokeDistortion (customParams[0].xyzw) are generated from metadata.json.
 // Both legs share the same params: `p_smokeDistortion` is the close-leg
 // coefficient (default 0.4) and the open leg uses `* 0.875` to preserve the
-// niri 0.4-vs-0.35 ratio so defaults reproduce the original visual exactly.
+// 0.4-vs-0.35 close/open ratio so defaults reproduce the intended visual.
 
 // 6-octave, lacunarity-2.0 fBm over niriNoise. Delegates to the shared
 // parameterised fbm in noise.glsl (the octave loop lives there once); kept as
@@ -51,12 +47,12 @@ float sm_warpedFbm(vec2 p, float t) {
 }
 
 // `uv` is vTexCoord; `t` is the forward 0→1 leg progress (the harness applies
-// legProgress()); `windowFadingIn` selects the niri open vs close body. The
+// legProgress()); `windowFadingIn` selects the open vs close body. The
 // per-leg swirl time is `swirlT` (named to avoid shadowing the `t` progress).
 vec4 smokeBody(vec2 uv, float t, bool windowFadingIn) {
     vec4 result;
     if (!windowFadingIn) {
-        // ── niri close.glsl body (forward progress p = t) ──
+        // ── close-leg body (forward progress p = t) ──
         float p = t;
         float seed = surfaceSeed() * 100.0;
 
@@ -66,8 +62,8 @@ vec4 smokeBody(vec2 uv, float t, bool windowFadingIn) {
         // multiplying by iAnchorSize/iSurfaceScreenPos.zw scales the
         // cycle count to the fraction of the screen this surface
         // covers, so smoke feature pixel size stays constant across
-        // popup vs. maximized windows. Matches niri's reference on
-        // full-screen (multiplier = 1.0 there).
+        // popup vs. maximized windows. The multiplier is 1.0 when the
+        // surface fills the screen.
         vec2 screenScale = max(iAnchorSize, vec2(1.0)) / max(iSurfaceScreenPos.zw, vec2(1.0));
         vec2 perCardScale = p_smokeNoiseScale * screenScale;
         float fluid = sm_warpedFbm(uv * perCardScale + seed, swirlT);
@@ -99,7 +95,7 @@ vec4 smokeBody(vec2 uv, float t, bool windowFadingIn) {
         float tail = smoothstep(1.0, 0.8, p);
         result = color * remain * tail;
     } else {
-        // ── niri open.glsl body (forward progress p = t) ──
+        // ── open-leg body (forward progress p = t) ──
         float p = t;
         float seed = surfaceSeed() * 100.0;
 

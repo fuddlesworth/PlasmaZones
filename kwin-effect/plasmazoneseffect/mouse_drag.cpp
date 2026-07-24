@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include <PhosphorAnimation/StaggerTimer.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -12,9 +12,9 @@
 
 #include <QLoggingCategory>
 
-#include "../autotilehandler.h"
-#include "../dragtracker.h"
-#include "../snaphandler.h"
+#include "autotilehandler/autotilehandler.h"
+#include "handlers/dragtracker.h"
+#include "handlers/snaphandler.h"
 
 namespace PlasmaZones {
 
@@ -117,7 +117,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
         if (effectiveScreenId != m_lastEffectiveScreenId) {
             m_lastEffectiveScreenId = effectiveScreenId;
             m_lastCursorOutput = connectorName;
-            if (m_daemonServiceRegistered) {
+            if (m_daemonGate.serviceRegistered) {
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("cursorScreenChanged"),
                     {effectiveScreenId});

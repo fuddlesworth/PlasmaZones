@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../snapadaptor.h"
-#include "../windowtrackingadaptor.h"
-#include "../../core/interfaces.h"
-#include "../../core/logging.h"
+#include "snapadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "core/interfaces/interfaces.h"
+#include "core/platform/logging.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
-#include "../../core/isettings.h"
+#include "core/interfaces/isettings.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 

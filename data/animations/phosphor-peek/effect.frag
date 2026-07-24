@@ -39,7 +39,6 @@ vec3 fluxGradient(float t) {
 }
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     float tt = clamp(t, 0.0, 1.0);
     vec2 res = resolutionSafe();
     float aspect = res.x / max(res.y, 1.0);
@@ -99,8 +98,12 @@ vec4 pTransition(vec2 uv, float t) {
     float band = smoothstep(-0.28, 0.0, fb) * (1.0 - smoothstep(0.0, 0.28, fb));
 
     // De-energize: the windows darken just as the front reaches them, before
-    // the desktop takes over. Gated by band, so no residue at the endpoints.
-    col *= 1.0 - band * (1.0 - reveal) * clamp(p_dim, 0.0, 1.0) * 0.7;
+    // the desktop takes over. The band alone does NOT vanish at tt = 0 (the
+    // front's -0.11 - soft lead can reach the leading corner's jittered p on
+    // the very first frame), so ramp the dim in over the first 5% of the leg
+    // — same first-frame-pop guard as desktop-phosphor's frontIn. The tt = 1
+    // side needs no gate: (1 - reveal) is 0 there.
+    col *= 1.0 - band * (1.0 - reveal) * clamp(p_dim, 0.0, 1.0) * 0.7 * smoothstep(0.0, 0.05, tt);
 
     // Traces: thin lines parallel to the drain direction, carrying dashes that
     // flow along the drain so the windows read as pixels draining down them.
@@ -134,16 +137,9 @@ vec4 pTransition(vec2 uv, float t) {
     // this return to normalise it: the desktop pass keeps PZ_FINALIZE_COLOR at
     // its identity default, because the capture FBOs already inherit the
     // output's colorDescription and converting again would double-transform
-    // (see the kFinalizeColorBlock note in shader_transitions.cpp).
+    // (see the kFinalizeColorBlock note in shader_textures.cpp).
     //
-    // This deliberately diverges from desktop-phosphor and desktop-aretha,
-    // which DO clamp their additive glow. Their clamp is the anomaly: on an HDR
-    // output it crushes capture values the blend never created. Do not "restore"
-    // it here for consistency.
+    // No upper clamp, matching desktop-phosphor and desktop-aretha: a clamp
+    // here would crush HDR capture values the blend never created.
     return vec4(col, 1.0);
-#else
-    // Desktop transitions are compositor-only; the daemon never runs them.
-    // Return transparent so the pack still bakes for the daemon target.
-    return vec4(0.0);
-#endif
 }

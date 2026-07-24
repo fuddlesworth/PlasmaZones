@@ -8,7 +8,7 @@
 #include <QRectF>
 #include <QVector>
 
-#include "core/interfaces.h"
+#include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 

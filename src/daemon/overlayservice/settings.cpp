@@ -2,18 +2,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "internal.h"
-#include "../overlayservice.h"
+#include "daemon/overlayservice.h"
 #include "qml_property_names.h"
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorRendering/ShaderCompiler.h>
-#include "../../core/cavaoptions.h"
-#include "../../core/logging.h"
+#include "core/types/cavaoptions.h"
+#include "core/platform/logging.h"
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
-#include "../../core/shaderregistry.h"
-#include "../../core/utils.h"
+#include "core/interfaces/shaderregistry.h"
+#include "core/utils/utils.h"
 #include <QQuickWindow>
 #include <QScreen>
 #include <QTimer>
@@ -118,6 +118,8 @@ void OverlayService::setSettings(ISettings* settings)
                         applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
                     if (m_layoutPickerVisible)
                         applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
+                    if (m_cheatsheetVisible)
+                        applyDecoration(state.cheatsheetSlot(), QStringLiteral("popup.cheatsheet"));
                 }
             });
 
@@ -394,8 +396,8 @@ void OverlayService::syncCavaState()
                 // so an audio-reactive border must settle to silence too rather
                 // than freeze on the last pushed frame. Independent of the zone
                 // overlay, so cleared regardless of overlayPhysScreen.
-                for (QQuickItem* deco :
-                     {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(), st.zoneSelectorSlot()}) {
+                for (QQuickItem* deco : {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(),
+                                         st.zoneSelectorSlot(), st.cheatsheetSlot()}) {
                     if (deco) {
                         writeQmlProperty(deco, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                     }

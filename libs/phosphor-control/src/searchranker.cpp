@@ -5,9 +5,48 @@
 
 #include <QStringView>
 
+#include <QChar>
+#include <QLatin1String>
+
 #include <algorithm>
 
 namespace PhosphorControl {
+
+void SearchRanker::prefold(SearchEntry& entry)
+{
+    entry.foldedTitle = foldForSearch(entry.title);
+    entry.foldedSubtitle = foldForSearch(entry.subtitle);
+    entry.foldedKeywords.clear();
+    entry.foldedKeywords.reserve(entry.keywords.size());
+    for (const QString& kw : entry.keywords) {
+        entry.foldedKeywords.append(foldForSearch(kw));
+    }
+}
+
+QString SearchRanker::foldForSearch(const QString& s)
+{
+    // Decompose so an accent becomes a separate combining mark, drop those
+    // marks, then case-fold. Without this "cafe" misses "Café", which a user
+    // reads as the search being broken rather than as a folding rule.
+    //
+    // ß is mapped explicitly, and AFTER the fold: Qt's toCaseFolded() is a
+    // SIMPLE fold, so it maps ẞ (U+1E9E) down to ß but never to "ss".
+    // Replacing before the fold would therefore miss the capital form and
+    // leave "GRÖẞE" as "große", unmatched by the "grosse" query this
+    // special-case exists to serve. Deliberately the only special-case — a
+    // full Unicode special-casing table is not warranted for a settings
+    // search, and every other mapping this could grow is rarer than the
+    // false-confidence of a half-built one.
+    const QString decomposed = s.normalized(QString::NormalizationForm_D);
+    QString stripped;
+    stripped.reserve(decomposed.size());
+    for (const QChar c : decomposed) {
+        if (c.category() != QChar::Mark_NonSpacing) {
+            stripped.append(c);
+        }
+    }
+    return stripped.toCaseFolded().replace(QChar(0x00DF), QLatin1String("ss"));
+}
 
 namespace {
 
@@ -26,8 +65,9 @@ bool wordStartPrefix(const QString& hay, const QString& n)
 }
 
 // Subsequence score: 0 if `n` is not an in-order subsequence of `hay`;
-// otherwise 360 for a tight match down to 120 for a very gappy one. Only
-// reached after exact/prefix/substring miss, so a match here always has gaps.
+// otherwise up to 330 for the densest reachable match, down to 120 for a very
+// gappy one. Only reached after exact/prefix/substring miss, so a match here
+// always has gaps.
 int subsequenceScore(const QString& hay, const QString& n)
 {
     int hi = 0;
@@ -50,16 +90,21 @@ int subsequenceScore(const QString& hay, const QString& n)
         prevMatch = hi;
         ++hi;
     }
-    return std::max(120, 360 - std::min(gaps, 8) * 30);
+    // Floor is structural: gaps is clamped to 8, so 360 - 8*30 == 120 already.
+    // No std::max needed, and the reachable TOP is 330 rather than 360 —
+    // fieldScore only reaches here after contains() has failed, so a
+    // zero-gap (contiguous) match cannot arrive.
+    return 360 - std::min(gaps, 8) * 30;
 }
 
-// Best tier score for a single field against an already-lowercased needle.
-int fieldScore(const QString& field, const QString& needle)
+// Best tier score for a single ALREADY-FOLDED field against an already-folded
+// needle. Both sides are folded by the caller so a keystroke does not re-walk
+// immutable index data — see SearchEntry's folded* fields.
+int fieldScore(const QString& f, const QString& needle)
 {
-    if (field.isEmpty() || needle.isEmpty()) {
+    if (f.isEmpty() || needle.isEmpty()) {
         return 0;
     }
-    const QString f = field.toLower();
     if (f == needle) {
         return 1000;
     }
@@ -84,21 +129,41 @@ int fieldScore(const QString& field, const QString& needle)
 
 } // namespace
 
-int SearchRanker::score(const QString& query, const SearchEntry& entry)
+namespace {
+// Scores against an ALREADY-folded needle. rank() folds the query once and
+// reuses it across every entry. The entry's FIELDS are folded once at index
+// build time (SearchRanker::prefold) — that is the dominant cost at catalogue
+// scale, since every entry contributes a title, a subtitle and N keywords
+// against the query's one. Entries that were not prefolded fall back to
+// folding here, so correctness never depends on the caller having done it.
+inline QString foldedOr(const QString& folded, const QString& raw)
 {
-    const QString needle = query.trimmed().toLower();
+    return folded.isEmpty() ? SearchRanker::foldForSearch(raw) : folded;
+}
+
+int scoreWithFoldedNeedle(const QString& needle, const SearchEntry& entry)
+{
     if (needle.isEmpty()) {
         return 0;
     }
 
     // Field weights: title authoritative, keywords strong, subtitle (breadcrumb)
     // weakest so a stray breadcrumb hit never outranks a real title match.
-    int best = fieldScore(entry.title, needle);
-    for (const QString& kw : entry.keywords) {
+    int best = fieldScore(foldedOr(entry.foldedTitle, entry.title), needle);
+    const bool haveFoldedKeywords = entry.foldedKeywords.size() == entry.keywords.size();
+    for (int i = 0; i < entry.keywords.size(); ++i) {
+        const QString kw =
+            haveFoldedKeywords ? entry.foldedKeywords.at(i) : SearchRanker::foldForSearch(entry.keywords.at(i));
         best = std::max(best, fieldScore(kw, needle) * 85 / 100);
     }
-    best = std::max(best, fieldScore(entry.subtitle, needle) * 60 / 100);
+    best = std::max(best, fieldScore(foldedOr(entry.foldedSubtitle, entry.subtitle), needle) * 60 / 100);
     return best;
+}
+} // namespace
+
+int SearchRanker::score(const QString& query, const SearchEntry& entry)
+{
+    return scoreWithFoldedNeedle(SearchRanker::foldForSearch(query.trimmed()), entry);
 }
 
 QVector<SearchEntry> SearchRanker::rank(const QString& query, const QVector<SearchEntry>& entries, int limit)
@@ -110,10 +175,12 @@ QVector<SearchEntry> SearchRanker::rank(const QString& query, const QVector<Sear
         int score;
         int index;
     };
+    // Folded ONCE for the whole ranking pass, not once per entry.
+    const QString needle = SearchRanker::foldForSearch(query.trimmed());
     QVector<Scored> scored;
     scored.reserve(entries.size());
     for (int i = 0; i < entries.size(); ++i) {
-        const int s = SearchRanker::score(query, entries.at(i));
+        const int s = scoreWithFoldedNeedle(needle, entries.at(i));
         if (s > 0) {
             scored.push_back({s, i});
         }
@@ -137,8 +204,11 @@ QVector<SearchEntry> SearchRanker::rank(const QString& query, const QVector<Sear
 
 int SearchRanker::editDistance(const QString& a, const QString& b)
 {
-    const QString s = a.toLower();
-    const QString t = b.toLower();
+    return editDistanceFolded(SearchRanker::foldForSearch(a), SearchRanker::foldForSearch(b));
+}
+
+int SearchRanker::editDistanceFolded(const QString& s, const QString& t)
+{
     const int n = s.size();
     const int m = t.size();
     if (n == 0) {
@@ -167,7 +237,10 @@ int SearchRanker::editDistance(const QString& a, const QString& b)
 
 QString SearchRanker::closestTitle(const QString& query, const QVector<SearchEntry>& entries, int maxDistance)
 {
-    const QString needle = query.trimmed();
+    // Folded, so the tolerance is derived from the SAME length editDistance
+    // measures. Sizing it from the raw query while measuring folded strings
+    // made the two disagree for ß-bearing input, where folding changes length.
+    const QString needle = foldForSearch(query.trimmed());
     if (needle.isEmpty()) {
         return QString();
     }
@@ -182,7 +255,10 @@ QString SearchRanker::closestTitle(const QString& query, const QVector<SearchEnt
         if (entry.title.isEmpty()) {
             continue;
         }
-        const int d = editDistance(needle, entry.title);
+        // Both sides pre-folded: editDistance folds its arguments, and the
+        // needle is already folded above, so calling it directly would fold
+        // the needle again for every entry on the slowest path there is.
+        const int d = editDistanceFolded(needle, foldedOr(entry.foldedTitle, entry.title));
         if (d < bestDistance) {
             bestDistance = d;
             bestTitle = entry.title;

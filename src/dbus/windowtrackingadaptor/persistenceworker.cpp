@@ -3,8 +3,8 @@
 
 #include "persistenceworker.h"
 
-#include "../../config/configbackends.h"
-#include "../../core/logging.h"
+#include "config/configbackends.h"
+#include "core/platform/logging.h"
 
 #include <QThread>
 

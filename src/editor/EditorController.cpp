@@ -3,6 +3,7 @@
 
 #include "EditorController.h"
 
+#include "EditorGapsModel.h"
 #include "../config/configbackends.h"
 #include "../config/configdefaults.h"
 #include "services/ILayoutService.h"
@@ -16,11 +17,11 @@
 #include "helpers/ZoneSerialization.h"
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorRules/RuleStoreWatcher.h>
-#include "../core/geometryutils.h"
+#include "core/utils/geometryutils.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/LayoutComputeService.h>
-#include "../core/logging.h"
-#include "../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include "../shaderpreview/shaderpreviewcontroller.h"
 
 #include <PhosphorZones/Layout.h>
@@ -41,6 +42,7 @@ EditorController::EditorController(QObject* parent)
     , m_snappingService(new SnappingService(this))
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
+    , m_gaps(new EditorGapsModel(this, this))
     , m_localRuleStore(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath()))
     , m_localRuleStoreWatcher(std::make_unique<PhosphorRules::RuleStoreWatcher>(*m_localRuleStore))
     , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(),

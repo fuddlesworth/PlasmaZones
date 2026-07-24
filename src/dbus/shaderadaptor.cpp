@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "shaderadaptor.h"
-#include "../core/shaderregistry.h"
+#include "core/interfaces/shaderregistry.h"
 
 namespace PlasmaZones {
 

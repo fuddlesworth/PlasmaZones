@@ -1,24 +1,24 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../daemon.h"
+#include "daemon/daemon.h"
 #include "helpers.h"
 #include "macros.h"
-#include "../overlayservice.h"
-#include "../unifiedlayoutcontroller.h"
-#include "../../config/settings.h"
+#include "daemon/overlayservice.h"
+#include "daemon/controllers/unifiedlayoutcontroller.h"
+#include "config/settings.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include "../../core/constants.h"
-#include "../../core/logging.h"
-#include "../../core/screenmoderouter.h"
-#include "../../core/utils.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
+#include "core/resolve/screenmoderouter.h"
+#include "core/utils/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../../dbus/snapadaptor.h"
-#include "../../dbus/windowtrackingadaptor.h"
+#include "dbus/snapadaptor/snapadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -122,7 +122,6 @@ void Daemon::handleRotate(bool clockwise)
     if (m_rotateDebounce.isValid() && m_rotateDebounce.elapsed() < kShortcutDebounceMs) {
         return;
     }
-    m_rotateDebounce.restart();
 
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
@@ -130,6 +129,10 @@ void Daemon::handleRotate(bool clockwise)
         if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
+        // Restart only on actual dispatch so a guard-rejected press doesn't
+        // consume the window and swallow a valid press that follows within
+        // it. Matches handleSpan.
+        m_rotateDebounce.restart();
         nav->rotateWindows(clockwise, ctx);
     }
 }
@@ -142,7 +145,6 @@ void Daemon::handleFloat()
     if (m_floatDebounce.isValid() && m_floatDebounce.elapsed() < kShortcutDebounceMs) {
         return;
     }
-    m_floatDebounce.restart();
 
     // Float toggles the active window regardless of which screen it's on.
     // The navigatorForShortcut helper pulls both windowId and screenId
@@ -158,6 +160,8 @@ void Daemon::handleFloat()
         if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
+        // Restart only on actual dispatch — see handleSpan.
+        m_floatDebounce.restart();
         nav->toggleFocusedFloat(ctx);
     }
 }
@@ -179,6 +183,49 @@ void Daemon::handleMove(NavigationDirection direction)
         return;
     }
     nav->moveFocusedInDirection(dirStr, ctx);
+}
+
+void Daemon::handleSpan(NavigationDirection direction)
+{
+    // Thin keyboard auto-repeat to one span step per debounce window.
+    // Unlike move, span is not monotonic: once the grow direction hits the
+    // layout boundary the same keypress shrinks the opposite edge, so
+    // unthrottled repeat would grow to the edge and collapse the span at
+    // full repeat rate. Full prevention would need press/repeat
+    // discrimination the shortcut backend doesn't expose; the window slows
+    // the walk enough for the user to release the key.
+    //
+    // One timer covers all four directions, so a deliberate reversal inside
+    // the window (grow right, then grow left within kShortcutDebounceMs) is
+    // dropped too. That is accepted: the reversal corrects a press whose
+    // result the user has not seen yet, and per-direction timers would let
+    // auto-repeat on one arrow chain past a boundary flip while the opposite
+    // arrow was still settling. m_virtualScreenDebounce reasons about
+    // alternation differently because its two ops are not each other's
+    // inverse.
+    if (m_spanDebounce.isValid() && m_spanDebounce.elapsed() < kShortcutDebounceMs) {
+        return;
+    }
+
+    NavigationContext ctx;
+    auto* nav =
+        navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Span");
+    if (!nav) {
+        return;
+    }
+    const QString dirStr = navigationDirectionToString(direction);
+    if (dirStr.isEmpty()) {
+        qCWarning(lcDaemon) << "Unknown span navigation direction:" << static_cast<int>(direction);
+        return;
+    }
+    if (isFocusedContextGated(ctx.screenId)) {
+        return;
+    }
+    // Restart only when the press actually dispatches: a press rejected by
+    // the guards above must not consume the window and swallow a valid
+    // press that follows within it.
+    m_spanDebounce.restart();
+    nav->spanFocusedInDirection(dirStr, ctx);
 }
 
 void Daemon::handleFocus(NavigationDirection direction)
@@ -463,7 +510,6 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     if (m_virtualScreenDebounce.isValid() && m_virtualScreenDebounce.elapsed() < kShortcutDebounceMs) {
         return;
     }
-    m_virtualScreenDebounce.restart();
 
     const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty()) {
@@ -481,6 +527,8 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
         qCWarning(lcDaemon) << "SwapVirtualScreen: unknown direction" << static_cast<int>(direction);
         return;
     }
+    // Restart only on actual dispatch — see handleSpan.
+    m_virtualScreenDebounce.restart();
 
     // Run the swap through the daemon-held swapper. The Result enum carries
     // the rejection reason directly, so the OSD can show a specific failure
@@ -505,7 +553,6 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     if (m_virtualScreenDebounce.isValid() && m_virtualScreenDebounce.elapsed() < kShortcutDebounceMs) {
         return;
     }
-    m_virtualScreenDebounce.restart();
 
     const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty()) {
@@ -515,6 +562,8 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     const QString physId = PhosphorIdentity::VirtualScreenId::isVirtual(screenId)
         ? PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)
         : screenId;
+    // Restart only on actual dispatch — see handleSpan.
+    m_virtualScreenDebounce.restart();
 
     // Swapper is always non-null on the shortcut path — see matching
     // comment in handleSwapVirtualScreen above.

@@ -1,42 +1,42 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../daemon.h"
+#include "daemon/daemon.h"
 #include "helpers.h"
-#include "../overlayservice.h"
-#include "../unifiedlayoutcontroller.h"
-#include "../shortcutmanager.h"
-#include "../../config/settingsconfigstore.h"
+#include "daemon/overlayservice.h"
+#include "daemon/controllers/unifiedlayoutcontroller.h"
+#include "daemon/controllers/shortcutmanager.h"
+#include "config/settingsconfigstore.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
-#include "../../core/geometryutils.h"
-#include "../../core/logging.h"
-#include "../../core/utils.h"
-#include "../../dbus/layoutadaptor.h"
-#include "../../dbus/settingsadaptor.h"
-#include "../../dbus/shaderadaptor.h"
-#include "../../dbus/compositorbridgeadaptor.h"
-#include "../../dbus/controladaptor.h"
-#include "../../dbus/overlayadaptor.h"
-#include "../../dbus/zonedetectionadaptor.h"
-#include "../../dbus/snapadaptor.h"
-#include "../../dbus/windowtrackingadaptor.h"
-#include "../../dbus/windowdragadaptor.h"
-#include "../../dbus/autotileadaptor.h"
+#include "core/utils/geometryutils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
+#include "dbus/layoutadaptor/layoutadaptor.h"
+#include "dbus/settingsadaptor/settingsadaptor.h"
+#include "dbus/shaderadaptor.h"
+#include "dbus/compositorbridgeadaptor.h"
+#include "dbus/controladaptor.h"
+#include "dbus/overlayadaptor.h"
+#include "dbus/zonedetectionadaptor.h"
+#include "dbus/snapadaptor/snapadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
+#include "dbus/autotileadaptor/autotileadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
-#include "../../core/shaderregistry.h"
-#include "../../config/settingsconfigstore.h"
+#include "core/interfaces/shaderregistry.h"
+#include "config/settingsconfigstore.h"
 #include <PhosphorZones/ZoneDetector.h>
 #include <QProcess>
 #include <QPointer>
-#include "../../config/settings.h"
+#include "config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -451,8 +451,8 @@ void Daemon::connectDesktopActivity()
 void Daemon::connectShortcutSignals()
 {
     // NOTE: registerShortcuts() is called by Daemon::start() before this method.
-    // Do NOT call it again here — it would hit the m_registrationInProgress guard
-    // and log a spurious warning.
+    // Do NOT call it again here — it would hit registerShortcuts()'s own
+    // already-registered / in-flight guards and do nothing useful.
 
     // Connect shortcut signals
     // Screen detection: On X11, QCursor::pos() works; on Wayland, background daemons
@@ -537,7 +537,6 @@ void Daemon::connectShortcutSignals()
         if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
             return;
         }
-        m_cycleLayoutDebounce.restart();
         // Screen-targeted (cycles a screen's layout) — resolve cursor-first.
         // See layoutPickerRequested below for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
@@ -545,13 +544,17 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "PreviousLayout shortcut: no screen info";
             return;
         }
+        // Restart once a screen resolves — handleCycleLayout's own locked
+        // path still shows a locked-preview OSD, which counts as the
+        // dispatch this window throttles (unlike handleSpan's guards,
+        // which reject with no user-visible effect).
+        m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, false);
     });
     connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
         if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
             return;
         }
-        m_cycleLayoutDebounce.restart();
         // Screen-targeted (cycles a screen's layout) — resolve cursor-first.
         // See layoutPickerRequested below for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
@@ -559,6 +562,11 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "NextLayout shortcut: no screen info";
             return;
         }
+        // Restart once a screen resolves — handleCycleLayout's own locked
+        // path still shows a locked-preview OSD, which counts as the
+        // dispatch this window throttles (unlike handleSpan's guards,
+        // which reject with no user-visible effect).
+        m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, true);
     });
 
@@ -569,6 +577,9 @@ void Daemon::connectShortcutSignals()
     // Navigation shortcuts — single code path per operation (handleXxx)
     connect(m_shortcutManager.get(), &ShortcutManager::moveWindowRequested, this, [this](NavigationDirection d) {
         handleMove(d);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::spanWindowRequested, this, [this](NavigationDirection d) {
+        handleSpan(d);
     });
     connect(m_shortcutManager.get(), &ShortcutManager::focusZoneRequested, this, [this](NavigationDirection d) {
         handleFocus(d);
@@ -638,6 +649,11 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
             return;
         }
+        // At most one Escape-consuming modal at a time — the cheatsheet's
+        // dedicated Escape grab would key-conflict with the picker's shared
+        // cancel-overlay grab (KGlobalAccel routes one action per key).
+        // Dismissing first releases the cheatsheet grab synchronously.
+        m_overlayService->hideCheatsheet();
         m_unifiedLayoutController->setCurrentScreenName(screenId);
         updateLayoutFilterForScreen(screenId);
         m_overlayService->showLayoutPicker(screenId);
@@ -680,10 +696,46 @@ void Daemon::connectShortcutSignals()
     connect(m_overlayService.get(), &IOverlayService::snapAssistShown, this,
             [this](const QString&, const PhosphorProtocol::EmptyZoneList&,
                    const PhosphorProtocol::SnapAssistCandidateList&) {
+                // Same one-Escape-consumer contract as the picker path: the
+                // cheatsheet's dedicated grab must be gone before the shared
+                // cancel-overlay grab registers, or Escape stays routed to a
+                // dismissed sheet.
+                m_overlayService->hideCheatsheet();
                 if (m_windowDragAdaptor) {
                     m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
                 }
             });
+
+    // Shortcut cheatsheet: toggle on the cursor screen; Escape grab is
+    // bound inside toggleCheatsheet (only on a successful show) and
+    // released on ANY dismissal path via cheatsheetDismissed.
+    connect(m_shortcutManager.get(), &ShortcutManager::toggleCheatsheetRequested, this, [this]() {
+        toggleCheatsheet();
+    });
+    connect(m_overlayService.get(), &OverlayService::cheatsheetDismissed, this, [this]() {
+        onCheatsheetDismissed();
+    });
+    // Live refilter while the sheet is open: catalog changes (rebinds,
+    // external System Settings edits), per-screen mode switches, and the
+    // global autotile feature gate all re-push into the visible slot.
+    // Each refresh re-resolves the mode for the sheet's BOUND screen, so
+    // over-triggering is safe and cheap (no-op when hidden).
+    connect(m_shortcutManager.get(), &ShortcutManager::cheatsheetModelChanged, this, [this]() {
+        refreshCheatsheetIfVisible();
+    });
+    // The controller-driven mode-refresh connects (layoutApplied /
+    // autotileApplied → refreshCheatsheetIfVisible) live in
+    // connectLayoutSignals(): this function runs BEFORE
+    // initializeUnifiedController() creates the controller, so a connect
+    // guarded on m_unifiedLayoutController here would never fire.
+    if (m_settings) {
+        // Tracked handle: m_settings is deliberately excluded from stop()'s
+        // per-sender sweep (its ctor/init connections must survive), so this
+        // per-start connection is severed individually.
+        m_perStartConnections.append(connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
+            refreshCheatsheetIfVisible();
+        }));
+    }
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
         // Release the shared Escape grab only when no other consumer (snap
         // assist) still needs it — releaseCancelOverlayShortcutIfIdle() is the

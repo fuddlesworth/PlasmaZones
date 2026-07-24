@@ -359,14 +359,33 @@ private:
     void releaseRhiResources();
     void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
     void appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
-    void appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
+    /// How the pass an SRB belongs to touches the depth texture.
+    ///
+    /// Every buffer render target carries the depth texture as its second
+    /// colour attachment (ensureBufferTarget), so a buffer pass WRITES it.
+    /// Binding it as a sampled texture in that same pass's SRB is a read and a
+    /// write of one texture inside a single render pass, which QRhi rejects
+    /// ("Texture ... used with different accesses within the same pass, this is
+    /// not allowed") — it showed up on the overlay packs that pair `multipass`
+    /// with `depthBuffer` (neon-city, voxel-terrain). Those buffer shaders only
+    /// ever write depth (`layout(location = 1) out float oDepth`); reading it
+    /// back is the image pass's job, and the depth.glsl helper lives on the
+    /// image side. So a writing pass gets the dummy texture at binding 12 —
+    /// a valid binding for a shader that includes depth.glsl anyway, rather
+    /// than a missing one.
+    enum class DepthAccess {
+        Sampled, ///< Image pass: binds the real depth texture.
+        WrittenThisPass ///< Buffer pass: depth is an attachment, bind the dummy.
+    };
+    void appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings, DepthAccess access) const;
     void appendExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
     void appendAudioBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     /// UBO at binding 0 + consumer-managed extra bindings (e.g. binding 1).
     void appendUboAndExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
     /// Bindings 6 (audio), 7-10 (user textures), 11 (wallpaper), 12 (depth) —
-    /// shared trailer between buffer-pass and image-pass SRBs.
-    void appendCommonTrailerBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
+    /// shared trailer between buffer-pass and image-pass SRBs. @p depthAccess
+    /// is the one thing the two differ on; see DepthAccess.
+    void appendCommonTrailerBindings(QVector<QRhiShaderResourceBinding>& bindings, DepthAccess depthAccess) const;
     void resetAllBindingsAndPipelines();
     void bakeBufferShaders();
     QString loadAndExpandShader(const QString& path, QString* outError);
@@ -619,6 +638,12 @@ private:
     /// the source provider's QRhiTexture comes from a different QRhi than our
     /// own (cross-window provider). Prevents log spam.
     bool m_warnedForeignRhi = false;
+    /// One-shot latches for the audio-spectrum diagnostics. Both conditions
+    /// persist across frames by design (an oversized vector stays oversized;
+    /// the create() retry is per-frame), so without a latch each would log at
+    /// spectrum cadence. Cleared in releaseRhiResources() beside the RHI latch.
+    bool m_warnedAudioTruncated = false;
+    bool m_warnedAudioCreateFailed = false;
     /// 1×1 transparent fallback texture used when a source provider is set
     /// but has not yet produced a usable QRhiTexture (or its texture lives
     /// on a foreign QRhi). Bound at slot 0 instead of falling through to

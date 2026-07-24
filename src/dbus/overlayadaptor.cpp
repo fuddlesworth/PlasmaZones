@@ -3,16 +3,16 @@
 
 #include "overlayadaptor.h"
 #include "dbushelpers.h"
-#include "../core/interfaces.h"
-#include "../core/dmabufthumbnail.h"
-#include "../core/ioverlayservice.h"
+#include "core/interfaces/interfaces.h"
+#include "core/types/dmabufthumbnail.h"
+#include "core/interfaces/ioverlayservice.h"
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "../core/constants.h"
-#include "../core/logging.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
 #include <PhosphorScreens/Manager.h>
-#include "../core/utils.h"
+#include "core/utils/utils.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <QDBusConnection>

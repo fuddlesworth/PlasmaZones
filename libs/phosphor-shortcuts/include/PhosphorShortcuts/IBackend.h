@@ -6,6 +6,9 @@
 #include <QKeySequence>
 #include <QObject>
 #include <QString>
+#include <QStringList>
+
+#include <optional>
 
 #include "phosphorshortcuts_export.h"
 
@@ -113,6 +116,44 @@ public:
      */
     virtual void flush() = 0;
 
+    /**
+     * The key sequence(s) the backend believes are EFFECTIVELY bound for an
+     * id right now — i.e. what the user actually has to press, including any
+     * override applied outside this process (System Settings rebind on
+     * KGlobalAccel, compositor-assigned trigger on Portal).
+     *
+     * Returned as display strings rather than QKeySequence because the XDG
+     * Portal only reports a human-readable `trigger_description`; backends
+     * that do have structured sequences (KGlobalAccel) return
+     * QKeySequence::toString(QKeySequence::PortableText) per sequence. The
+     * strings are DISPLAY-ONLY and not format-stable across backends —
+     * Portal relays the compositor's localized description verbatim while
+     * KGlobalAccel yields PortableText — so callers must not string-compare
+     * results across backends or parse them back into sequences.
+     *
+     * Tri-state on purpose:
+     *  - std::nullopt   → this backend cannot report for the id; callers
+     *    fall back to their own stored current sequence.
+     *  - engaged, empty → the backend reports the id as unbound as far as
+     *    it can tell (e.g. the user cleared the key in System Settings).
+     *    Callers must NOT fall back — the stored sequence is stale. This is
+     *    a best-effort report, not a hard guarantee that the user cleared
+     *    the key: a momentarily unavailable binding service (kglobalacceld
+     *    down, grab not yet landed) can also read back empty, in which case
+     *    the display shows unbound until the next triggersChanged report.
+     *  - engaged, non-empty → the effective trigger strings.
+     * Folding the first two into one empty list made a cleared binding
+     * display as its stale stored value.
+     *
+     * The default implementation reports nullopt (correct for the D-Bus
+     * trigger fallback, which has no key grabs at all).
+     */
+    virtual std::optional<QStringList> currentTriggers(const QString& id) const
+    {
+        Q_UNUSED(id);
+        return std::nullopt;
+    }
+
 Q_SIGNALS:
     /**
      * Emitted when the backend observes the user triggering a registered
@@ -126,6 +167,16 @@ Q_SIGNALS:
      * here.
      */
     void ready();
+
+    /**
+     * Emitted when the effective binding for an id changes outside the
+     * register/update flow — e.g. the user rebinds it in System Settings
+     * (KGlobalAccel) or the compositor confirms/assigns a trigger (Portal
+     * BindShortcuts Response). Consumers displaying bindings re-query
+     * currentTriggers() on this signal. Backends that cannot observe
+     * external changes simply never emit it.
+     */
+    void triggersChanged(QString id);
 };
 
 } // namespace PhosphorShortcuts

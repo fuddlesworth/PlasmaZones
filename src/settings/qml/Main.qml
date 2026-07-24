@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import QtCore
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -19,14 +20,21 @@ import org.plasmazones.common as QFZCommon
 // Discard/Keep prompt), the toast, the shortcut overlay, and the
 // What's-New banner that pops on first launch after an update.
 PhosphorUi.SettingsAppWindow {
-    // Aspect-ratio labels consumed by the layout context menu's
-    // submenu — kept at window scope rather than inside the Menu so
-    // future consumers (Per-Screen Override picker, Layouts page) can
-    // bind to the same canonical i18n strings without duplicating them.
-
     id: window
 
     // ── Public API used by per-page QML files ───────────────────────
+    // The `settingsController` / `appSettings` context properties from
+    // main.cpp, re-exposed under distinct names. A child that declares a
+    // required property of the SAME name cannot be wired with
+    // `Foo { appSettings: appSettings }`: the right-hand side resolves
+    // against Foo's own scope first, so the binding points the property at
+    // itself and it stays undefined (context properties sit at the bottom
+    // of the lookup order). Wire such children from these names instead.
+    // Same two names every page already uses for the same capture (see
+    // LayoutsPage / GeneralPage / TilingAlgorithmPage…), so there is one
+    // spelling for one idea across the settings tree.
+    readonly property var controllerBridge: settingsController
+    readonly property var settingsBridge: appSettings
     // Pages reach the layout-context popup via window.layoutContextMenu.
     readonly property alias layoutContextMenu: layoutContextMenu
     // GeneralPage's "Reset to Defaults" button reaches the chrome-owned
@@ -37,7 +45,12 @@ PhosphorUi.SettingsAppWindow {
     // against the page's own scope (Loader breaks file-id lookup),
     // throwing `ReferenceError: defaultsConfirmDialog is not defined`
     // at runtime and leaving the user with no path to reset defaults.
-    readonly property alias defaultsConfirmDialog: defaultsConfirmDialog
+    readonly property alias defaultsConfirmDialog: confirmDialogs.defaults
+    // Aspect-ratio labels consumed by the layout context menu's submenu, kept
+    // at window scope rather than inside the Menu so future consumers
+    // (Per-Screen Override picker, Layouts page) can bind to the same
+    // canonical i18n strings without duplicating them.
+    //
     // Kept as an object literal for back-compat with any QML reader that
     // expects index-by-key access (a Repeater iterates the keys / a
     // delegate looks up by aspect-ratio key). Reading any value here
@@ -62,6 +75,31 @@ PhosphorUi.SettingsAppWindow {
             "super-ultrawide": aspectRatioLabelsObject.superUltrawide,
             "portrait": aspectRatioLabelsObject.portrait
         })
+    // Name of the profile that a Save would apply: the STAGED-active row,
+    // refreshed from the bridge on profilesChanged (every staged-active
+    // mutation announces itself through that signal). Empty when no profile
+    // is active. The footer message that consumes it is additionally gated on
+    // the Profiles page being dirty, so it surfaces for any staged profile
+    // edit, not only a staged switch.
+    property string _pendingProfileName
+
+    // Make the Save footer say what Save will actually do when the batch
+    // includes a profile switch: a plain "Unsaved changes" hides that the
+    // staged edits ARE the selected profile's settings.
+    unsavedChangesMessage: settingsController.profilesPage && settingsController.profilesPage.dirty && window._pendingProfileName.length > 0 ? i18n("Unsaved changes. Saving applies the profile “%1”.", window._pendingProfileName) : ""
+
+    function _refreshPendingProfileName() {
+        const page = settingsController.profilesPage;
+        const rows = page && page.bridge ? page.bridge.availableProfiles() : [];
+        for (let i = 0; i < rows.length; ++i) {
+            if (rows[i].active) {
+                window._pendingProfileName = rows[i].name;
+                return;
+            }
+        }
+        window._pendingProfileName = "";
+    }
+
     // Keyboard-shortcut overlay state.
     property bool _showShortcuts: false
 
@@ -99,6 +137,40 @@ PhosphorUi.SettingsAppWindow {
         toast.show(msg);
     }
 
+    Connections {
+        // resetPage stages nothing when it refuses, so the page simply stays
+        // as it was. Without a word from here the user reads that as "Reset
+        // did nothing because there was nothing to reset".
+        function onPageResetFailed(page, reason) {
+            // The signal carries the id so the shell can name the page. Fall
+            // back to the generic wording when the id resolves to nothing.
+            //
+            // It also carries WHY, because the two branches that refuse fail
+            // for unrelated reasons: one could not read the daemon's slot map,
+            // the other could not clear an override while a discard still owns
+            // it. Naming the daemon on the second would be a false explanation.
+            const title = settingsController.app.registry.pageData(page).title || "";
+            const named = title.length > 0;
+            if (reason === "overrides-not-cleared") {
+                window.showToast(named ? i18n("Some settings on %1 are still being saved, so it was left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so it was left unchanged. Try again in a moment."));
+                return;
+            }
+            window.showToast(named ? i18n("Could not reach the PlasmaZones service, so %1 was left unchanged.", title) : i18n("Could not reach the PlasmaZones service, so this page was left unchanged."));
+        }
+
+        // discardPage reconciles value-based when a revert refuses, so the page
+        // stays badged with no other word. It refuses for only one reason (an
+        // override file still being written), so there is no daemon-unreachable
+        // branch to distinguish here.
+        function onPageDiscardFailed(page, reason) {
+            const title = settingsController.app.registry.pageData(page).title || "";
+            const named = title.length > 0;
+            window.showToast(named ? i18n("Some settings on %1 are still being saved, so they were left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so they were left unchanged. Try again in a moment."));
+        }
+
+        target: settingsController
+    }
+
     // Page-controller toasts, wired once here rather than per page. A refusal can
     // be raised from a controller while a completely different page is loaded (a
     // Reset blocked by an in-flight discard, say), and a page-scoped Connections
@@ -132,6 +204,22 @@ PhosphorUi.SettingsAppWindow {
         }
     }
 
+    // The profile store's refusals also cross pages: the sticky sidebar
+    // switcher can activate a profile from anywhere, so a schema-mismatch
+    // toast raised on, say, the Snapping page must still surface. The same
+    // scope applies to the staged-active name the footer message shows.
+    Connections {
+        target: settingsController.profilesPage ? settingsController.profilesPage.bridge : null
+
+        function onToastRequested(text) {
+            window.showToast(text);
+        }
+
+        function onProfilesChanged() {
+            window._refreshPendingProfileName();
+        }
+    }
+
     controller: settingsController.app
     title: i18n("PlasmaZones Settings")
     // Sized in Kirigami grid units so the window scales with the
@@ -152,7 +240,8 @@ PhosphorUi.SettingsAppWindow {
     navigationShortcutsEnabled: window._navShortcutsEnabled
 
     // Global search in the header toolbar (headerExtras slot). It supersedes the
-    // in-sidebar page-tree filter, which is disabled in Component.onCompleted.
+    // in-sidebar page-tree filter, which is switched off by the declarative
+    // `sidebar.searchEnabled: false` further down this file.
     headerExtras: Component {
         GlobalSearchField {
             // SettingsAppWindow paints the header band itself with the Header
@@ -164,6 +253,13 @@ PhosphorUi.SettingsAppWindow {
             // Declared inline in Main.qml, so it can reach `window` to feed the
             // page-step shortcut guard while the results dropdown is open.
             onSearchOpenChanged: window._searchOpen = searchOpen
+            // App-level action results. Ids come from seedSearchCatalog
+            // (searchcatalog.cpp); dispatch lives here because actions act
+            // on window chrome the library knows nothing about.
+            onActionTriggered: actionId => {
+                if (actionId === "show-shortcut-overlay")
+                    window._showShortcuts = true;
+            }
         }
     }
 
@@ -225,14 +321,14 @@ PhosphorUi.SettingsAppWindow {
                 // "on" until the daemon actually stops. Turning OFF kills tiling
                 // + snapping for the whole session, so confirm first; turning ON
                 // applies immediately.
-                // Routes through the root-level daemonStopConfirm (declared
-                // beside the other inline confirm dialogs) so the page-nav
-                // shortcut guard can see its `visible` state.
+                // Routes through confirmDialogs.daemonStop (a root-level dialog
+                // in ConfirmDialogs.qml) so the page-nav shortcut guard can see
+                // its `visible` state.
                 onToggled: function (newValue) {
                     if (newValue)
                         settingsController.daemonController.setEnabled(true);
                     else
-                        daemonStopConfirm.open();
+                        confirmDialogs.daemonStop.open();
                 }
             }
         }
@@ -241,69 +337,77 @@ PhosphorUi.SettingsAppWindow {
     // Per-page overflow (kebab) in the breadcrumb row: Reset this page to
     // defaults / Discard this page's unsaved changes. Shown on any page that
     // supports at least one action. The two items query pageSupportsReset /
-    // pageSupportsDiscard separately so a future discard-only page can show just
-    // Discard; today every resettable page is also discardable, so the two
-    // predicates match. Both route through a window-scoped confirm.
+    // pageSupportsDiscard separately, and the two sets are not the same:
+    // pageSupportsDiscard also accepts a parent category, which discardPage
+    // handles by walking the group. Both route through a window-scoped confirm.
     breadcrumbTrailing: Component {
-        ToolButton {
-            id: pageActionsButton
+        Row {
+            spacing: 0
 
-            // Re-evaluates on activePageChanged (activePage is referenced), so
-            // the button appears/disappears as the user moves between pages.
-            visible: settingsController.pageSupportsReset(settingsController.activePage) || settingsController.pageSupportsDiscard(settingsController.activePage)
-            icon.name: "overflow-menu"
-            display: AbstractButton.IconOnly
-            text: i18n("Page actions")
-            Accessible.name: i18n("Page actions")
+            // Discoverability affordance for the help overlay: the "?"
+            // shortcut is invisible until you already know it, so give it a
+            // permanent button in the chrome. Sits before the per-page
+            // kebab, always visible.
+            ToolButton {
+                icon.name: "input-keyboard"
+                display: AbstractButton.IconOnly
+                text: i18n("Keyboard shortcuts")
+                Accessible.name: i18n("Keyboard shortcuts")
+                ToolTip.visible: hovered
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+                ToolTip.text: i18nc("@info:tooltip, ? is the keyboard shortcut", "Keyboard shortcuts (?)")
+                onClicked: window._showShortcuts = !window._showShortcuts
+            }
 
-            onClicked: pageActionsMenu.popup()
+            ToolButton {
+                id: pageActionsButton
 
-            Menu {
-                id: pageActionsMenu
+                // Re-evaluates on activePageChanged and on a mode flip, via
+                // activeDirtyScope's NOTIFY. Both items are queried against the
+                // SCOPE they act on, not the page: on a condensed page those
+                // differ, and gating the button on the narrower id would hide
+                // the controls that clear what the rail's badge reports. Reset
+                // and Discard both act on activeDirtyScope now.
+                visible: settingsController.pageSupportsReset(settingsController.activeDirtyScope) || settingsController.pageSupportsDiscard(settingsController.activeDirtyScope)
+                icon.name: "overflow-menu"
+                display: AbstractButton.IconOnly
+                text: i18n("Page actions")
+                Accessible.name: i18n("Page actions")
 
-                MenuItem {
-                    text: i18n("Reset page to defaults")
-                    Accessible.name: text
-                    icon.name: "document-revert"
-                    visible: settingsController.pageSupportsReset(settingsController.activePage)
-                    // Disabled while a global Save/Discard batch is in flight: a
-                    // per-page reset mid-batch could race the async revert (e.g.
-                    // the animation controller's async file restore) and leave a
-                    // partial reset.
-                    enabled: !settingsController.app.applying && !settingsController.app.discarding
-                    onTriggered: resetPageConfirmDialog.open()
-                }
-
-                MenuItem {
-                    text: i18n("Discard changes on this page")
-                    Accessible.name: text
-                    icon.name: "edit-undo"
-                    visible: settingsController.pageSupportsDiscard(settingsController.activePage)
-                    // Enabled only when the page carries unsaved edits and no
-                    // global Save/Discard batch is in flight. `dirtyPages` is
-                    // referenced purely to re-run this binding on
-                    // dirtyPagesChanged (isPageDirty itself is a function call
-                    // whose only QML dependency would otherwise be activePage).
-                    enabled: {
-                        void settingsController.dirtyPages;
-                        return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.activePage);
-                    }
-                    onTriggered: discardPageConfirmDialog.open()
-                }
+                // The Menu lives at window root (beside layoutContextMenu),
+                // NOT inside this delegate — see the note on it.
+                onClicked: pageActionsMenu.popup(pageActionsButton)
             }
         }
     }
 
+    // Persisted simple/advanced UI mode. Uses the same QtCore.Settings
+    // mechanism the filter/sort chrome uses (LayoutFilterBar, ShaderBrowserPage)
+    // rather than daemon config — it is settings-app-local UI state. The
+    // default (no stored value yet) reads the controller's own default at
+    // startup, so "what mode does a brand-new user get" is defined in ONE
+    // place: SettingsController::m_advancedMode. The stored value is pushed
+    // into the controller at startup (Component.onCompleted below) and the
+    // sidebar footer toggle writes user flips back here.
+    Settings {
+        id: uiModeSettings
+        category: "UiMode"
+        property bool advancedMode: settingsController.advancedMode
+    }
+
     Component.onCompleted: {
+        // Restore the remembered simple/advanced mode before anything else so
+        // the sidebar's first filtered build and the drill-state restore below
+        // both see the correct mode (a simple-mode restore may redirect the
+        // active page off an advanced-only target).
+        settingsController.advancedMode = uiModeSettings.advancedMode;
+
         // Zone previews app-wide must show the EFFECTIVE zone colors (the
         // same settings pipeline the daemon pushes into its overlays). The
         // ZoneColorDefaults singleton cannot resolve the appSettings context
         // property itself (compiled-module singletons have no root-context
         // chain), so inject it once here.
         QFZCommon.ZoneColorDefaults.settingsSource = appSettings;
-
-        // The header search supersedes the sidebar's page-tree search.
-        window.sidebar.searchEnabled = false;
 
         var geo = settingsController.loadWindowGeometry();
         if (geo.width > 0 && geo.height > 0) {
@@ -328,7 +432,31 @@ PhosphorUi.SettingsAppWindow {
     // both at restore-time (Component.onCompleted) AND when activePage
     // changes externally (CLI --page, daemon broadcast, shortcut). DRY
     // the chain-walk so future tweaks happen in one place.
+    // Re-run on a mode flip: the flat rail has no scopes, but flipping back
+    // to the tree rail must restore the drill scope for the active page.
+    // Without this a mode-agnostic page (Rules, Layouts) leaves the rail at
+    // top level while the active page is nested — the counterpart pages only
+    // get there incidentally, via the redirect's activePageChanged.
+    Connections {
+        function onAdvancedModeChanged() {
+            // Deferred: `sidebar.flattenTree` is bound to the same property
+            // this signal announces, and nothing orders a binding update
+            // against a Connections handler. Running inline could observe a
+            // still-true flattenTree, in which case BOTH the guard below and
+            // Sidebar.drillInto early-return and the scope is never restored
+            // — the exact bug this block exists to fix. callLater runs after
+            // the emission settles.
+            Qt.callLater(window._drillIntoActivePage);
+        }
+
+        target: settingsController
+    }
+
     function _drillIntoActivePage() {
+        // Flat simple-mode rail has no drill scopes — every page is a
+        // top-level row, so there is nothing to restore into.
+        if (window.sidebar.flattenTree)
+            return;
         const chain = settingsController.app.parentChainFor(settingsController.activePage);
         for (let i = chain.length - 1; i >= 0; --i) {
             const entry = settingsController.app.registry.pageData(chain[i]);
@@ -451,12 +579,13 @@ PhosphorUi.SettingsAppWindow {
     }
 
     // ── Ctrl+PgUp / Ctrl+PgDown — step through navigable pages ──────
-    // Guarded: page navigation must not fire while any of the inline
-    // confirm dialogs (whatsNewDialog,
-    // defaultsConfirmDialog, sectionToggleDiscardConfirm, daemonStopConfirm,
-    // resetPageConfirmDialog, discardPageConfirmDialog),
+    // Guarded: page navigation must not fire while the What's-New dialog is
+    // up, while any chrome confirm dialog is open (confirmDialogs.anyOpen
+    // covers all five), while either of the
+    // window-root menus (layoutContextMenu, pageActionsMenu) is open,
     // the shortcut
-    // overlay, the active page's own modal stack (RulesPage's
+    // overlay, the global search dropdown, the sidebar profile switcher's
+    // dropdown, the active page's own modal stack (RulesPage's
     // forceSaveConfirm / addRuleWizard / ruleEditorSheet /
     // windowPickerDialog), OR a native child window (QtQuick FileDialog,
     // system color picker, etc.) is open. The `window.active` check
@@ -465,12 +594,6 @@ PhosphorUi.SettingsAppWindow {
     // overlays that don't change the window's active state. Without the
     // combined guard the user could navigate the underlying page state
     // while interacting with any of these prompts.
-    //
-    // Page-level modals are surfaced via an optional `anyModalOpen`
-    // property on the active page item — the active page lives inside
-    // the framework-owned PageHost Loader, so we read it via the
-    // settingsApp activeFocusItem chain. Pages that haven't opted into
-    // the property contribute false; the guard stays correct.
     /// Cross-cutting flag that pages opt into by writing through
     /// `window._pageOwnedModalOpen` when they open / close their own
     /// modal stack. RulesPage publishes its
@@ -485,10 +608,17 @@ PhosphorUi.SettingsAppWindow {
     /// True while the global search dropdown is open — suppresses page-step
     /// shortcuts so ↑/↓/Enter drive the results list, not page navigation.
     property bool _searchOpen: false
+    /// True while the sidebar profile switcher's dropdown is open. Mirrored
+    /// out of the header Component (whose ids are not reachable from this
+    /// scope) by its onPopupOpenChanged handler, and force-cleared when that
+    /// delegate is destroyed — the combo hides in the compact rail, and a
+    /// destruction mid-popup would otherwise latch this true forever and
+    /// kill Ctrl+PgUp/PgDown for the rest of the session.
+    property bool _profilePopupOpen: false
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !confirmDialogs.anyOpen && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen && !window._profilePopupOpen && !pageActionsMenu.visible
 
     Shortcut {
         sequence: "Ctrl+PgUp"
@@ -542,162 +672,79 @@ PhosphorUi.SettingsAppWindow {
     LayoutContextMenu {
         id: layoutContextMenu
 
-        settingsController: settingsController
-        appSettings: appSettings
+        settingsController: window.controllerBridge
+        appSettings: window.settingsBridge
         aspectRatioLabels: window.aspectRatioLabels
     }
-    Kirigami.PromptDialog {
-        id: defaultsConfirmDialog
 
-        title: i18n("Restore Defaults")
-        subtitle: i18n("Are you sure you want to reset all settings to their default values?")
-        standardButtons: Kirigami.Dialog.NoButton
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Restore Defaults")
-                icon.name: "document-revert"
-                onTriggered: {
-                    defaultsConfirmDialog.close();
-                    settingsController.defaults();
-                }
-            },
-            Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel"
-                onTriggered: defaultsConfirmDialog.close()
+    // ── Per-page kebab menu (Reset / Discard this page). Lives HERE at
+    // window root — not inside the breadcrumbTrailing delegate whose
+    // button opens it — for the same reason as layoutContextMenu: a Menu
+    // destroyed with its delegate risks the Qt6 SIGSEGV, and an open menu
+    // dying with the delegate would strand the _navShortcutsEnabled guard
+    // (visibleChanged never fires during destruction). Root placement
+    // also lets the guard read `pageActionsMenu.visible` directly. ──
+    Menu {
+        id: pageActionsMenu
+
+        MenuItem {
+            text: i18n("Reset page to defaults")
+            Accessible.name: text
+            icon.name: "document-revert"
+            // Queried against activeDirtyScope, matching Discard below and the
+            // resetPage(activeDirtyScope) call the confirm dialog makes: on a
+            // condensed simple page the scope is the whole feature area, and
+            // asking the narrower id would hide Reset in simple mode entirely
+            // (the scope is a group id no leaf branch of pageSupportsReset
+            // accepts). In advanced mode the scope equals the active page.
+            visible: settingsController.pageSupportsReset(settingsController.activeDirtyScope)
+            // Disabled while a global Save/Discard batch is in flight: a
+            // per-page reset mid-batch could race the async revert (e.g.
+            // the animation controller's async file restore) and leave a
+            // partial reset.
+            enabled: !settingsController.app.applying && !settingsController.app.discarding
+            onTriggered: confirmDialogs.resetPage.open()
+        }
+
+        MenuItem {
+            text: i18n("Discard changes on this page")
+            Accessible.name: text
+            icon.name: "edit-undo"
+            visible: settingsController.pageSupportsDiscard(settingsController.activeDirtyScope)
+            // Enabled only when the page carries unsaved edits and no
+            // global Save/Discard batch is in flight. `dirtyPages` is
+            // referenced purely to re-run this binding on
+            // dirtyPagesChanged (isPageDirty itself is a function call
+            // whose only QML dependency would otherwise be activePage).
+            //
+            // Queried against activeDirtyScope, not activePage: a condensed
+            // page is the sole visible row for its whole feature area, so its
+            // badge already counts the area's hidden leaves. Asking the
+            // narrower id here would grey out the one control that can clear
+            // what the badge reports. The property NOTIFYs on both a page
+            // change and a mode flip, so unlike a bare dirtyScopeFor(activePage)
+            // call it does not strand this binding on the pre-flip scope.
+            enabled: {
+                void settingsController.dirtyPages;
+                return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.activeDirtyScope);
             }
-        ]
+            onTriggered: confirmDialogs.discardPage.open()
+        }
     }
-
-    // Per-page Reset — restores just the active page's settings to their
-    // defaults, staged for Save/Discard (opened from the breadcrumb kebab).
-    Kirigami.PromptDialog {
-        id: resetPageConfirmDialog
-
-        title: i18n("Reset Page to Defaults")
-        subtitle: i18n("Reset the settings on this page to their default values? You can still review the result and Save or Discard afterwards.")
-        standardButtons: Kirigami.Dialog.NoButton
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Reset Page")
-                icon.name: "document-revert"
-                onTriggered: {
-                    resetPageConfirmDialog.close();
-                    settingsController.resetPage(settingsController.activePage);
-                }
-            },
-            Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel"
-                onTriggered: resetPageConfirmDialog.close()
-            }
-        ]
-    }
-
-    // Per-page Discard — reverts just the active page's unsaved edits to the
-    // last-saved values, leaving other pages' changes intact.
-    Kirigami.PromptDialog {
-        id: discardPageConfirmDialog
-
-        title: i18n("Discard Page Changes")
-        subtitle: i18n("Discard the unsaved changes on this page? Changes on other pages are kept.")
-        standardButtons: Kirigami.Dialog.NoButton
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Discard")
-                icon.name: "edit-undo"
-                onTriggered: {
-                    discardPageConfirmDialog.close();
-                    settingsController.discardPage(settingsController.activePage);
-                }
-            },
-            Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel"
-                onTriggered: discardPageConfirmDialog.close()
-            }
-        ]
-    }
-
-    // Confirm dialog for the sidebar's inline snapping/tiling toggle when
-    // the relevant page has unsaved edits. Disabling the section through
-    // beginExternalEdit/endExternalEdit commits the *_Enabled flag plus
-    // whatever the page has staged dirty — without this gate the user
-    // could silently apply a partial edit by flipping the sidebar toggle.
-    Kirigami.PromptDialog {
-        id: sectionToggleDiscardConfirm
-
-        // Set by the trailing-delegate SettingsSwitch before open(); the
-        // confirm action reads them to know which section to commit and
-        // what value to set.
-        property string pendingSection: ""
-        property bool pendingValue: false
-
-        title: i18n("Discard unsaved changes?")
-        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?")
-        standardButtons: Kirigami.Dialog.NoButton
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Discard and Disable")
-                icon.name: "edit-undo"
-                onTriggered: {
-                    const section = sectionToggleDiscardConfirm.pendingSection;
-                    const value = sectionToggleDiscardConfirm.pendingValue;
-                    sectionToggleDiscardConfirm.close();
-                    // Discard the section's staged edits first, THEN flip the
-                    // enable flag — otherwise the inline beginExternalEdit /
-                    // endExternalEdit pair would surface the still-staged edits
-                    // alongside the disable. discardPage("snapping"/"tiling")
-                    // reverts every manifest-backed leaf under that mode back to
-                    // the committed baseline (the framework PageAdapter.discard()
-                    // for these virtual parents is a no-op, so the old
-                    // registry.controller(section).discard() call did nothing).
-                    settingsController.discardPage(section);
-                    settingsController.beginExternalEdit(section);
-                    if (section === "snapping")
-                        appSettings.snappingEnabled = value;
-                    else
-                        appSettings.autotileEnabled = value;
-                    settingsController.endExternalEdit();
-                }
-            },
-            Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel"
-                onTriggered: sectionToggleDiscardConfirm.close()
-            }
-        ]
-    }
-
-    // Confirm before stopping the daemon from the header toggle. Declared at the
-    // window root (not in the headerTrailing Component) so the page-nav shortcut
-    // guard `_navShortcutsEnabled` can read its `visible` state; the header
-    // SettingsSwitch opens it via outer-scope reference.
-    Kirigami.PromptDialog {
-        id: daemonStopConfirm
-
-        title: i18n("Stop daemon?")
-        subtitle: i18n("Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.")
-        standardButtons: Kirigami.Dialog.Cancel
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Stop daemon")
-                icon.name: "system-shutdown"
-                onTriggered: {
-                    settingsController.daemonController.setEnabled(false);
-                    daemonStopConfirm.close();
-                }
-            }
-        ]
+    // Chrome-owned confirmation prompts (Restore Defaults, per-page Reset /
+    // Discard, the section-toggle discard, Stop daemon). Split into their own
+    // component when this file passed the 1150-line ceiling.
+    ConfirmDialogs {
+        id: confirmDialogs
     }
 
     // ── Keyboard-shortcut overlay ───────────────────────────────────
     KeyboardShortcutOverlay {
         parent: window.contentItem
-        // `appSettings` is the context property exposed by main.cpp;
-        // pass it explicitly through the new required property so the
-        // overlay no longer relies on the implicit context-name match.
-        appSettings: appSettings
+        // `appSettings` is the context property exposed by main.cpp,
+        // reached through window.settingsBridge because the overlay's
+        // own required property of that name shadows the context one.
+        appSettings: window.settingsBridge
         shown: window._showShortcuts
         onDismiss: window._showShortcuts = false
     }
@@ -726,6 +773,115 @@ PhosphorUi.SettingsAppWindow {
     //      without having to drill in.
     //   2. Inline SettingsSwitch on the snapping / tiling rows so a
     //      whole feature can be disabled without drilling in.
+    // Simple mode gets a completely flat rail: every visible page as one
+    // top-level row, no category headers or drill-downs. Advanced mode
+    // keeps the full tree. The window-appearance leaf is registered as
+    // Decorations → "General"; standing alone it must read "Appearance".
+    //
+    // The override titles are backed by a QtObject for the same reason
+    // aspectRatioLabelsObject is: the map itself is a `property var` bound to
+    // an object literal, which is frozen at construction time, so an i18n()
+    // call written inline would keep the language active during first
+    // instantiation. Each label is its own binding on the QtObject, which
+    // re-evaluates on QML's language-change signal and pushes a fresh map out
+    // through the literal.
+    QtObject {
+        id: flatTitleLabelsObject
+
+        readonly property string windowAppearance: i18n("Appearance")
+    }
+
+    // Constant, so declarative alongside its siblings rather than an
+    // imperative write in Component.onCompleted.
+    sidebar.searchEnabled: false
+    sidebar.flattenTree: !settingsController.advancedMode
+    sidebar.flatTitleOverrides: ({
+            "window-appearance": flatTitleLabelsObject.windowAppearance
+        })
+
+    // Simple/advanced mode toggle, pinned at the bottom of the sidebar — it
+    // lives with the navigation it reconfigures instead of floating in the
+    // header, using the rail's established label + switch row shape (the
+    // same layout as the Snapping/Tiling enable rows). Fully controlled:
+    // `checked` reads the controller and the toggle writes both the
+    // controller (live) and the QtCore.Settings store (persisted).
+    //
+    // Compact-aware: this toggle is the only route into advanced mode, so it
+    // must survive the icon-only rail. Declaring `property bool compact` opts
+    // out of the footer slot's default suppression (Sidebar.qml hides
+    // compact-unaware footers outright), and the sidebar feeds the live value
+    // in. The compact form drops the label and centres the switch, with the
+    // label moved into a hover tooltip the way SidebarRow does it.
+    sidebar.footerContent: Component {
+        Item {
+            id: advancedModeFooter
+
+            property bool compact: false
+
+            implicitHeight: advancedModeRow.implicitHeight + Kirigami.Units.largeSpacing * 2
+
+            RowLayout {
+                id: advancedModeRow
+
+                anchors.fill: parent
+                // Match the rail rows' horizontal inset (SidebarRow pads by
+                // largeSpacing, and drops to smallSpacing when compact) and
+                // give the row breathing room above the window edge.
+                anchors.leftMargin: advancedModeFooter.compact ? Kirigami.Units.smallSpacing : Kirigami.Units.largeSpacing
+                anchors.rightMargin: advancedModeFooter.compact ? Kirigami.Units.smallSpacing : Kirigami.Units.largeSpacing
+                anchors.topMargin: Kirigami.Units.largeSpacing
+                anchors.bottomMargin: Kirigami.Units.largeSpacing
+                // No inter-item gap in the compact rail: the switch is the only
+                // visible item there and the rail is barely wider than it, so a
+                // spacing slot would push the flanking spacers into shrinking
+                // the switch itself.
+                spacing: advancedModeFooter.compact ? 0 : Kirigami.Units.smallSpacing
+
+                // Leading spacer, compact only. Paired with the trailing one it
+                // centres the lone switch in the rail; the layout skips both
+                // while they are hidden.
+                Item {
+                    visible: advancedModeFooter.compact
+                    Layout.fillWidth: true
+                }
+
+                Label {
+                    visible: !advancedModeFooter.compact
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    text: i18n("Advanced")
+                    elide: Text.ElideRight
+                }
+
+                SettingsSwitch {
+                    Layout.alignment: Qt.AlignVCenter
+                    checked: settingsController.advancedMode
+                    accessibleName: i18n("Toggle advanced settings")
+                    onToggled: function (newValue) {
+                        settingsController.advancedMode = newValue;
+                        uiModeSettings.advancedMode = newValue;
+                    }
+
+                    HoverHandler {
+                        id: advancedModeHover
+                    }
+
+                    // Tooltip stands in for the hidden label, matching the
+                    // compact rail rows.
+                    ToolTip.text: i18n("Advanced")
+                    ToolTip.visible: advancedModeFooter.compact && advancedModeHover.hovered
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
+                }
+
+                // Trailing spacer, compact only. See the leading one above.
+                Item {
+                    visible: advancedModeFooter.compact
+                    Layout.fillWidth: true
+                }
+            }
+        }
+    }
+
     sidebar.trailingDelegate: Component {
         RowLayout {
             id: trailingRow
@@ -738,8 +894,30 @@ PhosphorUi.SettingsAppWindow {
             // "id" to "pageId" (the prior name shadowed the QML id:
             // directive); read `entry.pageId` accordingly.
             readonly property var entry: parent ? parent.modelData : null
-            readonly property bool isSnapping: entry && entry.pageId === "snapping"
-            readonly property bool isTiling: entry && entry.pageId === "tiling"
+            // Match the drill-parent rows AND their simple-mode counterparts:
+            // simple mode builds the rail through SidebarRows' FLAT walk,
+            // which emits every visible leaf at depth 0, so there the
+            // "Snapping"/"Tiling" rows carry the simple leaf's own pageId.
+            // The inline enable toggles must stay with them.
+            readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
+            readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
+            // The id whose dirty state this row REPRESENTS, which is not
+            // always the id it renders. Simple mode condenses a whole subtree
+            // down to one visible row, and that row's own dirty state covers
+            // only what it hosts — edits staged on the subtree's hidden
+            // advanced leaves survive the flip and would badge nowhere. The
+            // C++ side resolves this generally: the nearest ancestor group for
+            // which this page is the only visible navigable row, stopping at
+            // the first ancestor with two. It hoists only for a condensed
+            // (SimpleOnly) page, so a page that exists in both modes always
+            // speaks for itself.
+            readonly property string dirtyScopeId: entry ? settingsController.dirtyScopeFor(entry.pageId) : ""
+            // The section-toggle's own scope, deliberately NOT dirtyScopeId.
+            // pendingSection feeds discardPage() / beginExternalEdit() and a
+            // subtitle that names one of exactly two features, so it must stay
+            // bounded to the two ids those consumers handle. dirtyScopeId is an
+            // unbounded walk result and could hop past them.
+            readonly property string sectionId: isSnapping ? "snapping" : "tiling"
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0
@@ -779,8 +957,8 @@ PhosphorUi.SettingsAppWindow {
                     if (trailingRow.isCollapsibleHeader && trailingRow.isCollapsibleExpanded)
                         return false;
 
-                    trailingRow._dirtyTick; // re-evaluate when dirty state changes
-                    return settingsController.isPageDirty(trailingRow.entry.pageId);
+                    void trailingRow._dirtyTick; // deliberate dependency registration
+                    return settingsController.isPageDirty(trailingRow.dirtyScopeId);
                 }
 
                 SequentialAnimation on opacity {
@@ -817,16 +995,24 @@ PhosphorUi.SettingsAppWindow {
                     // state the page has staged). Prompt before clobbering.
                     // Enabling is safe — it doesn't discard anything — so
                     // we only gate the disable path.
-                    if (!newValue && trailingRow.entry && settingsController.isPageDirty(trailingRow.entry.pageId)) {
-                        sectionToggleDiscardConfirm.pendingSection = trailingRow.isSnapping ? "snapping" : "tiling";
-                        sectionToggleDiscardConfirm.pendingValue = newValue;
-                        sectionToggleDiscardConfirm.open();
+                    //
+                    // The guard queries `sectionId`, the exact id the confirm
+                    // hands to discardPage() / beginExternalEdit() below, so
+                    // guard, prompt and commit are uniformly bounded to the one
+                    // feature the toggle disables. (For these rows it equals
+                    // dirtyScopeId, which the badge uses; keeping them separate
+                    // holds even if a topology change ever let dirtyScopeId
+                    // hoist above the section.)
+                    if (!newValue && settingsController.isPageDirty(trailingRow.sectionId)) {
+                        confirmDialogs.sectionToggle.pendingSection = trailingRow.sectionId;
+                        confirmDialogs.sectionToggle.pendingValue = newValue;
+                        confirmDialogs.sectionToggle.open();
                         // Snap the toggle visual back to its checked state
                         // — the binding to appSettings.* keeps it in sync
                         // automatically once the user makes a decision.
                         return;
                     }
-                    settingsController.beginExternalEdit(trailingRow.isSnapping ? "snapping" : "tiling");
+                    settingsController.beginExternalEdit(trailingRow.sectionId);
                     if (trailingRow.isSnapping)
                         appSettings.snappingEnabled = newValue;
                     else
@@ -834,6 +1020,25 @@ PhosphorUi.SettingsAppWindow {
                     settingsController.endExternalEdit();
                 }
             }
+        }
+    }
+
+    // Sticky sidebar-header profile switcher — activate a settings profile from
+    // anywhere, mirroring the per-row Activate on the Profiles page. Selecting
+    // one STAGES it into the Save footer (applies on Save, reverts on Discard).
+    // Collapses to nothing until at least one profile exists; in the narrow
+    // compact rail the combo hides and only the identicon mark remains.
+    sidebar.headerContent: Component {
+        ProfileSwitcherHeader {
+            // Suppress Ctrl+PgUp/PgDown page-stepping while the dropdown is
+            // open, like every other window-scoped popup folded into
+            // _navShortcutsEnabled. Wired here because the extracted widget
+            // cannot resolve the window id across files.
+            onPopupOpenChanged: window._profilePopupOpen = popupOpen
+            // The compact rail unloads this delegate; without the clear a
+            // destruction while the dropdown is open leaves the suppression
+            // flag stuck true.
+            Component.onDestruction: window._profilePopupOpen = false
         }
     }
 }

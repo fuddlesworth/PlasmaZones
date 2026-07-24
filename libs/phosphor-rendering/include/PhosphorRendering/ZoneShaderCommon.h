@@ -4,16 +4,13 @@
 #pragma once
 
 #include <PhosphorShaders/BaseUniforms.h>
-#include <PhosphorShaders/IUniformExtension.h>
 
 #include <QColor>
 #include <QRectF>
 #include <QVector>
 #include <QVector4D>
 
-#include <atomic>
 #include <cstddef>
-#include <cstring>
 
 namespace PhosphorRendering {
 
@@ -21,10 +18,6 @@ namespace PhosphorRendering {
  * @brief Maximum number of zones the zone-aware UBO supports.
  */
 constexpr int MaxZones = 64;
-
-// Re-export so consumers that pull in this header get the full set of shader
-// constants without an extra include.
-using PhosphorShaders::kShaderTimeWrap;
 
 /**
  * @brief GPU uniform buffer layout — BaseUniforms + zone extension.
@@ -47,37 +40,42 @@ struct alignas(16) ZoneShaderUniforms
     float zoneFillColors[MaxZones][4];
     float zoneBorderColors[MaxZones][4];
     float zoneParams[MaxZones][4];
+
+    // Logical-to-device scale for the lengths carried in zoneParams (corner
+    // radius, border width). The GLSL counterpart is `uZoneScale` at the tail
+    // of the ZoneUniforms block in data/overlays/shared/common.glsl. std140
+    // places a float directly after the preceding vec4 array, so no leading
+    // pad is needed; the three trailing floats round the block out to the
+    // 16-byte boundary std140 requires.
+    // Defaulted to identity for the same reason ZoneUniformExtension's
+    // constructor seeds it: a value-initialised `ZoneShaderUniforms u = {}`
+    // would otherwise carry a zero scale, and a zero scale multiplies every
+    // corner radius and border width to nothing, so zones render square and
+    // border-less rather than failing visibly. The two structs are asserted
+    // binary-identical below, so both need the safe default.
+    float zoneScale = 1.0f;
+    float _pad_after_zoneScale[3] = {};
 };
 
-static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds expected size");
+/// Size of the zone extension region: four vec4[MaxZones] arrays, plus the
+/// uZoneScale scalar and the std140 tail pad that rounds it to 16 bytes.
+/// Derived rather than spelled as a literal so bumping MaxZones cannot leave
+/// the assert below asserting the old size.
+inline constexpr std::size_t kZoneExtensionBytes = 4 * sizeof(float[MaxZones][4]) + 4 * sizeof(float);
+
+// Exact, not a bound. Every member offset below is pinned exactly, so a loose
+// `<= 8192` would be the one assert that let an accidental growth through.
+static_assert(sizeof(ZoneShaderUniforms) == sizeof(PhosphorShaders::BaseUniforms) + kZoneExtensionBytes,
+              "ZoneShaderUniforms must be BaseUniforms plus the zone extension region");
 static_assert(offsetof(ZoneShaderUniforms, base) == 0, "base must be at offset 0");
 static_assert(offsetof(ZoneShaderUniforms, zoneRects) == sizeof(PhosphorShaders::BaseUniforms),
               "zoneRects must follow BaseUniforms with no gap");
-
-/**
- * @brief UBO region offsets for partial updates (reduces GPU bandwidth).
- *
- * Extends PhosphorShaders::UboRegions with zone-specific regions.
- */
-namespace ZoneShaderUboRegions {
-
-// Re-export base regions
-using namespace PhosphorShaders::UboRegions;
-
-// Scene header: iResolution through end of BaseUniforms (before zone arrays).
-// Used when scene data changes but zone data hasn't.
-constexpr size_t K_SCENE_HEADER_OFFSET = offsetof(ZoneShaderUniforms, base.iResolution);
-constexpr size_t K_SCENE_HEADER_SIZE = sizeof(PhosphorShaders::BaseUniforms) - K_SCENE_HEADER_OFFSET;
-
-// Scene data: iResolution through end of zone arrays. Used when zone data changes.
-constexpr size_t K_SCENE_DATA_OFFSET = offsetof(ZoneShaderUniforms, base.iResolution);
-constexpr size_t K_SCENE_DATA_SIZE = sizeof(ZoneShaderUniforms) - K_SCENE_DATA_OFFSET;
-
-// Zone extension region (zoneRects/zoneFillColors/zoneBorderColors/zoneParams).
-constexpr size_t K_ZONE_EXTENSION_OFFSET = sizeof(PhosphorShaders::BaseUniforms);
-constexpr size_t K_ZONE_EXTENSION_SIZE = sizeof(ZoneShaderUniforms) - sizeof(PhosphorShaders::BaseUniforms);
-
-} // namespace ZoneShaderUboRegions
+// std140 puts a scalar directly after a vec4 array — pin that, because an
+// accidental pad here shifts uZoneScale and every overlay pack silently reads
+// garbage as its logical-to-device scale (corners round by a random factor).
+static_assert(offsetof(ZoneShaderUniforms, zoneScale)
+                  == offsetof(ZoneShaderUniforms, zoneParams) + sizeof(float[MaxZones][4]),
+              "zoneScale must follow zoneParams with no gap (std140 scalar after vec4 array)");
 
 /**
  * @brief Per-zone payload pushed into the UBO each frame.
@@ -104,7 +102,10 @@ struct ZoneRect
     float height = 0.0f;
     int zoneNumber = 0;
     bool highlighted = false;
-    float borderRadius = 8.0f;
+    // 0, matching ZoneData::borderRadius on the same path. An 8 px default here
+    // would be exactly the per-pack corner floor the shared zoneSdf() removed:
+    // a configured radius of 0 has to mean square corners, not "round by 8".
+    float borderRadius = 0.0f;
     float borderWidth = 2.0f;
 };
 

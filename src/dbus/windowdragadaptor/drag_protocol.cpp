@@ -10,13 +10,13 @@
 // state machine doesn't need to be rewritten. They're no longer exposed
 // on the D-Bus surface.
 
-#include "../windowdragadaptor.h"
-#include "../windowtrackingadaptor.h"
-#include "../../core/interfaces.h"
+#include "windowdragadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "core/interfaces/interfaces.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../../core/settings_interfaces.h"
-#include "../../core/logging.h"
+#include "core/interfaces/settings_interfaces.h"
+#include "core/platform/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <QGuiApplication>
 #include <QTimer>

@@ -14,20 +14,6 @@ layout(location = 4) out vec2 vFragCoord;
 
 #include <common.glsl>
 
-// Noise for organic movement
-float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float c = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
-    
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
 void main() {
     vTexCoord = texCoord;
     vFragCoord = fragCoordFromTexCoord(texCoord);
@@ -35,13 +21,28 @@ void main() {
     // Get parameters
     float fieldStrength = customParams[0].x >= 0.0 ? customParams[0].x : 1.0;
     float waveSpeed = customParams[0].y >= 0.0 ? customParams[0].y : 1.5;
-    float distortionAmount = customParams[1].w >= 0.0 ? customParams[1].w : 0.4;
+    // Slot 6, not 7. The p_<id> preamble is spliced into the FRAGMENT stage
+    // only, so a vertex shader has to hand-decode the scalar pool, and the
+    // slots follow declaration order in metadata.json:
+    //   0 fieldStrength  1 waveSpeed  2 rippleSize  3 glowIntensity
+    //   4 particleCount  5 particleSize  6 distortionAmount  7 audioReactivity
+    // This read [1].w, which is audioReactivity. Every vertex displacement in
+    // this file, and the vDistortAmount / vDisplacement varyings the fragment
+    // stage builds its border width, glow extent and strain lines from, was
+    // therefore scaled by the audio knob rather than the Distortion slider,
+    // and defaulted to 1.0 where 0.4 was meant.
+    float distortionAmount = customParams[1].z >= 0.0 ? customParams[1].z : 0.4;
     
-    // Mouse position in normalized coordinates
+    // Mouse position in normalized coordinates. iMouse.zw is fragCoord space,
+    // and texCoord is the other orientation (texCoord.y == 1.0 - iMouse.w at
+    // the same point), so normalising the vertex through vFragCoord instead of
+    // texCoord is what keeps both stages agreeing. Reading texCoord here made
+    // every mouse-driven vertex effect track the cursor mirrored about the
+    // horizontal midline while this pack's own fragment stage did not.
     vec2 mouseNorm = iMouse.zw;
     
-    // Current vertex position (normalized 0-1)
-    vec2 vertexNorm = texCoord;
+    // Current vertex position (normalized 0-1), same orientation as iMouse.zw
+    vec2 vertexNorm = vFragCoord / max(iResolution, vec2(1.0));
     
     // Calculate distance and direction to mouse
     vec2 toMouse = mouseNorm - vertexNorm;
@@ -94,8 +95,8 @@ void main() {
     // Adds organic feel to the deformation
     // =========================================================================
     float noiseScale = 3.0;
-    float n1 = noise(vertexNorm * noiseScale + iTime * 0.5);
-    float n2 = noise(vertexNorm * noiseScale + vec2(100.0) + iTime * 0.5);
+    float n1 = noise2D(vertexNorm * noiseScale + iTime * 0.5);
+    float n2 = noise2D(vertexNorm * noiseScale + vec2(100.0) + iTime * 0.5);
     vec2 organicWobble = vec2(n1 - 0.5, n2 - 0.5) * 0.008 * edgeFactor * distortionAmount;
     // Increase wobble near mouse
     organicWobble *= (1.0 + attractionFalloff * 2.0);

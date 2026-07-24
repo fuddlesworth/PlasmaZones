@@ -69,6 +69,7 @@ struct ScriptMetadata
     bool supportsSingleWindow = false; ///< Owns the single-window case (else calculateZones() fills the work area)
     bool supportsMinSizes = true; ///< Default true — most algorithms support min sizes
     bool retileOnFocus = false; ///< Re-run the layout when focus moves between tiled windows (focus-driven layouts)
+    QString overlapStacking; ///< For overlap layouts: "firstOnTop" or "lastOnTop"; empty = lastOnTop
     QString id; ///< Optional algorithm id (else "script:filename")
     QVector<CustomParamDef> customParams;
 };

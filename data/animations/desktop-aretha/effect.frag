@@ -21,14 +21,18 @@
 #include <noise.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
-    // Hex cell identity in constant screen pixels (independent of resolution).
+    // Hex cell identity in constant DEVICE pixels (iResolution is device-sized
+    // on the desktop pass, so the grid is finer on a scaled output).
     float hexSize  = max(p_hexSize, 6.0);
     vec2  px       = uv * resolutionSafe();
     vec2  scaled   = px / hexSize;
     vec2  hex      = hexLocal(scaled);
     float d        = hexDist(hex);
-    vec2  cellId   = floor((scaled - hex) / vec2(1.0, 1.732));
+    // Hash the cell's own center. A floor() of the center over the row pitch
+    // collapses each base-lattice hex and its offset-lattice diagonal
+    // neighbour onto one id, so adjacent pairs would pop and stutter in
+    // lockstep; the raw center is unique per hex.
+    vec2  cellId   = scaled - hex;
     float cellRand = classicHash(cellId);
 
     // Per-cell flip threshold: a diagonal data sweep blended with per-cell
@@ -70,7 +74,7 @@ vec4 pTransition(vec2 uv, float t) {
         col.b = crossFade(uv + vec2(-split + jitter, 0.0), reveal).b;
     }
 
-    // Scanline modulation on the front (CRT feel, constant pixel pitch).
+    // Scanline modulation on the front (CRT feel, constant DEVICE-pixel pitch).
     float scan = 0.85 + 0.15 * step(0.5, fract(px.y * 0.5));
     col *= mix(1.0, scan, glitchAmt * edge * 0.7);
 
@@ -85,9 +89,10 @@ vec4 pTransition(vec2 uv, float t) {
     col += edgeCol * frontGlow * (0.35 + 0.65 * hexLine);
 
     // Two opaque desktops blended stay opaque — the pass draws with blending
-    // off and replaces the screen, so alpha is a constant 1.
-    return vec4(clamp(col, 0.0, 1.0), 1.0);
-#else
-    return vec4(0.0);
-#endif
+    // off and replaces the screen, so alpha is a constant 1. No upper clamp:
+    // the reveal blend is convex over the two captures, the scanline term is
+    // multiplicative in (0, 1], and the edge glow only adds non-negative
+    // colour — clamping would crush HDR capture values the blend never
+    // created (the crush phosphor-peek's tail comment warns about).
+    return vec4(col, 1.0);
 }

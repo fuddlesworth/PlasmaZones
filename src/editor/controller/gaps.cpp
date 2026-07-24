@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../EditorController.h"
+#include "../EditorGapsModel.h"
 #include "../services/ZoneManager.h"
 #include "../undo/UndoController.h"
 #include "../undo/commands/UpdateGapOverrideCommand.h"
@@ -10,10 +11,10 @@
 #include "../undo/commands/UpdateFixedGeometryCommand.h"
 #include "../helpers/SettingsDbusQueries.h"
 #include "../../config/configdefaults.h"
-#include "../../core/constants.h"
-#include "../../core/logging.h"
+#include "core/types/constants.h"
+#include "core/platform/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
-#include "../../core/utils.h"
+#include "core/utils/utils.h"
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <QDBusConnection>
@@ -29,240 +30,6 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
-
-int EditorController::zonePadding() const
-{
-    return m_zonePadding;
-}
-
-int EditorController::outerGap() const
-{
-    return m_outerGap;
-}
-
-bool EditorController::hasZonePaddingOverride() const
-{
-    return m_zonePadding >= 0;
-}
-
-bool EditorController::hasOuterGapOverride() const
-{
-    return m_outerGap >= 0;
-}
-
-int EditorController::globalZonePadding() const
-{
-    return m_cachedGlobalZonePadding;
-}
-
-int EditorController::globalOuterGap() const
-{
-    return m_cachedGlobalOuterGap;
-}
-
-void EditorController::setZonePadding(int padding)
-{
-    if (padding < -1) {
-        padding = -1;
-    }
-    if (m_zonePadding != padding) {
-        auto* cmd =
-            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::ZonePadding, m_zonePadding, padding);
-        m_undoController->push(cmd);
-    }
-}
-
-void EditorController::setZonePaddingDirect(int padding)
-{
-    if (padding < -1) {
-        padding = -1;
-    }
-    if (m_zonePadding != padding) {
-        m_zonePadding = padding;
-        markUnsaved();
-        Q_EMIT zonePaddingChanged();
-    }
-}
-
-void EditorController::setOuterGap(int gap)
-{
-    if (gap < -1) {
-        gap = -1;
-    }
-    if (m_outerGap != gap) {
-        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap, m_outerGap, gap);
-        m_undoController->push(cmd);
-    }
-}
-
-void EditorController::setOuterGapDirect(int gap)
-{
-    if (gap < -1) {
-        gap = -1;
-    }
-    if (m_outerGap != gap) {
-        m_outerGap = gap;
-        markUnsaved();
-        Q_EMIT outerGapChanged();
-    }
-}
-
-bool EditorController::usePerSideOuterGap() const
-{
-    return m_usePerSideOuterGap;
-}
-
-int EditorController::outerGapTop() const
-{
-    return m_outerGapTop;
-}
-
-int EditorController::outerGapBottom() const
-{
-    return m_outerGapBottom;
-}
-
-int EditorController::outerGapLeft() const
-{
-    return m_outerGapLeft;
-}
-
-int EditorController::outerGapRight() const
-{
-    return m_outerGapRight;
-}
-
-bool EditorController::globalUsePerSideOuterGap() const
-{
-    return m_cachedGlobalUsePerSideOuterGap;
-}
-
-int EditorController::globalOuterGapTop() const
-{
-    return m_cachedGlobalOuterGapTop;
-}
-
-int EditorController::globalOuterGapBottom() const
-{
-    return m_cachedGlobalOuterGapBottom;
-}
-
-int EditorController::globalOuterGapLeft() const
-{
-    return m_cachedGlobalOuterGapLeft;
-}
-
-int EditorController::globalOuterGapRight() const
-{
-    return m_cachedGlobalOuterGapRight;
-}
-
-void EditorController::setUsePerSideOuterGap(bool enabled)
-{
-    if (m_usePerSideOuterGap != enabled) {
-        // Use a gap override command for undo (toggling per-side is conceptually a gap change)
-        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::UsePerSideOuterGap,
-                                                 m_usePerSideOuterGap ? 1 : 0, enabled ? 1 : 0);
-        m_undoController->push(cmd);
-    }
-}
-
-void EditorController::setUsePerSideOuterGapDirect(bool enabled)
-{
-    if (m_usePerSideOuterGap != enabled) {
-        m_usePerSideOuterGap = enabled;
-        markUnsaved();
-        Q_EMIT outerGapChanged();
-    }
-}
-
-void EditorController::setOuterGapTop(int gap)
-{
-    if (gap < -1)
-        gap = -1;
-    if (m_outerGapTop != gap) {
-        auto* cmd =
-            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapTop, m_outerGapTop, gap);
-        m_undoController->push(cmd);
-    }
-}
-
-void EditorController::setOuterGapTopDirect(int gap)
-{
-    if (gap < -1)
-        gap = -1;
-    if (m_outerGapTop != gap) {
-        m_outerGapTop = gap;
-        markUnsaved();
-        Q_EMIT outerGapChanged();
-    }
-}
-
-void EditorController::setOuterGapBottom(int gap)
-{
-    if (gap < -1)
-        gap = -1;
-    if (m_outerGapBottom != gap) {
-        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapBottom,
-                                                 m_outerGapBottom, gap);
-        m_undoController->push(cmd);
-    }
-}
-
-void EditorController::setOuterGapBottomDirect(int gap)
-{
-    if (gap < -1)
-        gap = -1;
-    if (m_outerGapBottom != gap) {
-        m_outerGapBottom = gap;
-        markUnsaved();
-        Q_EMIT outerGapChanged();
-    }
-}
-
-void EditorController::setOuterGapLeft(int gap)
-{
-    if (gap < -1)
-        gap = -1;
-    if (m_outerGapLeft != gap) {
-        auto* cmd =
-            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapLeft, m_outerGapLeft, gap);
-        m_undoController->push(cmd);
-    }
-}
-
-void EditorController::setOuterGapLeftDirect(int gap)
-{
-    if (gap < -1)
-        gap = -1;
-    if (m_outerGapLeft != gap) {
-        m_outerGapLeft = gap;
-        markUnsaved();
-        Q_EMIT outerGapChanged();
-    }
-}
-
-void EditorController::setOuterGapRight(int gap)
-{
-    if (gap < -1)
-        gap = -1;
-    if (m_outerGapRight != gap) {
-        auto* cmd =
-            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapRight, m_outerGapRight, gap);
-        m_undoController->push(cmd);
-    }
-}
-
-void EditorController::setOuterGapRightDirect(int gap)
-{
-    if (gap < -1)
-        gap = -1;
-    if (m_outerGapRight != gap) {
-        m_outerGapRight = gap;
-        markUnsaved();
-        Q_EMIT outerGapChanged();
-    }
-}
 
 int EditorController::overlayDisplayMode() const
 {
@@ -303,53 +70,9 @@ void EditorController::setOverlayDisplayModeDirect(int mode)
     }
 }
 
-void EditorController::clearZonePaddingOverride()
-{
-    setZonePadding(-1);
-}
-
 void EditorController::clearOverlayDisplayModeOverride()
 {
     setOverlayDisplayMode(-1);
-}
-
-void EditorController::clearOuterGapOverride()
-{
-    // Early return if nothing to clear — avoids empty macro on undo stack
-    bool hasAnyOverride = m_outerGap != -1 || m_usePerSideOuterGap || m_outerGapTop != -1 || m_outerGapBottom != -1
-        || m_outerGapLeft != -1 || m_outerGapRight != -1;
-    if (!hasAnyOverride) {
-        return;
-    }
-
-    // Snapshot current state for undo, then push a macro command that resets all gap overrides.
-    // Uses beginMacro/endMacro so the entire clear is one undo step.
-    m_undoController->beginMacro(PhosphorI18n::tr("Clear Edge Gap Override", "@action"));
-    if (m_outerGap != -1) {
-        m_undoController->push(
-            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap, m_outerGap, -1));
-    }
-    if (m_usePerSideOuterGap) {
-        m_undoController->push(
-            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::UsePerSideOuterGap, 1, 0));
-    }
-    if (m_outerGapTop != -1) {
-        m_undoController->push(
-            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapTop, m_outerGapTop, -1));
-    }
-    if (m_outerGapBottom != -1) {
-        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapBottom,
-                                                            m_outerGapBottom, -1));
-    }
-    if (m_outerGapLeft != -1) {
-        m_undoController->push(
-            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapLeft, m_outerGapLeft, -1));
-    }
-    if (m_outerGapRight != -1) {
-        m_undoController->push(
-            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapRight, m_outerGapRight, -1));
-    }
-    m_undoController->endMacro();
 }
 
 bool EditorController::useFullScreenGeometry() const
@@ -712,73 +435,24 @@ void EditorController::refreshGlobalGapOverlaySettings()
     };
     const QVariantMap values = SettingsDbusQueries::querySettingsBatch(kGapOverlayKeys);
 
-    // Helper: read an int from the batch result. Uses toInt(&ok) so a
-    // malformed daemon reply (wrong type, not convertible) falls back to
-    // the default rather than silently coercing to 0. Negative values are
-    // also treated as invalid — these keys are all non-negative pixel
-    // counts / enum indices, matching the old single-key helpers'
-    // semantics. Keys missing from the batch (unknown to the daemon, or
-    // the whole call failed) also fall through to the fallback.
-    auto readInt = [&](const QString& key, int fallback) {
-        auto it = values.constFind(key);
-        if (it == values.constEnd()) {
-            return fallback;
-        }
+    // The gap globals (innerGap + outerGap cluster) live in the gap sub-model.
+    m_gaps->applyGlobalSettings(values);
+
+    // overlayDisplayMode global stays on the controller. Uses toInt(&ok) so a
+    // malformed daemon reply falls back to the default rather than coercing to
+    // 0; a negative or missing value also falls through to the default.
+    auto it = values.constFind(QStringLiteral("overlayDisplayMode"));
+    int newOverlay = ConfigDefaults::overlayDisplayMode();
+    if (it != values.constEnd()) {
         bool ok = false;
         const int v = it.value().toInt(&ok);
-        if (!ok || v < 0) {
-            return fallback;
-        }
-        return v;
-    };
-    auto readBool = [&](const QString& key, bool fallback) {
-        auto it = values.constFind(key);
-        return it == values.constEnd() ? fallback : it.value().toBool();
-    };
-
-    // innerGap
-    {
-        const int newValue = readInt(QStringLiteral("innerGap"), Defaults::InnerGap);
-        if (m_cachedGlobalZonePadding != newValue) {
-            m_cachedGlobalZonePadding = newValue;
-            Q_EMIT globalZonePaddingChanged();
+        if (ok && v >= 0) {
+            newOverlay = v;
         }
     }
-
-    // outerGap cluster — matches the old refreshGlobalOuterGap()
-    // change-detection semantics (one aggregate signal covers any field
-    // changing).
-    {
-        const int newValue = readInt(QStringLiteral("outerGap"), Defaults::OuterGap);
-        const bool newUsePerSide = readBool(QStringLiteral("usePerSideOuterGap"), false);
-        const int newTop = readInt(QStringLiteral("outerGapTop"), Defaults::OuterGap);
-        const int newBottom = readInt(QStringLiteral("outerGapBottom"), Defaults::OuterGap);
-        const int newLeft = readInt(QStringLiteral("outerGapLeft"), Defaults::OuterGap);
-        const int newRight = readInt(QStringLiteral("outerGapRight"), Defaults::OuterGap);
-
-        const bool changed = (m_cachedGlobalOuterGap != newValue) || (m_cachedGlobalUsePerSideOuterGap != newUsePerSide)
-            || (m_cachedGlobalOuterGapTop != newTop) || (m_cachedGlobalOuterGapBottom != newBottom)
-            || (m_cachedGlobalOuterGapLeft != newLeft) || (m_cachedGlobalOuterGapRight != newRight);
-
-        m_cachedGlobalOuterGap = newValue;
-        m_cachedGlobalUsePerSideOuterGap = newUsePerSide;
-        m_cachedGlobalOuterGapTop = newTop;
-        m_cachedGlobalOuterGapBottom = newBottom;
-        m_cachedGlobalOuterGapLeft = newLeft;
-        m_cachedGlobalOuterGapRight = newRight;
-
-        if (changed) {
-            Q_EMIT globalOuterGapChanged();
-        }
-    }
-
-    // overlayDisplayMode
-    {
-        const int newValue = readInt(QStringLiteral("overlayDisplayMode"), ConfigDefaults::overlayDisplayMode());
-        if (m_cachedGlobalOverlayDisplayMode != newValue) {
-            m_cachedGlobalOverlayDisplayMode = newValue;
-            Q_EMIT globalOverlayDisplayModeChanged();
-        }
+    if (m_cachedGlobalOverlayDisplayMode != newOverlay) {
+        m_cachedGlobalOverlayDisplayMode = newOverlay;
+        Q_EMIT globalOverlayDisplayModeChanged();
     }
 }
 

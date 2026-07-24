@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../layoutadaptor.h"
+#include "layoutadaptor.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
-#include "../../core/logging.h"
-#include "../../core/utils.h"
-#include "../../core/constants.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
+#include "core/types/constants.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>

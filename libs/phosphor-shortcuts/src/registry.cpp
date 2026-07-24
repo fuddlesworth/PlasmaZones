@@ -26,6 +26,14 @@ Registry::Registry(IBackend* backend, QObject* parent)
 
     connect(backend, &IBackend::activated, this, &Registry::onBackendActivated);
     connect(backend, &IBackend::ready, this, &Registry::onBackendReady);
+    connect(backend, &IBackend::triggersChanged, this, [this](const QString& id) {
+        // Filter to ids we own — a shared backend may carry other consumers'
+        // entries, and forwarding those would make consumers re-query ids
+        // they never bound.
+        if (m_entries.contains(id)) {
+            Q_EMIT triggersChanged(id);
+        }
+    });
 }
 
 Registry::~Registry() = default;
@@ -165,6 +173,31 @@ QKeySequence Registry::shortcut(const QString& id) const
         return {};
     }
     return it->binding.currentSeq;
+}
+
+QStringList Registry::effectiveTriggers(const QString& id) const
+{
+    const auto it = m_entries.constFind(id);
+    if (it == m_entries.constEnd()) {
+        return {};
+    }
+    if (m_backend) {
+        // Engaged optional is authoritative EVEN WHEN EMPTY: an empty
+        // report means the user cleared the binding out-of-process, and
+        // falling back to our stored sequence would display a key that no
+        // longer fires. Only a disengaged optional ("cannot report") falls
+        // through to the stored value.
+        if (const std::optional<QStringList> fromBackend = m_backend->currentTriggers(id)) {
+            return *fromBackend;
+        }
+    }
+    // Backend can't report (Portal before a described Response, DBusTrigger,
+    // or backend gone) — our own current sequence is the best available
+    // answer.
+    if (it->binding.currentSeq.isEmpty()) {
+        return {};
+    }
+    return {it->binding.currentSeq.toString(QKeySequence::PortableText)};
 }
 
 QVector<Registry::Binding> Registry::bindings(bool persistentOnly) const

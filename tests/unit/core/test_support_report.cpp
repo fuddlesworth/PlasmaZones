@@ -15,7 +15,7 @@
 #include <QRegularExpression>
 #include <QTemporaryFile>
 
-#include "core/supportreport.h"
+#include "core/platform/supportreport.h"
 #include "version.h"
 
 using namespace PlasmaZones;

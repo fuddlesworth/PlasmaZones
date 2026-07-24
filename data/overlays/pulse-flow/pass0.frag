@@ -39,16 +39,22 @@ float getAudioReact()     { return customParams[1].z >= 0.0 ? customParams[1].z 
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-// Minimum distance to any zone border (borderRadius scaled by pxScale for
-// resolution-independent corner shapes matching the effect pass).
-float zoneEdgeSDF(vec2 fragCoord, float pxs) {
+// Minimum distance to any zone border. Goes through the shared zoneSdf() so
+// the corner arcs this pass measures are the same ones the effect pass draws —
+// the two used to derive the radius independently (this one via pxScale, the
+// effect pass via its own inline copy), which put the glow trail slightly off
+// the painted corner at any scale other than 1080p.
+float zoneEdgeSDF(vec2 fragCoord) {
     float minDist = 1e6;
     for (int i = 0; i < zoneCount && i < 64; i++) {
-        vec2 pos = zoneRectPos(zoneRects[i]);
-        vec2 sz  = zoneRectSize(zoneRects[i]);
-        float radius = max(zoneParams[i].x, 8.0) * pxs;
-        vec2 center = pos + sz * 0.5;
-        float d = sdRoundedBox(fragCoord - center, sz * 0.5, radius);
+        // Skip degenerate rects, as every other zone loop does. A zero-size
+        // zone collapses zoneSdf() to a point field, and this pass feeds a
+        // ping-pong feedback buffer, so the phantom emission would persist and
+        // spread across frames rather than clearing. It would also satisfy the
+        // `minDist < 1.0` early break below and hide the real zones entirely.
+        vec4 rect = zoneRects[i];
+        if (rect.z <= 0.0 || rect.w <= 0.0) continue;
+        float d = zoneSdf(fragCoord, rect, zoneParams[i].x).d;
         minDist = min(minDist, abs(d));
         if (minDist < 1.0) break;
     }
@@ -67,13 +73,12 @@ void main() {
     vec2 res = max(iResolution.xy, vec2(1.0));
     vec2 uv = fragCoord / res;
     float aspect = res.x / res.y;
-    float pxs = pxScale();
 
     // ── First frame: seed initial state ─────────────────────────────────────
     if (iFrame == 0) {
         float energy = 0.0;
-        float edgeDist = zoneEdgeSDF(fragCoord, pxs);
-        energy += smoothstep(40.0 * pxs, 0.0, edgeDist) * 0.3;
+        float edgeDist = zoneEdgeSDF(fragCoord);
+        energy += smoothstep(zoneLen(40.0), 0.0, edgeDist) * 0.3;
         energy += noise2D(uv * 8.0) * 0.05;
         fragColor = vec4(clamp(energy, 0.0, 1.0), energy, 0.0, 1.0);
         return;
@@ -82,7 +87,10 @@ void main() {
     // ── Parameters ──────────────────────────────────────────────────────────
     float intensity   = getIntensity();
     float persistence = getPersistence();
-    float edgeW       = getEdgeWidth() * pxs;
+    // zoneLen(), matching the corner arcs this band hugs: zoneEdgeSDF() is
+    // built on zoneSdf(), so a pxScale() band width would sit on a differently
+    // scaled edge than the one it is measured from.
+    float edgeW       = zoneLen(getEdgeWidth());
     float feedbackStr = getFeedbackStr();
     float driftSpd    = getDriftSpeed();
     float rotSpd      = getRotationSpeed();
@@ -164,9 +172,14 @@ void main() {
     // ── 4. ZONE-EDGE EMISSION ───────────────────────────────────────────────
     // Exponential falloff with noise flicker. Bass makes edges flare.
 
-    float edgeDist = zoneEdgeSDF(fragCoord, pxs);
+    float edgeDist = zoneEdgeSDF(fragCoord);
 
-    if (edgeDist < edgeW * 2.0) {
+    // The mids boost below widens its own falloff by up to (1 + audioR), so the
+    // gate has to cover the widened band as well. Gating on the unwidened width
+    // cut the boost at 37% of its peak and left a hard ring, which this buffer
+    // then advected across frames through the feedback pass.
+    float midsWiden = (hasAudio && mids > 0.05) ? (1.0 + mids * audioR) : 1.0;
+    if (edgeDist < edgeW * 2.0 * midsWiden) {
         float falloff = exp(-edgeDist / max(edgeW, 1.0));
 
         float flicker = noise2D((uv - 0.5) * 6.0 + vec2(t * 0.4, t * -0.3));
@@ -181,7 +194,7 @@ void main() {
 
         // Mids: widen effective emission range (edges breathe with mid-range)
         if (hasAudio && mids > 0.05) {
-            float midsBoost = exp(-edgeDist / max(edgeW * (1.0 + mids * audioR), 1.0));
+            float midsBoost = exp(-edgeDist / max(edgeW * midsWiden, 1.0));
             emission += midsBoost * mids * audioR * intensity * 0.03;
         }
 

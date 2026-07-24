@@ -5,9 +5,9 @@
 
 #include "plasmazones_export.h"
 
-#include "../core/interfaces.h"
-#include "../core/logging.h"
-#include "../core/utils.h"
+#include "core/interfaces/interfaces.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/Layout.h>

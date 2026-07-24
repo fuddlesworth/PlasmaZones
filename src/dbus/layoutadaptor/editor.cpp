@@ -1,17 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../layoutadaptor.h"
-#include "../../core/interfaces.h"
+#include "layoutadaptor.h"
+#include "core/interfaces/interfaces.h"
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutFactory.h>
 #include <PhosphorZones/Zone.h>
-#include "../../core/constants.h"
+#include "core/types/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../../core/logging.h"
-#include "../../core/utils.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <QJsonDocument>
 #include <QJsonObject>

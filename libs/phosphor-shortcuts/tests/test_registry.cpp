@@ -67,9 +67,25 @@ public:
         Q_EMIT activated(id);
     }
 
+    std::optional<QStringList> currentTriggers(const QString& id) const override
+    {
+        const auto it = reportedTriggers.constFind(id);
+        if (it == reportedTriggers.constEnd()) {
+            return std::nullopt;
+        }
+        return *it;
+    }
+
+    void reportTriggers(const QString& id, const QStringList& triggers)
+    {
+        reportedTriggers.insert(id, triggers);
+        Q_EMIT triggersChanged(id);
+    }
+
     QVector<RegisterCall> registers;
     QVector<UpdateCall> updates;
     QVector<QString> unregisters;
+    QHash<QString, QStringList> reportedTriggers;
     int flushes = 0;
 };
 
@@ -731,6 +747,84 @@ private Q_SLOTS:
 
         QCOMPARE(registry.bindings().size(), 1);
         QCOMPARE(registry.shortcut(QStringLiteral("pz.a")), QKeySequence(QStringLiteral("Meta+2")));
+    }
+
+    void effectiveTriggers_prefersBackendReadback()
+    {
+        // The backend's read-back wins over the registry's own stored value:
+        // it sees out-of-process overrides (System Settings rebind on
+        // KGlobalAccel, compositor-assigned trigger on Portal) that the
+        // registry's currentSeq cannot.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        // No read-back yet → fall back to the registry's current sequence.
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.a")),
+                 QStringList{QKeySequence(QStringLiteral("Meta+1")).toString(QKeySequence::PortableText)});
+
+        // Backend now reports an external override.
+        backend.reportTriggers(QStringLiteral("pz.a"), {QStringLiteral("Meta+F9")});
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.a")), QStringList{QStringLiteral("Meta+F9")});
+
+        // Unknown id → empty, not a fallback.
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.ghost")), QStringList());
+    }
+
+    void effectiveTriggers_afterBackendDestroyed_fallsBackToStored()
+    {
+        // Pins the null-backend branch: a destroyed backend (teardown
+        // ordering, same scenario as flushAfterBackendDestroyed) must not
+        // crash and must fall back to the registry's own stored current
+        // sequence.
+        auto backend = std::make_unique<FakeBackend>();
+        Registry registry(backend.get());
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        backend.reset(); // QPointer in Registry::m_backend goes null
+
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.a")),
+                 QStringList{QKeySequence(QStringLiteral("Meta+1")).toString(QKeySequence::PortableText)});
+    }
+
+    void effectiveTriggers_backendEmptyIsAuthoritativeUnbound()
+    {
+        // A backend that CAN report and reports an empty list means the
+        // user cleared the binding out-of-process (System Settings). The
+        // registry must NOT fall back to its stored sequence — that would
+        // display a key that no longer fires (the stale-assigned bug).
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        backend.reportTriggers(QStringLiteral("pz.a"), {});
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.a")), QStringList());
+    }
+
+    void triggersChanged_forwardsOnlyOwnedIds()
+    {
+        // A shared backend may carry other consumers' ids; the registry must
+        // forward triggersChanged only for ids it owns so consumers don't
+        // re-query bindings they never made.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.mine"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        QSignalSpy spy(&registry, &Registry::triggersChanged);
+
+        backend.reportTriggers(QStringLiteral("pz.mine"), {QStringLiteral("Meta+2")});
+        backend.reportTriggers(QStringLiteral("pz.other-consumer"), {QStringLiteral("Meta+3")});
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("pz.mine"));
     }
 
     void descriptionChange_isLocalOnly()

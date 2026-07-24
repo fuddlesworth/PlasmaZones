@@ -197,6 +197,7 @@ void PortalBackend::unregisterShortcut(const QString& id)
     m_pending.remove(id);
     m_descriptions.remove(id);
     m_lastSentPreferred.remove(id);
+    m_confirmedTriggers.remove(id);
     // If an in-flight BindShortcuts batch was carrying this id, drop it from
     // the snapshot so a successful Response doesn't promote a since-released
     // grab back into m_lastSentPreferred.
@@ -394,7 +395,13 @@ void PortalBackend::sendBindShortcuts()
             shortcutOptions.insert(QStringLiteral("description"), it.value().description);
         }
         if (!it.value().preferred.isEmpty()) {
-            shortcutOptions.insert(QStringLiteral("preferred_trigger"), it.value().preferred.toString());
+            // PortableText spelled explicitly (it is also toString()'s
+            // default): the string crosses a process boundary and must stay
+            // locale/platform-independent, unlike NativeText — same
+            // convention as every other on-the-wire sequence string in this
+            // library.
+            shortcutOptions.insert(QStringLiteral("preferred_trigger"),
+                                   it.value().preferred.toString(QKeySequence::PortableText));
         }
         shortcutsArg << shortcutOptions;
         shortcutsArg.endStructure();
@@ -510,6 +517,11 @@ void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap
     // versus when it leaves a grab dangling (spec limitation — see
     // unregisterShortcut).
     const QVariant shortcutsVar = results.value(QStringLiteral("shortcuts"));
+    // Ids whose trigger_description changed this Response. Collected and
+    // emitted AFTER the parse loop: a synchronous triggersChanged consumer
+    // that mutates backend state (unregisterShortcut) mid-iteration would
+    // otherwise invalidate the maps this loop is reading.
+    QStringList changedTriggerIds;
     if (shortcutsVar.canConvert<QDBusArgument>()) {
         QDBusArgument arg = shortcutsVar.value<QDBusArgument>();
         arg.beginArray();
@@ -537,13 +549,50 @@ void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap
                 if (snapIt != m_pendingBindResponse.constEnd()) {
                     m_lastSentPreferred.insert(id, snapIt->preferred);
                 }
+                // trigger_description is the compositor's human-readable
+                // statement of the key(s) it actually assigned — the only
+                // read-back the spec offers. Capture it for
+                // currentTriggers() and notify on change so binding
+                // displays can refresh. The Response covers ids from prior
+                // batches too (BindShortcuts is additive), so this also
+                // picks up compositor-side rebinds between batches.
+                const QString trigger = opts.value(QStringLiteral("trigger_description")).toString();
+                QStringList triggers;
+                if (!trigger.isEmpty()) {
+                    triggers.append(trigger);
+                }
+                if (m_confirmedTriggers.value(id) != triggers) {
+                    if (triggers.isEmpty()) {
+                        m_confirmedTriggers.remove(id);
+                    } else {
+                        m_confirmedTriggers.insert(id, triggers);
+                    }
+                    changedTriggerIds.append(id);
+                }
             }
         }
         arg.endArray();
     }
     m_pendingBindResponse.clear();
+    for (const QString& changedId : std::as_const(changedTriggerIds)) {
+        Q_EMIT triggersChanged(changedId);
+    }
     qCDebug(lcPhosphorShortcuts) << "Portal BindShortcuts Response: success, results=" << results;
     Q_EMIT ready();
+}
+
+std::optional<QStringList> PortalBackend::currentTriggers(const QString& id) const
+{
+    // Engaged only for ids the compositor has explicitly described in a
+    // BindShortcuts Response. An id bound but never described yields
+    // nullopt ("cannot report" — caller falls back to its stored
+    // sequence); the portal has no "cleared binding" concept, so an
+    // engaged-empty result never occurs here.
+    const auto it = m_confirmedTriggers.constFind(id);
+    if (it == m_confirmedTriggers.constEnd()) {
+        return std::nullopt;
+    }
+    return *it;
 }
 
 void PortalBackend::onActivated(const QDBusObjectPath& /*sessionHandle*/, const QString& shortcutId,

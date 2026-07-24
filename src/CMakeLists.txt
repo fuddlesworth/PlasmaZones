@@ -25,72 +25,80 @@ add_subdirectory(shared)
 # Core library sources
 set(plasmazones_core_SRCS
     phosphor_qml_i18n.h
-    core/constants.h
-    core/baselinecleanup.h
-    core/logging.h
-    core/logging.cpp
-    core/translationloader.h
-    core/translationloader.cpp
-    core/animationbootstrap.h
-    core/animationbootstrap.cpp
+    core/types/constants.h
+    core/types/baselinecleanup.h
+    core/platform/logging.h
+    core/platform/logging.cpp
+    core/utils/translationloader.h
+    core/utils/translationloader.cpp
+    core/resolve/animationbootstrap.h
+    core/resolve/animationbootstrap.cpp
     # wallpaperprovider moved to PhosphorShaders
-    core/enums.h
-    core/interfaces.h
-    core/interfaces.cpp
+    core/types/enums.h
+    core/interfaces/interfaces.h
+    core/interfaces/interfaces.cpp
     # ilayoutmanager / izonedetector shims removed - consumers include
     # <PhosphorZones/ILayoutManager.h> / <PhosphorZones/IZoneDetector.h>
     # directly.
-    core/ioverlayservice.h
-    core/isettings.h
-    core/settings_interfaces.h
-    core/types.h
-    core/utils.h
-    core/utils.cpp
-    core/daemongeometryresolver.h
-    core/daemongeometryresolver.cpp
-    core/platform.cpp
-    core/platform.h
-    core/geometryutils.cpp
-    core/geometryutils.h
-    core/spatialadjacency.h
+    core/interfaces/ioverlayservice.h
+    core/interfaces/isettings.h
+    core/interfaces/settings_interfaces.h
+    core/types/types.h
+    core/utils/utils.h
+    core/utils/utils.cpp
+    core/resolve/daemongeometryresolver.h
+    core/resolve/daemongeometryresolver.cpp
+    core/platform/platform.cpp
+    core/platform/platform.h
+    core/utils/geometryutils.cpp
+    core/utils/geometryutils.h
+    core/types/spatialadjacency.h
     # virtualscreenswapper.{h,cpp} lifted to libs/phosphor-screens/Swapper.h -
     # callers include <PhosphorScreens/Swapper.h> directly.
-    core/screenmoderouter.cpp
-    core/screenmoderouter.h
-    core/crosssurfaceresolver.cpp
-    core/crosssurfaceresolver.h
-    core/dbusvariantutils.cpp
-    core/dbusvariantutils.h
+    core/resolve/screenmoderouter.cpp
+    core/resolve/screenmoderouter.h
+    core/resolve/crosssurfaceresolver.cpp
+    core/resolve/crosssurfaceresolver.h
+    core/utils/dbusvariantutils.cpp
+    core/utils/dbusvariantutils.h
     # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutRegistry,
     # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ -
     # consumers include <PhosphorZones/...> directly and construct the registry
     # with a borrowed PhosphorRules::RuleStore* + the
     # "plasmazones/layouts" subdir inline.
-    core/unifiedlayoutlist.cpp
-    core/unifiedlayoutlist.h
+    core/utils/unifiedlayoutlist.cpp
+    core/utils/unifiedlayoutlist.h
     common/layoutpreviewserialize.cpp
     common/layoutpreviewserialize.h
     common/screenidresolver.cpp
     common/screenidresolver.h
     common/layoutbundlebuilder.cpp
     common/layoutbundlebuilder.h
-    core/supportreport.cpp
-    core/supportreport.h
+    core/platform/supportreport.cpp
+    core/platform/supportreport.h
     # layersurface moved to PhosphorWayland; shaderregistry/params moved to PhosphorShaders
-    core/single_instance_service.cpp
-    core/single_instance_service.h
+    core/platform/singleinstanceservice.cpp
+    core/platform/singleinstanceservice.h
     # screen_resolver.{h,cpp} and screenmanager.{h,cpp} + screenmanager/
     # lifted to libs/phosphor-screens. Daemon consumers take
     # PhosphorScreens::ScreenManager* via constructor injection -
     # no service-locator intermediary.
-    core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
+    core/interfaces/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
     # shaderregistry.cpp + shaderincluderesolver moved to PhosphorShaders
-    core/modifierutils.cpp
-    core/modifierutils.h
+    core/utils/modifierutils.cpp
+    core/utils/modifierutils.h
     config/settings.cpp
     config/settings/loadsave.cpp
     config/settings/setters.cpp
     config/settings/perscreen.cpp
+    config/settings/animationprofile.cpp
+    config/settings/profiletrees.cpp
+    config/settings/disable.cpp
+    config/settings/uienums.cpp
+    config/settings/triggers.cpp
+    config/settings/systemcolors.cpp
+    config/settings/storescalars.cpp
+    config/settings/shortcuts.cpp
     config/settings.h
     config/configdefaults.cpp
     config/configbackends.h
@@ -101,21 +109,32 @@ set(plasmazones_core_SRCS
     config/perscreenresolver.cpp
     config/settingsschema.h
     config/settingsschema.cpp
+    config/settingsschemachoices.h
+    config/settingsvaluelabels.cpp
+    config/settingsvaluelabels.h
     config/configmigration.h
+    config/configmigration_util.h
+    config/configmigration_v4detail.h
     config/configmigration.cpp
+    config/configmigration_v2.cpp
+    config/configmigration_v3.cpp
+    config/configmigration_v4.cpp
+    config/configmigration_v4rules.cpp
+    config/configmigration_v4finalize.cpp
+    config/configmigration_v5.cpp
     config/colorimporter.cpp
     config/colorimporter.h
     config/updatechecker.cpp
     config/updatechecker.h
     dbus/dbushelpers.cpp
-    dbus/layoutadaptor.cpp
+    dbus/layoutadaptor/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp
     dbus/layoutadaptor/editor.cpp
-    dbus/layoutadaptor.h
-    dbus/settingsadaptor.cpp
-    dbus/settingsadaptor_batch.cpp
-    dbus/settingsadaptor_registry.cpp
-    dbus/settingsadaptor.h
+    dbus/layoutadaptor/layoutadaptor.h
+    dbus/settingsadaptor/settingsadaptor.cpp
+    dbus/settingsadaptor/settingsadaptor_batch.cpp
+    dbus/settingsadaptor/settingsadaptor_registry.cpp
+    dbus/settingsadaptor/settingsadaptor.h
     dbus/shaderadaptor.cpp
     dbus/shaderadaptor.h
     dbus/compositorbridgeadaptor.cpp
@@ -129,8 +148,12 @@ set(plasmazones_core_SRCS
     dbus/ruleadaptor.cpp
     dbus/ruleadaptor.h
     # snapnavigationtargets moved to libs/phosphor-snap-engine/
-    dbus/windowtrackingadaptor.cpp
+    dbus/windowtrackingadaptor/windowtrackingadaptor.cpp
+    dbus/windowtrackingadaptor/lifecycle.cpp
+    dbus/windowtrackingadaptor/queries.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
+    dbus/windowtrackingadaptor/rules.cpp
+    dbus/windowtrackingadaptor/crossmode.cpp
     dbus/windowtrackingadaptor/navigation.cpp
     dbus/windowtrackingadaptor/float.cpp
     dbus/windowtrackingadaptor/persistence.cpp
@@ -139,23 +162,23 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/persistenceworker.h
     dbus/windowtrackingadaptor/snaprestore.cpp
     dbus/windowtrackingadaptor/convenience.cpp
-    dbus/windowtrackingadaptor.h
+    dbus/windowtrackingadaptor/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
-    dbus/windowdragadaptor.cpp
+    dbus/windowdragadaptor/windowdragadaptor.cpp
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
     dbus/windowdragadaptor/dragactivation.cpp
     dbus/windowdragadaptor/dragactivation.h
-    dbus/windowdragadaptor.h
-    dbus/autotileadaptor.cpp
+    dbus/windowdragadaptor/windowdragadaptor.h
+    dbus/autotileadaptor/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
-    dbus/autotileadaptor.h
-    dbus/snapadaptor.cpp
+    dbus/autotileadaptor/autotileadaptor.h
+    dbus/snapadaptor/snapadaptor.cpp
     dbus/snapadaptor/commit.cpp
     dbus/snapadaptor/snaprestore.cpp
     dbus/snapadaptor/navigation.cpp
-    dbus/snapadaptor.h
+    dbus/snapadaptor/snapadaptor.h
     # TilingAlgorithm, TilingState, SplitTree, AlgorithmRegistry, scripted-algo
     # machinery live in libs/phosphor-tiles/. Consumers include canonical
     # <PhosphorTiles/...> headers directly; no forwarding shims remain.
@@ -447,11 +470,17 @@ install(TARGETS plasmazones_shaderpreview
 # Daemon executable
 set(plasmazones_daemon_SRCS
     daemon/main.cpp
-    daemon/vulkan_support.cpp
+    daemon/rendering/vulkansupport.cpp
     daemon/daemon.cpp
-    daemon/enginefactory.cpp
+    daemon/controllers/enginefactory.cpp
     daemon/daemon/start.cpp
+    daemon/daemon/autotile_init.cpp
     daemon/daemon/signals.cpp
+    daemon/daemon/shader_warmup.cpp
+    daemon/daemon/init_services.cpp
+    daemon/daemon/init_adaptors.cpp
+    daemon/daemon/init_engines.cpp
+    daemon/daemon/lifecycle.cpp
     daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
@@ -463,8 +492,8 @@ set(plasmazones_daemon_SRCS
     # (VirtualDesktopManager + ActivityManager + ScreenModeRouter + ISettings)
     # to the LGPL PhosphorContext::IContextResolver triple. Owned by Daemon
     # alongside m_contextResolver — see the wiring in daemon/daemon.h.
-    daemon/contextresolverwiring.h
-    daemon/contextresolverwiring.cpp
+    daemon/controllers/contextresolverwiring.h
+    daemon/controllers/contextresolverwiring.cpp
     daemon/overlayservice.cpp
     daemon/overlayservice/animation_config.cpp
     daemon/overlayservice/lifecycle.cpp
@@ -474,6 +503,7 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/osd.cpp
     daemon/overlayservice/priming.cpp
     daemon/overlayservice/rekey.cpp
+    daemon/overlayservice/cheatsheet.cpp
     daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
     daemon/overlayservice/shellhost_bridge.cpp
@@ -483,25 +513,25 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice.h
     daemon/overlayservice_types.h
     daemon/overlayservice/internal.h
-    daemon/snapassistthumbnailprovider.cpp
-    daemon/snapassistthumbnailprovider.h
+    daemon/rendering/snapassistthumbnailprovider.cpp
+    daemon/rendering/snapassistthumbnailprovider.h
     # Zero-copy GPU thumbnail path (PLASMAZONES_DMABUF_THUMBNAILS): imports
     # dma-bufs handed from the kwin-effect as Vulkan-backed QSGTextures.
-    daemon/dmabuftextureprovider.cpp
-    daemon/dmabuftextureprovider.h
-    daemon/dmabuffencewaiter.cpp
-    daemon/dmabuffencewaiter.h
+    daemon/rendering/dmabuftextureprovider.cpp
+    daemon/rendering/dmabuftextureprovider.h
+    daemon/rendering/dmabuffencewaiter.cpp
+    daemon/rendering/dmabuffencewaiter.h
     # OpenGL-RHI fallback import (EGL dma-buf -> GL texture). Isolated TU so its
     # epoxy GL/EGL headers don't mix with the Vulkan + Qt RHI headers.
-    daemon/dmabufglimport.cpp
-    daemon/dmabufglimport.h
-    daemon/shortcutmanager.cpp
-    daemon/shortcutmanager.h
-    daemon/zoneselectorcontroller.cpp
-    daemon/zoneselectorcontroller.h
+    daemon/rendering/dmabufglimport.cpp
+    daemon/rendering/dmabufglimport.h
+    daemon/controllers/shortcutmanager.cpp
+    daemon/controllers/shortcutmanager.h
+    daemon/controllers/zoneselectorcontroller.cpp
+    daemon/controllers/zoneselectorcontroller.h
     # Mode tracking and smart toggle (Unified Layout Model)
-    daemon/unifiedlayoutcontroller.cpp
-    daemon/unifiedlayoutcontroller.h
+    daemon/controllers/unifiedlayoutcontroller.cpp
+    daemon/controllers/unifiedlayoutcontroller.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering
 )
 
@@ -563,7 +593,7 @@ target_link_libraries(plasmazonesd PRIVATE PkgConfig::Epoxy)
 # first GL include and refuses to coexist with GL/gl.h, which jumbo-grouping
 # with the Vulkan + Qt RHI sources would pull in. Standalone TU keeps its
 # EGL/GL headers fully isolated.
-set_source_files_properties(daemon/dmabufglimport.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(daemon/rendering/dmabufglimport.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 install(TARGETS plasmazonesd DESTINATION ${KDE_INSTALL_BINDIR})
 
@@ -667,8 +697,10 @@ endif()
 
 set(plasmazones_editor_SRCS
     editor/main.cpp
-    daemon/vulkan_support.cpp
+    daemon/rendering/vulkansupport.cpp
     editor/EditorController.cpp
+    editor/EditorGapsModel.cpp
+    editor/EditorGapsModel.h
     editor/EditorLaunchController.cpp
     editor/EditorLaunchController.h
     editor/EditorAppAdaptor.cpp

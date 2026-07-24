@@ -3,8 +3,8 @@
 
 #include "shaderpreviewcontroller.h"
 
-#include "../daemon/rendering/zonelabeltexturebuilder.h"
-#include "../phosphor_i18n.h"
+#include "daemon/rendering/zonelabeltexturebuilder.h"
+#include "phosphor_i18n.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 #include <PhosphorShaders/ShaderRegistry.h>

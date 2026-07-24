@@ -7,8 +7,8 @@
 // getWindowState, getAllWindowStates stay — they are cross-mode queries
 // on WTS state.
 
-#include "../windowtrackingadaptor.h"
-#include "../../core/logging.h"
+#include "windowtrackingadaptor.h"
+#include "core/platform/logging.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
 
 namespace PlasmaZones {

@@ -13,9 +13,9 @@
 #include <chrono>
 #include <memory>
 
-#include "shortcutmanager.h"
+#include "controllers/shortcutmanager.h"
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
-#include "../core/types.h"
+#include "core/types/types.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
@@ -243,7 +243,27 @@ public:
     /// no OSD.
     void showNotAssignedOsd(const QString& screenId);
 
+    // Shortcut cheatsheet overlay (impls in daemon/osd.cpp).
+    /// Toggle the cheatsheet on the cursor's screen. Show path resolves the
+    /// screen's tiling mode + the shortcut catalog and pushes both into the
+    /// overlay (daemon-mediated push), dismisses any other Escape-consuming
+    /// modal first (picker / snap assist — at most one Escape grab consumer
+    /// at a time), then binds the sheet's dedicated Escape ad-hoc grab.
+    void toggleCheatsheet();
+    /// Re-push catalog + mode into a visible cheatsheet — live refilter on
+    /// mode switches, rebinds, and the autotile feature gate. No-op when
+    /// hidden. Mode is re-resolved for the screen the sheet is BOUND to
+    /// (not the cursor's current screen).
+    void refreshCheatsheetIfVisible();
+    /// Release the cheatsheet's Escape ad-hoc grab. Connected to
+    /// OverlayService::cheatsheetDismissed in start.cpp.
+    void onCheatsheetDismissed();
+
 private:
+    /// Show path for the toggle shortcut: resolve cursor screen, catalog,
+    /// per-screen mode; dismiss sibling Escape-consuming modals; show and
+    /// bind the Escape grab. Only called from toggleCheatsheet().
+    void showCheatsheetOnCursorScreen();
     /**
      * @brief Show layout OSD for an autotile algorithm (visual zone preview)
      *
@@ -279,6 +299,14 @@ private:
     void setupAnimationProfiles();
     void setupAnimationShaderEffects();
     void setupSurfaceShaderEffects();
+
+    // init() phase methods, run in order from the thin init() (daemon.cpp); the
+    // order is load-bearing. Defined across daemon/init_*.cpp + shader_warmup.cpp.
+    void setupShaderWarmBakes();
+    void initLayoutAndSettingsWiring();
+    void initCoreAdaptors();
+    void initEnginesAndWiring();
+    bool registerDBusService();
 
     /// Watch the session going idle and push it to the KWin effect, which pauses
     /// decoration-chain animation on it. See m_idleService for why the daemon owns this
@@ -393,6 +421,7 @@ private:
     void handleRotate(bool clockwise);
     void handleFloat();
     void handleMove(NavigationDirection direction);
+    void handleSpan(NavigationDirection direction);
     void handleFocus(NavigationDirection direction);
     void handlePush();
     void handleRestore();
@@ -640,44 +669,30 @@ private:
     // rule-backed assignment cascade — construction order must build the
     // store first. The RuleAdaptor borrows it too.
     std::unique_ptr<PhosphorRules::RuleStore> m_ruleStore;
-    // Filtered slice of m_ruleStore — only rules whose action list
-    // contains a terminal `Exclude`. Built via
-    // `PhosphorRules::ExclusionRules::excludeRulesFrom` and kept in
-    // lockstep with the unified store via the rulesChanged subscription
-    // wired in init(). SnapEngine borrows a pointer into this set for its
-    // `isAppIdExcluded` probe; the WindowTrackingAdaptor's
-    // `pruneExcludedPendingRestores` receives the AppId patterns extracted
-    // from this same filtered slice by the daemon at refilter time. Held
-    // as a member (stable address) rather than rebuilt per access so the
-    // bound RuleEvaluator's per-revision cache stays valid across
-    // back-to-back resolves. Replaces a legacy QStringList-based settings
-    // path that derived the equivalent set from two flat string lists —
-    // see configmigration.cpp::migrateV3ToV4 for the schema fold; the
-    // unified `PhosphorRules::ExclusionRules` namespace now does the
-    // slicing across both the daemon and the kwin-effect.
+    // Filtered slice of m_ruleStore — only rules with a terminal `Exclude`
+    // action, built via `PhosphorRules::ExclusionRules::excludeRulesFrom` and
+    // kept in lockstep with the store via the rulesChanged subscription wired
+    // in init(). SnapEngine borrows a pointer into this set for isAppIdExcluded;
+    // the WindowTrackingAdaptor's pruneExcludedPendingRestores receives the
+    // AppId patterns extracted from this same slice at refilter time. Held as a
+    // member (stable address) so the bound RuleEvaluator's per-revision cache
+    // stays valid across back-to-back resolves.
     PhosphorRules::RuleSet m_excludeRuleSet;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
-    // Daemon-owned tile-algorithm registry. Replaces the old
-    // AlgorithmRegistry::instance() singleton — per-process ownership is
-    // the only shape that works once PlasmaZones becomes a plugin-based
-    // compositor/WM/shell (plugins can't share process-global state
-    // safely).
-    //
-    // ─── DECLARATION ORDER INVARIANT ─────────────────────────────────
-    // Every FactoryContext service the bundle borrows (m_layoutManager
-    // → IZoneLayoutRegistry, m_algorithmRegistry → ITileAlgorithmRegistry)
-    // MUST be declared before m_layoutSources so reverse-order member
-    // destruction tears the bundle (and its ZonesLayoutSource /
-    // AutotileLayoutSource children) down BEFORE the registries those
-    // children borrow. The LayoutSourceBundle contract
-    // (libs/phosphor-layout-api/.../LayoutSourceBundle.h) is explicit
-    // about this — violating the order produces dangling pointers in
-    // every source's destructor, hidden today only by Qt's signal
-    // auto-disconnect. Do not reorder these three lines without revisiting
-    // every source's destructor.
-    //
-    // Also declared before ScriptedAlgorithmLoader + AutotileEngine
-    // because both take a borrowed pointer to it in their constructor.
+    // Daemon-owned tile-algorithm registry, replacing the old
+    // AlgorithmRegistry::instance() singleton: plugins can't share
+    // process-global state safely, so the composition root owns it.
+    // DECLARATION ORDER INVARIANT: every FactoryContext service the bundle
+    // borrows (m_layoutManager → IZoneLayoutRegistry, m_algorithmRegistry
+    // → ITileAlgorithmRegistry) MUST precede m_layoutSources, so
+    // reverse-order destruction tears the bundle and its ZonesLayoutSource
+    // / AutotileLayoutSource children down before the registries they
+    // borrow. See the LayoutSourceBundle contract
+    // (libs/phosphor-layout-api/.../LayoutSourceBundle.h). Violating it
+    // dangles every source's destructor, hidden today only by Qt's signal
+    // auto-disconnect, so don't reorder these three lines without
+    // revisiting them. Must also precede ScriptedAlgorithmLoader and
+    // AutotileEngine, which borrow it in their constructors.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_algorithmRegistry;
     // Manual layouts + autotile algorithms composed behind layoutSource().
     // The bundle owns all three objects so destruction is deterministic
@@ -699,33 +714,35 @@ private:
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
     // ─── End of layout-source declaration block ─────────────────────────
     std::unique_ptr<PhosphorZones::LayoutComputeService> m_layoutComputeService;
-    /// Per-daemon curve registry. Replaces the prior per-process
-    /// `CurveRegistry::instance()` singleton — composition roots own
-    /// their own.
-    ///
-    /// DECLARATION ORDER INVARIANT: must be declared BEFORE `m_settings`
-    /// (which takes a borrowed pointer to it in its constructor) and
-    /// BEFORE `m_curveLoader` / `m_profileLoader` (which also borrow).
-    /// Reverse-order destruction then tears every consumer down before
-    /// the registry itself, guaranteeing no UAF on the Settings /
-    /// loader teardown paths. Also reset from `PhosphorCurve::s_registry`
-    /// in `~Daemon` before teardown so the QML static helper doesn't
-    /// dangle into freed memory on process shutdown or successive
-    /// Daemon constructions in tests.
+
+    /// Raw Global-path profile as the loader registered it, snapshot once per
+    /// loader reload and cleared on profilesChanged. The settings-driven
+    /// publish merges its fallbacks over THIS rather than over the registry's
+    /// current entry, which is the merged result of the previous tick and
+    /// would freeze the fallbacks at their first observed value. Keyed by path
+    /// even though kSettingsDrivenProfilePaths holds a single entry today, so
+    /// adding a second path needs no new plumbing. Borrows nothing, so it sits
+    /// outside the declaration-order block below.
+    QHash<QString, PhosphorAnimation::Profile> m_rawJsonProfiles;
+    /// Per-daemon curve registry, replacing the `CurveRegistry::instance()`
+    /// singleton so each composition root owns its own.
+    /// DECLARATION ORDER INVARIANT: must precede `m_settings`,
+    /// `m_curveLoader` and `m_profileLoader`, all of which borrow it, so
+    /// reverse-order destruction tears every consumer down first and no
+    /// Settings / loader teardown path can UAF. Also cleared from
+    /// `PhosphorCurve::s_registry` in `~Daemon`, so the QML static helper
+    /// can't dangle on shutdown or across successive Daemon
+    /// constructions in tests.
     PhosphorAnimation::CurveRegistry m_curveRegistry;
-    /// Per-daemon profile registry. Replaces the prior process-global
-    /// `PhosphorProfileRegistry::instance()` singleton — composition
-    /// roots own their own and publish via `setDefaultRegistry` so QML
-    /// callsites resolve through the same instance the daemon
-    /// populates from Settings + ProfileLoader.
-    ///
-    /// DECLARATION ORDER INVARIANT: must be declared BEFORE
-    /// `m_overlayService` (which takes a reference into its
-    /// SurfaceAnimator) and BEFORE `m_profileLoader` (which holds a
-    /// reference). Reverse-order destruction then tears the consumers
-    /// down before the registry itself, guaranteeing no UAF on the
-    /// service / loader teardown paths. The `setDefaultRegistry(nullptr)`
-    /// call in `stop()` clears the QML static handle before teardown.
+    /// Per-daemon profile registry, replacing the
+    /// `PhosphorProfileRegistry::instance()` singleton. Published via
+    /// `setDefaultRegistry` so QML callsites resolve through the same
+    /// instance the daemon populates from Settings + ProfileLoader.
+    /// DECLARATION ORDER INVARIANT: must precede `m_overlayService` (which
+    /// references it from its SurfaceAnimator) and `m_profileLoader`, so
+    /// reverse-order destruction tears the consumers down first and no
+    /// service / loader teardown path can UAF. `stop()` calls
+    /// `setDefaultRegistry(nullptr)` to clear the QML static handle.
     PhosphorAnimation::PhosphorProfileRegistry m_profileRegistry;
     /// Per-daemon QtQuickClock manager — replaces the prior process-
     /// global `QtQuickClockManager::instance()` singleton. Published via
@@ -772,25 +789,24 @@ private:
     /// Wayland client, so it watches and pushes the resolved boolean to the effect
     /// over D-Bus (SettingsAdaptor::sessionIdleChanged).
     ///
-    /// The effect pauses decoration-chain animation while idle. That is the only
-    /// lever that lets the GPU leave its top performance state: an animated pack
-    /// repaints every window carrying it on every vsync, and it is the EXISTENCE of
-    /// per-frame work, not its size, that holds the clocks up.
+    /// The effect pauses decoration-chain animation while idle, the only lever
+    /// that lets the GPU leave its top performance state. An animated pack
+    /// repaints every window carrying it on every vsync, and it is the EXISTENCE
+    /// of per-frame work, not its size, that holds the clocks up.
     std::unique_ptr<PhosphorServiceIdle::IdleService> m_idleService;
 
-    /// Coalesces idle-ladder rebuilds. Rearming is not free and not silent — it
-    /// destroys and recreates the compositor's ext-idle-notify-v1 object, and while
-    /// the session is idle it announces a resume, which wakes every decorated window.
-    /// The "Idle after" slider writes on every step of a drag, so the rebuild is
-    /// deferred to one net reconfigure once the value settles.
+    /// Coalesces idle-ladder rebuilds. Rearming destroys and recreates the
+    /// compositor's ext-idle-notify-v1 object, and while idle it announces a
+    /// resume that wakes every decorated window. The "Idle after" slider writes
+    /// on every drag step, so rebuilds defer to one net reconfigure.
     QTimer m_idleStagesRefreshTimer;
     static constexpr int kIdleStagesRefreshDebounceMs = 250;
 
-    /// Retry budget for an idle ladder that would not arm. The failure this covers is a
-    /// login race (the seat's input devices are not advertised yet), so it resolves in well
-    /// under a second or it is not going to resolve at all — a handful of tries a second
-    /// apart is generous. When the budget runs out the feature degrades to off, which is
-    /// what it silently did before anyone was checking.
+    /// Retry budget for an idle ladder that would not arm. This covers a login
+    /// race (the seat's input devices are not advertised yet), which resolves in
+    /// well under a second or not at all, so a few tries a second apart is
+    /// generous. Exhausting it degrades the feature to off, which is what it
+    /// silently did before anyone was checking.
     static constexpr int kIdleArmRetries = 5;
     static constexpr int kIdleArmRetryDelayMs = 1000;
     int m_idleArmRetriesLeft = kIdleArmRetries;
@@ -812,6 +828,22 @@ private:
     /// of which are made in the constructor or init() and would never come back on a
     /// stop()→start() cycle — and so a re-armed service cannot stack duplicates.
     QList<QMetaObject::Connection> m_idleConnections;
+
+    /// Connections installed by connectLayoutSignals() / connectOverlaySignals().
+    /// Both functions re-run on every start(), but their senders survive stop(),
+    /// so a restart would stack duplicate handlers. We disconnect these exact
+    /// handles on re-entry rather than the (sender, signal, receiver) triple:
+    /// other call sites install their OWN handlers on the same signals — e.g.
+    /// initLayoutAndSettingsWiring() connects layoutAssigned from the ctor — and
+    /// a triple-wide disconnect would silently delete those too. Qt::UniqueConnection
+    /// is not an option here: it does not apply to lambda/functor connections.
+    QList<QMetaObject::Connection> m_restartScopedConnections;
+    /// Handles for the autotile shortcut connections installed by
+    /// initializeAutotile(). Separate from m_restartScopedConnections because
+    /// that list is cleared in connectLayoutSignals(), which start() calls
+    /// AFTER initializeAutotile() — sharing one list would drop these handles
+    /// the moment after they were installed.
+    QList<QMetaObject::Connection> m_autotileShortcutConnections;
 
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;
@@ -1041,12 +1073,23 @@ private:
     QElapsedTimer m_rotateDebounce;
     QElapsedTimer m_floatDebounce;
     QElapsedTimer m_cycleLayoutDebounce;
+    // One timer for all four span directions; handleSpan carries the why.
+    QElapsedTimer m_spanDebounce;
     // Shared debounce for VS swap/rotate. Each fire commits a config change
     // through Settings and kicks a refresh → resnap cascade — cheap per call
     // but pile-up-prone under keyboard auto-repeat, same rationale as
     // m_rotateDebounce above. One timer for both ops: rapid alternation
     // between swap and rotate is not a user pattern.
     QElapsedTimer m_virtualScreenDebounce;
+    /// Per-start connections outside stop()'s per-sender sweep and outside
+    /// m_restartScopedConnections: the m_settings→this autotile-enabled
+    /// cheatsheet refilter. m_settings is swept only by teardownIdleConnections,
+    /// whose ctor/init connections must survive, so this per-start one is
+    /// severed here by handle. The WTA-to-drag-adaptor fan-out is instead kept
+    /// unique with Qt::UniqueConnection, and the layout/overlay connections are
+    /// tracked in m_restartScopedConnections and cleared at the top of
+    /// connectLayoutSignals().
+    QVector<QMetaObject::Connection> m_perStartConnections;
 
     // Last autotile window order per (screen, desktop, activity), captured when
     // leaving autotile. Used to re-seed the autotile engine with the same order

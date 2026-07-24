@@ -310,7 +310,7 @@ bool ShaderNodeRhi::ensureBufferPipeline()
                             2 + j, QRhiShaderResourceBinding::FragmentStage, tex, sam));
                     }
                 }
-                appendCommonTrailerBindings(bindings);
+                appendCommonTrailerBindings(bindings, DepthAccess::WrittenThisPass);
                 srb->setBindings(bindings.begin(), bindings.end());
                 if (!srb->create()) {
                     m_shaderError = QStringLiteral("Failed to create multi-buffer pass SRB ") + QString::number(i);
@@ -373,7 +373,7 @@ bool ShaderNodeRhi::ensureBufferPipeline()
                     2 + ch, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
-        appendCommonTrailerBindings(bindings);
+        appendCommonTrailerBindings(bindings, DepthAccess::WrittenThisPass);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -452,7 +452,7 @@ bool ShaderNodeRhi::ensurePipeline()
                     2 + ch, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
-        appendCommonTrailerBindings(bindings);
+        appendCommonTrailerBindings(bindings, DepthAccess::Sampled);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -471,7 +471,7 @@ bool ShaderNodeRhi::ensurePipeline()
                     2 + i, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
-        appendCommonTrailerBindings(bindings);
+        appendCommonTrailerBindings(bindings, DepthAccess::Sampled);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -612,12 +612,13 @@ void ShaderNodeRhi::appendUboAndExtraBindings(QVector<QRhiShaderResourceBinding>
     appendExtraBindings(bindings);
 }
 
-void ShaderNodeRhi::appendCommonTrailerBindings(QVector<QRhiShaderResourceBinding>& bindings) const
+void ShaderNodeRhi::appendCommonTrailerBindings(QVector<QRhiShaderResourceBinding>& bindings,
+                                                DepthAccess depthAccess) const
 {
     appendAudioBinding(bindings);
     appendUserTextureBindings(bindings);
     appendWallpaperBinding(bindings);
-    appendDepthBinding(bindings);
+    appendDepthBinding(bindings, depthAccess);
 }
 
 void ShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const
@@ -628,12 +629,21 @@ void ShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& b
     }
 }
 
-void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings) const
+void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings, DepthAccess access) const
 {
-    if (m_useDepthBuffer && m_depthTexture && m_depthSampler) {
-        bindings.append(QRhiShaderResourceBinding::sampledTexture(12, QRhiShaderResourceBinding::FragmentStage,
-                                                                  m_depthTexture.get(), m_depthSampler.get()));
+    if (!m_useDepthBuffer || !m_depthTexture || !m_depthSampler) {
+        return;
     }
+    // A pass that writes the depth attachment must not also sample it — see
+    // DepthAccess. Substitute the dummy so binding 12 stays populated for a
+    // buffer shader that pulls in depth.glsl regardless.
+    const bool writes = access == DepthAccess::WrittenThisPass;
+    QRhiTexture* tex = writes ? m_dummyChannelTexture.get() : m_depthTexture.get();
+    QRhiSampler* sam = writes ? m_dummyChannelSampler.get() : m_depthSampler.get();
+    if (!tex || !sam) {
+        return;
+    }
+    bindings.append(QRhiShaderResourceBinding::sampledTexture(12, QRhiShaderResourceBinding::FragmentStage, tex, sam));
 }
 
 void ShaderNodeRhi::appendExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const

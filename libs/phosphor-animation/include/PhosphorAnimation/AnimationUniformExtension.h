@@ -10,6 +10,7 @@
 
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPointF>
 #include <QSizeF>
 #include <QVector4D>
 
@@ -29,14 +30,14 @@ namespace PhosphorAnimation {
 ///
 /// Why an extension and not a BaseUniforms member: the zone-shader path
 /// (`ZoneShaderItem` via `ZoneUniformExtension`) shares `BaseUniforms`
-/// with the animation path. An earlier revision grew BaseUniforms to
-/// 704 bytes to add these two fields directly; that change broke zone-
+/// with the animation path. An earlier revision grew BaseUniforms
+/// directly to add the first of these per-leg fields; that change broke zone-
 /// shader rendering on multi-VS setups in a way the team couldn't
 /// reproduce in a controlled test (likely a transitively-included-
 /// `common.glsl` cache-key gap in `shaderCacheKey`, but unconfirmed).
 /// Keeping `BaseUniforms` at 672 bytes and routing animation-only
 /// fields through this extension isolates the two pipelines: zone
-/// shaders attach `ZoneUniformExtension` (4096 bytes after base) and
+/// shaders attach `ZoneUniformExtension` (`kZoneExtensionBytes` after base) and
 /// never observe these fields at all; animation shaders attach
 /// `AnimationUniformExtension` (48 bytes after base) — `iSurfaceScreenPos`
 /// at offset 672, `iAnchorSize` at 688, `iAnchorPosInFbo` at 696,
@@ -45,8 +46,8 @@ namespace PhosphorAnimation {
 /// declares.
 ///
 /// Cross-runtime parity: the kwin-effect path uses classic GL
-/// `setUniform` lookups for these names (see `paint_pipeline.cpp`
-/// + `shader_transitions.cpp`) — independent of the UBO mechanism,
+/// `setUniform` lookups for these names (see `paint_shader_window.cpp`)
+/// — independent of the UBO mechanism,
 /// works without any extension. Author-side GLSL is identical across
 /// runtimes (the `#ifdef PLASMAZONES_KWIN` branch of
 /// animation_uniforms.glsl declares them as default-block uniforms;
@@ -64,6 +65,10 @@ namespace PhosphorAnimation {
 /// `m_mutex` serializes both — sync phase normally blocks the render
 /// thread but some Qt render loops can advance through prepare() before
 /// the next sync fires, so the lock is required to prevent torn copies.
+/// The lost-dirty race (a setter landing between the render thread's
+/// copy and its dirty-clear) is defended on the consumer side:
+/// `uploadExtensionToUbo` clears the flag BEFORE copying, so such a
+/// setter re-arms it and the value uploads next frame.
 class PHOSPHORANIMATION_EXPORT AnimationUniformExtension : public PhosphorShaders::IUniformExtension
 {
 public:
@@ -118,12 +123,13 @@ public:
     /// Surface origin in **logical** screen pixels (.xy) plus host
     /// screen dimensions (.zw). Pushed by SurfaceAnimator on every leg
     /// attach and on each anchor / window geometry signal. Logical-
-    /// pixel units; `iResolution` lands in the UBO multiplied by DPR
-    /// (`shadereffect.cpp::syncCustomNode`) so its units differ —
-    /// shaders that need FBO size to be in the SAME unit as the
-    /// extension fields should read it from `.zw` here (which mirrors
-    /// the QQuickWindow's contentItem size and equals the wl_surface
-    /// rect for screen-sized OSD / popup surfaces on the daemon path).
+    /// pixel units — the same unit `iResolution` carries on this path,
+    /// because this extension's `requiresPhysicalResolution()` returns
+    /// false and `shadereffect.cpp::effectiveResolutionScale` therefore skips the
+    /// DPR multiply. `.zw` mirrors the QQuickWindow's contentItem size
+    /// and equals the wl_surface rect for screen-sized OSD / popup
+    /// surfaces on the daemon path, so it is an equivalent screen-size
+    /// source when a shader wants it independent of the FBO bounds.
     /// Initial value (0,0,0,0) — vertex shaders that read `.zw` for
     /// screen size MUST guard against zero (`max(.z, 1.0)`) to avoid
     /// NaN before the first push lands.
@@ -149,9 +155,10 @@ public:
     /// `syncShaderGeometryNow`. Logical-pixel units to keep magic-
     /// constant tuning that consumes this as a standalone pixel count
     /// stable across DPR settings (broken-glass's `uSize`, tv-glitch's
-    /// row offsets). Shaders that need to compute ratios involving FBO
-    /// size should pair this with `iSurfaceScreenPos.zw` (also
-    /// logical), NOT with `iResolution` (physical).
+    /// row offsets). Ratios against `iSurfaceScreenPos.zw` or against
+    /// `iResolution` are both unit-consistent here — the animation
+    /// path publishes `iResolution` in logical pixels too (see
+    /// `requiresPhysicalResolution()` above).
     void setIAnchorSize(const QSizeF& size)
     {
         QMutexLocker lock(&m_mutex);

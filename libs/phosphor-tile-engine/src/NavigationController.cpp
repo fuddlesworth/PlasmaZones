@@ -4,6 +4,7 @@
 #include <PhosphorTileEngine/NavigationController.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
@@ -59,7 +60,10 @@ void NavigationController::focusMaster()
                                             QString(), QString(), screenId);
         return;
     }
-    emitFocusRequestAtIndex(0, true);
+    // Reuse the resolution above rather than calling emitFocusRequestAtIndex,
+    // which would run the whole three-tier walk (a tiledWindows() list build
+    // per state in the scan tier) a second time for the same press.
+    activateResolvedWindowAtIndex(windows, state, 0, true);
     Q_EMIT m_engine->navigationFeedback(true, QStringLiteral("focus_master"), QStringLiteral("master"), QString(),
                                         QString(), screenId);
 }
@@ -105,7 +109,7 @@ void NavigationController::rotateWindowOrder(bool clockwise)
     PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
-    if (windows.size() < 2 || !state) {
+    if (!state || windows.size() < 2) {
         Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("nothing_to_rotate"),
                                             QString(), QString(), screenId);
         return; // Nothing to rotate with 0 or 1 window
@@ -113,19 +117,52 @@ void NavigationController::rotateWindowOrder(bool clockwise)
 
     // Rotate the window order
     bool rotated = state->rotateWindows(clockwise);
+
+    // For overlap layouts, rotating exists to bring a different window to the
+    // user's working position (monocle cycles the visible window, deck cycles
+    // which window holds the master slot). Geometry alone cannot express that
+    // — with identical or overlapping zones the retile leaves the old window
+    // on top — so request activation of the window that just arrived there.
+    // Layouts with a declared master zone (deck, horizontal-deck) focus the
+    // window now occupying that slot; for the rest the interaction front is
+    // the stack's topmost window (last tiled index for lastOnTop, first for
+    // firstOnTop). The pending focus is emitted AFTER windowsTiled (see
+    // applyTiling), landing the raise on top of the effect's post-tile
+    // restack.
+    if (rotated) {
+        const PhosphorTiles::TilingAlgorithm* algo = m_engine->effectiveAlgorithm(screenId);
+        if (algo && algo->producesOverlappingZones()) {
+            const QStringList rotatedOrder = state->tiledWindows();
+            if (!rotatedOrder.isEmpty()) {
+                const int masterIdx = algo->masterZoneIndex();
+                QString front;
+                if (masterIdx >= 0 && masterIdx < rotatedOrder.size()) {
+                    front = rotatedOrder.at(masterIdx);
+                } else if (algo->overlapStacking() == QLatin1String("firstOnTop")) {
+                    front = rotatedOrder.first();
+                } else {
+                    front = rotatedOrder.last();
+                }
+                m_engine->requestPostRetileFocus(screenId, front);
+            }
+        }
+    }
+
     m_engine->retileAfterOperation(screenId, rotated);
 
     if (rotated) {
+        qCInfo(PhosphorTileEngine::lcTileEngine) << "Rotated windows" << (clockwise ? "clockwise" : "counterclockwise");
         QString reason = QStringLiteral("%1:%2")
                              .arg(clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise"))
                              .arg(windows.size());
         Q_EMIT m_engine->navigationFeedback(true, QStringLiteral("rotate"), reason, QString(), QString(), screenId);
     } else {
+        // Defensive: TilingState::rotateWindows only refuses below two
+        // windows, which the guard above already rejected. Kept as a tripwire
+        // in case that precondition ever moves.
         Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_rotations"), QString(),
                                             QString(), screenId);
     }
-
-    qCInfo(PhosphorTileEngine::lcTileEngine) << "Rotated windows" << (clockwise ? "clockwise" : "counterclockwise");
 }
 
 QString NavigationController::directionalNeighborWindow(PhosphorTiles::TilingState* state, const QStringList& windows,
@@ -514,13 +551,25 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     if (!targetWindow.isEmpty()) {
         const bool swapped = state->swapWindowsById(focused, targetWindow);
         m_engine->retileAfterOperation(screenId, swapped);
-        Q_EMIT m_engine->navigationFeedback(swapped, action, direction, QString(), QString(), screenId);
+        // On failure the OSD needs a structured reason, not the raw direction
+        // (which the failure branches would misread as a boundary condition).
+        Q_EMIT m_engine->navigationFeedback(swapped, action, swapped ? direction : QStringLiteral("swap_failed"),
+                                            QString(), QString(), screenId);
         return;
     }
 
     if (hasGeometry) {
         // The focused window is at the layout edge in this direction — try the
         // adjacent output first, then the adjacent desktop, before giving up.
+        //
+        // The cross-MODE leg of crossOutputMove defers to the daemon's
+        // direct-connected handoff handlers, which can no-op (target engine
+        // unavailable, or per-desktop mode resolution disagreeing with this
+        // engine's neighbour check). This success OSD is therefore optimistic
+        // for that leg — the same documented convention as the snap engine's
+        // tryCrossModeOutput. A daemon-side failure emit cannot fix it: the
+        // handler runs synchronously inside the Q_EMIT, so its OSD would be
+        // immediately replaced by this one.
         if (crossOutputMove(screenId, focused, direction, action)) {
             Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("screen:") + direction, QString(),
                                                 QString(), screenId);
@@ -540,19 +589,25 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     }
 
     // Geometry not computed yet: fall back to order-based neighbour with wrap.
-    // This needs a partner — a single window has nothing to swap with and no
-    // geometry to cross a boundary, so report nothing_to_swap.
+    // The focused-window discriminator runs FIRST: a window that is tracked
+    // but absent from tiledWindows() is floating, not unfocused, and reporting
+    // "nothing to swap" for it would hide the real reason whenever the screen
+    // also happens to hold fewer than two tiled windows.
+    const int currentIndex = windows.indexOf(focused);
+    if (currentIndex < 0) {
+        const QString reason =
+            state->containsWindow(focused) ? QStringLiteral("not_tiled") : QStringLiteral("no_focus");
+        Q_EMIT m_engine->navigationFeedback(false, action, reason, QString(), QString(), screenId);
+        return;
+    }
+    // A lone tiled window has no partner to trade with and no geometry to
+    // cross a boundary with.
     if (windows.size() < 2) {
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("nothing_to_swap"), QString(), QString(),
                                             screenId);
         return;
     }
     const bool forward = isForwardDirection(direction);
-    const int currentIndex = windows.indexOf(focused);
-    if (currentIndex < 0) {
-        Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_focus"), QString(), QString(), screenId);
-        return;
-    }
     int targetIndex = forward ? currentIndex + 1 : currentIndex - 1;
     if (targetIndex < 0) {
         targetIndex = windows.size() - 1;
@@ -561,7 +616,9 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     }
     const bool swapped = state->swapWindowsById(focused, windows.at(targetIndex));
     m_engine->retileAfterOperation(screenId, swapped);
-    Q_EMIT m_engine->navigationFeedback(swapped, action, direction, QString(), QString(), screenId);
+    // Same structured failure reason as the geometry path above.
+    Q_EMIT m_engine->navigationFeedback(swapped, action, swapped ? direction : QStringLiteral("swap_failed"), QString(),
+                                        QString(), screenId);
 }
 
 void NavigationController::focusInDirection(const QString& direction, const QString& action,
@@ -578,6 +635,20 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
     }
 
     const QString focused = !explicitWindowId.isEmpty() ? explicitWindowId : state->focusedWindow();
+    if (focused.isEmpty() || windows.indexOf(focused) < 0) {
+        // The focus is not a member of the tiled set: either untracked, or
+        // sitting on a floating / dialog / excluded window on this screen.
+        // Both spellings behave identically downstream —
+        // directionalNeighborWindow bails before reporting geometry, and the
+        // order-cycling fallback then clamps indexOf(-1) to 0 and activates an
+        // arbitrary neighbour as if the press had travelled. Enter at the
+        // master instead, which is where a directional press from "nowhere"
+        // belongs, and report it as a master entry rather than as travel in
+        // the pressed direction, which never happened.
+        Q_EMIT m_engine->activateWindowRequested(windows.first());
+        Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("master"), QString(), QString(), screenId);
+        return;
+    }
 
     bool hasGeometry = false;
     const QString target = directionalNeighborWindow(state, windows, focused, direction, hasGeometry);
@@ -803,7 +874,12 @@ PhosphorTiles::TilingState* NavigationController::resolveActiveState(QString& ou
 
 QString NavigationController::resolveActiveScreen() const
 {
-    if (!m_engine->m_activeScreen.isEmpty()) {
+    // Gated on autotile mode, matching tier 2 of tiledWindowsForFocusedScreen.
+    // setActiveScreenHint accepts any screenId, including a snap-mode one, so
+    // an ungated hint sent the master-ratio and master-count shortcuts to a
+    // screen with no tiling state — they reported no_focus while the autotile
+    // screen the user was actually on went untouched.
+    if (!m_engine->m_activeScreen.isEmpty() && m_engine->isAutotileScreen(m_engine->m_activeScreen)) {
         return m_engine->m_activeScreen;
     }
     if (!m_engine->m_autotileScreens.isEmpty()) {
@@ -817,6 +893,20 @@ void NavigationController::emitFocusRequestAtIndex(int indexOffset, bool useFirs
     QString screenId;
     PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
+    if (windows.isEmpty()) {
+        // Report it. focusNext/focusPrevious used to return in silence here,
+        // so a press that did nothing also said nothing and read as a broken
+        // shortcut, while every sibling operation surfaced no_windows.
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_windows"), QString(),
+                                            QString(), screenId);
+        return;
+    }
+    activateResolvedWindowAtIndex(windows, state, indexOffset, useFirst);
+}
+
+void NavigationController::activateResolvedWindowAtIndex(const QStringList& windows, PhosphorTiles::TilingState* state,
+                                                         int indexOffset, bool useFirst)
+{
     if (windows.isEmpty()) {
         return;
     }
@@ -833,7 +923,8 @@ void NavigationController::emitFocusRequestAtIndex(int indexOffset, bool useFirs
 
 QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScreenId,
                                                                PhosphorTiles::TilingState*& outState,
-                                                               const QString& explicitWindowId)
+                                                               const QString& explicitWindowId,
+                                                               bool requireTiledWindows)
 {
     outState = nullptr;
 
@@ -866,50 +957,114 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
         // tracked by autotile — caller will surface no_focus / no_windows.
     }
 
-    // Use the tracked active screen (set by onWindowFocused) to avoid
-    // non-deterministic QHash iteration when multiple screens have focused windows
-    if (!m_engine->m_activeScreen.isEmpty()) {
+    // Use the tracked active screen (set by onWindowFocused, and by the
+    // daemon's setActiveScreenHint on every autotile shortcut) to avoid
+    // non-deterministic QHash iteration when multiple screens have windows.
+    //
+    // The hinted screen wins whenever it HAS tiled windows — deliberately not
+    // gated on a tracked focusedWindow(). Focus can legitimately sit on a
+    // floating, snapped, or never-tracked window there, and requiring a
+    // tracked focus sent every screen-scoped operation (rotate, swap with
+    // master, focus master, cycle) down to the hash-ordered scan below, where
+    // it acted on a DIFFERENT monitor than the shortcut targeted.
+    if (!m_engine->m_activeScreen.isEmpty() && m_engine->isAutotileScreen(m_engine->m_activeScreen)) {
         const auto key = m_engine->currentKeyForScreen(m_engine->m_activeScreen);
         auto sit = m_engine->m_states.states().constFind(key);
         if (sit != m_engine->m_states.states().constEnd()) {
             PhosphorTiles::TilingState* state = sit.value();
-            if (state && !state->focusedWindow().isEmpty()) {
+            const QStringList tiled = state ? state->tiledWindows() : QStringList();
+            if (!tiled.isEmpty() || (state && !requireTiledWindows && !state->focusedWindow().isEmpty())) {
                 outScreenId = m_engine->m_activeScreen;
                 outState = state;
-                return state->tiledWindows();
+                return tiled;
             }
         }
     }
 
-    // Fallback: scan states for current desktop/activity (e.g., if m_activeScreen is stale).
-    // Same sticky-pin-aware desktop match as the explicit-window scan above.
+    // Fallback: scan states for current desktop/activity (e.g. a stale hint).
+    // Selects on TILED WINDOWS, matching the hinted branch: focusedWindow() is
+    // never cleared and can name a floating window, so selecting on it could
+    // return a state with nothing tiled while a sibling screen has a full
+    // layout — every consumer would then report "no windows" on a desktop that
+    // plainly has some. A state that also holds the focus wins the tie.
+    //
+    // The no-focus runners-up are ranked rather than taken first-seen: QHash
+    // order is not stable run to run, so on two tiled monitors with no tracked
+    // focus a mutation (rotate, swap with master) would land on an arbitrary
+    // output. Preference order is the hinted screen, then the primary screen,
+    // then the lowest screenId, which is total and deterministic.
+    const QString primaryScreenId =
+        m_engine->m_screenManager ? m_engine->m_screenManager->primaryScreen().identifier : QString();
+    const auto fallbackRank = [&](const QString& screenId) {
+        if (!m_engine->m_activeScreen.isEmpty() && screenId == m_engine->m_activeScreen) {
+            return 0;
+        }
+        if (!primaryScreenId.isEmpty() && screenId == primaryScreenId) {
+            return 1;
+        }
+        return 2;
+    };
+    PhosphorTiles::TilingState* fallbackState = nullptr;
+    QString fallbackScreen;
+    int fallbackRankValue = 0;
     for (auto it = m_engine->m_states.states().constBegin(); it != m_engine->m_states.states().constEnd(); ++it) {
         if (it.key().desktop != m_engine->currentKeyForScreen(it.key().screenId).desktop
-            || it.key().activity != m_engine->m_context.currentActivity()) {
+            || it.key().activity != m_engine->m_context.currentActivity()
+            || !m_engine->isAutotileScreen(it.key().screenId)) {
             continue;
         }
         PhosphorTiles::TilingState* state = it.value();
-        if (state && !state->focusedWindow().isEmpty()) {
+        if (!state) {
+            continue;
+        }
+        const bool hasTiled = !state->tiledWindows().isEmpty();
+        if (!hasTiled && (requireTiledWindows || state->focusedWindow().isEmpty())) {
+            continue;
+        }
+        if (!state->focusedWindow().isEmpty()) {
             outScreenId = it.key().screenId;
             outState = state;
             return state->tiledWindows();
         }
+        const int rank = fallbackRank(it.key().screenId);
+        if (!fallbackState || rank < fallbackRankValue
+            || (rank == fallbackRankValue && it.key().screenId < fallbackScreen)) {
+            fallbackState = state;
+            fallbackScreen = it.key().screenId;
+            fallbackRankValue = rank;
+        }
+    }
+    if (fallbackState) {
+        outScreenId = fallbackScreen;
+        outState = fallbackState;
+        return fallbackState->tiledWindows();
     }
 
-    // No focused window found - fallback to primary screen if available
+    // Nothing resolved yet — fall back to the primary screen. The STATE lookup
+    // is gated on autotile mode so a snap-mode screen never receives a tiling
+    // mutation that retileAfterOperation would then refuse to paint, but the
+    // screen id is set either way: on a total miss the callers still emit
+    // navigationFeedback, and OverlayService needs an output to place that OSD
+    // on. Gating the id as well left every failure OSD homeless, which under
+    // the virtual-screen model is the common case (m_autotileScreens holds
+    // VIRTUAL ids while primaryScreen.identifier is physical, so the mode gate
+    // can never pass on a subdivided setup).
     const PhosphorScreens::PhysicalScreen primaryScreen =
         m_engine->m_screenManager ? m_engine->m_screenManager->primaryScreen() : PhosphorScreens::PhysicalScreen{};
     if (primaryScreen.isValid()) {
         outScreenId = primaryScreen.identifier;
-        const auto key = m_engine->currentKeyForScreen(outScreenId);
-        auto sit = m_engine->m_states.states().constFind(key);
-        if (sit != m_engine->m_states.states().constEnd() && sit.value()) {
-            outState = sit.value();
-            return sit.value()->tiledWindows();
+        if (m_engine->isAutotileScreen(primaryScreen.identifier)) {
+            const auto key = m_engine->currentKeyForScreen(outScreenId);
+            auto sit = m_engine->m_states.states().constFind(key);
+            if (sit != m_engine->m_states.states().constEnd() && sit.value()) {
+                outState = sit.value();
+                return sit.value()->tiledWindows();
+            }
         }
+        return {};
     }
 
-    outScreenId.clear();
+    outScreenId = m_engine->m_activeScreen;
     return {};
 }
 

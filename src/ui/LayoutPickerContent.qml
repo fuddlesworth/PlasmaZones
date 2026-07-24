@@ -219,16 +219,14 @@ Item {
             }
         }
 
-        // Title
-        Label {
+        // Title — shared popup-card typography (PopupCardTitle).
+        PopupCardTitle {
             id: titleLabel
 
             anchors.top: parent.top
             anchors.topMargin: metrics.paddingSide
             anchors.horizontalCenter: parent.horizontalCenter
             text: i18n("Choose Layout")
-            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.4
-            font.weight: Font.DemiBold
             color: root.textColor
         }
 

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../plasmazoneseffect.h"
+#include "plasmazoneseffect.h"
 
 #include "shader_internal.h"
 
@@ -29,10 +29,10 @@
 #include <QSet>
 #include <QStringList>
 
-#include "../autotilehandler.h"
-#include "../navigationhandler.h"
-#include "../snapassisthandler.h"
-#include "../snaphandler.h"
+#include "autotilehandler/autotilehandler.h"
+#include "handlers/navigationhandler.h"
+#include "handlers/snapassisthandler.h"
+#include "handlers/snaphandler.h"
 
 namespace PlasmaZones {
 
@@ -165,7 +165,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // Consuming it only on the non-minimized path left it armed when a drag-floated window
     // was minimized, and the next legitimate float-restore for that window was then wrongly
     // skipped by the stale marker.
-    const bool wasDragFloated = zoneId.isEmpty() && m_dragFloatedWindowIds.remove(liveWindowId);
+    const bool wasDragFloated = zoneId.isEmpty() && m_dragActivation.floatedWindowIds.remove(liveWindowId);
 
     // Skip float-restore geometry on minimized windows: when a snapped window is minimized
     // we float it (to free the zone slot), but applying the pre-tile geometry while minimized
@@ -327,7 +327,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         ? PhosphorAnimation::ProfilePaths::WindowLayoutSwitch
         : PhosphorAnimation::ProfilePaths::WindowSnapIn;
 
-    // Per-screen supersession epoch (see m_daemonBatchGenByScreen): bump and
+    // Per-screen supersession epoch (see m_daemonGate.batchGenByScreen): bump and
     // snapshot each target screen's counter so this cascade's still-queued
     // ticks self-cancel if a newer batch lands on the same screen. Float/
     // restore entries (empty screenId) are independent and never guarded.
@@ -336,7 +336,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         if (p.screenId.isEmpty() || genByScreen.contains(p.screenId)) {
             continue;
         }
-        genByScreen.insert(p.screenId, ++m_daemonBatchGenByScreen[p.screenId]);
+        genByScreen.insert(p.screenId, ++m_daemonGate.batchGenByScreen[p.screenId]);
     }
 
     applyStaggeredOrImmediate(
@@ -349,7 +349,8 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // in a stale zone. Only observable with cascade stagger enabled,
             // where the per-window moves spread across timer ticks. Empty
             // screenId (float/restore) is independent and always applies.
-            if (!p.screenId.isEmpty() && m_daemonBatchGenByScreen.value(p.screenId) != genByScreen.value(p.screenId)) {
+            if (!p.screenId.isEmpty()
+                && m_daemonGate.batchGenByScreen.value(p.screenId) != genByScreen.value(p.screenId)) {
                 return;
             }
             // isDeleted too, not just destruction: close-shader grabs (which
@@ -364,7 +365,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // this batch BEFORE applyWindowGeometry, not after. Empty screenId means the
             // daemon didn't supply an authoritative answer (e.g. autotile float-restore
             // path) — fall through to the existing geometry-based behavior in that case.
-            // The pre-seed handles async follow-up frame changes; m_inDaemonGeometryApply
+            // The pre-seed handles async follow-up frame changes; m_daemonGate.inGeometryApply
             // (set below) handles the synchronous frame change emitted from inside
             // applyWindowGeometry, which would otherwise resolve the new position against
             // pre-rotation m_virtualScreenDefs and report a phantom cross-VS unsnap.
@@ -372,9 +373,9 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 m_trackedScreenPerWindow[p.window] = p.screenId;
                 m_autotileHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
             }
-            m_inDaemonGeometryApply = true;
+            m_daemonGate.inGeometryApply = true;
             const auto guard = qScopeGuard([this] {
-                m_inDaemonGeometryApply = false;
+                m_daemonGate.inGeometryApply = false;
             });
             applyWindowGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
                                 /*skipAnimation=*/false, batchProfilePath);
@@ -420,7 +421,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // assist itself.
             bool fullySuperseded = !genByScreen.isEmpty();
             for (auto it = genByScreen.constBegin(); it != genByScreen.constEnd(); ++it) {
-                if (m_daemonBatchGenByScreen.value(it.key()) == it.value()) {
+                if (m_daemonGate.batchGenByScreen.value(it.key()) == it.value()) {
                     fullySuperseded = false;
                     break;
                 }
@@ -486,9 +487,9 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
     m_navigationHandler->setWindowFloating(windowId, isFloating);
     // When a window is unfloated (tiled/snapped), clear the drag-float skip flag.
     // Without this, a subsequent float toggle's geometry restore would be skipped
-    // because m_dragFloatedWindowIds still has the entry from the original drag.
+    // because m_dragActivation.floatedWindowIds still has the entry from the original drag.
     if (!isFloating) {
-        m_dragFloatedWindowIds.remove(windowId);
+        m_dragActivation.floatedWindowIds.remove(windowId);
         // An authoritative external unfloat moots any deferred
         // unminimize→unfloat commit in either engine: the daemon has already
         // unfloated (and re-snapped/retiled) the window — a user float toggle
@@ -763,7 +764,7 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
     qCDebug(lcEffect) << "Providing" << windowArray.size() << "running windows to daemon";
 
     // Send result back to daemon via D-Bus
-    if (m_daemonServiceRegistered) {
+    if (m_daemonGate.serviceRegistered) {
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Settings,
                                                        QStringLiteral("provideRunningWindows"), {jsonString},
                                                        QStringLiteral("provideRunningWindows"));
