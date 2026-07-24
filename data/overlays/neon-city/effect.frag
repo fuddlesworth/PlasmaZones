@@ -13,11 +13,14 @@
 
 // ─── Per-zone rendering ─────────────────────────────────────────────
 
-vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
+vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, vec4 fillColor, vec4 borderColor,
+                bool isHighlighted,
                 float bass, float mids, float treble, float overall, bool hasAudio)
 {
-    float borderRadius = max(params.x, 6.0);
-    float borderWidth  = max(params.y, 2.5);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
     float reactivity   = p_reactivity >= 0.0 ? p_reactivity : 1.5;
     float bassImpact   = p_bassImpact >= 0.0 ? p_bassImpact : 1.5;
@@ -53,13 +56,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
         energy   *= 0.5;
     }
 
-    float px = pxScale();
 
-    vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
-    float d       = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d       = zoneShape.d;
 
     vec4 result = vec4(0.0);
 
@@ -89,9 +89,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
 
             float coc = abs(pixelDepth - focalDepth) * 2.0 * dofStrength;
 
-            vec4 center = texture(iChannel0, sceneUv);
-            float cw = 1.0 + max(max(center.r, center.g), center.b);
-            vec4 bokeh = center * cw;
+            vec4 centerSample = texture(iChannel0, sceneUv);
+            float cw = 1.0 + max(max(centerSample.r, centerSample.g), centerSample.b);
+            vec4 bokeh = centerSample * cw;
             float total = cw;
 
             const int RINGS = 2;
@@ -163,12 +163,17 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
             sceneRgb = mix(vec3(lum), sceneRgb, 0.45);
             sceneRgb *= 0.4;
         }
-        result.rgb = sceneRgb;
+        // Fold in the zone's own fill colour as a light identity tint, the same
+        // shape every other pack uses. zoneTint() returns sceneRgb untouched
+        // when the fill is fully transparent.
+        result.rgb = zoneTint(sceneRgb, fillColor, 0.35);
         result.a   = fillOpacity;
 
         // Inner edge glow — SDF-based tint that rides the zone's rim.
-        // Fade distance scales with resolution via pxScale().
-        float innerGlow = exp(d / (mix(28.0, 14.0, vitality) * px))
+        // Fade distance is zoneLen(), not pxScale(): it is measured against the
+        // zone edge, so it has to track the display scale the corner radius and
+        // border width now use rather than the 1080p-relative resolution.
+        float innerGlow = exp(d / zoneLen(mix(28.0, 14.0, vitality)))
                         * mix(0.04, 0.12, vitality);
         innerGlow *= edgeGlow * (0.5 + energy * 0.4 + aMids * 0.25);
         vec3 innerCol = mix(accent, bassCol, clamp(energy, 0.0, 1.0));
@@ -212,8 +217,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
             }
 
             // Gaussian halo — pixel radius scaled by pxScale() so angular
-            // reach is resolution-independent.
-            vec2 haloReach = texel * 3.5 * px;
+            // reach is resolution-independent. Computed here, the only place it
+            // is used, rather than unconditionally at the top of renderZone.
+            vec2 haloReach = texel * 3.5 * pxScale();
             float halo = 0.0;
             for (int hy = -2; hy <= 2; hy++) {
                 for (int hx = -2; hx <= 2; hx++) {
@@ -271,7 +277,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
     // K_TIME_WRAP boundary (~17 min).  Raw sin(iTime*k) would visibly
     // jump.  angularNoise/segments are noise/sawtooth and tolerate a
     // small reseed at the wrap, so they keep using iTime directly.
-    float coreWidth = borderWidth * mix(0.5, 0.9, vitality);
+    // zoneStrokeWidth re-floors the derived stroke at one device pixel.
+    // zoneBorderWidth() floors the border itself, but scaling that down
+    // puts it straight back under a pixel, where it shimmers out on a
+    // fractional scale. A width of 0 still passes through as 0.
+    float coreWidth = zoneStrokeWidth(borderWidth * mix(0.5, 0.9, vitality));
     float borderCore = softBorder(d, coreWidth);
     if (borderCore > 0.0) {
         float borderAngle   = atan(p.x, -p.y) / TAU + 0.5;
@@ -281,7 +291,13 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
         // Slow 0.5Hz color sweep — must use timeSin() (wrap would snap).
         // When no audio, idleSpeed scales the sweep rate.
         float sweepRate = 0.5 * (hasAudio ? 1.0 : idleSpeed);
-        vec3 coreColor = mix(accent, bassCol, 0.5 + 0.5 * timeSin(sweepRate))
+        // The zone's own border colour folds in HERE, at the border stroke and at
+        // the sibling packs' weight of 0.3 — not into `accent`, which is a
+        // scene-wide palette variable feeding the silhouettes, haze, label halo
+        // and outer glow. buffer.frag renders that scene full-screen with no
+        // zone to key off, so a scene-wide fold could never be consistent.
+        vec3 borderAccent = mix(accent, colorWithFallback(borderColor.rgb, accent), 0.3);
+        vec3 coreColor = mix(borderAccent, bassCol, 0.5 + 0.5 * timeSin(sweepRate))
                         * edgeGlow * borderEnergy;
 
         float flowRate = mix(0.3, 1.5, vitality) * (hasAudio ? 1.0 : idleSpeed);
@@ -304,22 +320,27 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
             coreColor = mix(coreColor, lightC * 2.0, bassFlash * borderCore * 0.4);
         }
 
-        result.rgb = max(result.rgb, coreColor * borderCore);
-        result.a   = max(result.a, borderCore);
+        result.rgb = max(result.rgb, coreColor * borderCore * borderColor.a);
+        result.a   = max(result.a, borderCore * borderColor.a);
     }
 
     // ── Outer glow ───────────────────────────────────────────
-    // baseGlowR scales with pxScale() for resolution-independent angular
-    // reach (16px at 1080p == 32px at 4K).
-    float baseGlowR  = mix(6.0, 16.0, vitality) * px;
+    // The outer glow is measured from the zone edge, so it is zoneLen() like
+    // the border and corner radius beside it, not pxScale(). Under pxScale a 4K
+    // monitor at scale 1 drew a 1x border with a 2x glow, and a 1080p monitor
+    // at scale 2 drew the reverse.
+    float baseGlowR  = zoneLen(mix(6.0, 16.0, vitality));
     float pulseRate  = 0.8 * (hasAudio ? 1.0 : idleSpeed);
     float glowRadius = baseGlowR
-        + (hasAudio ? aBass * 5.0 : timeSin(pulseRate) * 2.0 * px);
-    glowRadius += energy * 4.0 * px;
+        + (hasAudio ? aBass * zoneLen(5.0) : timeSin(pulseRate) * zoneLen(2.0));
+    glowRadius += energy * zoneLen(4.0);
 
+    // Both lobes have their pedestal at the bound subtracted (expGlowBounded),
+    // so they reach exactly 0 at glowRadius and the gate cuts nothing. The wide
+    // lobe would otherwise still be at exp(-2) = 13.5% of its peak there.
     if (d > 0.0 && d < glowRadius) {
-        float glow1 = expGlow(d, glowRadius * 0.2, edgeGlow * mix(0.08, 0.25, vitality));
-        float glow2 = expGlow(d, glowRadius * 0.5, edgeGlow * mix(0.03, 0.08, vitality));
+        float glow1 = expGlowBounded(d, glowRadius * 0.2, edgeGlow * mix(0.08, 0.25, vitality), glowRadius);
+        float glow2 = expGlowBounded(d, glowRadius * 0.5, edgeGlow * mix(0.03, 0.08, vitality), glowRadius);
 
         vec3 glowColor = mix(accent, bassCol, clamp(energy * 0.8, 0.0, 1.0));
         if (isHighlighted) {
@@ -357,6 +378,7 @@ vec4 pImage(vec2 fragCoord) {
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
 
         vec4 zoneColor = renderZone(fragCoord, rect, zoneParams[i],
+            zoneFillColors[i], zoneBorderColors[i],
             zoneParams[i].z > 0.5,
             bass, mids, treble, overall, hasAudio);
 

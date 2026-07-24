@@ -2,7 +2,7 @@
     "id": "nixos-drift",
     "name": "NixOS Drift",
     "category": "Branded",
-    "description": "A procedural NixOS snowflake logo with 6-fold SDF geometry and a two-tone twilight gradient fill drifts through a hexagonal Voronoi lattice. Aurora curtains, constellation particles, crystal growth lines, and nebula pulse borders animate with per-arm audio reactivity",
+    "description": "A procedural NixOS snowflake logo with 6-fold SDF geometry and a two-tone twilight gradient fill drifts through a crystal field. Aurora curtains, constellation particles, crystal growth lines, and a border of hexagonal cells that light up in a wave travelling round the zone all animate with per-arm audio reactivity",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",

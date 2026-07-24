@@ -12,21 +12,10 @@
  * All pattern/animation uses fragCoord (screen space) so blobs flow
  * seamlessly across zone boundaries.
  *
- * Parameters (customParams):
- *   [0].x = speed          (0.06)  global animation speed
- *   [0].y = blobScale      (10)    blob count (3–16)
- *   [0].z = blobSoftness   (0.4)   smin k for blob merging
- *   [0].w = glowIntensity  (0.5)   bloom glow around blobs
- *   [1].x = fillOpacity    (0.90)  zone fill opacity
- *   [1].y = sparkleStr     (0.6)   sparkle brightness
- *   [1].z = sparkleSize    (1.0)   sparkle point size
- *   [1].w = audioSens      (1.0)   audio sensitivity
- *   [2].x = driftSpeed     (0.8)   blob drift speed
- *   [2].y = mintIntensity  (0.4)   mint sparkle color intensity
- *   [2].z = bloomWidth     (0.06)  glow falloff width
- *   [2].w = vignetteStr    (0.15)  edge darkening
- *   [3].x = blobSizeMin    (0.05)  minimum blob radius
- *   [3].y = blobSizeMax    (0.14)  maximum blob radius
+ * Parameters are declared in metadata.json and read here through the
+ * generated p_<id> accessors. The slot table that used to sit here listed
+ * customParams indices that the pack stopped using and drifted out of date
+ * as parameters were added, so it is not restated.
  *
  * Colors (customColors):
  *   [0] = berryPink   #ff6b9d  primary pink
@@ -57,7 +46,7 @@ float smin(float a, float b, float k) {
 
 // Blob center position via Lissajous orbital path
 // Each blob has a unique home position spread across the screen
-vec2 blobCenter(int idx, float time, float drift) {
+vec2 blobCenter(int idx, float drift) {
     float fi = float(idx);
     float seed = fi * 1.618;
 
@@ -84,7 +73,7 @@ vec2 blobCenter(int idx, float time, float drift) {
 // Evaluate merged blob SDF and closest blob index at a screen UV point
 // Returns: x = merged SDF distance, y = closest blob index (float)
 // uv and aspect must be consistent: pass raw UV, aspect applied internally
-vec2 blobField(vec2 uv, float time, float drift, float softness,
+vec2 blobField(vec2 uv, float drift, float softness,
                int blobCount, float aspect, float sizeMin, float sizeMax,
                float bass, float treble, float rawTime) {
     float merged = 1e5;
@@ -93,7 +82,7 @@ vec2 blobField(vec2 uv, float time, float drift, float softness,
 
     for (int i = 0; i < 16; i++) {
         if (i >= blobCount) break;
-        vec2 c = blobCenter(i, time, drift);
+        vec2 c = blobCenter(i, drift);
         vec2 diff = uv - c;
         diff.x *= aspect;
 
@@ -133,17 +122,15 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                      float bass, float mids, float treble, float overall, bool hasAudio)
 {
     // Zone geometry
-    float borderRadius = max(params.x, 6.0);
-    float borderWidth = max(params.y, 2.0);
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
     vec2 p = fragCoord - center;
-    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     // Parameters (sentinel pattern)
-    float speed        = p_speed >= 0.0 ? p_speed : 0.06;
     float blobScale    = p_blobScale >= 0.0 ? p_blobScale : 10.0;
     float blobSoftness = p_blobSoftness >= 0.0 ? p_blobSoftness : 0.4;
     float glowIntensity= p_glowIntensity >= 0.0 ? p_glowIntensity : 0.5;
@@ -176,7 +163,6 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float trebleAmt = hasAudio ? treble * audioSens : idlePulse * 0.3;
     float vitality = zoneVitality(isHighlighted);
 
-    float time = iTime * speed;
 
     vec4 result = vec4(0.0);
 
@@ -211,14 +197,17 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         }
 
         // === LAYER 2: Organic Blob Field ===
-        float blobTime = iTime * driftSpeed;
         float softK = max(blobSoftness * 0.05, 0.001);
         int blobCount = clamp(int(blobScale), 3, 16);
 
         // Mids-driven color warmth: applied per-blob below
         float midsWarmth = midsAmt * 0.12;
 
-        vec2 field = blobField(globalUV, blobTime, 1.0, softK,
+        // driftSpeed scales the orbit frequency the blob centres advance at.
+        // It used to reach blobCenter as `iTime * driftSpeed` through a `time`
+        // parameter that function never read, while the orbit ran off a
+        // hard-coded 1.0, so the Drift Speed setting did nothing at all.
+        vec2 field = blobField(globalUV, driftSpeed, softK,
                                blobCount, aspect, blobSizeMin, blobSizeMax,
                                bassAmt, trebleAmt, iTime);
         float blobDist = field.x;
@@ -296,14 +285,19 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             outerGlow *= vitalityScale(0.5, 1.3, vitality);
             innerColor = mix(innerColor, berryPink, vitalityScale(0.0, 0.3, vitality));
             result.rgb += innerColor * innerGlow + outerColor * outerGlow;
-            result.a = max(result.a, innerGlow * 0.6);
-        }
+            }
 
         // === LAYER 4: Mint Sparkles ===
         // Bigger, brighter, with 4-point star shape
         {
-            for (int sy = -2; sy <= 2; sy++) {
-                for (int sx = -2; sx <= 2; sx++) {
+            // +/-1 ring only. The gaussian core dies well inside one cell
+        // (6e-6 at the boundary), so it needs no help. The star ray does NOT:
+        // its reach can exceed the cell size, so it is explicitly windowed to
+        // the gather below rather than trusted to fall off in time. A 5x5
+        // gather was doing 25 iterations of hash work per fragment inside every
+        // zone for the 9 that actually contribute.
+        for (int sy = -1; sy <= 1; sy++) {
+            for (int sx = -1; sx <= 1; sx++) {
                     vec2 cell = floor(globalUV * sparkleGridDensity) + vec2(float(sx), float(sy));
                     vec2 cellHash = hash22(cell);
                     vec2 sparklePos = (cell + cellHash) / sparkleGridDensity;
@@ -319,7 +313,14 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                     // 4-point star rays
                     float angle = atan(diff.y, diff.x);
                     float star = pow(abs(cos(angle * 2.0)), 8.0);
-                    float starRay = exp(-sDist / (pointSize * 4.0)) * star * 0.6;
+                    // Windowed to the gather. The ray is an exponential length
+                    // scale, not a hard radius, so at the top of the Sparkle Size
+                    // and Grid sliders it still carried ~25% amplitude one cell
+                    // out — past the 3x3 sweep — and popped on and off as the
+                    // fragment crossed a cell boundary, drawing grid seams.
+                    float cellUV = 1.0 / max(sparkleGridDensity, 1.0);
+                    float rayWindow = smoothstep(cellUV, cellUV * 0.5, sDist);
+                    float starRay = exp(-sDist / (pointSize * 4.0)) * star * 0.6 * rayWindow;
                     sparkle += starRay;
 
                     // Twinkling
@@ -365,6 +366,11 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
         // Dormant desaturation
         result.rgb = vitalityDesaturate(result.rgb, vitality);
+        // Light identity tint from the zone's configured fill colour, at the
+        // sibling packs' weight. borderColor is already consumed below;
+        // fillColor was the only half of the pair this pack discarded, so the
+        // per-zone fill colour did nothing at all here.
+        result.rgb = zoneTint(result.rgb, fillColor, 0.35);
         result.a = fillOpacity;
     }
 
@@ -387,17 +393,20 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             borderClr = mix(borderClr, vec3(1.0), bassFlash * 0.2);
         }
 
-        result.rgb = mix(result.rgb, borderClr, border * 0.9);
-        result.a = max(result.a, border * 0.95);
+        result.rgb = mix(result.rgb, borderClr, (border * 0.9) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // === Outer glow (both states, vitality-modulated) ===
     if (d > 0.0) {
-        float glowR = vitalityScale(12.0, 24.0, vitality) + (hasAudio ? bass * audioSens * vitalityScale(4.0, 8.0, vitality) : idlePulse * vitalityScale(3.0, 8.0, vitality));
+        // Bound and falloff share the zoneLen() basis. When only the falloff
+        // scaled, a 2x display doubled it to 8-16 px inside a bound still at
+        // 12-24 px, slicing the gradient at ~22% and ringing every zone.
+        float glowR = zoneLen(vitalityScale(12.0, 24.0, vitality) + (hasAudio ? bass * audioSens * vitalityScale(4.0, 8.0, vitality) : idlePulse * vitalityScale(3.0, 8.0, vitality)));
         float breathe = 1.0 + vitalityScale(0.05, 0.15, vitality) * sin(iTime * 2.0);
         glowR *= breathe;
         if (d < glowR) {
-            float glowFalloff = vitalityScale(4.0, 8.0, vitality);
+            float glowFalloff = zoneLen(vitalityScale(4.0, 8.0, vitality));
             float glowAmt = vitalityScale(0.15, 0.45, vitality) * (1.0 + energy * 0.4);
             float glow = expGlow(d, glowFalloff, glowAmt);
             vec3 glowColor = vitalityDesaturate(bubblegum, vitality);

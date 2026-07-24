@@ -81,17 +81,18 @@ vec3 chromaticSample(float baseVal, float edgeDist, float strength) {
 
 vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                         vec4 params, bool isHighlighted,
-                        float bass, float mids, float treble, float overall, bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+                        float bass, float mids, float treble, bool hasAudio) {
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
     vec2 p = fragCoord - center;
-    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
 
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     // Params
     float cellScale = p_cellScale >= 0.0 ? p_cellScale : 12.0;
@@ -105,7 +106,6 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     float audioReact = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
     float idlePulse = p_idlePulse >= 0.0 ? p_idlePulse : 0.8;
 
-    float energy = hasAudio ? overall * audioReact : 0.0;
     float idleAnim = hasAudio ? 0.0 : (0.5 + 0.5 * sin(iTime * 1.2 * PI)) * idlePulse;
     float vitality = zoneVitality(isHighlighted);
 
@@ -201,7 +201,10 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
         // Base result
         vec3 base = edgeColor + specular;
-        base = mix(base, fillColor.rgb, zoneTintBlend); // Zone tint
+        // Blend skipped at zero alpha: this mixes TOWARD the hue, so the
+        // helper's white fallback would wash the field up to 100% white
+        // rather than leaving it alone.
+        base = mix(base, zoneFillHue(fillColor), fillColor.a > 1e-3 ? zoneTintBlend : 0.0); // Zone tint
 
         // Mouse: cursor glow hotspot
         if (mouseInZone) {
@@ -270,12 +273,12 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         borderClr = mix(borderClr, accent, vitalityScale(0.05, 0.4, vitality));
         borderClr *= vitalityScale(0.8, 1.1, vitality);
         borderClr = vitalityDesaturate(borderClr, vitality);
-        result.rgb = mix(result.rgb, borderClr, border * 0.9);
-        result.a = max(result.a, border * 0.95);
+        result.rgb = mix(result.rgb, borderClr, (border * 0.9) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // Outer glow (both states, vitality-modulated)
-    float outerGlowR = vitalityScale(10.0, 28.0, vitality) + idleAnim * vitalityScale(3.0, 8.0, vitality);
+    float outerGlowR = zoneLen(vitalityScale(10.0, 28.0, vitality) + idleAnim * vitalityScale(3.0, 8.0, vitality));
     if (hasAudio) {
         float glowAngle = atan(p.y, p.x);
         float nodePattern = 0.5 + 0.5 * sin(glowAngle * 6.0 + iTime * 1.8);
@@ -283,7 +286,7 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     }
     if (d > 0.0 && d < outerGlowR) {
         float outerStr = vitalityScale(0.15, 0.5, vitality) + (hasAudio ? mids * audioReact * vitalityScale(0.08, 0.3, vitality) : 0.0);
-        float glow = expGlow(d, vitalityScale(5.0, 9.0, vitality), outerStr);
+        float glow = expGlow(d, zoneLen(vitalityScale(5.0, 9.0, vitality)), outerStr);
         vec3 glowCol = vitalityDesaturate(accent, vitality);
         result.rgb += glowCol * glow * vitalityScale(0.15, 0.4, vitality);
         result.a = max(result.a, glow * vitalityScale(0.2, 0.55, vitality));
@@ -406,7 +409,6 @@ vec4 pImage(vec2 fragCoord) {
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
     float treble  = getTrebleSoft();
-    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
@@ -416,7 +418,7 @@ vec4 pImage(vec2 fragCoord) {
         bool isHighlighted = zoneParams[i].z > 0.5;
         vec4 zoneColor = renderPrismataZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], isHighlighted,
-            bass, mids, treble, overall, hasAudio);
+            bass, mids, treble, hasAudio);
         color = blendOver(color, zoneColor);
     }
 

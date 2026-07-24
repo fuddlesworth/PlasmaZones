@@ -41,19 +41,28 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 vec4 params, bool isHighlighted,
                 vec3 glowCol, vec3 trailCol,
                 float bass, float mids, float treble, bool hasAudio) {
-    float px = pxScale();
     float audioR = getAudioReact();
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    // This pack used to scale by pxScale() (a 1080p-relative factor) rather
+    // than the display scale, so its corners tracked resolution instead of
+    // DPI and diverged from both its sibling packs and the decorations.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
+    float d = zoneShape.d;
+    float borderWidth = zoneBorderWidth(params.y);
+    // Reject fragments beyond everything this pack draws, which is the outer
+    // glow (below) OR the border band, whichever reaches further. Bounding by
+    // the glow alone is not enough: glowRadius goes down to 2 while the border
+    // reaches zoneBorderWidth() = up to 10 logical px. Both terms are now on
+    // the same zoneLen() basis, so the max() actually compares like with like.
+    if (d > max((zoneLen(getGlowRadius()) + zoneLen(5.0)) * 2.5, borderWidth)) return vec4(0.0);
 
-    float borderRadius = max(params.x, 8.0) * px;
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
-    if (d > 20.0 * px) return vec4(0.0);
-
-    float borderWidth = max(params.y, 2.0) * px;
     float fillOpacity = getFillOpacity();
 
     vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
@@ -85,7 +94,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         vec3 col = energyColor(buf.r, buf.g, activeGlow, trailCol);
 
         // Zone fill tint
-        col = mix(col, col * fillColor.rgb, getZoneTint());
+        col = mix(col, col * zoneFillHue(fillColor), getZoneTint());
 
         // Vitality modulation
         col = vitalityDesaturate(col, vitality);
@@ -102,8 +111,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         col += activeGlow * innerGlow;
 
         // ── Treble: spark traces near inner edge ────────────────────────
-        if (hasAudio && treble > 0.06 && d > -borderWidth * 3.0) {
-            float edgeProx = smoothstep(-borderWidth * 3.0, -borderWidth * 0.5, d);
+        // zoneEdgeBand: at a configured width of 0 both the gate and the
+        // smoothstep below collapsed, killing the treble spark traces.
+        float sparkBand = zoneEdgeBand(borderWidth * 3.0, 6.0);
+        if (hasAudio && treble > 0.06 && d > -sparkBand) {
+            float edgeProx = smoothstep(-sparkBand, -sparkBand / 6.0, d);
             float spark = 0.0;
             for (int si = 0; si < 3; si++) {
                 float spd = 2.0 + float(si) * 1.5;
@@ -151,22 +163,27 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             borderFlow = mix(borderFlow, activeGlow * borderEnergy, mids * audioR * 0.3);
         }
 
-        result.rgb = mix(result.rgb, borderFlow, border * vitalityScale(0.8, 0.95, vitality));
-        result.a = max(result.a, border * 0.95);
+        result.rgb = mix(result.rgb, borderFlow, (border * vitalityScale(0.8, 0.95, vitality)) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow with bass wavefronts ─────────────────────────────────
+    // zoneLen(), matching the corner radius and border width above. getGlowRadius()
+    // is a logical-px user setting, and the glow is measured from the zone edge,
+    // so it belongs on the display scale rather than the 1080p-relative pxScale().
+    // While it was on pxScale the border doubled on a 2x display and the glow it
+    // sits inside did not.
     float maxGlow = getGlowRadius();
-    if (d > 0.0 && d < maxGlow * 2.5 * px) {
-        float glowRadius = vitalityScale(maxGlow * 0.5, maxGlow, vitality) * px;
+    if (d > 0.0 && d < (zoneLen(maxGlow) + zoneLen(5.0)) * 2.5) {
+        float glowRadius = zoneLen(vitalityScale(maxGlow * 0.5, maxGlow, vitality));
         float glowFalloff = vitalityScale(0.25, 0.5, vitality);
 
         // Bass: expanding wavefront from zone edge
         if (hasAudio && bass > 0.06) {
             float waveCycle = fract(iTime * 1.0);
-            float waveRadius = waveCycle * 14.0 * px;
-            float waveBand = exp(-abs(d - waveRadius) * (0.5 / px)) * (1.0 - waveCycle);
-            glowRadius += waveBand * bassEnv * 5.0 * px;
+            float waveRadius = waveCycle * zoneLen(14.0);
+            float waveBand = exp(-abs(d - waveRadius) / zoneLen(2.0)) * (1.0 - waveCycle);
+            glowRadius += waveBand * bassEnv * zoneLen(5.0);
         }
 
         float glow = expGlow(d, glowRadius, glowFalloff);

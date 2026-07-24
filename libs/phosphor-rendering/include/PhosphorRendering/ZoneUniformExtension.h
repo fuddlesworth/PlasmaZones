@@ -8,7 +8,9 @@
 
 #include <QMutex>
 #include <QMutexLocker>
+#include <QtNumeric>
 #include <atomic>
+#include <cmath>
 #include <cstring>
 
 namespace PhosphorRendering {
@@ -17,24 +19,36 @@ namespace PhosphorRendering {
  * @brief IUniformExtension implementation for zone data.
  *
  * Appends zone arrays (zoneRects, zoneFillColors, zoneBorderColors, zoneParams)
- * after BaseUniforms in the UBO. Total extension size: MaxZones * 4 * sizeof(float) * 4 = 4096 bytes.
+ * plus the trailing zoneScale scalar after BaseUniforms in the UBO. Total
+ * extension size is `kZoneExtensionBytes` (ZoneShaderCommon.h): the four arrays,
+ * plus the scalar and the 12 pad bytes std140 needs to close the block on a
+ * 16-byte boundary.
  *
  * The zone data layout matches the GLSL UBO declaration in common.glsl exactly,
  * and is binary-compatible with the zone region of ZoneShaderUniforms.
  *
  * @par Threading
  * write() runs on the render thread during prepare(); updateFromZones() runs
- * on the GUI thread (typically from updatePaintNode's sync phase). Sync phase
- * is meant to block the render thread, but some Qt render loops can advance
- * through prepare() before the next sync fires, so m_mutex serialises reads
- * and writes of m_data to prevent torn copies.
+ * during the sync phase (updatePaintNode), which is ALSO the render thread,
+ * with the GUI thread blocked — not the GUI thread, despite the name. Sync is
+ * meant to block, but some Qt render loops can advance through prepare()
+ * before the next sync fires, so m_mutex serialises reads and writes of
+ * m_data to prevent torn copies.
  */
 class ZoneUniformExtension : public PhosphorShaders::IUniformExtension
 {
 public:
     ZoneUniformExtension()
     {
-        std::memset(&m_data, 0, sizeof(m_data));
+        // Value-initialise rather than memset: the default member initialisers
+        // on ZoneExtensionData make it non-trivially-default-constructible, so a
+        // memset trips -Wclass-memaccess in every including TU. `= {}` zeroes
+        // the arrays AND applies the zoneScale = 1.0f default, which is the
+        // identity the shader needs until the item reports the real
+        // device-pixel ratio. A zeroed scale would multiply every radius and
+        // border width to 0, so a fresh overlay's first frames would render
+        // square-cornered and border-less before the first setScale() lands.
+        m_data = {};
     }
 
     int extensionSize() const override
@@ -58,9 +72,10 @@ public:
         m_dirty.store(false, std::memory_order_release);
     }
 
-    /// Update zone data from a vector of ZoneData. Called on the GUI thread
-    /// (typically from updatePaintNode's sync phase). Mutex-guarded against
-    /// a concurrent write() on the render thread — see class Threading note.
+    /// Update zone data from a vector of ZoneData. Called from the sync phase
+    /// (updatePaintNode), which runs on the render thread with the GUI thread
+    /// blocked. Mutex-guarded against a concurrent write() — see the class
+    /// Threading note for why blocking is not sufficient on its own.
     void updateFromZones(const QVector<ZoneData>& zones)
     {
         QMutexLocker lock(&m_mutex);
@@ -93,6 +108,50 @@ public:
         m_dirty.store(true, std::memory_order_release);
     }
 
+    /// Set the logical-to-device scale the shader applies to the lengths in
+    /// zoneParams (corner radius, border width). Called from the item's
+    /// updatePaintNode sync phase with the same device-pixel ratio the node's
+    /// resolution is scaled by, so `radius * uZoneScale` lands in the same
+    /// device-px space as iResolution and vFragCoord.
+    ///
+    /// Separate from updateFromZones() because the two change on different
+    /// clocks: zone contents churn per drag frame, the scale only when the
+    /// overlay moves to a differently-scaled screen. Guarded by the same mutex
+    /// and only marks dirty on an actual change, so a per-frame call from the
+    /// sync phase costs nothing.
+    ///
+    /// @return false if @p scale was rejected as out of contract, true
+    ///         otherwise (including a no-op re-set of the current value).
+    ///         Rejection keeps the last good scale, which renders correctly but
+    ///         is indistinguishable from working code, so the caller is
+    ///         expected to report it. The check cannot log here: this library's
+    ///         logging category is private to its src/ tree, and the caller
+    ///         owns a category that names the actual subsystem anyway.
+    [[nodiscard]] bool setScale(float scale)
+    {
+        // Reject values that would make the shader silently disappear rather
+        // than degrade. The GLSL multiplies every radius and border width by
+        // this: a NaN propagates through clamp() and takes the whole zone with
+        // it, and zero or a negative collapses the corner to square with a
+        // hairline border. Neither reads as a fault, so a bad value would be
+        // mistaken for a design choice. A device-pixel ratio is always
+        // positive and finite, so anything else is a caller bug; keep the last
+        // good scale instead of rendering a lie.
+        if (!(scale > 0.0f) || std::isinf(scale)) {
+            return false;
+        }
+        QMutexLocker lock(&m_mutex);
+        // qFuzzyCompare is undefined with a zero operand. Safe here only
+        // because the guard above rejects zero/negative/NaN and zoneScale is
+        // seeded to 1.0f, so neither argument can be 0.
+        if (qFuzzyCompare(m_data.zoneScale, scale)) {
+            return true;
+        }
+        m_data.zoneScale = scale;
+        m_dirty.store(true, std::memory_order_release);
+        return true;
+    }
+
 private:
     /// Raw zone extension data — matches the zone region of ZoneShaderUniforms exactly.
     struct alignas(16) ZoneExtensionData
@@ -101,10 +160,18 @@ private:
         float zoneFillColors[MaxZones][4];
         float zoneBorderColors[MaxZones][4];
         float zoneParams[MaxZones][4];
+        // Defaulted to identity for the same reason ZoneShaderUniforms::zoneScale
+        // is, and the constructor now relies on it: a zero scale multiplies
+        // every corner radius and border width to nothing, so a zone renders
+        // square-cornered and border-less rather than failing visibly. The two
+        // structs are asserted binary-identical below, so both need it.
+        float zoneScale = 1.0f;
+        float _pad_after_zoneScale[3] = {};
     };
 
-    static_assert(sizeof(ZoneExtensionData) == MaxZones * 4 * sizeof(float) * 4,
-                  "ZoneExtensionData must be MaxZones * 4 arrays * 4 floats");
+    static_assert(sizeof(ZoneExtensionData) == kZoneExtensionBytes,
+                  "ZoneExtensionData must be MaxZones * 4 arrays * 4 floats, plus the "
+                  "zoneScale scalar and its std140 tail pad");
     // Field offsets must match the GLSL UBO layout in common.glsl exactly.
     // Reordering or inserting fields here silently breaks shader rendering
     // (no compile error, just wrong colors/positions on every zone).
@@ -115,6 +182,8 @@ private:
                   "zoneBorderColors must follow zoneFillColors with no gap");
     static_assert(offsetof(ZoneExtensionData, zoneParams) == 3 * sizeof(float[MaxZones][4]),
                   "zoneParams must follow zoneBorderColors with no gap");
+    static_assert(offsetof(ZoneExtensionData, zoneScale) == 4 * sizeof(float[MaxZones][4]),
+                  "zoneScale must follow zoneParams with no gap");
     // Verify ZoneExtensionData is binary-identical to the zone region of
     // ZoneShaderUniforms (BaseUniforms + this == ZoneShaderUniforms layout).
     static_assert(sizeof(ZoneExtensionData) == sizeof(ZoneShaderUniforms) - sizeof(PhosphorShaders::BaseUniforms),

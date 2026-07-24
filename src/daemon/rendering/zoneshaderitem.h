@@ -9,12 +9,9 @@
 #include <PhosphorRendering/ZoneUniformExtension.h>
 #include <PhosphorShaders/IUniformExtension.h>
 
-#include "zoneshadernoderhi.h"
-
 #include <plasmazones_rendering_export.h>
 #include <QMutex>
 #include <QVariantList>
-#include <QVector>
 #include <atomic>
 #include <memory>
 
@@ -42,7 +39,7 @@ namespace PlasmaZones {
  * ZoneShaderItem {
  *     anchors.fill: parent
  *     zones: zoneDataProvider.zones
- *     shaderSource: "qrc:/shaders/neon.frag"
+ *     shaderSource: "file:///usr/share/plasmazones/overlays/neon-city/effect.frag"
  *     customColor1: "#ff8800"
  * }
  * @endcode
@@ -50,9 +47,10 @@ namespace PlasmaZones {
 class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public PhosphorRendering::ShaderEffect
 {
     Q_OBJECT
-    // Registered manually via qmlRegisterType in daemon/main.cpp and
-    // editor/main.cpp under the "PlasmaZones" module URI. QML_ELEMENT here
-    // would be inert (no qt_add_qml_module target exists) and misleading.
+    // Registered manually via qmlRegisterType in each app's main.cpp (daemon,
+    // editor, settings) plus the shared-module test, under the "PlasmaZones"
+    // module URI. QML_ELEMENT here would be inert (no qt_add_qml_module target
+    // exists) and misleading.
 
     // Zone data (zone-specific, not in parent)
     Q_PROPERTY(QVariantList zones READ zones WRITE setZones NOTIFY zonesChanged FINAL)
@@ -107,23 +105,10 @@ public:
      */
     PhosphorRendering::ZoneDataSnapshot getZoneDataSnapshot() const;
 
-    /**
-     * @brief Get parsed zone rectangles (thread-safe)
-     * @return Vector of normalized zone rectangles
-     */
-    QVector<PhosphorRendering::ZoneRect> zoneRects() const;
-
-    /**
-     * @brief Get parsed zone fill colors (thread-safe)
-     * @return Vector of zone fill colors
-     */
-    QVector<PhosphorRendering::ZoneColor> zoneFillColors() const;
-
-    /**
-     * @brief Get parsed zone border colors (thread-safe)
-     * @return Vector of zone border colors
-     */
-    QVector<PhosphorRendering::ZoneColor> zoneBorderColors() const;
+    // The per-array accessors (zoneRects / zoneFillColors / zoneBorderColors)
+    // that used to sit here had no callers anywhere in the repo, including
+    // tests. getZoneDataSnapshot() above takes the mutex once and returns all
+    // three together, which is what every real consumer wants.
 
     // Note: reloadShader() is inherited from ShaderEffect (Q_INVOKABLE). Call
     // that directly from QML / C++ — no zone-specific alias needed.
@@ -202,6 +187,10 @@ private:
     int m_zoneCount = 0;
     int m_highlightedCount = 0;
     int m_hoveredZoneIndex = -1;
+    /// The last index setHoveredZoneIndex was ASKED for, kept unclamped. The
+    /// effective m_hoveredZoneIndex is re-derived from it whenever the zone list
+    /// changes, so a hover that arrived before the list grew is not lost.
+    int m_requestedHoveredZoneIndex = -1;
 
     // Labels texture (main thread writes, render thread reads via updatePaintNode)
     PhosphorRendering::ZoneLabelTexture m_labelsTexture;
@@ -222,6 +211,16 @@ private:
     // Dirty flags for render thread synchronization
     std::atomic<bool> m_zoneDataDirty{false};
     std::atomic<int> m_dataVersion{0};
+
+    // One-shot latch for the rejected-scale warning. updatePaintNode runs every
+    // frame, and a scale that is wrong once is wrong every frame after, so an
+    // unlatched warning would fill the log at the refresh rate. Only ever
+    // touched from the sync phase with the GUI thread blocked, so a plain bool
+    // is enough.
+    bool m_loggedBadScale = false;
+
+    // Same latch, for a layout with more zones than the UBO can hold.
+    bool m_loggedZoneOverflow = false;
 };
 
 } // namespace PlasmaZones

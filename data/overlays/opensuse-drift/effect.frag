@@ -9,7 +9,7 @@
  *   - Thin-film interference iridescence (nanocrystal color shifting)
  *   - Turing pattern overlays (organic chameleon markings)
  *   - Curl noise dust particles (Tumbleweed desert wind)
- *   - 82-vertex polygon SDF Geeko logo extracted from official SVG
+ *   - 81-vertex polygon SDF Geeko logo extracted from official SVG
  *
  * Audio reactivity (organic — modulates existing animation):
  *   Bass  = scale breathing + color metamorphosis speed + dust wind
@@ -110,12 +110,16 @@ vec2 curlNoiseFwd(vec2 p, float time) {
 
 
 // ═══════════════════════════════════════════════════════════════
-//  GEEKO LOGO — 82-vertex polygon extracted from official SVG
+//  GEEKO LOGO — 81-vertex polygon extracted from official SVG
 //  Winding-number SDF (Inigo Quilez) with AABB early-out
 // ═══════════════════════════════════════════════════════════════
 
-const int GEEKO_N = 82;
-const vec2 GEEKO[82] = vec2[82](
+// The closing vertex is NOT repeated: the loop below wraps j from N-1 to 0,
+// so a duplicated first==last point would give e == vec2(0.0) and a 0/0 in
+// dot(w, e) / dot(e, e), producing a NaN for every fragment that clears the
+// AABB early-out.
+const int GEEKO_N = 81;
+const vec2 GEEKO[81] = vec2[81](
     vec2(0.9871, 0.4367),
     vec2(0.9934, 0.4318),
     vec2(0.9790, 0.3832),
@@ -196,8 +200,7 @@ const vec2 GEEKO[82] = vec2[82](
     vec2(0.7621, 0.4030),
     vec2(0.8399, 0.4466),
     vec2(0.9022, 0.4644),
-    vec2(0.9391, 0.4609),
-    vec2(0.9871, 0.4367)
+    vec2(0.9391, 0.4609)
 );
 
 const vec2 GEEKO_CENTER = vec2(0.4189, 0.5347);
@@ -211,9 +214,9 @@ const vec2  GEEKO_PUPIL_R    = vec2(0.018, 0.012);     // pupil semi-axes (horiz
 
 // Polygon SDF with AABB early-out (winding-number sign rule)
 float sdGeeko(vec2 p) {
-    // AABB: polygon spans x=[0.007,0.993], y=[0.256,0.744]
+    // AABB: polygon spans x=[0.007,0.994], y=[0.256,0.745] (rounded outward)
     vec2 dLo = vec2(0.007, 0.256) - p;
-    vec2 dHi = p - vec2(0.993, 0.744);
+    vec2 dHi = p - vec2(0.994, 0.745);
     vec2 outside = max(max(dLo, dHi), vec2(0.0));
     float boxDist2 = dot(outside, outside);
     if (boxDist2 > 0.04) return sqrt(boxDist2);
@@ -239,7 +242,7 @@ float geekoSDF(vec2 p, float breathe) {
 // ── Per-instance UV computation ──────────────────────────────
 
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse,
+                       float logoScale, float bassEnv,
                        float sizeMin, float sizeMax, float logoSpin, out float instScale) {
     vec2 uv = globalUV;
     uv.x = (uv.x - 0.5) * aspect + 0.5;
@@ -297,8 +300,10 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
                     bool isHighlighted, float bass, float mids, float treble,
                     bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth  = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
     // ── Parameter reads ────────────────────────────────────────
     float speed         = p_speed >= 0.0 ? p_speed : 0.08;
@@ -313,7 +318,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
-    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float edgeFadeStart     = zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0);
     float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
     float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
@@ -338,13 +343,10 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float camoStr       = p_camouflageShimmer >= 0.0 ? p_camouflageShimmer : 0.25;
     float eyeBeamStr    = p_eyeBeamStrength >= 0.0 ? p_eyeBeamStrength : 0.5;
 
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
-    vec2 halfSize = rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
-    float d = sdRoundedBox(p, halfSize, borderRadius);
+    float d = zoneShape.d;
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     float aspect = iResolution.x / max(iResolution.y, 1.0);
     float time = iTime;
@@ -354,7 +356,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, SUSE_TURQ);
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, SUSE_GLOW);
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStr;
 
     float flowAngle = flowDirection * TAU;
@@ -421,7 +423,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
         // Scale gap color — veins visible through gaps between scales
         vec3 gapCol = palPrimary * 0.3 + veinCol * veins * veinPulse;
-        float rimStrength = mix(0.3, 1.0, gridScale / 0.6);
+        float rimStrength = mix(0.3, 1.0, clamp(gridScale / 0.6, 0.0, 1.0));
         vec3 col = mix(gapCol, scaleCol * scaleHighlight * brightness, scaleRim * rimStrength);
 
         // ── Per-cell interior shapes (living scales) ──────────
@@ -536,7 +538,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 vec2 seed = vec2(hash11(fi * 7.3), hash11(fi * 11.1 + 5.0));
 
                 vec2 pos = seed;
-                for (int step = 0; step < 3; step++) {
+                for (int si = 0; si < 3; si++) {
                     pos += curlNoiseFwd(pos * 3.0, time * windSpeed + fi) * 0.015;
                 }
                 pos = fract(pos);
@@ -560,7 +562,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
             vec2 iLogoUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, bassEnv, logoPulse,
+                                              logoScale, bassEnv,
                                               logoSizeMin, logoSizeMax, logoSpin, instScale);
 
             // Bounding check
@@ -583,7 +585,8 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             // Soft iridescent edge glow
             if (fDist > -0.005 && fDist < 0.06) {
                 float auraDist = max(fDist, 0.0);
-                float aura = exp(-auraDist * 30.0) * 0.3;
+                // Pedestal-subtracted at the 0.06 gate so the aura fades to 0.
+                float aura = max(exp(-auraDist * 30.0) - exp(-0.06 * 30.0), 0.0) * 0.3;
                 float auraAngle = atan(iLogoUV.y - GEEKO_CENTER.y,
                                        iLogoUV.x - GEEKO_CENTER.x);
                 float auraThickness = 0.5 + 0.2 * sin(auraAngle * 3.0 + time * 0.8);
@@ -609,7 +612,6 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                     // ── Chameleon color-shift fill ─────────────────
                     vec2 fillLP = iLogoUV - GEEKO_CENTER;
                     float fillAngle = atan(fillLP.y, fillLP.x);
-                    float fillR = length(fillLP);
 
                     // Body regions: head is warmer, tail cooler
                     float headRegion = smoothstep(0.3, 0.15, length(iLogoUV - vec2(0.85, 0.35)));
@@ -701,9 +703,18 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                         scleraCol = mix(scleraCol, irisCol, irisMask);
 
                         // Turret pupil: slow independent orbit
-                        float eyeOrbitAngle = time * 0.4 + sin(time * 0.7) * 0.8;
-                        vec2 pupilOrbit = vec2(cos(eyeOrbitAngle),
-                                               sin(eyeOrbitAngle)) * 0.005;
+                        // Wrap-safe: this angle steers the pupil orbit AND the
+                        // attention beam, both geometry, so a raw wrapped-time
+                        // angle would snap them once per K_TIME_WRAP. Build the
+                        // sin/cos of the composed angle from the wrap-safe
+                        // primitives rather than sampling raw iTime.
+                        float eyeWobble = timeSin(0.7, 0.0) * 0.8;
+                        float eyeCos = timeCos(0.4, 0.0) * cos(eyeWobble) - timeSin(0.4, 0.0) * sin(eyeWobble);
+                        float eyeSin = timeSin(0.4, 0.0) * cos(eyeWobble) + timeCos(0.4, 0.0) * sin(eyeWobble);
+                        vec2 pupilOrbit = vec2(eyeCos, eyeSin) * 0.005;
+                        // The beam below consumes the angle itself (mod TAU), so
+                        // recover it wrap-safely from the wrap-safe sin/cos.
+                        float eyeOrbitAngle = atan(eyeSin, eyeCos);
                         vec2 pupilCenter = GEEKO_PUPIL_C + pupilOrbit;
                         // Pupil dilates on bass (chameleons dilate when excited)
                         float pupilDilate = 1.0 + bassEnv * 0.4;
@@ -769,9 +780,12 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 }
 
                 // ── Multi-layer glow ──────────────────────────────
-                float glow1 = exp(-max(fDist, 0.0) * 80.0) * 0.45;
-                float glow2 = exp(-max(fDist, 0.0) * 25.0) * 0.2;
-                float glow3 = exp(-max(fDist, 0.0) * 8.0) * 0.1;
+                // Pedestal-subtracted at the enclosing gate, so each lobe reaches exactly 0
+                // there. The widest one was being cut with most of its peak still left,
+                // painting a hard ring around every logo instance.
+float glow1 = max(exp(-max(fDist, 0.0) * 80) - exp(-0.005 * 80), 0.0) * 0.45;
+                float glow2 = max(exp(-max(fDist, 0.0) * 25) - exp(-0.005 * 25), 0.0) * 0.2;
+                float glow3 = max(exp(-max(fDist, 0.0) * 8.0) - exp(-0.005 * 8.0), 0.0) * 0.1;
                 vec3 edgeCol = triStopPalette(time * 0.06 + iLogoUV.y + float(li) * 0.2,
                                             palGlow, palSecondary, palAccent);
                 float flare = 1.0 + bassEnv * 0.4;
@@ -894,13 +908,13 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float depthDarken = smoothstep(0.0, edgeFadeStart, innerDist);
         col *= mix(0.8, 1.0, 1.0 - depthDarken * 0.2);
 
-        float innerGlow = exp(-innerDist / 12.0);
+        float innerGlow = exp(-innerDist / zoneLen(12.0));
         float edgeAngle = atan(p.y, p.x);
         float iriT = edgeAngle / TAU + time * 0.05 + midsEnv * 0.2;
         vec3 edgeIriCol = triStopPalette(iriT, palSecondary, palAccent, palGlow);
         col += edgeIriCol * innerGlow * innerGlowStr;
 
-        col = mix(col, fillColor.rgb * luminance(col), 0.07);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.07);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -910,7 +924,9 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float border = softBorder(d, borderWidth);
     if (border > 0.0) {
         float angle = atan(p.y, p.x) * 2.0;
-        ScaleCell borderCell = hexScaleGrid(vec2(angle, d * 0.1), 4.0);
+        // d is device px; dividing by a zoneLen() keeps the scale-pattern pitch
+        // across the border tracking the same scale as zoneBorderWidth() above.
+        ScaleCell borderCell = hexScaleGrid(vec2(angle, d / zoneLen(10.0)), 4.0);
         float borderPattern = smoothstep(0.0, 0.04, borderCell.edgeDist);
         vec3 borderFilm = thinFilm(borderCell.cellHash, 0.4 + time * 0.08 + midsEnv * 0.15);
 
@@ -923,7 +939,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         borderCol = mix(borderCol, zoneBorderTint * luminance(borderCol), 0.25);
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.3 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {
@@ -932,15 +948,20 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             borderCol *= 0.55;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow ───────────────────────────────────────────
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 5.0;
-    float glowRadius = mix(10.0, 18.0, vitality) + bassGlowPush;
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(10.0, 18.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, 7.0, borderGlow);
+        float glow = expGlowBounded(d, zoneLen(7.0), borderGlow, glowRadius);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.08) + midsEnv * 0.15;
         vec3 glowCol = triStopPalette(glowT, palSecondary, palAccent, palGlow);
@@ -1113,9 +1134,9 @@ vec4 pImage(vec2 fragCoord) {
         color = blendOver(color, zoneColor);
     }
 
-    // showLabels guard: default ON (unset = -1, which is < 0)
-    float showLabelsVal = p_showLabels;
-    if (showLabelsVal < 0.0 || showLabelsVal > 0.5)
+    // metadata declares showLabels bool/default true, so the slot is always
+    // populated and the sentinel arm this used to carry was unreachable.
+    if (p_showLabels > 0.5)
         color = compositeSuseLabels(color, fragCoord, bass, mids, treble, hasAudio);
 
     return color;

@@ -14,7 +14,8 @@
 // Logo effects (12 layers, all unique):
 //   Frost crystallization halo (ice dendrites growing from edges),
 //   hex-shaped bass shockwave rings, interior hex micro-lattice,
-//   convergence spiral vortex, crystal refraction beams (6-axis prism),
+//   convergence spiral vortex, centre convergence glow,
+//   crystal refraction beams (6-axis prism),
 //   per-arm aurora ripples, edge energy lines, arm tip glow beacons,
 //   data packet traces along polygon edges, checksum verification rings
 //   (segmented arcs with differential rotation + moire),
@@ -236,7 +237,7 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
     vec3 col = vec3(0.0);
 
     // Precompute dot positions (Lissajous orbits with unique seeds)
-    vec2 dots[20];
+    vec2 dots[CONSTELLATION_COUNT];
     for (int i = 0; i < CONSTELLATION_COUNT; i++) {
         float fi = float(i);
         float h1 = hash21(vec2(fi * 7.13, 3.91));
@@ -447,7 +448,7 @@ float convergenceVortex(vec2 p, float time, float bassEnv, float midsEnv) {
 // =================================================================
 
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse,
+                       float logoScale, float bassEnv,
                        float sizeMin, float sizeMax, out float instScale) {
     vec2 uv = globalUV;
     uv.x = (uv.x - 0.5) * aspect + 0.5;
@@ -506,8 +507,10 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
                      bool isHighlighted, float bass, float mids, float treble,
                      bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     // -- Parameters (p_<id> from metadata.json, sentinel-default fallbacks) ------
     float speed         = p_speed >= 0.0 ? p_speed : 0.08;
@@ -520,7 +523,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
     float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
-    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float edgeFadeStart     = zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0);
     float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
     float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
@@ -540,13 +543,10 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.6;
 
     // -- Zone geometry --------------------------------------------
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
-    vec2 halfSize = rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
-    float d = sdRoundedBox(p, halfSize, borderRadius);
+    float d = zoneShape.d;
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     float aspect = iResolution.x / max(iResolution.y, 1.0);
     float time = iTime;
@@ -557,8 +557,8 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, NIX_SKY);
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, NIX_GLOW);
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
-    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
+    float vitality = zoneVitality(isHighlighted);
+    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStrength;
 
     float flowAngle = flowDirection * TAU;
     vec2 flowDir = vec2(cos(flowAngle), sin(flowAngle));
@@ -652,7 +652,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
             vec2 iLogoUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, bassEnv, logoPulse,
+                                              logoScale, bassEnv,
                                               logoSizeMin, logoSizeMax, instScale);
 
             // Wide bounding check
@@ -670,9 +670,14 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             // Circular vignette for the logo area
             float logoVignette = 1.0 - smoothstep(0.35, 0.55, logoR);
 
-            // Snowflake can spin freely (it is 6-fold symmetric)
-            float wobble = time * logoSpin * 0.5 + float(li) * 1.047;
-            vec2 rotP = logoP * rot(wobble);
+            // Snowflake can spin freely (it is 6-fold symmetric). The angle is
+            // built from timeCos/timeSin rather than rot(time * k): a raw
+            // wrapped-iTime angle makes every instance jump orientation in one
+            // frame at the wrap.
+            float spinSpeed = logoSpin * 0.5;
+            float wc = timeCos(spinSpeed, float(li) * 1.047);
+            float ws = timeSin(spinSpeed, float(li) * 1.047);
+            vec2 rotP = logoP * mat2(wc, -ws, ws, wc);
 
             float ringBreath = 1.0 + midsEnv * 0.3;
 
@@ -932,8 +937,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                     // Build propagation: depth-dependent activation
                     float depth = (fg + 0.5) / 3.0;
                     float built = smoothstep(depth - 0.15, depth, buildFront);
-                    float building = smoothstep(0.0, 0.1,
-                        abs(depth - buildFront)) < 0.5 ? 1.0 : 0.0;
+                    float building = step(abs(depth - buildFront), 0.05);
 
                     float branchGlow = smoothstep(lineWidth, lineWidth * 0.2, segDist);
                     branchGlow *= built;
@@ -993,14 +997,22 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         float vignette = smoothstep(0.0, edgeFadeStart, innerDist);
         col *= mix(0.85, 1.0, vignette);
 
-        // Crisp inner edge line (not soft exponential glow)
-        float edgeLine = smoothstep(3.0, 1.0, innerDist) * innerGlowStr * 0.6;
+        // Crisp inner edge line (not soft exponential glow). zoneLen() like the
+        // edge fade above, so the line keeps its physical width on a HiDPI
+        // output instead of thinning to half of it.
+        float edgeLine = smoothstep(zoneLen(3.0), zoneLen(1.0), innerDist) * innerGlowStr * 0.6;
         col += palSecondary * edgeLine;
 
-        // Hex cell tessellation in the border region (innerDist < 25px)
-        if (innerDist < 25.0) {
+        // Hex cell tessellation in the border region (innerDist < 25 logical px)
+        if (innerDist < zoneLen(25.0)) {
             // Hex grid in pixel space along the border
-            float hexScale = 0.08;  // size of hex cells in normalized coords
+            // Cell size in normalized screen coords, deliberately NOT zoneLen().
+            // The band the cells fill is a distance from the zone edge and
+            // scales with the display; the cells themselves are a background
+            // tessellation, so they keep the same count across the screen at any
+            // resolution. That is the pxScale question, not the zoneLen one
+            // (see the note on both helpers in shared/common.glsl).
+            float hexScale = 0.08;
             vec2 borderUV = fragCoord / max(iResolution, vec2(1.0));
             vec2 hp = borderUV / hexScale;
 
@@ -1012,8 +1024,13 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
             // Angular position of this cell around the zone center
             vec2 cellWorld = hid * hexScale * iResolution;
-            float cellAngle = atan(cellWorld.y - center.y / max(iResolution.y, 1.0),
-                                   cellWorld.x - center.x / max(iResolution.x, 1.0));
+            // Both terms are device px. The divisions that used to sit here
+            // bound tighter than the subtraction, so this took `cellWorld
+            // minus a 0-to-1 value` and the angle came out about the screen
+            // origin rather than the zone centre, sweeping the activation
+            // wave around the top-left corner of the display.
+            float cellAngle = atan(cellWorld.y - center.y,
+                                   cellWorld.x - center.x);
             float cellPhase = (cellAngle + PI) / TAU;  // 0..1
 
             // Activation wave sweeps around the zone perimeter
@@ -1030,7 +1047,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             cellBright += bassFlash;
 
             // Only show in border region, fading inward
-            float borderMask = smoothstep(25.0, 0.0, innerDist) * smoothstep(0.0, 5.0, innerDist);
+            float borderMask = smoothstep(zoneLen(25.0), 0.0, innerDist) * smoothstep(0.0, zoneLen(5.0), innerDist);
 
             // Hex cell shape mask
             float hexE = max(abs(hgv.x), abs(hgv.x * 0.5 + hgv.y * 0.866025));
@@ -1042,7 +1059,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         }
 
         // Tint with fill color
-        col = mix(col, fillColor.rgb * luminance(col), 0.1);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.1);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -1084,15 +1101,20 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             borderCol *= 0.6;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // -- Outer glow: crisp hex-shaped, not soft FBM fog -----------
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 3.0;
-    float glowRadius = mix(8.0, 16.0, vitality) + bassGlowPush;
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(8.0, 16.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, 10.0, borderGlow);
+        float glow = expGlowBounded(d, zoneLen(10.0), borderGlow, glowRadius);
         // 6-fold modulated glow — hex-shaped falloff
         float oAngle = atan(p.y, p.x);
         float hexShape = 0.7 + 0.3 * cos(oAngle * 3.0 + time * 0.3);
@@ -1179,7 +1201,7 @@ vec4 compositeNixosLabels(vec4 color, vec2 fragCoord,
         vec3 haloCol = triStopPalette(t, palPrimary, palAccent, palGlow);
 
         // Bass brightens halo
-        float pulse = 0.85 + 0.15 * sin(time * 2.5);
+        float pulse = 0.85 + 0.15 * timeSin(2.5, 0.0);
         pulse *= 1.0 + bassEnv * 0.6;
 
         color.rgb += haloCol * haloEdge * 0.7 * pulse;
@@ -1189,7 +1211,6 @@ vec4 compositeNixosLabels(vec4 color, vec2 fragCoord,
         // branches — like real ice crystal growth on a cold surface.
         // No other shader has angular dendritic growth on labels.
         {
-            float frostStr = 0.0;
             vec3 frostCol = vec3(0.0);
             float frostAngle = atan(uv.y - 0.5, uv.x - 0.5);
             for (int fi = 0; fi < 6; fi++) {
@@ -1217,9 +1238,7 @@ vec4 compositeNixosLabels(vec4 color, vec2 fragCoord,
                 vec3 rCol = triStopPalette(float(fi) / 6.0 + time * 0.04,
                                         palAccent, palGlow, palSecondary);
                 frostCol += rCol * ray;
-                frostStr += ray;
             }
-            frostStr *= haloEdge;
             color.rgb += frostCol * haloEdge * 0.5;
         }
 
@@ -1330,8 +1349,7 @@ vec4 pImage(vec2 fragCoord) {
         color = blendOver(color, zoneColor);
     }
 
-    float showLabelsVal = p_showLabels;
-    if (showLabelsVal < 0.0 || showLabelsVal > 0.5) {
+    if (p_showLabels > 0.5) {
         color = compositeNixosLabels(color, fragCoord, bass, mids, treble, hasAudio);
     }
 

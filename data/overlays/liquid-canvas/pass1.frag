@@ -20,7 +20,10 @@ layout(location = 0) out vec4 fragColor;
 
 // Procedural watercolor pattern used when no image source is available
 vec3 watercolorFallback(vec2 uv, float t) {
-    vec3 c1 = colorWithFallback(customColors[0].rgb, vec3(0.27, 0.53, 0.8));
+    // Slot 0 carries no declared colour parameter for this pack (metadata
+    // declares only glowColor at 1 and edgeColor at 2), so read the literal
+    // directly rather than a uniform the user cannot set.
+    vec3 c1 = vec3(0.27, 0.53, 0.8);
     vec3 c2 = colorWithFallback(customColors[1].rgb, vec3(0.8, 0.4, 0.67));
     vec3 c3 = colorWithFallback(customColors[2].rgb, vec3(0.4, 0.8, 0.73));
 

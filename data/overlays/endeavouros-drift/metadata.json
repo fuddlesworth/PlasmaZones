@@ -2,7 +2,7 @@
     "id": "endeavouros-drift",
     "name": "EndeavourOS Drift",
     "category": "Branded",
-    "description": "A procedural EndeavourOS tri-sail logo built as three overlapping SDF polygon shapes drifts over a constellation network of orbiting dots connected by proximity lines. The logo interior shows simplex noise flow tinted per sail, per-sail bass pulses, a summit convergence glow, and shared-edge highlights, over a warm purple-to-coral gradient wash background with dense per-band audio reactivity",
+    "description": "A procedural EndeavourOS tri-sail logo built as three overlapping SDF polygon shapes drifts over flowing wind currents with parallax sail silhouettes at three depths. The logo interior shows simplex noise flow tinted per sail, per-sail bass pulses, a summit convergence glow, and shared-edge highlights, over a warm purple-to-coral gradient wash background with dense per-band audio reactivity",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",
@@ -18,7 +18,7 @@
         },
         {
             "id": "flowSpeed",
-            "name": "Orbit Speed",
+            "name": "Wind Speed",
             "group": "Animation",
             "type": "float",
             "default": 0.2,
@@ -44,18 +44,9 @@
             "max": 8
         },
         {
-            "id": "orbitRadius",
-            "name": "Orbit Radius",
-            "group": "Constellation",
-            "type": "float",
-            "default": 5.0,
-            "min": 1.0,
-            "max": 12.0
-        },
-        {
             "id": "lineStrength",
-            "name": "Line Brightness",
-            "group": "Constellation",
+            "name": "Current Brightness",
+            "group": "Wind",
             "type": "float",
             "default": 0.2,
             "min": 0.0,
@@ -126,7 +117,7 @@
         },
         {
             "id": "particleStrength",
-            "name": "Dot Brightness",
+            "name": "Sail Brightness",
             "group": "Effects",
             "type": "float",
             "default": 0.4,
@@ -188,15 +179,6 @@
             "max": 1.57
         },
         {
-            "id": "packetDirection",
-            "name": "Connection Threshold",
-            "group": "Effects",
-            "type": "float",
-            "default": 0.25,
-            "min": 0.0,
-            "max": 1.0
-        },
-        {
             "id": "logoScale",
             "name": "Logo Scale",
             "group": "Logo",
@@ -252,8 +234,8 @@
         },
         {
             "id": "orbitCenterX",
-            "name": "Orbit Center X",
-            "group": "Constellation",
+            "name": "Sail Center X",
+            "group": "Wind",
             "type": "float",
             "default": 0.5,
             "min": -1.0,
@@ -261,8 +243,8 @@
         },
         {
             "id": "orbitCenterY",
-            "name": "Orbit Center Y",
-            "group": "Constellation",
+            "name": "Sail Center Y",
+            "group": "Wind",
             "type": "float",
             "default": 0.5,
             "min": -1.0,

@@ -13,19 +13,10 @@
  * energy pulses race around the perimeter with the beat, spectrum data
  * paints a flowing aurora, treble fires off edge sparks.
  *
- * Parameters (customParams):
- *   [0].x = glowIntensity    — border glow brightness (1–5)
- *   [0].y = reactivity       — audio sensitivity (0.5–3)
- *   [0].z = waveHeight       — spectrum aurora height (0.05–0.4)
- *   [0].w = bassExpand       — bass glow expansion (0–3)
- *   [1].x = flowSpeed        — border energy flow speed (0.5–4)
- *   [1].y = plasmaDetail     — edge plasma turbulence (0–2)
- *   [1].z = colorMix         — audio-driven primary↔accent shift (0–1)
- *   [1].w = idleAnimation    — animation when silent (0–2)
- *   [2].x = veinIntensity    — energy vein / tendril brightness (0–1)
- *   [2].y = radialWaves      — bass radial wave strength (0–1)
- *   [2].z = gridIntensity    — grid / mesh overlay brightness (0–0.5)
- *   [2].w = fillOpacity      — zone interior fill opacity (0–1)
+ * Parameters are declared in metadata.json and read here through the
+ * generated p_<id> accessors. The slot table that used to sit here listed
+ * customParams indices that the pack stopped using and drifted out of date
+ * as parameters were added, so it is not restated.
  *
  * Colors:
  *   p_primaryColor = primary neon (default: cyan)
@@ -85,8 +76,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 vec4 params, bool isHighlighted,
                 float bass, float mids, float treble, float overall, bool hasAudio)
 {
-    float borderRadius = max(params.x, 6.0);
-    float borderWidth  = max(params.y, 2.5);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
     // Parameters with defaults (sentinel: -1.0 = unset → use default)
     float glowIntensity = p_glowIntensity >= 0.0 ? p_glowIntensity : 2.5;
@@ -98,28 +91,27 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float colorMix      = p_colorMix >= 0.0 ? p_colorMix : 0.5;
     float idleAnim      = p_idleAnimation >= 0.0 ? p_idleAnimation : 1.0;
     float veinIntensity = p_veinIntensity >= 0.0 ? p_veinIntensity : 0.5;
-    float radialWaveStr = customParams[2].y >= 0.0 ? customParams[2].y : 1.0;
     float gridOpacity   = p_gridOpacity >= 0.0 ? p_gridOpacity : 0.15;
     float fillOpacity   = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float gridRes       = p_gridResolution >= 0.0 ? p_gridResolution : 20.0;
 
     // Zone geometry
-    vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
-    float d       = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d       = zoneShape.d;
 
     // Screen-space UV: continuous across zones (0-1 over entire screen)
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
 
-    // Screen-space angle (from screen center, for interior effects)
-    vec2 screenCenter = iResolution.xy * 0.5;
-    vec2 sp = fragCoord - screenCenter;
-    float angle = atan(sp.x, -sp.y) / TAU + 0.5;
 
     // Colors
-    vec3 primary  = colorWithFallback(p_primaryColor.rgb, fillColor.rgb);
+    // Gated, not zoneFillHue directly: this feeds a colorWithFallback CHAIN, and
+    // the helper's white fallback has length 1.73, which passes the emptiness
+    // test and makes the cyan fallback on the next line unreachable. A fully
+    // transparent zone would turn the pack's neon white instead of cyan.
+    vec3 fillHue  = fillColor.a > 1e-3 ? zoneFillHue(fillColor) : vec3(0.0);
+    vec3 primary  = colorWithFallback(p_primaryColor.rgb, fillHue);
     primary       = colorWithFallback(primary, vec3(0.0, 1.0, 1.0));
     vec3 accent   = colorWithFallback(p_accentColor.rgb, vec3(1.0, 0.0, 1.0));
     vec3 bassCol  = colorWithFallback(p_bassColor.rgb, vec3(1.0, 0.4, 0.0));
@@ -158,7 +150,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         result.a   = fillOpacity;
 
         // Inner glow: exponential falloff from border edge
-        float innerGlow = exp(-innerDist / 30.0) * 0.3 * intensity;
+        float innerGlow = exp(-innerDist / zoneLen(30.0)) * 0.3 * intensity;
         // Slight color variation on inner glow
         vec3 glowTint = mix(activeColor, accent, innerGlow * 0.5);
         result.rgb += glowTint * innerGlow;
@@ -264,7 +256,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Border (neon core with energy flow) ────────────────────
 
-    float coreWidth = borderWidth * 0.7;
+    // zoneStrokeWidth re-floors the derived stroke at one device pixel.
+    // zoneBorderWidth() floors the border itself, but scaling that down
+    // puts it straight back under a pixel, where it shimmers out on a
+    // fractional scale. A width of 0 still passes through as 0.
+    float coreWidth = zoneStrokeWidth(borderWidth * 0.7);
     float core = softBorder(d, coreWidth);
     if (core > 0.0) {
         // Seamless angular noise (no atan discontinuity)
@@ -283,7 +279,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float travelPulse = pow(0.5 + 0.5 * sin(travelPhase * TAU * 3.0), 4.0);
 
         float borderBright = intensity * (flowPulse + plasma + travelPulse * 0.25);
-        vec3 coreColor = activeColor * borderBright;
+        // Folds in the zone's configured border colour so the setting is not
+        // inert here. fillColor is already consumed above; borderColor was the
+        // only half of the pair this pack discarded.
+        vec3 coreColor = mix(activeColor, colorWithFallback(borderColor.rgb, activeColor), 0.3) * borderBright;
 
         // White-hot neon center (toned down so user color shows through)
         coreColor = mix(coreColor, vec3(1.0), core * 0.35);
@@ -294,16 +293,19 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             coreColor = mix(coreColor, bassCol * 2.0, flash * core * 0.25);
         }
 
-        result.rgb = max(result.rgb, coreColor * core);
-        result.a   = max(result.a, core);
+        result.rgb = max(result.rgb, coreColor * core * borderColor.a);
+        result.a   = max(result.a, core * borderColor.a);
     }
 
     // ── Outer glow (bass-reactive expansion) ──────────────────
 
-    float glowRadius = 20.0 + 5.0 * bassHit + 8.0 * idlePulse;
+    float glowRadius = zoneLen(20.0 + 5.0 * bassHit + 8.0 * idlePulse);
+    // Both lobes have their pedestal at the bound subtracted (expGlowBounded),
+    // so they reach exactly 0 at glowRadius and the gate cuts nothing. The wide
+    // lobe would otherwise still be at exp(-2) = 13.5% of its peak there.
     if (d > 0.0 && d < glowRadius) {
-        float glow1 = expGlow(d, glowRadius * 0.2, intensity * 0.35);
-        float glow2 = expGlow(d, glowRadius * 0.5, intensity * 0.12);
+        float glow1 = expGlowBounded(d, glowRadius * 0.2, intensity * 0.35, glowRadius);
+        float glow2 = expGlowBounded(d, glowRadius * 0.5, intensity * 0.12, glowRadius);
 
         // Flowing color using seamless angular noise
         float glowAngle = atan(p.x, -p.y);
@@ -316,7 +318,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Edge sparks (treble-driven, per-spark staggered timing) ─
 
-    if (hasAudio && treble > 0.1 && abs(d) < borderWidth * 4.0) {
+    // zoneEdgeBand: at a configured width of 0 `abs(d) < 0` is never true and
+    // the edge-spark block (sole consumer of p_sparkColor here) went dead.
+    if (hasAudio && treble > 0.1 && abs(d) < zoneEdgeBand(borderWidth * 4.0, 8.0)) {
         float sparkAngle = atan(p.x, -p.y) / TAU + 0.5;
         float sparkSlot = floor(sparkAngle * 60.0);
 

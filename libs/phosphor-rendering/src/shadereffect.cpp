@@ -13,6 +13,9 @@
 #include <QMutexLocker>
 #include <QPainter>
 #include <QQuickWindow>
+#if QT_VERSION < QT_VERSION_CHECK(6, 11, 0)
+#include <QScreen>
+#endif
 #include <QSvgRenderer>
 
 #include <cmath>
@@ -158,6 +161,8 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
 {
     setFlag(ItemHasContents, true);
 
+    m_userTextureSvgSizes.fill(kDefaultUserTextureSvgSize);
+
     // When the scene graph is invalidated (e.g. window hide on Vulkan destroys
     // the QRhi), release GPU resources from the render node and mark shader
     // dirty so it reinitializes on the next show().
@@ -181,27 +186,26 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
             disconnect(m_connectedWindow.data(), &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
         }
         m_connectedWindow = win;
+
+        // Cleared for BOTH branches, not just the detach. The old window's scene
+        // graph owns the node and has already taken it for deletion by the time
+        // windowChanged fires, on a reparent as much as on a detach. Keeping the
+        // pointer through a window-A -> window-B move leaves it dangling AND
+        // makes the destructor's `node && window()` guard pass, because the new
+        // window is attached — so invalidateItem() would run on freed memory.
+        // The next updatePaintNode re-registers, so nothing is lost.
+        m_renderNode.store(nullptr, std::memory_order_release);
+
         if (win) {
             connect(
                 win, &QQuickWindow::sceneGraphAboutToStop, this,
                 [this]() {
-                    if (m_renderNode) {
-                        m_renderNode->releaseResources();
+                    if (ShaderNodeRhi* node = m_renderNode.load(std::memory_order_acquire)) {
+                        node->releaseResources();
                     }
                     m_shaderDirty.store(true);
                 },
                 Qt::DirectConnection);
-        } else {
-            // Window detached: the scene graph owns the render node and has
-            // either deleted it already or will before any future paint. Drop
-            // our raw pointer NOW so the destructor's `if (m_renderNode &&
-            // window())` guard collapses to a true safety check — without
-            // this the dtor relies solely on `window()` returning nullptr to
-            // detect the dangling case, which is correct today but coupled
-            // to QQuickItem teardown ordering. Clearing here makes the
-            // tracker self-consistent regardless of how the dtor liveness
-            // check evolves.
-            m_renderNode = nullptr;
         }
     });
 }
@@ -209,10 +213,16 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
 ShaderEffect::~ShaderEffect()
 {
     // Disconnect the DirectConnection sceneGraphAboutToStop callback FIRST.
-    // That lambda executes on the render thread and dereferences m_renderNode;
-    // QObject::disconnect is thread-safe and blocks until any in-flight
-    // invocation completes, so after this line the render thread cannot race
-    // our subsequent member teardown.
+    // That lambda executes on the render thread and touches this object.
+    //
+    // Be exact about what this buys, because an earlier version of this comment
+    // claimed the opposite of ShaderEffect.h's and both cannot be right:
+    // QObject::disconnect is thread-safe but does NOT block a direct-connection
+    // slot that is already running (doActivate releases the sender's lock
+    // across the call). It guarantees no FUTURE invocation, nothing more. What
+    // keeps teardown safe today is that sceneGraphAboutToStop is emitted only
+    // while the render thread is tearing the scene graph down, which does not
+    // overlap an item destruction in practice. Narrow, not closed.
     if (m_connectedWindow) {
         disconnect(m_connectedWindow.data(), &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
         m_connectedWindow.clear();
@@ -226,10 +236,10 @@ ShaderEffect::~ShaderEffect()
     // If the window (and its scene graph) was already destroyed, the node has
     // been deleted by the SG and m_renderNode is dangling. window() returns
     // nullptr once the window is gone, so use that as liveness check.
-    if (m_renderNode && window()) {
-        m_renderNode->invalidateItem();
+    if (ShaderNodeRhi* node = m_renderNode.load(std::memory_order_acquire); node && window()) {
+        node->invalidateItem();
     }
-    m_renderNode = nullptr;
+    m_renderNode.store(nullptr, std::memory_order_release);
 }
 
 // ============================================================================
@@ -665,8 +675,15 @@ ShaderNodeRhi* ShaderEffect::createShaderNode()
 
 void ShaderEffect::setError(const QString& error)
 {
-    if (m_errorLog != error) {
-        m_errorLog = error;
+    bool changed = false;
+    {
+        QMutexLocker lock(&m_errorLogMutex);
+        changed = (m_errorLog != error);
+        if (changed) {
+            m_errorLog = error;
+        }
+    }
+    if (changed) {
         Q_EMIT errorLogChanged();
     }
     setStatus(Status::Error);
@@ -674,17 +691,29 @@ void ShaderEffect::setError(const QString& error)
 
 void ShaderEffect::setStatus(Status newStatus)
 {
-    Status expected = m_status.load(std::memory_order_acquire);
-    if (expected == newStatus) {
+    // Single atomic swap, not load-compare-store. Status is written from the
+    // render thread and read from the GUI thread, so a split read and write
+    // lets two concurrent transitions both pass the compare and emit
+    // statusChanged() twice, or interleave into a transition nobody reports.
+    const Status previous = m_status.exchange(newStatus, std::memory_order_acq_rel);
+    if (previous == newStatus) {
         return;
     }
-    m_status.store(newStatus, std::memory_order_release);
     Q_EMIT statusChanged();
 }
 
 // ============================================================================
 // Shared Property Sync (used by updatePaintNode and subclass overrides)
 // ============================================================================
+
+qreal ShaderEffect::effectiveResolutionScale() const
+{
+    const bool needsPhysical = !m_uniformExtension || m_uniformExtension->requiresPhysicalResolution();
+    if (needsPhysical && window() && window()->screen()) {
+        return window()->effectiveDevicePixelRatio();
+    }
+    return 1.0;
+}
 
 void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
 {
@@ -723,11 +752,7 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     // `m_iResolution` itself stays in logical units (Q_PROPERTY
     // semantics — QML callers expect the same units they bound it
     // from). Only the GPU-bound value is conditionally multiplied.
-    qreal dpr = 1.0;
-    const bool needsPhysical = !m_uniformExtension || m_uniformExtension->requiresPhysicalResolution();
-    if (needsPhysical && window() && window()->screen()) {
-        dpr = window()->effectiveDevicePixelRatio();
-    }
+    const qreal dpr = effectiveResolutionScale();
     node->setResolution(static_cast<float>(m_iResolution.width() * dpr),
                         static_cast<float>(m_iResolution.height() * dpr));
     // Scale the mouse by the SAME dpr as the resolution so iMouse.xy (pixels)
@@ -810,10 +835,12 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
 
     if (width() <= 0 || height() <= 0) {
         if (oldNode) {
-            if (m_renderNode) {
-                m_renderNode->invalidateItem();
-                m_renderNode = nullptr;
-            }
+            // Invalidate oldNode DIRECTLY, not the tracked pointer: if
+            // m_renderNode were ever null while oldNode is live, keying off the
+            // tracked pointer would delete the node without severing its item
+            // back-pointer. Both subclass overrides already do it this way.
+            static_cast<ShaderNodeRhi*>(oldNode)->invalidateItem();
+            m_renderNode.store(nullptr, std::memory_order_release);
             delete oldNode;
         }
         return nullptr;
@@ -823,11 +850,17 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     bool freshNode = false;
     if (!node) {
         // Scene graph deleted the previous node (e.g. releaseResources), or first call.
-        m_renderNode = nullptr;
+        m_renderNode.store(nullptr, std::memory_order_release);
         node = createShaderNode();
-        m_renderNode = node;
         freshNode = true;
     }
+    // Register unconditionally, not only on the fresh-node path. windowChanged
+    // clears m_renderNode, and a reuse-path frame after that would otherwise
+    // leave it null forever, so the destructor's `node && window()` guard would
+    // never sever the node's item back-pointer. QQuickItemPrivate::derefWindow()
+    // makes that sequence unreachable today, but the guard must not depend on
+    // it. One release store per frame is unmeasurable.
+    m_renderNode.store(node, std::memory_order_release);
 
     // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper, user textures) ──
     syncBasePropertiesToNode(node);
@@ -891,8 +924,27 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                         errorMsg = QStringLiteral("Shader loading failed");
                     }
                     qCWarning(lcShaderNode) << "Fragment shader load failed:" << fragPath << "—" << errorMsg;
+                    // Drop the node's shader before reporting. On the node-REUSE
+                    // path a previously good bake is still resident, so
+                    // isShaderReady() stays true and the status block below
+                    // would set Ready again three lines later, leaving the item
+                    // claiming Ready while errorLog holds a real failure.
+                    node->setFragmentShaderSource(QString());
+                    node->invalidateShader();
                     setError(errorMsg);
                 }
+            } else {
+                // The URL passed isLocalShaderUrl() but carries no usable path
+                // (a host-only file:// URL, or a qrc: URL with an empty path).
+                // m_shaderDirty has already been consumed above, so returning
+                // silently here would pin the item at Status::Loading forever
+                // with an empty errorLog and no retry on any later frame.
+                qCWarning(lcShaderNode) << "Shader URL resolved to an empty local path:" << m_shaderSource;
+                // Same reuse-path clobber as the load-failure arm above: drop
+                // the resident bake so isShaderReady() cannot revert the error.
+                node->setFragmentShaderSource(QString());
+                node->invalidateShader();
+                setError(QStringLiteral("Shader URL resolved to an empty local path: ") + m_shaderSource.toString());
             }
         } else {
             // Source cleared — stop rendering old shader
@@ -949,7 +1001,68 @@ void ShaderEffect::itemChange(ItemChange change, const ItemChangeData& value)
         // parented to a window would never tick — the connection in
         // setPlaying short-circuits when window() is null.
         updatePlayingConnection();
+        // Same for the output-scale subscriptions: they hang off the window
+        // and its screen, so they have to follow the item between windows.
+        updateScaleConnections();
     }
+}
+
+void ShaderEffect::updateScaleConnections()
+{
+    // Tear down unconditionally before re-establishing, so moving between
+    // windows cannot leave a connection to the previous one behind.
+    QObject::disconnect(m_scaleConnection);
+    m_scaleConnection = {};
+    // Unconditional: a default-constructed Connection disconnects cleanly, and
+    // on 6.11+ this is simply always that.
+    QObject::disconnect(m_screenDprConnection);
+    m_screenDprConnection = {};
+
+    QQuickWindow* w = window();
+    if (!w) {
+        // Not parented yet. itemChange(ItemSceneChange) re-calls us once the
+        // item has a window.
+        return;
+    }
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 11, 0)
+    // One connection covers every case, because devicePixelRatioChanged is the
+    // NOTIFY for effectiveDevicePixelRatio, which is exactly what
+    // effectiveResolutionScale() reads. It fires for a screen move, for a
+    // screen rescaled in place, and for a per-surface scale change that never
+    // touches a screen at all (Wayland's fractional-scale-v1 preferred scale),
+    // which no QScreen signal reports.
+    m_scaleConnection = QObject::connect(w, &QQuickWindow::devicePixelRatioChanged, this, [this]() {
+        update();
+    });
+#else
+    // Before 6.11 the accessor has no notifier, so approximate it. The window
+    // moving to another screen changes effectiveDevicePixelRatio; re-subscribe
+    // to the new screen's own signal at the same time.
+    m_scaleConnection = QObject::connect(w, &QWindow::screenChanged, this, [this]() {
+        updateScaleConnections();
+        update();
+    });
+
+    // A screen can also be rescaled in place without the window ever moving.
+    // logicalDotsPerInch is the value that tracks Qt's high-DPI scale factor.
+    // physicalDotsPerInch is derived from geometry over physical size, and a
+    // scale change alters neither, so it would simply never fire.
+    if (QScreen* s = w->screen()) {
+        m_screenDprConnection = QObject::connect(s, &QScreen::logicalDotsPerInchChanged, this, [this]() {
+            update();
+        });
+    }
+#endif
+
+    // Kick a frame on the establish path too, exactly as
+    // updatePlayingConnection() does. The window we just attached to may have a
+    // different scale from the one last pushed to the node, and no change
+    // signal fires for that: it is a change from OUR side, not the window's.
+    // Leaning on QQuickItem's own add-to-window dirtying would be the same
+    // "some later frame happens to repaint" assumption this function exists to
+    // remove.
+    update();
 }
 
 void ShaderEffect::componentComplete()

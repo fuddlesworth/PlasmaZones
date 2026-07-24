@@ -16,12 +16,10 @@
  * radius at that angle = spectrum amplitude. One morphing blob defined
  * by all 256 bars. Best with 256 spectrum bars in KCM settings.
  *
- * Parameters (customParams):
- *   [0].x = reactivity       — audio sensitivity (0.5–3)
- *   [0].y = contourScale     — how far spectrum extends from base (0.2–0.6)
- *   [0].z = baseRadius       — minimum contour radius when silent (0.05–0.3)
- *   [0].w = glowWidth       — width of contour glow (0.02–0.1)
- *   [1].x = idleAnimation    — star pulse when no audio (0–2)
+ * Parameters are declared in metadata.json and read here through the
+ * generated p_<id> accessors. The slot table that used to sit here listed
+ * customParams indices that the pack stopped using and drifted out of date
+ * as parameters were added, so it is not restated.
  *
  * Colors:
  *   p_primaryColor = primary (low freq, default: cyan)
@@ -37,10 +35,12 @@
 
 vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 vec4 params, bool isHighlighted,
-                float bass, float mids, float treble, float overall, bool hasAudio)
+                float bass, float mids, float overall, bool hasAudio)
 {
-    float borderRadius = max(params.x, 6.0);
-    float borderWidth  = max(params.y, 2.5);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
     // Parameters with defaults (sentinel: -1.0 = unset -> use default)
     float reactivity   = p_reactivity >= 0.0 ? p_reactivity : 1.5;
@@ -56,12 +56,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float auroraRays   = p_auroraRayCount >= 0.0 ? p_auroraRayCount : 12.0;
 
     // Zone geometry -- KEEP for cutout, border, edge effects
-    vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;  // KEEP for border/glow angle
-    vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
-    float d       = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d       = zoneShape.d;
 
     // Screen-space polar coords
     vec2 screenCenter = iResolution.xy * 0.5;
@@ -85,8 +82,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float vitality = isHighlighted ? 1.0 : 0.25;
 
     if (!isHighlighted) {
-        primary = mix(primary, vec3(dot(primary, vec3(0.299, 0.587, 0.114))), 0.6);
-        accent  = mix(accent, vec3(dot(accent, vec3(0.299, 0.587, 0.114))), 0.6);
+        primary = mix(primary, vec3(luminance(primary)), 0.6);
+        accent  = mix(accent, vec3(luminance(accent)), 0.6);
         reactivity   *= 0.5;
         contourScale *= 0.55;
         glowWidth    *= 0.7;
@@ -179,6 +176,12 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             nebBright *= 1.0 - smoothstep(0.0, 1.3, r) * 0.25;
 
             result.rgb = nebColor * nebBright;
+            // Light identity tint from the zone's configured fill colour, the
+            // same weight the sibling packs use. Without it the per-zone colour
+            // a user sets in appearance settings does nothing at all in this
+            // pack, which reads as the setting being broken rather than as a
+            // pack that owns its palette.
+            result.rgb = zoneTint(result.rgb, fillColor, 0.35);
             result.a = mix(fillOpacity * 0.59, fillOpacity, vitality);
         }
 
@@ -313,14 +316,20 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Zone border: flowing energy ──────────────────────────────
     {
-        float coreWidth = borderWidth * mix(0.5, 0.9, vitality);
+        // zoneStrokeWidth re-floors the derived stroke at one device pixel.
+        // zoneBorderWidth() floors the border itself, but scaling that down
+        // puts it straight back under a pixel, where it shimmers out on a
+        // fractional scale. A width of 0 still passes through as 0.
+        float coreWidth = zoneStrokeWidth(borderWidth * mix(0.5, 0.9, vitality));
         float core = softBorder(d, coreWidth);
         if (core > 0.0) {
             float bAngle = atan(p.x, -p.y) / TAU + 0.5;
 
             // Audio-reactive border energy
             float borderEnergy = 1.0 + energy * mix(0.2, 1.0, vitality) + idlePulse * 0.3;
-            vec3 coreColor = primary * mix(0.6, 1.8, vitality) * borderEnergy;
+            // Folds in the zone's configured border colour at the sibling
+            // packs' weight, so the setting is not inert here.
+            vec3 coreColor = mix(primary, colorWithFallback(borderColor.rgb, primary), 0.3) * mix(0.6, 1.8, vitality) * borderEnergy;
 
             // Flowing highlights: animated angular noise
             float flowSpeed = mix(0.3, 2.0, vitality);
@@ -346,8 +355,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 coreColor = mix(coreColor, bassWarm * 2.0, flash * core * 0.3);
             }
 
-            result.rgb = max(result.rgb, coreColor * core);
-            result.a = max(result.a, core);
+            result.rgb = max(result.rgb, coreColor * core * borderColor.a);
+            result.a = max(result.a, core * borderColor.a);
         }
     }
 
@@ -423,7 +432,6 @@ vec4 pImage(vec2 fragCoord) {
     bool  hasAudio = iAudioSpectrumSize > 0;
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
-    float treble  = getTrebleSoft();
     float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
@@ -432,7 +440,7 @@ vec4 pImage(vec2 fragCoord) {
 
         vec4 zoneColor = renderZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio);
+            bass, mids, overall, hasAudio);
 
         color = blendOver(color, zoneColor);
     }

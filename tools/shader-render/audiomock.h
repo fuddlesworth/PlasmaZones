@@ -31,15 +31,16 @@ namespace PlasmaZones::ShaderRender {
  *            Useful for verifying that bass / mid / treble buckets
  *            light up as expected.
  *
- * Bar count is sourced from PhosphorAudio::Defaults::MaxBars so the preview
- * pipeline can't drift away from the runtime's CAVA cap. Producing previews
- * at the cap is fine: the shader tolerates any size up to the cap (it reads
- * iAudioSpectrumSize), and the cap value looks smooth for clip-style previews.
+ * Bar count is sourced from PhosphorAudio::Defaults::DefaultBarCount, which is
+ * what IAudioSpectrumProvider hands a default daemon. Parity with the runtime
+ * is this tool's whole premise, and previewing at the 256-bar cap instead gave
+ * shaders a different bucket distribution and a different iAudioSpectrumSize
+ * from the thing the preview is meant to represent.
  */
 class AudioMock
 {
 public:
-    static constexpr int kBarCount = PhosphorAudio::Defaults::MaxBars;
+    static constexpr int kBarCount = PhosphorAudio::Defaults::DefaultBarCount;
 
     virtual ~AudioMock() = default;
 

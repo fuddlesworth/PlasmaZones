@@ -191,9 +191,12 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         // would then dereference the freed item.
         registerRenderNode(nullptr);
         node = createShaderNode();
-        registerRenderNode(node);
         freshNode = true;
     }
+    // Register on every frame, not just the fresh-node path: windowChanged
+    // clears the base's tracked node, and a reuse-path frame after that would
+    // leave the teardown guard permanently disarmed.
+    registerRenderNode(node);
 
     // ── Sync base properties (time, params, colors, audio, multipass, depth) ──
     // syncBasePropertiesToNode pushes user textures (slots 0..3) and the

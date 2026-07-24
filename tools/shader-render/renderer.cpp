@@ -33,6 +33,10 @@
 #include <private/qquickshadereffectsource_p.h>
 #include <QSGRendererInterface>
 #include <QStandardPaths>
+
+// std::memcpy below. It used to arrive transitively through
+// ZoneShaderCommon.h, which no longer includes <cstring>.
+#include <cstring>
 #include <QUrl>
 
 #include <QLoggingCategory>
@@ -282,7 +286,9 @@ void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetad
 
 QStringList shaderIncludePaths()
 {
-    // Mirrors ZoneShaderItem's constructor (src/daemon/rendering/zoneshaderitem.cpp:75-85):
+    // Mirrors PlasmaZones::expandShaderIncludePaths() in
+    // src/daemon/rendering/zoneshadernoderhi.h (cited by symbol, not by line —
+    // the previous file:line citation had rotted onto unrelated code):
     // for each shader root, push <root>/shared FIRST then <root>. The /shared
     // entry is where common.glsl / audio.glsl / zone.vert live in the source
     // tree; without it `#include <common.glsl>` only resolves accidentally via
@@ -290,20 +296,61 @@ QStringList shaderIncludePaths()
     // shared zone.vert fallback (see resolveZoneVertexShader) wouldn't find
     // anything either.
     QStringList paths;
-    const auto pushRoot = [&paths](const QString& root) {
-        const QString sharedDir = root + QStringLiteral("/shared");
-        if (QDir(sharedDir).exists()) {
-            paths.append(sharedDir);
+    // Existence-filtered and deduped, matching the daemon's appendUniquePath.
+    // Without both, an XDG_DATA_DIRS that repeats a directory (or the common
+    // case where <root> itself is absent but <root>/shared was checked) puts
+    // nonexistent and duplicate entries into the include path, so the list the
+    // preview compiles against stops being byte-identical to the daemon's.
+    const auto pushPath = [&paths](const QString& path) {
+        if (!path.isEmpty() && QDir(path).exists() && !paths.contains(path)) {
+            paths.append(path);
         }
-        paths.append(root);
     };
-    const QStringList xdg = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
-    for (const QString& dir : xdg) {
-        pushRoot(dir + QStringLiteral("/overlays"));
+    const auto pushRoot = [&pushPath](const QString& root) {
+        pushPath(root + QStringLiteral("/shared"));
+        pushPath(root);
+    };
+    // Source tree FIRST, unlike the daemon this otherwise mirrors. The daemon
+    // is the installed program and must prefer installed data; this tool exists
+    // to validate the tree you are editing, so an installed copy shadowing it
+    // is the one outcome that makes the tool worthless.
+    //
+    // It was that way round: with the package installed, every pack rendered
+    // against /usr/share's shared/common.glsl while the pack .frag files came
+    // from data/overlays. A helper added to the tree but not yet installed was
+    // therefore missing at preview time, and the pack failed to compile with
+    // "no matching overloaded function found" for a function plainly sitting in
+    // the file the author was looking at. The preview was silently a render of
+    // the last install, not of the working tree.
+    //
+    // data/overlays only exists when run from the source tree, so this entry is
+    // simply absent for an installed invocation and the order below applies.
+    // Absolutised: every other entry in this list is absolute, and a relative
+    // include path is the one entry that can silently resolve somewhere else if
+    // the process cwd is not the source tree.
+    pushRoot(QDir(QStringLiteral("data/overlays")).absolutePath());
+
+    // GenericDataLocation + "plasmazones/overlays", matching the daemon's
+    // trustedShaderRoots(). This used to be AppDataLocation + "/overlays", which
+    // appends the APPLICATION name ("plasmazones-shader-render"), so it probed
+    // <xdg>/plasmazones-shader-render/overlays, a directory that does not exist,
+    // and the whole user tier silently resolved nothing. A pack the user
+    // installed under ~/.local/share/plasmazones/overlays was live in the daemon
+    // and invisible to the preview, which is the same class of divergence the
+    // source-tree-first ordering above exists to prevent.
+    for (const QString& dir : QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation)) {
+        pushRoot(dir + QStringLiteral("/plasmazones/overlays"));
     }
-    pushRoot(QStringLiteral("/usr/share/plasmazones/overlays"));
-    pushRoot(QStringLiteral("data/overlays"));
-    paths.append(QStringLiteral("libs/phosphor-rendering/shaders"));
+    // No explicit /usr/share entry: GenericDataLocation already ends with the
+    // XDG_DATA_DIRS list, which includes it on a normal system.
+    // No libs/phosphor-*/shaders entry. There used to be one naming
+    // "libs/phosphor-rendering/shaders", which has never existed, so it
+    // resolved nothing in any invocation. Repointing it at the real
+    // libs/phosphor-shaders/shaders would be worse than deleting it: that
+    // directory holds the BASE common.glsl (a different file from the
+    // overlay one), and the daemon's expandShaderIncludePaths carries no
+    // such entry, so adding it here would make the preview search a path
+    // the runtime does not.
     return paths;
 }
 
@@ -315,7 +362,8 @@ QStringList shaderIncludePaths()
 // vertex shader (kDefaultVertexShaderSource — emits only vTexCoord) is used,
 // every zone fragment shader fails to link with `vFragCoord not declared as
 // input from previous stage`, and every preview comes out as the clear colour.
-// Replicates ZoneShaderItem's resolution at src/daemon/rendering/zoneshaderitem.cpp:358-373.
+// Replicates PlasmaZones::resolveZoneVertexPath() in
+// src/daemon/rendering/zoneshadernoderhi.h.
 QString resolveZoneVertexShader(const QString& metadataVertexPath, const QStringList& includePaths)
 {
     if (!metadataVertexPath.isEmpty()) {
@@ -618,19 +666,42 @@ int Renderer::render(const RenderOptions& opts)
     auto zoneExt = std::make_shared<PhosphorRendering::ZoneUniformExtension>();
     auto runtimeZones = toRuntimeZones(opts.zones);
 
-    // Resolve --still-highlight ZONE_NUMBER. When in range, pin that zone as
-    // the only highlighted one for the entire run; the per-frame schedule is
-    // then a no-op. Out-of-range values fall back to cycling so the caller
-    // gets a usable preview instead of an empty-handed render.
-    const int stillIdx = (opts.stillHighlightZone >= 1 && opts.stillHighlightZone <= runtimeZones.size())
-        ? opts.stillHighlightZone - 1
-        : -1;
+    // Resolve --still-highlight ZONE_NUMBER. Matched against the zone's OWN
+    // zoneNumber, not its position: zone numbers are a value the zone carries
+    // and are free to be reordered or non-contiguous, so an index match would
+    // silently pin the wrong zone on any such layout. When it matches, that
+    // zone is the only highlighted one for the entire run and the per-frame
+    // schedule is a no-op. An unmatched number falls back to cycling so the
+    // caller gets a usable preview instead of an empty-handed render.
+    int stillIdx = -1;
+    if (opts.stillHighlightZone >= 1) {
+        for (int z = 0; z < runtimeZones.size(); ++z) {
+            if (runtimeZones[z].zoneNumber == opts.stillHighlightZone) {
+                stillIdx = z;
+                break;
+            }
+        }
+        if (stillIdx < 0) {
+            qCWarning(lcRenderer) << "--still-highlight" << opts.stillHighlightZone
+                                  << "matches no zone number in this layout; falling back to the cycling schedule";
+        }
+    }
     if (stillIdx >= 0) {
         for (int z = 0; z < runtimeZones.size(); ++z)
             runtimeZones[z].isHighlighted = (z == stillIdx);
     }
 
     zoneExt->updateFromZones(runtimeZones);
+    // Push the same scale the daemon's ZoneShaderItem does. It is provably
+    // 1.0 today because the render target's DPR is pinned to 1.0 above, which
+    // is also what the base uses for iResolution — but nothing links those two
+    // 1.0s, and the preview only mirrors the daemon while they agree. Deriving
+    // it from dpr keeps the corner radii and border widths correct if a --dpr
+    // or --scale option is ever added, instead of silently previewing every
+    // length at 1/dpr of what the daemon renders.
+    if (!zoneExt->setScale(static_cast<float>(dpr))) {
+        qCWarning(lcRenderer) << "zone scale" << dpr << "was rejected; previews will use the default 1.0 scale";
+    }
     effect->setUniformExtension(zoneExt);
 
     // Initial zone counts. For the cycling schedule, highlightedCount and

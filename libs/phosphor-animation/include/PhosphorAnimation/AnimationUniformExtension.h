@@ -37,7 +37,7 @@ namespace PhosphorAnimation {
 /// `common.glsl` cache-key gap in `shaderCacheKey`, but unconfirmed).
 /// Keeping `BaseUniforms` at 672 bytes and routing animation-only
 /// fields through this extension isolates the two pipelines: zone
-/// shaders attach `ZoneUniformExtension` (4096 bytes after base) and
+/// shaders attach `ZoneUniformExtension` (`kZoneExtensionBytes` after base) and
 /// never observe these fields at all; animation shaders attach
 /// `AnimationUniformExtension` (48 bytes after base) — `iSurfaceScreenPos`
 /// at offset 672, `iAnchorSize` at 688, `iAnchorPosInFbo` at 696,
@@ -125,7 +125,7 @@ public:
     /// attach and on each anchor / window geometry signal. Logical-
     /// pixel units — the same unit `iResolution` carries on this path,
     /// because this extension's `requiresPhysicalResolution()` returns
-    /// false and `shadereffect.cpp::syncCustomNode` therefore skips the
+    /// false and `shadereffect.cpp::effectiveResolutionScale` therefore skips the
     /// DPR multiply. `.zw` mirrors the QQuickWindow's contentItem size
     /// and equals the wl_surface rect for screen-sized OSD / popup
     /// surfaces on the daemon path, so it is an equivalent screen-size

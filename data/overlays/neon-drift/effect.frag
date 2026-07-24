@@ -388,8 +388,10 @@ vec3 emberParticles(vec2 uv, float time, float trebleEnv, float bassEnv,
 vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
                      bool isHighlighted, float bass, float mids, float treble,
                      bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
 
     float speed         = p_speed >= 0.0 ? p_speed : 0.12;
     float flowSpeed     = p_flowSpeed >= 0.0 ? p_flowSpeed : 0.25;
@@ -403,7 +405,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
-    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float edgeFadeStart     = zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0);
     float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
     float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
@@ -428,13 +430,10 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float gearSpin      = p_gearSpin >= 0.0 ? p_gearSpin : 0.15;
     float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.5;
 
-    vec2 rectPos = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
-    vec2 halfSize = rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
 
     vec2 p = fragCoord - center;
-    float d = sdRoundedBox(p, halfSize, borderRadius);
+    float d = zoneShape.d;
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     float aspect = iResolution.x / max(iResolution.y, 1.0);
     float time = iTime;
@@ -445,7 +444,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec3 palAccent    = colorWithFallback(p_accentColor.rgb, vec3(0.239, 0.859, 0.761));
     vec3 palGlow      = colorWithFallback(p_glowColor.rgb, vec3(0.878, 1.0, 0.969));
 
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
 
     float flowAngle = flowDirection * TAU;
@@ -694,7 +693,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float depthDarken = smoothstep(0.0, edgeFadeStart, innerDist);
         col *= mix(0.6, 1.0, 1.0 - depthDarken * 0.35);
 
-        float innerGlow = exp(-innerDist / 12.0);
+        float innerGlow = exp(-innerDist / zoneLen(12.0));
         float edgeAngle = atan(p.y, p.x);
         float iriT = edgeAngle / TAU + time * 0.05 + midsEnv * 0.2;
         vec3 iriCol = mix(
@@ -704,7 +703,10 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         );
         col += iriCol * innerGlow * innerGlowStr;
 
-        col = mix(col, fillColor.rgb * luminance(col), 0.1);
+        // Multiplicative, so white is a true no-op. The previous hue-replacement
+        // form desaturated by 10% under zoneFillHue's white fallback, which is
+        // not what a fully transparent zone should do.
+        col = mix(col, col * zoneFillHue(fillColor), 0.1);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -727,11 +729,16 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         borderCol *= borderBrightness;
 
         // Neon tube effect on border
-        float borderNeon = exp(-abs(d) * 8.0) * 0.3;
+        // One logical px, floored at one device px. The old 0.125 only
+        // contributed within ~0.3 px of the edge, so the tube core aliased
+        // instead of reading as a stroke. Flooring 0.125 alone was not enough:
+        // zoneLen(0.125) stays under 1.0 for every scale below 8, so the floor
+        // always won and the falloff stopped tracking the display entirely.
+        float borderNeon = exp(-abs(d) / max(zoneLen(1.0), 1.0)) * 0.3;
         borderCol += palAccent * borderNeon;
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.4 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {
@@ -740,15 +747,19 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             borderCol *= 0.7;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow ───────────────────────────────────────────
     float bassGlowPush = hasAudio ? bassEnv * 2.5 : idlePulse * 5.0;
-    float glowRadius = mix(10.0, 20.0, vitality) + bassGlowPush;
+    // Derive the bound from the falloff rather than from an independent radius:
+    // the old pairing cut the glow at 1.6 falloffs when dormant (20% of peak),
+    // which reads as a hard circle around every zone at high borderGlow.
+    float glowFalloff = zoneLen(8.0);
+    float glowRadius = glowFalloff * 3.5 + zoneLen(bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, 8.0, borderGlow);
+        float glow = expGlow(d, glowFalloff, borderGlow);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.06) + midsEnv * 0.1;
         vec3 glowCol = mix(

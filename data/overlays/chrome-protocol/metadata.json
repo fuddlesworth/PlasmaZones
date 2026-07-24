@@ -2,7 +2,7 @@
     "id": "chrome-protocol",
     "name": "Chrome Protocol",
     "category": "Cyberpunk",
-    "description": "A 3D stacked targeting array of 7 concentric rings raymarched in Z with an orbiting camera, a live 7-segment audio readout, rotating HUD panels, a hexagonal background grid, and a spectrum-bar strip that replaces the original rolling blocks. Bass breathes the ring thickness and camera orbit, mids drive rotation speed, and treble fractures the grid with glitch bands.",
+    "description": "A 3D stacked targeting array of 7 concentric rings raymarched in Z with an orbiting camera, a live 7-segment audio readout, rotating HUD panels, a hexagonal background grid, and a spectrum-bar strip that replaces the original rolling blocks. Bass breathes the ring thickness and camera orbit, mids widen the camera orbit, and treble fractures the grid with glitch bands.",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",
@@ -30,7 +30,7 @@
             "name": "Ring Base Thickness",
             "group": "Rings",
             "type": "float",
-            "default": 0.025,
+            "default": 0.03,
             "min": 0.005,
             "max": 0.08
         },
@@ -103,15 +103,6 @@
             "default": true
         },
         {
-            "id": "reservedC2w",
-            "name": "Reserved",
-            "group": "Overlays",
-            "type": "float",
-            "default": 0.0,
-            "min": 0.0,
-            "max": 1.0
-        },
-        {
             "id": "staticNoise",
             "name": "Static Noise Floor",
             "group": "Atmosphere",
@@ -173,15 +164,6 @@
             "default": 48,
             "min": 16,
             "max": 96
-        },
-        {
-            "id": "reservedC4w",
-            "name": "Reserved",
-            "group": "Appearance",
-            "type": "float",
-            "default": 0.0,
-            "min": 0.0,
-            "max": 1.0
         },
         {
             "id": "labelGlowSpread",

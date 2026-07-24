@@ -2,21 +2,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "unifiedlayoutcontroller.h"
+
+#include "config/settings.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
+
+#include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorLayoutApi/ILayoutSource.h>
 // Full definition required: the header stores a QPointer<ScreenManager> (only
 // forward-declared there), and QPointer construction/deref needs the complete
 // QObject-derived type. Previously satisfied transitively via the Unity build;
 // included directly so it doesn't depend on jumbo-grouping order.
 #include <PhosphorScreens/Manager.h>
-#include <PhosphorEngine/PlacementEngineBase.h>
-#include <PhosphorScreens/Manager.h>
-#include "config/settings.h"
-#include "core/types/constants.h"
-#include <PhosphorZones/LayoutRegistry.h>
-#include "core/platform/logging.h"
-#include "core/utils/utils.h"
-#include <PhosphorLayoutApi/ILayoutSource.h>
-#include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 namespace PlasmaZones {
 
@@ -38,11 +37,23 @@ UnifiedLayoutController::UnifiedLayoutController(PhosphorZones::LayoutRegistry* 
 
         connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
                 [this](PhosphorZones::Layout* layout) {
-                    if (layout) {
-                        QString newId = layout->id().toString();
-                        if (m_currentLayoutId != newId) {
-                            setCurrentLayoutId(newId);
-                        }
+                    // Only while there is no per-screen context. m_currentLayoutId
+                    // is a PER-SCREEN value everywhere else that writes it
+                    // (setCurrentScreenName, applyEntry, and syncFromExternalState
+                    // with an override), so mirroring the GLOBAL active layout into
+                    // it once a screen is known lets any global writer — a
+                    // drop-to-layout, a D-Bus assignment, a layout deletion
+                    // re-pointing active at the default — overwrite the focused
+                    // screen's assignment id and misaim the next cycle().
+                    //
+                    // Kept for the pre-screen window: the constructor calls
+                    // syncFromExternalState() before any screen name exists, and
+                    // that is the state this mirror is genuinely for.
+                    //
+                    // Clears on null so the property cannot latch an observer on an
+                    // id whose layout no longer exists.
+                    if (m_currentScreenName.isEmpty()) {
+                        setCurrentLayoutId(layout ? layout->id().toString() : QString());
                     }
                 });
     }
@@ -117,8 +128,9 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
         // Law-of-Demeter reach-through engine->algorithmRegistry().
         // Per-output virtual desktops (#648): resolve the current screen's own
         // desktop, not the global active one.
-        const int desktop = m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName)
-                                            : m_currentVirtualDesktop;
+        // buildUnifiedLayoutList returns an empty list outright when the layout
+        // manager is null, so the fallback arm's value is never observable.
+        const int desktop = m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName) : 0;
         m_cachedLayouts = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
             m_layoutManager, m_algorithmRegistry, m_currentScreenName, desktop, m_currentActivity,
             m_includeManualLayouts, m_includeAutotileLayouts,
@@ -127,6 +139,7 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
             PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts),
             m_autotileLayoutSource);
 
+        m_cachedScreenDesktop = desktop;
         m_cacheValid = true;
     }
     return m_cachedLayouts;
@@ -197,14 +210,14 @@ void UnifiedLayoutController::cycle(bool forward)
     applyLayoutByIndex(nextIndex);
 }
 
-void UnifiedLayoutController::syncFromExternalState(const QString& overrideId)
+void UnifiedLayoutController::syncFromExternalState(std::optional<QString> overrideId)
 {
-    if (!overrideId.isEmpty()) {
-        m_currentLayoutId = overrideId;
+    if (overrideId.has_value()) {
+        setCurrentLayoutId(*overrideId);
     } else if (m_layoutManager && m_layoutManager->activeLayout()) {
-        m_currentLayoutId = m_layoutManager->activeLayout()->id().toString();
+        setCurrentLayoutId(m_layoutManager->activeLayout()->id().toString());
     } else {
-        m_currentLayoutId.clear();
+        setCurrentLayoutId(QString());
     }
 }
 
@@ -214,24 +227,54 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
         m_currentScreenName = screenId;
         m_cacheValid = false;
 
-        // Sync current layout ID to what's actually assigned to this screen
-        // (not the global active layout, which may belong to a different screen)
-        if (m_layoutManager && !screenId.isEmpty()) {
-            // Per-output virtual desktops (#648): this screen's own desktop.
-            const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
-            PhosphorZones::Layout* screenLayout =
-                m_layoutManager->layoutForScreen(screenId, desktop, m_currentActivity);
-            if (screenLayout) {
-                m_currentLayoutId = screenLayout->id().toString();
-            }
-        }
+        // Sync the current layout ID to what is actually ASSIGNED to this
+        // screen, not the global active layout, which may belong to another.
+        //
+        // assignmentIdForScreen, not layoutForScreen. layoutForScreen falls
+        // back to defaultLayout() on a cascade miss and consults only the snap
+        // provider, so it answers a different question: it never returns null
+        // for an unassigned screen (it hands back the default layout's UUID as
+        // if it were the assignment), and on a screen assigned an
+        // "autotile:<algo>" id it returns a manual Layout* instead. Either way
+        // m_currentLayoutId ends up holding something that is not this screen's
+        // assignment, findCurrentIndex() then misses under the autotile filter,
+        // and the next cycle() jumps to the wrong entry.
+        //
+        // assignmentIdForScreen is mode-aware and returns the stored id verbatim,
+        // including the "autotile:<algo>" form, which is the property that
+        // matters: findCurrentIndex() compares it against the preview ids, and an
+        // autotile-assigned screen has to yield an autotile id. It is NOT
+        // "empty on a miss": it falls through to the level-1 global defaults,
+        // consulting the snap provider and then the autotile provider, so an
+        // unassigned screen with a configured default still gets that default's
+        // id. (layoutForScreen consults only the snap provider, which is why it
+        // is the wrong call here.) Empty means both providers missed.
+        //
+        // Written unconditionally so an empty screen name, or a null registry,
+        // clears rather than leaving the previous screen's id latched.
+        // currentVirtualDesktopForScreen already falls back to the registry's
+        // global desktop for an empty screen id, so no branch is needed for it.
+        setCurrentLayoutId(
+            m_layoutManager && !screenId.isEmpty()
+                ? m_layoutManager->assignmentIdForScreen(
+                      screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity)
+                : QString());
     }
 }
 
 void UnifiedLayoutController::setCurrentVirtualDesktop(int desktop)
 {
-    if (m_currentVirtualDesktop != desktop) {
+    // Invalidate on a change of EITHER the global desktop (this member) or the
+    // current screen's own desktop, which is what layouts() actually keys the
+    // cache on. Only the global currentDesktopChanged handler calls this, and
+    // the per-output screenDesktopChanged path reaches the controller through
+    // setters that early-return when nothing they own changed, so guarding on
+    // the global value alone would leave a stale list on a per-output switch.
+    const int screenDesktop =
+        m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName) : 0;
+    if (m_currentVirtualDesktop != desktop || m_cachedScreenDesktop != screenDesktop) {
         m_currentVirtualDesktop = desktop;
+        m_cachedScreenDesktop = screenDesktop;
         m_cacheValid = false;
     }
 }
@@ -281,7 +324,9 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
             Q_EMIT autotileApplied(preview.displayName, 0);
             return true;
         }
-        qCWarning(lcDaemon) << "applyEntry: autotile engine not available for" << preview.id;
+        qCWarning(lcDaemon) << "applyEntry: cannot apply autotile entry" << preview.id << "- autotile engine is"
+                            << (m_autotileEngine ? "present" : "null") << "and layout manager is"
+                            << (m_layoutManager ? "present" : "null");
         return false;
     }
 
@@ -306,7 +351,11 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
             Q_EMIT layoutApplied(layout);
             return true;
         }
+        qCWarning(lcDaemon) << "applyEntry: no layout found for id" << preview.id;
+        return false;
     }
+    qCWarning(lcDaemon) << "applyEntry: cannot apply manual entry" << preview.id << "-"
+                        << (uuidOpt ? "layout manager is null" : "id is not a valid UUID");
     return false;
 }
 
@@ -317,6 +366,7 @@ void UnifiedLayoutController::setCurrentLayoutId(const QString& layoutId)
     }
 
     m_currentLayoutId = layoutId;
+    Q_EMIT currentLayoutIdChanged();
 }
 
 int UnifiedLayoutController::findCurrentIndex() const

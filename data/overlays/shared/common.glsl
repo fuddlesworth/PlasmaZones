@@ -36,6 +36,13 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 zoneFillColors[64];
     vec4 zoneBorderColors[64];
     vec4 zoneParams[64];
+    // Logical-to-device scale: multiply a length expressed in LOGICAL px (the
+    // units the settings UI and zoneParams use) by this to reach the device-px
+    // space iResolution / vFragCoord / zoneRectPos are in. The overlay
+    // counterpart of the decoration contract's uSurfaceScale
+    // (data/surface/shared/surface_uniforms.glsl). std140 places this float
+    // immediately after the zoneParams array; the block pads to 16 from here.
+    float uZoneScale;
 };
 
 // Per-zone context handed to a `vec4 pZone(ZoneCtx z)` entry function (T1.4).
@@ -49,13 +56,22 @@ struct ZoneCtx {
     int   index;         // zone i (0 .. zoneCount-1)
     vec2  fragCoord;     // screen-space pixel (the vFragCoord the loop passes in)
     vec4  rect;          // zoneRects[i]
+    // rgb is PREMULTIPLIED by the zone's activeOpacity, which .a also carries
+    // (src/daemon/overlayservice/overlay_data.cpp writes redF() * alpha). Use
+    // zoneFillHue() to recover the colour the user actually picked, or the tint
+    // dims as they raise transparency, which is backwards.
     vec4  fillColor;     // zoneFillColors[i]
+    // Straight (NOT premultiplied), unlike fillColor above. Its rgb is usable
+    // as-is.
     vec4  borderColor;   // zoneBorderColors[i]
     vec4  params;        // zoneParams[i] (x=borderRadius, y=borderWidth, z=highlight flag, …)
+                         // x/y are LOGICAL px — pass them through zoneSdf() /
+                         // zoneBorderWidth() rather than using them raw, so they
+                         // reach device px the way decoration packs do.
     bool  isHighlighted; // zoneParams[i].z > 0.5
 };
 
-// Shader time-wrap period — must match kShaderTimeWrap in zoneshadercommon.h
+// Shader time-wrap period — must match kShaderTimeWrap in BaseUniforms.h
 // iTime is wrapped into [0, K_TIME_WRAP); iTimeHi is the floor-offset. Without
 // wrapping, float32 ULP would grow past one frame at ~36h uptime and kill any
 // animation driven purely by iTime.
@@ -135,6 +151,178 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
 
+// Zone frame geometry + rounded-rect signed distance — the overlay counterpart
+// of the decoration side's frameSdf() (data/surface/shared/surface_lib.glsl).
+// One call replaces the centre / half-size / radius / SDF idiom every overlay
+// pack repeated inline, and fixes the three ways those inline copies diverged
+// from the decoration packs:
+//
+//   * SCALE. `radiusLogical` is the pack's LOGICAL-px radius (zoneParams[i].x
+//     is the user's configured value in logical px). It is multiplied by
+//     uZoneScale to reach the device-px space the rect and fragCoord live in,
+//     exactly as decoration packs multiply by uSurfaceScale. The inline copies
+//     skipped this, so on a 2x display an overlay corner rounded half as hard
+//     as a decoration corner set to the same number.
+//   * CLAMP. The radius is clamped to half the smaller side. sdRoundedBox()
+//     with r greater than a half-extent inverts the inset box and collapses
+//     the zone to a sliver rather than rounding it. The settings UI caps the
+//     radius at 50 logical px, so reaching this needs a zone under 100 logical
+//     px on its smaller side, or a per-zone borderRadius from layout JSON,
+//     which is unbounded. frameSdf() has always clamped; the inline copies
+//     never did.
+//   * NO FLOOR. The inline copies each applied their own `max(params.x, N)`
+//     with N of 4, 6, or 8 depending on the pack, so a configured radius of 0
+//     still rounded, by a different amount per pack. The configured value is
+//     now honoured exactly, including 0 for square corners.
+//
+// `fragCoord` is the device-px fragment (ZoneCtx::fragCoord / vFragCoord),
+// `rect` the normalised zoneRects[i].
+struct ZoneSDF {
+    vec2 center;     // zone centre, device px
+    vec2 halfSize;   // zone half-extents, device px
+    float radius;    // scaled + clamped corner radius, device px
+    float d;         // signed distance; negative inside the zone
+};
+ZoneSDF zoneSdf(vec2 fragCoord, vec4 rect, float radiusLogical) {
+    ZoneSDF z;
+    z.halfSize = zoneRectSize(rect) * 0.5;
+    z.center = zoneRectPos(rect) + z.halfSize;
+    z.radius = clamp(radiusLogical * uZoneScale, 0.0, min(z.halfSize.x, z.halfSize.y));
+    z.d = sdRoundedBox(fragCoord - z.center, z.halfSize, z.radius);
+    return z;
+}
+// Border width in device px: the pack's logical-px width (zoneParams[i].y)
+// scaled by uZoneScale, so a border keeps its physical thickness across
+// output scales the same way a decoration pack's width does.
+//
+// A width the user actually asked for is floored at one device pixel, so a
+// thin border never falls below a pixel and flickers out on a fractional
+// scale. A width of exactly 0 is not a thin border, it is the user turning
+// the border off, and it returns 0. Without that split the floor would do to
+// the border what the per-pack `max(params.x, N)` floors did to the corner
+// radius: make the configured value unreachable at one end of its range.
+// borderWidthMin() is 0, so 0 is a legal setting and has to mean something.
+float zoneBorderWidth(float widthLogical) {
+    return widthLogical <= 0.0 ? 0.0 : max(widthLogical * uZoneScale, 1.0);
+}
+
+// Any other length a pack expresses in logical px, converted to the device-px
+// space the SDF and fragCoord live in. Use this for glow radii, edge-fade
+// distances, inner-glow falloffs, and every other hard-coded pixel constant
+// that sits beside a zoneSdf() radius or a zoneBorderWidth().
+//
+// It matters that these agree. zoneSdf() and zoneBorderWidth() make the corner
+// radius and the border track the display scale; a neighbouring constant left
+// in raw device px does not, so on a 2x display the border doubles in physical
+// thickness while its glow stays put and the proportions the pack was tuned at
+// drift apart. Before those two helpers existed every length was uniformly
+// wrong in the same direction, which hid the mismatch — making two of them
+// right is what exposes it.
+//
+// Note this is NOT pxScale(). pxScale() is 1080p-relative and answers "what
+// fraction of the screen is this?", which is the right question for a
+// full-screen background pattern. zoneLen() answers "how big is this on the
+// user's display?", which is the right question for anything measured against
+// a zone edge.
+float zoneLen(float logicalPx) {
+    return logicalPx * uZoneScale;
+}
+
+// A stroke DERIVED from zoneBorderWidth(), re-floored at one device pixel.
+//
+// zoneBorderWidth() floors its result so a thin border never drops below a
+// pixel, but a pack that then scales it down (`borderWidth * 0.5` for an inner
+// core stroke, and similar) puts it straight back under one. That used to be
+// harmless because the floor was 2 to 2.5 LOGICAL px, so half of it was still
+// over a pixel. The floor is one DEVICE px now, so half of it shimmers and
+// drops out on a fractional scale, which is the exact failure the floor exists
+// to prevent.
+//
+// Pass the already-scaled device-px width in. A width of 0 stays 0, so "border
+// off" still means off through every derived stroke.
+float zoneStrokeWidth(float deviceWidth) {
+    return deviceWidth <= 0.0 ? 0.0 : max(deviceWidth, 1.0);
+}
+
+// The band around the zone edge that an edge-anchored EFFECT should occupy,
+// given the pack's border width.
+//
+// Packs gate treble sparks, edge glints and similar on a multiple of the border
+// width. That was safe while the width had a hard 2-logical-px floor, but a
+// user-configured width of 0 collapses the band to nothing and takes the effect
+// with it, silently. Turning the border off should not also turn off a feature
+// that merely sits near the edge, so the band falls back to its own minimum.
+float zoneEdgeBand(float deviceWidth, float minLogical) {
+    return max(deviceWidth, zoneLen(minLogical));
+}
+
+// The zone's configured fill colour as a plain hue, undoing the premultiply.
+//
+// zoneFillColors[i].rgb arrives multiplied by the zone's activeOpacity (the
+// daemon writes `redF() * alpha`), while zoneBorderColors[i] does not. A pack
+// that tints with the raw rgb therefore gets the colour at whatever opacity
+// happens to be set: at the 0.5 default it is half brightness, and it fades
+// further toward black as the user raises transparency, so the tint gets weaker
+// exactly when they asked for more of it. Divide it back out first.
+//
+// The epsilon floor matters. A fully transparent zone has a == 0 and rgb == 0,
+// and 0/0 is a NaN that would travel out through the fragment colour.
+//
+// This is about the HUE only, and stays necessary even though .a itself no
+// longer feeds the fill alpha. Packs set their fill alpha from their own
+// fillOpacity parameter, catalog-wide, so activeOpacity does not reach the
+// output alpha. It is still baked into rgb by the daemon, though, so a pack
+// that tinted with the raw rgb would darken as the user raised transparency
+// while the alpha stayed put. Dividing it back out is what keeps the tint the
+// colour the user picked.
+vec3 zoneFillHue(vec4 fillColor) {
+    // A fully transparent zone has a == 0 AND rgb == 0, so the quotient would be
+    // 0/1e-3 = black and every consumer would tint TOWARD BLACK rather than
+    // leaving the colour alone. That used to be moot because a zone at opacity 0
+    // was invisible, but the fill alpha comes from the pack's own fillOpacity
+    // now, so the zone is still drawn.
+    //
+    // White is returned instead, but be precise about what that buys: it is a
+    // TRUE identity only for the multiplicative form, `mix(c, c * hue, w)`. It
+    // is NOT an identity for an additive or weighted sum (`hue * k + other`),
+    // for a mix TOWARD the hue, or for a colorWithFallback chain, where white
+    // is a perfectly valid non-empty colour and suppresses the next fallback.
+    // Most consumers should NOT call this directly — use zoneTint() below, which
+    // owns the common weighted-blend shape and its zero-alpha case. Two shape
+    // families call this directly WITHOUT gating, and both are deliberate: the
+    // multiplicative `mix(c, c * hue, w)` form, where white is a true identity,
+    // and the `mix(c, hue * luminance(c), w)` form, where white collapses to a
+    // 7-15% desaturation. That second one is cosmetic at zero opacity and
+    // strictly better than the darken-to-black it replaced. Every direct caller
+    // with any OTHER shape (a weighted sum, a mix toward the hue, a
+    // colorWithFallback chain) gates on the alpha at its own call site and says
+    // so. Do not restate the callers as a list or a count — that enumeration
+    // was wrong three times running, which is why the common case became a
+    // helper in the first place.
+    return fillColor.a > 1e-3 ? fillColor.rgb / fillColor.a : vec3(1.0);
+}
+
+// The zone's fill colour applied as a light identity tint, which is what nearly
+// every pack actually wants from zoneFillHue().
+//
+// This exists because the raw helper cannot be safe on its own. What a consumer
+// needs at zero alpha depends entirely on the shape it uses the hue in: a
+// multiply wants white, a weighted sum wants the term absent, a mix-toward
+// wants zero weight, and a colorWithFallback chain wants an empty colour. Three
+// separate attempts to pick one fallback inside zoneFillHue() each fixed one
+// family and broke another — the last made the weighted-sum family lift every
+// dark pack's base by a constant 0.0525, a visible grey floor on a navy or
+// near-black surface.
+//
+// So the decision moves here, where the shape is known. At zero alpha there is
+// no colour to tint with and the base is returned untouched.
+vec3 zoneTint(vec3 base, vec4 fillColor, float weight) {
+    if (fillColor.a <= 1e-3) {
+        return base;
+    }
+    return mix(base, base * 0.85 + zoneFillHue(fillColor) * 0.15, weight);
+}
+
 // 2D rotation matrix. mat2 is column-major, so p * rot(a) rotates by +a,
 // while rot(a) * p applies the transpose (rotation by -a). The *drift fbm
 // keeps its historical matrix-first rot(a) * uv form; the pass-shader flow
@@ -212,13 +400,48 @@ vec4 blendOver(vec4 dst, vec4 src) {
 
 // Soft border factor from SDF distance d (0 at edge, 1 inside border)
 float softBorder(float d, float borderWidth) {
+    // A width of 0 means the user turned the border off, and it has to be
+    // handled before the smoothstep rather than inside it. GLSL leaves
+    // smoothstep undefined when edge0 >= edge1, and the usual implementation
+    // evaluates (x - 0) / (0 - 0): every fragment off the edge divides to
+    // infinity and clamps to a harmless 1, but the fragments exactly on the
+    // edge compute 0/0 and hand back a NaN that clamp() is not required to
+    // absorb. That NaN would then travel through the alpha and out of
+    // blendOver(), so the "no border" setting could take the whole zone with
+    // it. Same defence as expGlow()'s max() on its falloff below.
+    if (borderWidth <= 0.0) {
+        return 0.0;
+    }
     float borderDist = abs(d);
     return 1.0 - smoothstep(0.0, borderWidth, borderDist);
 }
 
+// BORDER ALPHA CONTRACT. zoneBorderColors[i] arrives STRAIGHT, not premultiplied
+// (unlike zoneFillColors[i], which carries activeOpacity in its rgb). Its alpha
+// is the user's border-colour alpha, and the catalog-wide decision is that it
+// fades the whole border, in every pack, whatever that pack's compositing model
+// is. Concretely borderColor.a scales the border's full contribution, not only
+// its alpha: an alpha-blend pack multiplies the mix() weight by it (so the band
+// does not paint at full strength over the fill and fade only at the overhang),
+// a max()-composite neon pack multiplies the composited coreColor*core term by
+// it, and chrome-protocol folds it into the blendOver srcA. A fully opaque
+// border colour, the default, leaves all three unchanged.
+
 // Exponential falloff glow (e.g. outer glow: d > 0 outside zone)
 float expGlow(float d, float falloff, float strength) {
     return exp(-d / max(falloff, 0.001)) * strength;
+}
+
+// expGlow with its pedestal at `bound` subtracted, so the term reaches exactly
+// 0 there instead of being clipped at whatever residual the gate happens to
+// land on. Use this whenever a glow sits inside an `if (d < bound)`: a bare
+// expGlow cut at 2 falloffs still has 13.5% of its peak left, which paints a
+// hard ring at a fixed distance from every zone. Widening the gate instead is
+// the wrong trade — it only shrinks the step, and the shaded annulus grows with
+// the square of the widening on a path that runs per decorated window per frame.
+float expGlowBounded(float d, float falloff, float strength, float bound) {
+    float f = max(falloff, 0.001);
+    return max(exp(-d / f) * strength - exp(-bound / f) * strength, 0.0);
 }
 
 // Color with fallback when unset (length < 0.01)

@@ -18,15 +18,10 @@
  * The entire pattern slowly rotates and breathes with overall energy.
  * Edge spectrum bars remain zone-local, painting along each zone's walls.
  *
- * Parameters (customParams):
- *   [0].x = reactivity       — audio sensitivity multiplier
- *   [0].y = ringCount        — how many spectrum rings to draw
- *   [0].z = (unused)
- *   [0].w = ringSpeed        — ring expansion speed
- *   [1].x = rotationSpeed    — slow rotation of the pattern
- *   [1].y = idleAnimation    — animation when no audio
- *   [1].z = glowIntensity    — overall glow brightness
- *   [1].w = fillOpacity      — zone fill alpha
+ * Parameters are declared in metadata.json and read here through the
+ * generated p_<id> accessors. The slot table that used to sit here listed
+ * customParams indices that the pack stopped using and drifted out of date
+ * as parameters were added, so it is not restated.
  *
  * Colors:
  *   p_primaryColor = primary (default: cyan)
@@ -40,10 +35,12 @@
 
 vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 vec4 params, bool isHighlighted,
-                float bass, float mids, float treble, float overall, bool hasAudio)
+                float bass, float treble, float overall, bool hasAudio)
 {
-    float borderRadius = max(params.x, 6.0);
-    float borderWidth  = max(params.y, 2.5);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
 
     // Parameters with defaults
     float reactivity    = p_reactivity >= 0.0 ? p_reactivity : 1.5;
@@ -62,7 +59,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // ── Highlighted vs dormant ──────────────────────────────
     // Highlighted zones are fully alive; non-highlighted are subdued/dormant.
     // A "vitality" factor (0-1) drives all the differences.
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
 
     if (isHighlighted) {
         // Vivid dual-color palette — keep both colors active
@@ -71,9 +68,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         rotSpeed *= 3.0;        // spin faster
     } else {
         // Dormant: desaturated, dimmer, slower
-        primary = mix(primary, vec3(dot(primary, vec3(0.299, 0.587, 0.114))), 0.5); // desaturate
-        accent = mix(accent, vec3(dot(accent, vec3(0.299, 0.587, 0.114))), 0.5);
-        bassCol = mix(bassCol, vec3(dot(bassCol, vec3(0.299, 0.587, 0.114))), 0.5);
+        primary = mix(primary, vec3(luminance(primary)), 0.5); // desaturate
+        accent = mix(accent, vec3(luminance(accent)), 0.5);
+        bassCol = mix(bassCol, vec3(luminance(bassCol)), 0.5);
         glowIntensity *= 0.5;
         reactivity *= 0.6;
         rotSpeed *= 0.5;        // barely moving
@@ -82,11 +79,13 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // Zone geometry — KEEP for cutout, border, edge effects
     vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    // Floored: a legitimately tiny normalised rect can flush to ~0 in float,
+    // and this feeds divisions that would hand smoothstep a NaN edge.
+    vec2 rectSize = max(zoneRectSize(rect), vec2(1.0));
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;  // KEEP for border/glow angle
     vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
-    float d       = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d       = zoneShape.d;
 
     // Screen-space coords for the ring pattern
     vec2 screenCenter = iResolution.xy * 0.5;
@@ -125,7 +124,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float angle = atan(lensedSP.y, lensedSP.x) + iTime * rotSpeed;
 
         // Distance from fragment to mouse in screen-space (for secondary rings)
-        float mouseFragR = length(sp - mouseScreenP) / refSize;
 
         // ── Concentric spectrum rings ───────────────────────
         // Map frequency bands to radial distance: bass at center, treble at edge
@@ -230,7 +228,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // ── Compose interior ────────────────────────────────
 
         // Nebula as the base layer
-        result.rgb = nebColor * nebBright;
+        // Light identity tint from the zone's configured fill colour, at the
+        // sibling packs' weight. This pack used to discard both of its per-zone
+        // colour parameters.
+        result.rgb = zoneTint(nebColor * nebBright, fillColor, 0.35);
 
         // Add spectrum rings on top
         result.rgb += ringColor * ringBright * glowIntensity * 0.6;
@@ -319,7 +320,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
 
         // Inner edge glow — highlighted gets a stronger inward glow
-        float innerGlow = exp(d / mix(25.0, 12.0, vitality)) * mix(0.06, 0.2, vitality) * glowIntensity * (1.0 + energy);
+        float innerGlow = exp(d / zoneLen(mix(25.0, 12.0, vitality))) * mix(0.06, 0.2, vitality) * glowIntensity * (1.0 + energy);
         result.rgb += primary * innerGlow;
 
         // ── Zone label: Resonance Lens ───────────────────────
@@ -372,14 +373,21 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Border ──────────────────────────────────────────────
 
-    float coreWidth = borderWidth * mix(0.5, 0.9, vitality);
+    // zoneStrokeWidth re-floors the derived stroke at one device pixel.
+    // zoneBorderWidth() floors the border itself, but scaling that down
+    // puts it straight back under a pixel, where it shimmers out on a
+    // fractional scale. A width of 0 still passes through as 0.
+    float coreWidth = zoneStrokeWidth(borderWidth * mix(0.5, 0.9, vitality));
     float core = softBorder(d, coreWidth);
     if (core > 0.0) {
         float angle = atan(p.x, -p.y) / TAU + 0.5;
 
         // Audio-reactive border: highlighted pulses hard, dormant is static
         float borderEnergy = 1.0 + energy * mix(0.2, 1.0, vitality) + idlePulse * 0.3;
-        vec3 coreColor = primary * glowIntensity * borderEnergy;
+        // Folds in the zone's configured border colour, with the pack's own
+        // primary as the fallback for an unset colour.
+        vec3 coreColor = mix(primary, colorWithFallback(borderColor.rgb, primary), 0.3)
+                       * glowIntensity * borderEnergy;
 
         // Flowing highlights — highlighted: fast animated flow; dormant: barely moving
         float flowSpeed = mix(0.3, 2.0, vitality);
@@ -405,18 +413,22 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             coreColor = mix(coreColor, bassCol * 2.0, flash * core * 0.3);
         }
 
-        result.rgb = max(result.rgb, coreColor * core);
-        result.a = max(result.a, core);
+        result.rgb = max(result.rgb, coreColor * core * borderColor.a);
+        result.a = max(result.a, core * borderColor.a);
     }
 
     // ── Outer glow ──────────────────────────────────────────
 
-    float baseGlowR = mix(8.0, 20.0, vitality);
-    float bassGlowR = mix(2.0, 6.0, vitality);
-    float glowRadius = baseGlowR + bassGlowR * (hasAudio ? bass * reactivity : idlePulse) + 5.0 * energy;
+    float baseGlowR = zoneLen(mix(8.0, 20.0, vitality));
+    // Addends share baseGlowR's zoneLen() basis.
+    float bassGlowR = zoneLen(mix(2.0, 6.0, vitality));
+    float glowRadius = baseGlowR + bassGlowR * (hasAudio ? bass * reactivity : idlePulse) + zoneLen(5.0) * energy;
+    // Both lobes have their pedestal at the bound subtracted (expGlowBounded),
+    // so they reach exactly 0 at glowRadius and the gate cuts nothing. The wide
+    // lobe would otherwise still be at exp(-2) = 13.5% of its peak there.
     if (d > 0.0 && d < glowRadius) {
-        float glow1 = expGlow(d, glowRadius * 0.2, glowIntensity * mix(0.12, 0.35, vitality));
-        float glow2 = expGlow(d, glowRadius * 0.5, glowIntensity * mix(0.04, 0.12, vitality));
+        float glow1 = expGlowBounded(d, glowRadius * 0.2, glowIntensity * mix(0.12, 0.35, vitality), glowRadius);
+        float glow2 = expGlowBounded(d, glowRadius * 0.5, glowIntensity * mix(0.04, 0.12, vitality), glowRadius);
 
         vec3 glowColor = primary;
         // Highlighted: dual-color glow
@@ -449,5 +461,5 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 vec4 pZone(ZoneCtx z) {
     bool hasAudio = iAudioSpectrumSize > 0;
     return renderZone(z.fragCoord, z.rect, z.fillColor, z.borderColor, z.params, z.isHighlighted,
-                      getBassSoft(), getMidsSoft(), getTrebleSoft(), getOverallSoft(), hasAudio);
+                      getBassSoft(), getTrebleSoft(), getOverallSoft(), hasAudio);
 }

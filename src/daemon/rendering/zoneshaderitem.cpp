@@ -5,23 +5,19 @@
 #include "zoneentryscaffold.h"
 #include "zoneshadernoderhi.h"
 
+#include "config/configdefaults.h"
+#include "core/platform/logging.h"
+
+#include <PhosphorZones/ZoneJsonKeys.h>
+
+#include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorRendering/ZoneShaderCommon.h>
 #include <PhosphorRendering/ZoneShaderNodeRhi.h>
 #include <PhosphorRendering/ZoneUniformExtension.h>
 
-#include "config/configdefaults.h"
-#include "core/types/constants.h"
-#include "core/platform/logging.h"
-
-#include <PhosphorRendering/ShaderEffect.h>
-
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QImage>
 #include <QMetaType>
 #include <QMutexLocker>
-#include <QStandardPaths>
 #include <QVariantMap>
 
 #include <mutex>
@@ -127,14 +123,14 @@ PhosphorRendering::ShaderNodeRhi* ZoneShaderItem::createShaderNode()
 
 void ZoneShaderItem::setUniformExtension(std::shared_ptr<PhosphorShaders::IUniformExtension> extension)
 {
-    // The zone UBO layout is load-bearing: ZoneShaderNodeRhi installs a
-    // ZoneUniformExtension whose byte layout matches common.glsl's zone
+    // The zone UBO layout is load-bearing: this item's own constructor installs
+    // a ZoneUniformExtension whose byte layout matches common.glsl's zone
     // arrays. Accepting a caller-supplied extension here would either
     // de-align that layout or silently replace zone rendering with garbage.
     // Log loudly at the point of misuse instead of inheriting the base
     // class's silent-store behaviour.
     Q_UNUSED(extension);
-    qCWarning(PlasmaZones::lcOverlay) << "ZoneShaderItem::setUniformExtension: ignored: zone rendering owns its own "
+    qCWarning(PlasmaZones::lcOverlay) << "ZoneShaderItem::setUniformExtension: ignored: zone rendering owns its own"
                                       << "IUniformExtension (ZoneUniformExtension) and cannot accept a replacement.";
 }
 
@@ -240,8 +236,9 @@ void ZoneShaderItem::updateHoveredHighlightOnly()
 {
     // Precondition: m_zoneData must be populated by a prior setZones/parseZoneData call.
     if (m_zoneData.rects.size() != static_cast<qsizetype>(m_zones.size())) {
-        qCWarning(lcOverlay) << "updateHoveredHighlightOnly: zone data out of sync (rects=" << m_zoneData.rects.size()
-                             << "zones=" << m_zones.size() << ") - setZones must be called first";
+        qCWarning(PlasmaZones::lcOverlay)
+            << "updateHoveredHighlightOnly: zone data out of sync (rects=" << m_zoneData.rects.size()
+            << "zones=" << m_zones.size() << ") - setZones must be called first";
         return;
     }
     // Pre-compute highlight flags outside the mutex to avoid blocking the render
@@ -250,9 +247,11 @@ void ZoneShaderItem::updateHoveredHighlightOnly()
     QVector<bool> highlights(count, false);
     int highlightedCount = 0;
     for (int i = 0; i < count; ++i) {
-        const bool fromZone = (i < m_zones.size())
-            ? m_zones[i].toMap().value(QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted), false).toBool()
-            : false;
+        // .at(), not operator[]: m_zones is a non-const member, so the mutable
+        // overload would detach the whole list on the first iteration of every
+        // mouse-move. The early return above already pins i in range.
+        const bool fromZone =
+            m_zones.at(i).toMap().value(QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted), false).toBool();
         const bool hovered = (m_hoveredZoneIndex >= 0 && i == m_hoveredZoneIndex);
         highlights[i] = fromZone || hovered;
         if (highlights[i]) {
@@ -285,24 +284,6 @@ PhosphorRendering::ZoneDataSnapshot ZoneShaderItem::getZoneDataSnapshot() const
     return m_zoneData;
 }
 
-QVector<PhosphorRendering::ZoneRect> ZoneShaderItem::zoneRects() const
-{
-    QMutexLocker lock(&m_zoneDataMutex);
-    return m_zoneData.rects;
-}
-
-QVector<PhosphorRendering::ZoneColor> ZoneShaderItem::zoneFillColors() const
-{
-    QMutexLocker lock(&m_zoneDataMutex);
-    return m_zoneData.fillColors;
-}
-
-QVector<PhosphorRendering::ZoneColor> ZoneShaderItem::zoneBorderColors() const
-{
-    QMutexLocker lock(&m_zoneDataMutex);
-    return m_zoneData.borderColors;
-}
-
 // ============================================================================
 // Scene Graph Integration
 // ============================================================================
@@ -317,9 +298,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             // node's back-pointer to this item via invalidateItem() before
             // deleting it, so any in-flight render-thread access fails safe
             // instead of walking a freed item.
-            if (auto* rhiNode = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(oldNode)) {
-                rhiNode->invalidateItem();
-            }
+            static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(oldNode)->invalidateItem();
             // Deregister from the base so its destructor doesn't invalidate
             // a dangling pointer.
             registerRenderNode(nullptr);
@@ -345,10 +324,13 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         // SurfaceShaderItem has.
         registerRenderNode(nullptr);
         node = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(createShaderNode());
-        registerRenderNode(node);
         freshNode = true;
         qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
     }
+    // Register on every frame, not just the fresh-node path: windowChanged
+    // clears the base's tracked node, and a reuse-path frame after that would
+    // leave the teardown guard permanently disarmed.
+    registerRenderNode(node);
     // No per-frame log on the reuse path: updatePaintNode runs on every rendered
     // frame, so logging here floods the journal at the repaint rate.
 
@@ -454,6 +436,36 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         }
     }
 
+    // ── Logical-to-device scale for the lengths in zoneParams ────────
+    //
+    // Corner radius and border width arrive from settings in LOGICAL px, while
+    // the shader's rect / fragCoord space follows iResolution. Ask the base for
+    // the exact factor it scaled iResolution by, so the two cannot disagree.
+    //
+    // This used to re-derive the ratio here, duplicating the base's logic
+    // across a library boundary and reading a different member that only
+    // aliases the base's because the constructor installs one into the other.
+    // Any later change to how the base derives it would have left zoneScale
+    // silently disagreeing with iResolution, which is the one invariant this
+    // call exists to hold.
+    //
+    // Pushed unconditionally rather than under m_zoneDataDirty: moving the
+    // overlay to a differently-scaled screen changes the ratio without
+    // touching zone contents, and setScale() early-outs when the value is
+    // unchanged, so the steady-state cost is a mutex lock and a compare.
+    // setScale is [[nodiscard]] and its contract says the caller reports a
+    // rejection, so this branch handles it. No current DPR source can trigger
+    // it: effectiveResolutionScale() returns either the window's device-pixel
+    // ratio or literal 1.0, both always positive and finite. It is a backstop
+    // against that contract changing, not an observed runtime state.
+    const qreal scale = effectiveResolutionScale();
+    if (!m_zoneExtension->setScale(static_cast<float>(scale)) && !m_loggedBadScale) {
+        m_loggedBadScale = true;
+        qCWarning(PlasmaZones::lcOverlay)
+            << "ZoneShaderItem: rejected out-of-contract zone scale" << scale
+            << "- keeping the last good value. Corner radii and border widths will not track this screen.";
+    }
+
     // ── Sync zone data to the node AFTER shader is ready ─────────────
     //
     // Three things happen together:
@@ -468,13 +480,32 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // while the extension lives for the lifetime of this item.
     if (m_zoneDataDirty.load()) {
         if (node->isShaderReady()) {
-            m_zoneDataDirty.exchange(false);
+            m_zoneDataDirty.store(false);
             PhosphorRendering::ZoneDataSnapshot snapshot = getZoneDataSnapshot();
 
-            QVector<PhosphorRendering::ZoneData> zoneDataVec;
-            zoneDataVec.reserve(snapshot.zoneCount);
+            // The UBO's zone arrays are fixed at MaxZones, and both the
+            // extension writer and setZoneCounts clamp to it, so an oversized
+            // layout truncates rather than corrupting. Truncation is silent
+            // everywhere else in the chain though, and the symptom is zones
+            // that simply do not appear, so say so once.
+            if (snapshot.zoneCount > PhosphorRendering::MaxZones && !m_loggedZoneOverflow) {
+                m_loggedZoneOverflow = true;
+                qCWarning(PlasmaZones::lcOverlay)
+                    << "ZoneShaderItem: layout has" << snapshot.zoneCount << "zones but the shader UBO holds"
+                    << PhosphorRendering::MaxZones << "- the excess will not be rendered.";
+            }
 
-            for (int i = 0; i < snapshot.zoneCount; ++i) {
+            // Clamped: everything past MaxZones is discarded by
+            // updateFromZones() anyway, so building it (two QColor conversions
+            // apiece) is pure waste on an oversized layout. The raw count still
+            // goes to setZoneCounts and to the warning above, both of which
+            // want the true number.
+            const int syncCount = qMin(snapshot.zoneCount, PhosphorRendering::MaxZones);
+            QVector<PhosphorRendering::ZoneData> zoneDataVec;
+            zoneDataVec.reserve(syncCount);
+
+            int uploadedHighlighted = 0;
+            for (int i = 0; i < syncCount; ++i) {
                 PhosphorRendering::ZoneData zd;
 
                 // Rectangle (already normalized 0-1)
@@ -496,11 +527,18 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 zd.borderColor = QColor::fromRgbF(static_cast<float>(border.r), static_cast<float>(border.g),
                                                   static_cast<float>(border.b), static_cast<float>(border.a));
 
+                if (rect.highlighted) {
+                    ++uploadedHighlighted;
+                }
                 zoneDataVec.append(zd);
             }
 
             m_zoneExtension->updateFromZones(zoneDataVec);
-            node->setZoneCounts(snapshot.zoneCount, snapshot.highlightedCount);
+            // Highlight count is the count AMONG THE UPLOADED zones, not among
+            // all of them: on an oversized layout the shader can only see the
+            // first MaxZones, so a snapshot-wide count would make appField1
+            // claim more highlights than the shader has zones for.
+            node->setZoneCounts(snapshot.zoneCount, uploadedHighlighted);
         }
         // If shader not ready, leave dirty flag set so we sync on next frame
     }

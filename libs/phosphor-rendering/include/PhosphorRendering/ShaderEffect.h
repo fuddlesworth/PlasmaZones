@@ -42,6 +42,10 @@ class ShaderNodeRhi;
 /// in shadereffect.cpp.
 inline constexpr int kMaxUserTextureSlots = 4;
 
+/// Default per-axis rasterisation size for an SVG user texture, used until a
+/// slot's shader param overrides it.
+inline constexpr int kDefaultUserTextureSvgSize = 1024;
+
 /**
  * @brief QQuickItem that renders a fullscreen fragment shader via Qt RHI.
  *
@@ -629,6 +633,7 @@ public:
     }
     QString errorLog() const
     {
+        QMutexLocker lock(&m_errorLogMutex);
         return m_errorLog;
     }
 
@@ -672,6 +677,9 @@ Q_SIGNALS:
     /// almost always wrong (V4 / QML JS / most app code is GUI-thread-
     /// only).
     void statusChanged();
+    /// Emitted from setError(), which runs on the RENDER thread (from
+    /// updatePaintNode) — the same hazard statusChanged() documents above. A
+    /// DirectConnection here would run QML JS off the GUI thread.
     void errorLogChanged();
 
 protected:
@@ -679,6 +687,24 @@ protected:
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
     void componentComplete() override;
     void itemChange(ItemChange change, const ItemChangeData& value) override;
+
+    /**
+     * @brief The factor the GPU-bound iResolution is multiplied by.
+     *
+     * 1.0 when the installed extension reports
+     * `requiresPhysicalResolution() == false` (the animation path keeps
+     * iResolution logical), and 1.0 whenever the item has no window or the
+     * window has no screen. Otherwise the window's effective device-pixel
+     * ratio. See the extended rationale at the call site in
+     * syncBasePropertiesToNode().
+     *
+     * Exposed because a subclass that puts its own lengths into the UBO has to
+     * agree with iResolution or its geometry lands in a different space. That
+     * agreement is the whole contract, so it is one function rather than a
+     * derivation each subclass re-implements and a comment asking them to keep
+     * the copies in step.
+     */
+    qreal effectiveResolutionScale() const;
 
     /**
      * @brief Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) to a render node.
@@ -731,7 +757,7 @@ protected:
      */
     void registerRenderNode(ShaderNodeRhi* node)
     {
-        m_renderNode = node;
+        m_renderNode.store(node, std::memory_order_release);
     }
 
     void setError(const QString& error);
@@ -747,6 +773,32 @@ private:
     /// from the previous frame and advances iTime / iTimeDelta / iFrame.
     void onPlayingTick();
 
+    // ── Output-scale plumbing ────────────────────────────────────────
+    /// Re-subscribe to whatever reports a change in
+    /// effectiveResolutionScale(). Called from itemChange when the item
+    /// moves between windows.
+    ///
+    /// The mechanism is version-split. On Qt 6.11+ this is a single
+    /// connection to QQuickWindow::devicePixelRatioChanged, the NOTIFY for
+    /// effectiveDevicePixelRatio, which is the exact accessor
+    /// effectiveResolutionScale() reads: it covers a screen move, a screen
+    /// rescaled in place, and a per-surface scale change that touches no
+    /// screen at all (Wayland fractional-scale-v1), which no QScreen signal
+    /// reports. Below 6.11 that notifier does not exist, so it approximates
+    /// with QWindow::screenChanged plus the screen's
+    /// logicalDotsPerInchChanged.
+    ///
+    /// Without this, a scale change only reaches the GPU on a frame that
+    /// something else already scheduled. Moving an overlay to a
+    /// differently-scaled screen at the same logical size dirties nothing:
+    /// geometryChange() sees no logical-size change, and itemChange() does
+    /// not report screen moves. An animated pack masks it because playing=true
+    /// ticks every frame anyway, but a static pack keeps painting at the old
+    /// scale until an unrelated event dirties the item. This covers
+    /// iResolution and the zone extension's scale together, since both
+    /// derive from effectiveResolutionScale().
+    void updateScaleConnections();
+
     // ── Animation state ──────────────────────────────────────────────
     // Field order minimises padding: 8-byte (qreal/QSizeF/QPointF) members
     // grouped together, followed by 4-byte (int), trailing 1-byte bool.
@@ -760,6 +812,16 @@ private:
     bool m_isReversed = false;
     bool m_playing = false;
     QMetaObject::Connection m_playingConnection;
+    /// Assigned on both arms of the version split: the window's DPR notifier
+    /// on 6.11+, the screen-change signal below that.
+    QMetaObject::Connection m_scaleConnection;
+    /// Pre-6.11 only: on 6.11+ the single connection above covers this case and
+    /// this stays default-constructed. Declared UNCONDITIONALLY even so. This
+    /// is an exported class in a shared library whose supported Qt range spans
+    /// the 6.11 boundary, and a member that exists only on one side of a
+    /// version check shifts every later member's offset between translation
+    /// units built against different Qt minors.
+    QMetaObject::Connection m_screenDprConnection;
 
     // ── Shader source ────────────────────────────────────────────────
     QUrl m_shaderSource;
@@ -838,7 +900,10 @@ private:
     /// behaviour — sized to be sharp at the typical zone-icon scale
     /// without the 4× cost a 4096 default would impose on the common
     /// case (a 200×200 px logo doesn't need a 16 MP rasterisation).
-    std::array<int, kMaxUserTextureSlots> m_userTextureSvgSizes = {1024, 1024, 1024, 1024};
+    // Filled with kDefaultUserTextureSvgSize by the constructor rather than a
+    // brace list, so bumping kMaxUserTextureSlots cannot silently zero-fill the
+    // new slots (qBound would then rasterise them at the 64 px floor).
+    std::array<int, kMaxUserTextureSlots> m_userTextureSvgSizes{};
     /// Set by `setUserTexture` to flag that a directly-pushed QImage now
     /// occupies one of the user-texture slots (path cache cleared). Honoured
     /// by `setShaderParams`: when the incoming params map is byte-equal to
@@ -866,10 +931,25 @@ private:
     // semantics suffice — there's no associated data we need to publish
     // alongside.
     std::atomic<Status> m_status{Status::Null};
+    /// Guarded because setError() runs on the RENDER thread (from
+    /// updatePaintNode) while errorLog() is a Q_PROPERTY READ reachable from
+    /// QML on the GUI thread. A QString assignment is a non-atomic d-pointer
+    /// write plus a refcount touch, so an unguarded concurrent read can hand
+    /// QML a torn pointer. The neighbouring m_status is std::atomic for exactly
+    /// this reason; a QString cannot be, hence the mutex. Written at most once
+    /// per shader load, so contention is nil.
+    mutable QMutex m_errorLogMutex;
     QString m_errorLog;
 
     // ── Render node tracking ─────────────────────────────────────────
-    ShaderNodeRhi* m_renderNode = nullptr;
+    /// Atomic because the sceneGraphAboutToStop handler is a DirectConnection
+    /// that reads and dereferences this ON THE RENDER THREAD, while the
+    /// windowChanged handler nulls it on the GUI thread. The disconnect that
+    /// precedes that null write is thread-safe, but Qt does not promise it
+    /// BLOCKS an in-flight direct-connection slot, so the ordering alone is not
+    /// enough to make the plain pointer safe. Every access is a simple
+    /// load/store, so the atomic costs nothing measurable.
+    std::atomic<ShaderNodeRhi*> m_renderNode{nullptr};
     // QPointer defends against reparent/teardown storms where the window is
     // destroyed out from under us before windowChanged(nullptr) fires.
     QPointer<QQuickWindow> m_connectedWindow;

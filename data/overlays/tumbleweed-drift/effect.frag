@@ -30,11 +30,10 @@ float pNoiseScale()      { return p_noiseScale >= 0.0 ? p_noiseScale : 3.5;  }
 float pWindDirection()   { return p_windDirection >= 0.0 ? p_windDirection : 0.3;  }
 float pBrightness()      { return p_brightness >= 0.0 ? p_brightness : 0.7;  }
 float pContrast()        { return p_contrast >= 0.0 ? p_contrast : 0.9;  }
-// slot 6 reserved
 float pInnerGlowStr()    { return p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.4;  }
 float pFillOpacity()     { return p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85; }
 float pBorderGlow()      { return p_borderGlow >= 0.0 ? p_borderGlow : 0.35; }
-float pEdgeFadeStart()   { return p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0; }
+float pEdgeFadeStart()   { return zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0); }
 float pBorderBrightness(){ return p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;  }
 float pAudioReactivity() { return p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;  }
 float pParticleStrength(){ return p_particleStrength >= 0.0 ? p_particleStrength : 0.5;  }
@@ -51,7 +50,6 @@ float pLogoSizeMin()     { return p_logoSizeMin >= 0.0 ? p_logoSizeMin : 0.4;  }
 float pLogoSizeMax()     { return p_logoSizeMax >= 0.0 ? p_logoSizeMax : 1.0;  }
 float pLogoSpin()        { return p_logoSpin >= 0.0 ? p_logoSpin : 0.3;  }
 float pIdleStrength()    { return p_idleStrength >= 0.0 ? p_idleStrength : 0.6;  }
-float pShowLabels()      { return p_showLabels >= 0.0 ? p_showLabels : 1.0;  }
 float pSparkleIntensity(){ return p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;  }
 
 // ─── Palette ───────────────────────────────────────────────────────
@@ -86,7 +84,12 @@ vec2 windField(vec2 p, float t) {
 
     vec2 curl = vec2(n1 - n2, -(n3 - n4)) / (2.0 * eps);
     vec2 bias = vec2(cos(wdir), sin(wdir)) * 1.5;
-    return normalize(curl + bias) * (length(curl) * 0.5 + 0.5);
+    // Epsilon-nudged: curl is a central difference over 2*eps with eps=0.01, so
+    // it is unbounded relative to bias's fixed length of 1.5 and an exact
+    // cancellation is representable. normalize(vec2(0)) is undefined and the
+    // NaN would travel out through windIntensity into the fragment colour.
+    // Same guard this pack already uses at the trailUV normalize below.
+    return normalize(curl + bias + vec2(1e-4)) * (length(curl) * 0.5 + 0.5);
 }
 
 // ─── Sand particle system (3-layer parallax) ──────────────────────
@@ -379,11 +382,12 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
             timeCos(0.23) * 0.010 + timeCos(0.13) * 0.005
         );
         uv -= drift;
-        // Rolling rotation
-        float rotAng = time * spinRate * 0.8;
+        // Rolling rotation. Built from timeCos/timeSin, not cos/sin of a raw
+        // wrapped-iTime angle, which would snap the spin at every wrap.
+        float rc = timeCos(spinRate * 0.8, 0.0);
+        float rs = timeSin(spinRate * 0.8, 0.0);
         vec2 lp = uv - vec2(0.5);
-        uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-                   lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
+        uv = vec2(lp.x * rc - lp.y * rs, lp.x * rs + lp.y * rc) + vec2(0.5);
         float breathe = 1.0 + timeSin(0.8) * 0.015;
         float springT = fract(time * 1.5);
         float spring = 1.0 + bassEnv * 0.1 * exp(-springT * 6.0) * cos(springT * 20.0);
@@ -406,11 +410,13 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     );
     uv -= drift;
 
-    // Rolling rotation — tumbleweeds spin as they drift
-    float rotAng = time * spinRate * (0.8 + h3 * 0.4) + float(idx) * 1.047;
+    // Rolling rotation — tumbleweeds spin as they drift. Same wrap-safe build
+    // as the single-instance branch above.
+    float spinSpeed = spinRate * (0.8 + h3 * 0.4);
+    float rc = timeCos(spinSpeed, float(idx) * 1.047);
+    float rs = timeSin(spinSpeed, float(idx) * 1.047);
     vec2 lp = uv - vec2(0.5);
-    uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-               lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
+    uv = vec2(lp.x * rc - lp.y * rs, lp.x * rs + lp.y * rc) + vec2(0.5);
 
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
     float breathe = 1.0 + timeSin(0.6 + float(idx) * 0.13, h1 * TAU) * 0.015;
@@ -547,7 +553,9 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
         if (logoD > 0.1) continue;
 
         // Light casting (warm glow in sand haze)
-        float lightCast = exp(-max(logoD, 0.0) * 12.0) * 0.35;
+        // Pedestal-subtracted at the enclosing continue gate, so the cast fades to
+            // nothing rather than being cut at a fixed radius.
+            float lightCast = max(exp(-max(logoD, 0.0) * 12.0) - exp(-0.1 * 12.0), 0.0) * 0.35;
         vec3 logoLight = triStopPalette(time * 0.15 + iLogoUV.y + float(li) * 0.3,
                                             palGlow, palAccent, palSecondary);
         col += logoLight * lightCast * instIntensity * (1.0 + bassEnv * 0.8) * depthFactor;
@@ -594,9 +602,12 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
             }
 
             // Multi-layer glow
-            float glow1 = exp(-max(logoD, 0.0) * 60.0) * 0.6;
-            float glow2 = exp(-max(logoD, 0.0) * 20.0) * 0.35;
-            float glow3 = exp(-max(logoD, 0.0) * 6.0) * 0.18;
+            // Pedestal-subtracted at the enclosing gate, so each lobe reaches exactly 0
+            // there. The widest one was being cut with most of its peak still left,
+            // painting a hard ring around every logo instance.
+float glow1 = max(exp(-max(logoD, 0.0) * 60) - exp(-0.03 * 60), 0.0) * 0.6;
+            float glow2 = max(exp(-max(logoD, 0.0) * 20) - exp(-0.03 * 20), 0.0) * 0.35;
+            float glow3 = max(exp(-max(logoD, 0.0) * 6) - exp(-0.03 * 6), 0.0) * 0.18;
             vec3 edgeCol = triStopPalette(time * 0.2 + iLogoUV.y + float(li) * 0.2,
                                               palGlow, palAccent, palSecondary);
             float flare = 1.0 + bassEnv * 0.8;
@@ -620,8 +631,8 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
             float f1 = 0.07 + float(li) * 0.023;
             float f2 = 0.05 + float(li) * 0.019;
             vec2 trailDir = normalize(vec2(
-                cos(time * f1 + h1 * TAU),
-                -sin(time * f2 + h1 * TAU)));
+                timeCos(f1, h1 * TAU),
+                -timeSin(f2, h1 * TAU)));
             vec2 trailUV = iLogoUV - TW_LOGO_CENTER;
             float trailDot = dot(normalize(trailUV + 0.001), -trailDir);
             float trailDist = length(trailUV);
@@ -646,25 +657,24 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
 
 vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                           vec4 params, vec3 sceneCol, bool isHighlighted,
-                          float bassEnv, bool hasAudio) {
-    float borderRadius = max(params.x, 6.0);
-    float borderWidth  = max(params.y, 2.5);
+                          float bassEnv, float idlePulse, bool hasAudio) {
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth  = zoneBorderWidth(params.y);
     float vitality     = zoneVitality(isHighlighted);
     float innerGlowStr = pInnerGlowStr();
     float fillOpacity  = pFillOpacity();
     float contrast     = pContrast();
 
-    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * pIdleStrength();
 
     vec3 palSecondary = colSecondary();
     vec3 palAccent    = colAccent();
     vec3 palGlow      = colGlow();
 
-    vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
-    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;
-    float d       = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d       = zoneShape.d;
 
     float time = iTime;
 
@@ -688,14 +698,14 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
         float depthDarken = smoothstep(0.0, pEdgeFadeStart(), innerDist);
         col *= mix(0.6, 1.0, 1.0 - depthDarken * 0.35);
 
-        float innerGlow = exp(-innerDist / 12.0);
+        float innerGlow = exp(-innerDist / zoneLen(12.0));
         float edgeAngle = atan(p.y, p.x);
         float iriT = edgeAngle / TAU + time * 0.05;
         vec3 iriCol = triStopPalette(iriT, palSecondary, palAccent, palGlow);
         col += iriCol * innerGlow * innerGlowStr;
 
         // Zone fillColor tint
-        col = mix(col, fillColor.rgb * luminance(col), 0.15);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.15);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -714,7 +724,7 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
         borderCol *= pBorderBrightness();
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.8 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {
@@ -723,16 +733,21 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
             borderCol *= 0.55;
         }
 
-        result.rgb = mix(result.rgb, borderCol, border * 0.95);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, borderCol, (border * 0.95) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // ── Outer glow with angular noise ──────────────────────────────
 
     float bassGlowPush = hasAudio ? bassEnv * 5.0 : idlePulse * 5.0;
-    float glowRadius = mix(10.0, 22.0, vitality) + bassGlowPush;
+        // The glow is pedestal-subtracted (expGlowBounded), so it reaches exactly
+    // 0 at glowRadius. A bare expGlow was cut here with a large fraction of
+    // its peak still left, painting a hard ring at a fixed radius. Subtracting
+    // is exact and free; widening the gate instead would only shrink the step
+    // and would grow the shaded annulus on the compositor path.
+float glowRadius = zoneLen(mix(10.0, 22.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && pBorderGlow() > 0.01) {
-        float glow = expGlow(d, 7.0, pBorderGlow());
+        float glow = expGlowBounded(d, zoneLen(7.0), pBorderGlow(), glowRadius);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.08);
         vec3 glowCol = triStopPalette(glowT, palSecondary, palAccent, palGlow);
@@ -912,22 +927,58 @@ vec4 pImage(vec2 fragCoord) {
     float midsEnv   = hasAudio ? smoothstep(0.05, 0.30, mids)   * audioReact : idlePulse * 0.6;
     float trebleEnv = hasAudio ? smoothstep(0.06, 0.35, treble) * audioReact : 0.0;
 
-    // Render the desert scene + drifting Tumbleweed logos once in
-    // overlay-space. Each zone below renders a window onto this shared
-    // scene plus its own border/glow/vitality treatment.
-    vec3 sceneCol = renderGlobalScene(fragCoord, bassEnv, midsEnv, trebleEnv);
-
+    // Bound the scene before paying for it. renderGlobalScene() is by far the
+    // most expensive thing in this pack: the wind field, three particle layers,
+    // five sand streams, three dust devils, a four-octave erosion FBM, the storm
+    // band, the shimmer and sparkle fields, plus up to eight logo instances each
+    // carrying a 150-vertex multi-subpath SDF. Its result is consumed ONLY
+    // inside renderTumbleweedZone, so on a fragment no zone reaches it is
+    // computed in full and thrown away. Layouts routinely leave the screen
+    // partly uncovered, and this runs per fragment of every draw on the
+    // compositor path.
+    //
+    // The bound has to cover the furthest anything paints beyond a zone edge,
+    // and that is NOT the resting glow. glowRadius is
+    // zoneLen(mix(10, 22, vitality) + bassGlowPush), and bassGlowPush is
+    // bassEnv * 5 where bassEnv carries audioReactivity, which metadata caps at
+    // 2.0 — so the highlighted, fully-driven case reaches zoneLen(32), not 27.
+    // The idle leg tops out at 27 (idleStrength caps at 1.0), which is what made
+    // 27 look sufficient. The per-zone border is bounded separately: the
+    // settings path caps borderWidth at 10, but a layout JSON can set it
+    // unclamped, so it is taken from the zone rather than assumed.
+    //
+    // The pre-pass repeats the same zoneSdf() the render loop runs but stops at
+    // the distance, so it costs a few ALU ops against the whole desert.
+    //
+    // Labels are deliberately left outside the gate: they are sampled from
+    // uZoneLabels in screen space and never go through the zone SDF.
+    float minDist = 1e30;
+    float maxReach = zoneLen(32.0);
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
-
-        vec4 zoneColor = renderTumbleweedZone(fragCoord, rect, zoneFillColors[i],
-            zoneBorderColors[i], zoneParams[i], sceneCol, zoneParams[i].z > 0.5,
-            bassEnv, hasAudio);
-        color = blendOver(color, zoneColor);
+        minDist = min(minDist, zoneSdf(fragCoord, rect, zoneParams[i].x).d);
+        maxReach = max(maxReach, zoneBorderWidth(zoneParams[i].y));
     }
 
-    if (pShowLabels() > 0.5)
+    if (minDist < maxReach) {
+        // Render the desert scene + drifting Tumbleweed logos once in
+        // overlay-space. Each zone below renders a window onto this shared
+        // scene plus its own border/glow/vitality treatment.
+        vec3 sceneCol = renderGlobalScene(fragCoord, bassEnv, midsEnv, trebleEnv);
+
+        for (int i = 0; i < zoneCount && i < 64; i++) {
+            vec4 rect = zoneRects[i];
+            if (rect.z <= 0.0 || rect.w <= 0.0) continue;
+
+            vec4 zoneColor = renderTumbleweedZone(fragCoord, rect, zoneFillColors[i],
+                zoneBorderColors[i], zoneParams[i], sceneCol, zoneParams[i].z > 0.5,
+                bassEnv, idlePulse, hasAudio);
+            color = blendOver(color, zoneColor);
+        }
+    }
+
+    if (p_showLabels > 0.5)
         color = compositeTumbleweedLabels(color, fragCoord, bass, mids, treble, hasAudio);
 
     return color;

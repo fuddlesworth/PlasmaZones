@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <audio.glsl>
+#include <logo-drift.glsl>
 
 /*
  * NEON VENOM — Organic Bioluminescent Overlay
@@ -11,34 +12,9 @@
  * Rising toxic bubbles, venomous mist, and living vein networks create a
  * biological/organic feel distinct from digital circuit aesthetics.
  *
- * Parameters:
- *   p_veinScale = veinScale         — Vein network scale
- *   p_veinSpeed = veinSpeed         — Pulse animation speed (all effects)
- *   p_veinSharpness = veinSharpness     — How sharp/defined veins are
- *   p_veinWarp = veinWarp          — Domain warp intensity
- *   p_poolIntensity = poolIntensity     — Acid pool surface effect
- *   p_bubbleCount = bubbleCount       — Number of rising bubbles
- *   p_bubbleSpeed = bubbleSpeed       — Bubble rise speed
- *   p_fillOpacity = fillOpacity       — Zone fill opacity
- *   p_glowStrength = glowStrength      — Neon glow intensity
- *   p_mistDensity = mistDensity       — Atmospheric venom mist
- *   p_audioReactivity = audioReactivity   — Audio response strength
- *   p_sparkIntensity = sparkIntensity    — Audio spark strength
- *   p_labelGlowSpread = labelGlowSpread
- *   p_labelBrightness = labelBrightness
- *   p_labelAudioReact = labelAudioReact
- *   p_edgeGlow = edgeGlow
- *   p_warpOctaves = warpOctaves
- *   p_showLabels = showLabels
- *   p_poolSpeed = poolSpeed         — Pool/caustic animation speed
- *   p_surgeThreshold = surgeThreshold    — Bass level to trigger vein surge
- *   p_mouseInfluence = mouseInfluence    — Cursor interaction strength
- *   p_bubbleSize = bubbleSize        — Bubble size multiplier
- *   p_veinFineDetail = veinFineDetail    — Fine vein detail blend
- *   p_venomColor   — Venom green (default #39FF14)
- *   p_acidColor   — Acid purple (default #BF00FF)
- *   p_glowColor   — Glow highlight (default #CCFF00)
- *   p_mistColor   — Mist tint (default #0D001A)
+ * Parameters are declared in metadata.json and read through the generated
+ * p_<id> accessors. A table here only drifts, which is why the sibling packs
+ * each deleted theirs.
  */
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -49,7 +25,9 @@ float fbm(vec2 p, int octaves) {
     float f = 0.0;
     float amp = 0.5;
     mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
-    for (int i = 0; i < octaves; i++) {
+    // Capped at 8 like common.glsl's shared fbm(). `octaves` comes straight
+    // from a user parameter, and this runs on the compositor path.
+    for (int i = 0; i < octaves && i < 8; i++) {
         f += amp * noise2D(p);
         p = rot * p * 2.0;
         amp *= 0.5;
@@ -169,7 +147,9 @@ float mouseProximity(vec2 fragCoord, float influence) {
     vec2 mousePos = iMouse.xy;
     if (mousePos.x < 0.0 || mousePos.y < 0.0) return 0.0;
     float d = length(fragCoord - mousePos);
-    float radius = 120.0 * pxScale();
+    // zoneLen(), not pxScale(): this radius is measured against fragCoord in
+    // the same device-px space as the rim falloff it ends up scaling.
+    float radius = zoneLen(120.0);
     return smoothstep(radius, 0.0, d) * influence;
 }
 
@@ -192,16 +172,15 @@ vec4 renderNeonVenomZone(
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
-    float px = pxScale();
 
-    float borderRadius = params.x * px;
-    float borderWidth = params.y * px;
-    vec2 halfSize = rectSize * 0.5;
-    vec2 centered = fragCoord - rectPos - halfSize;
-    float sdf = sdRoundedBox(centered, halfSize, borderRadius);
-
-    // Early-out: wide enough for rim glow at max audio + edge glow headroom
-    if (sdf > borderWidth * 2.0 + 60.0 * px) return vec4(0.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    // This pack used to scale by pxScale() (a 1080p-relative factor) rather
+    // than the display scale, so its corners tracked resolution instead of
+    // DPI and diverged from both its sibling packs and the decorations.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
+    float sdf = zoneShape.d;
 
     float vitality = zoneVitality(isHighlighted);
     float t = iTime * veinSpeed;
@@ -213,6 +192,18 @@ vec4 renderNeonVenomZone(
 
     // Mouse proximity — intensifies veins and glow near cursor
     float mouseFx = mouseProximity(fragCoord, mouseInfluence) * vitality;
+
+    // Early-out, placed after the audio and mouse terms because the rim glow's
+    // reach depends on them. The rim below decays over rimFalloff, so bound at
+    // four falloff lengths and the border band, which leaves the rim at ~2%
+    // where it is cut. The old bound was a flat 60 logical px, sized for the
+    // resting falloff of 10. audioReactivity (max 2) and mouseInfluence (max 4)
+    // push rimFalloff to 80, where a bound of 60 sliced the gradient at ~47%
+    // and left a hard ring. These terms are a few cheap ALU ops, well below the
+    // vein FBM the early-out protects. rimFalloff is zoneLen() so it shares a
+    // basis with borderWidth in the bound below, which zoneBorderWidth() scales.
+    float rimFalloff = zoneLen(10.0 + audioPulse * 15.0 + mouseFx * 10.0);
+    if (sdf > borderWidth * 2.0 + rimFalloff * 4.0) return vec4(0.0);
 
     // ─── Vein network ────────────────────────────────────────────────
     // Bass + mouse warp the vein domain for a breathing/throbbing effect
@@ -237,7 +228,11 @@ vec4 renderNeonVenomZone(
 
     // ─── Compose color ──────────────────────────────────────────────
     // Base: blend zone fill color with mist tint (fill color has real influence)
-    vec3 baseCol = fillColor.rgb * 0.3 + mistCol * 0.35;
+    // Weighted SUM, so zoneFillHue's white fallback is not the identity here:
+    // a fully transparent zone would wash the base to vec3(0.3) + mist. The
+    // tint is simply absent in that case instead.
+    vec3 fillHue = fillColor.a > 1e-3 ? zoneFillHue(fillColor) : vec3(0.0);
+    vec3 baseCol = fillHue * 0.3 + mistCol * 0.35;
 
     // Veins: green-purple gradient, shifts toward glow on treble hits
     float veinHue = veins * 0.5 + sin(t * 1.5 + localUV.y * 3.0) * 0.3;
@@ -283,16 +278,21 @@ vec4 renderNeonVenomZone(
 
     // Edge glow (bioluminescent rim) — pulses strongly with bass + mouse
     float rimDist = abs(sdf);
-    float rimFalloff = (10.0 + audioPulse * 15.0 + mouseFx * 10.0) * px;
+    // rimFalloff is computed up at the early-out, which bounds itself by this
+    // same reach — keep it one definition so the two cannot drift apart.
     float rim = exp(-rimDist / rimFalloff) * edgeGlow * vitality;
     col += rim * mix(venomCol, glowCol, audioPulse * 0.5) * (1.0 + audioPulse);
 
     // Border: blend zone borderColor with venom palette (borderColor has real influence)
     vec3 borderTint = mix(venomCol, acidCol, sin(t * 1.5) * 0.3 + 0.5 + audioMid * 0.3);
     vec3 borderFinal = mix(borderTint, borderColor.rgb, 0.3) * (1.0 + audioPulse * 0.6);
-    col = mix(col, borderFinal * glowStr, borderFactor);
+    col = mix(col, borderFinal * glowStr, borderFactor * borderColor.a);
 
-    float alpha = inside * fillOpacity * fillColor.a;
+    // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
+    // The zone's activeOpacity arrives in fillColor.a, but only four packs
+    // ever multiplied it in, so it was inert catalog-wide and the split
+    // just made the same setting behave differently per pack.
+    float alpha = inside * fillOpacity;
     alpha = max(alpha, borderFactor * borderColor.a);
     alpha = max(alpha, rim * 0.5);
 
@@ -339,6 +339,11 @@ vec4 pImage(vec2 fragCoord) {
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect       = zoneRects[i];
+        // Skip degenerate rects, as every sibling pack's loop does. A zero-size
+        // zone collapses zoneSdf() to a point, and the rim glow around it still
+        // renders, so an unguarded loop paints a stray blob where the others
+        // draw nothing.
+        if (rect.z <= 0.0 || rect.w <= 0.0) continue;
         vec4 fillColor  = zoneFillColors[i];
         vec4 borderCol  = zoneBorderColors[i];
         vec4 params     = zoneParams[i];
@@ -364,7 +369,7 @@ vec4 pImage(vec2 fragCoord) {
         vec2 luv = labelsUv(fragCoord);
         vec2 texelSize = 1.0 / max(iResolution, vec2(1.0));
         vec4 labels = texture(uZoneLabels, luv);
-        float spread = labelSpread * pxScale();
+        float spread = zoneLen(labelSpread);
         float t = iTime * p_veinSpeed; // veinSpeed
 
         bool hasAudio = iAudioSpectrumSize > 0;
@@ -372,31 +377,18 @@ vec4 pImage(vec2 fragCoord) {
         float trebleMod = hasAudio ? treble * labelReact : 0.0;
 
         // ── Multi-layer halo sampling ────────────────────────────────
-        float haloTight = 0.0, haloWide = 0.0, haloVWide = 0.0;
-        float haloR = 0.0, haloG = 0.0, haloB = 0.0;
-        // Chromatic offset: green/purple venom split
+        // The shared gather, not a local copy. The local one had drifted to a
+        // different tight weight (0.5 vs 0.6) and a different very-wide divisor
+        // (22 vs 20), so it was neither the shared kernel nor documented as a
+        // deliberate variation, while still paying the same 75 fetches.
         vec2 chromOff = vec2(texelSize.x * 2.5, texelSize.y * 0.5);
-        for (int dy = -2; dy <= 2; dy++) {
-            for (int dx = -2; dx <= 2; dx++) {
-                vec2 off = vec2(float(dx), float(dy)) * texelSize;
-                float r2 = float(dx * dx + dy * dy);
-                float wTight = exp(-r2 * 0.5);
-                float wWide = exp(-r2 * 0.2);
-                float wVWide = exp(-r2 * 0.1);
-
-                float s = texture(uZoneLabels, luv + off * spread).a;
-                haloTight += s * wTight;
-                haloWide += s * wWide;
-                haloVWide += s * wVWide;
-
-                haloR += texture(uZoneLabels, luv + off * spread + chromOff).a * wWide;
-                haloG += texture(uZoneLabels, luv + off * spread).a * wWide;
-                haloB += texture(uZoneLabels, luv + off * spread - chromOff).a * wWide;
-            }
-        }
-        haloTight /= 10.0;
-        haloWide /= 16.5;
-        haloVWide /= 22.0;
+        LabelHalo halo = gatherLabelHalo(luv, texelSize, spread, chromOff);
+        float haloTight = halo.tight;
+        float haloWide = halo.wide;
+        float haloVWide = halo.vWide;
+        float haloR = halo.chroma.r;
+        float haloG = halo.chroma.g;
+        float haloB = halo.chroma.b;
 
         // Bioluminescent flicker: organic irregular pulsing
         float bioFlicker = 0.8 + 0.12 * sin(t * 5.7 + luv.x * 20.0)

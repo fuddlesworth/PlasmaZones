@@ -5,7 +5,7 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.3.0] - 2026-07-22
+## [3.3.0] - 2026-07-23
 
 ### Added
 
@@ -23,6 +23,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Editing a layout no longer scrolls the page back to the top**: hiding a layout, changing its auto-assign, or picking an aspect ratio while scrolled down threw the Layouts page back to the top. The page now holds its position while the cards rebuild. The Shaders pages keep their position across a group or sort change for the same reason ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
 - **Layout cards no longer flicker when you change one**: toggling a layout's visibility or auto-assign briefly redrew every card without its badges, and the one you just changed snapped back before it took. Each change now refreshes the list once, with everything in place ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
 - **Overlay shaders with a depth buffer render cleanly**: the Neon City and Voxel Terrain overlays asked the graphics driver to read and write the same depth texture in one drawing pass, which it refused ([#827](https://github.com/fuddlesworth/PlasmaZones/pull/827)).
+- **Zone overlay corners now round like window decorations**: every overlay pack worked out its corners on its own, so they disagreed with the decoration packs and with each other. On a scaled display the corners came out too tight, because the radius was treated as if the display were unscaled. Setting the radius to 0 still left rounded corners, by a different amount in each pack. A radius larger than half a narrow zone collapsed that zone into a sliver instead of rounding it. All 27 overlays now share the geometry the decorations use, so the radius you set is the radius you get, at any display scale. Border widths follow the display scale for the same reason ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Pulse Flow honours its Outer Glow Size setting**: the overlay stopped drawing at the distance the default setting reaches, so raising the slider past its default widened nothing and left a hard edge where the glow was cut ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Berry Drift's Drift Speed setting works**: the slider had no effect on how fast the blobs move. The speed you set was calculated and then dropped before it reached the blobs, which always drifted at a fixed rate ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Neon Venom no longer draws a ring around each zone**: the bioluminescent rim fades out with distance, but the overlay stopped drawing while the fade was still half bright, which showed up as a hard ring. Turning up audio reactivity or cursor influence made it worse, because both widen the fade ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **A border width of zero now turns the border off**: every overlay pack drew at least a one-pixel border no matter how low you set the width, so the bottom of the slider never reached "no border" ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Zone colors apply in six more overlays**: Berry Drift, Mosaic Pulse, Spectrum Bloom, Spectrum Pulse, Toxic Circuit, and Voxel Terrain ignored the fill or border color set for a zone, so changing it did nothing in those packs. They now tint with it the way the other overlays do ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Chrome Protocol's Animation Speed and Ring Base Thickness sliders work**: both were shown in settings and read by nothing, so the rings always turned and thickened at a fixed rate. The overlay is also much cheaper to draw, because it no longer raytraces the console for parts of the screen no zone covers ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Magnetic Field respects its own settings again**: inactive zones were meant to thin out their particle field and did not, and the Wave Speed slider was applied twice to the field lines, so they ran roughly nine times too fast at the top of the range and too slow at the bottom ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Overlay glows keep their proportions on a scaled display**: in 26 of the 27 packs a glow reach, an edge fade, or a travelling ring was measured in raw pixels while the border and corner beside it followed the display scale. On a HiDPI screen the parts drifted apart, and Berry Drift cut its glow off mid-gradient and left a ring ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Settings that did nothing are gone**: EndeavourOS Drift showed an Orbit Radius and a Connection Threshold slider, Chrome Protocol showed two sliders labelled "Reserved", and Berry Drift showed an Animation Speed slider that duplicated its Drift Speed. None of them were read by anything ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **Eight overlay descriptions match what they draw**: Fedora Drift described neon tubes against a northern-lights sky when it draws frosted glass over data streams, NixOS Drift described nebula pulse borders when its border is a wave of lighting hexagons, EndeavourOS Drift described a constellation of orbiting dots when it draws wind currents behind parallax sails, Sonic Ripple said its rings start at the zone center when they start at the middle of the screen, Spectrum Bloom said the zone boundary itself morphs when the contour is only seen through the zone, Chrome Protocol said mids drive the ring rotation when they widen the camera orbit, CachyOS Drift said bass shatters the facets when it scatters them, and openSUSE Drift called its Geeko a constructive SDF when it is a single polygon ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
+- **EndeavourOS Drift's sliders are named for what they do**: five sliders and their group were still labelled for an orbiting-dot constellation the overlay does not draw. They now read as Wind Speed, Current Brightness, Sail Brightness, and Sail Center X and Y, with the three that describe the wind and the sail placement grouped under Wind ([#841](https://github.com/fuddlesworth/PlasmaZones/pull/841)).
 
 ## [3.2.7] - 2026-07-21
 
@@ -1090,7 +1102,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - **Release workflow retry loop**: Replaced `softprops/action-gh-release` with native `gh` CLI to fix releases getting stuck in a retry loop ([action-gh-release#704](https://github.com/softprops/action-gh-release/issues/704)).
 
-## 1.15.10 - 2026-03-08
+## [1.15.10] - 2026-03-08
 
 ### Fixed
 - **Login freeze persisted despite v1.15.9 batching** (fixes [#200](https://github.com/fuddlesworth/PlasmaZones/discussions/200)): The v1.15.9 deferred batch approach still blocked because each batch made synchronous D-Bus round-trips whose replies stalled for ~25s while kglobalaccel processed key grabs (QTBUG-34698). Replaced with true async D-Bus. `setDefaultShortcut()` registers actions synchronously (fast, no key grabbing), then `setShortcutKeys` calls fire via `QDBusPendingCallWatcher` so the event loop never blocks on key grabbing.
@@ -1142,7 +1154,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - **RPM packaging**: Added KCM and editor translation files (`kcm_plasmazones.mo`, `plasmazones-editor.mo`) to spec `%files` section, fixing "unpackaged file(s) found" build failure on Fedora.
 
-## 1.15.0 - 2026-02-22
+## [1.15.0] - 2026-02-22
 
 ### Added
 - **Mosaic Pulse shader**: Audio-reactive stained glass mosaic with colorful tiles, pulsing shapes (circles, diamonds, squares), sparkles, and dithered posterization. Bass drives shape pulse, mids shift hue, treble triggers sparkles. 12 configurable parameters across 6 groups.
@@ -1183,7 +1195,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Per-side edge gap: `usePerSideOuterGap` toggle now persists across save/load even with all-default side values.
 - Per-side edge gap: clearing override in editor is now undoable.
 
-## 1.13.0 - 2026-02-20
+## [1.13.0] - 2026-02-20
 
 ### Added
 - **Layout Picker Overlay**: Full-screen interactive layout browser triggered via configurable keyboard shortcut. Browse all available layouts in a centered card grid with keyboard navigation (arrow keys + Enter) and mouse support. Selecting a layout switches to it and resnaps all windows. ([#176])
@@ -1576,7 +1588,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - POSIX awk compatibility in changelog generator (mawk on Ubuntu)
 - AUR publish: mount PKGBUILD read-only and generate .SRCINFO via stdout to avoid docker chown breaking host git ownership
 
-## 1.5.2 - 2026-02-05
+## [1.5.2] - 2026-02-05
 
 ### Added
 - Multi-pass shader rendering with up to 4 buffer passes and inter-pass texture channels (iChannel0-3) ([#78])
@@ -1820,7 +1832,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [1.15.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.13...v1.15.14
 [1.15.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.12...v1.15.13
 [1.15.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.11...v1.15.12
-[1.15.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.9...v1.15.11
+[1.15.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.10...v1.15.11
+[1.15.10]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.9...v1.15.10
 [1.15.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.8...v1.15.9
 [1.15.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.7...v1.15.8
 [1.15.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.6...v1.15.7
@@ -1829,9 +1842,11 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [1.15.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.3...v1.15.4
 [1.15.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.2...v1.15.3
 [1.15.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.1...v1.15.2
-[1.15.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.1...v1.15.1
+[1.15.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.0...v1.15.1
+[1.15.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.1...v1.15.0
 [1.14.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.0...v1.14.1
 [1.14.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.13.1...v1.14.0
+[1.13.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.8...v1.12.0
@@ -1863,6 +1878,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [1.6.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.9...v1.6.0
 [1.5.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.3...v1.5.9
+[1.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.4...v1.5.2
 [1.3.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.1...v1.3.2

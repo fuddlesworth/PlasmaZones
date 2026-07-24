@@ -3,8 +3,15 @@
 
 #pragma once
 
+#include <optional>
+
 #include "core/utils/unifiedlayoutlist.h"
 #include <PhosphorLayoutApi/LayoutPreview.h>
+// Layout must be COMPLETE here, not forward-declared: the layoutApplied signal
+// below carries a PhosphorZones::Layout*, and moc's metatype registration asks
+// whether that type is complete. Answering "no" and then completing the type
+// later in the same translation unit is what -Wsfinae-incomplete reports.
+#include <PhosphorZones/Layout.h>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -22,7 +29,6 @@ class ITileAlgorithmRegistry;
 }
 
 namespace PhosphorZones {
-class Layout;
 class LayoutRegistry;
 }
 
@@ -44,7 +50,8 @@ class Settings;
  *
  * Usage:
  * @code
- * auto *controller = new UnifiedLayoutController(layoutManager, settings, parent);
+ * auto *controller = new UnifiedLayoutController(layoutManager, settings, screenManager,
+ *                                                algorithmRegistry, autotileEngine, parent);
  * controller->applyLayoutById(layoutId);
  * controller->cycleNext();
  * connect(controller, &UnifiedLayoutController::layoutApplied, this, &Daemon::showLayoutOsd);
@@ -55,7 +62,7 @@ class Settings;
 class UnifiedLayoutController : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QString currentLayoutId READ currentLayoutId)
+    Q_PROPERTY(QString currentLayoutId READ currentLayoutId NOTIFY currentLayoutIdChanged)
 
 public:
     /**
@@ -141,13 +148,24 @@ public:
      * @brief Synchronize current layout ID from external state
      *
      * Call this when layout changes from other sources (zone selector, D-Bus).
-     * Updates internal tracking without triggering signals.
+     * Routes through setCurrentLayoutId(), so it emits currentLayoutIdChanged()
+     * when the value actually moves. It has to: a property that declares NOTIFY
+     * but mutates silently on some of its paths leaves observers latched on a
+     * stale value, which is worse than having no NOTIFY at all.
      *
-     * @param overrideId If non-empty, use this as the current layout ID instead
-     *                   of querying the global active layout. Used for per-desktop
+     * @param overrideId When set, use this as the current layout ID instead of
+     *                   querying the global active layout. Used for per-desktop
      *                   sync where the assignment may be an autotile ID.
+     *
+     *                   It is std::optional rather than a possibly-empty QString
+     *                   because both callers pass an assignment id that is
+     *                   legitimately empty when the (screen, desktop, activity)
+     *                   has no assignment. Treating empty as "no override" made
+     *                   that case fall back to the GLOBAL active layout, which is
+     *                   the very fallback the per-desktop path exists to avoid.
+     *                   A set-but-empty override now clears the id, as it should.
      */
-    void syncFromExternalState(const QString& overrideId = QString());
+    void syncFromExternalState(std::optional<QString> overrideId = std::nullopt);
 
     /**
      * @brief Get current screen name
@@ -210,6 +228,18 @@ Q_SIGNALS:
      */
     void autotileApplied(const QString& algorithmName, int windowCount);
 
+    /**
+     * @brief Emitted when the current layout ID changes.
+     *
+     * Backs the currentLayoutId Q_PROPERTY, which would otherwise be a
+     * read-only view over a value that demonstrably mutates. Declared for
+     * property completeness: the controller is a C++-only object today, held by
+     * the daemon and never registered with QML or connected to, so this has no
+     * consumer yet. Every path that writes m_currentLayoutId goes through
+     * setCurrentLayoutId() so that stays true when one appears.
+     */
+    void currentLayoutIdChanged();
+
 private:
     /**
      * @brief Apply a unified layout preview
@@ -217,7 +247,8 @@ private:
     bool applyEntry(const PhosphorLayout::LayoutPreview& preview);
 
     /**
-     * @brief Update current layout ID and emit signal
+     * @brief Update the current layout ID, emitting currentLayoutIdChanged
+     *        when the value actually changes.
      */
     void setCurrentLayoutId(const QString& layoutId);
 
@@ -236,12 +267,25 @@ private:
 
     QString m_currentLayoutId;
     QString m_currentScreenName;
+    // Change-guard only: layouts() resolves the desktop per-screen from the
+    // layout manager, so this value never reaches the list builder. It exists
+    // so setCurrentVirtualDesktop can invalidate the cache on a real change
+    // rather than on every desktop-changed signal.
+    //
+    // It tracks the GLOBAL desktop while the cache is keyed on the CURRENT
+    // SCREEN's desktop, so the two are only incidentally correlated. The setter
+    // therefore invalidates on either changing, not on this member alone.
     int m_currentVirtualDesktop = 1;
+
     QString m_currentActivity;
     bool m_includeManualLayouts = true;
     bool m_includeAutotileLayouts = false;
     mutable QVector<PhosphorLayout::LayoutPreview> m_cachedLayouts;
     mutable bool m_cacheValid = false;
+    /// The per-screen desktop the cached list was built for, so the invalidation
+    /// guard keys on the same thing layouts() does. Mutable for the same reason
+    /// the cache itself is: layouts() is const and fills it lazily.
+    mutable int m_cachedScreenDesktop = -1;
 };
 
 } // namespace PlasmaZones

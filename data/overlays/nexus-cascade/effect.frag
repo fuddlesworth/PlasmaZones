@@ -22,7 +22,7 @@ float getAudioReact()    { return p_audioReactivity >= 0.0 ? p_audioReactivity :
 float getBassChromaMul() { return p_bassChromaMultiplier >= 0.0 ? p_bassChromaMultiplier : 3.0; }
 
 
-vec4 sampleNexus(vec2 fragCoord, vec2 uv, float chroma) {
+vec4 sampleNexus(vec2 fragCoord, float chroma) {
     vec4 c0 = texture(iChannel0, channelUv(0, fragCoord));
     vec4 c1 = texture(iChannel1, channelUv(1, fragCoord));
     vec4 c2 = texture(iChannel2, channelUv(2, fragCoord));
@@ -44,25 +44,32 @@ vec4 sampleNexus(vec2 fragCoord, vec2 uv, float chroma) {
 vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                      vec4 params, bool isHighlighted,
                      float bass, float mids, float treble, bool hasAudio) {
-    float borderRadius = max(params.x, 8.0);
-    float borderWidth = max(params.y, 2.0);
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
+    // Shared with the decoration side via zoneSdf() in shared/common.glsl.
+    ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
+    float borderWidth = zoneBorderWidth(params.y);
     float fillOpacity = getFillOpacity();
     float chroma = getChromaStrength();
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
+    vec2 center = zoneShape.center;  // already computed by zoneSdf()
     vec2 p = fragCoord - center;
     vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
 
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float d = zoneShape.d;
 
     vec4 result = vec4(0.0);
+
+    // Weight for the mix-TOWARD-hue sites below. zoneFillHue returns white at
+    // zero alpha, which is an identity for a multiply but pulls a mix() toward
+    // white rather than leaving it alone, so those sites zero their weight.
+    float hueMix = fillColor.a > 1e-3 ? 1.0 : 0.0;
 
     vec3 borderClr = colorWithFallback(borderColor.rgb, vec3(0.5, 0.6, 1.0));
 
     // Vitality system: highlighted = vivid/energetic, dormant = desaturated/dim
-    float vitality = isHighlighted ? 1.0 : 0.3;
+    float vitality = zoneVitality(isHighlighted);
 
     // ── Bass = Cascade Chain-Reaction Chromatic ────────────────────────
     // Bass triggers a signal that propagates from zone center outward along
@@ -81,8 +88,8 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float chromaMod = chroma * chromaSpike;
 
     if (d < 0.0) {
-        vec4 nexus = sampleNexus(fragCoord, localUV, isHighlighted ? chromaMod * 1.5 : chromaMod);
-        vec3 zoneFill = fillColor.rgb;
+        vec4 nexus = sampleNexus(fragCoord, isHighlighted ? chromaMod * 1.5 : chromaMod);
+        vec3 zoneFill = zoneFillHue(fillColor);
         float tintAmount = getZoneFillTint();
         result.rgb = mix(nexus.rgb, nexus.rgb * zoneFill, tintAmount);
         result.a = fillOpacity;
@@ -125,10 +132,10 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         vec3 glowClr;
         if (cyclePhase < 0.333) {
             // borderClr → fillColor
-            glowClr = mix(borderClr, fillColor.rgb, cyclePhase * 3.0);
+            glowClr = mix(borderClr, zoneFillHue(fillColor), cyclePhase * 3.0 * hueMix);
         } else if (cyclePhase < 0.666) {
             // fillColor → complementary
-            glowClr = mix(fillColor.rgb, complementary, (cyclePhase - 0.333) * 3.0);
+            glowClr = mix(mix(borderClr, zoneFillHue(fillColor), hueMix), complementary, (cyclePhase - 0.333) * 3.0);
         } else {
             // complementary → borderClr
             glowClr = mix(complementary, borderClr, (cyclePhase - 0.666) * 3.0);
@@ -164,25 +171,33 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         // Highlighted: accent trace along border
         if (isHighlighted) {
             float accentTrace = angularNoise(angle, 6.0, iTime * 2.5);
-            flowColor = mix(flowColor, fillColor.rgb * borderEnergy, accentTrace * 0.3);
+            flowColor = mix(flowColor, zoneFillHue(fillColor) * borderEnergy, accentTrace * 0.3 * hueMix);
         }
 
-        result.rgb = mix(result.rgb, flowColor, borderAlpha);
-        result.a = max(result.a, border * 0.98);
+        result.rgb = mix(result.rgb, flowColor, (borderAlpha) * borderColor.a);
+        result.a = max(result.a, border * borderColor.a);
     }
 
     // Outer glow
-    if (d > 0.0 && d < 22.0) {
-        float glowRadius = mix(5.0, 9.0, vitality);
+    float glowRadius = zoneLen(mix(5.0, 9.0, vitality));
+    // The gate covers the ENLARGED radius. The bass wavefront below adds up
+    // to zoneLen(8.0) to glowRadius AFTER this test, so gating on the base
+    // alone cut the widened glow mid-gradient and rang. Two e-folds past
+    // the enlarged radius leaves ~13% residual, which is invisible; three
+    // pushed the glow visibly further than it reached before this PR and
+    // nearly tripled the annulus this branch shades.
+    if (d > 0.0 && d < (glowRadius + zoneLen(8.0)) * 2.0) {
         float glowFalloff = mix(0.3, 0.6, vitality);
         // Cascade wavefront glow — bass sends expanding rings outward from
         // the zone edge, like a network signal radiating to neighbors.
         // The ring expands and fades rather than uniform glow growth.
         if (hasAudio) {
             float waveCycle = fract(iTime * 1.2);
-            float waveRadius = waveCycle * 18.0; // ring expands up to 18px
-            float waveBand = exp(-abs(d - waveRadius) * 0.5) * (1.0 - waveCycle);
-            glowRadius += waveBand * bassEnvelope * 8.0;
+            // zoneLen() throughout, matching the glowRadius it feeds: the ring
+            // expands up to 18 logical px.
+            float waveRadius = waveCycle * zoneLen(18.0);
+            float waveBand = exp(-abs(d - waveRadius) / zoneLen(2.0)) * (1.0 - waveCycle);
+            glowRadius += waveBand * bassEnvelope * zoneLen(8.0);
             glowFalloff += waveBand * bass * 0.4;
         }
         float glow = expGlow(d, glowRadius, glowFalloff);
@@ -198,8 +213,13 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     // Treble creates bright sparks that travel along the inner edge like data
     // packets racing through network traces. Multiple sparks at different speeds
     // create a flickering circuit-board look along the zone perimeter.
-    if (hasAudio && treble > 0.06 && d > -borderWidth * 3.0 && d < 0.0) {
-        float edgeProx = smoothstep(-borderWidth * 3.0, 0.0, d);
+    // zoneEdgeBand, not a bare multiple of borderWidth. A configured width
+    // of 0 collapsed this gate to `d > 0.0 && d < 0.0` and took the whole
+    // treble spark feature with it. Turning the border off should not also
+    // turn off a feature that merely sits near the edge.
+    float sparkBand = zoneEdgeBand(borderWidth * 3.0, 6.0);
+    if (hasAudio && treble > 0.06 && d > -sparkBand && d < 0.0) {
+        float edgeProx = smoothstep(-sparkBand, 0.0, d);
         // Three spark traces at different angular speeds
         float spark = 0.0;
         for (int si = 0; si < 3; si++) {
