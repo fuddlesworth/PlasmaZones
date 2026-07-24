@@ -179,6 +179,29 @@ if(CMAKE_PROJECT_NAME STREQUAL "PhosphorFsLoader" OR BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
+if(NOT DEFINED KDE_INSTALL_DATADIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_DATADIR ${CMAKE_INSTALL_DATAROOTDIR})
+endif()
+
+# valijson is BSD-2-Clause (Tristan Penman) and, in the default vendored build,
+# its headers are compiled into this library — so its licence notice must
+# accompany the distribution. Ship it alongside the app's own licences, next to
+# the vendored Luau notice phosphor-scripting installs. The system-valijson
+# build uses separately-installed headers that carry their own licence, so skip
+# it there. Guarded on the file existing for the same reason as the Luau rule:
+# a scope that skips the extraction must not leave an install rule pointing at
+# a path that was never created.
+if(NOT PHOSPHORFSLOADER_USE_SYSTEM_VALIJSON)
+    set(_pz_valijson_license
+        "${_pz_valijson_root}/valijson-${PHOSPHORFSLOADER_VALIJSON_VERSION}/LICENSE")
+    if(EXISTS "${_pz_valijson_license}")
+        install(FILES ${_pz_valijson_license}
+            DESTINATION ${KDE_INSTALL_DATADIR}/licenses/plasmazones
+            RENAME LICENSE.valijson)
+    endif()
+endif()
+
 install(TARGETS PhosphorFsLoader
     EXPORT PhosphorFsLoaderTargets
     RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
