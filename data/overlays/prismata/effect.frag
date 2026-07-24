@@ -277,7 +277,7 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     }
 
     // Outer glow (both states, vitality-modulated)
-    float outerGlowR = vitalityScale(10.0, 28.0, vitality) + idleAnim * vitalityScale(3.0, 8.0, vitality);
+    float outerGlowR = zoneLen(vitalityScale(10.0, 28.0, vitality) + idleAnim * vitalityScale(3.0, 8.0, vitality));
     if (hasAudio) {
         float glowAngle = atan(p.y, p.x);
         float nodePattern = 0.5 + 0.5 * sin(glowAngle * 6.0 + iTime * 1.8);
@@ -285,7 +285,7 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     }
     if (d > 0.0 && d < outerGlowR) {
         float outerStr = vitalityScale(0.15, 0.5, vitality) + (hasAudio ? mids * audioReact * vitalityScale(0.08, 0.3, vitality) : 0.0);
-        float glow = expGlow(d, vitalityScale(5.0, 9.0, vitality), outerStr);
+        float glow = expGlow(d, zoneLen(vitalityScale(5.0, 9.0, vitality)), outerStr);
         vec3 glowCol = vitalityDesaturate(accent, vitality);
         result.rgb += glowCol * glow * vitalityScale(0.15, 0.4, vitality);
         result.a = max(result.a, glow * vitalityScale(0.2, 0.55, vitality));

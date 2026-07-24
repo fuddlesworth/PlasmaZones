@@ -316,7 +316,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Outer glow ──────────────────────────────────────────
 
-    float baseGlowR = mix(8.0, 20.0, vitality);
+    float baseGlowR = zoneLen(mix(8.0, 20.0, vitality));
     float bassGlowR = mix(3.0, 6.0, vitality);
     // Glow radius pulses with bass beat but uses a smoothed envelope, not raw value
     float bassEnvelope = hasAudio ? smoothstep(0.2, 0.7, bass) * bass * reactivity : idlePulse;

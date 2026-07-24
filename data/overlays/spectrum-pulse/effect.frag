@@ -300,7 +300,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Outer glow (bass-reactive expansion) ──────────────────
 
-    float glowRadius = 20.0 + 5.0 * bassHit + 8.0 * idlePulse;
+    float glowRadius = zoneLen(20.0 + 5.0 * bassHit + 8.0 * idlePulse);
     if (d > 0.0 && d < glowRadius) {
         float glow1 = expGlow(d, glowRadius * 0.2, intensity * 0.35);
         float glow2 = expGlow(d, glowRadius * 0.5, intensity * 0.12);

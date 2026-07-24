@@ -522,7 +522,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
     float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
-    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float edgeFadeStart     = zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0);
     float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
     float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
@@ -1096,9 +1096,9 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
     // -- Outer glow: crisp hex-shaped, not soft FBM fog -----------
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 3.0;
-    float glowRadius = mix(8.0, 16.0, vitality) + bassGlowPush;
+    float glowRadius = zoneLen(mix(8.0, 16.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, 10.0, borderGlow);
+        float glow = expGlow(d, zoneLen(10.0), borderGlow);
         // 6-fold modulated glow — hex-shaped falloff
         float oAngle = atan(p.y, p.x);
         float hexShape = 0.7 + 0.3 * cos(oAngle * 3.0 + time * 0.3);

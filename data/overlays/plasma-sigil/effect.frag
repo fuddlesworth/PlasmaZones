@@ -114,7 +114,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     vec2 center   = rectPos + rectSize * 0.5;
     vec2 p        = fragCoord - center;
     float d = zoneShape.d;
-    if (d > 30.0) return vec4(0.0);
+    if (d > zoneLen(30.0)) return vec4(0.0);
 
     float iconScale = getIconScale();
     float strokeW   = getStrokeWidth();
@@ -428,8 +428,8 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     }
 
     // ── Outer glow: chromatic gradient ───────────────────────────────────
-    if (d > 0.0 && d < 24.0) {
-        float glowRadius  = vitalityScale(5.0, 10.0, vitality);
+    if (d > 0.0 && d < zoneLen(24.0)) {
+        float glowRadius  = zoneLen(vitalityScale(5.0, 10.0, vitality));
         float glowFalloff = vitalityScale(0.3, 0.55, vitality);
 
         // Gentle bass wavefront expansion

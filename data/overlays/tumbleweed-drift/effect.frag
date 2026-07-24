@@ -34,7 +34,7 @@ float pContrast()        { return p_contrast >= 0.0 ? p_contrast : 0.9;  }
 float pInnerGlowStr()    { return p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.4;  }
 float pFillOpacity()     { return p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85; }
 float pBorderGlow()      { return p_borderGlow >= 0.0 ? p_borderGlow : 0.35; }
-float pEdgeFadeStart()   { return p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0; }
+float pEdgeFadeStart()   { return zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0); }
 float pBorderBrightness(){ return p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;  }
 float pAudioReactivity() { return p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;  }
 float pParticleStrength(){ return p_particleStrength >= 0.0 ? p_particleStrength : 0.5;  }
@@ -732,9 +732,9 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
     // ── Outer glow with angular noise ──────────────────────────────
 
     float bassGlowPush = hasAudio ? bassEnv * 5.0 : idlePulse * 5.0;
-    float glowRadius = mix(10.0, 22.0, vitality) + bassGlowPush;
+    float glowRadius = zoneLen(mix(10.0, 22.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && pBorderGlow() > 0.01) {
-        float glow = expGlow(d, 7.0, pBorderGlow());
+        float glow = expGlow(d, zoneLen(7.0), pBorderGlow());
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.08);
         vec3 glowCol = triStopPalette(glowT, palSecondary, palAccent, palGlow);

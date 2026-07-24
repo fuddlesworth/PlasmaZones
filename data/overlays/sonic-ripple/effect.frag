@@ -413,7 +413,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Outer glow ──────────────────────────────────────────
 
-    float baseGlowR = mix(8.0, 20.0, vitality);
+    float baseGlowR = zoneLen(mix(8.0, 20.0, vitality));
     float bassGlowR = mix(2.0, 6.0, vitality);
     float glowRadius = baseGlowR + bassGlowR * (hasAudio ? bass * reactivity : idlePulse) + 5.0 * energy;
     if (d > 0.0 && d < glowRadius) {

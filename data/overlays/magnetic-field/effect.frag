@@ -210,7 +210,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
     // Treble = Corona discharge arc intensity
     float coronaIntensity = smoothstep(0.08, 0.5, treble);
-    float coronaReach = 20.0 + treble * 60.0; // how far arcs extend from edge (pixels)
+    float coronaReach = zoneLen(20.0 + treble * 60.0); // how far arcs extend from edge (pixels)
 
     // Overall = Field density/visibility (NOT a simple multiplier)
     // Affects rendering thresholds and particle visibility
@@ -457,11 +457,11 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     }
 
     // Outer glow influenced by mouse proximity and vertex deformation
-    float glowExtent = 25.0 + vDistortAmount * 15.0;
+    float glowExtent = zoneLen(25.0 + vDistortAmount * 15.0);
     if (d > 0.0 && d < glowExtent) {
         float mouseDist = length(globalUV - mouseGlobal);
         float mouseInfluence = exp(-mouseDist * 3.0);
-        float glowSize = 15.0 + mouseInfluence * 10.0 + vDistortAmount * 5.0;
+        float glowSize = zoneLen(15.0 + mouseInfluence * 10.0 + vDistortAmount * 5.0);
         float glow = exp(-d / glowSize) * (0.3 + mouseInfluence * 0.4 + vMouseInfluence * 0.2);
         result.rgb += fieldColor * glow * 0.4;
         result.a = max(result.a, glow * 0.5);

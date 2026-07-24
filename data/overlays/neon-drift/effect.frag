@@ -405,7 +405,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
     float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
-    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float edgeFadeStart     = zoneLen(p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0);
     float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
     float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
@@ -747,9 +747,9 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Outer glow ───────────────────────────────────────────
     float bassGlowPush = hasAudio ? bassEnv * 2.5 : idlePulse * 5.0;
-    float glowRadius = mix(10.0, 20.0, vitality) + bassGlowPush;
+    float glowRadius = zoneLen(mix(10.0, 20.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, 8.0, borderGlow);
+        float glow = expGlow(d, zoneLen(8.0), borderGlow);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.06) + midsEnv * 0.1;
         vec3 glowCol = mix(

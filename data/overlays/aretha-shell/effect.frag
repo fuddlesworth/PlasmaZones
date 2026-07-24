@@ -679,9 +679,9 @@ vec4 arethaZoneGlow(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted) 
 
     float d = zoneShape.d;
 
-    float glowExtent = vitalityScale(10.0, 28.0, vitality);
+    float glowExtent = zoneLen(vitalityScale(10.0, 28.0, vitality));
     if (d > 0.0 && d < glowExtent) {
-        float glowSize = vitalityScale(4.0, 8.0, vitality);
+        float glowSize = zoneLen(vitalityScale(4.0, 8.0, vitality));
         float glowStr = vitalityScale(0.12, 0.4, vitality);
         float glow = expGlow(d, glowSize, glowStr);
         vec3 glowColor = vitalityDesaturate(getArethaCyan(), vitality);

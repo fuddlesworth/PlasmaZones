@@ -588,10 +588,10 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     }
 
     // Outer toxic glow (vitality-modulated)
-    float outerGlowRange = vitalityScale(25.0, 60.0, vitality);
+    float outerGlowRange = zoneLen(vitalityScale(25.0, 60.0, vitality));
     if (d > 0.0 && d < outerGlowRange) {
-        float glowFalloff1 = vitalityScale(10.0, 20.0, vitality);
-        float glowFalloff2 = vitalityScale(20.0, 40.0, vitality);
+        float glowFalloff1 = zoneLen(vitalityScale(10.0, 20.0, vitality));
+        float glowFalloff2 = zoneLen(vitalityScale(20.0, 40.0, vitality));
 
         float glow1 = expGlow(d, glowFalloff1, vitalityScale(0.3, 0.7, vitality));
         float glow2 = expGlow(d, glowFalloff2, vitalityScale(0.15, 0.4, vitality));

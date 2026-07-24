@@ -463,9 +463,9 @@ vec4 fluxZoneGlow(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted) {
 
     float d = zoneShape.d;
 
-    float glowExtent = vitalityScale(12.0, 30.0, vitality);
+    float glowExtent = zoneLen(vitalityScale(12.0, 30.0, vitality));
     if (d > 0.0 && d < glowExtent) {
-        float glowSize = vitalityScale(4.0, 9.0, vitality);
+        float glowSize = zoneLen(vitalityScale(4.0, 9.0, vitality));
         float glowStr  = vitalityScale(0.10, 0.35, vitality) * getGlowStrength();
         float glow = expGlow(d, glowSize, glowStr);
         vec3 glowColor = vitalityDesaturate(fluxGradient(screenDiag(fragCoord)), vitality);

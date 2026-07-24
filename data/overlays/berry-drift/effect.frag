@@ -402,7 +402,7 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         float breathe = 1.0 + vitalityScale(0.05, 0.15, vitality) * sin(iTime * 2.0);
         glowR *= breathe;
         if (d < glowR) {
-            float glowFalloff = vitalityScale(4.0, 8.0, vitality);
+            float glowFalloff = zoneLen(vitalityScale(4.0, 8.0, vitality));
             float glowAmt = vitalityScale(0.15, 0.45, vitality) * (1.0 + energy * 0.4);
             float glow = expGlow(d, glowFalloff, glowAmt);
             vec3 glowColor = vitalityDesaturate(bubblegum, vitality);

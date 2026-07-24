@@ -174,8 +174,8 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     }
 
     // Outer glow
-    if (d > 0.0 && d < 22.0) {
-        float glowRadius = mix(5.0, 9.0, vitality);
+    if (d > 0.0 && d < zoneLen(22.0)) {
+        float glowRadius = zoneLen(mix(5.0, 9.0, vitality));
         float glowFalloff = mix(0.3, 0.6, vitality);
         // Cascade wavefront glow — bass sends expanding rings outward from
         // the zone edge, like a network signal radiating to neighbors.

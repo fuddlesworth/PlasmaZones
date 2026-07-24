@@ -218,9 +218,9 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
     // Outer glow
     float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 5.0;
-    float glowRadius = mix(12.0, 20.0, vitality) + bassGlowPush;
+    float glowRadius = zoneLen(mix(12.0, 20.0, vitality) + bassGlowPush);
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
-        float glow = expGlow(d, 8.0, borderGlow);
+        float glow = expGlow(d, zoneLen(8.0), borderGlow);
 
         // Glow color from palette
         float angle = atan(p.y, p.x);
