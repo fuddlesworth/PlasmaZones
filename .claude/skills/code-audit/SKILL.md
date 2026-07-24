@@ -167,8 +167,21 @@ For partitioned scopes:
    - The project rules from `CLAUDE.md` (quoted relevant sections, not "see the file").
    - **Grep scope ≠ read scope.** The agent's *read* scope is limited to its partition files, but its *grep / ast-grep* scope is the WHOLE repo. Specifically the agent MUST grep beyond its partition for: (a) any old-pattern remnant of a refactor it's verifying ("X should now use Y" → enumerate all remaining X uses), (b) callers of any public function its partition touches, (c) comments naming a count or method/class it can verify. The partition limits where the agent reads files fully, not where it searches.
    - A request for prioritized findings in the format: `file:line — description — suggested fix — severity`.
+   - **An explicit delivery instruction.** A dispatched agent's plain-text output is NOT returned to you — it runs as a background teammate, and text it merely prints goes nowhere. Every prompt MUST end with: "When done, call the `SendMessage` tool with `to: \"main\"` and your full findings as `message`. Your plain-text output is not delivered; without that call your report is lost." Send-even-if-empty and send-partial-if-short-on-budget belong in that instruction too.
 4. Wait for all agents to return.
 5. Aggregate their findings into a single deduplicated list, then continue to step 4.
+
+### Diagnosing a silent partition (READ THIS BEFORE CONCLUDING THE AGENTS ARE BROKEN)
+
+The dominant failure mode is **an agent going idle with no report** — you receive an idle notification with `idleReason: "available"` and nothing else. That is NOT a crash, and it is almost never an infrastructure fault. `"available"` means the agent finished its turn cleanly. The overwhelmingly likely cause is that it did the analysis, wrote the findings as plain text, and never called `SendMessage` — so the report evaporated.
+
+When a partition goes silent:
+
+1. **Nudge with the delivery instruction, not "print your report."** Telling it to print again reproduces the failure. `SendMessage` it: "Your plain text is not delivered. Call `SendMessage(to: \"main\", message: <findings>)` now." This recovers the work already done — the agent usually still has its analysis in context.
+2. **Run a controlled test before declaring systemic failure.** Dispatch ONE trivial task and see if it returns. If custom agent types fail and a built-in (`general-purpose`) succeeds, the problem is the agent definition, not the mechanism. Do this on the SECOND failure, not the fifteenth.
+3. **Never conclude "the channel is broken" from repeated identical silence.** Identical silence across many agents is evidence of a common *contract* bug, which is fixable, not of dead infrastructure, which is not. Assuming the latter costs the entire partitioned review and pushes the audit onto a single context that cannot hold it.
+
+Only after a nudge with explicit `SendMessage` instructions fails should you re-dispatch, and only after that should you fall back to inline analysis. If you do fall back, say so plainly in the step 12 verdict: passes without the full partition count are INVALID per step 8.5 and cannot support a CLEAN verdict.
 
 If a reviewer agent returns generic boilerplate, crashes, or covers fewer files than its partition listed, re-dispatch that partition with sharper instructions. A non-responsive partition means that part of the scope wasn't audited.
 
