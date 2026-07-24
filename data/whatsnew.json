@@ -16,7 +16,7 @@
                 "Fixed: the Neon City and Voxel Terrain overlays render again on drivers that refused their depth buffer setup (#827)",
                 "Fixed: zone overlay corners and borders now follow your display scale and match the window decorations, so the corner radius you set is the radius you get. Setting the border width to 0 turns the border off, which it did not before (#841)",
                 "Fixed: switching the tiling algorithm no longer writes that algorithm's default window count into your global Max windows setting (#820)",
-                "Fixed: windows keep their minimum size in the deck, theater, and floating-center layouts, overlapping layouts stack in a defined order, and rotating the order in monocle brings the newly shown window to the top (#829)",
+                "Fixed: the deck, theater, and floating-center layouts no longer force a zone smaller than a window's minimum size. Overlapping layouts now stack in a defined order, and rotating the order in monocle brings the newly shown window to the top (#829)",
                 "Fixed: layout and shader cards fill the grid at wide window sizes instead of leaving an empty slot, and small layout cards keep their name and badges readable (#828)"
             ]
         },
