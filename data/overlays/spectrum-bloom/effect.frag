@@ -181,7 +181,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             // a user sets in appearance settings does nothing at all in this
             // pack, which reads as the setting being broken rather than as a
             // pack that owns its palette.
-            result.rgb = mix(result.rgb, result.rgb * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
+            result.rgb = zoneTint(result.rgb, fillColor, 0.35);
             result.a = mix(fillOpacity * 0.59, fillOpacity, vitality);
         }
 

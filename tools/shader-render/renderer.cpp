@@ -286,7 +286,9 @@ void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetad
 
 QStringList shaderIncludePaths()
 {
-    // Mirrors ZoneShaderItem's constructor (src/daemon/rendering/zoneshaderitem.cpp:75-85):
+    // Mirrors PlasmaZones::expandShaderIncludePaths() in
+    // src/daemon/rendering/zoneshadernoderhi.h (cited by symbol, not by line —
+    // the previous file:line citation had rotted onto unrelated code):
     // for each shader root, push <root>/shared FIRST then <root>. The /shared
     // entry is where common.glsl / audio.glsl / zone.vert live in the source
     // tree; without it `#include <common.glsl>` only resolves accidentally via
@@ -329,7 +331,8 @@ QStringList shaderIncludePaths()
     for (const QString& dir : QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation)) {
         pushRoot(dir + QStringLiteral("/plasmazones/overlays"));
     }
-    pushRoot(QStringLiteral("/usr/share/plasmazones/overlays"));
+    // No explicit /usr/share entry: GenericDataLocation already ends with the
+    // XDG_DATA_DIRS list, which includes it, and pushRoot does not dedupe.
     // No libs/phosphor-*/shaders entry. There used to be one naming
     // "libs/phosphor-rendering/shaders", which has never existed, so it
     // resolved nothing in any invocation. Repointing it at the real
@@ -349,7 +352,8 @@ QStringList shaderIncludePaths()
 // vertex shader (kDefaultVertexShaderSource — emits only vTexCoord) is used,
 // every zone fragment shader fails to link with `vFragCoord not declared as
 // input from previous stage`, and every preview comes out as the clear colour.
-// Replicates ZoneShaderItem's resolution at src/daemon/rendering/zoneshaderitem.cpp:358-373.
+// Replicates PlasmaZones::resolveZoneVertexPath() in
+// src/daemon/rendering/zoneshadernoderhi.h.
 QString resolveZoneVertexShader(const QString& metadataVertexPath, const QStringList& includePaths)
 {
     if (!metadataVertexPath.isEmpty()) {

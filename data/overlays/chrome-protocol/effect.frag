@@ -785,7 +785,7 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // Zone shows the global scene, desaturated when dormant, with a
         // slight fillColor tint layered underneath for zone identity.
         vec3 col = vitalityDesaturate(sceneCol, vitality);
-        col = mix(col, col * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
+        col = zoneTint(col, fillColor, 0.35);
 
         // Overlay HUD — per-zone in zone-local aspect-corrected UV so the
         // 7-seg readout, spectrum bars, and edge panels land inside the

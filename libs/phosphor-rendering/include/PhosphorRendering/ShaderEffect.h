@@ -629,6 +629,7 @@ public:
     }
     QString errorLog() const
     {
+        QMutexLocker lock(&m_errorLogMutex);
         return m_errorLog;
     }
 
@@ -672,6 +673,9 @@ Q_SIGNALS:
     /// almost always wrong (V4 / QML JS / most app code is GUI-thread-
     /// only).
     void statusChanged();
+    /// Emitted from setError(), which runs on the RENDER thread (from
+    /// updatePaintNode) — the same hazard statusChanged() documents above. A
+    /// DirectConnection here would run QML JS off the GUI thread.
     void errorLogChanged();
 
 protected:
@@ -920,6 +924,14 @@ private:
     // semantics suffice — there's no associated data we need to publish
     // alongside.
     std::atomic<Status> m_status{Status::Null};
+    /// Guarded because setError() runs on the RENDER thread (from
+    /// updatePaintNode) while errorLog() is a Q_PROPERTY READ reachable from
+    /// QML on the GUI thread. A QString assignment is a non-atomic d-pointer
+    /// write plus a refcount touch, so an unguarded concurrent read can hand
+    /// QML a torn pointer. The neighbouring m_status is std::atomic for exactly
+    /// this reason; a QString cannot be, hence the mutex. Written at most once
+    /// per shader load, so contention is nil.
+    mutable QMutex m_errorLogMutex;
     QString m_errorLog;
 
     // ── Render node tracking ─────────────────────────────────────────

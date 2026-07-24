@@ -402,7 +402,7 @@ vec4 renderFluxZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // The fill COLOUR is separate and was being discarded entirely. Light
         // identity tint at the sibling packs' weight, through zoneFillHue()
         // because zoneFillColors[i].rgb arrives premultiplied.
-        baseColor = mix(baseColor, baseColor * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
+        baseColor = zoneTint(baseColor, fillColor, 0.35);
 
         vec3 fx = vec3(0.0);
 

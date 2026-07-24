@@ -154,7 +154,10 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
         if (isHighlighted) {
             float accentTrace = angularNoise(angle, 6.0, iTime * 2.5);
-            flowColor = mix(flowColor, zoneFillHue(fillColor) * borderEnergy, accentTrace * 0.25);
+            // Weight zeroed at zero alpha: zoneFillHue returns white there, which
+            // would pull this accent toward white rather than leaving it alone.
+            flowColor = mix(flowColor, zoneFillHue(fillColor) * borderEnergy,
+                            accentTrace * 0.25 * (fillColor.a > 1e-3 ? 1.0 : 0.0));
         }
 
         result.rgb = mix(result.rgb, flowColor, borderAlpha);

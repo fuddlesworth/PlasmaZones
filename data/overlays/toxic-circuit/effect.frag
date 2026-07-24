@@ -540,7 +540,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
 
         // Light identity tint from the zone's configured fill colour, at the
         // sibling packs' weight.
-        result.rgb = mix(baseColor, baseColor * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
+        result.rgb = zoneTint(baseColor, fillColor, 0.35);
         result.a = fillOpacity;
     }
 
@@ -592,7 +592,10 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     }
 
     // Outer toxic glow (vitality-modulated)
-    float outerGlowRange = zoneLen(vitalityScale(25.0, 60.0, vitality));
+    // 3.5 falloffs, not an independently tuned constant. At the old 60 against a
+    // 40 falloff the gradient was cut at 22% of peak and then multiplied by a
+    // glow strength that reaches 6.6, which is a blatant ring.
+    float outerGlowRange = zoneLen(vitalityScale(20.0, 40.0, vitality)) * 3.5;
     if (d > 0.0 && d < outerGlowRange) {
         float glowFalloff1 = zoneLen(vitalityScale(10.0, 20.0, vitality));
         float glowFalloff2 = zoneLen(vitalityScale(20.0, 40.0, vitality));

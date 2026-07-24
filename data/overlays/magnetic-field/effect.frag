@@ -434,7 +434,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         result.rgb = bg + fx * vig;
         // Light identity tint from the zone's configured fill colour, at the
         // sibling packs' weight. Without it this pack discarded the setting.
-        result.rgb = mix(result.rgb, result.rgb * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
+        result.rgb = zoneTint(result.rgb, fillColor, 0.35);
         // fillOpacity alone, matching the other 26 packs. The distortion addend was
     // unbounded (vDistortAmount is length(displacement) * 50 from the vert) and
     // relied on clampFragColor to save it.
@@ -466,11 +466,14 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     }
 
     // Outer glow influenced by mouse proximity and vertex deformation
-    float glowExtent = zoneLen(25.0 + vDistortAmount * 15.0);
-    if (d > 0.0 && d < glowExtent) {
-        float mouseDist = length(globalUV - mouseGlobal);
-        float mouseInfluence = exp(-mouseDist * 3.0);
-        float glowSize = zoneLen(15.0 + mouseInfluence * 10.0 + vDistortAmount * 5.0);
+    // Bound derived from the falloff rather than tuned independently, and both
+    // hoisted so they cannot drift. They used to coincide when the cursor sat on
+    // the zone (mouseInfluence -> 1), cutting the gradient at exp(-1) = 37% and
+    // leaving a hard ring at a fixed radius.
+    float mouseDist = length(globalUV - mouseGlobal);
+    float mouseInfluence = exp(-mouseDist * 3.0);
+    float glowSize = zoneLen(15.0 + mouseInfluence * 10.0 + vDistortAmount * 5.0);
+    if (d > 0.0 && d < glowSize * 3.5) {
         float glow = exp(-d / glowSize) * (0.3 + mouseInfluence * 0.4 + vMouseInfluence * 0.2);
         result.rgb += fieldColor * glow * 0.4;
         result.a = max(result.a, glow * 0.5);

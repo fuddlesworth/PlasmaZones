@@ -61,6 +61,11 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
     vec4 result = vec4(0.0);
 
+    // Weight for the mix-TOWARD-hue sites below. zoneFillHue returns white at
+    // zero alpha, which is an identity for a multiply but pulls a mix() toward
+    // white rather than leaving it alone, so those sites zero their weight.
+    float hueMix = fillColor.a > 1e-3 ? 1.0 : 0.0;
+
     vec3 borderClr = colorWithFallback(borderColor.rgb, vec3(0.5, 0.6, 1.0));
 
     // Vitality system: highlighted = vivid/energetic, dormant = desaturated/dim
@@ -127,10 +132,10 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         vec3 glowClr;
         if (cyclePhase < 0.333) {
             // borderClr → fillColor
-            glowClr = mix(borderClr, zoneFillHue(fillColor), cyclePhase * 3.0);
+            glowClr = mix(borderClr, zoneFillHue(fillColor), cyclePhase * 3.0 * hueMix);
         } else if (cyclePhase < 0.666) {
             // fillColor → complementary
-            glowClr = mix(zoneFillHue(fillColor), complementary, (cyclePhase - 0.333) * 3.0);
+            glowClr = mix(mix(borderClr, zoneFillHue(fillColor), hueMix), complementary, (cyclePhase - 0.333) * 3.0);
         } else {
             // complementary → borderClr
             glowClr = mix(complementary, borderClr, (cyclePhase - 0.666) * 3.0);
@@ -166,7 +171,7 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         // Highlighted: accent trace along border
         if (isHighlighted) {
             float accentTrace = angularNoise(angle, 6.0, iTime * 2.5);
-            flowColor = mix(flowColor, zoneFillHue(fillColor) * borderEnergy, accentTrace * 0.3);
+            flowColor = mix(flowColor, zoneFillHue(fillColor) * borderEnergy, accentTrace * 0.3 * hueMix);
         }
 
         result.rgb = mix(result.rgb, flowColor, borderAlpha);

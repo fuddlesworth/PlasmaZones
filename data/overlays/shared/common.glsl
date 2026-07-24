@@ -287,13 +287,39 @@ vec3 zoneFillHue(vec4 fillColor) {
     // is NOT an identity for an additive or weighted sum (`hue * k + other`),
     // for a mix TOWARD the hue, or for a colorWithFallback chain, where white
     // is a perfectly valid non-empty colour and suppresses the next fallback.
-    // A consumer of any of those shapes must gate on the alpha itself; three do
-    // (neon-venom, spectrum-pulse, prismata) and say so at the call site.
+    // Most consumers should NOT call this directly — use zoneTint() below, which
+    // owns the common weighted-blend shape and its zero-alpha case. The direct
+    // callers left are the ones with their own shape, and each gates on the
+    // alpha at the call site and says so: neon-venom (weighted sum),
+    // spectrum-pulse (fallback chain), prismata, nexus-cascade and liquid-canvas
+    // (mix toward the hue). Do not restate that list as a count — it was wrong
+    // twice, which is why the common case became a helper.
     // The remaining consumers are the `c*0.85 + hue*0.15` and `hue*luminance(c)`
     // families, where white is a slight lift or desaturation rather than a
     // no-op. Both are cosmetic at zero opacity and strictly better than the
     // darken-to-black they replaced.
     return fillColor.a > 1e-3 ? fillColor.rgb / fillColor.a : vec3(1.0);
+}
+
+// The zone's fill colour applied as a light identity tint, which is what nearly
+// every pack actually wants from zoneFillHue().
+//
+// This exists because the raw helper cannot be safe on its own. What a consumer
+// needs at zero alpha depends entirely on the shape it uses the hue in: a
+// multiply wants white, a weighted sum wants the term absent, a mix-toward
+// wants zero weight, and a colorWithFallback chain wants an empty colour. Three
+// separate attempts to pick one fallback inside zoneFillHue() each fixed one
+// family and broke another — the last made the weighted-sum family lift every
+// dark pack's base by a constant 0.0525, a visible grey floor on a navy or
+// near-black surface.
+//
+// So the decision moves here, where the shape is known. At zero alpha there is
+// no colour to tint with and the base is returned untouched.
+vec3 zoneTint(vec3 base, vec4 fillColor, float weight) {
+    if (fillColor.a <= 1e-3) {
+        return base;
+    }
+    return mix(base, base * 0.85 + zoneFillHue(fillColor) * 0.15, weight);
 }
 
 // 2D rotation matrix. mat2 is column-major, so p * rot(a) rotates by +a,

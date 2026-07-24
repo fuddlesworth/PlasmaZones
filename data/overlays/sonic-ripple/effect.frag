@@ -231,8 +231,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // Light identity tint from the zone's configured fill colour, at the
         // sibling packs' weight. This pack was the last one still discarding
         // both of its per-zone colour parameters.
-        result.rgb = mix(nebColor * nebBright,
-                         nebColor * nebBright * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
+        result.rgb = zoneTint(nebColor * nebBright, fillColor, 0.35);
 
         // Add spectrum rings on top
         result.rgb += ringColor * ringBright * glowIntensity * 0.6;

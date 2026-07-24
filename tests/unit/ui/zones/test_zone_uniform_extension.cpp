@@ -551,6 +551,12 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
     QVERIFY2(bodyEnd > bodyStart, "no closing brace for the ZoneUniforms block (unbalanced brace in a comment?)");
     const QString body = source.mid(bodyStart + 1, bodyEnd - bodyStart - 1);
 
+    // The block must stay ANONYMOUS. Naming the instance (`} zu;`) would force
+    // every pack to write zu.zoneRects, so all 27 stop compiling against the
+    // block the C++ side writes — with no build error on the C++ side at all.
+    QVERIFY2(source.mid(bodyEnd + 1).trimmed().startsWith(QLatin1Char(';')),
+             "ZoneUniforms must stay an anonymous block; an instance name would make every pack qualify its members");
+
     // std140 layout only depends on member type, order and array length, so
     // that triple is exactly what has to agree. Comments carry none of it.
     static const QRegularExpression memberRe(QStringLiteral(R"(^\s*(\w+)\s+(\w+)\s*(?:\[\s*(\d+)\s*\])?\s*;)"),
@@ -565,8 +571,18 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
         QString name;
         int arrayLen; // 0 == not an array
     };
+    // Block comments stripped ONCE, up front, so the member parse and the
+    // totality count below are derived from the same text. Parsing `body` while
+    // counting `stripped` let a commented-out declaration become a phantom
+    // member that the count never saw, which shifted every later index and
+    // failed with a bare number naming nothing.
+    static const QRegularExpression blockCommentRe(QStringLiteral(R"(/\*.*?\*/)"),
+                                                   QRegularExpression::DotMatchesEverythingOption);
+    QString stripped = body;
+    stripped.replace(blockCommentRe, QString());
+
     QVector<Member> members;
-    auto it = memberRe.globalMatch(body);
+    auto it = memberRe.globalMatch(stripped);
     while (it.hasNext()) {
         const auto m = it.next();
         members.append({m.captured(1), m.captured(2), m.captured(3).isEmpty() ? 0 : m.captured(3).toInt()});
@@ -582,12 +598,6 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
     // that names the offending line instead of a silent pass.
     {
         int consumed = 0;
-        // Block comments stripped first: they are legal GLSL inside the block and
-        // every one of their lines would otherwise read as unparsed.
-        static const QRegularExpression blockCommentRe(QStringLiteral(R"(/\*.*?\*/)"),
-                                                       QRegularExpression::DotMatchesEverythingOption);
-        QString stripped = body;
-        stripped.replace(blockCommentRe, QString());
         const QStringList bodyLines = stripped.split(QLatin1Char('\n'));
         for (const QString& rawLine : bodyLines) {
             // Strip a trailing line comment, then test what is left.

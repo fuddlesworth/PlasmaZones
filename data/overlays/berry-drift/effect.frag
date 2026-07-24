@@ -311,7 +311,14 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                     // 4-point star rays
                     float angle = atan(diff.y, diff.x);
                     float star = pow(abs(cos(angle * 2.0)), 8.0);
-                    float starRay = exp(-sDist / (pointSize * 4.0)) * star * 0.6;
+                    // Windowed to the gather. The ray is an exponential length
+                    // scale, not a hard radius, so at the top of the Sparkle Size
+                    // and Grid sliders it still carried ~25% amplitude one cell
+                    // out — past the 3x3 sweep — and popped on and off as the
+                    // fragment crossed a cell boundary, drawing grid seams.
+                    float cellUV = 1.0 / max(sparkleGridDensity, 1.0);
+                    float rayWindow = smoothstep(cellUV, cellUV * 0.5, sDist);
+                    float starRay = exp(-sDist / (pointSize * 4.0)) * star * 0.6 * rayWindow;
                     sparkle += starRay;
 
                     // Twinkling
@@ -361,7 +368,7 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         // sibling packs' weight. borderColor is already consumed below;
         // fillColor was the only half of the pair this pack discarded, so the
         // per-zone fill colour did nothing at all here.
-        result.rgb = mix(result.rgb, result.rgb * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
+        result.rgb = zoneTint(result.rgb, fillColor, 0.35);
         result.a = fillOpacity;
     }
 

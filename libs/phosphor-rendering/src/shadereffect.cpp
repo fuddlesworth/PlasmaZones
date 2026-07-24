@@ -184,6 +184,16 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
             disconnect(m_connectedWindow.data(), &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
         }
         m_connectedWindow = win;
+
+        // Cleared for BOTH branches, not just the detach. The old window's scene
+        // graph owns the node and has already taken it for deletion by the time
+        // windowChanged fires, on a reparent as much as on a detach. Keeping the
+        // pointer through a window-A -> window-B move leaves it dangling AND
+        // makes the destructor's `node && window()` guard pass, because the new
+        // window is attached — so invalidateItem() would run on freed memory.
+        // The next updatePaintNode re-registers, so nothing is lost.
+        m_renderNode.store(nullptr, std::memory_order_release);
+
         if (win) {
             connect(
                 win, &QQuickWindow::sceneGraphAboutToStop, this,
@@ -194,17 +204,6 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
                     m_shaderDirty.store(true);
                 },
                 Qt::DirectConnection);
-        } else {
-            // Window detached: the scene graph owns the render node and has
-            // either deleted it already or will before any future paint. Drop
-            // our raw pointer NOW so the destructor's `if (m_renderNode &&
-            // window())` guard collapses to a true safety check — without
-            // this the dtor relies solely on `window()` returning nullptr to
-            // detect the dangling case, which is correct today but coupled
-            // to QQuickItem teardown ordering. Clearing here makes the
-            // tracker self-consistent regardless of how the dtor liveness
-            // check evolves.
-            m_renderNode.store(nullptr, std::memory_order_release);
         }
     });
 }
@@ -212,10 +211,16 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
 ShaderEffect::~ShaderEffect()
 {
     // Disconnect the DirectConnection sceneGraphAboutToStop callback FIRST.
-    // That lambda executes on the render thread and dereferences m_renderNode;
-    // QObject::disconnect is thread-safe and blocks until any in-flight
-    // invocation completes, so after this line the render thread cannot race
-    // our subsequent member teardown.
+    // That lambda executes on the render thread and touches this object.
+    //
+    // Be exact about what this buys, because an earlier version of this comment
+    // claimed the opposite of ShaderEffect.h's and both cannot be right:
+    // QObject::disconnect is thread-safe but does NOT block a direct-connection
+    // slot that is already running (doActivate releases the sender's lock
+    // across the call). It guarantees no FUTURE invocation, nothing more. What
+    // keeps teardown safe today is that sceneGraphAboutToStop is emitted only
+    // while the render thread is tearing the scene graph down, which does not
+    // overlap an item destruction in practice. Narrow, not closed.
     if (m_connectedWindow) {
         disconnect(m_connectedWindow.data(), &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
         m_connectedWindow.clear();
@@ -668,8 +673,15 @@ ShaderNodeRhi* ShaderEffect::createShaderNode()
 
 void ShaderEffect::setError(const QString& error)
 {
-    if (m_errorLog != error) {
-        m_errorLog = error;
+    bool changed = false;
+    {
+        QMutexLocker lock(&m_errorLogMutex);
+        changed = (m_errorLog != error);
+        if (changed) {
+            m_errorLog = error;
+        }
+    }
+    if (changed) {
         Q_EMIT errorLogChanged();
     }
     setStatus(Status::Error);
