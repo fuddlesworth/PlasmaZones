@@ -136,12 +136,26 @@ if(BUILD_TESTING)
     # would silently opt out of it. Same launcher and same config file as
     # tests/unit/CMakeLists.txt, with the same graceful skip when
     # dbus-run-session or CMake 3.29 is unavailable.
-    find_program(_pz_sr_dbus_run_session dbus-run-session)
-    if(_pz_sr_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
+    # Redirect XDG to the same throwaway tree tests/unit uses. This half matters
+    # more than the bus half: without it a test that touches QStandardPaths
+    # writes into the developer's real ~/.config/plasmazones. Neither loader
+    # does today, which is exactly the argument that was accepted for the bus
+    # isolation below, so apply it here for the same reason.
+    set(_pz_sr_test_home "${CMAKE_BINARY_DIR}/test-xdg")
+    set_tests_properties(test_shader_render_layoutloader test_shader_render_metadataloader PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${_pz_sr_test_home}/config;XDG_DATA_HOME=${_pz_sr_test_home}/data;XDG_STATE_HOME=${_pz_sr_test_home}/state;XDG_CACHE_HOME=${_pz_sr_test_home}/cache")
+
+    # Reuses tests/unit's cache entry rather than caching the same program
+    # under a second name a user could set inconsistently.
+    find_program(_pz_dbus_run_session dbus-run-session)
+    if(_pz_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
         foreach(_pz_sr_test test_shader_render_layoutloader test_shader_render_metadataloader)
             set_target_properties(${_pz_sr_test} PROPERTIES
                 TEST_LAUNCHER
-                "${_pz_sr_dbus_run_session};--config-file=${CMAKE_SOURCE_DIR}/tests/unit/test-session-bus.conf;--")
+                "${_pz_dbus_run_session};--config-file=${CMAKE_SOURCE_DIR}/tests/unit/test-session-bus.conf;--")
         endforeach()
+    else()
+        message(STATUS "shader-render tests: D-Bus isolation unavailable (needs dbus-run-session + CMake 3.29); "
+                       "running on the ambient session bus")
     endif()
 endif()

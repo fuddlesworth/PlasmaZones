@@ -2,7 +2,7 @@
     "id": "fedora-drift",
     "name": "Fedora Drift",
     "category": "Branded",
-    "description": "A procedural Fedora infinity-f logo drawn as SDF geometry drifts through the scene. The logo sits behind frosted glass with per-part audio reactivity, bass shatter, shockwave rings, and pulse rings sweeping inward from the zone edge, over a background of drifting data streams, a dot matrix, and a network of connected nodes",
+    "description": "A procedural Fedora infinity-f logo drawn as SDF geometry drifts through the scene. The logo sits behind frosted glass and brightens with the bass, with pulse rings sweeping inward from the zone edge, over a background of drifting data streams, a dot matrix, and a network of connected nodes",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",

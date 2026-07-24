@@ -49,7 +49,9 @@ float fbm(vec2 p, int octaves) {
     float f = 0.0;
     float amp = 0.5;
     mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
-    for (int i = 0; i < octaves; i++) {
+    // Capped at 8 like common.glsl's shared fbm(). `octaves` comes straight
+    // from a user parameter, and this runs on the compositor path.
+    for (int i = 0; i < octaves && i < 8; i++) {
         f += amp * noise2D(p);
         p = rot * p * 2.0;
         amp *= 0.5;
@@ -169,7 +171,9 @@ float mouseProximity(vec2 fragCoord, float influence) {
     vec2 mousePos = iMouse.xy;
     if (mousePos.x < 0.0 || mousePos.y < 0.0) return 0.0;
     float d = length(fragCoord - mousePos);
-    float radius = 120.0 * pxScale();
+    // zoneLen(), not pxScale(): this radius is measured against fragCoord in
+    // the same device-px space as the rim falloff it ends up scaling.
+    float radius = zoneLen(120.0);
     return smoothstep(radius, 0.0, d) * influence;
 }
 
@@ -248,7 +252,7 @@ vec4 renderNeonVenomZone(
 
     // ─── Compose color ──────────────────────────────────────────────
     // Base: blend zone fill color with mist tint (fill color has real influence)
-    vec3 baseCol = fillColor.rgb * 0.3 + mistCol * 0.35;
+    vec3 baseCol = zoneFillHue(fillColor) * 0.3 + mistCol * 0.35;
 
     // Veins: green-purple gradient, shifts toward glow on treble hits
     float veinHue = veins * 0.5 + sin(t * 1.5 + localUV.y * 3.0) * 0.3;
@@ -414,6 +418,14 @@ vec4 pImage(vec2 fragCoord) {
         haloTight /= 10.0;
         haloWide /= 16.5;
         haloVWide /= 22.0;
+        // The chroma channels accumulate on the same wWide kernel as haloWide,
+        // so they need the same divisor. Left raw they carried the full weight
+        // sum (~16.5x) into the additive bloom below and bleached every label
+        // halo to a flat clamped colour. The shared gatherLabelHalo() this loop
+        // duplicates divides by 16.5 for exactly this reason.
+        haloR /= 16.5;
+        haloG /= 16.5;
+        haloB /= 16.5;
 
         // Bioluminescent flicker: organic irregular pulsing
         float bioFlicker = 0.8 + 0.12 * sin(t * 5.7 + luv.x * 20.0)

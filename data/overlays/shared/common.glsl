@@ -56,7 +56,13 @@ struct ZoneCtx {
     int   index;         // zone i (0 .. zoneCount-1)
     vec2  fragCoord;     // screen-space pixel (the vFragCoord the loop passes in)
     vec4  rect;          // zoneRects[i]
+    // rgb is PREMULTIPLIED by the zone's activeOpacity, which .a also carries
+    // (src/daemon/overlayservice/overlay_data.cpp writes redF() * alpha). Use
+    // zoneFillHue() to recover the colour the user actually picked, or the tint
+    // dims as they raise transparency, which is backwards.
     vec4  fillColor;     // zoneFillColors[i]
+    // Straight (NOT premultiplied), unlike fillColor above. Its rgb is usable
+    // as-is.
     vec4  borderColor;   // zoneBorderColors[i]
     vec4  params;        // zoneParams[i] (x=borderRadius, y=borderWidth, z=highlight flag, …)
                          // x/y are LOGICAL px — pass them through zoneSdf() /
@@ -222,6 +228,21 @@ float zoneLen(float logicalPx) {
     return logicalPx * uZoneScale;
 }
 
+// The zone's configured fill colour as a plain hue, undoing the premultiply.
+//
+// zoneFillColors[i].rgb arrives multiplied by the zone's activeOpacity (the
+// daemon writes `redF() * alpha`), while zoneBorderColors[i] does not. A pack
+// that tints with the raw rgb therefore gets the colour at whatever opacity
+// happens to be set: at the 0.5 default it is half brightness, and it fades
+// further toward black as the user raises transparency, so the tint gets weaker
+// exactly when they asked for more of it. Divide it back out first.
+//
+// The epsilon floor matters. A fully transparent zone has a == 0 and rgb == 0,
+// and 0/0 is a NaN that would travel out through the fragment colour.
+vec3 zoneFillHue(vec4 fillColor) {
+    return fillColor.rgb / max(fillColor.a, 1e-3);
+}
+
 // 2D rotation matrix. mat2 is column-major, so p * rot(a) rotates by +a,
 // while rot(a) * p applies the transpose (rotation by -a). The *drift fbm
 // keeps its historical matrix-first rot(a) * uv form; the pass-shader flow
@@ -299,6 +320,18 @@ vec4 blendOver(vec4 dst, vec4 src) {
 
 // Soft border factor from SDF distance d (0 at edge, 1 inside border)
 float softBorder(float d, float borderWidth) {
+    // A width of 0 means the user turned the border off, and it has to be
+    // handled before the smoothstep rather than inside it. GLSL leaves
+    // smoothstep undefined when edge0 >= edge1, and the usual implementation
+    // evaluates (x - 0) / (0 - 0): every fragment off the edge divides to
+    // infinity and clamps to a harmless 1, but the fragments exactly on the
+    // edge compute 0/0 and hand back a NaN that clamp() is not required to
+    // absorb. That NaN would then travel through the alpha and out of
+    // blendOver(), so the "no border" setting could take the whole zone with
+    // it. Same defence as expGlow()'s max() on its falloff below.
+    if (borderWidth <= 0.0) {
+        return 0.0;
+    }
     float borderDist = abs(d);
     return 1.0 - smoothstep(0.0, borderWidth, borderDist);
 }

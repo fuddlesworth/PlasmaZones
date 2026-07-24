@@ -12,16 +12,11 @@
  *
  * Structure: diagonalCircuitGrid + circuitPattern (traces/nodes), toxicDrip,
  * glitchOffset, atmosphericSmog; then renderToxicCircuitZone (base + circuits +
- * drip + smog + shimmer + mouse interaction). Parameters:
- *   p_circuitDensity = circuitDensity (4.0-20.0) - Circuit trace density
- *   p_pulseSpeed = pulseSpeed (0.5-3.0) - Energy pulse animation speed
- *   p_dripIntensity = dripIntensity (0.0-1.0) - Toxic drip effect strength
- *   p_glitchAmount = glitchAmount (0.0-0.5) - Digital corruption intensity
- *   p_glowStrength = glowStrength (0.5-3.0) - Neon glow intensity
- *   p_smogDensity = smogDensity (0.0-0.5) - Atmospheric haze
- *   p_fillOpacity = fillOpacity (0.3-0.9) - Inner fill darkness
- *   p_primaryColor - Primary color (default #39FF14)
- *   p_secondaryColor - Secondary color (default #BF00FF)
+ * drip + smog + shimmer + mouse interaction).
+ *
+ * Parameters are declared in metadata.json and read here through the
+ * generated p_<id> accessors. The table that used to sit here listed 9 of
+ * the 21 parameters the pack now reads.
  */
 
 
@@ -32,7 +27,9 @@
 float fbm(vec2 p, int octaves) {
     float f = 0.0;
     float amp = 0.5;
-    for (int i = 0; i < octaves; i++) {
+    // Capped at 8 like common.glsl's shared fbm(); this runs on the
+    // compositor path.
+    for (int i = 0; i < octaves && i < 8; i++) {
         f += amp * noise2D(p);
         p *= 2.0;
         amp *= 0.5;
@@ -538,9 +535,8 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         }
 
         // Light identity tint from the zone's configured fill colour, at the
-        // sibling packs' weight. borderColor is already consumed below;
-        // fillColor was the only half of the pair this pack discarded.
-        result.rgb = mix(baseColor, baseColor * 0.85 + fillColor.rgb * 0.15, 0.35);
+        // sibling packs' weight.
+        result.rgb = mix(baseColor, baseColor * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
         result.a = fillOpacity;
     }
 
@@ -560,6 +556,9 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
 
         // Vitality-scaled accent blend and brightness
         borderBase = mix(borderBase, accentColor, vitalityScale(0.0, 0.4, vitality));
+        // Fold in the zone's configured border colour, at the same weight the
+        // sibling packs use. Without it this pack discarded the setting.
+        borderBase = mix(borderBase, borderColor.rgb, 0.3);
         borderBase *= vitalityScale(0.8, 1.3, vitality);
 
         // Border glows uniformly in its voltage-aware color

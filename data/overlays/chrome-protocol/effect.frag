@@ -785,7 +785,7 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // Zone shows the global scene, desaturated when dormant, with a
         // slight fillColor tint layered underneath for zone identity.
         vec3 col = vitalityDesaturate(sceneCol, vitality);
-        col = mix(col, col * 0.85 + fillColor.rgb * 0.15, 0.35);
+        col = mix(col, col * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
 
         // Overlay HUD — per-zone in zone-local aspect-corrected UV so the
         // 7-seg readout, spectrum bars, and edge panels land inside the
@@ -870,7 +870,11 @@ vec4 pImage(vec2 fragCoord) {
     g.scanDensity  = p_scanlineDensity;
     g.bgStrength   = p_bgGridStrength;
     g.mouseInfStr  = p_mouseTargeting;
-    g.stepCount    = int(max(p_rayStepCount, 16.0));
+    // Clamped, not just floored. Every other runtime-count loop in the pack
+    // carries a hard cap, and each step of this one evaluates all seven ring
+    // SDFs. metadata caps the slider at 96, but a hand-edited config would
+    // otherwise run the raymarch unbounded on the compositor path.
+    g.stepCount    = clamp(int(p_rayStepCount), 16, 96);
     g.hasAudio     = hasAudio;
     g.aBass   = hasAudio ? bass    * g.audioReact : 0.0;
     g.aMids   = hasAudio ? mids    * g.audioReact : 0.0;
@@ -897,7 +901,7 @@ vec4 pImage(vec2 fragCoord) {
         // the others draw nothing.
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
-        minDist = min(minDist, zoneSdf(vFragCoord, rect, zoneParams[i].x).d);
+        minDist = min(minDist, zoneSdf(fragCoord, rect, zoneParams[i].x).d);
     }
     // Beyond that reach every renderZoneChrome branch is already inert: the
     // fill needs d < 0, softBorder() is 0 outside the border band, and the glow
@@ -908,14 +912,14 @@ vec4 pImage(vec2 fragCoord) {
     vec4 result = vec4(0.0);
     if (minDist < kOuterGlowReach * uZoneScale) {
         // Render the HUD scene once in screen-space — shared across all zones
-        vec3 sceneCol = renderGlobalScene(vFragCoord, g);
+        vec3 sceneCol = renderGlobalScene(fragCoord, g);
 
         // Per-zone: gate visibility, apply vitality, draw border + glow
         for (int i = 0; i < zoneCount && i < 64; i++) {
             vec4 rect = zoneRects[i];
             if (rect.z <= 0.0 || rect.w <= 0.0) continue;
             result = blendOver(result, renderZoneChrome(
-                vFragCoord, rect, zoneFillColors[i], zoneBorderColors[i],
+                fragCoord, rect, zoneFillColors[i], zoneBorderColors[i],
                 zoneParams[i], sceneCol, g, zoneParams[i].z > 0.5));
         }
     }
@@ -934,7 +938,7 @@ vec4 pImage(vec2 fragCoord) {
         vec3 lDataCol   = colorWithFallback(p_dataColor.rgb, vec3(0.129, 0.784, 1.000));
         vec3 lScanCol   = colorWithFallback(p_scanColor.rgb, vec3(0.918, 0.965, 1.000));
 
-        vec2 luv = labelsUv(vFragCoord);
+        vec2 luv = labelsUv(fragCoord);
         vec2 texPx = 1.0 / max(iResolution, vec2(1.0));
         vec4 labels = texture(uZoneLabels, luv);
         float spread = labelSpread * pxScale();

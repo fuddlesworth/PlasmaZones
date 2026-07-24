@@ -84,7 +84,7 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
     if (d < 0.0) {
         vec4 nexus = sampleNexus(fragCoord, isHighlighted ? chromaMod * 1.5 : chromaMod);
-        vec3 zoneFill = fillColor.rgb;
+        vec3 zoneFill = zoneFillHue(fillColor);
         float tintAmount = getZoneFillTint();
         result.rgb = mix(nexus.rgb, nexus.rgb * zoneFill, tintAmount);
         result.a = fillOpacity;
@@ -127,10 +127,10 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         vec3 glowClr;
         if (cyclePhase < 0.333) {
             // borderClr → fillColor
-            glowClr = mix(borderClr, fillColor.rgb, cyclePhase * 3.0);
+            glowClr = mix(borderClr, zoneFillHue(fillColor), cyclePhase * 3.0);
         } else if (cyclePhase < 0.666) {
             // fillColor → complementary
-            glowClr = mix(fillColor.rgb, complementary, (cyclePhase - 0.333) * 3.0);
+            glowClr = mix(zoneFillHue(fillColor), complementary, (cyclePhase - 0.333) * 3.0);
         } else {
             // complementary → borderClr
             glowClr = mix(complementary, borderClr, (cyclePhase - 0.666) * 3.0);
@@ -166,7 +166,7 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         // Highlighted: accent trace along border
         if (isHighlighted) {
             float accentTrace = angularNoise(angle, 6.0, iTime * 2.5);
-            flowColor = mix(flowColor, fillColor.rgb * borderEnergy, accentTrace * 0.3);
+            flowColor = mix(flowColor, zoneFillHue(fillColor) * borderEnergy, accentTrace * 0.3);
         }
 
         result.rgb = mix(result.rgb, flowColor, borderAlpha);
@@ -179,7 +179,11 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     // change to glowRadius carries the guard with it instead of silently
     // clipping the way pulse-flow's hard-coded bound did.
     float glowRadius = zoneLen(mix(5.0, 9.0, vitality));
-    if (d > 0.0 && d < glowRadius * 3.0) {
+    // The gate has to cover the ENLARGED radius, not the base one. The bass
+    // wavefront below adds up to zoneLen(8.0) to glowRadius after this test, so
+    // gating on the base alone cut the widened glow well short of its tail and
+    // left a hard ring on every bass hit.
+    if (d > 0.0 && d < (glowRadius + zoneLen(8.0)) * 3.0) {
         float glowFalloff = mix(0.3, 0.6, vitality);
         // Cascade wavefront glow — bass sends expanding rings outward from
         // the zone edge, like a network signal radiating to neighbors.

@@ -695,7 +695,7 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
         col += iriCol * innerGlow * innerGlowStr;
 
         // Zone fillColor tint
-        col = mix(col, fillColor.rgb * luminance(col), 0.15);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.15);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);

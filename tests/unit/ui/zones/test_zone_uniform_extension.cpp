@@ -364,7 +364,7 @@ void TestZoneUniformExtension::scale_defaultsToIdentity()
 void TestZoneUniformExtension::scale_writesAtTailOffset()
 {
     ZoneUniformExtension ext;
-    ext.setScale(2.0f);
+    QVERIFY(ext.setScale(2.0f));
 
     std::vector<char> buf(ext.extensionSize(), 0);
     ext.write(buf.data(), 0);
@@ -385,7 +385,7 @@ void TestZoneUniformExtension::scale_survivesZoneUpdate()
     // clocks. updateFromZones() must not stomp a scale already reported, or a
     // drag frame would reset the overlay to 1x mid-gesture on a scaled screen.
     ZoneUniformExtension ext;
-    ext.setScale(1.5f);
+    QVERIFY(ext.setScale(1.5f));
 
     QVector<ZoneData> zones;
     zones.append(makeZone(0.0, 0.0, 1.0, 1.0, QColor::fromRgbF(1.0f, 1.0f, 1.0f, 1.0f),
@@ -401,16 +401,16 @@ void TestZoneUniformExtension::scale_survivesZoneUpdate()
 void TestZoneUniformExtension::dirty_setOnScaleChangeOnly()
 {
     ZoneUniformExtension ext;
-    ext.setScale(2.0f);
+    QVERIFY(ext.setScale(2.0f));
     ext.clearDirty();
 
     // Re-reporting the same ratio must not dirty the extension: the item calls
     // setScale() every frame, and a spurious dirty would re-upload the whole
     // 4 KiB zone region on every frame of every overlay.
-    ext.setScale(2.0f);
+    QVERIFY(ext.setScale(2.0f));
     QVERIFY(!ext.isDirty());
 
-    ext.setScale(1.0f);
+    QVERIFY(ext.setScale(1.0f));
     QVERIFY(ext.isDirty());
 }
 
@@ -422,13 +422,13 @@ void TestZoneUniformExtension::scale_rejectsNonPositiveAndNonFinite()
     // corners with a hairline border, which looks like a design choice. Any
     // of them must leave the last good scale in place.
     ZoneUniformExtension ext;
-    ext.setScale(2.0f);
+    QVERIFY(ext.setScale(2.0f));
     ext.clearDirty();
 
-    ext.setScale(0.0f);
-    ext.setScale(-1.5f);
-    ext.setScale(std::numeric_limits<float>::quiet_NaN());
-    ext.setScale(std::numeric_limits<float>::infinity());
+    QVERIFY2(!ext.setScale(0.0f), "zero must be rejected");
+    QVERIFY2(!ext.setScale(-1.5f), "a negative scale must be rejected");
+    QVERIFY2(!ext.setScale(std::numeric_limits<float>::quiet_NaN()), "NaN must be rejected");
+    QVERIFY2(!ext.setScale(std::numeric_limits<float>::infinity()), "infinity must be rejected");
     QVERIFY(!ext.isDirty());
 
     std::vector<char> buf(ext.extensionSize(), 0);
@@ -520,12 +520,26 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
     QVERIFY2(glsl.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(glsl.errorString()));
     const QString source = QString::fromUtf8(glsl.readAll());
 
-    // Isolate the ZoneUniforms block body.
-    const int blockStart = source.indexOf(QLatin1String("uniform ZoneUniforms"));
-    QVERIFY2(blockStart >= 0, "ZoneUniforms block not found in common.glsl");
+    // Anchor on the FULL qualifier, not just the block name. Dropping `std140`
+    // makes the layout implementation-defined and changing `binding = 0`
+    // unbinds the block from the buffer the C++ side writes. Either one breaks
+    // every pack with no build error, so matching only "uniform ZoneUniforms"
+    // would leave the two things most worth pinning unpinned.
+    static const QRegularExpression blockRe(
+        QStringLiteral(R"(layout\s*\(\s*std140\s*,\s*binding\s*=\s*0\s*\)\s*uniform\s+ZoneUniforms)"));
+    const QRegularExpressionMatch blockMatch = blockRe.match(source);
+    QVERIFY2(blockMatch.hasMatch(),
+             "ZoneUniforms must be declared layout(std140, binding = 0); the C++ side depends on both");
+    const int blockStart = blockMatch.capturedStart();
+
     const int bodyStart = source.indexOf(QLatin1Char('{'), blockStart);
+    // Checked before it is used as a search origin: QString::indexOf treats a
+    // negative `from` as an offset back from the end of the string, so a failed
+    // bodyStart would silently make the closing-brace search scan the file tail
+    // and still produce a plausible-looking body.
+    QVERIFY2(bodyStart >= 0, "no opening brace after the ZoneUniforms declaration");
     const int bodyEnd = source.indexOf(QLatin1Char('}'), bodyStart);
-    QVERIFY(bodyStart >= 0 && bodyEnd > bodyStart);
+    QVERIFY2(bodyEnd > bodyStart, "no closing brace for the ZoneUniforms block (unbalanced brace in a comment?)");
     const QString body = source.mid(bodyStart + 1, bodyEnd - bodyStart - 1);
 
     // std140 layout only depends on member type, order and array length, so
@@ -546,10 +560,47 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
         members.append({m.captured(1), m.captured(2), m.captured(3).isEmpty() ? 0 : m.captured(3).toInt()});
     }
 
+    // std140 sizing, by declared type. Needed for the head-region check below:
+    // the zone arrays all happen to be vec4, so a vec4-only rule would be
+    // enough for the tail, but the base block carries a mat4, ints, vec2s and
+    // vec2 arrays, and getting their strides right is the whole point of
+    // computing the head offset independently.
+    //
+    // Returns the size CONSUMED by the member including any alignment padding
+    // inserted before it, given the offset it starts at.
+    const auto std140Advance = [](const Member& m, int offset) -> int {
+        int baseAlign = 0;
+        int baseSize = 0;
+        if (m.type == QLatin1String("float") || m.type == QLatin1String("int") || m.type == QLatin1String("uint")
+            || m.type == QLatin1String("bool")) {
+            baseAlign = 4;
+            baseSize = 4;
+        } else if (m.type == QLatin1String("vec2")) {
+            baseAlign = 8;
+            baseSize = 8;
+        } else if (m.type == QLatin1String("vec3") || m.type == QLatin1String("vec4")) {
+            baseAlign = 16;
+            baseSize = 16;
+        } else if (m.type == QLatin1String("mat4")) {
+            baseAlign = 16;
+            baseSize = 64;
+        } else {
+            return -1; // unknown type: caller fails loudly rather than guessing
+        }
+        // std140 rounds every array element's stride up to 16.
+        if (m.arrayLen > 0) {
+            baseAlign = 16;
+            baseSize = 16 * m.arrayLen;
+        }
+        const int aligned = (offset + baseAlign - 1) / baseAlign * baseAlign;
+        return (aligned - offset) + baseSize;
+    };
+
     // The GLSL block declares the WHOLE UBO: BaseUniforms first, then the zone
-    // extension. Only the extension tail is this class's contract, so locate
-    // where it starts rather than asserting over the base's members, which
-    // belong to PhosphorShaders and are pinned on that side.
+    // extension. The tail is this class's contract, but the HEAD has to be
+    // pinned too. Inserting, removing or reordering a base member shifts the
+    // entire extension region in std140 while leaving extensionSize() and the
+    // tail comparison identical, which breaks all 27 packs with nothing failing.
     const QVector<Member> expectedTail = {
         {QStringLiteral("vec4"), QStringLiteral("zoneRects"), MaxZones},
         {QStringLiteral("vec4"), QStringLiteral("zoneFillColors"), MaxZones},
@@ -579,13 +630,31 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
         QCOMPARE(actualMember.arrayLen, expectedTail[i].arrayLen);
     }
 
+    // Walk the head region with the real std140 rules and confirm the zone
+    // arrays start exactly where BaseUniforms ends. This is what catches a base
+    // member being added, dropped or reordered.
+    int headSize = 0;
+    for (int i = 0; i < tailStart; ++i) {
+        const int advance = std140Advance(members[i], headSize);
+        QVERIFY2(advance > 0,
+                 qPrintable(
+                     QStringLiteral("unhandled GLSL type '%1' for member '%2'").arg(members[i].type, members[i].name)));
+        headSize += advance;
+    }
+    // The base block itself closes on a 16-byte boundary before the zone arrays
+    // begin, and the zone arrays are 16-aligned anyway.
+    headSize = (headSize + 15) / 16 * 16;
+    QCOMPARE(headSize, static_cast<int>(sizeof(PhosphorShaders::BaseUniforms)));
+
     // Independently recompute the std140 size of the extension region from the
-    // parsed declaration and check it against what the C++ side reports. vec4,
-    // and every array element, is 16-byte strided; the trailing scalar takes 4
-    // and the block rounds up to a 16-byte multiple from there.
+    // parsed declaration and check it against what the C++ side reports.
     int glslSize = 0;
     for (int i = tailStart; i < members.size(); ++i) {
-        glslSize += members[i].arrayLen > 0 ? members[i].arrayLen * 16 : 4;
+        const int advance = std140Advance(members[i], glslSize);
+        QVERIFY2(advance > 0,
+                 qPrintable(
+                     QStringLiteral("unhandled GLSL type '%1' for member '%2'").arg(members[i].type, members[i].name)));
+        glslSize += advance;
     }
     glslSize = (glslSize + 15) / 16 * 16;
 

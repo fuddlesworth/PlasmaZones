@@ -8,15 +8,6 @@
     "fragmentShader": "effect.frag",
     "parameters": [
         {
-            "id": "speed",
-            "name": "Animation Speed",
-            "group": "Animation",
-            "type": "float",
-            "default": 0.06,
-            "min": 0.02,
-            "max": 0.3
-        },
-        {
             "id": "blobScale",
             "name": "Blob Count",
             "group": "Blobs",

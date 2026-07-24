@@ -201,7 +201,7 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
         // Base result
         vec3 base = edgeColor + specular;
-        base = mix(base, fillColor.rgb, zoneTintBlend); // Zone tint
+        base = mix(base, zoneFillHue(fillColor), zoneTintBlend); // Zone tint
 
         // Mouse: cursor glow hotspot
         if (mouseInZone) {

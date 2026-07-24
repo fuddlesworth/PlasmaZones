@@ -980,20 +980,35 @@ void ShaderEffect::updateScaleConnections()
         return;
     }
 
-    // The window moving to another screen changes effectiveDevicePixelRatio.
-    // Re-subscribe to the new screen's own ratio signal at the same time.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 11, 0)
+    // One connection covers every case, because devicePixelRatioChanged is the
+    // NOTIFY for effectiveDevicePixelRatio, which is exactly what
+    // effectiveResolutionScale() reads. It fires for a screen move, for a
+    // screen rescaled in place, and for a per-surface scale change that never
+    // touches a screen at all (Wayland's fractional-scale-v1 preferred scale),
+    // which no QScreen signal reports.
+    m_windowScreenConnection = QObject::connect(w, &QQuickWindow::devicePixelRatioChanged, this, [this]() {
+        update();
+    });
+#else
+    // Before 6.11 the accessor has no notifier, so approximate it. The window
+    // moving to another screen changes effectiveDevicePixelRatio; re-subscribe
+    // to the new screen's own signal at the same time.
     m_windowScreenConnection = QObject::connect(w, &QWindow::screenChanged, this, [this]() {
         updateScaleConnections();
         update();
     });
 
-    // A screen can also have its scale changed in place, without the window
-    // ever moving.
+    // A screen can also be rescaled in place without the window ever moving.
+    // logicalDotsPerInch is the value that tracks Qt's high-DPI scale factor.
+    // physicalDotsPerInch is derived from geometry over physical size, and a
+    // scale change alters neither, so it would simply never fire.
     if (QScreen* s = w->screen()) {
-        m_screenDprConnection = QObject::connect(s, &QScreen::physicalDotsPerInchChanged, this, [this]() {
+        m_screenDprConnection = QObject::connect(s, &QScreen::logicalDotsPerInchChanged, this, [this]() {
             update();
         });
     }
+#endif
 }
 
 void ShaderEffect::componentComplete()

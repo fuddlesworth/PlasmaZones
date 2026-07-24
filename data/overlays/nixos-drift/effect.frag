@@ -1054,7 +1054,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         }
 
         // Tint with fill color
-        col = mix(col, fillColor.rgb * luminance(col), 0.1);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.1);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);

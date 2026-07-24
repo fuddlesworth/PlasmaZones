@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /*
- * ENDEAVOUROS DRIFT - Fragment Shader (Tri-Sail Community Constellation)
+ * ENDEAVOUROS DRIFT - Fragment Shader (Tri-Sail Fleet)
  *
- * Constellation network background: orbiting dots on Lissajous curves
+ * Wind current background: six flowing current lines plus three parallax sail silhouettes
  * connected by proximity lines, over a warm purple-to-coral gradient wash.
  * Three overlapping sail SDF shapes with per-sail coloring, simplex noise
  * interior flow, per-sail bass pulses, summit convergence glow, and
@@ -14,7 +14,7 @@
  * from the EndeavourOS logo.
  *
  * Audio reactivity:
- *   Bass  = constellation lines brighten, sail pulses, summit glow
+ *   Bass  = wind currents strengthen, sail pulses, summit glow
  *   Mids  = interior noise churn, palette warmth drift
  *   Treble = dots twinkle, edge sparks, shared-edge flare
  *
@@ -683,7 +683,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
         vec3 iriCol = paletteSweep(iriT, palPrimary, palSecondary, palAccent, palGlow, midsEnv);
         col += iriCol * innerGlow * innerGlowStr;
 
-        col = mix(col, fillColor.rgb * luminance(col), 0.15);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.15);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);

@@ -595,7 +595,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         vec3 iriCol = triStopPalette(iriT, palPrimary, palSecondary, palAccent);
         col += iriCol * innerGlow * innerGlowStr;
 
-        col = mix(col, fillColor.rgb * luminance(col), 0.15);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.15);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);

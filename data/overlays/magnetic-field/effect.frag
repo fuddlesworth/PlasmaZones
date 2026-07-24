@@ -365,8 +365,12 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
         // ── MIDS: EM Interference Bands (field-aligned) ───────────────
         if (hasAudio && emBandIntensity > 0.01) {
-            // Compute field direction at this fragment to align bands with field lines
-            vec2 localField = fieldVector(globalUV, mouseGlobal, fieldStrength * 0.5, t, polarityFlip);
+            // Compute field direction at this fragment to align bands with field lines.
+            // iTime, matching the fieldLines() call above. Passing `t` here (which
+            // already carries waveSpeed) advanced this field's turbulence on a
+            // different clock from the lines the bands are supposed to align to, so
+            // at any waveSpeed other than 1 they aligned to a field nobody drew.
+            vec2 localField = fieldVector(globalUV, mouseGlobal, fieldStrength * 0.5, iTime, polarityFlip);
             float fieldAngle = atan(localField.y, localField.x);
             // Project UV perpendicular to the field direction so bands run along field lines
             float bandCoord = globalUV.x * cos(fieldAngle) - globalUV.y * sin(fieldAngle);
@@ -424,11 +428,18 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         float vig = 1.0 - length(globalUV - 0.5) * (0.4 - vDistortAmount * 0.1);
 
         result.rgb = bg + fx * vig;
+        // Light identity tint from the zone's configured fill colour, at the
+        // sibling packs' weight. Without it this pack discarded the setting.
+        result.rgb = mix(result.rgb, result.rgb * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
         result.a = fillOpacity + vDistortAmount * 0.05;
     }
 
     // Border with energy effect - enhanced by vertex displacement
-    float effectiveBorderWidth = borderWidth + vDistortAmount * zoneLen(2.0);
+    // The distortion addend only widens a border that exists. Added
+    // unconditionally it kept the width non-zero, so this was the one pack in
+    // the catalog where setting the border width to 0 did not turn the border
+    // off.
+    float effectiveBorderWidth = borderWidth <= 0.0 ? 0.0 : borderWidth + vDistortAmount * zoneLen(2.0);
     float border = softBorder(d, effectiveBorderWidth);
     if (border > 0.0) {
 
@@ -436,6 +447,8 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         float flow = sin(atan(p.y, p.x) * 8.0 + t * 4.0 + vMouseInfluence * 10.0) * 0.5 + 0.5;
 
         vec3 borderClr = mix(fieldColor, highlightColor, flow * 0.5 + vMouseInfluence * 0.3);
+        // Fold in the zone's configured border colour, as the sibling packs do.
+        borderClr = mix(borderClr, borderColor.rgb, 0.3);
         borderClr *= 0.8 + 0.2 * flow + vDistortAmount * 0.5;
         // Corona discharge bleeds into border during treble
         vec3 coronaBorderGlow = vec3(0.6, 0.75, 1.0) * coronaIntensity * 0.4;

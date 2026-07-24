@@ -367,7 +367,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         }
 
         // ── Zone fill color tint ──────────────────────────────────────────
-        col = mix(col, col * fillColor.rgb, zoneTint);
+        col = mix(col, col * zoneFillHue(fillColor), zoneTint);
 
         // Vitality
         col = vitalityDesaturate(col, vitality);
@@ -436,7 +436,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             float waveCycle = fract(t * 0.7);
             float waveRadius = waveCycle * zoneLen(16.0);
             float waveBand = exp(-abs(d - waveRadius) / zoneLen(1.667)) * (1.0 - waveCycle);
-            glowRadius += waveBand * bass * 3.0;
+            glowRadius += waveBand * bass * zoneLen(3.0);
             glowFalloff += waveBand * bass * 0.15;
         }
 

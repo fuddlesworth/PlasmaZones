@@ -89,7 +89,7 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
         // Zone fill color tint
         float tintAmount = getZoneTint();
-        result.rgb = mix(canvas.rgb, canvas.rgb * fillColor.rgb, tintAmount);
+        result.rgb = mix(canvas.rgb, canvas.rgb * zoneFillHue(fillColor), tintAmount);
         result.a = fillOpacity;
 
         // Vitality: saturation and brightness
@@ -154,7 +154,7 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
         if (isHighlighted) {
             float accentTrace = angularNoise(angle, 6.0, iTime * 2.5);
-            flowColor = mix(flowColor, fillColor.rgb * borderEnergy, accentTrace * 0.25);
+            flowColor = mix(flowColor, zoneFillHue(fillColor) * borderEnergy, accentTrace * 0.25);
         }
 
         result.rgb = mix(result.rgb, flowColor, borderAlpha);
@@ -167,7 +167,11 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     // change to glowRadius carries the guard with it instead of silently
     // clipping the way pulse-flow's hard-coded bound did.
     float glowRadius = zoneLen(mix(5.0, 9.0, vitality));
-    if (d > 0.0 && d < glowRadius * 3.0) {
+    // The gate has to cover the ENLARGED radius, not the base one. The bass
+    // wavefront below adds up to zoneLen(6.0) to glowRadius after this test,
+    // so gating on the base alone cut the widened glow at ~27% of peak and
+    // left a hard ring on every bass hit.
+    if (d > 0.0 && d < (glowRadius + zoneLen(6.0)) * 3.0) {
         float glowFalloff = mix(0.3, 0.55, vitality);
 
         // Bass: expanding glow wavefront

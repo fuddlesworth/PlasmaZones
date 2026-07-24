@@ -30,7 +30,7 @@
             "name": "Ring Base Thickness",
             "group": "Rings",
             "type": "float",
-            "default": 0.025,
+            "default": 0.03,
             "min": 0.005,
             "max": 0.08
         },

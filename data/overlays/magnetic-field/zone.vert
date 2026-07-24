@@ -14,20 +14,6 @@ layout(location = 4) out vec2 vFragCoord;
 
 #include <common.glsl>
 
-// Noise for organic movement
-float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float c = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
-    
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
 void main() {
     vTexCoord = texCoord;
     vFragCoord = fragCoordFromTexCoord(texCoord);
@@ -94,8 +80,8 @@ void main() {
     // Adds organic feel to the deformation
     // =========================================================================
     float noiseScale = 3.0;
-    float n1 = noise(vertexNorm * noiseScale + iTime * 0.5);
-    float n2 = noise(vertexNorm * noiseScale + vec2(100.0) + iTime * 0.5);
+    float n1 = noise2D(vertexNorm * noiseScale + iTime * 0.5);
+    float n2 = noise2D(vertexNorm * noiseScale + vec2(100.0) + iTime * 0.5);
     vec2 organicWobble = vec2(n1 - 0.5, n2 - 0.5) * 0.008 * edgeFactor * distortionAmount;
     // Increase wobble near mouse
     organicWobble *= (1.0 + attractionFalloff * 2.0);

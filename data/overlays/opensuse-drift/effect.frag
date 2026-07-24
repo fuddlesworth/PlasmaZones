@@ -898,7 +898,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         vec3 edgeIriCol = triStopPalette(iriT, palSecondary, palAccent, palGlow);
         col += edgeIriCol * innerGlow * innerGlowStr;
 
-        col = mix(col, fillColor.rgb * luminance(col), 0.07);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.07);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);

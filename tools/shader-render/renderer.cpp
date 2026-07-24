@@ -33,6 +33,10 @@
 #include <private/qquickshadereffectsource_p.h>
 #include <QSGRendererInterface>
 #include <QStandardPaths>
+
+// std::memcpy below. It used to arrive transitively through
+// ZoneShaderCommon.h, which no longer includes <cstring>.
+#include <cstring>
 #include <QUrl>
 
 #include <QLoggingCategory>
@@ -653,7 +657,9 @@ int Renderer::render(const RenderOptions& opts)
     // it from dpr keeps the corner radii and border widths correct if a --dpr
     // or --scale option is ever added, instead of silently previewing every
     // length at 1/dpr of what the daemon renders.
-    zoneExt->setScale(static_cast<float>(dpr));
+    if (!zoneExt->setScale(static_cast<float>(dpr))) {
+        qCWarning(lcRenderer) << "zone scale" << dpr << "was rejected; previews will use the default 1.0 scale";
+    }
     effect->setUniformExtension(zoneExt);
 
     // Initial zone counts. For the cycling schedule, highlightedCount and

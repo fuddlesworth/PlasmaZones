@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # plasmazones-shader-render
 
 Headless offscreen renderer for PlasmaZones shaders. Reproducible
@@ -146,12 +151,11 @@ Working today:
 Known gaps to verify on first run:
 
 - **Multipass + buffer-feedback shaders** (neon-city, voxel-
-  terrain, paper, ...) — the renderer uses
-  `QQuickRenderControl::polishAndSync() + render()` which works
-  for simple `ShaderEffect`s but may need explicit
-  `beginFrame()`/`endFrame()` (Qt 6.6+) for clean ping-pong
-  between the buffer textures. The ping-pong setup lives in
-  `buildOffscreenTarget` and the frame loop in `renderFrames`.
+  terrain, paper, ...) — the renderer drives each frame with an
+  explicit `beginFrame()` / `render()` / `endFrame()` triple, which
+  is what clean ping-pong between the buffer textures needs. The
+  offscreen targets are built in `buildOffscreenTarget` and the
+  frame loop lives in `Renderer::render`.
 - **Depth-buffered shaders** — `useDepthBuffer = true` flag is
   forwarded; the corresponding offscreen depth attachment is
   set up by `ShaderNodeRhi`, but verify visually against a real

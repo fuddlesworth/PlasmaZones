@@ -122,7 +122,7 @@ public:
     ///         expected to report it. The check cannot log here: this library's
     ///         logging category is private to its src/ tree, and the caller
     ///         owns a category that names the actual subsystem anyway.
-    bool setScale(float scale)
+    [[nodiscard]] bool setScale(float scale)
     {
         // Reject values that would make the shader silently disappear rather
         // than degrade. The GLSL multiplies every radius and border width by

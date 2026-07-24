@@ -178,7 +178,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         col += glowColor * innerGlow * glowStrength;
 
         // Zone fill color tint — let per-zone color influence the palette
-        col = mix(col, fillColor.rgb * dot(col, vec3(0.299, 0.587, 0.114)), 0.2);
+        col = mix(col, zoneFillHue(fillColor) * dot(col, vec3(0.299, 0.587, 0.114)), 0.2);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);

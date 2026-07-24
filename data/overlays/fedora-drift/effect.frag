@@ -649,7 +649,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         col += palAccent * (ring * 0.3 + bassRing * 0.5);
 
         // Tint with fill color
-        col = mix(col, fillColor.rgb * luminance(col), 0.1);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.1);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);

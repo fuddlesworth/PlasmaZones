@@ -109,7 +109,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec2 sp = fragCoord - screenCenter;
 
     // Colors
-    vec3 primary  = colorWithFallback(p_primaryColor.rgb, fillColor.rgb);
+    vec3 primary  = colorWithFallback(p_primaryColor.rgb, zoneFillHue(fillColor));
     primary       = colorWithFallback(primary, vec3(0.0, 1.0, 1.0));
     vec3 accent   = colorWithFallback(p_accentColor.rgb, vec3(1.0, 0.0, 1.0));
     vec3 bassCol  = colorWithFallback(p_bassColor.rgb, vec3(1.0, 0.4, 0.0));

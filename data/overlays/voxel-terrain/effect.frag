@@ -114,7 +114,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // Light identity tint from the zone's configured fill colour, at the
         // sibling packs' weight. Without it the per-zone colour a user sets in
         // appearance settings does nothing at all in this pack.
-        result.rgb = mix(sceneRgb, sceneRgb * 0.85 + fillColor.rgb * 0.15, 0.35);
+        result.rgb = mix(sceneRgb, sceneRgb * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
         result.a = fillOpacity;
 
         // Volumetric glow alpha contribution — reconstruct from depth buffer.

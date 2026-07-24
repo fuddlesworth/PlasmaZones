@@ -450,7 +450,10 @@ vec4 renderFluxZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
         edgeColor = vitalityDesaturate(edgeColor, vitality);
         result.rgb = mix(result.rgb, edgeColor, border * vitalityScale(0.65, 0.95, vitality));
-        result.a = max(result.a, border * max(borderColor.a, 0.85));
+        // borderColor.a straight, no 0.85 floor. The floor meant lowering a
+    // zone's opacity could not fade its frame below 85%, so the setting
+    // stopped working partway down its range.
+    result.a = max(result.a, border * borderColor.a);
     }
 
     return result;

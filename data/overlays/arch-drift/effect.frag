@@ -757,7 +757,7 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         vec3 iriCol = paletteSweep(iriT, palPrimary, palSecondary, palAccent, palGlow, midsEnv);
         col += iriCol * innerGlow * innerGlowStr;
 
-        col = mix(col, fillColor.rgb * luminance(col), 0.15);
+        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.15);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);

@@ -131,7 +131,6 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float d = zoneShape.d;
 
     // Parameters (sentinel pattern)
-    float speed        = p_speed >= 0.0 ? p_speed : 0.06;
     float blobScale    = p_blobScale >= 0.0 ? p_blobScale : 10.0;
     float blobSoftness = p_blobSoftness >= 0.0 ? p_blobSoftness : 0.4;
     float glowIntensity= p_glowIntensity >= 0.0 ? p_glowIntensity : 0.5;
@@ -359,7 +358,7 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         // sibling packs' weight. borderColor is already consumed below;
         // fillColor was the only half of the pair this pack discarded, so the
         // per-zone fill colour did nothing at all here.
-        result.rgb = mix(result.rgb, result.rgb * 0.85 + fillColor.rgb * 0.15, 0.35);
+        result.rgb = mix(result.rgb, result.rgb * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
         result.a = fillOpacity;
     }
 
