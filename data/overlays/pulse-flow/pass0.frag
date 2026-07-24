@@ -47,7 +47,14 @@ float getAudioReact()     { return customParams[1].z >= 0.0 ? customParams[1].z 
 float zoneEdgeSDF(vec2 fragCoord) {
     float minDist = 1e6;
     for (int i = 0; i < zoneCount && i < 64; i++) {
-        float d = zoneSdf(fragCoord, zoneRects[i], zoneParams[i].x).d;
+        // Skip degenerate rects, as every other zone loop does. A zero-size
+        // zone collapses zoneSdf() to a point field, and this pass feeds a
+        // ping-pong feedback buffer, so the phantom emission would persist and
+        // spread across frames rather than clearing. It would also satisfy the
+        // `minDist < 1.0` early break below and hide the real zones entirely.
+        vec4 rect = zoneRects[i];
+        if (rect.z <= 0.0 || rect.w <= 0.0) continue;
+        float d = zoneSdf(fragCoord, rect, zoneParams[i].x).d;
         minDist = min(minDist, abs(d));
         if (minDist < 1.0) break;
     }
