@@ -317,9 +317,17 @@ QStringList shaderIncludePaths()
     // data/overlays only exists when run from the source tree, so this entry is
     // simply absent for an installed invocation and the order below applies.
     pushRoot(QStringLiteral("data/overlays"));
-    const QStringList xdg = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
-    for (const QString& dir : xdg) {
-        pushRoot(dir + QStringLiteral("/overlays"));
+
+    // GenericDataLocation + "plasmazones/overlays", matching the daemon's
+    // trustedShaderRoots(). This used to be AppDataLocation + "/overlays", which
+    // appends the APPLICATION name, and the tool never sets one — so it probed
+    // <xdg>/plasmazones-shader-render/overlays, a directory that does not exist,
+    // and the whole user tier silently resolved nothing. A pack the user
+    // installed under ~/.local/share/plasmazones/overlays was live in the daemon
+    // and invisible to the preview, which is the same class of divergence the
+    // source-tree-first ordering above exists to prevent.
+    for (const QString& dir : QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation)) {
+        pushRoot(dir + QStringLiteral("/plasmazones/overlays"));
     }
     pushRoot(QStringLiteral("/usr/share/plasmazones/overlays"));
     // No libs/phosphor-*/shaders entry. There used to be one naming

@@ -276,12 +276,23 @@ float zoneEdgeBand(float deviceWidth, float minLogical) {
 // while the alpha stayed put. Dividing it back out is what keeps the tint the
 // colour the user picked.
 vec3 zoneFillHue(vec4 fillColor) {
-    // A fully transparent zone has a == 0 AND rgb == 0, so the quotient would
-    // be 0/1e-3 = black, and every consumer would tint TOWARD BLACK rather than
-    // leaving the colour alone. That used to be moot because a zone at opacity
-    // 0 was invisible, but the fill alpha comes from the pack's own fillOpacity
-    // now, so the zone is still drawn. White is the identity for the multiply
-    // and mix forms every consumer uses, so it makes the tint a no-op instead.
+    // A fully transparent zone has a == 0 AND rgb == 0, so the quotient would be
+    // 0/1e-3 = black and every consumer would tint TOWARD BLACK rather than
+    // leaving the colour alone. That used to be moot because a zone at opacity 0
+    // was invisible, but the fill alpha comes from the pack's own fillOpacity
+    // now, so the zone is still drawn.
+    //
+    // White is returned instead, but be precise about what that buys: it is a
+    // TRUE identity only for the multiplicative form, `mix(c, c * hue, w)`. It
+    // is NOT an identity for an additive or weighted sum (`hue * k + other`),
+    // for a mix TOWARD the hue, or for a colorWithFallback chain, where white
+    // is a perfectly valid non-empty colour and suppresses the next fallback.
+    // A consumer of any of those shapes must gate on the alpha itself; three do
+    // (neon-venom, spectrum-pulse, prismata) and say so at the call site.
+    // The remaining consumers are the `c*0.85 + hue*0.15` and `hue*luminance(c)`
+    // families, where white is a slight lift or desaturation rather than a
+    // no-op. Both are cosmetic at zero opacity and strictly better than the
+    // darken-to-black they replaced.
     return fillColor.a > 1e-3 ? fillColor.rgb / fillColor.a : vec3(1.0);
 }
 

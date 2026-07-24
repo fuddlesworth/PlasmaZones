@@ -10,7 +10,7 @@
                 "Fixed: the layout right-click menu works again, so \"Set as Default\" and \"Hide from Zone Selector\" do something (#827)",
                 "Fixed: editing a layout no longer throws the page back to the top, and the cards no longer flicker while one of them changes (#827)",
                 "Fixed: the Neon City and Voxel Terrain overlays render again on drivers that refused their depth buffer setup (#827)",
-                "Fixed: zone overlay corners and borders now follow your display scale and match the window decorations, so the corner radius you set is the radius you get. Setting the border width to 0 turns the border off, which it did not before (#841)."
+                "Fixed: zone overlay corners and borders now follow your display scale and match the window decorations, so the corner radius you set is the radius you get. Setting the border width to 0 turns the border off, which it did not before (#841)"
             ]
         },
         {

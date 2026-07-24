@@ -667,7 +667,12 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         borderCol *= borderBrightness;
 
         // Soft glow along border
-        float borderSoftGlow = smoothstep(borderWidth * 2.0, 0.0, abs(d)) * 0.2;
+        // borderWidth, not borderWidth * 2.0. This sits inside `border > 0.0`,
+        // and softBorder() is only non-zero for abs(d) < borderWidth, so the
+        // upper half of a 2x domain was unreachable and the term never fell
+        // below half its range. Matching the domain to the guard makes the
+        // ramp actually span the band it is drawn in.
+        float borderSoftGlow = smoothstep(borderWidth, 0.0, abs(d)) * 0.2;
         borderCol += palAccent * borderSoftGlow;
 
         if (isHighlighted) {

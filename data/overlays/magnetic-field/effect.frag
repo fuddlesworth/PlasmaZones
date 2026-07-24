@@ -197,7 +197,11 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
     // Overall = Field density/visibility (NOT a simple multiplier)
     // Affects rendering thresholds and particle visibility
-    float fieldDensity = hasAudio ? 0.4 + overall * 0.9 * audioReactivity : 1.0;
+    // Clamped: audioReactivity maxes at 2.0, so this reached 2.2 and the mix()
+    // below extrapolated fieldLineThreshold to -0.39, where the smoothstep
+    // returns 1.0 for every input and the visibility gate it describes stops
+    // gating anything.
+    float fieldDensity = hasAudio ? clamp(0.4 + overall * 0.9 * audioReactivity, 0.0, 1.3) : 1.0;
     float fieldLineThreshold = mix(0.6, 0.15, fieldDensity); // lower = more lines visible
 
     vec2 center = zoneShape.center;  // already computed by zoneSdf()

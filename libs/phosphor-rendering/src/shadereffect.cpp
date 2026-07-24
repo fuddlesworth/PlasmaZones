@@ -188,8 +188,8 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
             connect(
                 win, &QQuickWindow::sceneGraphAboutToStop, this,
                 [this]() {
-                    if (m_renderNode) {
-                        m_renderNode->releaseResources();
+                    if (ShaderNodeRhi* node = m_renderNode.load(std::memory_order_acquire)) {
+                        node->releaseResources();
                     }
                     m_shaderDirty.store(true);
                 },
@@ -204,7 +204,7 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
             // to QQuickItem teardown ordering. Clearing here makes the
             // tracker self-consistent regardless of how the dtor liveness
             // check evolves.
-            m_renderNode = nullptr;
+            m_renderNode.store(nullptr, std::memory_order_release);
         }
     });
 }
@@ -229,10 +229,10 @@ ShaderEffect::~ShaderEffect()
     // If the window (and its scene graph) was already destroyed, the node has
     // been deleted by the SG and m_renderNode is dangling. window() returns
     // nullptr once the window is gone, so use that as liveness check.
-    if (m_renderNode && window()) {
-        m_renderNode->invalidateItem();
+    if (ShaderNodeRhi* node = m_renderNode.load(std::memory_order_acquire); node && window()) {
+        node->invalidateItem();
     }
-    m_renderNode = nullptr;
+    m_renderNode.store(nullptr, std::memory_order_release);
 }
 
 // ============================================================================
@@ -821,9 +821,9 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
 
     if (width() <= 0 || height() <= 0) {
         if (oldNode) {
-            if (m_renderNode) {
-                m_renderNode->invalidateItem();
-                m_renderNode = nullptr;
+            if (ShaderNodeRhi* node = m_renderNode.load(std::memory_order_acquire)) {
+                node->invalidateItem();
+                m_renderNode.store(nullptr, std::memory_order_release);
             }
             delete oldNode;
         }
@@ -834,9 +834,9 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     bool freshNode = false;
     if (!node) {
         // Scene graph deleted the previous node (e.g. releaseResources), or first call.
-        m_renderNode = nullptr;
+        m_renderNode.store(nullptr, std::memory_order_release);
         node = createShaderNode();
-        m_renderNode = node;
+        m_renderNode.store(node, std::memory_order_release);
         freshNode = true;
     }
 

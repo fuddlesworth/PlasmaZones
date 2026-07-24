@@ -85,7 +85,12 @@ vec2 windField(vec2 p, float t) {
 
     vec2 curl = vec2(n1 - n2, -(n3 - n4)) / (2.0 * eps);
     vec2 bias = vec2(cos(wdir), sin(wdir)) * 1.5;
-    return normalize(curl + bias) * (length(curl) * 0.5 + 0.5);
+    // Epsilon-nudged: curl is a central difference over 2*eps with eps=0.01, so
+    // it is unbounded relative to bias's fixed length of 1.5 and an exact
+    // cancellation is representable. normalize(vec2(0)) is undefined and the
+    // NaN would travel out through windIntensity into the fragment colour.
+    // Same guard this pack already uses at the trailUV normalize below.
+    return normalize(curl + bias + vec2(1e-4)) * (length(curl) * 0.5 + 0.5);
 }
 
 // ─── Sand particle system (3-layer parallax) ──────────────────────
@@ -921,21 +926,31 @@ vec4 pImage(vec2 fragCoord) {
     // partly uncovered, and this runs per fragment of every draw on the
     // compositor path.
     //
-    // The bound is the furthest anything paints beyond a zone edge, which is the
-    // outer glow at zoneLen(22 + 5) for the highlighted, fully-pushed case. The
-    // pre-pass repeats the same zoneSdf() the render loop runs but stops at the
-    // distance, so it costs a few ALU ops against the whole desert.
+    // The bound has to cover the furthest anything paints beyond a zone edge,
+    // and that is NOT the resting glow. glowRadius is
+    // zoneLen(mix(10, 22, vitality) + bassGlowPush), and bassGlowPush is
+    // bassEnv * 5 where bassEnv carries audioReactivity, which metadata caps at
+    // 2.0 — so the highlighted, fully-driven case reaches zoneLen(32), not 27.
+    // The idle leg tops out at 27 (idleStrength caps at 1.0), which is what made
+    // 27 look sufficient. The per-zone border is bounded separately: the
+    // settings path caps borderWidth at 10, but a layout JSON can set it
+    // unclamped, so it is taken from the zone rather than assumed.
+    //
+    // The pre-pass repeats the same zoneSdf() the render loop runs but stops at
+    // the distance, so it costs a few ALU ops against the whole desert.
     //
     // Labels are deliberately left outside the gate: they are sampled from
     // uZoneLabels in screen space and never go through the zone SDF.
     float minDist = 1e30;
+    float maxReach = zoneLen(32.0);
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
         minDist = min(minDist, zoneSdf(fragCoord, rect, zoneParams[i].x).d);
+        maxReach = max(maxReach, zoneBorderWidth(zoneParams[i].y));
     }
 
-    if (minDist < zoneLen(27.0)) {
+    if (minDist < maxReach) {
         // Render the desert scene + drifting Tumbleweed logos once in
         // overlay-space. Each zone below renders a window onto this shared
         // scene plus its own border/glow/vitality treatment.

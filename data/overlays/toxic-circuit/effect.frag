@@ -271,7 +271,11 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     primaryColor = mix(primaryColor, accentColor, vitalityScale(0.0, 0.4, vitality));
     primaryColor = vitalityDesaturate(primaryColor, vitality);
     secondaryColor = vitalityDesaturate(secondaryColor, vitality);
-    bgColor = mix(bgColor, vec3(0.15, 0.0, 0.25), vitalityScale(0.0, 1.0, vitality));
+    // Capped at 0.4 so the user's configured Smog Tint always dominates the base
+    // wash. At full weight a highlighted zone replaced it outright with this
+    // hardcoded purple, and highlighted is the state the user is most likely
+    // looking at, so the setting appeared not to work.
+    bgColor = mix(bgColor, vec3(0.15, 0.0, 0.25), vitalityScale(0.0, 0.4, vitality));
 
     glowStrength *= vitalityScale(0.5, 2.2, vitality);
     dripIntensity *= vitalityScale(0.5, 2.0, vitality);

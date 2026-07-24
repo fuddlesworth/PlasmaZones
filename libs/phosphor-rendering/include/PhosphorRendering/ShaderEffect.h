@@ -749,7 +749,7 @@ protected:
      */
     void registerRenderNode(ShaderNodeRhi* node)
     {
-        m_renderNode = node;
+        m_renderNode.store(node, std::memory_order_release);
     }
 
     void setError(const QString& error);
@@ -923,7 +923,14 @@ private:
     QString m_errorLog;
 
     // ── Render node tracking ─────────────────────────────────────────
-    ShaderNodeRhi* m_renderNode = nullptr;
+    /// Atomic because the sceneGraphAboutToStop handler is a DirectConnection
+    /// that reads and dereferences this ON THE RENDER THREAD, while the
+    /// windowChanged handler nulls it on the GUI thread. The disconnect that
+    /// precedes that null write is thread-safe, but Qt does not promise it
+    /// BLOCKS an in-flight direct-connection slot, so the ordering alone is not
+    /// enough to make the plain pointer safe. Every access is a simple
+    /// load/store, so the atomic costs nothing measurable.
+    std::atomic<ShaderNodeRhi*> m_renderNode{nullptr};
     // QPointer defends against reparent/teardown storms where the window is
     // destroyed out from under us before windowChanged(nullptr) fires.
     QPointer<QQuickWindow> m_connectedWindow;

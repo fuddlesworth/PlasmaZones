@@ -555,6 +555,9 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
     // that triple is exactly what has to agree. Comments carry none of it.
     static const QRegularExpression memberRe(QStringLiteral(R"(^\s*(\w+)\s+(\w+)\s*(?:\[\s*(\d+)\s*\])?\s*;)"),
                                              QRegularExpression::MultilineOption);
+    // Same shape but anchored at BOTH ends, used only by the totality check so a
+    // line carrying two declarations fails instead of half-matching.
+    static const QRegularExpression wholeLineRe(QStringLiteral(R"(^\s*(\w+)\s+(\w+)\s*(?:\[\s*(\d+)\s*\])?\s*;\s*$)"));
 
     struct Member
     {
@@ -579,7 +582,13 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
     // that names the offending line instead of a silent pass.
     {
         int consumed = 0;
-        const QStringList bodyLines = body.split(QLatin1Char('\n'));
+        // Block comments stripped first: they are legal GLSL inside the block and
+        // every one of their lines would otherwise read as unparsed.
+        static const QRegularExpression blockCommentRe(QStringLiteral(R"(/\*.*?\*/)"),
+                                                       QRegularExpression::DotMatchesEverythingOption);
+        QString stripped = body;
+        stripped.replace(blockCommentRe, QString());
+        const QStringList bodyLines = stripped.split(QLatin1Char('\n'));
         for (const QString& rawLine : bodyLines) {
             // Strip a trailing line comment, then test what is left.
             QString code = rawLine;
@@ -591,7 +600,12 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
                 continue;
             }
             ++consumed;
-            QVERIFY2(memberRe.match(code).hasMatch(),
+            // Fully anchored (`$`), unlike memberRe, which is only `^`-anchored so
+            // it can consume the FIRST declaration on a line and leave a second
+            // one on the same line silently unparsed. `float uZoneScale; vec4
+            // uExtra;` passed every other assertion while uExtra never reached the
+            // C++ side at all.
+            QVERIFY2(wholeLineRe.match(code).hasMatch(),
                      qPrintable(QStringLiteral("unparsed line in the ZoneUniforms block, so a member would be "
                                                "silently dropped from the layout check: '%1'")
                                     .arg(code.trimmed())));

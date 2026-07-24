@@ -289,7 +289,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float borderEnergy = 1.0 + energy * mix(0.2, 1.0, vitality) + idlePulse * 0.3;
         // Folds in the zone's configured border colour so the setting is not
         // inert here, at the same weight the sibling packs use.
-        vec3 coreColor = mix(hueCenter, borderColor.rgb, 0.3) * mix(1.0, 2.0, vitality) * borderEnergy;
+        vec3 coreColor = mix(hueCenter, colorWithFallback(borderColor.rgb, hueCenter), 0.3) * mix(1.0, 2.0, vitality) * borderEnergy;
 
         float flowSpeed = mix(0.3, 2.0, vitality);
         float flowRange = mix(0.1, 0.4, vitality);

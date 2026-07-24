@@ -106,7 +106,12 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
 
     // Colors
-    vec3 primary  = colorWithFallback(p_primaryColor.rgb, zoneFillHue(fillColor));
+    // Gated, not zoneFillHue directly: this feeds a colorWithFallback CHAIN, and
+    // the helper's white fallback has length 1.73, which passes the emptiness
+    // test and makes the cyan fallback on the next line unreachable. A fully
+    // transparent zone would turn the pack's neon white instead of cyan.
+    vec3 fillHue  = fillColor.a > 1e-3 ? zoneFillHue(fillColor) : vec3(0.0);
+    vec3 primary  = colorWithFallback(p_primaryColor.rgb, fillHue);
     primary       = colorWithFallback(primary, vec3(0.0, 1.0, 1.0));
     vec3 accent   = colorWithFallback(p_accentColor.rgb, vec3(1.0, 0.0, 1.0));
     vec3 bassCol  = colorWithFallback(p_bassColor.rgb, vec3(1.0, 0.4, 0.0));
@@ -277,7 +282,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // Folds in the zone's configured border colour so the setting is not
         // inert here. fillColor is already consumed above; borderColor was the
         // only half of the pair this pack discarded.
-        vec3 coreColor = mix(activeColor, borderColor.rgb, 0.3) * borderBright;
+        vec3 coreColor = mix(activeColor, colorWithFallback(borderColor.rgb, activeColor), 0.3) * borderBright;
 
         // White-hot neon center (toned down so user color shows through)
         coreColor = mix(coreColor, vec3(1.0), core * 0.35);

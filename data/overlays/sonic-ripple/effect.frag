@@ -228,7 +228,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // ── Compose interior ────────────────────────────────
 
         // Nebula as the base layer
-        result.rgb = nebColor * nebBright;
+        // Light identity tint from the zone's configured fill colour, at the
+        // sibling packs' weight. This pack was the last one still discarding
+        // both of its per-zone colour parameters.
+        result.rgb = mix(nebColor * nebBright,
+                         nebColor * nebBright * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
 
         // Add spectrum rings on top
         result.rgb += ringColor * ringBright * glowIntensity * 0.6;
@@ -381,7 +385,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
         // Audio-reactive border: highlighted pulses hard, dormant is static
         float borderEnergy = 1.0 + energy * mix(0.2, 1.0, vitality) + idlePulse * 0.3;
-        vec3 coreColor = primary * glowIntensity * borderEnergy;
+        // Folds in the zone's configured border colour, with the pack's own
+        // primary as the fallback for an unset colour.
+        vec3 coreColor = mix(primary, colorWithFallback(borderColor.rgb, primary), 0.3)
+                       * glowIntensity * borderEnergy;
 
         // Flowing highlights — highlighted: fast animated flow; dormant: barely moving
         float flowSpeed = mix(0.3, 2.0, vitality);

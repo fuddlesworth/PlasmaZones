@@ -252,7 +252,11 @@ vec4 renderNeonVenomZone(
 
     // ─── Compose color ──────────────────────────────────────────────
     // Base: blend zone fill color with mist tint (fill color has real influence)
-    vec3 baseCol = zoneFillHue(fillColor) * 0.3 + mistCol * 0.35;
+    // Weighted SUM, so zoneFillHue's white fallback is not the identity here:
+    // a fully transparent zone would wash the base to vec3(0.3) + mist. The
+    // tint is simply absent in that case instead.
+    vec3 fillHue = fillColor.a > 1e-3 ? zoneFillHue(fillColor) : vec3(0.0);
+    vec3 baseCol = fillHue * 0.3 + mistCol * 0.35;
 
     // Veins: green-purple gradient, shifts toward glow on treble hits
     float veinHue = veins * 0.5 + sin(t * 1.5 + localUV.y * 3.0) * 0.3;

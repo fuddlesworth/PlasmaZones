@@ -95,7 +95,7 @@ struct LogoHit {
     float edgeDist;
 };
 
-LogoHit evalLogo(vec2 p, vec2 displacement[12], vec3 palCyan, vec3 palTeal, vec3 palMint, vec3 palGlow) {
+LogoHit evalLogo(vec2 p, vec2 displacement[12], vec3 palCyan, vec3 palTeal) {
     LogoHit hit;
     hit.dist = 1e9;
     hit.facetId = -1;
@@ -202,7 +202,7 @@ LogoHit evalLogo(vec2 p, vec2 displacement[12], vec3 palCyan, vec3 palTeal, vec3
 
 LogoHit evalLogoInstance(vec2 logoUV, int idx, float time,
                          float bassEnv, float logoPulse,
-                         vec3 palCyan, vec3 palTeal, vec3 palMint, vec3 palGlow) {
+                         vec3 palCyan, vec3 palTeal) {
     vec2 displacement[12];
     for (int i = 0; i < 12; i++) {
         float phase = float(i) * 2.39996 + float(idx) * 1.618;
@@ -215,7 +215,7 @@ LogoHit evalLogoInstance(vec2 logoUV, int idx, float time,
         float scatter = bassEnv * logoPulse * 0.06;
         displacement[i] = wobble + scatterDir * scatter;
     }
-    return evalLogo(logoUV, displacement, palCyan, palTeal, palMint, palGlow);
+    return evalLogo(logoUV, displacement, palCyan, palTeal);
 }
 
 // ── Per-instance UV computation ──────────────────────────────────
@@ -437,7 +437,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             float instIntensity = logoIntensity * (0.3 + 0.7 * depthFactor);
 
             LogoHit iLogo = evalLogoInstance(iLogoUV, li, time, bassEnv, logoPulse,
-                                             palPrimary, palSecondary, palAccent, palGlow);
+                                             palPrimary, palSecondary);
 
             if (iLogo.dist > 0.08) continue;
 

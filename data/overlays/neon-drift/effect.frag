@@ -703,7 +703,10 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         );
         col += iriCol * innerGlow * innerGlowStr;
 
-        col = mix(col, zoneFillHue(fillColor) * luminance(col), 0.1);
+        // Multiplicative, so white is a true no-op. The previous hue-replacement
+        // form desaturated by 10% under zoneFillHue's white fallback, which is
+        // not what a fully transparent zone should do.
+        col = mix(col, col * zoneFillHue(fillColor), 0.1);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -726,10 +729,12 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         borderCol *= borderBrightness;
 
         // Neon tube effect on border
-        // Floored at a device pixel: a 0.125-px falloff only contributes within
-        // ~0.3 px of the edge, so the tube core aliased instead of reading as a
-        // stroke, and scaling it down further on a 2x display made it worse.
-        float borderNeon = exp(-abs(d) / max(zoneLen(0.125), 1.0)) * 0.3;
+        // One logical px, floored at one device px. The old 0.125 only
+        // contributed within ~0.3 px of the edge, so the tube core aliased
+        // instead of reading as a stroke. Flooring 0.125 alone was not enough:
+        // zoneLen(0.125) stays under 1.0 for every scale below 8, so the floor
+        // always won and the falloff stopped tracking the display entirely.
+        float borderNeon = exp(-abs(d) / max(zoneLen(1.0), 1.0)) * 0.3;
         borderCol += palAccent * borderNeon;
 
         if (isHighlighted) {

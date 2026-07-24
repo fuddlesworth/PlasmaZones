@@ -201,7 +201,10 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
         // Base result
         vec3 base = edgeColor + specular;
-        base = mix(base, zoneFillHue(fillColor), zoneTintBlend); // Zone tint
+        // Blend skipped at zero alpha: this mixes TOWARD the hue, so the
+        // helper's white fallback would wash the field up to 100% white
+        // rather than leaving it alone.
+        base = mix(base, zoneFillHue(fillColor), fillColor.a > 1e-3 ? zoneTintBlend : 0.0); // Zone tint
 
         // Mouse: cursor glow hotspot
         if (mouseInZone) {

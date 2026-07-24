@@ -329,7 +329,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             float borderEnergy = 1.0 + energy * mix(0.2, 1.0, vitality) + idlePulse * 0.3;
             // Folds in the zone's configured border colour at the sibling
             // packs' weight, so the setting is not inert here.
-            vec3 coreColor = mix(primary, borderColor.rgb, 0.3) * mix(0.6, 1.8, vitality) * borderEnergy;
+            vec3 coreColor = mix(primary, colorWithFallback(borderColor.rgb, primary), 0.3) * mix(0.6, 1.8, vitality) * borderEnergy;
 
             // Flowing highlights: animated angular noise
             float flowSpeed = mix(0.3, 2.0, vitality);

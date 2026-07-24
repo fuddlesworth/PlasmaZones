@@ -14,7 +14,6 @@
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include <PhosphorLayoutApi/ILayoutSource.h>
-#include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 
 namespace PlasmaZones {
@@ -37,9 +36,24 @@ UnifiedLayoutController::UnifiedLayoutController(PhosphorZones::LayoutRegistry* 
 
         connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
                 [this](PhosphorZones::Layout* layout) {
-                    // Clear on null too, so the property cannot latch an
-                    // observer on an id whose layout no longer exists.
-                    setCurrentLayoutId(layout ? layout->id().toString() : QString());
+                    // Only while there is no per-screen context. m_currentLayoutId
+                    // is a PER-SCREEN value everywhere else that writes it
+                    // (setCurrentScreenName, applyEntry, and syncFromExternalState
+                    // with an override), so mirroring the GLOBAL active layout into
+                    // it once a screen is known lets any global writer — a
+                    // drop-to-layout, a D-Bus assignment, a layout deletion
+                    // re-pointing active at the default — overwrite the focused
+                    // screen's assignment id and misaim the next cycle().
+                    //
+                    // Kept for the pre-screen window: the constructor calls
+                    // syncFromExternalState() before any screen name exists, and
+                    // that is the state this mirror is genuinely for.
+                    //
+                    // Clears on null so the property cannot latch an observer on an
+                    // id whose layout no longer exists.
+                    if (m_currentScreenName.isEmpty()) {
+                        setCurrentLayoutId(layout ? layout->id().toString() : QString());
+                    }
                 });
     }
 
@@ -223,22 +237,24 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
         // assignment, findCurrentIndex() then misses under the autotile filter,
         // and the next cycle() jumps to the wrong entry.
         //
-        // assignmentIdForScreen returns the stored id verbatim (a manual UUID
-        // or the "autotile:" form) and is genuinely empty on a total miss,
-        // which is what the clear below is for. It is also what both
-        // syncFromExternalState callers already pass in.
+        // assignmentIdForScreen is mode-aware and returns the stored id verbatim,
+        // including the "autotile:<algo>" form, which is the property that
+        // matters: findCurrentIndex() compares it against the preview ids, and an
+        // autotile-assigned screen has to yield an autotile id. It is NOT
+        // "empty on a miss" — like layoutForScreen it falls through to the
+        // level-1 global defaults (snap provider, then autotile provider), so an
+        // unassigned screen with a configured default still gets that default's
+        // id. Empty means both providers missed.
         //
-        // Cleared unconditionally, including for an empty screenId: a screen
-        // with no name has no assignment by definition, and leaving the
-        // previous screen's id latched is the stale-id bug this exists to stop.
-        if (m_layoutManager) {
-            // Per-output virtual desktops (#648): this screen's own desktop.
-            const int desktop = screenId.isEmpty() ? m_currentVirtualDesktop
-                                                   : m_layoutManager->currentVirtualDesktopForScreen(screenId);
-            setCurrentLayoutId(screenId.isEmpty()
-                                   ? QString()
-                                   : m_layoutManager->assignmentIdForScreen(screenId, desktop, m_currentActivity));
-        }
+        // Written unconditionally so an empty screen name, or a null registry,
+        // clears rather than leaving the previous screen's id latched.
+        // currentVirtualDesktopForScreen already falls back to the registry's
+        // global desktop for an empty screen id, so no branch is needed for it.
+        setCurrentLayoutId(
+            m_layoutManager && !screenId.isEmpty()
+                ? m_layoutManager->assignmentIdForScreen(
+                      screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity)
+                : QString());
     }
 }
 
