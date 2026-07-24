@@ -320,8 +320,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, vec4 fillColor, vec4 bor
             coreColor = mix(coreColor, lightC * 2.0, bassFlash * borderCore * 0.4);
         }
 
-        result.rgb = max(result.rgb, coreColor * borderCore);
-        result.a   = max(result.a, borderCore);
+        result.rgb = max(result.rgb, coreColor * borderCore * borderColor.a);
+        result.a   = max(result.a, borderCore * borderColor.a);
     }
 
     // ── Outer glow ───────────────────────────────────────────

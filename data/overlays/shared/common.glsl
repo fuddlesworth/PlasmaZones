@@ -419,10 +419,13 @@ float softBorder(float d, float borderWidth) {
 // BORDER ALPHA CONTRACT. zoneBorderColors[i] arrives STRAIGHT, not premultiplied
 // (unlike zoneFillColors[i], which carries activeOpacity in its rgb). Its alpha
 // is the user's border-colour alpha, and the catalog-wide decision is that it
-// fades the whole border: every pack scales BOTH its rgb mix weight and its
-// alpha contribution by borderColor.a. Scaling only the alpha, which is what
-// most packs did before, left the band painting at full strength over the fill
-// and fading only where it overhung the zone edge.
+// fades the whole border, in every pack, whatever that pack's compositing model
+// is. Concretely borderColor.a scales the border's full contribution, not only
+// its alpha: an alpha-blend pack multiplies the mix() weight by it (so the band
+// does not paint at full strength over the fill and fade only at the overhang),
+// a max()-composite neon pack multiplies the composited coreColor*core term by
+// it, and chrome-protocol folds it into the blendOver srcA. A fully opaque
+// border colour, the default, leaves all three unchanged.
 
 // Exponential falloff glow (e.g. outer glow: d > 0 outside zone)
 float expGlow(float d, float falloff, float strength) {

@@ -631,8 +631,8 @@ float glow1 = max(exp(-max(logoD, 0.0) * 60) - exp(-0.03 * 60), 0.0) * 0.6;
             float f1 = 0.07 + float(li) * 0.023;
             float f2 = 0.05 + float(li) * 0.019;
             vec2 trailDir = normalize(vec2(
-                cos(time * f1 + h1 * TAU),
-                -sin(time * f2 + h1 * TAU)));
+                timeCos(f1, h1 * TAU),
+                -timeSin(f2, h1 * TAU)));
             vec2 trailUV = iLogoUV - TW_LOGO_CENTER;
             float trailDot = dot(normalize(trailUV + 0.001), -trailDir);
             float trailDist = length(trailUV);

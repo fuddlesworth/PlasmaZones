@@ -216,7 +216,7 @@ const vec2  GEEKO_PUPIL_R    = vec2(0.018, 0.012);     // pupil semi-axes (horiz
 float sdGeeko(vec2 p) {
     // AABB: polygon spans x=[0.008,0.994], y=[0.256,0.745] (rounded outward)
     vec2 dLo = vec2(0.007, 0.256) - p;
-    vec2 dHi = p - vec2(0.993, 0.744);
+    vec2 dHi = p - vec2(0.994, 0.745);
     vec2 outside = max(max(dLo, dHi), vec2(0.0));
     float boxDist2 = dot(outside, outside);
     if (boxDist2 > 0.04) return sqrt(boxDist2);
@@ -775,7 +775,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 // painting a hard ring around every logo instance.
 float glow1 = max(exp(-max(fDist, 0.0) * 80) - exp(-0.005 * 80), 0.0) * 0.45;
                 float glow2 = max(exp(-max(fDist, 0.0) * 25) - exp(-0.005 * 25), 0.0) * 0.2;
-                float glow3 = exp(-max(fDist, 0.0) * 8.0) * 0.1;
+                float glow3 = max(exp(-max(fDist, 0.0) * 8.0) - exp(-0.005 * 8.0), 0.0) * 0.1;
                 vec3 edgeCol = triStopPalette(time * 0.06 + iLogoUV.y + float(li) * 0.2,
                                             palGlow, palSecondary, palAccent);
                 float flare = 1.0 + bassEnv * 0.4;

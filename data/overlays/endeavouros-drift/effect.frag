@@ -243,7 +243,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     vec2 lp = uv - 0.5;
     uv = vec2(lp.x*cos(ra)-lp.y*sin(ra), lp.x*sin(ra)+lp.y*cos(ra)) + 0.5;
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
-    instScale *= 1.0 + sin(time*(0.4+float(idx)*0.09)+h1*TAU) * 0.012;
+    instScale *= 1.0 + timeSin(0.4 + float(idx)*0.09, h1*TAU) * 0.012;
     return (uv - 0.5) / instScale + LOGO_CENTER;
 }
 

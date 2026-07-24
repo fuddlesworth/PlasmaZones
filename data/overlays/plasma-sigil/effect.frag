@@ -117,7 +117,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     // Bound covers the glow AND the border band: per-zone border width comes
     // from layout JSON unclamped, so a hand-authored width past 30 logical px
     // would otherwise have its frame sliced at a fixed radius.
-    if (d > max(zoneLen(35.0), zoneBorderWidth(params.y) * 2.0)) return vec4(0.0);
+    if (d > max(zoneLen(35.0), borderWidth * 2.0)) return vec4(0.0);
 
     float iconScale = getIconScale();
     float strokeW   = getStrokeWidth();

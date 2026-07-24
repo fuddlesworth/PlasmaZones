@@ -286,7 +286,7 @@ vec4 renderNeonVenomZone(
     // Border: blend zone borderColor with venom palette (borderColor has real influence)
     vec3 borderTint = mix(venomCol, acidCol, sin(t * 1.5) * 0.3 + 0.5 + audioMid * 0.3);
     vec3 borderFinal = mix(borderTint, borderColor.rgb, 0.3) * (1.0 + audioPulse * 0.6);
-    col = mix(col, borderFinal * glowStr, borderFactor);
+    col = mix(col, borderFinal * glowStr, borderFactor * borderColor.a);
 
     // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
     // The zone's activeOpacity arrives in fillColor.a, but only four packs

@@ -5,7 +5,6 @@
 
 #include "config/settings.h"
 #include "core/platform/logging.h"
-#include "core/types/constants.h"
 #include "core/utils/utils.h"
 
 #include <PhosphorEngine/PlacementEngineBase.h>
