@@ -214,7 +214,7 @@ const vec2  GEEKO_PUPIL_R    = vec2(0.018, 0.012);     // pupil semi-axes (horiz
 
 // Polygon SDF with AABB early-out (winding-number sign rule)
 float sdGeeko(vec2 p) {
-    // AABB: polygon spans x=[0.008,0.994], y=[0.256,0.745] (rounded outward)
+    // AABB: polygon spans x=[0.007,0.994], y=[0.256,0.745] (rounded outward)
     vec2 dLo = vec2(0.007, 0.256) - p;
     vec2 dHi = p - vec2(0.994, 0.745);
     vec2 outside = max(max(dLo, dHi), vec2(0.0));
@@ -585,7 +585,8 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             // Soft iridescent edge glow
             if (fDist > -0.005 && fDist < 0.06) {
                 float auraDist = max(fDist, 0.0);
-                float aura = exp(-auraDist * 30.0) * 0.3;
+                // Pedestal-subtracted at the 0.06 gate so the aura fades to 0.
+                float aura = max(exp(-auraDist * 30.0) - exp(-0.06 * 30.0), 0.0) * 0.3;
                 float auraAngle = atan(iLogoUV.y - GEEKO_CENTER.y,
                                        iLogoUV.x - GEEKO_CENTER.x);
                 float auraThickness = 0.5 + 0.2 * sin(auraAngle * 3.0 + time * 0.8);
@@ -702,9 +703,18 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                         scleraCol = mix(scleraCol, irisCol, irisMask);
 
                         // Turret pupil: slow independent orbit
-                        float eyeOrbitAngle = time * 0.4 + sin(time * 0.7) * 0.8;
-                        vec2 pupilOrbit = vec2(cos(eyeOrbitAngle),
-                                               sin(eyeOrbitAngle)) * 0.005;
+                        // Wrap-safe: this angle steers the pupil orbit AND the
+                        // attention beam, both geometry, so a raw wrapped-time
+                        // angle would snap them once per K_TIME_WRAP. Build the
+                        // sin/cos of the composed angle from the wrap-safe
+                        // primitives rather than sampling raw iTime.
+                        float eyeWobble = timeSin(0.7, 0.0) * 0.8;
+                        float eyeCos = timeCos(0.4, 0.0) * cos(eyeWobble) - timeSin(0.4, 0.0) * sin(eyeWobble);
+                        float eyeSin = timeSin(0.4, 0.0) * cos(eyeWobble) + timeCos(0.4, 0.0) * sin(eyeWobble);
+                        vec2 pupilOrbit = vec2(eyeCos, eyeSin) * 0.005;
+                        // The beam below consumes the angle itself (mod TAU), so
+                        // recover it wrap-safely from the wrap-safe sin/cos.
+                        float eyeOrbitAngle = atan(eyeSin, eyeCos);
                         vec2 pupilCenter = GEEKO_PUPIL_C + pupilOrbit;
                         // Pupil dilates on bass (chameleons dilate when excited)
                         float pupilDilate = 1.0 + bassEnv * 0.4;
@@ -929,7 +939,7 @@ float glow1 = max(exp(-max(fDist, 0.0) * 80) - exp(-0.005 * 80), 0.0) * 0.45;
         borderCol = mix(borderCol, zoneBorderTint * luminance(borderCol), 0.25);
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.3 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {

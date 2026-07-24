@@ -724,7 +724,7 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
         borderCol *= pBorderBrightness();
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.8 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {

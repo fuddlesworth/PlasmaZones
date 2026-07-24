@@ -470,7 +470,8 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
             float logoVignette = 1.0 - smoothstep(0.45, 0.75, logoR);
 
             // Light casting onto background from logo
-            float lightCast = exp(-max(unionDist, 0.0) * 10.0) * 0.35;
+            // Pedestal-subtracted at the unionDist > 0.25 continue gate.
+            float lightCast = max(exp(-max(unionDist, 0.0) * 10.0) - exp(-0.25 * 10.0), 0.0) * 0.35;
             vec3 logoLight = paletteSweep(time * 0.08 + iLogoUV.y + float(li) * 0.3,
                                            palPrimary, palSecondary, palAccent, palGlow, midsEnv);
             col += logoLight * lightCast * instIntensity * (1.0 + bassEnv * 0.3) * depthFactor;
@@ -482,7 +483,9 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
                 // Warm radial glow
                 if (unionDist > 0.0) {
                     float emergeRadius = 0.10 + bassEnv * 0.04;
-                    float emergeFalloff = exp(-unionDist / emergeRadius) * 0.35;
+                    // Pedestal-subtracted at the 0.20 outer gate so the glow
+                    // fades to 0 there rather than being cut mid-falloff.
+                    float emergeFalloff = max(exp(-unionDist / emergeRadius) - exp(-0.20 / emergeRadius), 0.0) * 0.35;
                     vec3 emergeCol = mix(palGlow, palPrimary, 0.3);
                     outerCol += emergeCol * emergeFalloff * instIntensity * depthFactor;
 
@@ -707,7 +710,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
         borderCol *= borderBrightness;
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.3 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {

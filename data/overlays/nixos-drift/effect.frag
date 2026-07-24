@@ -1201,7 +1201,7 @@ vec4 compositeNixosLabels(vec4 color, vec2 fragCoord,
         vec3 haloCol = triStopPalette(t, palPrimary, palAccent, palGlow);
 
         // Bass brightens halo
-        float pulse = 0.85 + 0.15 * sin(time * 2.5);
+        float pulse = 0.85 + 0.15 * timeSin(2.5, 0.0);
         pulse *= 1.0 + bassEnv * 0.6;
 
         color.rgb += haloCol * haloEdge * 0.7 * pulse;

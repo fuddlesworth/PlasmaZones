@@ -203,7 +203,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
         // Highlighted border is brighter and pulses with cosmic breath
         if (isHighlighted) {
-            float breathe = 0.85 + 0.15 * sin(time * 2.5);
+            float breathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             // Bass sends a shockwave pulse along the border
             float borderBass = hasAudio ? 1.0 + smoothstep(0.1, 0.4, bass) * 0.25 : 1.0;
             borderCol *= breathe * borderBass;

@@ -525,7 +525,9 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 // -- Emerge glow (only when fDist > 0) --
                 if (fDist > 0.0) {
                     float emergeRadius = 0.08 + bassEnv * 0.04;
-                    float emergeFalloff = exp(-fDist / emergeRadius) * 0.3;
+                    // Pedestal-subtracted at the 0.20 outer gate so the glow
+                    // fades to 0 there rather than being cut mid-falloff.
+                    float emergeFalloff = max(exp(-fDist / emergeRadius) - exp(-0.20 / emergeRadius), 0.0) * 0.3;
                     float emergeY = (iLogoUV.y - 0.5) / 0.5;
                     vec3 emergeCol = mix(palPrimary, palGlow, clamp(-emergeY * 0.5 + 0.5, 0.0, 1.0));
                     outerCol += emergeCol * emergeFalloff * instIntensity * depthFactor;
@@ -785,7 +787,7 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         borderCol *= borderBrightness;
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.3 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {

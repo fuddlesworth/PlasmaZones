@@ -617,7 +617,7 @@ float glow1 = max(exp(-max(iLogo.dist, 0.0) * 80) - exp(-0.03 * 80), 0.0) * 0.5;
         borderCol *= borderBrightness;
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.3 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {

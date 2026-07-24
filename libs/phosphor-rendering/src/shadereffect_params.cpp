@@ -545,7 +545,7 @@ void ShaderEffect::setUserTexture(int slot, const QImage& image)
     // "..."})` of the SAME path triggers a fresh disk reload on every
     // params push (path-change detection sees the now-empty cache and
     // assumes the path is new). Mirrors the existing cacheKey guard in
-    // `ShaderNodeRhi::setUserTexture` (shadernoderhisetters.cpp:234).
+    // `ShaderNodeRhi::setUserTexture` (shadernoderhisetters.cpp ShaderNodeRhi::setUserTexture).
     if (m_userTextureImages[slot].cacheKey() == image.cacheKey()) {
         return;
     }

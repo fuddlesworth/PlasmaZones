@@ -490,7 +490,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // Bass adds turbulence; mids warp the rotation angle
         vec2 cloudUV = centeredUV * 0.5
                      + (flowDir * flowSpeed + normalize(toLogo + 0.001) * pullStrength) * time * 0.2;
-        cloudUV += vec2(sin(time * 2.0), cos(time * 1.5)) * bassEnv * 0.1;
+        cloudUV += vec2(timeSin(2.0, 0.0), timeCos(1.5, 0.0)) * bassEnv * 0.1;
         float clouds = fbm(cloudUV, max(octaves - 2, 3), fbmRot + midsEnv * 0.2);
         vec3 cloudTint = mix(palSecondary, FROST_DEEP, clouds);
         col = mix(col, cloudTint, clouds * 0.25);
@@ -529,7 +529,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
             float logoVignette = 1.0 - smoothstep(0.35, 0.55, logoR);
 
             // Gentle oscillation only — the "f" must stay upright to be recognizable
-            float wobble = sin(time * logoSpin * 2.0 + float(li) * 2.0) * 0.03;
+            float wobble = timeSin(logoSpin * 2.0, float(li) * 2.0) * 0.03;
             float cs = cos(wobble), sn = sin(wobble);
             vec2 rotP = vec2(logoP.x * cs - logoP.y * sn, logoP.x * sn + logoP.y * cs);
 
@@ -578,7 +578,9 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
             // ── SUBTLE OUTER EDGE GLOW (not neon tubes) ─────────
             if (fDist > 0.0 && fDist < 0.05) {
-                float edgeGlow = exp(-fDist * 20.0) * 0.4;
+                // Pedestal-subtracted at the 0.05 gate so the edge glow reaches
+                // exactly 0 there instead of being cut at 37% of its peak.
+                float edgeGlow = max(exp(-fDist * 20.0) - exp(-0.05 * 20.0), 0.0) * 0.4;
                 logoCol += palPrimary * edgeGlow * instIntensity * flicker;
             }
 
@@ -676,7 +678,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         borderCol += palAccent * borderSoftGlow;
 
         if (isHighlighted) {
-            float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
+            float bBreathe = 0.85 + 0.15 * timeSin(2.5, 0.0);
             float borderBass = hasAudio ? 1.0 + bassEnv * 0.4 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {
