@@ -91,7 +91,6 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
-    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
 
     float d = zoneShape.d;
 
@@ -107,7 +106,6 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     float audioReact = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
     float idlePulse = p_idlePulse >= 0.0 ? p_idlePulse : 0.8;
 
-    float energy = hasAudio ? overall * audioReact : 0.0;
     float idleAnim = hasAudio ? 0.0 : (0.5 + 0.5 * sin(iTime * 1.2 * PI)) * idlePulse;
     float vitality = zoneVitality(isHighlighted);
 

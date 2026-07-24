@@ -222,7 +222,6 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
-    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
 
     // Screen-space UV for continuous field across all zones
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));

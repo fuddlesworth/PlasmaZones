@@ -226,6 +226,12 @@ vec4 compositeCanvasLabels(vec4 color, vec2 fragCoord,
             halo += texture(uZoneLabels, uv + vec2(float(dx), float(dy)) * px * labelGlowSpread).a * w;
         }
     }
+    // 9.51 is the true sum of this 5x5 exp(-r^2 * 0.3) kernel, so the halo is
+    // genuinely normalised here. Most sibling packs divide the identical kernel
+    // by 16.5 instead (chrome-protocol 10.5, magnetic-field 16.0), which is not
+    // normalisation but a dimmer intensity choice — a halo about 1.7x fainter
+    // than this one. Both looks are shipped and deliberate; the number is only
+    // confusing if you assume every pack means the same thing by it.
     halo /= 9.51;
 
     // Flow-tinted halo outline

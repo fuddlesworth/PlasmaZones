@@ -141,7 +141,6 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
-    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
     float d = zoneShape.d;
 
     // Parameters (sentinel pattern)
@@ -178,7 +177,6 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float trebleAmt = hasAudio ? treble * audioSens : idlePulse * 0.3;
     float vitality = zoneVitality(isHighlighted);
 
-    float time = iTime * speed;
 
     vec4 result = vec4(0.0);
 

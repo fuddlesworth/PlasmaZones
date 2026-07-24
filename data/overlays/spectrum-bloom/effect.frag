@@ -62,7 +62,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec2 rectSize = zoneRectSize(rect);
     vec2 center   = rectPos + rectSize * 0.5;
     vec2 p        = fragCoord - center;  // KEEP for border/glow angle
-    vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
     float d       = zoneShape.d;
 
     // Screen-space polar coords

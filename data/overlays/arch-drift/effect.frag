@@ -300,7 +300,6 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
 
     float flowAngle = flowDirection * TAU;
-    vec2 flowDir = vec2(cos(flowAngle), sin(flowAngle));
 
     float bassEnv   = hasAudio ? smoothstep(0.02, 0.25, bass) * audioReact : 0.0;
     float midsEnv   = hasAudio ? smoothstep(0.02, 0.4, mids) * audioReact : 0.0;
@@ -830,7 +829,6 @@ vec4 compositeArchLabels(vec4 color, vec2 fragCoord,
     float time = iTime;
 
     float bassR   = hasAudio ? bass * labelAudioReact   : 0.0;
-    float midsR   = hasAudio ? mids * labelAudioReact   : 0.0;
     float trebleR = hasAudio ? treble * labelAudioReact : 0.0;
 
     // ── 3-pass Gaussian halo ─────────────────────────────────────

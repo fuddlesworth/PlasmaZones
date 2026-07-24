@@ -610,7 +610,6 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                     // ── Chameleon color-shift fill ─────────────────
                     vec2 fillLP = iLogoUV - GEEKO_CENTER;
                     float fillAngle = atan(fillLP.y, fillLP.x);
-                    float fillR = length(fillLP);
 
                     // Body regions: head is warmer, tail cooler
                     float headRegion = smoothstep(0.3, 0.15, length(iLogoUV - vec2(0.85, 0.35)));

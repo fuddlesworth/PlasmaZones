@@ -755,7 +755,6 @@ vec4 compositeEosLabels(vec4 color, vec2 fragCoord,
     float time = iTime;
 
     float bassR   = hasAudio ? bass * labelAudioReact   : 0.0;
-    float midsR   = hasAudio ? mids * labelAudioReact   : 0.0;
     float trebleR = hasAudio ? treble * labelAudioReact : 0.0;
 
     // -- 3-pass Gaussian halo --

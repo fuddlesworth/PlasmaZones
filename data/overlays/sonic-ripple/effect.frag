@@ -127,7 +127,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float angle = atan(lensedSP.y, lensedSP.x) + iTime * rotSpeed;
 
         // Distance from fragment to mouse in screen-space (for secondary rings)
-        float mouseFragR = length(sp - mouseScreenP) / refSize;
 
         // ── Concentric spectrum rings ───────────────────────
         // Map frequency bands to radial distance: bass at center, treble at edge

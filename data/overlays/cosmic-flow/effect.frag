@@ -99,7 +99,6 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     // ── Audio envelopes ────────────────────────────────────────
     float bassEnv   = hasAudio ? smoothstep(0.02, 0.3, bass) * audioReact : 0.0;
     float midsEnv   = hasAudio ? smoothstep(0.02, 0.4, mids) * audioReact : 0.0;
-    float trebleEnv = hasAudio ? smoothstep(0.05, 0.5, treble) * audioReact : 0.0;
 
     // Audio modulates existing animation parameters organically:
     //   bass  → FBM contrast deepening (brighter peaks, darker valleys)

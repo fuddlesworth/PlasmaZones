@@ -116,7 +116,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // Screen-space angle (from screen center, for interior effects)
     vec2 screenCenter = iResolution.xy * 0.5;
     vec2 sp = fragCoord - screenCenter;
-    float angle = atan(sp.x, -sp.y) / TAU + 0.5;
 
     // Colors
     vec3 primary  = colorWithFallback(p_primaryColor.rgb, fillColor.rgb);

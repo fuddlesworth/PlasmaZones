@@ -403,7 +403,6 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
         // Mids: color cycling between border color and gradient complement
         if (hasAudio && mids > 0.05) {
-            float cyclePhase = fract(t * (0.2 + mids * 0.12));
             vec3 complement = iconGradient(borderPhase + 0.5, cyanCol, blueCol, purpleCol, roseCol);
             borderCol = mix(borderCol, complement * flow, smoothstep(0.05, 0.4, mids) * 0.25);
         }
