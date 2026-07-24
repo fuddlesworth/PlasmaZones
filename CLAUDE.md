@@ -100,7 +100,7 @@ User-facing strings MUST read like plain, human-written prose with no LLM tics. 
 
 ### Adding a Setting
 1. `configdefaults.h` — static default accessor + `xxxKey()` accessor for the config key string
-2. `src/core/isettings.h` — signal in ISettings
+2. `src/core/interfaces/isettings.h` — signal in ISettings
 3. `settings.h` — Q_PROPERTY + getter + setter + member
 4. `settings.cpp` — setter (check changed, emit), load/save/reset using `ConfigDefaults::xxx()`
 

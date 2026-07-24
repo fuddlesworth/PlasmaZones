@@ -181,7 +181,7 @@ LabelHalo gatherLabelHalo(vec2 uv, vec2 px, float labelGlowSpread, vec2 chromOff
     float haloTight = 0.0;
     float haloWide = 0.0;
     float haloVWide = 0.0;
-    float haloR = 0.0, haloG = 0.0, haloB = 0.0;
+    float haloR = 0.0, haloB = 0.0;
 
     for (int dy = -2; dy <= 2; dy++) {
         for (int dx = -2; dx <= 2; dx++) {
@@ -197,8 +197,10 @@ LabelHalo gatherLabelHalo(vec2 uv, vec2 px, float labelGlowSpread, vec2 chromOff
             haloWide += s * wWide;
             haloVWide += s * wVWide;
 
+            // No haloG fetch: the green channel samples the same texel with the
+            // same weight as haloWide above, so it is copied out after the loop
+            // instead of costing a second fetch per tap.
             haloR += texture(uZoneLabels, uv + off * labelGlowSpread + chromOff).a * wWide;
-            haloG += texture(uZoneLabels, uv + off * labelGlowSpread).a * wWide;
             haloB += texture(uZoneLabels, uv + off * labelGlowSpread - chromOff).a * wWide;
         }
     }
@@ -207,7 +209,8 @@ LabelHalo gatherLabelHalo(vec2 uv, vec2 px, float labelGlowSpread, vec2 chromOff
     h.tight = haloTight / 10.0;
     h.wide = haloWide / 16.5;
     h.vWide = haloVWide / 20.0;
-    h.chroma = vec3(haloR, haloG, haloB) / 16.5;
+    // Green reuses h.wide: identical texel, identical weight, identical divisor.
+    h.chroma = vec3(haloR / 16.5, h.wide, haloB / 16.5);
     return h;
 }
 

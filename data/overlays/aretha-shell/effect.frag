@@ -32,7 +32,7 @@ float getAudioSensitivity(){ return p_audioSensitivity >= 0.0 ? p_audioSensitivi
 float getFillOpacity()     { return p_fillOpacity >= 0.0 ? p_fillOpacity : 0.95; }
 float getDataSurgeIntensity() { return p_dataSurgeIntensity >= 0.0 ? p_dataSurgeIntensity : 1.0; }
 
-// Tri-Hex parameters (customParams[4] and customParams[5])
+// Tri-Hex parameters
 float getTriLineThickness() { return p_triLineThickness >= 0.0 ? p_triLineThickness : 0.03; }
 float getTriLineOpacity()   { return p_triLineOpacity >= 0.0 ? p_triLineOpacity : 0.25; }
 float getTriFillOpacity()   { return p_triFillOpacity >= 0.0 ? p_triFillOpacity : 0.12; }
@@ -227,7 +227,10 @@ vec3 hexGrid(vec2 pixelCoord, float t, vec2 screenUV,
     bool hasAudio = iAudioSpectrumSize > 0;
 
     // Hex grid in pixel space (size stays constant regardless of zone size)
-    vec2 scaledUV = pixelCoord / HEX_PIXEL_SIZE;
+    // zoneLen(): HEX_PIXEL_SIZE is a logical-px setting divided into a
+    // device-px fragCoord, so without it the cells halved in physical size on
+    // a 2x display while the border and corner around them kept theirs.
+    vec2 scaledUV = pixelCoord / max(zoneLen(HEX_PIXEL_SIZE), 1.0);
     vec2 hex = hexCoord(scaledUV);
     float d = hexDist(hex);
 
@@ -593,10 +596,12 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // Base color
         vec3 baseColor = getBackgroundColor();
         // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
-        // The zone's activeOpacity arrives in fillColor.a, but only four packs
-        // ever multiplied it in, so it was inert in the other 23 and the split
-        // just made the same setting behave differently per pack.
+        // The pack's own fillOpacity is the sole fill alpha, catalog-wide.
         float bgAlpha = getFillOpacity();
+        // The fill COLOUR is separate and was being discarded entirely. Light
+        // identity tint at the sibling packs' weight, through zoneFillHue()
+        // because zoneFillColors[i].rgb arrives premultiplied.
+        baseColor = mix(baseColor, baseColor * 0.85 + zoneFillHue(fillColor) * 0.15, 0.35);
 
         // Layer 1: Color Grade
         vec3 gradedBg = colorGrade(baseColor);

@@ -37,9 +37,9 @@ UnifiedLayoutController::UnifiedLayoutController(PhosphorZones::LayoutRegistry* 
 
         connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
                 [this](PhosphorZones::Layout* layout) {
-                    if (layout) {
-                        setCurrentLayoutId(layout->id().toString());
-                    }
+                    // Clear on null too, so the property cannot latch an
+                    // observer on an id whose layout no longer exists.
+                    setCurrentLayoutId(layout ? layout->id().toString() : QString());
                 });
     }
 
@@ -193,10 +193,10 @@ void UnifiedLayoutController::cycle(bool forward)
     applyLayoutByIndex(nextIndex);
 }
 
-void UnifiedLayoutController::syncFromExternalState(const QString& overrideId)
+void UnifiedLayoutController::syncFromExternalState(std::optional<QString> overrideId)
 {
-    if (!overrideId.isEmpty()) {
-        setCurrentLayoutId(overrideId);
+    if (overrideId.has_value()) {
+        setCurrentLayoutId(*overrideId);
     } else if (m_layoutManager && m_layoutManager->activeLayout()) {
         setCurrentLayoutId(m_layoutManager->activeLayout()->id().toString());
     } else {
@@ -217,9 +217,11 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
             const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
             PhosphorZones::Layout* screenLayout =
                 m_layoutManager->layoutForScreen(screenId, desktop, m_currentActivity);
-            if (screenLayout) {
-                setCurrentLayoutId(screenLayout->id().toString());
-            }
+            // Clear when the screen has no assignment rather than leaving the
+            // PREVIOUS screen's id in place. findCurrentIndex() feeds cycle()
+            // off this value, so a stale id made cycling on an unassigned
+            // screen resume from the other screen's position.
+            setCurrentLayoutId(screenLayout ? screenLayout->id().toString() : QString());
         }
     }
 }

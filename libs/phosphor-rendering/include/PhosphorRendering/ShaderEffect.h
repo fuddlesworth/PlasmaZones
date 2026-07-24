@@ -766,9 +766,19 @@ private:
     void onPlayingTick();
 
     // ── Output-scale plumbing ────────────────────────────────────────
-    /// Re-subscribe to the signals that change effectiveResolutionScale():
-    /// the window's screen, and that screen's device-pixel ratio. Called
-    /// from itemChange when the item moves between windows.
+    /// Re-subscribe to whatever reports a change in
+    /// effectiveResolutionScale(). Called from itemChange when the item
+    /// moves between windows.
+    ///
+    /// The mechanism is version-split. On Qt 6.11+ this is a single
+    /// connection to QQuickWindow::devicePixelRatioChanged, the NOTIFY for
+    /// effectiveDevicePixelRatio, which is the exact accessor
+    /// effectiveResolutionScale() reads: it covers a screen move, a screen
+    /// rescaled in place, and a per-surface scale change that touches no
+    /// screen at all (Wayland fractional-scale-v1), which no QScreen signal
+    /// reports. Below 6.11 that notifier does not exist, so it approximates
+    /// with QWindow::screenChanged plus the screen's
+    /// logicalDotsPerInchChanged.
     ///
     /// Without this, a scale change only reaches the GPU on a frame that
     /// something else already scheduled. Moving an overlay to a
@@ -794,8 +804,13 @@ private:
     bool m_isReversed = false;
     bool m_playing = false;
     QMetaObject::Connection m_playingConnection;
-    QMetaObject::Connection m_windowScreenConnection;
+    /// Assigned on both arms of the version split: the window's DPR notifier
+    /// on 6.11+, the screen-change signal below that.
+    QMetaObject::Connection m_scaleConnection;
+#if QT_VERSION < QT_VERSION_CHECK(6, 11, 0)
+    /// Pre-6.11 only. On 6.11+ the single connection above covers this case.
     QMetaObject::Connection m_screenDprConnection;
+#endif
 
     // ── Shader source ────────────────────────────────────────────────
     QUrl m_shaderSource;

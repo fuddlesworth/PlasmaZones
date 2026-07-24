@@ -107,23 +107,10 @@ public:
      */
     PhosphorRendering::ZoneDataSnapshot getZoneDataSnapshot() const;
 
-    /**
-     * @brief Get parsed zone rectangles (thread-safe)
-     * @return Vector of normalized zone rectangles
-     */
-    QVector<PhosphorRendering::ZoneRect> zoneRects() const;
-
-    /**
-     * @brief Get parsed zone fill colors (thread-safe)
-     * @return Vector of zone fill colors
-     */
-    QVector<PhosphorRendering::ZoneColor> zoneFillColors() const;
-
-    /**
-     * @brief Get parsed zone border colors (thread-safe)
-     * @return Vector of zone border colors
-     */
-    QVector<PhosphorRendering::ZoneColor> zoneBorderColors() const;
+    // The per-array accessors (zoneRects / zoneFillColors / zoneBorderColors)
+    // that used to sit here had no callers anywhere in the repo, including
+    // tests. getZoneDataSnapshot() above takes the mutex once and returns all
+    // three together, which is what every real consumer wants.
 
     // Note: reloadShader() is inherited from ShaderEffect (Q_INVOKABLE). Call
     // that directly from QML / C++ — no zone-specific alias needed.

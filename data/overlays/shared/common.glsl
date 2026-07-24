@@ -228,6 +228,34 @@ float zoneLen(float logicalPx) {
     return logicalPx * uZoneScale;
 }
 
+// A stroke DERIVED from zoneBorderWidth(), re-floored at one device pixel.
+//
+// zoneBorderWidth() floors its result so a thin border never drops below a
+// pixel, but a pack that then scales it down (`borderWidth * 0.5` for an inner
+// core stroke, and similar) puts it straight back under one. That used to be
+// harmless because the floor was 2 to 2.5 LOGICAL px, so half of it was still
+// over a pixel. The floor is one DEVICE px now, so half of it shimmers and
+// drops out on a fractional scale, which is the exact failure the floor exists
+// to prevent.
+//
+// Pass the already-scaled device-px width in. A width of 0 stays 0, so "border
+// off" still means off through every derived stroke.
+float zoneStrokeWidth(float deviceWidth) {
+    return deviceWidth <= 0.0 ? 0.0 : max(deviceWidth, 1.0);
+}
+
+// The band around the zone edge that an edge-anchored EFFECT should occupy,
+// given the pack's border width.
+//
+// Packs gate treble sparks, edge glints and similar on a multiple of the border
+// width. That was safe while the width had a hard 2-logical-px floor, but a
+// user-configured width of 0 collapses the band to nothing and takes the effect
+// with it, silently. Turning the border off should not also turn off a feature
+// that merely sits near the edge, so the band falls back to its own minimum.
+float zoneEdgeBand(float deviceWidth, float minLogical) {
+    return max(deviceWidth, zoneLen(minLogical));
+}
+
 // The zone's configured fill colour as a plain hue, undoing the premultiply.
 //
 // zoneFillColors[i].rgb arrives multiplied by the zone's activeOpacity (the

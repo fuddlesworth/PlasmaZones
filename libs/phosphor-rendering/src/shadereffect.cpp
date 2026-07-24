@@ -13,7 +13,9 @@
 #include <QMutexLocker>
 #include <QPainter>
 #include <QQuickWindow>
+#if QT_VERSION < QT_VERSION_CHECK(6, 11, 0)
 #include <QScreen>
+#endif
 #include <QSvgRenderer>
 
 #include <cmath>
@@ -968,10 +970,12 @@ void ShaderEffect::updateScaleConnections()
 {
     // Tear down unconditionally before re-establishing, so moving between
     // windows cannot leave a connection to the previous one behind.
-    QObject::disconnect(m_windowScreenConnection);
-    m_windowScreenConnection = {};
+    QObject::disconnect(m_scaleConnection);
+    m_scaleConnection = {};
+#if QT_VERSION < QT_VERSION_CHECK(6, 11, 0)
     QObject::disconnect(m_screenDprConnection);
     m_screenDprConnection = {};
+#endif
 
     QQuickWindow* w = window();
     if (!w) {
@@ -987,14 +991,14 @@ void ShaderEffect::updateScaleConnections()
     // screen rescaled in place, and for a per-surface scale change that never
     // touches a screen at all (Wayland's fractional-scale-v1 preferred scale),
     // which no QScreen signal reports.
-    m_windowScreenConnection = QObject::connect(w, &QQuickWindow::devicePixelRatioChanged, this, [this]() {
+    m_scaleConnection = QObject::connect(w, &QQuickWindow::devicePixelRatioChanged, this, [this]() {
         update();
     });
 #else
     // Before 6.11 the accessor has no notifier, so approximate it. The window
     // moving to another screen changes effectiveDevicePixelRatio; re-subscribe
     // to the new screen's own signal at the same time.
-    m_windowScreenConnection = QObject::connect(w, &QWindow::screenChanged, this, [this]() {
+    m_scaleConnection = QObject::connect(w, &QWindow::screenChanged, this, [this]() {
         updateScaleConnections();
         update();
     });

@@ -167,11 +167,13 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     // change to glowRadius carries the guard with it instead of silently
     // clipping the way pulse-flow's hard-coded bound did.
     float glowRadius = zoneLen(mix(5.0, 9.0, vitality));
-    // The gate has to cover the ENLARGED radius, not the base one. The bass
-    // wavefront below adds up to zoneLen(6.0) to glowRadius after this test,
-    // so gating on the base alone cut the widened glow at ~27% of peak and
-    // left a hard ring on every bass hit.
-    if (d > 0.0 && d < (glowRadius + zoneLen(6.0)) * 3.0) {
+    // The gate covers the ENLARGED radius. The bass wavefront below adds up
+    // to zoneLen(6.0) to glowRadius AFTER this test, so gating on the base
+    // alone cut the widened glow mid-gradient and rang. Two e-folds past
+    // the enlarged radius leaves ~13% residual, which is invisible; three
+    // pushed the glow visibly further than it reached before this PR and
+    // nearly tripled the annulus this branch shades.
+    if (d > 0.0 && d < (glowRadius + zoneLen(6.0)) * 2.0) {
         float glowFalloff = mix(0.3, 0.55, vitality);
 
         // Bass: expanding glow wavefront
@@ -193,8 +195,13 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     }
 
     // ---- Treble: paint splatter sparks near inner edge ----
-    if (hasAudio && treble > 0.06 && d > -borderWidth * 3.0 && d < 0.0) {
-        float edgeProx = smoothstep(-borderWidth * 3.0, 0.0, d);
+    // zoneEdgeBand, not a bare multiple of borderWidth. A configured width
+    // of 0 collapsed this gate to `d > 0.0 && d < 0.0` and took the whole
+    // treble spark feature with it. Turning the border off should not also
+    // turn off a feature that merely sits near the edge.
+    float sparkBand = zoneEdgeBand(borderWidth * 3.0, 6.0);
+    if (hasAudio && treble > 0.06 && d > -sparkBand && d < 0.0) {
+        float edgeProx = smoothstep(-sparkBand, 0.0, d);
         float spark = 0.0;
         for (int si = 0; si < 3; si++) {
             float sparkSpeed = 2.5 + float(si) * 1.5;

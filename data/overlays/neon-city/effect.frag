@@ -273,7 +273,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
     // K_TIME_WRAP boundary (~17 min).  Raw sin(iTime*k) would visibly
     // jump.  angularNoise/segments are noise/sawtooth and tolerate a
     // small reseed at the wrap, so they keep using iTime directly.
-    float coreWidth = borderWidth * mix(0.5, 0.9, vitality);
+    // zoneStrokeWidth re-floors the derived stroke at one device pixel.
+    // zoneBorderWidth() floors the border itself, but scaling that down
+    // puts it straight back under a pixel, where it shimmers out on a
+    // fractional scale. A width of 0 still passes through as 0.
+    float coreWidth = zoneStrokeWidth(borderWidth * mix(0.5, 0.9, vitality));
     float borderCore = softBorder(d, coreWidth);
     if (borderCore > 0.0) {
         float borderAngle   = atan(p.x, -p.y) / TAU + 0.5;

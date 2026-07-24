@@ -428,19 +428,22 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
     // ── Outer glow: chromatic gradient ───────────────────────────────────
     if (d > 0.0 && d < zoneLen(24.0)) {
-        float glowRadius  = zoneLen(vitalityScale(5.0, 10.0, vitality));
-        float glowFalloff = vitalityScale(0.3, 0.55, vitality);
+        // Named for what expGlow(d, falloff, strength) actually takes. The old
+        // names had them the other way round, so the line below read as
+        // widening the falloff when it brightens the glow.
+        float glowFalloff  = zoneLen(vitalityScale(5.0, 10.0, vitality));
+        float glowStrength = vitalityScale(0.3, 0.55, vitality);
 
         // Gentle bass wavefront expansion
         if (hasAudio) {
             float waveCycle = fract(t * 0.7);
             float waveRadius = waveCycle * zoneLen(16.0);
             float waveBand = exp(-abs(d - waveRadius) / zoneLen(1.667)) * (1.0 - waveCycle);
-            glowRadius += waveBand * bass * zoneLen(3.0);
-            glowFalloff += waveBand * bass * 0.15;
+            glowFalloff += waveBand * bass * zoneLen(3.0);
+            glowStrength += waveBand * bass * 0.15;
         }
 
-        float glow = expGlow(d, glowRadius, glowFalloff);
+        float glow = expGlow(d, glowFalloff, glowStrength);
         glow *= vitalityScale(0.3, 1.0, vitality);
 
         float glowPhase = fract(angle / TAU + midsShift * 0.05);
@@ -448,9 +451,9 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
         // Chromatic split outer glow
         vec3 outerGlowCol = vec3(
-            expGlow(d - 1.0, glowRadius, glowFalloff),
+            expGlow(d - zoneLen(1.0), glowFalloff, glowStrength),
             glow,
-            expGlow(d + 1.0, glowRadius, glowFalloff)
+            expGlow(d + zoneLen(1.0), glowFalloff, glowStrength)
         ) * glowColor;
 
         result.rgb += outerGlowCol;

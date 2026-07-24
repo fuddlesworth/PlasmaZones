@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "core/utils/unifiedlayoutlist.h"
 #include <PhosphorLayoutApi/LayoutPreview.h>
 // Layout must be COMPLETE here, not forward-declared: the layoutApplied signal
@@ -150,11 +152,19 @@ public:
      * but mutates silently on some of its paths leaves observers latched on a
      * stale value, which is worse than having no NOTIFY at all.
      *
-     * @param overrideId If non-empty, use this as the current layout ID instead
-     *                   of querying the global active layout. Used for per-desktop
+     * @param overrideId When set, use this as the current layout ID instead of
+     *                   querying the global active layout. Used for per-desktop
      *                   sync where the assignment may be an autotile ID.
+     *
+     *                   It is std::optional rather than a possibly-empty QString
+     *                   because both callers pass an assignment id that is
+     *                   legitimately empty when the (screen, desktop, activity)
+     *                   has no assignment. Treating empty as "no override" made
+     *                   that case fall back to the GLOBAL active layout, which is
+     *                   the very fallback the per-desktop path exists to avoid.
+     *                   A set-but-empty override now clears the id, as it should.
      */
-    void syncFromExternalState(const QString& overrideId = QString());
+    void syncFromExternalState(std::optional<QString> overrideId = std::nullopt);
 
     /**
      * @brief Get current screen name

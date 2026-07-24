@@ -111,8 +111,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         col += activeGlow * innerGlow;
 
         // ── Treble: spark traces near inner edge ────────────────────────
-        if (hasAudio && treble > 0.06 && d > -borderWidth * 3.0) {
-            float edgeProx = smoothstep(-borderWidth * 3.0, -borderWidth * 0.5, d);
+        // zoneEdgeBand: at a configured width of 0 both the gate and the
+        // smoothstep below collapsed, killing the treble spark traces.
+        float sparkBand = zoneEdgeBand(borderWidth * 3.0, 6.0);
+        if (hasAudio && treble > 0.06 && d > -sparkBand) {
+            float edgeProx = smoothstep(-sparkBand, -sparkBand / 6.0, d);
             float spark = 0.0;
             for (int si = 0; si < 3; si++) {
                 float spd = 2.0 + float(si) * 1.5;

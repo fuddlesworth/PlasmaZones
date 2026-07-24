@@ -79,7 +79,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // Zone geometry — KEEP for cutout, border, edge effects
     vec2 rectPos  = zoneRectPos(rect);
-    vec2 rectSize = zoneRectSize(rect);
+    // Floored: a legitimately tiny normalised rect can flush to ~0 in float,
+    // and this feeds divisions that would hand smoothstep a NaN edge.
+    vec2 rectSize = max(zoneRectSize(rect), vec2(1.0));
     vec2 center   = zoneShape.center;  // already computed by zoneSdf()
     vec2 p        = fragCoord - center;  // KEEP for border/glow angle
     vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
@@ -368,7 +370,15 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Border ──────────────────────────────────────────────
 
-    float coreWidth = borderWidth * mix(0.5, 0.9, vitality);
+    // zoneStrokeWidth re-floors the derived stroke at one device pixel.
+
+    // zoneBorderWidth() floors the border itself, but scaling that down
+
+    // puts it straight back under a pixel, where it shimmers out on a
+
+    // fractional scale. A width of 0 still passes through as 0.
+
+    float coreWidth = zoneStrokeWidth(borderWidth * mix(0.5, 0.9, vitality));
     float core = softBorder(d, coreWidth);
     if (core > 0.0) {
         float angle = atan(p.x, -p.y) / TAU + 0.5;

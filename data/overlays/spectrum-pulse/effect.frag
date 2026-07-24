@@ -254,7 +254,15 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Border (neon core with energy flow) ────────────────────
 
-    float coreWidth = borderWidth * 0.7;
+    // zoneStrokeWidth re-floors the derived stroke at one device pixel.
+
+    // zoneBorderWidth() floors the border itself, but scaling that down
+
+    // puts it straight back under a pixel, where it shimmers out on a
+
+    // fractional scale. A width of 0 still passes through as 0.
+
+    float coreWidth = zoneStrokeWidth(borderWidth * 0.7);
     float core = softBorder(d, coreWidth);
     if (core > 0.0) {
         // Seamless angular noise (no atan discontinuity)
@@ -309,7 +317,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Edge sparks (treble-driven, per-spark staggered timing) ─
 
-    if (hasAudio && treble > 0.1 && abs(d) < borderWidth * 4.0) {
+    // zoneEdgeBand: at a configured width of 0 `abs(d) < 0` is never true and
+    // the edge-spark block (sole consumer of p_sparkColor here) went dead.
+    if (hasAudio && treble > 0.1 && abs(d) < zoneEdgeBand(borderWidth * 4.0, 8.0)) {
         float sparkAngle = atan(p.x, -p.y) / TAU + 0.5;
         float sparkSlot = floor(sparkAngle * 60.0);
 

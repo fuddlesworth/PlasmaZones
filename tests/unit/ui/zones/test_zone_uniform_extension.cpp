@@ -578,7 +578,12 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
         } else if (m.type == QLatin1String("vec2")) {
             baseAlign = 8;
             baseSize = 8;
-        } else if (m.type == QLatin1String("vec3") || m.type == QLatin1String("vec4")) {
+        } else if (m.type == QLatin1String("vec3")) {
+            // std140 vec3: base ALIGNMENT 16 but base SIZE 12, so a following
+            // float packs into the same 16 bytes.
+            baseAlign = 16;
+            baseSize = 12;
+        } else if (m.type == QLatin1String("vec4")) {
             baseAlign = 16;
             baseSize = 16;
         } else if (m.type == QLatin1String("mat4")) {
@@ -587,10 +592,13 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
         } else {
             return -1; // unknown type: caller fails loudly rather than guessing
         }
-        // std140 rounds every array element's stride up to 16.
+        // std140 rounds an array element's STRIDE up to a multiple of 16. That
+        // is 16 for every scalar and vector type, but 64 for mat4, so the
+        // stride has to be derived rather than hard-coded.
         if (m.arrayLen > 0) {
+            const int stride = (baseSize + 15) / 16 * 16;
             baseAlign = 16;
-            baseSize = 16 * m.arrayLen;
+            baseSize = stride * m.arrayLen;
         }
         const int aligned = (offset + baseAlign - 1) / baseAlign * baseAlign;
         return (aligned - offset) + baseSize;
@@ -601,6 +609,30 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
     // pinned too. Inserting, removing or reordering a base member shifts the
     // entire extension region in std140 while leaving extensionSize() and the
     // tail comparison identical, which breaks all 27 packs with nothing failing.
+    // BaseUniforms, member for member. The size walk below would pass a swap of
+    // two same-size adjacent members (iTimeDelta with iFrame, say), which shifts
+    // nothing but makes every pack read the wrong 4 bytes for both, with no
+    // build error. Identity has to be pinned, not just the total.
+    const QVector<Member> expectedHead = {
+        {QStringLiteral("mat4"), QStringLiteral("qt_Matrix"), 0},
+        {QStringLiteral("float"), QStringLiteral("qt_Opacity"), 0},
+        {QStringLiteral("float"), QStringLiteral("iTime"), 0},
+        {QStringLiteral("float"), QStringLiteral("iTimeDelta"), 0},
+        {QStringLiteral("int"), QStringLiteral("iFrame"), 0},
+        {QStringLiteral("vec2"), QStringLiteral("iResolution"), 0},
+        {QStringLiteral("int"), QStringLiteral("zoneCount"), 0},
+        {QStringLiteral("int"), QStringLiteral("highlightedCount"), 0},
+        {QStringLiteral("vec4"), QStringLiteral("iMouse"), 0},
+        {QStringLiteral("vec4"), QStringLiteral("iDate"), 0},
+        {QStringLiteral("vec4"), QStringLiteral("customParams"), 8},
+        {QStringLiteral("vec4"), QStringLiteral("customColors"), 16},
+        {QStringLiteral("vec2"), QStringLiteral("iChannelResolution"), 4},
+        {QStringLiteral("int"), QStringLiteral("iAudioSpectrumSize"), 0},
+        {QStringLiteral("int"), QStringLiteral("iFlipBufferY"), 0},
+        {QStringLiteral("vec2"), QStringLiteral("iTextureResolution"), 4},
+        {QStringLiteral("float"), QStringLiteral("iTimeHi"), 0},
+    };
+
     const QVector<Member> expectedTail = {
         {QStringLiteral("vec4"), QStringLiteral("zoneRects"), MaxZones},
         {QStringLiteral("vec4"), QStringLiteral("zoneFillColors"), MaxZones},
@@ -617,6 +649,14 @@ void TestZoneUniformExtension::layout_matchesGlslUboDeclaration()
         }
     }
     QVERIFY2(tailStart >= 0, "zoneRects not found in the ZoneUniforms block");
+
+    QCOMPARE(tailStart, expectedHead.size());
+    for (int i = 0; i < expectedHead.size(); ++i) {
+        const Member& actualMember = members[i];
+        QCOMPARE(actualMember.type, expectedHead[i].type);
+        QCOMPARE(actualMember.name, expectedHead[i].name);
+        QCOMPARE(actualMember.arrayLen, expectedHead[i].arrayLen);
+    }
 
     // Exactly the expected tail, and nothing after it. A member appended past
     // uZoneScale would land in the 12 std140 pad bytes the C++ struct declares

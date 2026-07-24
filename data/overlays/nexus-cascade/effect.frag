@@ -179,11 +179,13 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     // change to glowRadius carries the guard with it instead of silently
     // clipping the way pulse-flow's hard-coded bound did.
     float glowRadius = zoneLen(mix(5.0, 9.0, vitality));
-    // The gate has to cover the ENLARGED radius, not the base one. The bass
-    // wavefront below adds up to zoneLen(8.0) to glowRadius after this test, so
-    // gating on the base alone cut the widened glow well short of its tail and
-    // left a hard ring on every bass hit.
-    if (d > 0.0 && d < (glowRadius + zoneLen(8.0)) * 3.0) {
+    // The gate covers the ENLARGED radius. The bass wavefront below adds up
+    // to zoneLen(8.0) to glowRadius AFTER this test, so gating on the base
+    // alone cut the widened glow mid-gradient and rang. Two e-folds past
+    // the enlarged radius leaves ~13% residual, which is invisible; three
+    // pushed the glow visibly further than it reached before this PR and
+    // nearly tripled the annulus this branch shades.
+    if (d > 0.0 && d < (glowRadius + zoneLen(8.0)) * 2.0) {
         float glowFalloff = mix(0.3, 0.6, vitality);
         // Cascade wavefront glow — bass sends expanding rings outward from
         // the zone edge, like a network signal radiating to neighbors.
@@ -210,8 +212,13 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     // Treble creates bright sparks that travel along the inner edge like data
     // packets racing through network traces. Multiple sparks at different speeds
     // create a flickering circuit-board look along the zone perimeter.
-    if (hasAudio && treble > 0.06 && d > -borderWidth * 3.0 && d < 0.0) {
-        float edgeProx = smoothstep(-borderWidth * 3.0, 0.0, d);
+    // zoneEdgeBand, not a bare multiple of borderWidth. A configured width
+    // of 0 collapsed this gate to `d > 0.0 && d < 0.0` and took the whole
+    // treble spark feature with it. Turning the border off should not also
+    // turn off a feature that merely sits near the edge.
+    float sparkBand = zoneEdgeBand(borderWidth * 3.0, 6.0);
+    if (hasAudio && treble > 0.06 && d > -sparkBand && d < 0.0) {
+        float edgeProx = smoothstep(-sparkBand, 0.0, d);
         // Three spark traces at different angular speeds
         float spark = 0.0;
         for (int si = 0; si < 3; si++) {

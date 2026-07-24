@@ -281,24 +281,6 @@ PhosphorRendering::ZoneDataSnapshot ZoneShaderItem::getZoneDataSnapshot() const
     return m_zoneData;
 }
 
-QVector<PhosphorRendering::ZoneRect> ZoneShaderItem::zoneRects() const
-{
-    QMutexLocker lock(&m_zoneDataMutex);
-    return m_zoneData.rects;
-}
-
-QVector<PhosphorRendering::ZoneColor> ZoneShaderItem::zoneFillColors() const
-{
-    QMutexLocker lock(&m_zoneDataMutex);
-    return m_zoneData.fillColors;
-}
-
-QVector<PhosphorRendering::ZoneColor> ZoneShaderItem::zoneBorderColors() const
-{
-    QMutexLocker lock(&m_zoneDataMutex);
-    return m_zoneData.borderColors;
-}
-
 // ============================================================================
 // Scene Graph Integration
 // ============================================================================
@@ -467,14 +449,16 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // overlay to a differently-scaled screen changes the ratio without
     // touching zone contents, and setScale() early-outs when the value is
     // unchanged, so the steady-state cost is a mutex lock and a compare.
-    // A rejected scale keeps the last good value, which still renders and so
-    // looks exactly like working code. Report it once rather than never: the
-    // symptom is corners and borders quietly stuck at the previous screen's
-    // scale, which nobody would think to trace back to here.
-    if (!m_zoneExtension->setScale(static_cast<float>(effectiveResolutionScale())) && !m_loggedBadScale) {
+    // setScale is [[nodiscard]] and its contract says the caller reports a
+    // rejection, so this branch handles it. No current DPR source can trigger
+    // it: effectiveResolutionScale() returns either the window's device-pixel
+    // ratio or literal 1.0, both always positive and finite. It is a backstop
+    // against that contract changing, not an observed runtime state.
+    const qreal scale = effectiveResolutionScale();
+    if (!m_zoneExtension->setScale(static_cast<float>(scale)) && !m_loggedBadScale) {
         m_loggedBadScale = true;
         qCWarning(PlasmaZones::lcOverlay)
-            << "ZoneShaderItem: rejected out-of-contract zone scale" << effectiveResolutionScale()
+            << "ZoneShaderItem: rejected out-of-contract zone scale" << scale
             << "- keeping the last good value. Corner radii and border widths will not track this screen.";
     }
 
@@ -507,10 +491,16 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                     << PhosphorRendering::MaxZones << "- the excess will not be rendered.";
             }
 
+            // Clamped: everything past MaxZones is discarded by
+            // updateFromZones() anyway, so building it (two QColor conversions
+            // apiece) is pure waste on an oversized layout. The raw count still
+            // goes to setZoneCounts and to the warning above, both of which
+            // want the true number.
+            const int syncCount = qMin(snapshot.zoneCount, PhosphorRendering::MaxZones);
             QVector<PhosphorRendering::ZoneData> zoneDataVec;
-            zoneDataVec.reserve(snapshot.zoneCount);
+            zoneDataVec.reserve(syncCount);
 
-            for (int i = 0; i < snapshot.zoneCount; ++i) {
+            for (int i = 0; i < syncCount; ++i) {
                 PhosphorRendering::ZoneData zd;
 
                 // Rectangle (already normalized 0-1)

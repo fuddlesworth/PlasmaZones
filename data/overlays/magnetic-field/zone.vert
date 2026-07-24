@@ -21,7 +21,17 @@ void main() {
     // Get parameters
     float fieldStrength = customParams[0].x >= 0.0 ? customParams[0].x : 1.0;
     float waveSpeed = customParams[0].y >= 0.0 ? customParams[0].y : 1.5;
-    float distortionAmount = customParams[1].w >= 0.0 ? customParams[1].w : 0.4;
+    // Slot 6, not 7. The p_<id> preamble is spliced into the FRAGMENT stage
+    // only, so a vertex shader has to hand-decode the scalar pool, and the
+    // slots follow declaration order in metadata.json:
+    //   0 fieldStrength  1 waveSpeed  2 rippleSize  3 glowIntensity
+    //   4 particleCount  5 particleSize  6 distortionAmount  7 audioReactivity
+    // This read [1].w, which is audioReactivity. Every vertex displacement in
+    // this file, and the vDistortAmount / vDisplacement varyings the fragment
+    // stage builds its border width, glow extent and strain lines from, was
+    // therefore scaled by the audio knob rather than the Distortion slider,
+    // and defaulted to 1.0 where 0.4 was meant.
+    float distortionAmount = customParams[1].z >= 0.0 ? customParams[1].z : 0.4;
     
     // Mouse position in normalized coordinates
     vec2 mouseNorm = iMouse.zw;

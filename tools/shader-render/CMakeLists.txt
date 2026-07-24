@@ -142,17 +142,30 @@ if(BUILD_TESTING)
     # does today, which is exactly the argument that was accepted for the bus
     # isolation below, so apply it here for the same reason.
     set(_pz_sr_test_home "${CMAKE_BINARY_DIR}/test-xdg")
+    # Created here as well as in tests/unit: relying on that directory to make
+    # them first is an invisible one-way dependency between two sibling trees.
+    file(MAKE_DIRECTORY
+        "${_pz_sr_test_home}/config"
+        "${_pz_sr_test_home}/data"
+        "${_pz_sr_test_home}/state"
+        "${_pz_sr_test_home}/cache")
     set_tests_properties(test_shader_render_layoutloader test_shader_render_metadataloader PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${_pz_sr_test_home}/config;XDG_DATA_HOME=${_pz_sr_test_home}/data;XDG_STATE_HOME=${_pz_sr_test_home}/state;XDG_CACHE_HOME=${_pz_sr_test_home}/cache")
 
     # Reuses tests/unit's cache entry rather than caching the same program
     # under a second name a user could set inconsistently.
+    # Fail at configure time rather than as a confusing launcher error inside
+    # ctest if the shared bus config ever moves.
+    set(_pz_sr_bus_conf "${CMAKE_SOURCE_DIR}/tests/unit/test-session-bus.conf")
+    if(NOT EXISTS "${_pz_sr_bus_conf}")
+        message(FATAL_ERROR "shader-render tests: missing D-Bus isolation config at ${_pz_sr_bus_conf}")
+    endif()
     find_program(_pz_dbus_run_session dbus-run-session)
     if(_pz_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
         foreach(_pz_sr_test test_shader_render_layoutloader test_shader_render_metadataloader)
             set_target_properties(${_pz_sr_test} PROPERTIES
                 TEST_LAUNCHER
-                "${_pz_dbus_run_session};--config-file=${CMAKE_SOURCE_DIR}/tests/unit/test-session-bus.conf;--")
+                "${_pz_dbus_run_session};--config-file=${_pz_sr_bus_conf};--")
         endforeach()
     else()
         message(STATUS "shader-render tests: D-Bus isolation unavailable (needs dbus-run-session + CMake 3.29); "

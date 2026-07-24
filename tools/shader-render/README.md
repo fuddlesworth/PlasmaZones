@@ -72,7 +72,8 @@ Common flags:
 | `--layout-dir` | `data/layouts/` then `/usr/share/...` | where to find layout JSONs |
 
 Shared GLSL (`shared/common.glsl`, `audio.glsl`, `zone.vert`) resolves from the
-source tree first, then the XDG data dirs, then `/usr/share`. That is the
+source tree first, then the XDG data dirs, then `/usr/share`, with a final
+`libs/phosphor-rendering/shaders` fallback the daemon does not have. That is the
 opposite of the daemon's order, on purpose. The daemon is the installed program
 and should prefer installed data. This tool exists to check the tree you are
 editing, so an installed copy taking precedence would mean previewing the last
@@ -136,12 +137,11 @@ Working today:
 - Audio mock generators (silent / sine / noise / sweep)
 - Frame-grab and PNG / VP9 / H.264 output
 - phosphor-rendering's ZoneUniformExtension attached so zone arrays in the UBO match
-  the runtime exactly. The tool renders at an exact pixel
-  resolution with no display scaling, so it leaves the
-  extension's logical-to-device scale at its 1.0 default rather
-  than reporting a device-pixel ratio the way the daemon item
-  does. A corner radius or border width therefore comes out in
-  the units you asked for, which is what a preview wants. Raising
+  the runtime exactly. The tool reports the render target's
+  device-pixel ratio to the extension the same way the daemon
+  item does; that ratio is pinned to 1.0 here, so a corner radius
+  or border width comes out in the units you asked for, which is
+  what a preview wants. Raising
   `--resolution` does NOT stand in for a scaled display: the zone
   rects grow with `iResolution` while the radius stays fixed, so
   the corners get relatively smaller. A real scaled display scales
@@ -151,11 +151,12 @@ Working today:
 Known gaps to verify on first run:
 
 - **Multipass + buffer-feedback shaders** (neon-city, voxel-
-  terrain, paper, ...) — the renderer drives each frame with an
-  explicit `beginFrame()` / `render()` / `endFrame()` triple, which
-  is what clean ping-pong between the buffer textures needs. The
-  offscreen targets are built in `buildOffscreenTarget` and the
-  frame loop lives in `Renderer::render`.
+  terrain, paper, ...) — the frame loop issues polishItems /
+  `beginFrame()` / sync / `render()`, and the matching
+  `endFrame()` lands in `captureFrame` after the readback, so the
+  ping-pong ordering between the buffer textures stays explicit.
+  The offscreen targets are built in `buildOffscreenTarget` and
+  the loop lives in `Renderer::render`.
 - **Depth-buffered shaders** — `useDepthBuffer = true` flag is
   forwarded; the corresponding offscreen depth attachment is
   set up by `ShaderNodeRhi`, but verify visually against a real

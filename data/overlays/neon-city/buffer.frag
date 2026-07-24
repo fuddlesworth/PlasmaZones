@@ -1,5 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-FileCopyrightText: nikitamashchenko
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// NOTE FOR MAINTAINERS: the body below is adapted from a Shadertoy work
+// published under CC-BY-NC-SA 3.0 (see the attribution in the header comment).
+// CLAUDE.md requires an incorporated upstream to keep its own licence, because
+// PlasmaZones is not the copyright holder and cannot relicense it. The upstream
+// copyright line above is the part that was simply missing. The licence
+// identifier is a separate question that needs a human: CC-BY-NC-SA carries a
+// non-commercial restriction that is not compatible with GPL-3.0-or-later in
+// either direction, so the current identifier may not be servable as-is.
 
 #version 450
 

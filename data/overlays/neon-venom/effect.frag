@@ -414,8 +414,9 @@ vec4 pImage(vec2 fragCoord) {
                 haloWide += s * wWide;
                 haloVWide += s * wVWide;
 
+                // No haloG fetch: green samples the same texel with the same
+                // weight as haloWide above, so it is copied out after the loop.
                 haloR += texture(uZoneLabels, luv + off * spread + chromOff).a * wWide;
-                haloG += texture(uZoneLabels, luv + off * spread).a * wWide;
                 haloB += texture(uZoneLabels, luv + off * spread - chromOff).a * wWide;
             }
         }
@@ -428,7 +429,7 @@ vec4 pImage(vec2 fragCoord) {
         // halo to a flat clamped colour. The shared gatherLabelHalo() this loop
         // duplicates divides by 16.5 for exactly this reason.
         haloR /= 16.5;
-        haloG /= 16.5;
+        haloG = haloWide;  // same texel, same weight, same divisor
         haloB /= 16.5;
 
         // Bioluminescent flicker: organic irregular pulsing
