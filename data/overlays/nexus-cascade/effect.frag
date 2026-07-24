@@ -22,7 +22,7 @@ float getAudioReact()    { return p_audioReactivity >= 0.0 ? p_audioReactivity :
 float getBassChromaMul() { return p_bassChromaMultiplier >= 0.0 ? p_bassChromaMultiplier : 3.0; }
 
 
-vec4 sampleNexus(vec2 fragCoord, vec2 uv, float chroma) {
+vec4 sampleNexus(vec2 fragCoord, float chroma) {
     vec4 c0 = texture(iChannel0, channelUv(0, fragCoord));
     vec4 c1 = texture(iChannel1, channelUv(1, fragCoord));
     vec4 c2 = texture(iChannel2, channelUv(2, fragCoord));
@@ -83,7 +83,7 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float chromaMod = chroma * chromaSpike;
 
     if (d < 0.0) {
-        vec4 nexus = sampleNexus(fragCoord, localUV, isHighlighted ? chromaMod * 1.5 : chromaMod);
+        vec4 nexus = sampleNexus(fragCoord, isHighlighted ? chromaMod * 1.5 : chromaMod);
         vec3 zoneFill = fillColor.rgb;
         float tintAmount = getZoneFillTint();
         result.rgb = mix(nexus.rgb, nexus.rgb * zoneFill, tintAmount);
