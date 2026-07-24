@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Daemon::initializeAutotile() — the autotile engine's signal wiring and its
-// eight shortcut handlers. Split out of daemon/signals.cpp along the seam
-// docs/file-size-remediation.md names for that file; the rest of the daemon's
-// signal wiring stays there.
+// eight shortcut handlers. Split out of daemon/signals.cpp to keep that file
+// under the size ceiling; the rest of the daemon's signal wiring stays there.
 
 #include "daemon/daemon.h"
 #include "helpers.h"

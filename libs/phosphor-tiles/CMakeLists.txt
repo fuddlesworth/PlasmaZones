@@ -202,7 +202,7 @@ endif()
 
 # Ship the pluau standard-library type definitions so users authoring custom
 # `.luau` algorithms get luau-lsp autocomplete and luau-analyze type-checking
-# (see docs/architecture/luau-algorithm-authoring.md). Installed OUTSIDE the
+# (see https://phosphor-works.github.io/guides/tiling/). Installed OUTSIDE the
 # scanned algorithms subdirectory: the loader globs `*.luau`, so a `.d.luau`
 # sitting next to the algorithms would be picked up by the scan and then
 # skipped with a warning, since `pluau.d` fails the basename check.

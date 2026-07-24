@@ -178,7 +178,8 @@ via `file(ARCHIVE_EXTRACT)`) rather than a submodule or the unpacked tree, so so
 tarballs stay self-contained for every distro with no network, while the repo
 carries one ~2 MB blob instead of ~950 files;
 `-DPLASMAZONES_SYSTEM_LUAU=ON` still links a system Luau. An end-user
-[Luau algorithm authoring guide](../luau-algorithm-authoring.md) ships with it.
+[Luau algorithm authoring guide](https://phosphor-works.github.io/guides/tiling/)
+ships with it.
 
 **Remaining:**
 
