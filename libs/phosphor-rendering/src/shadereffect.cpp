@@ -686,6 +686,15 @@ void ShaderEffect::setStatus(Status newStatus)
 // Shared Property Sync (used by updatePaintNode and subclass overrides)
 // ============================================================================
 
+qreal ShaderEffect::effectiveResolutionScale() const
+{
+    const bool needsPhysical = !m_uniformExtension || m_uniformExtension->requiresPhysicalResolution();
+    if (needsPhysical && window() && window()->screen()) {
+        return window()->effectiveDevicePixelRatio();
+    }
+    return 1.0;
+}
+
 void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
 {
     // ── Shadertoy uniforms ───────────────────────────────────────────
@@ -723,11 +732,7 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     // `m_iResolution` itself stays in logical units (Q_PROPERTY
     // semantics — QML callers expect the same units they bound it
     // from). Only the GPU-bound value is conditionally multiplied.
-    qreal dpr = 1.0;
-    const bool needsPhysical = !m_uniformExtension || m_uniformExtension->requiresPhysicalResolution();
-    if (needsPhysical && window() && window()->screen()) {
-        dpr = window()->effectiveDevicePixelRatio();
-    }
+    const qreal dpr = effectiveResolutionScale();
     node->setResolution(static_cast<float>(m_iResolution.width() * dpr),
                         static_cast<float>(m_iResolution.height() * dpr));
     // Scale the mouse by the SAME dpr as the resolution so iMouse.xy (pixels)

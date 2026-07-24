@@ -5,25 +5,18 @@
 #include "zoneentryscaffold.h"
 #include "zoneshadernoderhi.h"
 
+#include "config/configdefaults.h"
+#include "core/platform/logging.h"
+#include "core/types/constants.h"
+
+#include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorRendering/ZoneShaderCommon.h>
 #include <PhosphorRendering/ZoneShaderNodeRhi.h>
 #include <PhosphorRendering/ZoneUniformExtension.h>
 
-#include "config/configdefaults.h"
-#include "core/types/constants.h"
-#include "core/platform/logging.h"
-
-#include <PhosphorRendering/ShaderEffect.h>
-
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QImage>
 #include <QMetaType>
 #include <QMutexLocker>
-#include <QQuickWindow>
-#include <QScreen>
-#include <QStandardPaths>
 #include <QVariantMap>
 
 #include <mutex>
@@ -459,27 +452,21 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // ── Logical-to-device scale for the lengths in zoneParams ────────
     //
     // Corner radius and border width arrive from settings in LOGICAL px, while
-    // the shader's rect / fragCoord space follows iResolution. Report exactly
-    // the ratio the base class scaled iResolution by, so the two always agree.
+    // the shader's rect / fragCoord space follows iResolution. Ask the base for
+    // the exact factor it scaled iResolution by, so the two cannot disagree.
     //
-    // That means mirroring the base's requiresPhysicalResolution() gate as well
-    // as its dpr lookup: an extension that opts out of physical resolution gets
-    // a LOGICAL iResolution, and reporting a device-pixel ratio against it
-    // would scale every radius by the dpr twice over. ZoneUniformExtension
-    // leaves the flag at its true default today, so this evaluates to the same
-    // number either way — but reading the flag rather than assuming it keeps
-    // the two derivations structurally identical instead of silently coupled.
+    // This used to re-derive the ratio here, duplicating the base's logic
+    // across a library boundary and reading a different member that only
+    // aliases the base's because the constructor installs one into the other.
+    // Any later change to how the base derives it would have left zoneScale
+    // silently disagreeing with iResolution, which is the one invariant this
+    // call exists to hold.
     //
     // Pushed unconditionally rather than under m_zoneDataDirty: moving the
     // overlay to a differently-scaled screen changes the ratio without
     // touching zone contents, and setScale() early-outs when the value is
     // unchanged, so the steady-state cost is a mutex lock and a compare.
-    {
-        const bool needsPhysical = !m_zoneExtension || m_zoneExtension->requiresPhysicalResolution();
-        const qreal dpr =
-            (needsPhysical && window() && window()->screen()) ? window()->effectiveDevicePixelRatio() : 1.0;
-        m_zoneExtension->setScale(static_cast<float>(dpr));
-    }
+    m_zoneExtension->setScale(static_cast<float>(effectiveResolutionScale()));
 
     // ── Sync zone data to the node AFTER shader is ready ─────────────
     //

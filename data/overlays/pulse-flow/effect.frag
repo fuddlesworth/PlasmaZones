@@ -49,7 +49,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec2 center   = rectPos + rectSize * 0.5;
     vec2 p        = fragCoord - center;
 
-    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     // This pack used to scale by pxScale() (a 1080p-relative factor) rather
     // than the display scale, so its corners tracked resolution instead of

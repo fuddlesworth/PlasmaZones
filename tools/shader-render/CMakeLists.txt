@@ -66,11 +66,10 @@ target_link_libraries(plasmazones-shader-render PRIVATE
     plasmazones_rendering
 )
 
-# The tool reuses the daemon's ZoneUniformExtension header so the
-# UBO layout matches the runtime exactly.  This is intentional
-# coupling — if/when the extension moves into a shared library
-# (probably libs/phosphor-wayland), drop this include and add the
-# library to target_link_libraries above.
+# Needed for the daemon's zoneentryscaffold.h, so a pack defining
+# pZone/pImage is assembled here exactly as the daemon assembles it.
+# ZoneUniformExtension no longer needs this path; it comes from the
+# linked PhosphorRendering target.
 target_include_directories(plasmazones-shader-render PRIVATE
     ${CMAKE_SOURCE_DIR}/src/daemon/rendering
 )

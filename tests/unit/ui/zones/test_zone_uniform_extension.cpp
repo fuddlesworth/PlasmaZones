@@ -45,6 +45,8 @@ private Q_SLOTS:
     void scale_writesAtTailOffset();
     void scale_survivesZoneUpdate();
     void dirty_setOnScaleChangeOnly();
+    void scale_rejectsNonPositiveAndNonFinite();
+    void requiresPhysicalResolution_isTrue();
     void layout_matchesZoneShaderUniformsOffsets();
 };
 
@@ -138,17 +140,17 @@ void TestZoneUniformExtension::write_singleZone_populatesFirstSlotAndZerosRest()
 
     // Slot 0: fillColor
     Vec4 f = readVec4(buf, 1, 0);
-    QVERIFY(qFuzzyCompare(f.x + 1.0f, 0.1f + 1.0f));
-    QVERIFY(qFuzzyCompare(f.y + 1.0f, 0.2f + 1.0f));
-    QVERIFY(qFuzzyCompare(f.z + 1.0f, 0.3f + 1.0f));
-    QVERIFY(qFuzzyCompare(f.w + 1.0f, 0.4f + 1.0f));
+    QCOMPARE(f.x + 1.0f, 0.1f + 1.0f);
+    QCOMPARE(f.y + 1.0f, 0.2f + 1.0f);
+    QCOMPARE(f.z + 1.0f, 0.3f + 1.0f);
+    QCOMPARE(f.w + 1.0f, 0.4f + 1.0f);
 
     // Slot 0: borderColor
     Vec4 b = readVec4(buf, 2, 0);
-    QVERIFY(qFuzzyCompare(b.x + 1.0f, 0.5f + 1.0f));
-    QVERIFY(qFuzzyCompare(b.y + 1.0f, 0.6f + 1.0f));
-    QVERIFY(qFuzzyCompare(b.z + 1.0f, 0.7f + 1.0f));
-    QVERIFY(qFuzzyCompare(b.w + 1.0f, 0.8f + 1.0f));
+    QCOMPARE(b.x + 1.0f, 0.5f + 1.0f);
+    QCOMPARE(b.y + 1.0f, 0.6f + 1.0f);
+    QCOMPARE(b.z + 1.0f, 0.7f + 1.0f);
+    QCOMPARE(b.w + 1.0f, 0.8f + 1.0f);
 
     // Slot 0: params (radius, width, highlighted, number)
     Vec4 p = readVec4(buf, 3, 0);
@@ -211,7 +213,7 @@ void TestZoneUniformExtension::write_overflow_truncatesToMaxZones()
         Vec4 r = readVec4(buf, 0, i);
         QCOMPARE(r.x, static_cast<float>(i));
     }
-    // Buffer is exactly MaxZones * kBytesPerZone wide — past-end writes would
+    // Buffer is extensionSize() wide (the zone arrays plus the scale tail) — past-end writes would
     // have overflowed and corrupted memory; the static_assert in the header
     // backs this up at compile time, but we still want a runtime check that
     // updateFromZones doesn't index past MaxZones.
@@ -406,6 +408,41 @@ void TestZoneUniformExtension::dirty_setOnScaleChangeOnly()
 
     ext.setScale(1.0f);
     QVERIFY(ext.isDirty());
+}
+
+void TestZoneUniformExtension::scale_rejectsNonPositiveAndNonFinite()
+{
+    // The shader multiplies every corner radius and border width by this
+    // value, so a bad one does not fail loudly: NaN propagates through the
+    // clamp and erases the zone, and zero or a negative renders square
+    // corners with a hairline border, which looks like a design choice. Any
+    // of them must leave the last good scale in place.
+    ZoneUniformExtension ext;
+    ext.setScale(2.0f);
+    ext.clearDirty();
+
+    ext.setScale(0.0f);
+    ext.setScale(-1.5f);
+    ext.setScale(std::numeric_limits<float>::quiet_NaN());
+    ext.setScale(std::numeric_limits<float>::infinity());
+    QVERIFY(!ext.isDirty());
+
+    std::vector<char> buf(ext.extensionSize(), 0);
+    ext.write(buf.data(), 0);
+    QCOMPARE(readScale(buf), 2.0f);
+}
+
+void TestZoneUniformExtension::requiresPhysicalResolution_isTrue()
+{
+    // The whole logical-to-device contract rests on this staying true. The
+    // item reports a device-pixel ratio for zoneScale precisely because the
+    // base pre-multiplies iResolution by the same ratio, and it only does
+    // that while the installed extension asks for physical resolution. Flip
+    // this to false and iResolution goes logical while the radius stays
+    // dpr-scaled, so every corner is wrong by the display scale with nothing
+    // in the build to catch it.
+    ZoneUniformExtension ext;
+    QVERIFY(ext.requiresPhysicalResolution());
 }
 
 void TestZoneUniformExtension::layout_matchesZoneShaderUniformsOffsets()

@@ -104,7 +104,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                      vec4 params, bool isHighlighted,
                      vec3 cyanCol, vec3 blueCol, vec3 purpleCol, vec3 roseCol,
                      float bass, float mids, float treble, bool hasAudio) {
-    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
     float borderWidth  = zoneBorderWidth(params.y);

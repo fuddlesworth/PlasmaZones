@@ -59,7 +59,7 @@ class Settings;
 class UnifiedLayoutController : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QString currentLayoutId READ currentLayoutId)
+    Q_PROPERTY(QString currentLayoutId READ currentLayoutId NOTIFY currentLayoutIdChanged)
 
 public:
     /**
@@ -214,6 +214,15 @@ Q_SIGNALS:
      */
     void autotileApplied(const QString& algorithmName, int windowCount);
 
+    /**
+     * @brief Emitted when the current layout ID changes.
+     *
+     * Backs the currentLayoutId Q_PROPERTY. Without it the property is a
+     * read-only view over a value that demonstrably mutates, so any QML
+     * binding would latch the first value it saw and never update.
+     */
+    void currentLayoutIdChanged();
+
 private:
     /**
      * @brief Apply a unified layout preview
@@ -221,7 +230,8 @@ private:
     bool applyEntry(const PhosphorLayout::LayoutPreview& preview);
 
     /**
-     * @brief Update current layout ID and emit signal
+     * @brief Update the current layout ID, emitting currentLayoutIdChanged
+     *        when the value actually changes.
      */
     void setCurrentLayoutId(const QString& layoutId);
 

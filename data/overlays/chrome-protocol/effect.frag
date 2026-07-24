@@ -743,7 +743,7 @@ vec3 renderGlobalScene(vec2 fragCoord, GlobalParams g) {
 // Per-zone chrome: fill (from global scene with vitality), border, glow.
 vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                       vec4 zParams, vec3 sceneCol, GlobalParams g, bool isHighlighted) {
-    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, zParams.x);
     float borderWidth  = zoneBorderWidth(zParams.y);

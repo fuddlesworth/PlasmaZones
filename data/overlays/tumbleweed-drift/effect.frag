@@ -647,7 +647,7 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
 vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                           vec4 params, vec3 sceneCol, bool isHighlighted,
                           float bassEnv, bool hasAudio) {
-    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
     float borderWidth  = zoneBorderWidth(params.y);

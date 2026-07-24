@@ -30,8 +30,8 @@ replaces it with three cooperating pieces:
 A second pair of types specialises the base node for the **zone-overlay**
 case: `ZoneShaderNodeRhi` adds a labels texture binding and zone counts
 in the base UBO, and `ZoneUniformExtension` writes zone rects, fill /
-border colours, per-zone parameters, and the logical-to-device scale
-those parameters' lengths are in, into the UBO tail. They are
+border colours, per-zone parameters, and the logical-to-device scale the shader
+applies to the lengths among them, into the UBO tail. They are
 optional. Non-zone shader effects use `ShaderEffect` + `ShaderNodeRhi`
 directly.
 

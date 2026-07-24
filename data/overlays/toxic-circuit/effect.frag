@@ -209,7 +209,7 @@ float atmosphericSmog(vec2 uv, float time, float density) {
 
 vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted,
                            float bass, float mids, float treble, float overall, bool hasAudio) {
-    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
     float borderWidth = zoneBorderWidth(params.y);
@@ -551,7 +551,12 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     // Neon toxic border with voltage-aware glow (vitality-modulated)
     float effectiveBorderWidth = borderWidth * vitalityScale(1.0, 1.5, vitality);
     float border = softBorder(d, effectiveBorderWidth);
-    if (abs(d) < effectiveBorderWidth + 5.0) {
+    // softBorder() is already exactly 0 for abs(d) >= effectiveBorderWidth, so
+    // gate on the value itself rather than a padded distance. The old
+    // `abs(d) < effectiveBorderWidth + 5.0` slack ran the whole border body
+    // across an annulus where every result was multiplied by zero. Every
+    // sibling pack gates on border > 0.0.
+    if (border > 0.0) {
         // Animated border color (vitality-modulated pulse rate)
         float pulseRate = vitalityScale(3.0, 5.0, vitality);
         float borderPulse = sin(iTime * pulseSpeed * pulseRate) * 0.5 + 0.5;

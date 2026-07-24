@@ -9,6 +9,7 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <atomic>
+#include <cmath>
 #include <cstring>
 
 namespace PhosphorRendering {
@@ -114,6 +115,17 @@ public:
     /// sync phase costs nothing.
     void setScale(float scale)
     {
+        // Reject values that would make the shader silently disappear rather
+        // than degrade. The GLSL multiplies every radius and border width by
+        // this: a NaN propagates through clamp() and takes the whole zone with
+        // it, and zero or a negative collapses the corner to square with a
+        // hairline border. Neither reads as a fault, so a bad value would be
+        // mistaken for a design choice. A device-pixel ratio is always
+        // positive and finite, so anything else is a caller bug; keep the last
+        // good scale instead of rendering a lie.
+        if (!(scale > 0.0f) || std::isinf(scale)) {
+            return;
+        }
         QMutexLocker lock(&m_mutex);
         if (qFuzzyCompare(m_data.zoneScale, scale)) {
             return;

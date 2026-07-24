@@ -681,6 +681,23 @@ protected:
     void itemChange(ItemChange change, const ItemChangeData& value) override;
 
     /**
+     * @brief The factor the GPU-bound iResolution is multiplied by.
+     *
+     * 1.0 when the installed extension reports
+     * `requiresPhysicalResolution() == false` (the animation path keeps
+     * iResolution logical), otherwise the window's effective device-pixel
+     * ratio. See the extended rationale at the call site in
+     * syncBasePropertiesToNode().
+     *
+     * Exposed because a subclass that puts its own lengths into the UBO has to
+     * agree with iResolution or its geometry lands in a different space. That
+     * agreement is the whole contract, so it is one function rather than a
+     * derivation each subclass re-implements and a comment asking them to keep
+     * the copies in step.
+     */
+    qreal effectiveResolutionScale() const;
+
+    /**
      * @brief Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) to a render node.
      *
      * Does NOT sync user textures, uniform extension, or shader source — these differ

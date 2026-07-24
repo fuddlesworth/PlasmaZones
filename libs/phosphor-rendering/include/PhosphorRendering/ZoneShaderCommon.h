@@ -54,8 +54,14 @@ struct alignas(16) ZoneShaderUniforms
     // places a float directly after the preceding vec4 array, so no leading
     // pad is needed; the three trailing floats round the block out to the
     // 16-byte boundary std140 requires.
-    float zoneScale;
-    float _pad_after_zoneScale[3];
+    // Defaulted to identity for the same reason ZoneUniformExtension's
+    // constructor seeds it: a value-initialised `ZoneShaderUniforms u = {}`
+    // would otherwise carry a zero scale, and a zero scale multiplies every
+    // corner radius and border width to nothing, so zones render square and
+    // border-less rather than failing visibly. The two structs are asserted
+    // binary-identical below, so both need the safe default.
+    float zoneScale = 1.0f;
+    float _pad_after_zoneScale[3] = {};
 };
 
 static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds expected size");

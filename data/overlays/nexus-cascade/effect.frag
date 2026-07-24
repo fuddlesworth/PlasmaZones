@@ -44,7 +44,7 @@ vec4 sampleNexus(vec2 fragCoord, float chroma) {
 vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                      vec4 params, bool isHighlighted,
                      float bass, float mids, float treble, bool hasAudio) {
-    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
     float borderWidth = zoneBorderWidth(params.y);
@@ -174,8 +174,12 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     }
 
     // Outer glow
-    if (d > 0.0 && d < zoneLen(22.0)) {
-        float glowRadius = zoneLen(mix(5.0, 9.0, vitality));
+    // Bound by the falloff this gates rather than a constant: at three
+    // e-folds the glow is ~5% of peak, so the cut is invisible, and a later
+    // change to glowRadius carries the guard with it instead of silently
+    // clipping the way pulse-flow's hard-coded bound did.
+    float glowRadius = zoneLen(mix(5.0, 9.0, vitality));
+    if (d > 0.0 && d < glowRadius * 3.0) {
         float glowFalloff = mix(0.3, 0.6, vitality);
         // Cascade wavefront glow — bass sends expanding rings outward from
         // the zone edge, like a network signal radiating to neighbors.

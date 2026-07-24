@@ -15,7 +15,7 @@ and anyone else who needs a stable image of a built-in shader.
    mock rect.
 3. Boots a Qt Quick scene under `QQuickRenderControl` (offscreen,
    no window manager required) with a `ShaderEffect` filling the
-   surface and the daemon's `ZoneUniformExtension` attached so the
+   surface and phosphor-rendering's `ZoneUniformExtension` attached so the
    `zoneRects[64]` / `zoneFillColors[64]` / etc. UBO arrays match
    the runtime byte-for-byte.
 4. Renders N frames, advancing `iTime` and feeding a synthetic
@@ -119,7 +119,7 @@ Working today:
   reads)
 - Audio mock generators (silent / sine / noise / sweep)
 - Frame-grab and PNG / VP9 / H.264 output
-- ZoneUniformExtension attached so zone arrays in the UBO match
+- phosphor-rendering's ZoneUniformExtension attached so zone arrays in the UBO match
   the runtime exactly. The tool renders at an exact pixel
   resolution with no display scaling, so it leaves the
   extension's logical-to-device scale at its 1.0 default rather
@@ -128,9 +128,9 @@ Working today:
   the units you asked for, which is what a preview wants. Raising
   `--resolution` does NOT stand in for a scaled display: the zone
   rects grow with `iResolution` while the radius stays fixed, so
-  the corners get relatively smaller, which is the opposite of
-  what a real scaled display does. The tool cannot preview a
-  non-1.0 scale today.
+  the corners get relatively smaller. A real scaled display scales
+  the radius too, so corners keep their relative size. The tool
+  cannot preview a non-1.0 scale today.
 
 Known gaps to verify on first run:
 
@@ -152,13 +152,16 @@ Known gaps to verify on first run:
 
 ## Tech debt
 
-`tools/shader-render/CMakeLists.txt` includes
-`src/daemon/rendering/` directly to reuse the daemon's
-`ZoneUniformExtension` header. The right long-term fix is to
-extract `ZoneUniformExtension` (and the `ZoneShaderUniforms` UBO
-struct) into a small reusable library — probably
-`libs/phosphor-wayland/` since the extension is the canonical
-example of `IUniformExtension`. Until then, this header coupling
-is the trade-off for not duplicating the UBO layout, which would
-be a worse failure mode (silent visual drift between docs and
-runtime).
+`tools/shader-render/CMakeLists.txt` still adds
+`src/daemon/rendering/` to the include path, now only for
+`zoneentryscaffold.h`. The tool needs the daemon's entry-point
+scaffold so a pack that defines `pZone` or `pImage` is assembled
+the same way the daemon assembles it. Get that wrong and the
+preview renders a different program than the runtime does, which
+is the failure this whole tool exists to avoid.
+
+`ZoneUniformExtension` and the `ZoneShaderUniforms` UBO struct no
+longer contribute to that coupling. They live in
+`libs/phosphor-rendering/` and arrive through the linked
+`PhosphorRendering::PhosphorRendering` target like any other
+library header.

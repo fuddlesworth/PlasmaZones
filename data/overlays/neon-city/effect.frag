@@ -16,7 +16,7 @@
 vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
                 float bass, float mids, float treble, float overall, bool hasAudio)
 {
-    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     ZoneSDF zoneShape = zoneSdf(fragCoord, rect, params.x);
     float borderWidth  = zoneBorderWidth(params.y);
@@ -91,9 +91,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
 
             float coc = abs(pixelDepth - focalDepth) * 2.0 * dofStrength;
 
-            vec4 center = texture(iChannel0, sceneUv);
-            float cw = 1.0 + max(max(center.r, center.g), center.b);
-            vec4 bokeh = center * cw;
+            vec4 centerSample = texture(iChannel0, sceneUv);
+            float cw = 1.0 + max(max(centerSample.r, centerSample.g), centerSample.b);
+            vec4 bokeh = centerSample * cw;
             float total = cw;
 
             const int RINGS = 2;

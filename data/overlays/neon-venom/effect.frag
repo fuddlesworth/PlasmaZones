@@ -194,7 +194,7 @@ vec4 renderNeonVenomZone(
     vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
     float px = pxScale();
 
-    // Corner radius: logical px to device px, clamped to the zone half-extent.
+    // Corner radius: logical px to device px, clamped to half the zone's smaller side.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
     // This pack used to scale by pxScale() (a 1080p-relative factor) rather
     // than the display scale, so its corners tracked resolution instead of

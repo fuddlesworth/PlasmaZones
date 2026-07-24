@@ -317,6 +317,7 @@ void UnifiedLayoutController::setCurrentLayoutId(const QString& layoutId)
     }
 
     m_currentLayoutId = layoutId;
+    Q_EMIT currentLayoutIdChanged();
 }
 
 int UnifiedLayoutController::findCurrentIndex() const
