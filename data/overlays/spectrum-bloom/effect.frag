@@ -37,7 +37,7 @@
 
 vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 vec4 params, bool isHighlighted,
-                float bass, float mids, float treble, float overall, bool hasAudio)
+                float bass, float mids, float overall, bool hasAudio)
 {
     // Corner radius: logical px to device px, clamped to the zone half-extent.
     // Shared with the decoration side via zoneSdf() in shared/common.glsl.
@@ -425,7 +425,6 @@ vec4 pImage(vec2 fragCoord) {
     bool  hasAudio = iAudioSpectrumSize > 0;
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
-    float treble  = getTrebleSoft();
     float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
@@ -434,7 +433,7 @@ vec4 pImage(vec2 fragCoord) {
 
         vec4 zoneColor = renderZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio);
+            bass, mids, overall, hasAudio);
 
         color = blendOver(color, zoneColor);
     }

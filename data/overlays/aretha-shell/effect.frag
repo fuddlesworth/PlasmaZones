@@ -73,7 +73,7 @@ vec3 getTriLineColor() { vec3 c = p_triLineColor.rgb; return length(c) > 0.01 ? 
 // LAYER 1: NEON COLOR GRADE  (from original, unchanged)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-vec3 colorGrade(vec3 color, float t) {
+vec3 colorGrade(vec3 color) {
     float GRADE_INTENSITY = getGradeIntensity();
     float GRADE_SATURATION = getGradeSaturation();
     float lum = luminance(color);
@@ -120,8 +120,8 @@ vec2 hexCoord(vec2 uv) {
 // TRI-HEX OVERLAY  (triangular regions between hexagons at vertex junctions)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-vec3 triHexOverlay(vec2 hex, float d, vec2 hexId, vec2 hexCenter, float t,
-                   float bass, float mids, float treble, float overall) {
+vec3 triHexOverlay(vec2 hex, float d, vec2 hexCenter, float t,
+                   float bass, float treble) {
     float triLineThick = getTriLineThickness();
     float triLineAlpha = getTriLineOpacity();
     float triFillAlpha = getTriFillOpacity();
@@ -306,7 +306,7 @@ vec3 hexGrid(vec2 pixelCoord, float t, vec2 screenUV,
     }
 
     // Tri-hex overlay: animated triangles between hexagons (at vertex junctions)
-    vec3 triHex = triHexOverlay(hex, d, hexId, hexCenter, t, bass, mids, treble, overall);
+    vec3 triHex = triHexOverlay(hex, d, hexCenter, t, bass, treble);
 
     return gridColor * gridIntensity * HEX_OPACITY + triHex;
 }
@@ -599,7 +599,7 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float bgAlpha = fillColor.a > 0.01 ? fillColor.a : getFillOpacity();
 
         // Layer 1: Color Grade
-        vec3 gradedBg = colorGrade(baseColor, t * 10.0);
+        vec3 gradedBg = colorGrade(baseColor);
         float gradeStrength = 0.5;
         if (hasAudio) {
             // Network overload: energy pushes color grading toward clipped/overexposed
@@ -701,7 +701,7 @@ vec4 arethaZoneGlow(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted) 
 // ═══════════════════════════════════════════════════════════════════════════════
 
 vec4 compositeArethaLabels(vec4 color, vec2 fragCoord,
-                           float bass, float treble, bool hasAudio) {
+                           float bass, bool hasAudio) {
     vec2 uv = labelsUv(fragCoord);
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
@@ -812,6 +812,6 @@ vec4 pImage(vec2 fragCoord) {
     }
 
     if (p_showLabels > 0.5)
-        color = compositeArethaLabels(color, fragCoord, bass, treble, hasAudio);
+        color = compositeArethaLabels(color, fragCoord, bass, hasAudio);
     return color;
 }

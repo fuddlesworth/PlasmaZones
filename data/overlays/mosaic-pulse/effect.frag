@@ -348,7 +348,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 // ─── Custom Label Composite ─────────────────────────────────────
 
 vec4 compositeMosaicLabels(vec4 color, vec2 fragCoord,
-                            float bass, float mids, float treble, float overall, bool hasAudio) {
+                            float bass, bool hasAudio) {
     vec2 uv = labelsUv(fragCoord);
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
@@ -426,6 +426,6 @@ vec4 pImage(vec2 fragCoord) {
     }
 
     if (p_showLabels > 0.5)
-        color = compositeMosaicLabels(color, fragCoord, bass, mids, treble, overall, hasAudio);
+        color = compositeMosaicLabels(color, fragCoord, bass, hasAudio);
     return color;
 }

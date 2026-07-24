@@ -222,7 +222,7 @@ LogoHit evalLogoInstance(vec2 logoUV, int idx, float time,
 // Returns logo-space UV; instScale written via out parameter.
 
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse,
+                       float logoScale, float bassEnv,
                        float sizeMin, float sizeMax, out float instScale) {
     vec2 uv = globalUV;
     uv.x = (uv.x - 0.5) * aspect + 0.5;
@@ -426,7 +426,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
             vec2 iLogoUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, bassEnv, logoPulse,
+                                              logoScale, bassEnv,
                                               logoSizeMin, logoSizeMax, instScale);
 
             // Bounding check: skip if fragment is far from this logo

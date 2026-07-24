@@ -239,7 +239,7 @@ float geekoSDF(vec2 p, float breathe) {
 // ── Per-instance UV computation ──────────────────────────────
 
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse,
+                       float logoScale, float bassEnv,
                        float sizeMin, float sizeMax, float logoSpin, out float instScale) {
     vec2 uv = globalUV;
     uv.x = (uv.x - 0.5) * aspect + 0.5;
@@ -562,7 +562,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
             vec2 iLogoUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, bassEnv, logoPulse,
+                                              logoScale, bassEnv,
                                               logoSizeMin, logoSizeMax, logoSpin, instScale);
 
             // Bounding check

@@ -465,7 +465,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
 vec4 compositeSigilLabels(vec4 color, vec2 fragCoord,
                           vec3 cyanCol, vec3 purpleCol,
-                          float bass, float mids, float treble, bool hasAudio) {
+                          float bass, float treble, bool hasAudio) {
     vec2 uv = labelsUv(fragCoord);
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
@@ -546,7 +546,7 @@ vec4 pImage(vec2 fragCoord) {
 
     if (p_showLabels > 0.5)
         color = compositeSigilLabels(color, fragCoord, cyanCol, purpleCol,
-                                     bass, mids, treble, hasAudio);
+                                     bass, treble, hasAudio);
 
     return color;
 }

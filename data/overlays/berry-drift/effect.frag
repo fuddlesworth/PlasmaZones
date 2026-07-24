@@ -57,7 +57,7 @@ float smin(float a, float b, float k) {
 
 // Blob center position via Lissajous orbital path
 // Each blob has a unique home position spread across the screen
-vec2 blobCenter(int idx, float time, float drift) {
+vec2 blobCenter(int idx, float drift) {
     float fi = float(idx);
     float seed = fi * 1.618;
 
@@ -84,7 +84,7 @@ vec2 blobCenter(int idx, float time, float drift) {
 // Evaluate merged blob SDF and closest blob index at a screen UV point
 // Returns: x = merged SDF distance, y = closest blob index (float)
 // uv and aspect must be consistent: pass raw UV, aspect applied internally
-vec2 blobField(vec2 uv, float time, float drift, float softness,
+vec2 blobField(vec2 uv, float drift, float softness,
                int blobCount, float aspect, float sizeMin, float sizeMax,
                float bass, float treble, float rawTime) {
     float merged = 1e5;
@@ -93,7 +93,7 @@ vec2 blobField(vec2 uv, float time, float drift, float softness,
 
     for (int i = 0; i < 16; i++) {
         if (i >= blobCount) break;
-        vec2 c = blobCenter(i, time, drift);
+        vec2 c = blobCenter(i, drift);
         vec2 diff = uv - c;
         diff.x *= aspect;
 
@@ -213,14 +213,17 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         }
 
         // === LAYER 2: Organic Blob Field ===
-        float blobTime = iTime * driftSpeed;
         float softK = max(blobSoftness * 0.05, 0.001);
         int blobCount = clamp(int(blobScale), 3, 16);
 
         // Mids-driven color warmth: applied per-blob below
         float midsWarmth = midsAmt * 0.12;
 
-        vec2 field = blobField(globalUV, blobTime, 1.0, softK,
+        // driftSpeed scales the orbit frequency the blob centres advance at.
+        // It used to reach blobCenter as `iTime * driftSpeed` through a `time`
+        // parameter that function never read, while the orbit ran off a
+        // hard-coded 1.0, so the Drift Speed setting did nothing at all.
+        vec2 field = blobField(globalUV, driftSpeed, softK,
                                blobCount, aspect, blobSizeMin, blobSizeMax,
                                bassAmt, trebleAmt, iTime);
         float blobDist = field.x;

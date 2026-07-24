@@ -473,7 +473,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 // ─── Custom Label Composite ───────────────────────────────────────
 
 vec4 compositeMagneticLabels(vec4 color, vec2 fragCoord,
-                             float bass, float treble, bool hasAudio) {
+                             float bass, bool hasAudio) {
     vec2 uv = labelsUv(fragCoord);
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
@@ -560,7 +560,7 @@ void main() {
     }
 
     if (p_showLabels > 0.5)
-        color = compositeMagneticLabels(color, fragCoord, bass, treble, hasAudio);
+        color = compositeMagneticLabels(color, fragCoord, bass, hasAudio);
 
     fragColor = clampFragColor(color);
 }
