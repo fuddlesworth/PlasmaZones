@@ -283,6 +283,12 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
+        // Declared BEFORE the loader so it outlives it. ~ProfileLoader calls
+        // clearOwner, which emits profileChanged synchronously while this
+        // connection is still live (the destructor body runs before ~QObject
+        // tears connections down), so a latch declared after the loader would
+        // be read past the end of its lifetime.
+        bool reentered = false;
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
 
@@ -290,10 +296,10 @@ private Q_SLOTS:
 
         // One-shot: re-enter exactly once, or the recursion is unbounded
         // (rescanNow deliberately does not defer — see its header docs).
-        bool reentered = false;
         connect(&m_profileRegistry, &PhosphorProfileRegistry::profileChanged, &loader, [&]() {
-            if (reentered)
+            if (reentered) {
                 return;
+            }
             reentered = true;
             loader.rescanNow();
         });

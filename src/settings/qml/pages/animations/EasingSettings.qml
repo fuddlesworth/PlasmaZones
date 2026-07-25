@@ -258,7 +258,7 @@ ColumnLayout {
         description: curveInfo.isElastic ? i18n("How far past the target it travels before settling back") : i18n("Height of bounce peaks")
 
         SettingsSlider {
-            Accessible.name: curveInfo.isElastic ? i18n("Overshoot") : i18n("Amplitude")
+            accessibleName: curveInfo.isElastic ? i18n("Overshoot") : i18n("Amplitude")
             enabled: easingRoot.animationsEnabled
             // Mirrors Easing::clampAmplitude. For elastic the value IS the peak, so
             // the range is the curve's own reachable one and its FLOOR moves with the
@@ -295,7 +295,7 @@ ColumnLayout {
         description: i18n("Number of bounce repetitions")
 
         SettingsSlider {
-            Accessible.name: i18n("Bounces")
+            accessibleName: i18n("Bounces")
             enabled: easingRoot.animationsEnabled
             from: 1
             to: 8
@@ -316,7 +316,7 @@ ColumnLayout {
         description: i18n("Lower values wobble faster")
 
         SettingsSlider {
-            Accessible.name: i18n("Period")
+            accessibleName: i18n("Period")
             enabled: easingRoot.animationsEnabled
             from: 0.1
             to: 1
@@ -346,7 +346,7 @@ ColumnLayout {
         description: i18n("Total animation time in milliseconds")
 
         SettingsSlider {
-            Accessible.name: i18n("Duration")
+            accessibleName: i18n("Duration")
             enabled: easingRoot.animationsEnabled
             from: settingsController.generalPage.animationDurationMin
             to: settingsController.generalPage.animationDurationMax

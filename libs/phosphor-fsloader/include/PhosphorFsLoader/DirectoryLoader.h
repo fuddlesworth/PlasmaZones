@@ -99,8 +99,8 @@ public:
      * `RegistrationOrder::LowestPriorityFirst` (the default) takes input
      * in `[sys-lowest, ..., sys-highest, user]` order — the shape a
      * consumer gets from `std::reverse(locateAll(...))` plus a user-dir
-     * append. Passing
-     * `HighestPriorityFirst` lets callers feed `locateAll`'s natural
+     * append. Passing `HighestPriorityFirst` lets callers feed
+     * `locateAll`'s natural
      * output (with the user dir prepended) directly without their own
      * pre-reverse — the base normalises before the strategy runs, so
      * higher-priority entries always override on key collision.
@@ -127,8 +127,8 @@ public:
     /// the loaded state back before it returns: the debounce would
     /// otherwise answer that read with the pre-write state.
     ///
-    /// GUI-thread only, like every other mutating call on this class —
-    /// debug-asserted in `WatchedDirectorySet`, not enforced in release.
+    /// GUI-thread only, like every other non-test mutating call on this
+    /// class — debug-asserted in `WatchedDirectorySet`, not in release.
     /// `entriesChanged` is emitted on the caller's stack, so the sink's
     /// commit step and every DIRECTLY connected consumer slot run before
     /// this returns (a queued connection still runs later).
@@ -152,9 +152,11 @@ public:
     /// schema in this library's ecosystem.
     static constexpr qint64 kMaxFileBytes = 1 * 1024 * 1024;
 
-    /// Hard cap on entries parsed per rescan (summed across every
-    /// registered directory). At 10k entries a rescan has already burned
-    /// the 50 ms debounce budget many times over.
+    /// Hard cap on FILES parsed per rescan (summed across every registered
+    /// directory), not on the entries that survive to registration — a file
+    /// that fails to parse or loses a duplicate check has still been read.
+    /// At 10k files a rescan has already burned the 50 ms debounce budget
+    /// many times over.
     static constexpr int kMaxEntries = 10'000;
 
     /// Test-only: override the debounce interval (default 50 ms).
@@ -180,7 +182,8 @@ Q_SIGNALS:
     /// 50 ms debounce first. `rescanNow()` bypasses that and fires this on
     /// the caller's stack, and so does the initial scan inside
     /// `loadFromDirectory[ies]` — which is why a consumer has to wire its
-    /// slots BEFORE it registers directories, not after.
+    /// slots BEFORE it registers directories, not after. (An empty directory
+    /// list runs no scan and emits nothing; see `loadFromDirectories`.)
     ///
     /// This is **deliberately** a "rescan completed" signal rather than
     /// a "content changed" signal — the loader has no visibility into

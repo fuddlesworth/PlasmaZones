@@ -8,7 +8,10 @@
 // Group covers:
 //   * Path derivation (userProfilesDir / profileFilePath / userMotionSetsDir)
 //   * Existence + read (hasOverride / rawProfile / resolvedProfile)
-//   * Write + clear (setOverride / clearOverride / clearAllOverrides)
+//   * Write + clear (setOverride, and the clear family: removeOverrideFile /
+//     clearOverride / clearOverridesForPaths / clearAllOverrides /
+//     clearOverridesUnder)
+//   * Scoped dirty check (hasScopedPendingFiles)
 //
 // Sibling _shaders.cpp owns the shader-tree side; the main TU owns
 // pending-changes tracking, async-revert, and the section catalog.
@@ -249,6 +252,13 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     //
     // The drop owns the signal for the transition it causes, so the compare below
     // must not fire again for the same flip.
+    // Emit-side convention here (the clear paths use Defer and own the signal
+    // themselves): `dropped` stands in for "the drop already emitted", which
+    // holds because a drop on this path always flips. The early return above
+    // guarantees the written content differs from what was on disk, so a
+    // snapshot staged by THIS call can never match afterwards — a successful
+    // drop therefore means a pre-existing entry went away, which is a real
+    // transition the drop announced.
     const bool dropped = dropFileSnapshotIfUnchanged(filePath);
     const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
@@ -308,8 +318,18 @@ bool AnimationsPageController::clearOverride(const QString& path)
     // Absent here means the file went away between that check and this call.
     // The caller's intent is satisfied and nothing was done, so it reports the
     // same "nothing to clear" as the guard above rather than a failure.
-    if (removeOverrideFile(path) != OverrideFileRemoval::Removed)
+    //
+    // A FAILED removal can still have moved the dirty state: the snapshot is
+    // staged before the delete is attempted, and if an external writer touched
+    // the file in between, the deferred drop finds disk no longer matching and
+    // declines, leaving the entry behind. The page is dirty and has to be told
+    // even though the clear did not happen. The drop used to own this signal
+    // before it was deferred, so the early return has to carry it now.
+    if (removeOverrideFile(path) != OverrideFileRemoval::Removed) {
+        if (wasPending != hasPendingChanges())
+            Q_EMIT pendingChangesChanged();
         return false;
+    }
     // Before the signal, not after: the page re-reads resolvedProfile from
     // inside its overrideChanged handler, and the profile registry is behind
     // the delete until the loader's debounced rescan lands. Also before the
@@ -370,6 +390,12 @@ int AnimationsPageController::clearOverridesForPaths(const QStringList& eventPat
     // the profiles directory once per deleted file.
     if (!cleared.isEmpty())
         refreshProfileStore();
+    // Sampled here, after the refresh and before the signals, for the same
+    // reason clearOverride does it: a rescan fans out synchronously, and a
+    // listener that mutates in response would otherwise be measured against a
+    // stale read. The two clear paths must not diverge on this — the last two
+    // regressions in this signal both came in through an unstated divergence.
+    const bool nowPending = hasPendingChanges();
     for (const QString& path : cleared)
         Q_EMIT overrideChanged(path);
     // One dirty signal for the batch, describing the NET flip. Every snapshot
@@ -377,7 +403,7 @@ int AnimationsPageController::clearOverridesForPaths(const QStringList& eventPat
     // could not be mistaken for the outcome: a batch that drops a phantom
     // early and stages a real snapshot later ends dirty, and must not have
     // announced "clean" on the way through.
-    if (wasPending != hasPendingChanges())
+    if (wasPending != nowPending)
         Q_EMIT pendingChangesChanged();
     if (failed > 0) {
         qCWarning(lcConfig) << context << ":" << failed << "override files could not be removed";

@@ -593,6 +593,9 @@ private:
     /// Shared body of clearAllOverrides / clearOverridesUnder: clears every
     /// override file among @p eventPaths, refreshes the profile store once,
     /// then emits. @p context names the caller for the failure log.
+    ///
+    /// The caller owns the `m_asyncRevertInFlight` gate and its refusal
+    /// toast, exactly as it does for removeOverrideFile above.
     /// @return the number cleared, or -1 if any removal failed.
     int clearOverridesForPaths(const QStringList& eventPaths, QLatin1String context);
 

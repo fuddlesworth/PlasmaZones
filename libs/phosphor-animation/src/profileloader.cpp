@@ -165,10 +165,14 @@ public:
             currentMap.insert(parsed.key, *payload);
         }
 
-        // Single reloadFromOwner -> one `ownerReloaded` for the whole batch
-        // however many files changed (decision W: coalesce), alongside a
-        // per-path `profileChanged` for each entry that actually moved.
-        // (`profilesReloaded` is a different signal, fired only by the
+        // Single reloadFromOwner -> AT MOST one `ownerReloaded` for the whole
+        // batch however many files changed (decision W: coalesce), alongside a
+        // per-path `profileChanged` for each entry that actually moved. None
+        // of either when the registry's own diff comes out empty: a no-op
+        // rescan, or a batch whose every path is already direct-owned and so
+        // skipped. That diff is independent of this sink's lastBatchChanged,
+        // so the two signal families do not imply one another in either
+        // direction. (`profilesReloaded` is a third signal, fired only by the
         // registry's wholesale reloadAll / clear.) The partitioning ensures
         // daemon-direct entries at other paths survive this rescan.
         // `registry` is bound from a reference in the ctor, so it is never

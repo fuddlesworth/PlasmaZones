@@ -144,6 +144,13 @@ PLASMAZONES_EXPORT void seedShellAnimationFamilies(PhosphorAnimation::PhosphorPr
 /// `${XDG_DATA_DIRS}/plasmazones/{curves,profiles}` and the user-writable
 /// equivalents, mirroring the daemon. Library-level loaders stay
 /// consumer-agnostic per Phase-4 decision U.
+///
+/// Note the trade this makes: the ctor runs the full three-step load itself,
+/// so there is no seam between loader construction and the initial scan. A
+/// consumer that has to OBSERVE that first scan (`entriesChanged` fires
+/// synchronously from registration) must use `constructAnimationLoaders` plus
+/// the `runInitial*Load` helpers directly, as the daemon does. Neither the
+/// settings app nor the editor needs to, which is why they get the one-liner.
 class PLASMAZONES_EXPORT AnimationBootstrap
 {
 public:

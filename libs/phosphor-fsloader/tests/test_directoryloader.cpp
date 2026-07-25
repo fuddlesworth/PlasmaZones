@@ -25,6 +25,7 @@ class RecordingSink : public IDirectoryLoaderSink
 public:
     std::optional<ParsedEntry> parseFile(const QString& filePath) override
     {
+        ++parseCalls;
         QFile f(filePath);
         if (!f.open(QIODevice::ReadOnly)) {
             return std::nullopt;
@@ -61,6 +62,10 @@ public:
     }
 
     int commitCount = 0;
+    /// Number of times the loader asked this sink to parse a file. The
+    /// entry-count cap exists to bound exactly this, so a test that only
+    /// counted registered keys could not tell a working cap from a broken one.
+    int parseCalls = 0;
     QStringList lastRemoved;
     QList<ParsedEntry> lastCurrent;
     QHash<QString, std::string> registry;
@@ -545,6 +550,55 @@ private Q_SLOTS:
         for (int i = kTestCap; i < totalFiles; ++i) {
             QVERIFY(!sink.registry.contains(QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0'))));
         }
+    }
+
+    /// The cap must bound files PARSED, not keys registered. A spray of files
+    /// that each parse and then register nothing — malformed JSON, or a
+    /// thousand files all claiming one key — is precisely the GUI-thread
+    /// stall the guard names, and a registered-key count never reaches the cap
+    /// for any of them, so the guard let its own stated attack straight
+    /// through. Both shapes are covered here.
+    void testEntryCountCapBoundsParsingNotRegistration()
+    {
+        constexpr int kTestCap = 5;
+        const int totalFiles = kTestCap * 4;
+
+        // Shape 1: every file is unparseable, so nothing ever registers.
+        for (int i = 0; i < totalFiles; ++i) {
+            QFile f(m_tmp->filePath(QStringLiteral("junk-%1.json").arg(i, 3, 10, QLatin1Char('0'))));
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QVERIFY(f.write(QByteArrayLiteral("{ this is not json")) > 0);
+        }
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setMaxEntriesForTest(kTestCap);
+        loader.loadFromDirectory(m_tmp->path(), LiveReload::Off);
+
+        QCOMPARE(loader.registeredCount(), 0);
+        QVERIFY2(
+            sink.parseCalls <= kTestCap,
+            qPrintable(QStringLiteral("cap let %1 files through with a cap of %2").arg(sink.parseCalls).arg(kTestCap)));
+
+        // Shape 2: every file parses but they all claim the same key, so at
+        // most one ever registers.
+        QTemporaryDir sameKeyDir;
+        QVERIFY(sameKeyDir.isValid());
+        for (int i = 0; i < totalFiles; ++i) {
+            writeJson(sameKeyDir.filePath(QStringLiteral("dup-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                      QStringLiteral("one-key"), QStringLiteral("v"));
+        }
+
+        RecordingSink dupSink;
+        DirectoryLoader dupLoader(dupSink);
+        dupLoader.setMaxEntriesForTest(kTestCap);
+        dupLoader.loadFromDirectory(sameKeyDir.path(), LiveReload::Off);
+
+        QCOMPARE(dupLoader.registeredCount(), 1);
+        QVERIFY2(dupSink.parseCalls <= kTestCap,
+                 qPrintable(QStringLiteral("cap let %1 same-key files through with a cap of %2")
+                                .arg(dupSink.parseCalls)
+                                .arg(kTestCap)));
     }
 
     /// Regression guard for the Phase-1g reverse-scan + first-wins fix.
