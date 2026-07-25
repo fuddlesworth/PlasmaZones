@@ -304,6 +304,11 @@ void DirectoryLoader::requestRescan()
     m_watcher->requestRescan();
 }
 
+void DirectoryLoader::rescanNow()
+{
+    m_watcher->rescanNow();
+}
+
 int DirectoryLoader::registeredCount() const
 {
     return m_strategy->registeredCount();

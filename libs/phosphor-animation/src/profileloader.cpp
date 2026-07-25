@@ -245,6 +245,11 @@ void ProfileLoader::requestRescan()
     m_loader->requestRescan();
 }
 
+void ProfileLoader::rescanNow()
+{
+    m_loader->rescanNow();
+}
+
 int ProfileLoader::registeredCount() const
 {
     return m_loader->registeredCount();

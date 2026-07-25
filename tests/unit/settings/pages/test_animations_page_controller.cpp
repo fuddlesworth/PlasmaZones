@@ -36,13 +36,17 @@
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAnimation/Spring.h>
 
 #include <QRegularExpression>
+#include <QScopeGuard>
 
 #include "helpers/IsolatedConfigGuard.h"
 #include "config/settings.h"
@@ -635,6 +639,83 @@ private Q_SLOTS:
         QCOMPARE(resolved.value(QStringLiteral("curve")).toString(), QStringLiteral("spring:14.0,0.6"));
         // Library default for the unspecified field:
         QCOMPARE(resolved.value(QStringLiteral("minDistance")).toInt(), PhosphorAnimation::Profile::DefaultMinDistance);
+    }
+
+    /// The settings app resolves against a registry fed by a ProfileLoader
+    /// watching the very directory this controller writes, and that watch is
+    /// debounced by 50 ms with no rescan signal reaching the open page.
+    /// Everything the controller mutates therefore has to be visible to the
+    /// NEXT read it serves, without waiting for the watch:
+    ///
+    ///   * a write is covered by reading the user files ahead of the registry
+    ///   * a delete has nothing left on disk to outrank the stale entry, so
+    ///     the controller forces the loader to catch up first
+    ///
+    /// The delete half is the reported bug: "Revert to inherited" removed the
+    /// file, the registry kept serving the removed duration, and the control
+    /// did not move until the settings app was restarted.
+    void mutationsAreVisibleToTheNextResolveDespiteTheDebouncedWatch()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        PhosphorAnimation::CurveRegistry curves;
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(&registry);
+        // Unpublish before the registry leaves scope: the static default is
+        // process-wide and a dangling pointer would outlive this test.
+        const auto unpublish = qScopeGuard([]() {
+            PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
+        });
+        PhosphorAnimation::ProfileLoader loader(registry, curves, QStringLiteral("test-user-profiles"));
+        loader.loadFromDirectory(tmp.path(), PhosphorAnimation::LiveReload::On);
+        // What main.cpp injects.
+        c.setProfileStoreRefresher([&loader]() {
+            loader.rescanNow();
+        });
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 777}}));
+        // Stand in for the debounce landing: from here the registry holds 777
+        // and knows nothing of what follows until it is told.
+        loader.rescanNow();
+        QCOMPARE(registry.resolve(QStringLiteral("editor.snapIn")).value().duration.value(), 777);
+
+        // A second write lands on disk while the registry still holds 777.
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 888}}));
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 888);
+
+        // Revert to inherited: the file goes, so the leaf must fall through to
+        // the parent chain rather than to the entry the registry was holding.
+        QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 123}}));
+        QVERIFY(c.clearOverride(QStringLiteral("editor.snapIn")));
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 123);
+    }
+
+    /// The registry is still the source for every level this controller does
+    /// NOT write: bundled and system-dir profiles, and the shell family seeds.
+    /// Dropping it in favour of the disk read would have silenced all of them.
+    void resolvedProfile_stillReadsTheRegistryWhereNoUserFileExists()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(&registry);
+        const auto unpublish = qScopeGuard([]() {
+            PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
+        });
+
+        PhosphorAnimation::Profile bundled;
+        bundled.duration = 456;
+        registry.registerProfile(QStringLiteral("editor"), bundled);
+
+        // No user file anywhere on the chain: the parent's registry entry
+        // reaches the leaf.
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 456);
     }
 
     // ─── Path traversal hardening (security) ──────────────────────────────

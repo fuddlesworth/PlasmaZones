@@ -109,20 +109,30 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
     QString cur = path;
     while (!cur.isEmpty()) {
         QVariantMap source;
-        if (registry) {
+        if (isValidEventPath(cur)) {
+            // The user override files this controller writes are read
+            // FIRST, ahead of the registry. The registry is fed by a
+            // ProfileLoader watching this same directory, and that watch is
+            // debounced: for ~50 ms after any write or delete the registry
+            // still holds the pre-edit entry, and nothing re-notifies the
+            // page once the rescan lands. A registry-first read therefore
+            // answered every post-mutation refresh with the state the user
+            // just left — most visibly on "Revert to inherited", where the
+            // file is deleted but the stale registry entry kept serving the
+            // deleted value, so the control did not move until the settings
+            // app was restarted. Disk is what this process just wrote, so
+            // disk is the answer. Skipped for non-event paths so a crafted
+            // parent like "../" can't cause a stray file open.
+            source = readProfileJson(profileFilePath(cur)).toVariantMap();
+        }
+        if (source.isEmpty() && registry) {
+            // No user file at this level: the registry supplies the
+            // bundled / system-dir profiles and the shell family seeds,
+            // none of which this controller can write.
             const auto entry = registry->resolve(cur);
             if (entry.has_value()) {
                 source = profileToVariantMap(*entry);
             }
-        }
-        if (source.isEmpty() && isValidEventPath(cur)) {
-            // Registry not published, or no entry at this path. Fall
-            // back to a direct user-dir read so unit tests (which never
-            // bootstrap a registry) still get walk-up resolution over
-            // their own override files. Skip the read for non-event
-            // paths so a crafted parent like "../" can't cause a stray
-            // file open.
-            source = readProfileJson(profileFilePath(cur)).toVariantMap();
         }
         mergeMissingFields(merged, source);
         cur = ProfilePaths::parentPath(cur);
@@ -274,6 +284,10 @@ bool AnimationsPageController::clearOverride(const QString& path)
     // nothing to discard. The drop owns the signal for that flip (see setOverride).
     const bool dropped = dropFileSnapshotIfUnchanged(filePath);
     const bool nowPending = hasPendingChanges();
+    // Before the signal, not after: the page re-reads resolvedProfile from
+    // inside its overrideChanged handler, and the file this call just deleted
+    // survives in the registry until the loader's debounced rescan lands.
+    refreshProfileStore();
     Q_EMIT overrideChanged(path);
     if (!dropped && wasPending != nowPending)
         Q_EMIT pendingChangesChanged();

@@ -119,6 +119,14 @@ public:
     /// `WatchedDirectorySet`.
     void requestRescan();
 
+    /// Rescan every registered directory synchronously, on the calling
+    /// stack, cancelling any pending debounced rescan. Forwards to the
+    /// underlying `WatchedDirectorySet`. For a consumer that has just
+    /// written or deleted a file in a watched directory and must read
+    /// the loaded state back before it returns: the debounce would
+    /// otherwise answer that read with the pre-write state.
+    void rescanNow();
+
     /// Count of entries currently tracked by the loader.
     int registeredCount() const;
 

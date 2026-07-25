@@ -16,6 +16,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <functional>
 #include <optional>
 
 namespace PhosphorAnimationShaders {
@@ -392,6 +393,28 @@ public:
     /// callers must not redirect persistence.
     void setUserProfilesDirOverride(const QString& dir);
 
+    /// Injected by the composition root: brings the process's profile
+    /// registry back in line with this controller's directory
+    /// SYNCHRONOUSLY. Called after every override file this controller
+    /// DELETES, before the matching `overrideChanged`.
+    ///
+    /// The registry is fed by a `ProfileLoader` watching the same
+    /// directory through a 50 ms debounce, and no rescan signal reaches
+    /// the open page afterwards, so a delete left the registry serving
+    /// the removed profile for the rest of the session. `resolvedProfile`
+    /// reads the user files ahead of the registry, which covers a WRITE
+    /// on its own, but a delete leaves nothing on disk to outrank the
+    /// stale entry — that is the "Revert to inherited" control that
+    /// changed nothing until the settings app was restarted.
+    ///
+    /// Deletes only. A write is already covered by the disk-first read,
+    /// and writes arrive at slider rate during a duration drag, where a
+    /// synchronous directory rescan per tick would be far too expensive.
+    ///
+    /// Unset (the default, and every unit test) leaves the controller
+    /// purely file-backed, which is already self-consistent.
+    void setProfileStoreRefresher(std::function<void()> refresher);
+
 Q_SIGNALS:
     /// Emitted on any successful set/clearOverride. @p path is the
     /// affected event path.
@@ -518,9 +541,13 @@ private:
     /// emitted if that flipped hasPendingChanges()).
     bool dropFileSnapshotIfUnchanged(const QString& filePath);
 
+    /// Run the injected profile-store refresher, if any. No-op otherwise.
+    void refreshProfileStore() const;
+
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;
     QString m_userProfilesDirOverride; ///< Empty = use XDG default
+    std::function<void()> m_profileStoreRefresher; ///< See setProfileStoreRefresher
 
     // Sub-services owned via QObject-parent: both are constructed with
     // `this` as parent so ~AnimationsPageController tears them down
