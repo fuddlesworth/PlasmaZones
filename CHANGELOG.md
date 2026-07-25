@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Reverting an animation's duration or curve shows the inherited value right away**: the "Revert to inherited" links cleared the override but left the control showing the value you had just removed, and it only caught up the next time you opened the settings app ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+
 ## [3.3.0] - 2026-07-23
 
 ### Added
