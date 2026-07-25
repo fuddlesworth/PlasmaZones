@@ -308,11 +308,16 @@ ColumnLayout {
                     visible: root.showOverrideStatus
                     spacing: Kirigami.Units.smallSpacing
 
-                    // fillWidth so the elide actually engages on a long
-                    // translation; the revert link then sits at the row's
-                    // trailing edge.
+                    // maximumWidth pins the caption to its natural width so
+                    // the link sits directly after it, the way the duration
+                    // twin below reads. fillWidth stays on so a long
+                    // translation can still shrink and elide instead of
+                    // pushing the link out of the card; without the cap it
+                    // took the whole row and stranded the link against the
+                    // Customize button.
                     Label {
                         Layout.fillWidth: true
+                        Layout.maximumWidth: implicitWidth
                         text: root.curveOverridden ? i18n("Overridden for this event") : i18n("Following the inherited value")
                         font: Kirigami.Theme.smallFont
                         color: Kirigami.Theme.disabledTextColor
@@ -325,6 +330,12 @@ ColumnLayout {
                         font: Kirigami.Theme.smallFont
                         Accessible.name: i18n("Revert curve to inherited")
                         onClicked: root.curveRevertRequested()
+                    }
+
+                    // Soaks up the remainder so the pair above stays
+                    // left-aligned under the curve summary.
+                    Item {
+                        Layout.fillWidth: true
                     }
                 }
             }
