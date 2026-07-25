@@ -2,101 +2,52 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Phosphor.Bar.Audio, the default-sink volume bar widget.
 //
-// Binds to the process-global PipeWireHost singleton. The default sink has
-// no direct accessor on the model, so an Instantiator surfaces each sink
-// row's PwNode; the row whose name matches defaultSinkName becomes the
-// active node, falling back to the first sink when PipeWire publishes no
-// default. Scroll adjusts the linear amplitude in 5% steps and left-click
-// toggles mute. Volume writes are asynchronous, so the readout updates when
+// Binds to the process-global PipeWireHost singleton, which resolves
+// `defaultSink` by joining the default-sink name against the live node
+// set. Falls back to the first sink when PipeWire publishes no default.
+// Scroll adjusts the linear amplitude in 5% steps and left-click toggles
+// mute. Volume writes are asynchronous, so the readout updates when
 // PipeWire echoes the new value.
 
 import QtQuick
-import QtQml
 import org.kde.kirigami as Kirigami
 import Phosphor.Theme
 import Phosphor.Service.PipeWire
 
-Item {
+BarWidget {
     id: root
 
     // Gate on a RESOLVED sink, not merely a live PipeWire connection: with
     // no sink there is no value to show, and a literal "0%" would be a
     // false readout rather than an absent one.
-    readonly property bool available: root.node !== null
+    available: root.node !== null
+    contentWidth: row.implicitWidth
+    contentHeight: row.implicitHeight
 
     // The sink whose volume the bar shows: the default sink when PipeWire
     // publishes one, otherwise the first sink present. The fallback matters
     // because `default.audio.sink` comes from the metadata module, and a
     // session without it (or before it publishes) would otherwise hide the
     // widget for its whole life on a box with perfectly good sinks.
-    readonly property PwNode node: root._defaultNode ? root._defaultNode : root._firstNode
+    //
+    // `sinks.firstNode`, not `sinks.nodeAt(0)`: the latter is a plain
+    // function call that tracks no dependency, and pairing it with `count`
+    // does not fix that. A PipeWire restart that lands on the same number
+    // of sinks replaces every node without moving the count, so a
+    // count-gated binding would stay pinned to a node owned by the
+    // destroyed connection and this widget would drive a dead sink for the
+    // rest of the session.
+    readonly property PwNode node: PipeWireHost.defaultSink ? PipeWireHost.defaultSink : sinks.firstNode
 
-    // Matched against PipeWireHost.defaultSinkName by the Instantiator below.
-    property PwNode _defaultNode: null
-    // Row 0, tracked so the fallback has something to point at.
-    property PwNode _firstNode: null
     readonly property int volumePercent: root.node && root.node.volumes.length > 0 ? Math.round(root.node.volumes[0] * 100) : 0
     readonly property bool muted: root.node ? root.node.muted : false
 
-    visible: root.available
-    implicitWidth: root.available ? row.implicitWidth : 0
-    implicitHeight: row.implicitHeight
-
+    // Kept solely to back the first-sink fallback above. The default-sink
+    // path needs no model at all now that the host resolves it.
     PwSinkModel {
         id: sinks
 
         connection: PipeWireHost.connection
-    }
-
-    // PwNodeModel exposes no row accessor, so each row's node is surfaced
-    // through a non-visual delegate: one reports the default match, row 0
-    // reports itself as the fallback.
-    Instantiator {
-        model: sinks
-
-        delegate: QtObject {
-            required property PwNode node
-            required property string name
-            required property int index
-
-            readonly property bool isDefault: name.length > 0 && name === PipeWireHost.defaultSinkName
-
-            onIsDefaultChanged: root._syncDefault(isDefault, node)
-            // index, not just completion: when row 0 is removed the model
-            // renumbers the survivors in place rather than re-running their
-            // completion, so tracking only onCompleted would leave the
-            // fallback null for the rest of the session.
-            onIndexChanged: root._syncFirst(index, node)
-            Component.onCompleted: {
-                root._syncDefault(isDefault, node);
-                root._syncFirst(index, node);
-            }
-            Component.onDestruction: {
-                if (root._defaultNode === node)
-                    root._defaultNode = null;
-                if (root._firstNode === node)
-                    root._firstNode = null;
-            }
-        }
-    }
-
-    // A delegate pushes when it becomes the default and clears itself when
-    // it stops being one, so a default that moves between sinks (or goes
-    // away entirely) leaves _defaultNode pointing at the right row.
-    function _syncDefault(isDefault, node) {
-        if (isDefault)
-            root._defaultNode = node;
-        else if (root._defaultNode === node)
-            root._defaultNode = null;
-    }
-
-    // Same shape as _syncDefault, for the row-0 fallback: claim the slot on
-    // becoming index 0, release it on moving away.
-    function _syncFirst(index, node) {
-        if (index === 0)
-            root._firstNode = node;
-        else if (root._firstNode === node)
-            root._firstNode = null;
     }
 
     function _toggleMute() {

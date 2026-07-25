@@ -2,72 +2,35 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Phosphor.Bar.FocusedApp, the active window's app + title.
 //
-// Binds to the Toplevels singleton (foreign-toplevel list). There is no
-// "active toplevel" accessor, so a non-visual delegate per toplevel
-// reports activation and title changes, and a rescan picks the activated
-// window (or clears when none is). Collapses to zero width when nothing
-// is focused (e.g. the bare desktop).
+// Binds to the Toplevels singleton's `activeToplevel`, which resolves the
+// focused window process-wide. Collapses to zero width when nothing is
+// focused (e.g. the bare desktop, or a compositor without the
+// foreign-toplevel protocol, where the accessor stays null).
 
 import QtQuick
-import QtQml
 import org.kde.kirigami as Kirigami
 import Phosphor.Theme
 import Phosphor.Shell
 
-Item {
+BarWidget {
     id: root
 
     readonly property int maxTitleWidth: 220
 
-    property string _appTitle: ""
-    property string _appId: ""
+    // Plain bindings on the accessor. `activeToplevel` re-notifies when
+    // focus moves, and the title/appId bindings re-evaluate on that
+    // toplevel's own property signals, so a background window retitling
+    // costs nothing here.
+    readonly property string _appTitle: Toplevels.activeToplevel ? Toplevels.activeToplevel.title : ""
+    readonly property string _appId: Toplevels.activeToplevel ? Toplevels.activeToplevel.appId : ""
 
-    // Pick the activated toplevel from the current snapshot, or clear if
-    // none is active. Driven by the per-toplevel delegates below.
-    function _rescan() {
-        const list = Toplevels.toplevels;
-        for (let i = 0; i < list.length; i++) {
-            const t = list[i];
-            if (t && t.activated) {
-                root._appTitle = t.title || "";
-                root._appId = t.appId || "";
-                return;
-            }
-        }
-        root._appTitle = "";
-        root._appId = "";
-    }
-
-    Instantiator {
-        model: Toplevels.supported ? Toplevels.model : null
-
-        delegate: QtObject {
-            required property ForeignToplevel toplevel
-
-            readonly property bool activeFlag: toplevel ? toplevel.activated : false
-            readonly property string titleText: toplevel ? toplevel.title : ""
-
-            onActiveFlagChanged: root._rescan()
-            // Only the focused window's title can change what this shows; a
-            // background window retitling (browser tab switch, terminal cwd)
-            // would otherwise cost a full list walk that cannot change the
-            // result.
-            onTitleTextChanged: if (activeFlag)
-                root._rescan()
-            Component.onCompleted: root._rescan()
-            Component.onDestruction: root._rescan()
-        }
-    }
-
-    // Both bindings read this predicate, never `visible`. Item.visible READS
-    // as EFFECTIVE visibility, and the slot gates its cell on this very
-    // implicitWidth, so deriving the width from `visible` closes a loop that
-    // latches at zero and never recovers.
-    readonly property bool available: root._appTitle.length > 0
-
-    visible: root.available
-    implicitWidth: root.available ? row.implicitWidth : 0
-    implicitHeight: row.implicitHeight
+    // Either half is enough. A Wayland toplevel can legitimately publish an
+    // app id with an empty title (before the client sets one, splash and
+    // loader surfaces), and gating on the title alone threw away a perfectly
+    // good icon along with the missing label.
+    available: root._appTitle.length > 0 || root._appId.length > 0
+    contentWidth: row.implicitWidth
+    contentHeight: row.implicitHeight
 
     Accessible.role: Accessible.StaticText
     Accessible.name: root._appTitle
@@ -89,6 +52,8 @@ Item {
         }
 
         Text {
+            id: title
+
             // Folded into the root's Accessible.name already; QQuickText
             // exposes itself as its own StaticText node, so without this
             // assistive tech reads the composed name and then re-reads
@@ -100,7 +65,7 @@ Item {
             font.weight: Tokens.font_weight_medium
             font.family: Tokens.font_family
             elide: Text.ElideRight
-            width: Math.min(implicitWidth, root.maxTitleWidth)
+            width: Math.min(title.implicitWidth, root.maxTitleWidth)
             anchors.verticalCenter: parent.verticalCenter
         }
     }

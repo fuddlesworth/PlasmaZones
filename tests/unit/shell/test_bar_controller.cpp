@@ -41,19 +41,25 @@ void TestBarController::registersEveryBuiltin()
     BarController controller;
     const QStringList ids = controller.factoryIds();
 
-    // The shipped catalogue. Workspaces is deliberately absent: it has no
-    // data source yet, so a bar that offered it would have nothing to show.
+    // The shipped catalogue, hand-written rather than derived from
+    // builtinWidgets() so that adding or dropping a widget has to be a
+    // deliberate edit in two places.
     const QStringList expected{
         QStringLiteral("audio"), QStringLiteral("battery"),       QStringLiteral("bluetooth"),
         QStringLiteral("clock"), QStringLiteral("controlcenter"), QStringLiteral("focusedapp"),
         QStringLiteral("media"), QStringLiteral("network"),       QStringLiteral("notification"),
         QStringLiteral("power"), QStringLiteral("spacer"),        QStringLiteral("systemmetrics"),
-        QStringLiteral("tray"),
+        QStringLiteral("tray"),  QStringLiteral("workspaces"),
     };
 
     QCOMPARE(ids.size(), expected.size());
     QCOMPARE(ids, expected);
-    QVERIFY(!ids.contains(QStringLiteral("workspaces")));
+    // Workspaces was held back through Phase 4.1 for want of a data source
+    // and landed with the Workspaces QML singleton behind it. Asserted by
+    // name because its absence was previously pinned here, and a silent
+    // regression to that state would otherwise read as an ordinary count
+    // change.
+    QVERIFY(ids.contains(QStringLiteral("workspaces")));
 }
 
 void TestBarController::factoryIdsAreSorted()

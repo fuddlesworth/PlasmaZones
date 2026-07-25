@@ -14,13 +14,11 @@
 // reserves an exclusive zone of capsule-height + top-inset so windows
 // tile below the bar.
 //
-// One bar, on the primary output (ShellEngine defaults an unset
-// PanelWindow.screen to the primary). True per-screen bars are a tracked
-// follow-up: ShellEngine.materializePanels() discovers panels via
-// findChildren and detaches each into its own surface, which a
-// Repeater/PerScreen delegate's own ownership would double-free, so
-// dynamic per-monitor panels need engine support (re-materialize +
-// ownership handoff) rather than QML wiring alone.
+// One bar per output. BarHost itself is a single PanelWindow and takes no
+// position on how many exist: compose it under Phosphor.Shell's
+// PerScreenPanels to get one per screen (what examples/phosphor-shell does),
+// or instantiate it bare for a single bar on the primary output, which is
+// what ShellEngine resolves an unset PanelWindow.screen to.
 //
 //   BarHost { }   // defaults match the mockup; override the *Groups
 //                 // lists or barThickness/screenInset to customise.
@@ -52,12 +50,10 @@ PanelWindow {
     // Extra surface below the exclusive zone so the capsule's drop shadow
     // has room to render without being clipped at the panel's bottom edge.
     //
-    // This strip is transparent but still part of the wl_surface, and
-    // phosphor-layer sets no input region on its surfaces, so it currently
-    // swallows clicks along the top edge of whatever tiles beneath. The fix
-    // belongs in the layer library (derive an input region from the painted
-    // geometry); the panel this replaced carried the same strip and the same
-    // gap.
+    // The strip is transparent but still part of the wl_surface, so it
+    // would swallow clicks along the top edge of whatever tiles beneath.
+    // ShellEngine masks the surface's input region down to `thickness`
+    // (PanelWindow.visibleBand), which excludes it.
     shadowSize: Tokens.spacing_l
     alignment: PanelWindow.Fill
     // The bar never wants keyboard focus (Plasma-panel behaviour); attached
@@ -72,9 +68,8 @@ PanelWindow {
     // array of widget ids sharing one island chip. Related widgets are
     // combined (the status icons, the trailing buttons); others stand
     // alone. Defaults match the bar-top mockup; a layout editor / config
-    // can override these later. Workspaces is intentionally absent until a
-    // real compositor workspace source ships (see BarController).
-    property var leftGroups: [["focusedapp"]]
+    // can override these later.
+    property var leftGroups: [["workspaces"], ["focusedapp"]]
     property var centerGroups: [["clock"]]
     property var rightGroups: [["systemmetrics"], ["media"], ["tray"], ["audio", "network", "bluetooth", "battery"], ["notification", "controlcenter", "power"]]
 

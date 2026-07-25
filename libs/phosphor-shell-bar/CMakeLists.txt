@@ -35,7 +35,8 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
 # Kirigami.Icon resolves freedesktop icon NAMES through QIcon::fromTheme and
 # tints them via isMask; the shell's own image provider only serves the
-# pixmaps tray items push, so it cannot resolve names. Seven bar widgets rely
+# pixmaps tray items push, so it cannot resolve names. Seven files in this module import it (six widgets plus the shared
+# BarIconButton atom, which three more widgets build on); they rely
 # on it, which makes the bar the first KF6 consumer in the shell tier.
 # Declaring it here fails loudly at configure time on a host without Kirigami
 # instead of silently producing a bar whose icons never load, and lets the
@@ -48,7 +49,7 @@ find_package(KF6Kirigami REQUIRED)
 # build time, and consumers need their runtime plugins linked.
 # In-tree builds always have the sibling targets; fall back to installed
 # packages. The bar QML also imports Phosphor.Shell (PanelWindow in BarHost;
-# SystemClock, SystemUsage, Toplevels in the widgets) and the runtime-registered
+# SystemClock, SystemUsage, Toplevels, Workspaces in the widgets) and the runtime-registered
 # Phosphor.Service.* modules; those resolve in the shell process at load,
 # the same way examples/phosphor-shell does, so they are not declared to the
 # module at all. org.kde.kirigami IS declared (see DEPENDENCIES below),
@@ -75,8 +76,10 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/BarHost.qml
     qml/Phosphor/Bar/Slot.qml
     qml/Phosphor/Bar/Widgets/BarIconButton.qml
+    qml/Phosphor/Bar/Widgets/BarWidget.qml
     qml/Phosphor/Bar/Widgets/Clock.qml
     qml/Phosphor/Bar/Widgets/FocusedApp.qml
+    qml/Phosphor/Bar/Widgets/Workspaces.qml
     qml/Phosphor/Bar/Widgets/SystemMetrics.qml
     qml/Phosphor/Bar/Widgets/Network.qml
     qml/Phosphor/Bar/Widgets/Bluetooth.qml
@@ -168,7 +171,7 @@ if(TARGET PhosphorThemeQmlplugin)
 endif()
 
 # The Phosphor.Shell types the bar uses (PanelWindow, SystemClock,
-# SystemUsage, Toplevels) are all registered imperatively at runtime by ShellEngine in
+# SystemUsage, Toplevels, Workspaces) are all registered imperatively at runtime by ShellEngine in
 # the shell process, not by the phosphor-shell QML module. The only type
 # that module's registrar provides is PerScreen.qml, which the bar does not
 # use, so it is deliberately NOT linked here.

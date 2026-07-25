@@ -48,6 +48,14 @@ endif()
 if(NOT TARGET PhosphorWayland::PhosphorWayland)
     find_package(PhosphorWayland CONFIG REQUIRED)
 endif()
+# Backs the Workspaces QML singleton. Cheap: Qt6::Core + Qt6::DBus plus a
+# few small in-tree type libs, no KWin headers and nothing from src/.
+# The registration lives HERE rather than in phosphor-workspaces because
+# that library is on the engine-QML firewall list (see the root
+# CMakeLists) and may not link Qt6::Qml, directly or transitively.
+if(NOT TARGET PhosphorWorkspaces::PhosphorWorkspaces)
+    find_package(PhosphorWorkspaces CONFIG REQUIRED)
+endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -60,6 +68,7 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/ShellLoader.h
     include/PhosphorShell/ShellEngine.h
     include/PhosphorShell/PanelWindow.h
+    include/PhosphorShell/PerScreenPanels.h
     include/PhosphorShell/PopupWindow.h
     include/PhosphorShell/ScreenModel.h
     include/PhosphorShell/ShellGlobal.h
@@ -71,6 +80,7 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/FloatingWindow.h
     include/PhosphorShell/LazyLoader.h
     include/PhosphorShell/Toplevels.h
+    include/PhosphorShell/Workspaces.h
     include/PhosphorShell/WallpaperService.h
     include/PhosphorShell/SystemClock.h
     include/PhosphorShell/SystemUsage.h
@@ -84,6 +94,7 @@ set(phosphorshell_SRCS
     src/shellloader.cpp
     src/shellengine.cpp
     src/panelwindow.cpp
+    src/perscreenpanels.cpp
     src/popupwindow.cpp
     src/screenmodel.cpp
     src/shellglobal.cpp
@@ -95,6 +106,7 @@ set(phosphorshell_SRCS
     src/floatingwindow.cpp
     src/lazyloader.cpp
     src/toplevels.cpp
+    src/workspaces.cpp
     src/wallpaperservice.cpp
     src/systemclock.cpp
     src/systemusage.cpp
@@ -143,6 +155,14 @@ target_link_libraries(PhosphorShell
         PhosphorShaders::PhosphorShaders
         PhosphorWayland::PhosphorWayland
     PRIVATE
+        # PRIVATE, not PUBLIC: Workspaces.h only forward-declares
+        # VirtualDesktopManager and holds it behind a QPointer in a private
+        # section, so no consumer of PhosphorShell needs the definition, the
+        # include dir, or the link. PUBLIC would also put the target into the
+        # exported INTERFACE_LINK_LIBRARIES without a matching find_dependency
+        # in PhosphorShellConfig.cmake.in, which fails at generate time for
+        # anyone consuming the INSTALLED package.
+        PhosphorWorkspaces::PhosphorWorkspaces
         # WaylandClient + private headers needed by popupwindow.cpp to call
         # xdg_popup.reposition directly. Qt's xdg-shell client plugin owns
         # the xdg_popup proxy lifecycle, but reposition is just a stateless

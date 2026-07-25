@@ -14,7 +14,7 @@ import org.kde.kirigami as Kirigami
 import Phosphor.Theme
 import Phosphor.Service.Network
 
-Item {
+BarWidget {
     id: root
 
     NetworkHost {
@@ -76,14 +76,15 @@ Item {
     // simply not up) leaves the host inert with UnknownConnectivity and an
     // empty type, which would otherwise paint a permanent, unrecoverable
     // "offline" glyph on a perfectly connected machine. Gate on hardware the
-    // way Bluetooth and Battery do, and read the predicate rather than
-    // `visible`, which is EFFECTIVE visibility and would close a loop with
-    // the slot's cell gate.
-    readonly property bool available: host.deviceCount > 0
+    // way Bluetooth and Battery do.
+    // Named rather than repeated: this value feeds the collapse
+    // arithmetic as well as the glyph, so a bare literal in both places
+    // could silently desync them. Matches Tray's local convention.
+    readonly property int iconSize: 18
 
-    visible: root.available
-    implicitWidth: root.available ? 18 : 0
-    implicitHeight: 18
+    available: host.deviceCount > 0
+    contentWidth: root.iconSize
+    contentHeight: root.iconSize
 
     Accessible.role: Accessible.Indicator
     Accessible.name: root.online ? "Network connected" : root.limited ? "Network limited" : "Network offline"

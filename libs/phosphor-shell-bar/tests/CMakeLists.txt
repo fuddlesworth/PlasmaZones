@@ -44,4 +44,24 @@ add_test(
 
 set_tests_properties(test_phosphor_shell_bar PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    # LABELS so `ctest -L` can select this lib the way it can every sibling;
+    # TIMEOUT because this is a QtQuickTest binary that spins a QML engine,
+    # matching the other Quick-backed tests in the tree.
+    LABELS "phosphorshellbar"
+    TIMEOUT 30
 )
+
+# Same private-bus isolation as libs/phosphor-shell/tests. Nothing in the
+# bar's QML touches D-Bus today, but this is a QtQuickTest that instantiates
+# real QML, and the moment a bar file imports a Phosphor.Service.* type it
+# would start reading the developer's session bus with no diff to signal it.
+# EXISTS-guarded explicit path, not a bare `include(PhosphorTestIsolation)`:
+# a bare module name resolves only through the root project's
+# CMAKE_MODULE_PATH, so a standalone configure of this library (which the
+# repo supports — each lib is meant to stay extractable via `git subtree
+# split`) would hard-fail at generate time. Same shape as the
+# PhosphorLibTesting include in the sibling libraries.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake")
+    include(${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake)
+    phosphor_apply_test_isolation(test_phosphor_shell_bar)
+endif()

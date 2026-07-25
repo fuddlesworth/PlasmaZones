@@ -13,7 +13,7 @@ import org.kde.kirigami as Kirigami
 import Phosphor.Theme
 import Phosphor.Service.Bluetooth
 
-Item {
+BarWidget {
     id: root
 
     BluetoothHost {
@@ -25,16 +25,14 @@ Item {
 
     // No adapter means no Bluetooth hardware: hide rather than show a
     // perpetually-off glyph.
-    //
-    // Both bindings read this host-derived predicate, never `visible`.
-    // Item.visible READS as EFFECTIVE visibility, and the slot gates its
-    // cell on this very implicitWidth, so deriving the width from `visible`
-    // closes a loop that latches at zero and never recovers.
-    readonly property bool available: host.adapterCount > 0
+    // Named rather than repeated: this value feeds the collapse
+    // arithmetic as well as the glyph, so a bare literal in both places
+    // could silently desync them. Matches Tray's local convention.
+    readonly property int iconSize: 18
 
-    visible: root.available
-    implicitWidth: root.available ? 18 : 0
-    implicitHeight: 18
+    available: host.adapterCount > 0
+    contentWidth: root.iconSize
+    contentHeight: root.iconSize
 
     Accessible.role: Accessible.Indicator
     Accessible.name: root.powered ? "Bluetooth on" : "Bluetooth off"

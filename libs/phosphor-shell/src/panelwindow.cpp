@@ -3,6 +3,9 @@
 
 #include <PhosphorShell/PanelWindow.h>
 
+#include <QRect>
+#include <QSize>
+
 namespace PhosphorShell {
 
 PanelWindow::PanelWindow(QQuickItem* parent)
@@ -11,6 +14,31 @@ PanelWindow::PanelWindow(QQuickItem* parent)
 }
 
 PanelWindow::~PanelWindow() = default;
+
+QRect PanelWindow::visibleBand(Edge edge, int thickness, QSize surfaceSize)
+{
+    const int w = surfaceSize.width();
+    const int h = surfaceSize.height();
+    if (thickness <= 0 || w <= 0 || h <= 0) {
+        return {};
+    }
+
+    // Clamp to the surface. A thickness at or past the surface depth means
+    // there is no shadow strip to exclude, and the band is simply the whole
+    // surface — never a rect that overhangs it, which would be an input
+    // region the compositor has to clip.
+    switch (edge) {
+    case Top:
+        return {0, 0, w, qMin(thickness, h)};
+    case Bottom:
+        return {0, qMax(0, h - thickness), w, qMin(thickness, h)};
+    case Left:
+        return {0, 0, qMin(thickness, w), h};
+    case Right:
+        return {qMax(0, w - thickness), 0, qMin(thickness, w), h};
+    }
+    return {};
+}
 
 PanelWindow::Edge PanelWindow::edge() const
 {

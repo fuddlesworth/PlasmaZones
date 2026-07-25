@@ -12,7 +12,7 @@ import org.kde.kirigami as Kirigami
 import Phosphor.Theme
 import Phosphor.Service.Mpris
 
-Item {
+BarWidget {
     id: root
 
     readonly property int maxTitleWidth: 200
@@ -55,18 +55,12 @@ Item {
             root.player.togglePlaying();
     }
 
-    // Both bindings read this predicate, never `visible`. Item.visible READS
-    // as EFFECTIVE visibility, and the slot gates its cell on this very
-    // implicitWidth, so deriving the width from `visible` closes a loop that
-    // latches at zero and never recovers.
-    readonly property bool available: root.player !== null && (root.trackTitle.length > 0 || root.trackArtist.length > 0)
-
-    visible: root.available
-    implicitWidth: root.available ? row.implicitWidth : 0
-    implicitHeight: row.implicitHeight
+    available: root.player !== null && (root.trackTitle.length > 0 || root.trackArtist.length > 0)
+    contentWidth: row.implicitWidth
+    contentHeight: row.implicitHeight
 
     Accessible.role: Accessible.Indicator
-    Accessible.name: root._stateWord + " " + root._label
+    Accessible.name: root._label.length > 0 ? root._stateWord + " " + root._label : root._stateWord
 
     // A player that reports no control capability still shows its track, but
     // dimmed, so the inert click is legible rather than silently dead.

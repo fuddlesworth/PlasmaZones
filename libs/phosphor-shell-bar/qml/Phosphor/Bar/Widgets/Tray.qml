@@ -15,21 +15,17 @@ import QtQuick
 import Phosphor.Theme
 import Phosphor.Service.Sni
 
-Item {
+BarWidget {
     id: root
 
     readonly property int delegateSize: 24
     readonly property int iconSize: 18
     readonly property real passiveOpacity: 0.5
 
-    // Named like the sibling widgets, and read by BOTH bindings: `visible`
-    // is EFFECTIVE visibility, so sizing off it would close a loop with the
-    // slot's cell gate.
-    readonly property bool available: trayModel.count > 0
-
-    implicitWidth: root.available ? trayRow.implicitWidth : 0
-    implicitHeight: root.delegateSize
-    visible: root.available
+    // An empty tray collapses rather than reserving a blank chip.
+    available: trayModel.count > 0
+    contentWidth: trayRow.implicitWidth
+    contentHeight: root.delegateSize
 
     StatusNotifierHost {
         id: trayHost

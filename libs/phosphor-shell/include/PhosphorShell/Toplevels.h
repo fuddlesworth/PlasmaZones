@@ -13,6 +13,15 @@
 #include <QPointer>
 #include <QtQml/qqmlregistration.h>
 
+// `create()` below names both of these. Every existing consumer happened
+// to pull them in first, so the omission only surfaced once a translation
+// unit included this header on its own — the usual way a unity build
+// hides a missing declaration.
+QT_BEGIN_NAMESPACE
+class QQmlEngine;
+class QJSEngine;
+QT_END_NAMESPACE
+
 namespace PhosphorShell {
 
 /**
@@ -116,6 +125,17 @@ class PHOSPHORSHELL_EXPORT Toplevels : public QObject
     /// rebuilding. Bind `Repeater { model: Toplevels.model }`.
     Q_PROPERTY(QAbstractListModel* model READ model CONSTANT)
     Q_PROPERTY(bool supported READ isSupported CONSTANT)
+    /// The toplevel the compositor currently reports as activated, or null
+    /// when nothing is (the bare desktop, or a compositor that does not
+    /// advertise the protocol).
+    ///
+    /// The protocol has no "which one is active" event — activation is a
+    /// per-toplevel state flag — so anything that wants the focused window
+    /// must watch every toplevel's `stateChanged` and re-scan. Doing that
+    /// in QML costs a hidden delegate per window in every consuming
+    /// widget; doing it once here costs one connection per toplevel for
+    /// the whole process.
+    Q_PROPERTY(PhosphorWayland::ForeignToplevel* activeToplevel READ activeToplevel NOTIFY activeToplevelChanged)
 
 public:
     explicit Toplevels(QObject* parent = nullptr);
@@ -127,11 +147,21 @@ public:
     [[nodiscard]] QList<PhosphorWayland::ForeignToplevel*> toplevels() const;
     [[nodiscard]] QAbstractListModel* model() const;
     [[nodiscard]] bool isSupported() const;
+    [[nodiscard]] PhosphorWayland::ForeignToplevel* activeToplevel() const;
 
 Q_SIGNALS:
     void toplevelsChanged();
+    void activeToplevelChanged();
 
 private:
+    /// Wire one toplevel's state signals to the active scan. Does NOT
+    /// scan — seeding subscribes many and scans once at the end.
+    void subscribeToplevel(PhosphorWayland::ForeignToplevel* toplevel);
+    /// Subscribe a newly-arrived toplevel and re-scan. Activation is not
+    /// known at add time, so both halves matter on that path.
+    void watchToplevel(PhosphorWayland::ForeignToplevel* toplevel);
+    /// Re-pick the activated toplevel and emit only on a real change.
+    void recomputeActive();
     /// Process-wide ForeignToplevelManager. Lazily constructed on first
     /// access and parented to qApp so it dies at process exit. Sharing
     /// across engines avoids two protocol bindings to the same global
@@ -144,6 +174,17 @@ private:
     // QML engine, so engine teardown cleanly tears down its own model
     // without disturbing siblings.
     ToplevelListModel* m_model = nullptr;
+
+    // The last-published active toplevel. QPointer because a toplevel can
+    // be destroyed without a preceding state change, and the getter is
+    // read from arbitrary binding evaluations; a raw pointer would hand
+    // QML a dangling ForeignToplevel* in that window.
+    QPointer<PhosphorWayland::ForeignToplevel> m_active;
+    // The pointer VALUE last published through activeToplevelChanged. Raw
+    // and never dereferenced: it exists purely so the change gate compares
+    // published state rather than a handle that can clear itself out from
+    // under the comparison.
+    PhosphorWayland::ForeignToplevel* m_publishedActive = nullptr;
 };
 
 } // namespace PhosphorShell

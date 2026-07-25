@@ -78,6 +78,11 @@ private:
     [[nodiscard]] bool buildAndMaterialize();
     void materializePanels();
     void installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surface* surface, QSize screenSize);
+    /// Mask the surface's input region down to the painted band, so the
+    /// shadow strip beyond `thickness` stops accepting pointer events meant
+    /// for the window underneath. Re-applied on resize and on changes to the
+    /// geometry inputs it derives from.
+    void installInputRegion(PanelWindow* panel, PhosphorLayer::Surface* surface);
     void teardown();
     void setupWatcher();
     void savePersistentState();

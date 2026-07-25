@@ -39,10 +39,6 @@ QString BarController::moduleUri()
 
 const QList<BarController::BuiltinWidget>& BarController::builtinWidgets()
 {
-    // Workspaces is intentionally absent: it has no shipped data source yet
-    // (no QML-exposed workspace model), and faking it with hardcoded indices
-    // is disallowed; it lands with a real compositor workspace source.
-    //
     // The display names are untranslated. IFactoryBase leaves translation to
     // the factory ("may be translated by the factory implementation"), no
     // surface renders them yet, and the shell tier has no i18n wiring at all
@@ -53,6 +49,7 @@ const QList<BarController::BuiltinWidget>& BarController::builtinWidgets()
     static const QList<BuiltinWidget> widgets{
         {QStringLiteral("clock"), QStringLiteral("Clock"), QStringLiteral("Clock")},
         {QStringLiteral("focusedapp"), QStringLiteral("Focused App"), QStringLiteral("FocusedApp")},
+        {QStringLiteral("workspaces"), QStringLiteral("Workspaces"), QStringLiteral("Workspaces")},
         {QStringLiteral("systemmetrics"), QStringLiteral("System Metrics"), QStringLiteral("SystemMetrics")},
         {QStringLiteral("network"), QStringLiteral("Network"), QStringLiteral("Network")},
         {QStringLiteral("bluetooth"), QStringLiteral("Bluetooth"), QStringLiteral("Bluetooth")},
@@ -108,9 +105,11 @@ void BarController::registerBuiltins()
 {
     // Register each entry of the shared catalogue as an IBarWidgetFactory
     // wrapping a delegate type from the Phosphor.Bar module. Capabilities are
-    // advisory (enforced in Phase 5). The catalogue itself lives in
-    // builtinWidgets() so the test suite resolves exactly what ships here,
-    // rather than a second copy that could drift.
+    // advisory (enforced in Phase 5). Registration iterates builtinWidgets()
+    // so it cannot drift from the catalogue. The unit test's copy of the id
+    // list is deliberately hand-written rather than derived from the same
+    // accessor, so adding or dropping a widget has to be an explicit edit in
+    // two places and cannot pass unnoticed.
     for (const BuiltinWidget& widget : builtinWidgets()) {
         const bool registered = m_registry.registerFactory(std::make_shared<QmlComponentBarWidgetFactory>(
             widget.id, widget.displayName, moduleUri(), widget.typeName, QStringList{QStringLiteral("bar.widget")}));

@@ -13,7 +13,7 @@ import org.kde.kirigami as Kirigami
 import Phosphor.Theme
 import Phosphor.Service.UPower
 
-Item {
+BarWidget {
     id: root
 
     // A battery is shown only when UPower reports a present device with a
@@ -21,13 +21,11 @@ Item {
     // a desktop with no battery still exposes (it reports
     // battery-missing-symbolic); Number.isFinite rejects the NaN a
     // transient bus-init or mid-poll disconnect can surface.
-    readonly property bool available: !!battery.displayDevice && battery.displayDevice.isPresent && Number.isFinite(battery.displayDevice.percentage)
-    readonly property int percent: available ? Math.round(battery.displayDevice.percentage) : 0
-    readonly property bool charging: available && battery.displayDevice.state === UPowerDevice.Charging
-
-    visible: root.available
-    implicitWidth: root.available ? row.implicitWidth : 0
-    implicitHeight: row.implicitHeight
+    available: !!battery.displayDevice && battery.displayDevice.isPresent && Number.isFinite(battery.displayDevice.percentage)
+    contentWidth: row.implicitWidth
+    contentHeight: row.implicitHeight
+    readonly property int percent: root.available ? Math.round(battery.displayDevice.percentage) : 0
+    readonly property bool charging: root.available && battery.displayDevice.state === UPowerDevice.Charging
 
     UPowerHost {
         id: battery

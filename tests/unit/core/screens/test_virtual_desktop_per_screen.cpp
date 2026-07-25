@@ -112,7 +112,7 @@ private Q_SLOTS:
     {
         VirtualDesktopManager vdm;
         // Drive the private count-changed slot directly (no KWin D-Bus in tests).
-        QVERIFY(QMetaObject::invokeMethod(&vdm, "onNumberOfDesktopsChanged", Q_ARG(int, 7)));
+        QVERIFY(QMetaObject::invokeMethod(&vdm, "onNumberOfDesktopsChanged", Q_ARG(uint, 7)));
 
         vdm.updateScreenDesktop(QStringLiteral("DP-1"), 3);
         vdm.updateScreenDesktop(QStringLiteral("DP-2"), 7);
@@ -120,7 +120,7 @@ private Q_SLOTS:
         QSignalSpy spy(&vdm, &VirtualDesktopManager::screenDesktopChanged);
         // Desktops 5..7 removed -> count 4. The entry on 7 must clamp to 4; the
         // entry on 3 is unaffected.
-        QVERIFY(QMetaObject::invokeMethod(&vdm, "onNumberOfDesktopsChanged", Q_ARG(int, 4)));
+        QVERIFY(QMetaObject::invokeMethod(&vdm, "onNumberOfDesktopsChanged", Q_ARG(uint, 4)));
 
         QCOMPARE(vdm.currentDesktopForScreen(QStringLiteral("DP-1")), 3);
         QCOMPARE(vdm.currentDesktopForScreen(QStringLiteral("DP-2")), 4);
