@@ -5,7 +5,8 @@
  * @file test_animations_page_controller.cpp
  * @brief AnimationsPageController behaviour pins: path discovery,
  *        override CRUD, the batch and scoped dirty-state announcements,
- *        the path-traversal gate, the shader-leg support gate, the
+ *        the path-traversal gate, the QML meta-object reachability of every
+ *        name the settings QML calls, the shader-leg support gate, the
  *        stock-animation suppression mirror, the spring-slider bounds,
  *        and the simple-page scope coverage.
  *
@@ -25,8 +26,10 @@
  * the test never touches the real user XDG dirs.
  *
  * Companion test files:
- *   - test_animations_motion_sets.cpp      — preset / motion-set CRUD
+ *   - test_animations_motion_sets.cpp      — motion-set CRUD and async discard
+ *   - test_animations_presets.cpp          — the user-preset library
  *   - test_animations_shader_overrides.cpp — shader-effect overrides
+ *   - test_animation_page_scope.cpp        — the page-scope root tables
  */
 
 #include <QSignalSpy>
@@ -242,6 +245,100 @@ private Q_SLOTS:
         QVERIFY2(!editorSnapInCategoryFlag, "'editor.snapIn' is a leaf: not a category");
     }
 
+    // ─── QML boundary contract ────────────────────────────────────────────
+
+    /// Every name the settings QML calls on this controller must exist on its
+    /// meta-object. A plain public method is invisible to QML, and the call
+    /// fails at RUNTIME with a TypeError that no build and no C++ test can
+    /// see — which is exactly how a `clearOverridesUnder` call shipped from
+    /// QML against a method that had no Q_INVOKABLE, silently breaking the
+    /// override toggle.
+    ///
+    /// Two spellings are covered: the direct
+    /// `settingsController.animationsPage.foo`, and a same-file alias such as
+    /// RulesPage.qml's `readonly property var animationsController:
+    /// settingsController.animationsPage`. Bare property reads are scraped
+    /// alongside calls, since the meta-object lookup resolves either.
+    ///
+    /// NOT covered, stated plainly rather than left as a silent hole: the
+    /// shared shader pages receive this controller as a `bridge:` binding from
+    /// AnimationsShadersPage.qml and then call `bridge.foo(...)` in their own
+    /// files (ShaderBrowserCard.qml, ShaderSetsPage.qml, …). Following that
+    /// needs cross-file component resolution, and those same components are
+    /// bound to decorationPage and snappingShadersPage elsewhere, so a blanket
+    /// `bridge.` scrape would check names against the wrong controller. A
+    /// guard for that belongs in a test that can construct all of them.
+    /// ProfileRow.qml's pass-as-a-function-argument is out of reach for the
+    /// same reason.
+    void everyAnimationsPageCallFromQmlIsReachable()
+    {
+        static const QStringList kQmlRoots{QStringLiteral(P_SOURCE_DIR "/src/settings/qml"),
+                                           QStringLiteral(P_SOURCE_DIR "/kcm")};
+
+        // `<receiver>.<name>`, with or without a call paren. Word-boundary
+        // anchored so a longer identifier ending in the receiver name cannot
+        // match.
+        const auto namesUsedOn = [](const QString& src, const QString& receiver) {
+            QSet<QString> names;
+            const QRegularExpression re(QStringLiteral("\\b%1\\.([A-Za-z_][A-Za-z0-9_]*)").arg(receiver));
+            auto it = re.globalMatch(src);
+            while (it.hasNext())
+                names.insert(it.next().captured(1));
+            return names;
+        };
+
+        // The binding must END at `animationsPage`. Without the lookahead this
+        // also matched `... : settingsController.animationsPage.userPresets`,
+        // aliasing a LIST rather than the controller, and then reported that
+        // list's `length` as a missing controller member.
+        static const QRegularExpression aliasRe(
+            QStringLiteral("property\\s+var\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:"
+                           "\\s*settingsController\\.animationsPage\\s*(?![.A-Za-z0-9_])"));
+
+        QSet<QString> used;
+        int aliasesResolved = 0;
+        for (const QString& rootDir : kQmlRoots) {
+            QDirIterator dirIt(rootDir, QStringList{QStringLiteral("*.qml")}, QDir::Files,
+                               QDirIterator::Subdirectories);
+            while (dirIt.hasNext()) {
+                const QString src = readFile(dirIt.next());
+                used.unite(namesUsedOn(src, QStringLiteral("animationsPage")));
+                auto aliasIt = aliasRe.globalMatch(src);
+                while (aliasIt.hasNext()) {
+                    used.unite(namesUsedOn(src, aliasIt.next().captured(1)));
+                    ++aliasesResolved;
+                }
+            }
+        }
+
+        // Non-vacuity floors. The direct surface alone is well over a dozen
+        // names, and at least one alias exists (RulesPage.qml). A collapse
+        // means the scrape broke, not that the call sites went away.
+        QVERIFY2(used.size() >= 15,
+                 qPrintable(QStringLiteral("scraped only %1 animationsPage names from the QML tree").arg(used.size())));
+        QVERIFY2(aliasesResolved >= 1, "no same-file alias was resolved — the alias leg is checking nothing");
+
+        AnimationsPageController c;
+        const QMetaObject* meta = c.metaObject();
+        QStringList unreachable;
+        for (const QString& name : used) {
+            const QByteArray raw = name.toUtf8();
+            if (meta->indexOfProperty(raw.constData()) >= 0)
+                continue;
+            // By NAME, not signature: indexOfMethod needs an exact parameter
+            // list, and QML reaches these through every overload.
+            bool found = false;
+            for (int i = 0; i < meta->methodCount() && !found; ++i)
+                found = meta->method(i).name() == raw;
+            if (!found)
+                unreachable.append(name);
+        }
+        QVERIFY2(unreachable.isEmpty(),
+                 qPrintable(QStringLiteral("QML calls these, but they are absent from the meta-object "
+                                           "(missing Q_INVOKABLE / Q_PROPERTY): %1")
+                                .arg(unreachable.join(QStringLiteral(", ")))));
+    }
+
     // ─── Simple-page scope contract ───────────────────────────────────────
 
     /// Every event card on AnimationsSimplePage.qml must fall inside the
@@ -266,65 +363,6 @@ private Q_SLOTS:
     /// `"mirrorPaths": [ … ]` string literals only. A path that came from a JS
     /// expression or a property reference would not be seen, and the page has
     /// never used one. The count guards below are what stop a rewrite in that
-    /// Every `settingsController.animationsPage.<name>` the settings QML calls
-    /// must actually exist on the controller's meta-object. A plain public
-    /// method is invisible to QML, and the call fails at RUNTIME with a
-    /// TypeError that no build and no C++ test can see — which is exactly how
-    /// a `clearOverridesUnder` call shipped from QML against a method that had
-    /// no Q_INVOKABLE, silently breaking the override toggle.
-    ///
-    /// Scrapes the QML rather than listing names by hand so a new call site is
-    /// covered the day it is written.
-    void everyAnimationsPageCallFromQmlIsReachable()
-    {
-        static const QStringList kQmlRoots{QStringLiteral(P_SOURCE_DIR "/src/settings/qml"),
-                                           QStringLiteral(P_SOURCE_DIR "/kcm")};
-
-        // `animationsPage.foo(` — call sites only. A bare property read is
-        // covered by the same lookup, but restricting to calls keeps the regex
-        // from matching prose in comments.
-        static const QRegularExpression callRe(QStringLiteral("animationsPage\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\("));
-
-        QSet<QString> called;
-        for (const QString& rootDir : kQmlRoots) {
-            QDirIterator dirIt(rootDir, QStringList{QStringLiteral("*.qml")}, QDir::Files,
-                               QDirIterator::Subdirectories);
-            while (dirIt.hasNext()) {
-                const QString src = readFile(dirIt.next());
-                auto it = callRe.globalMatch(src);
-                while (it.hasNext())
-                    called.insert(it.next().captured(1));
-            }
-        }
-
-        // Non-vacuity floor: the animations QML calls well over a dozen of
-        // these. A collapse to a handful means the scrape broke, not that the
-        // call sites went away.
-        QVERIFY2(
-            called.size() >= 15,
-            qPrintable(QStringLiteral("scraped only %1 animationsPage calls from the QML tree").arg(called.size())));
-
-        AnimationsPageController c;
-        const QMetaObject* meta = c.metaObject();
-        QStringList unreachable;
-        for (const QString& name : called) {
-            const QByteArray raw = name.toUtf8();
-            if (meta->indexOfProperty(raw.constData()) >= 0)
-                continue;
-            // By NAME, not signature: indexOfMethod needs an exact parameter
-            // list, and QML reaches these through every overload.
-            bool found = false;
-            for (int i = 0; i < meta->methodCount() && !found; ++i)
-                found = meta->method(i).name() == raw;
-            if (!found)
-                unreachable.append(name);
-        }
-        QVERIFY2(unreachable.isEmpty(),
-                 qPrintable(QStringLiteral("QML calls these, but they are absent from the meta-object "
-                                           "(missing Q_INVOKABLE / Q_PROPERTY): %1")
-                                .arg(unreachable.join(QStringLiteral(", ")))));
-    }
-
     /// style from turning this into a test that asserts nothing.
     void simpleScopeCoversEverySimplePageCard()
     {
@@ -899,7 +937,13 @@ private Q_SLOTS:
 
         QSignalSpy done(&c, &AnimationsPageController::discardResult);
         c.asyncRevertPending();
-        QVERIFY(done.wait(5000));
+        // QTRY, not spy.wait(): asyncRevertPending emits discardResult
+        // SYNCHRONOUSLY on two early-return branches (a worker already in
+        // flight, or nothing pending), and wait() ignores an emission already
+        // recorded before it was called. If either branch were ever taken,
+        // wait() would block the full timeout and then fail for the wrong
+        // reason.
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
         QVERIFY(!c.hasOverride(QStringLiteral("editor")));
         QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
         QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toDouble(),
