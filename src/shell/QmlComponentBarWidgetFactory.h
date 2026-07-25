@@ -4,9 +4,14 @@
 
 #include <PhosphorRegistry/IBarWidgetFactory.h>
 
+#include <QLoggingCategory>
 #include <QString>
 #include <QStringList>
 #include <QtCore/qtclasshelpermacros.h>
+
+// Shared by the bar's registry owner and this factory so the widget-mounting
+// path can be filtered at runtime, matching the shell binary's lcShell.
+Q_DECLARE_LOGGING_CATEGORY(lcBar)
 
 QT_BEGIN_NAMESPACE
 class QQmlEngine;
@@ -24,7 +29,10 @@ namespace PhosphorShellApp {
 // to subclass IBarWidgetFactory. Plugin authors can mirror the pattern
 // or supply their own QQmlComponent build logic.
 //
-// Ownership: createWidget keeps the default CppOwnership and parents the
+// createWidget refuses a null engine or a null parent (returning nullptr
+// after a warning) rather than constructing an item nothing would own.
+//
+// Ownership: createWidget pins CppOwnership and parents the
 // created item under `parent`, so the bar host's destruction cascade
 // (the Slot Repeater destroys the slot, the QObject parent-chain takes
 // the widget with it) reclaims it. The IBarWidgetFactory contract

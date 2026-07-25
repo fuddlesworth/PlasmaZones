@@ -7,8 +7,6 @@
 // button is complete; the session actions (log out, suspend, reboot,
 // shut down) live behind that popout.
 
-import QtQuick
-
 BarIconButton {
     iconName: "system-shutdown"
     label: "Power"

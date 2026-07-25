@@ -22,9 +22,14 @@ Item {
     readonly property int iconSize: 18
     readonly property real passiveOpacity: 0.5
 
-    implicitWidth: trayModel.count > 0 ? trayRow.implicitWidth : 0
-    implicitHeight: delegateSize
-    visible: trayModel.count > 0
+    // Named like the sibling widgets, and read by BOTH bindings: `visible`
+    // is EFFECTIVE visibility, so sizing off it would close a loop with the
+    // slot's cell gate.
+    readonly property bool available: trayModel.count > 0
+
+    implicitWidth: root.available ? trayRow.implicitWidth : 0
+    implicitHeight: root.delegateSize
+    visible: root.available
 
     StatusNotifierHost {
         id: trayHost
@@ -49,15 +54,24 @@ Item {
                 id: trayDelegate
 
                 required property int index
-                required property string itemId
                 required property string title
                 required property string iconUrl
-                required property var status
+                // int, not var: the role carries a StatusNotifierItem::Status
+                // Q_ENUM value, compared against StatusNotifierItem.Passive.
+                required property int status
                 required property string toolTipTitle
-                required property string toolTipBody
-                required property string menuPath
                 required property bool itemIsMenu
-                required property string dbusService
+
+                // Primary activation, shared by the left button and the
+                // accessibility press action. Items that ARE a menu open
+                // their menu instead, mirroring Plasma.
+                function primaryActivate(px, py) {
+                    const global = trayDelegate.mapToGlobal(px, py);
+                    if (trayDelegate.itemIsMenu)
+                        trayModel.contextMenu(trayDelegate.index, global.x, global.y);
+                    else
+                        trayModel.activate(trayDelegate.index, global.x, global.y);
+                }
 
                 width: root.delegateSize
                 height: root.delegateSize
@@ -85,6 +99,10 @@ Item {
                     Text {
                         anchors.centerIn: parent
                         text: trayDelegate.title.length > 0 ? trayDelegate.title.charAt(0).toUpperCase() : "?"
+                        // The delegate's MouseArea already carries the
+                        // accessible name; without this the bare letter is
+                        // announced alongside it as its own StaticText node.
+                        Accessible.ignored: true
                         color: Theme.on_surface
                         font.pixelSize: Tokens.font_size_label_s
                         font.weight: Tokens.font_weight_bold
@@ -117,23 +135,31 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
 
+                    // Pointer + assistive tech only, no keyboard leg: this widget is an
+                    // indicator that happens to be clickable, and the bar's panel takes
+                    // no keyboard focus, so there is nothing to Tab from. BarIconButton
+                    // carries the full quad because it is the shared button atom and is
+                    // meant to work wherever a focused surface hosts it.
                     Accessible.role: Accessible.Button
                     Accessible.name: trayDelegate.toolTipTitle.length > 0 ? trayDelegate.toolTipTitle : trayDelegate.title
+                    // Assistive tech activates the item through the same
+                    // primary dispatch the left button uses, centred on the
+                    // icon since there is no pointer position to map.
+                    Accessible.onPressAction: trayDelegate.primaryActivate(trayMouse.width / 2, trayMouse.height / 2)
 
                     onClicked: mouse => {
+                        if (mouse.button === Qt.LeftButton) {
+                            // primaryActivate does its own mapping.
+                            trayDelegate.primaryActivate(mouse.x, mouse.y);
+                            return;
+                        }
                         // Translate to screen coords so the item's process
                         // can place any popup relative to the click.
                         const global = trayDelegate.mapToGlobal(mouse.x, mouse.y);
-                        if (mouse.button === Qt.LeftButton) {
-                            if (trayDelegate.itemIsMenu)
-                                trayModel.contextMenu(trayDelegate.index, global.x, global.y);
-                            else
-                                trayModel.activate(trayDelegate.index, global.x, global.y);
-                        } else if (mouse.button === Qt.MiddleButton) {
+                        if (mouse.button === Qt.MiddleButton)
                             trayModel.secondaryActivate(trayDelegate.index, global.x, global.y);
-                        } else if (mouse.button === Qt.RightButton) {
+                        else if (mouse.button === Qt.RightButton)
                             trayModel.contextMenu(trayDelegate.index, global.x, global.y);
-                        }
                     }
                     onWheel: wheel => {
                         if (wheel.angleDelta.y !== 0)

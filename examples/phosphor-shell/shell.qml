@@ -5,15 +5,14 @@ import Phosphor.Bar
 import QtQuick
 
 // Top-level composer for the dogfood shell. Phase 4.1 replaces the old
-// single TopPanel + pushed-in data sources with the production per-screen
-// bar: BarHost mounts one connected-corner bar per monitor and each bar
-// widget owns its own data source (Clock its SystemClock, Battery its
+// single TopPanel + pushed-in data sources with the production bar:
+// BarHost mounts one connected-corner bar on the primary output, and each
+// bar widget owns its own data source (Clock its SystemClock, Battery its
 // UPowerHost, Tray its StatusNotifierHost, ...), so this file no longer
 // wires clock/CPU/memory/battery into a panel.
 //
-// BarHost reads two context properties the host process provides:
-//   - PhosphorShell  (the screen model, set by ShellEngine) for PerScreen
-//   - BarRegistry    (the IBarWidgetFactory owner, set by src/shell/main.cpp)
+// BarHost reads the BarRegistry context property (the IBarWidgetFactory
+// owner, set by src/shell/main.cpp) to mount its widgets.
 //
 // The legacy panel/popup/settings demo components (TopPanel, PanelPopupHost,
 // SettingsWindow, ...) still ship in this module but are no longer composed

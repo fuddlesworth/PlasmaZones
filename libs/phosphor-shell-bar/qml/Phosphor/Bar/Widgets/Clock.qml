@@ -24,7 +24,7 @@ Item {
     }
 
     // SystemClock exposes only a QDate (clock.date), so the time is
-    // assembled from hours/minutes. The floor guards the pre-tick
+    // assembled from hours/minutes. The `< 0` branch guards the pre-tick
     // sentinel that SystemClock's synchronous first update makes
     // unobservable in practice; kept against future refactors.
     readonly property string _time: clock.hours < 0 ? "" : String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0")
@@ -41,6 +41,11 @@ Item {
         Text {
             id: timeLabel
 
+            // Folded into the root's Accessible.name already; QQuickText
+            // exposes itself as its own StaticText node, so without this
+            // assistive tech reads the composed name and then re-reads
+            // this fragment.
+            Accessible.ignored: true
             text: root._time
             color: Theme.on_surface
             font.pixelSize: Tokens.font_size_title_s
@@ -49,6 +54,7 @@ Item {
         }
 
         Text {
+            Accessible.ignored: true
             text: "·"
             color: Theme.on_surface_variant
             font.pixelSize: Tokens.font_size_title_s
@@ -57,6 +63,7 @@ Item {
         }
 
         Text {
+            Accessible.ignored: true
             text: root._date
             color: Theme.on_surface_variant
             font.pixelSize: Tokens.font_size_body_s

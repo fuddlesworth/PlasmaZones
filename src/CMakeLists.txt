@@ -698,8 +698,9 @@ if(BUILD_PHOSPHOR_SHELL)
     add_executable(phosphor-shell
         shell/main.cpp
         # The bar's IBarWidgetFactory registry owner + the generic
-        # QML-component factory. Production's first registry owner; the
-        # Phosphor.Bar QML module stays registry-agnostic (Phase 4.1).
+        # QML-component factory. First production owner of a UI-seam
+        # registry; the Phosphor.Bar QML module stays registry-agnostic
+        # (Phase 4.1).
         shell/BarController.h
         shell/barcontroller.cpp
         shell/QmlComponentBarWidgetFactory.h

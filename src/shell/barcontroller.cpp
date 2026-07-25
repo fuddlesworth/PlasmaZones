@@ -19,64 +19,127 @@ using namespace PhosphorRegistry;
 namespace PhosphorShellApp {
 
 namespace {
-// All built-in bar widgets live in the Phosphor.Bar module.
-const QString kModule = QStringLiteral("Phosphor.Bar");
+
+// Registry::ids() is documented as registration (insertion) order. The
+// sort imposes a stable ALPHABETICAL display order on top of that, so a
+// consumer enumerating ids renders the same sequence regardless of the
+// order the built-ins happened to be registered in.
+QStringList sortedIds(const Registry<IBarWidgetFactory>& registry)
+{
+    QStringList ids = registry.ids();
+    ids.sort();
+    return ids;
+}
 } // namespace
+
+QString BarController::moduleUri()
+{
+    return QStringLiteral("Phosphor.Bar");
+}
+
+const QList<BarController::BuiltinWidget>& BarController::builtinWidgets()
+{
+    // Workspaces is intentionally absent: it has no shipped data source yet
+    // (no QML-exposed workspace model), and faking it with hardcoded indices
+    // is disallowed; it lands with a real compositor workspace source.
+    //
+    // The display names are untranslated. IFactoryBase leaves translation to
+    // the factory ("may be translated by the factory implementation"), no
+    // surface renders them yet, and the shell tier has no i18n wiring at all
+    // on either side (no PhosphorI18n link here, no localized context for
+    // QML). They become PhosphorI18n::tr() calls together with the rest of
+    // the shell's strings when that story lands; translating these alone
+    // would localise the one label nothing displays.
+    static const QList<BuiltinWidget> widgets{
+        {QStringLiteral("clock"), QStringLiteral("Clock"), QStringLiteral("Clock")},
+        {QStringLiteral("focusedapp"), QStringLiteral("Focused App"), QStringLiteral("FocusedApp")},
+        {QStringLiteral("systemmetrics"), QStringLiteral("System Metrics"), QStringLiteral("SystemMetrics")},
+        {QStringLiteral("network"), QStringLiteral("Network"), QStringLiteral("Network")},
+        {QStringLiteral("bluetooth"), QStringLiteral("Bluetooth"), QStringLiteral("Bluetooth")},
+        {QStringLiteral("audio"), QStringLiteral("Audio"), QStringLiteral("Audio")},
+        {QStringLiteral("battery"), QStringLiteral("Battery"), QStringLiteral("Battery")},
+        {QStringLiteral("tray"), QStringLiteral("System Tray"), QStringLiteral("Tray")},
+        {QStringLiteral("media"), QStringLiteral("Media"), QStringLiteral("Media")},
+        {QStringLiteral("controlcenter"), QStringLiteral("Control Center"), QStringLiteral("ControlCenterButton")},
+        {QStringLiteral("notification"), QStringLiteral("Notifications"), QStringLiteral("NotificationButton")},
+        {QStringLiteral("power"), QStringLiteral("Power"), QStringLiteral("PowerButton")},
+        {QStringLiteral("spacer"), QStringLiteral("Spacer"), QStringLiteral("Spacer")},
+    };
+    return widgets;
+}
 
 BarController::BarController(QObject* parent)
     : QObject(parent)
 {
-    // Forward the registry's add/remove signals as a single
-    // factoryIdsChanged so the QML side rebinds without listening to two
-    // distinct notifications (a future plugin loader / hot-reload can add
-    // or drop widgets at runtime).
-    QObject::connect(m_registry.notifier(), &RegistryNotifier::factoryRegistered, this,
-                     &BarController::factoryIdsChanged);
-    QObject::connect(m_registry.notifier(), &RegistryNotifier::factoryUnregistered, this,
-                     &BarController::factoryIdsChanged);
-
+    // Register the built-ins BEFORE wiring the notifier forwarding, so the
+    // one-time construction registrations don't each fire a no-op
+    // factoryIdsChanged (nothing is connected yet, and QML reads factoryIds
+    // fresh when it binds).
     registerBuiltins();
+    m_cachedIds = sortedIds(m_registry);
+
+    // Both registry notifications route through one value-comparing slot.
+    // Nothing mutates this registry after construction today, so neither
+    // signal currently fires; the guard is here for the dynamic path a
+    // plugin loader would add. Under DuplicatePolicy::Replace a
+    // re-registration fires factoryUnregistered then factoryRegistered for
+    // the SAME id, and forwarding each straight to factoryIdsChanged would
+    // emit twice for an id set that never changed, against the "only emit
+    // when the value actually changes" rule.
+    QObject::connect(m_registry.notifier(), &RegistryNotifier::factoryRegistered, this,
+                     &BarController::refreshFactoryIds);
+    QObject::connect(m_registry.notifier(), &RegistryNotifier::factoryUnregistered, this,
+                     &BarController::refreshFactoryIds);
+}
+
+void BarController::refreshFactoryIds()
+{
+    QStringList ids = sortedIds(m_registry);
+    if (ids == m_cachedIds) {
+        return;
+    }
+    m_cachedIds = std::move(ids);
+    Q_EMIT factoryIdsChanged();
 }
 
 BarController::~BarController() = default;
 
 void BarController::registerBuiltins()
 {
-    // Register each built-in bar widget as an IBarWidgetFactory wrapping a
-    // delegate type from the Phosphor.Bar module. Capabilities are advisory
-    // (enforced in Phase 5). Workspaces is intentionally absent: it has no
-    // shipped data source yet (no QML-exposed workspace model), and faking
-    // it with hardcoded indices is disallowed; it lands with a real
-    // compositor workspace source.
-    const auto reg = [this](const QString& id, const QString& name, const QString& type) {
-        m_registry.registerFactory(std::make_shared<QmlComponentBarWidgetFactory>(
-            id, name, kModule, type, QStringList{QStringLiteral("bar.widget")}));
-    };
-    reg(QStringLiteral("clock"), QStringLiteral("Clock"), QStringLiteral("Clock"));
-    reg(QStringLiteral("focusedapp"), QStringLiteral("Focused App"), QStringLiteral("FocusedApp"));
-    reg(QStringLiteral("systemmetrics"), QStringLiteral("System Metrics"), QStringLiteral("SystemMetrics"));
-    reg(QStringLiteral("network"), QStringLiteral("Network"), QStringLiteral("Network"));
-    reg(QStringLiteral("bluetooth"), QStringLiteral("Bluetooth"), QStringLiteral("Bluetooth"));
-    reg(QStringLiteral("audio"), QStringLiteral("Audio"), QStringLiteral("Audio"));
-    reg(QStringLiteral("battery"), QStringLiteral("Battery"), QStringLiteral("Battery"));
-    reg(QStringLiteral("tray"), QStringLiteral("System Tray"), QStringLiteral("Tray"));
-    reg(QStringLiteral("media"), QStringLiteral("Media"), QStringLiteral("Media"));
-    reg(QStringLiteral("controlcenter"), QStringLiteral("Control Center"), QStringLiteral("ControlCenterButton"));
-    reg(QStringLiteral("notification"), QStringLiteral("Notifications"), QStringLiteral("NotificationButton"));
-    reg(QStringLiteral("power"), QStringLiteral("Power"), QStringLiteral("PowerButton"));
-    reg(QStringLiteral("spacer"), QStringLiteral("Spacer"), QStringLiteral("Spacer"));
+    // Register each entry of the shared catalogue as an IBarWidgetFactory
+    // wrapping a delegate type from the Phosphor.Bar module. Capabilities are
+    // advisory (enforced in Phase 5). The catalogue itself lives in
+    // builtinWidgets() so the test suite resolves exactly what ships here,
+    // rather than a second copy that could drift.
+    for (const BuiltinWidget& widget : builtinWidgets()) {
+        const bool registered = m_registry.registerFactory(std::make_shared<QmlComponentBarWidgetFactory>(
+            widget.id, widget.displayName, moduleUri(), widget.typeName, QStringList{QStringLiteral("bar.widget")}));
+        if (!registered) {
+            // Only reachable by giving two built-ins the same id, which
+            // would silently drop one from every bar. Surface it here
+            // rather than leaving it to Registry's internal warning.
+            qCWarning(lcBar) << "BarController: duplicate built-in bar widget id" << widget.id << "was rejected";
+        }
+    }
 }
 
 QQuickItem* BarController::createWidgetFor(const QString& id, QQuickItem* parent)
 {
     const auto factory = m_registry.factory(id);
     if (!factory) {
-        qWarning() << "BarController: no bar widget registered for id" << id;
+        qCWarning(lcBar) << "BarController: no bar widget registered for id" << id;
         return nullptr;
     }
-    QQmlEngine* engine = parent ? qmlEngine(parent) : nullptr;
+    // Distinct messages: a null parent is a QML wiring bug, while a live
+    // parent with no engine is a shutdown race. One shared message makes
+    // the log useless for telling them apart.
+    if (!parent) {
+        qCWarning(lcBar) << "BarController: null parent for id" << id;
+        return nullptr;
+    }
+    QQmlEngine* engine = qmlEngine(parent);
     if (!engine) {
-        qWarning() << "BarController: no QML engine resolvable from parent for id" << id;
+        qCWarning(lcBar) << "BarController: no QML engine resolvable from parent for id" << id;
         return nullptr;
     }
     return factory->createWidget(engine, parent);
@@ -84,12 +147,7 @@ QQuickItem* BarController::createWidgetFor(const QString& id, QQuickItem* parent
 
 QStringList BarController::factoryIds() const
 {
-    QStringList ids = m_registry.ids();
-    // QHash iteration is unspecified — give QML a deterministic
-    // alphabetical order so any consumer enumerating ids is stable across
-    // launches.
-    ids.sort();
-    return ids;
+    return m_cachedIds;
 }
 
 } // namespace PhosphorShellApp

@@ -5,6 +5,7 @@
 #include <PhosphorRegistry/IBarWidgetFactory.h>
 #include <PhosphorRegistry/Registry.h>
 
+#include <QList>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -19,10 +20,12 @@ namespace PhosphorShellApp {
 // Registry<IBarWidgetFactory>, registers the built-in bar widgets as
 // IBarWidgetFactory instances at construction, and exposes
 // createWidgetFor(id, parent) so Slot.qml can instantiate the delegates
-// it lists. This is the first production registry owner (the Phase 3
-// OSD/registry demos kept theirs in the demo executables); the bar QML
-// stays registry-agnostic and talks to this through duck-typed methods,
-// wired in as the `BarRegistry` context property by src/shell/main.cpp.
+// it lists. This is the first production owner of a UI-seam registry (the
+// five shell surfaces); the domain registries — shader packs, animation
+// effects, curves, tiling algorithms, layout sources — already compose
+// Registry<T>. The bar QML stays registry-agnostic and talks to this
+// through duck-typed methods, wired in as the `BarRegistry` context
+// property by src/shell/main.cpp.
 //
 // The engine is resolved per call from the widget's parent
 // (qmlEngine(parent)) rather than cached, so the controller survives the
@@ -35,13 +38,34 @@ class BarController : public QObject
     Q_PROPERTY(QStringList factoryIds READ factoryIds NOTIFY factoryIdsChanged)
 
 public:
+    /// One built-in bar widget: the registry id, the label a browser shows,
+    /// and the QML type it resolves to inside moduleUri().
+    struct BuiltinWidget
+    {
+        QString id;
+        QString displayName;
+        QString typeName;
+    };
+
+    /// The QML module the built-in delegates live in.
+    [[nodiscard]] static QString moduleUri();
+
+    /// The shipped catalogue, as the single source of truth: registerBuiltins
+    /// registers exactly this, and the test suite resolves exactly this
+    /// against the module. The type names are string bindings to QML files in
+    /// another tree, so nothing but a test can catch a rename or a dropped
+    /// QML_FILES entry, both of which compile and link cleanly and degrade to
+    /// a widget that silently never appears.
+    [[nodiscard]] static const QList<BuiltinWidget>& builtinWidgets();
+
     explicit BarController(QObject* parent = nullptr);
     ~BarController() override;
 
     // Slot.qml provider contract: build the bar-widget delegate for `id`,
     // parented into `parent`. Returns null for an unknown id (the slot
-    // skips it) or when no engine is resolvable from `parent`. The engine
-    // is resolved from `parent` so QML need not pass it.
+    // skips it), for a null `parent`, or when no engine is resolvable from
+    // `parent`. The engine is resolved from `parent` so QML need not pass
+    // it, which is also why `parent` must be non-null.
     [[nodiscard]] Q_INVOKABLE QQuickItem* createWidgetFor(const QString& id, QQuickItem* parent);
 
     // The registered widget ids, sorted for a deterministic order. Exposed
@@ -54,8 +78,16 @@ Q_SIGNALS:
 
 private:
     void registerBuiltins();
+    // Re-reads the registry and emits factoryIdsChanged only when the id
+    // set actually differs from the last emission.
+    void refreshFactoryIds();
 
     PhosphorRegistry::Registry<PhosphorRegistry::IBarWidgetFactory> m_registry;
+    // The id list QML reads. Seeded at construction and refreshed only when
+    // the registry's contents actually change, so factoryIds() is a cheap
+    // read rather than a re-sort per binding evaluation, and a notification
+    // that leaves the set unchanged emits nothing.
+    QStringList m_cachedIds;
 };
 
 } // namespace PhosphorShellApp

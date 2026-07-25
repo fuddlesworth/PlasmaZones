@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "BarController.h"
+
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
 #include <PhosphorServiceBrightness/QmlRegistration.h>
 #include <PhosphorServiceClipboard/QmlRegistration.h>
@@ -19,8 +21,6 @@
 #include <PhosphorShell/ShellLoader.h>
 #include <PhosphorWayland/LayerShellPluginLoader.h>
 
-#include "BarController.h"
-
 #include <PhosphorLayer/SurfaceFactory.h>
 #include <PhosphorLayer/defaults/DefaultScreenProvider.h>
 #include <PhosphorLayer/defaults/PhosphorWaylandTransport.h>
@@ -30,6 +30,9 @@
 #include <QLoggingCategory>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QUrl>
+
+#include <memory>
 
 Q_LOGGING_CATEGORY(lcShell, "phosphorshell.main")
 

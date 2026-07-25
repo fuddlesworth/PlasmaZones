@@ -73,6 +73,7 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/Toplevels.h
     include/PhosphorShell/WallpaperService.h
     include/PhosphorShell/SystemClock.h
+    include/PhosphorShell/SystemUsage.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -96,6 +97,7 @@ set(phosphorshell_SRCS
     src/toplevels.cpp
     src/wallpaperservice.cpp
     src/systemclock.cpp
+    src/systemusage.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

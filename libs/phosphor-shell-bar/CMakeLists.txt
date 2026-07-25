@@ -3,14 +3,16 @@
 #
 # PhosphorShellBar, the Phosphor.Bar surface module.
 #
-# A pure-QML module: BarHost (the per-screen connected-corner bar
-# surface, one PanelWindow per monitor via PerScreen, rendered with the
-# BarCanvas atom) plus the Slot left/center/right abstraction and the
+# A pure-QML module: BarHost (the connected-corner bar surface, a single
+# PanelWindow on the primary output, rendered with the BarCanvas atom)
+# plus the Slot left/center/right abstraction and the
 # built-in bar-widget delegates. Widgets are instantiated through the
 # IBarWidgetFactory registry the shell owns (BarController), so the
 # module itself stays registry-agnostic and the delegates are pluggable.
 # Themed through phosphor-theme and built on the phosphor-shell-widgets
-# atoms (BarCanvas, PhosphorPill, PhosphorButton).
+# atoms (BarCanvas, ElevationShadow, PhosphorRipple). Unlike the other
+# shell-tier libs this one depends on KF6 Kirigami, for Kirigami.Icon's
+# named-icon resolution in the status widgets.
 #
 # Phase 4.1 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
 
@@ -29,17 +31,29 @@ endif()
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
-# The bar imports Phosphor.Theme (tokens) and Phosphor.Widgets (BarCanvas,
-# PhosphorPill, PhosphorButton). The QML import scanner needs those modules
-# visible at build time, and consumers need their runtime plugins linked.
+# Kirigami.Icon resolves freedesktop icon NAMES through QIcon::fromTheme and
+# tints them via isMask; the shell's own image provider only serves the
+# pixmaps tray items push, so it cannot resolve names. Seven bar widgets rely
+# on it, which makes the bar the first KF6 consumer in the shell tier.
+# Declaring it here fails loudly at configure time on a host without Kirigami
+# instead of silently producing a bar whose icons never load, and lets the
+# QML import scanner compile those files through qmlcachegen.
+find_package(KF6Kirigami REQUIRED)
+
+# The bar imports Phosphor.Theme (the Tokens / Theme / Motion / StateLayer
+# singletons) and Phosphor.Widgets (BarCanvas, ElevationShadow,
+# PhosphorRipple). The QML import scanner needs those modules visible at
+# build time, and consumers need their runtime plugins linked.
 # In-tree builds always have the sibling targets; fall back to installed
-# packages. The bar QML also imports Phosphor.Shell (PanelWindow, PerScreen,
-# SystemClock, FileView, Toplevels) and the runtime-registered
+# packages. The bar QML also imports Phosphor.Shell (PanelWindow in BarHost;
+# SystemClock, SystemUsage, Toplevels in the widgets) and the runtime-registered
 # Phosphor.Service.* modules; those resolve in the shell process at load,
-# the same way examples/phosphor-shell does, so they are NOT build-time
-# IMPORTS here.
+# the same way examples/phosphor-shell does, so they are not declared to the
+# module at all. org.kde.kirigami IS declared (see DEPENDENCIES below),
+# because unlike those it is an external module the import scanner must
+# resolve at build time.
 if(NOT TARGET PhosphorTheme::PhosphorThemeQml)
     find_package(PhosphorTheme CONFIG QUIET)
 endif()
@@ -98,10 +112,20 @@ qt_add_qml_module(PhosphorShellBarQml
     URI Phosphor.Bar
     VERSION 1.0
     STATIC
-    IMPORTS
+    # DEPENDENCIES, never IMPORTS. IMPORTS emits a qmldir `import` line,
+    # which injects the named module's UNQUALIFIED type names into every
+    # file of this module, last entry winning. Kirigami exports a type
+    # called `Theme`, so listing it under IMPORTS shadowed the
+    # Phosphor.Theme `Theme` singleton across the whole bar and made every
+    # M3 colour token read undefined. DEPENDENCIES satisfies the import
+    # scanner without injecting anything, and every file already imports
+    # what it uses by name. QtQuick / QtQml resolve implicitly and are
+    # deliberately not listed.
+    DEPENDENCIES
         Phosphor.Theme
         Phosphor.Widgets
         QtQuick.Layouts
+        org.kde.kirigami
     SOURCES
         src/phosphorshellbar_qml_plugin.cpp
     QML_FILES ${_phosphor_bar_qml_files}
@@ -112,13 +136,19 @@ add_library(PhosphorShellBar::PhosphorShellBarQml ALIAS PhosphorShellBarQml)
 
 target_compile_features(PhosphorShellBarQml PUBLIC cxx_std_20)
 
+# No Qt6::QuickShapes here: the bar QML imports no QtQuick.Shapes itself. The
+# Shapes usage lives in Phosphor.Widgets' ConnectedShape, which BarCanvas
+# instantiates; that module's own target links Qt6::QuickShapes and propagates
+# it through the PUBLIC link below.
 target_link_libraries(PhosphorShellBarQml
     PUBLIC
         Qt6::Core
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
-        Qt6::QuickShapes
+        # The widgets' Kirigami.Icon import; enforced so a host without
+        # Kirigami fails at configure rather than at first paint.
+        KF6::Kirigami
 )
 
 # Link the sibling QML modules + their plugin registrars so the
@@ -137,18 +167,11 @@ if(TARGET PhosphorThemeQmlplugin)
     target_link_libraries(PhosphorShellBarQml PUBLIC PhosphorThemeQmlplugin)
 endif()
 
-# BarHost imports Phosphor.Shell for PerScreen.qml, which lives in the
-# phosphor-shell QML module (distinct from the C++ Phosphor.Shell types
-# like PanelWindow that ShellEngine registers imperatively). Link the QML
-# module + its plugin registrar so PerScreen resolves at runtime; without
-# this the bar is the first consumer of that module and it goes
-# unregistered ("PerScreen is not a type").
-if(TARGET PhosphorShell::PhosphorShellQml)
-    target_link_libraries(PhosphorShellBarQml PUBLIC PhosphorShell::PhosphorShellQml)
-endif()
-if(TARGET PhosphorShellQmlplugin)
-    target_link_libraries(PhosphorShellBarQml PUBLIC PhosphorShellQmlplugin)
-endif()
+# The Phosphor.Shell types the bar uses (PanelWindow, SystemClock,
+# SystemUsage, Toplevels) are all registered imperatively at runtime by ShellEngine in
+# the shell process, not by the phosphor-shell QML module. The only type
+# that module's registrar provides is PerScreen.qml, which the bar does not
+# use, so it is deliberately NOT linked here.
 
 # No install rules: PhosphorShellBarQml is a STATIC, in-tree-only QML
 # module (like PhosphorShellWidgetsQml / PhosphorShellOsdQml). It is linked

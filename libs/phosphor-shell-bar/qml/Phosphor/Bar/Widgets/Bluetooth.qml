@@ -20,13 +20,20 @@ Item {
         id: host
     }
 
-    readonly property var adapter: host.adapterCount > 0 ? host.adapterAt(0) : null
+    readonly property BluetoothAdapter adapter: host.adapterCount > 0 ? host.adapterAt(0) : null
     readonly property bool powered: root.adapter ? root.adapter.powered : false
 
     // No adapter means no Bluetooth hardware: hide rather than show a
     // perpetually-off glyph.
-    visible: host.adapterCount > 0
-    implicitWidth: visible ? 18 : 0
+    //
+    // Both bindings read this host-derived predicate, never `visible`.
+    // Item.visible READS as EFFECTIVE visibility, and the slot gates its
+    // cell on this very implicitWidth, so deriving the width from `visible`
+    // closes a loop that latches at zero and never recovers.
+    readonly property bool available: host.adapterCount > 0
+
+    visible: root.available
+    implicitWidth: root.available ? 18 : 0
     implicitHeight: 18
 
     Accessible.role: Accessible.Indicator
@@ -36,7 +43,10 @@ Item {
         anchors.centerIn: parent
         width: 18
         height: 18
-        source: root.powered ? "bluetooth-active" : "bluetooth-disabled"
+        // breeze ships no bare bluetooth-* names; these are the ones it
+        // actually carries, so both states draw a real glyph rather than the
+        // unknown-icon fallback.
+        source: root.powered ? "network-bluetooth-activated" : "network-bluetooth"
         isMask: true
         color: root.powered ? Theme.primary : Theme.on_surface_variant
     }

@@ -10,8 +10,6 @@
 // per-widget, which would fail to acquire the bus name. The badge binds
 // to that shared service when the notification center lands.
 
-import QtQuick
-
 BarIconButton {
     iconName: "notifications"
     label: "Notifications"

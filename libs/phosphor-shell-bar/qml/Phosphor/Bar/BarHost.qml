@@ -22,8 +22,16 @@
 // dynamic per-monitor panels need engine support (re-materialize +
 // ownership handoff) rather than QML wiring alone.
 //
-//   BarHost { }   // defaults match the mockup; override the *Widgets
+//   BarHost { }   // defaults match the mockup; override the *Groups
 //                 // lists or barThickness/screenInset to customise.
+//
+// The centre slot is anchored to the capsule's true centre (the clock sits
+// mid-screen, as the mockup shows) while the side slots anchor to the
+// edges, so none of the three reserves space against the others. On an
+// output narrow enough for the trailing cluster to reach the middle they
+// would overlap. That is the same trade the panel this replaced made
+// deliberately, and it keeps the clock optically centred rather than
+// centred in whatever space the sides leave.
 
 import QtQuick
 import Phosphor.Theme
@@ -36,10 +44,20 @@ PanelWindow {
     edge: PanelWindow.Top
     panelLayer: PanelWindow.LayerTop
     // Reserve the capsule plus its top inset; the side insets are
-    // horizontal and don't affect a top panel's exclusive zone.
+    // horizontal and don't affect a top panel's exclusive zone. The bottom
+    // deliberately gets no inset: the zone ends at the capsule's lower edge
+    // so tiled windows start immediately below the bar rather than leaving a
+    // permanent strip of wallpaper there.
     thickness: panel.barThickness + panel.screenInset
     // Extra surface below the exclusive zone so the capsule's drop shadow
     // has room to render without being clipped at the panel's bottom edge.
+    //
+    // This strip is transparent but still part of the wl_surface, and
+    // phosphor-layer sets no input region on its surfaces, so it currently
+    // swallows clicks along the top edge of whatever tiles beneath. The fix
+    // belongs in the layer library (derive an input region from the painted
+    // geometry); the panel this replaced carried the same strip and the same
+    // gap.
     shadowSize: Tokens.spacing_l
     alignment: PanelWindow.Fill
     // The bar never wants keyboard focus (Plasma-panel behaviour); attached
@@ -76,8 +94,8 @@ PanelWindow {
         barHeight: panel.barThickness
         // Fully-rounded capsule (radius = half height), per the mockup.
         cornerRadius: panel.barThickness / 2
-        // Capsule uses the navy surface so the lighter surface_container_high
-        // widget chips read against it (the mockup's colour relationship).
+        // Capsule uses the navy surface so the lighter surface_variant widget
+        // chips read against it (the mockup's colour relationship).
         color: Theme.surface
 
         // Lift the capsule off the wallpaper as a floating island. The
@@ -92,8 +110,9 @@ PanelWindow {
         // Popout sockets: empty until a bar-anchored popout opens. Bar-
         // anchored popouts (control center, notification center, power
         // menu) land in later phases and will push socket descriptors here
-        // so the capsule grows downward into them.
-        sockets: []
+        // so the capsule grows downward into them. Driving them will also
+        // mean growing `thickness` / `shadowSize` to match, since the
+        // layer-shell surface does not stretch on its own.
 
         // Default children land in the bar strip (the top barHeight band of
         // BarCanvas), so `parent` below is that strip and verticalCenter

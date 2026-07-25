@@ -28,9 +28,14 @@ RowLayout {
     // sharing one chip; a single-id array is a lone-widget chip.
     property var groups: []
     // Provider: an object exposing createWidgetFor(id, parent) -> Item.
-    // Injected by BarHost (the shell's BarController). Null in isolation,
-    // in which case the slot mounts nothing.
-    property var registry: null
+    // Injected by BarHost (the shell's BarController, a QObject). Null in
+    // isolation, in which case the slot mounts nothing.
+    //
+    // Mounting is one-shot per cell, so this must already be set when the
+    // slot is created; assigning it later mounts nothing. The shell sets the
+    // BarRegistry context property before engine.load(), which satisfies
+    // that.
+    property QtObject registry: null
 
     spacing: Tokens.spacing_s
 
@@ -46,10 +51,47 @@ RowLayout {
 
             required property var modelData // array of widget ids for this chip
 
+            // Normalise the host-supplied entry. `groups` is config data and
+            // a layout editor will write it, so a bare string (["clock"]
+            // instead of [["clock"]]) is a plausible mistake; treat it as a
+            // one-widget group rather than letting Repeater iterate the
+            // string's characters.
+            // Kept PURE: a binding can re-evaluate any number of times, so
+            // diagnosing a malformed entry in here would re-warn on each one.
+            // The warning lives in Component.onCompleted below instead.
+            //
+            // A bare string is handled first because strings also carry
+            // `length`, so the list check would otherwise walk their
+            // characters. The list check duck-types rather than using
+            // Array.isArray: a group arrives through a `var` model as a
+            // QVariantList, which is list-like but not a native JS Array, so
+            // Array.isArray rejects every real group.
+            readonly property var widgetIds: {
+                if (typeof chip.modelData === "string")
+                    return [chip.modelData];
+                if (chip.modelData && chip.modelData.length !== undefined)
+                    return chip.modelData;
+                return [];
+            }
+
+            // One diagnostic per chip, not one per binding evaluation.
+            Component.onCompleted: {
+                if (typeof chip.modelData === "string")
+                    console.warn("Slot: group entry should be an array of ids, got the bare string", chip.modelData);
+                else if (!chip.modelData || chip.modelData.length === undefined)
+                    console.warn("Slot: ignoring group entry that is neither a list of ids nor a string:", chip.modelData);
+            }
+
             readonly property bool hasContent: inner.implicitWidth > 0
 
             implicitWidth: chip.hasContent ? inner.implicitWidth + Tokens.spacing_m * 2 : 0
-            implicitHeight: 30
+            // Every chip rests at the same pill height, so a row of them
+            // reads as one band. Adding padding to the content height here
+            // would instead give each chip a different height (and, with
+            // radius: height/2, a different corner) according to whatever
+            // it happens to hold. Only a widget genuinely taller than the
+            // pill grows its chip; nothing in the catalogue does today.
+            implicitHeight: Math.max(30, inner.implicitHeight)
             visible: chip.hasContent
             radius: height / 2
             color: Theme.surface_variant
@@ -62,7 +104,7 @@ RowLayout {
                 spacing: Tokens.spacing_s
 
                 Repeater {
-                    model: chip.modelData
+                    model: chip.widgetIds
 
                     delegate: Item {
                         id: cell

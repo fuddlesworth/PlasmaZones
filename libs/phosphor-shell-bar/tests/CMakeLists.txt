@@ -5,10 +5,13 @@
 # tst_*.qml; tst_bar.cpp is the QUICK_TEST_MAIN entry point. The test
 # links the bar module + the modules it imports (Phosphor.Widgets,
 # Phosphor.Theme) and their plugin registrars so the QML engine can
-# resolve every import. The Slot cases drive the registry-agnostic seam
-# with a fake provider, so no Phosphor.Shell / Phosphor.Service.* runtime
-# registration is needed (BarHost and the real widgets are never
-# instantiated here).
+# resolve every import.
+#
+# The Slot cases drive the registry-agnostic seam with a fake provider,
+# so no Phosphor.Shell / Phosphor.Service.* runtime registration is needed
+# (BarHost and the real widgets are never instantiated here). One case
+# asserts a chip colour, which is the guard against the module's qmldir
+# shadowing the Phosphor.Theme singleton.
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes QuickTest)
 

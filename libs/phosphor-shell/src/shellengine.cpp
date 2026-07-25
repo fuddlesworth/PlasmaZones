@@ -14,6 +14,7 @@
 #include <PhosphorShell/ScreenModel.h>
 #include <PhosphorShell/ShellGlobal.h>
 #include <PhosphorShell/SystemClock.h>
+#include <PhosphorShell/SystemUsage.h>
 #include <PhosphorShell/Variants.h>
 
 #include <PhosphorWayland/IdleInhibitor.h>
@@ -123,6 +124,10 @@ bool ShellEngine::load(const QUrl& shellUrl)
             "Phosphor.Shell", 1, 0, "ForeignToplevel",
             QStringLiteral("ForeignToplevel is owned by Toplevels and cannot be constructed from QML"));
         qmlRegisterType<SystemClock>("Phosphor.Shell", 1, 0, "SystemClock");
+        // CPU / memory sampling. Kept in C++ rather than parsed from
+        // /proc in QML: the jiffy-delta arithmetic and the malformed-layout
+        // handling are logic, not presentation.
+        qmlRegisterType<SystemUsage>("Phosphor.Shell", 1, 0, "SystemUsage");
         // Surface-bound idle inhibition (zwp-idle-inhibit-v1): a QML window keeps
         // its own output awake while visible. This stays a foundation primitive.
         // Session-wide idle monitoring (ext-idle-notify-v1) is NOT registered here:

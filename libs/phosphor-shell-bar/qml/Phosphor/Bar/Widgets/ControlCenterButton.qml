@@ -8,8 +8,6 @@
 // and the bar-anchored popout wiring land (the BarCanvas socket the
 // popout grows from is already in place).
 
-import QtQuick
-
 BarIconButton {
     iconName: "configure"
     label: "Control center"

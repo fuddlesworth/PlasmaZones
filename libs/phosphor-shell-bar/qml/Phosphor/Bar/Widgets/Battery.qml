@@ -25,8 +25,8 @@ Item {
     readonly property int percent: available ? Math.round(battery.displayDevice.percentage) : 0
     readonly property bool charging: available && battery.displayDevice.state === UPowerDevice.Charging
 
-    visible: available
-    implicitWidth: available ? row.implicitWidth : 0
+    visible: root.available
+    implicitWidth: root.available ? row.implicitWidth : 0
     implicitHeight: row.implicitHeight
 
     UPowerHost {
@@ -54,6 +54,11 @@ Item {
         }
 
         Text {
+            // Folded into the root's Accessible.name already; QQuickText
+            // exposes itself as its own StaticText node, so without this
+            // assistive tech reads the composed name and then re-reads
+            // this fragment.
+            Accessible.ignored: true
             text: root.percent + "%"
             color: root.charging ? Theme.success : Theme.on_surface
             font.pixelSize: Tokens.font_size_label_l
