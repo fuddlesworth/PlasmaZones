@@ -222,6 +222,17 @@ void AnimationsPageController::setUserProfilesDirOverride(const QString& dir)
     m_userProfilesDirOverride = dir;
 }
 
+void AnimationsPageController::setProfileStoreRefresher(std::function<void()> refresher)
+{
+    m_profileStoreRefresher = std::move(refresher);
+}
+
+void AnimationsPageController::refreshProfileStore() const
+{
+    if (m_profileStoreRefresher)
+        m_profileStoreRefresher();
+}
+
 bool AnimationsPageController::isValidEventPath(const QString& path) const
 {
     if (path.isEmpty())
@@ -474,7 +485,12 @@ bool AnimationsPageController::revertPending()
     // scoped tree revert in SettingsController::discardPage for a per-page
     // discard). This method owns the FILE half only.
 
-    // Bulk emit so QML sub-pages refresh exactly the rows that moved.
+    // Bulk emit so QML sub-pages refresh exactly the rows that moved. One
+    // registry catch-up for the whole batch, ahead of the first signal — a
+    // restore that removed a file (its snapshot was "was absent") leaves the
+    // same stale entry behind that clearOverride does.
+    if (!overrideEvents.isEmpty())
+        refreshProfileStore();
     for (const QString& path : overrideEvents)
         Q_EMIT overrideChanged(path);
     if (anyPreset)
@@ -534,7 +550,11 @@ bool AnimationsPageController::revertPendingUnder(const QStringList& eventPaths)
         restoredEvents.append(path);
     }
 
-    // Refresh exactly the rows that moved; one dirty re-eval for the batch.
+    // Refresh exactly the rows that moved; one dirty re-eval for the batch,
+    // and one registry catch-up ahead of it for the restores that deleted a
+    // file (same stale-entry hazard as clearOverride).
+    if (!restoredEvents.isEmpty())
+        refreshProfileStore();
     for (const QString& path : restoredEvents)
         Q_EMIT overrideChanged(path);
     if (!restoredEvents.isEmpty())
@@ -624,6 +644,11 @@ void AnimationsPageController::asyncRevertPending()
             // Settings::load() that re-baselines the tree, so hasPendingChanges()
             // reads clean once the files are restored below.
 
+            // The worker restored files off the GUI thread, so the registry
+            // is behind on every one of them. Catch it up before the batch of
+            // signals the page refreshes on (see clearOverride).
+            if (!result.overrideEvents.isEmpty())
+                refreshProfileStore();
             for (const QString& path : result.overrideEvents)
                 Q_EMIT overrideChanged(path);
             if (result.anyPreset)

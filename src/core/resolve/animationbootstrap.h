@@ -166,6 +166,14 @@ public:
     {
         return m_curveRegistry.get();
     }
+    /// The profile loader feeding `profileRegistry()`. Borrowed by a
+    /// composition root that also WRITES profile files, so it can force
+    /// the loader's debounced watch to catch up before reading the
+    /// registry back (`ProfileLoader::rescanNow`).
+    PhosphorAnimation::ProfileLoader* profileLoader()
+    {
+        return m_profileLoader.get();
+    }
 
 private:
     std::unique_ptr<PhosphorAnimation::CurveRegistry> m_curveRegistry;

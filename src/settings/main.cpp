@@ -13,6 +13,7 @@
 #include "phosphor_qml_i18n.h"
 #include "settings/search/searchcatalog.h"
 #include "settings/search/searchproviders.h"
+#include "settings/pages/animationspagecontroller.h"
 #include "settings/pages/profilepagecontroller.h"
 #include "settings/stores/profilestore.h"
 #include "settings/rules/rulecontroller.h"
@@ -25,6 +26,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <PhosphorAnimation/PhosphorCurve.h>
+#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
 #include <QApplication>
@@ -179,6 +181,20 @@ int main(int argc, char* argv[])
     });
 
     PlasmaZones::SettingsController controller;
+
+    // The animations page writes and deletes the very profile files the
+    // bootstrap loader watches, and that watch is debounced by 50 ms with no
+    // rescan signal reaching the open page. Hand the page a synchronous
+    // catch-up so a delete (the "Revert to inherited" links, a per-page
+    // Discard) is reflected the moment it happens instead of on the next
+    // launch. `animationBootstrap` is declared above `controller` and so
+    // outlives it, which the captured pointer relies on.
+    if (controller.animationsPage() != nullptr) {
+        controller.animationsPage()->setProfileStoreRefresher([loader = animationBootstrap.profileLoader()]() {
+            if (loader != nullptr)
+                loader->rescanNow();
+        });
+    }
 
     // The launch controller owns the D-Bus single-instance lifecycle. Holds a
     // non-owning pointer to `controller`, which must outlive it (guaranteed by

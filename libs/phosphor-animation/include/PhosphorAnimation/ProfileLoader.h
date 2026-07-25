@@ -46,6 +46,11 @@ public:
 
     QString ownerTag() const;
     void requestRescan();
+    /// Rescan synchronously, so a caller that just wrote or deleted a
+    /// profile file can read the registry back in the same call. The
+    /// debounced `requestRescan` would answer that read with the
+    /// pre-write state.
+    void rescanNow();
     int registeredCount() const;
 
     struct Entry
