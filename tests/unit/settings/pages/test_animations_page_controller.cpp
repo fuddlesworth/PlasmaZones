@@ -4,9 +4,10 @@
 /**
  * @file test_animations_page_controller.cpp
  * @brief AnimationsPageController behaviour pins: path discovery,
- *        override CRUD, the shader-leg support gate, the stock-animation
- *        suppression mirror, the spring-slider bounds, and the
- *        simple-page scope coverage.
+ *        override CRUD, the batch and scoped dirty-state announcements,
+ *        the path-traversal gate, the shader-leg support gate, the
+ *        stock-animation suppression mirror, the spring-slider bounds,
+ *        and the simple-page scope coverage.
  *
  * Pins the file-per-path persistence model: setOverride writes one JSON
  * file under `<userProfilesDir>/<path>.json`, clearOverride deletes it,
@@ -24,7 +25,7 @@
  * the test never touches the real user XDG dirs.
  *
  * Companion test files:
- *   - test_animations_motion_sets.cpp      — preset / motion-set / pending
+ *   - test_animations_motion_sets.cpp      — preset / motion-set CRUD
  *   - test_animations_shader_overrides.cpp — shader-effect overrides
  */
 
@@ -772,10 +773,12 @@ private Q_SLOTS:
     }
 
     /// clearOverride is not the only path that removes an override file: the
-    /// scoped discard, the global discard and the bulk clears all do, and each
-    /// carries the same hazard — the file is gone, so nothing on disk outranks
-    /// the entry the registry is still holding. Deleting the refresh from any
-    /// of the three legs below fails this test.
+    /// scoped discard, the bulk clears, and BOTH global discards (the
+    /// synchronous one and the async worker the UI actually dispatches) all
+    /// do, and each carries the same hazard — the file is gone, so nothing on
+    /// disk outranks the entry the registry is still holding. Each leg below
+    /// is a distinct `refreshProfileStore()` call site, seeded with its own
+    /// stale registry value; deleting any one of the four fails this test.
     void everyBatchRemovalPathRefreshesTheProfileStore()
     {
         QTemporaryDir tmp;
@@ -813,11 +816,28 @@ private Q_SLOTS:
         QCOMPARE(c.clearOverridesUnder(QStringList{QStringLiteral("editor.snapIn")}), 1);
         QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 123);
 
-        // Leg 3 — global discard, which takes the parent with it, so the leaf
-        // falls all the way through to the library default.
+        // Leg 3 — synchronous global discard, which takes the parent with it,
+        // so the leaf falls all the way through to the library default.
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 999}}));
         loader.rescanNow();
         QVERIFY(c.revertPending());
+        QVERIFY(!c.hasOverride(QStringLiteral("editor")));
+        QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toDouble(),
+                 PhosphorAnimation::Profile::DefaultDuration);
+
+        // Leg 4 — the ASYNC discard, which is what StagingDomain::discard()
+        // dispatches and therefore the path the UI actually takes. It restores
+        // off the GUI thread, so its refresh lives in the finished handler and
+        // is a separate call site from leg 3's.
+        QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 456}}));
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 654}}));
+        loader.rescanNow();
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 654);
+
+        QSignalSpy done(&c, &AnimationsPageController::discardResult);
+        c.asyncRevertPending();
+        QVERIFY(done.wait(5000));
         QVERIFY(!c.hasOverride(QStringLiteral("editor")));
         QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
         QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toDouble(),

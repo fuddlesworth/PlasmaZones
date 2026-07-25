@@ -23,9 +23,9 @@ class CurveRegistry;
 class PhosphorProfileRegistry;
 
 /// Scans JSON profile-definition files and registers them with PhosphorProfileRegistry.
-/// Shaped like CurveLoader, with two additions: a synchronous `rescanNow()`, for the
-/// consumer that writes profile files and reads the registry back in the same call,
-/// and an O(1) `hasPath()`. Nothing needs either of curves, so CurveLoader has no twins.
+/// Shaped like CurveLoader, plus a synchronous `rescanNow()` for the consumer that
+/// writes profile files and reads the registry back in the same call. Nothing needs
+/// that of curves, so CurveLoader has no twin.
 /// User curves must already be registered (CurveLoader first).
 /// Profiles loaded here are preset templates — settings UIs deep-copy into active profiles.
 class PHOSPHORANIMATION_EXPORT ProfileLoader : public QObject
@@ -54,11 +54,18 @@ public:
     /// debounced `requestRescan` would answer that read with the
     /// pre-write state.
     ///
-    /// GUI-thread only, like the rest of this class. `profilesChanged`
-    /// (and the registry's own per-path `profileChanged` plus one
-    /// `ownerReloaded`) are emitted on the CALLER's stack if the rescan
-    /// sees a change, so a caller that is mid-mutation fans out into every
-    /// directly-connected listener before this returns.
+    /// GUI-thread only, like the rest of this class. Whatever the rescan
+    /// emits, it emits on the CALLER's stack, so a caller that is
+    /// mid-mutation fans out into every directly-connected listener before
+    /// this returns.
+    ///
+    /// Two independent predicates decide what that is. `profilesChanged`
+    /// fires when THIS loader's tracked set or a parsed Profile value
+    /// changed. Separately, the registry emits a per-path `profileChanged`
+    /// for each entry ITS diff moved, plus at most one `ownerReloaded` —
+    /// and neither when that diff is empty, which includes a batch whose
+    /// every path is already directly owned by someone else. The two can
+    /// each fire without the other.
     ///
     /// Unlike `requestRescan`, this does NOT defer when a scan is already
     /// running, and nothing bounds the recursion: calling it from one of
@@ -76,7 +83,11 @@ public:
     };
     QList<Entry> entries() const;
 
-    /// O(1) membership check — prefer over entries() on hot paths.
+    /// O(1) membership check over this loader's OWN bookkeeping — prefer
+    /// over entries() when that is the question. For "who owns this path in
+    /// the registry", which is what a consumer usually wants, ask
+    /// `PhosphorProfileRegistry::ownerOf()` instead: a path can be tracked
+    /// here and yet be owned by a direct registration in the registry.
     bool hasPath(const QString& path) const;
 
 Q_SIGNALS:

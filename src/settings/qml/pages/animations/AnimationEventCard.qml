@@ -472,17 +472,20 @@ Item {
         }
     }
 
-    /// Suppressed like the write path: each clearOverride emits
-    /// overrideChanged synchronously, so an unguarded loop pays one full
-    /// refresh per path (each re-reading EVERY path) and recomputes the
-    /// divergence banner against a half-cleared group, flickering it on
-    /// mid-loop.
+    /// One controller call for the whole group, not clearOverride in a loop:
+    /// the batch entry point deletes every file, rescans the profile registry
+    /// ONCE, and emits one dirty signal for the net flip. Looping the
+    /// single-path call instead paid a full directory rescan and re-parse per
+    /// mirror.
+    ///
+    /// Still suppressed with _committing: the batch emits one overrideChanged
+    /// per cleared path, and an unguarded handler would recompute the
+    /// divergence banner against a half-refreshed card, flickering it on
+    /// mid-batch.
     function _clearOverrideOnAll() {
         root._committing = true;
         try {
-            const paths = root._writePaths;
-            for (var i = 0; i < paths.length; ++i)
-                settingsController.animationsPage.clearOverride(paths[i]);
+            settingsController.animationsPage.clearOverridesUnder(root._writePaths);
         } finally {
             root._committing = false;
             root._inheritRev++;

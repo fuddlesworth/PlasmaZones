@@ -23,8 +23,8 @@ import org.plasmazones.common as PZCommon
  * touched; the consumer commits live. Properties are fully read-write
  * so the consumer can seed the editor from disk before showing it. The
  * picker model and parameter schema are fed in by the consumer
- * (@c availableShaders / @c shaderParamSchema) so the editor doesn't
- * reach a global context itself.
+ * (@c availableShaders / @c shaderParamSchema) rather than read from a
+ * global context, so shader-registry reactivity stays the consumer's.
  *
  * The shader-parameter sub-editor exposes reset / locking / randomize /
  * colour-picker affordances via the @c enableReset / @c enableLocking /
@@ -181,10 +181,10 @@ ColumnLayout {
     /// `shaderParamWriteRequested` signals instead, so consumers can
     /// distinguish a curve edit from a shader switch (which carries
     /// side-effects like dropping the previous effect's params).
-    /// The per-event card and GlobalTimingDefaultsCard each connect this to
-    /// their own commit path. The card commits the whole timing state at
-    /// once through it; the per-event card also listens to the per-axis
-    /// signals below, which is what keeps its writes per field.
+    /// `GlobalTimingDefaultsCard` is this aggregate's only consumer: it
+    /// commits the whole timing state in one go. The per-event card does NOT
+    /// connect it — it listens to the per-axis signals below instead, which
+    /// is what keeps its writes per field.
     signal valueChanged
     /// Per-axis refinements of `valueChanged`, emitted alongside it (the
     /// specific signal first, then the aggregate). A consumer that
@@ -332,6 +332,12 @@ ColumnLayout {
                     // inherited" beside "Revert duration to inherited" reads
                     // as though it reverted everything.
                     Kirigami.LinkButton {
+                        // Never squeezed: with no minimum the layout spreads
+                        // an overflow across both items, and the actionable
+                        // half can elide before the informational half does.
+                        // The caption is the one that gives way, and it
+                        // already elides.
+                        Layout.minimumWidth: implicitWidth
                         visible: root.curveOverridden
                         text: i18n("Revert curve to inherited")
                         font: Kirigami.Theme.smallFont
@@ -424,7 +430,7 @@ ColumnLayout {
                 to: settingsController.generalPage.animationDurationMax
                 stepSize: 10
                 valueSuffix: " ms"
-                Accessible.name: i18n("Animation duration")
+                accessibleName: i18n("Animation duration")
                 labelWidth: Kirigami.Units.gridUnit * 4
                 value: root.duration
                 onMoved: function (value) {
@@ -447,9 +453,11 @@ ColumnLayout {
         // Nor is it hidden in simple mode, which is what living outside the
         // curve-summary block buys: simple mode CAN pin a duration (the
         // slider above is its only timing control), so it needs the way
-        // back. It cannot pin a curve — every curve emitter sits inside the
-        // block simple mode hides — so the curve link stays in there with
-        // them, in Advanced, where such an override can only have been made.
+        // back. It cannot pin a curve: the timing-mode combo sits inside the
+        // hidden block, and so do the only two ways into the curve dialog
+        // (the thumbnail and Customize…), and an invisible item takes no
+        // clicks. So the curve link stays in there with them, in Advanced,
+        // where such an override can only have been made.
         RowLayout {
             visible: root.showOverrideStatus && root.durationOverridden
             Layout.fillWidth: true

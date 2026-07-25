@@ -89,6 +89,13 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
     QHash<QString, ParsedEntry> freshParsedByKey;
 
     bool capTripped = false;
+    /// Files CONSIDERED this rescan, summed across every registered directory.
+    /// The cap counts these rather than the entries that survive to
+    /// registration: a file that fails to parse, yields an empty key, loses an
+    /// intra-directory duplicate check, or is shadowed cross-directory has
+    /// still been read and parsed on the GUI thread, which is the work the cap
+    /// exists to bound.
+    int filesConsidered = 0;
 
     for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend(); ++dirIt) {
         const QString& directory = *dirIt;
@@ -136,10 +143,18 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
             // below. A directory sprayed with tens of thousands of empty
             // `*.json` files would otherwise parse every one of them on
             // the GUI thread on every watcher fire.
-            if (freshParsedByKey.size() >= m_maxEntries) {
+            //
+            // Counts files considered, NOT keys registered. Every one of the
+            // sprayed files above parses (cheaply, but not freely) and then
+            // registers nothing, so a registered-key count would never reach
+            // the cap and the guard would let exactly the attack it names
+            // straight through. Same for tens of thousands of files that all
+            // resolve to one key.
+            if (filesConsidered >= m_maxEntries) {
                 capTripped = true;
                 break;
             }
+            ++filesConsidered;
 
             const QString fullPath = dir.absoluteFilePath(file);
 

@@ -170,7 +170,7 @@ Kirigami.Dialog {
             SettingsSlider {
                 readonly property bool isElastic: easingPreviewInDialog.curveType.indexOf("elastic") >= 0
 
-                Accessible.name: isElastic ? i18n("Overshoot") : i18n("Amplitude")
+                accessibleName: isElastic ? i18n("Overshoot") : i18n("Amplitude")
                 // Mirrors Easing::clampAmplitude — see EasingSettings.qml. Elastic's
                 // value is its peak and its floor moves with the period.
                 from: isElastic ? Easing.minElasticPeak(easingPreviewInDialog.elasticPeriod) : 0.5
@@ -201,7 +201,7 @@ Kirigami.Dialog {
             description: i18n("Lower values wobble faster")
 
             SettingsSlider {
-                Accessible.name: i18n("Period")
+                accessibleName: i18n("Period")
                 from: 0.1
                 to: 1
                 stepSize: 0.05
@@ -227,7 +227,7 @@ Kirigami.Dialog {
             description: i18n("Number of bounce repetitions")
 
             SettingsSlider {
-                Accessible.name: i18n("Bounces")
+                accessibleName: i18n("Bounces")
                 from: 1
                 to: 8
                 stepSize: 1
@@ -290,7 +290,7 @@ Kirigami.Dialog {
             description: i18n("Higher = faster spring response")
 
             SettingsSlider {
-                Accessible.name: i18n("Speed")
+                accessibleName: i18n("Speed")
                 from: settingsController.animationsPage.springOmegaMin
                 to: settingsController.animationsPage.springOmegaMax
                 stepSize: 0.5
@@ -315,7 +315,7 @@ Kirigami.Dialog {
             description: i18n("< 1 bouncy, = 1 critical, > 1 overdamped")
 
             SettingsSlider {
-                Accessible.name: i18n("Damping ratio")
+                accessibleName: i18n("Damping ratio")
                 from: settingsController.animationsPage.springZetaMin
                 to: settingsController.animationsPage.springZetaMax
                 stepSize: 0.05
