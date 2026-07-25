@@ -354,6 +354,18 @@ public:
         return {};
     }
 
+    /// Update a window's minimum size after the initial windowOpened.
+    /// The compositor discovers a min size late for some clients (or the
+    /// client raises it at runtime); engines that fit windows to slots
+    /// re-validate their layout on a change. Default is a no-op for
+    /// engines without a min-size model.
+    virtual void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(minWidth)
+        Q_UNUSED(minHeight)
+    }
+
     /// Notify the engine that a tracked window finished an interactive resize.
     ///
     /// The daemon's WindowTracking adaptor forwards the compositor's

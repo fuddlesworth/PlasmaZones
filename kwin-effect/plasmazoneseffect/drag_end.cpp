@@ -3,7 +3,7 @@
 
 #include "plasmazoneseffect.h"
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/snapassisthandler.h"
@@ -167,7 +167,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // (setWindowFloatingForScreen) below still runs so a
                     // cross-screen move updates the daemon's float tracking.
                     if (!startedFloating) {
-                        m_autotileHandler->handleDragToFloat(safeWindow, windowId);
+                        m_tilingHandler->handleDragToFloat(safeWindow, windowId);
                     }
                     // Window is now floating — drop it from snapping's set.
                     m_snapHandler->clearWindowSnapped(windowId);
@@ -211,11 +211,11 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // Drag-drop snap committed — record in snapping's border set,
                     // but only for a resolved snap-mode screen. An empty
                     // (unresolved) or autotile-managed screen is owned by
-                    // AutotileHandler, so recording it here would double-track the
+                    // TilingHandler, so recording it here would double-track the
                     // window — same discriminator as the other snap-commit paths.
                     if (const QString scr =
                             !outcome.targetScreenId.isEmpty() ? outcome.targetScreenId : getWindowScreenId(safeWindow);
-                        !scr.isEmpty() && !m_autotileHandler->isAutotileScreen(scr)) {
+                        !scr.isEmpty() && !m_tilingHandler->isManagedScreen(scr)) {
                         // Defensively clear any stale local float flag before
                         // recording the snap — a surviving flag poisons the
                         // next pre-tile capture and wrongly exempts the window

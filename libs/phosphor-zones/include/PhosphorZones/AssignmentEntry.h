@@ -288,6 +288,35 @@ struct ContextTilingParams
 };
 
 /**
+ * @brief Per-context scrolling parameter overrides resolved from context rules.
+ *
+ * Each field is set only when a matching context rule fills the corresponding
+ * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
+ * SetScrollDefaultColumnDisplay); an unset field means "use the config value".
+ * Consumed daemon-side: the values are layered onto the scrolling engine's
+ * per-screen parameters (config stays the base, the rule wins where present),
+ * the same way @ref ContextTilingParams is layered onto the autotile override
+ * map. Resolved by @c LayoutRegistry::resolveContextScrollingParams.
+ */
+struct ContextScrollingParams
+{
+    /// Width a newly-opened column takes, as a fraction of the work area
+    /// (0.05-1.0). The wire value is the fraction; the editor shows a percent.
+    std::optional<double> defaultColumnWidth;
+    /// When the viewport re-centres on the focused column (0 = never,
+    /// 1 = always, 2 = on overflow); the resolver maps the wire token to this
+    /// int so the daemon stores the same value the config store uses.
+    std::optional<int> centerFocusedColumn;
+    /// How a newly-opened column lays its windows out (0 = normal, 1 = tabbed).
+    std::optional<int> defaultColumnDisplay;
+
+    bool isEmpty() const
+    {
+        return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay;
+    }
+};
+
+/**
  * @brief Canonical wire-string for an @ref AssignmentEntry::Mode.
  *
  * The wire vocabulary lives next to the enum so every persister/consumer

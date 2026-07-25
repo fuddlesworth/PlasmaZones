@@ -153,6 +153,33 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
     return resolved.slot(QString(PhosphorRules::ActionSlot::Float)).has_value();
 }
 
+QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId)
+{
+    QVariantMap out;
+    if (!m_ruleStore) {
+        return out;
+    }
+    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return out;
+    }
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    }
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnWidth))) {
+        out.insert(QStringLiteral("widthFraction"), action->params.value(PhosphorRules::ActionParam::Value).toDouble());
+    }
+    if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenTabbed))) {
+        out.insert(QStringLiteral("tabbed"), action->params.value(PhosphorRules::ActionParam::Value).toBool());
+    }
+    if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnPlacement))) {
+        const QString token = action->params.value(PhosphorRules::ActionParam::Value).toString();
+        out.insert(QStringLiteral("consume"), token == QLatin1String(PhosphorRules::ColumnPlacementToken::Consume));
+    }
+    return out;
+}
+
 PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRule(const QString& windowId,
                                                                                    const QString& screenId)
 {
@@ -262,7 +289,7 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
     // to a virtual desktop, ask the compositor to move it there. Independent of
     // snapping/tiling — the desktop move composes with the window's placement.
     // Called from the snap open-path facade (the autotile path uses
-    // applyOpenRoutingForAutotile, which also handles the screen redirect).
+    // applyOpenRoutingForTiling, which also handles the screen redirect).
     if (!m_ruleStore) {
         return;
     }
@@ -360,7 +387,7 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     Q_EMIT applyGeometryRequested(windowId, x, y, w, h, QString(), target, false);
 }
 
-QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& windowId, const QString& screenId)
+QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId, const QString& screenId)
 {
     if (!m_ruleStore) {
         return QString();
@@ -408,11 +435,11 @@ QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& window
     }
     if (m_layoutManager->modeForScreen(target, destDesktop, m_layoutManager->currentActivity())
         != PhosphorZones::AssignmentEntry::Mode::Autotile) {
-        qCDebug(lcDbusWindow) << "applyOpenRoutingForAutotile: RouteToScreen target" << target
+        qCDebug(lcDbusWindow) << "applyOpenRoutingForTiling: RouteToScreen target" << target
                               << "is not in autotile mode — not redirecting" << windowId;
         return QString();
     }
-    qCInfo(lcDbusWindow) << "applyOpenRoutingForAutotile: routing" << windowId << "to autotile screen" << target;
+    qCInfo(lcDbusWindow) << "applyOpenRoutingForTiling: routing" << windowId << "to autotile screen" << target;
     Q_EMIT windowOutputMoveExpected(windowId, target);
     return target;
 }

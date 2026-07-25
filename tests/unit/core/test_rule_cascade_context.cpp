@@ -360,6 +360,59 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextTilingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 
+    // ─── Context scrolling-parameter resolution (width / centering / display) ──
+    // resolveContextScrollingParams is a per-slot read like its tiling sibling:
+    // independent SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
+    // SetScrollDefaultColumnDisplay rules compose, and an unpinned screen resolves
+    // to an all-unset (empty) params struct.
+    void testContextScrollingParams_perSlotComposition()
+    {
+        const auto valueAction = [](QLatin1StringView type, const QVariant& value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), QJsonValue::fromVariant(value));
+            return a;
+        };
+        const auto scrollRule = [&](const QString& name, int priority, const QString& screenId,
+                                    const QList<PWR::RuleAction>& actions) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = actions;
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // Separate rules fill separate slots — all compose (per-slot read).
+        const PWR::Rule cw = scrollRule(QStringLiteral("cw"), 400, QStringLiteral("DP-1"),
+                                        {valueAction(PWR::ActionType::SetScrollDefaultColumnWidth, 0.75)});
+        // Centering carries a wire token → the centering int.
+        const PWR::Rule cf = scrollRule(
+            QStringLiteral("cf"), 300, QStringLiteral("DP-1"),
+            {valueAction(PWR::ActionType::SetCenterFocusedColumn, QString(PWR::CenterFocusedColumnToken::OnOverflow))});
+        // Column display carries a wire token → the display int.
+        const PWR::Rule cd = scrollRule(
+            QStringLiteral("cd"), 200, QStringLiteral("DP-1"),
+            {valueAction(PWR::ActionType::SetScrollDefaultColumnDisplay, QString(PWR::ColumnDisplayToken::Tabbed))});
+        QVERIFY(f.store->setAllRules({cw, cf, cd}));
+
+        const PhosphorZones::ContextScrollingParams p =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(p.defaultColumnWidth.has_value());
+        QCOMPARE(*p.defaultColumnWidth, 0.75);
+        QVERIFY(p.centerFocusedColumn.has_value());
+        QCOMPARE(*p.centerFocusedColumn, 2); // "onOverflow" → 2
+        QVERIFY(p.defaultColumnDisplay.has_value());
+        QCOMPARE(*p.defaultColumnDisplay, 1); // "tabbed" → 1
+
+        // A screen the rules do not pin → all-unset (the engine then keeps its
+        // config-derived parameters for that screen).
+        QVERIFY(f.registry->resolveContextScrollingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+    }
+
     // ─── Per-monitor gap rule overrides the baseline for that screen only ────
     // A per-monitor gap override is authored by the Appearance page as a NORMAL
     // (non-managed) screen-scoped rule: match `ScreenId == screen`, carrying the

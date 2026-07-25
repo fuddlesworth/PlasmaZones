@@ -1,0 +1,245 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorScrollEngine/ScrollTypes.h>
+#include <phosphorscrollengine_export.h>
+
+#include <QSize>
+#include <QString>
+#include <QStringList>
+#include <QVector>
+
+namespace PhosphorScrollEngine {
+
+/// The pure scrolling-strip model: an ordered list of columns on an
+/// unbounded horizontal strip, viewed through a fixed-width viewport.
+///
+/// This class is deliberately free of engine/compositor dependencies (Qt Core
+/// value types only) so the full behavioural matrix is unit-testable in
+/// isolation. The one invariant everything here serves: INSERTING OR REMOVING
+/// A COLUMN NEVER RESIZES ANOTHER COLUMN. Only the viewport moves.
+///
+/// ## Coordinates
+///
+/// Strip coordinates run left-to-right from the first column's left edge at 0.
+/// The viewport is the work area; its left edge sits at `viewX` in strip
+/// coordinates. The view anchor is stored RELATIVE TO THE ACTIVE COLUMN
+/// (`viewAnchor` = active column's left edge position within the viewport),
+/// so structural changes left of the focus never make the focused window
+/// drift — `viewX` is derived, never stored.
+///
+/// Mutators that can change which column is focused (or shift pixel
+/// positions under the anchor) take the current ScrollLayoutParams so they
+/// can keep the view anchored / apply the center-focused-column policy at
+/// the mutation site. Structural mutators return true when they changed
+/// anything; the owning engine relayouts and applies geometry afterwards.
+class PHOSPHORSCROLLENGINE_EXPORT ScrollStrip
+{
+public:
+    ScrollStrip() = default;
+
+    // ── Introspection ────────────────────────────────────────────────────────
+    const QVector<Column>& columns() const
+    {
+        return m_columns;
+    }
+    int columnCount() const
+    {
+        return m_columns.size();
+    }
+    bool isEmpty() const
+    {
+        return m_columns.isEmpty();
+    }
+    int activeColumnIndex() const
+    {
+        return m_activeColumnIdx;
+    }
+    const Column* activeColumn() const;
+    /// The focused window (active tile of the active column), or empty.
+    QString activeWindowId() const;
+    /// Column index owning @p windowId, or -1.
+    int columnOfWindow(const QString& windowId) const;
+    bool containsWindow(const QString& windowId) const
+    {
+        return columnOfWindow(windowId) != -1;
+    }
+    /// All windows in strip order (left-to-right, top-to-bottom), including
+    /// minimized tiles (their slot is part of the order contract).
+    QStringList windowsInOrder() const;
+    int windowCount() const;
+    /// The view anchor: the active column's left edge position within the
+    /// viewport (work-area-relative pixels; may be negative for a column
+    /// partially scrolled off the left edge).
+    int viewAnchor() const
+    {
+        return m_viewAnchor;
+    }
+    void setViewAnchor(int anchor)
+    {
+        m_viewAnchor = anchor;
+    }
+
+    // ── Structure: open / close / minimize ──────────────────────────────────
+    /// Insert a new single-tile column for @p windowId immediately to the
+    /// right of the active column (or at index 0 on an empty strip), focus
+    /// it, and leave every other column untouched. The view scrolls only as
+    /// the centering policy requires. Returns false when already present.
+    bool insertWindow(const QString& windowId, const ColumnWidth& width, ColumnDisplay display,
+                      const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0);
+    /// Insert @p windowId as a new tile at the bottom of the active column
+    /// (rule-driven "open consumed into the focused column"). Falls back to
+    /// insertWindow when the strip is empty.
+    bool insertWindowIntoActiveColumn(const QString& windowId, const ColumnWidth& width, ColumnDisplay display,
+                                      const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0);
+    /// Insert a restored single-tile column at @p columnIndex (clamped) —
+    /// the persistence/restore path. Does not change focus.
+    bool insertWindowAt(int columnIndex, const QString& windowId, const ColumnWidth& width, ColumnDisplay display);
+    /// Remove @p windowId; a column left empty closes up. Keeps the view
+    /// anchored so surviving neighbours don't jump, and selects a sensible
+    /// new focus when the active tile/column vanished. Returns false when
+    /// untracked.
+    bool removeWindow(const QString& windowId, const ScrollLayoutParams& params);
+    /// Mark a tile minimized (kept in order, excluded from layout) or restore
+    /// it. Returns true when the flag actually changed.
+    bool setWindowMinimized(const QString& windowId, bool minimized, const ScrollLayoutParams& params);
+    bool isWindowMinimized(const QString& windowId) const;
+    /// Update a tile's stored minimum size. Returns true when it changed.
+    bool setWindowMinimumSize(const QString& windowId, int minWidth, int minHeight);
+
+    // ── Focus ────────────────────────────────────────────────────────────────
+    /// Focus a column by index (clamped; active tile within it unchanged).
+    bool focusColumn(int columnIndex, const ScrollLayoutParams& params);
+    /// Focus the adjacent non-fully-minimized column. @p delta is -1/+1.
+    bool focusAdjacentColumn(int delta, const ScrollLayoutParams& params);
+    bool focusFirstColumn(const ScrollLayoutParams& params);
+    bool focusLastColumn(const ScrollLayoutParams& params);
+    /// Focus the previous/next non-minimized tile within the active column
+    /// (cycles tabs in a tabbed column exactly the same way). @p delta -1/+1.
+    bool focusAdjacentTile(int delta);
+    /// Make @p windowId the active tile of its (newly active) column.
+    /// Externally-driven focus (compositor activation). Returns false when
+    /// untracked or already the focused window.
+    bool focusWindow(const QString& windowId, const ScrollLayoutParams& params);
+
+    // ── Structure: move / consume / expel ───────────────────────────────────
+    /// Swap the active column with its neighbour. @p delta is -1/+1.
+    bool moveActiveColumn(int delta, const ScrollLayoutParams& params);
+    bool moveActiveColumnToFirst(const ScrollLayoutParams& params);
+    bool moveActiveColumnToLast(const ScrollLayoutParams& params);
+    /// Reorder the active tile within its column. @p delta is -1/+1.
+    bool moveActiveTile(int delta);
+    /// Pull the next column's active tile into the bottom of the active
+    /// column (niri consume-window-into-column).
+    bool consumeWindowIntoColumn(const ScrollLayoutParams& params);
+    /// Push the active tile out into its own new column immediately to the
+    /// right of the current one (niri expel-window-from-column).
+    bool expelWindowFromColumn(const ScrollLayoutParams& params);
+    /// niri consume-or-expel: when the active tile is alone in its column it
+    /// is consumed into the neighbour column in @p delta's direction
+    /// (appended); otherwise it is expelled into its own new column on that
+    /// side. @p delta is -1 (left) / +1 (right).
+    bool consumeOrExpel(int delta, const ScrollLayoutParams& params);
+    /// Remove @p windowId with no focus policy beyond index fixups — the
+    /// cross-context transfer / float path (the caller re-homes the window).
+    bool takeWindow(const QString& windowId, const ScrollLayoutParams& params);
+
+    // ── Sizing ───────────────────────────────────────────────────────────────
+    /// Set the active column's width intent.
+    bool setActiveColumnWidth(const ColumnWidth& width);
+    /// Cycle the active column through the preset width list. @p delta -1/+1.
+    /// Enters the cycle at the nearest preset when the current width is not
+    /// a preset.
+    bool cycleActiveColumnPresetWidth(int delta, const ScrollLayoutParams& params);
+    /// Adjust the active column's width by @p deltaPercent of the work-area
+    /// width (niri set-column-width "+10%"/"-10%").
+    bool adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params);
+    /// Full work-area width, still tiled (niri maximize-column). Toggles back
+    /// to the pre-maximize intent when already maximized.
+    bool toggleMaximizeActiveColumn();
+    /// Grow the active column into the on-screen space not covered by any
+    /// column at the current view (niri expand-column-to-available-width).
+    bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
+    /// Set the active tile's height intent.
+    bool setActiveWindowHeight(const WindowHeight& height);
+    /// Cycle the active tile through the preset height list. @p delta -1/+1.
+    bool cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params);
+    /// Adjust the active tile's height by @p deltaPercent of the work-area
+    /// height.
+    bool adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params);
+    /// Back to the even auto-split for EVERY tile in the active column.
+    bool resetActiveColumnHeights();
+    /// Reconcile a column's stored intent to a size the client actually
+    /// acked (app-initiated resize): the owning column takes the acked width
+    /// as Fixed, the tile the acked height. Other columns untouched.
+    bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize);
+
+    // ── Display ──────────────────────────────────────────────────────────────
+    /// Toggle the active column between Normal and Tabbed presentation.
+    bool toggleActiveColumnTabbed();
+
+    // ── View ─────────────────────────────────────────────────────────────────
+    /// Re-apply the centering policy to the current active column (settings
+    /// change / work-area change) using the current anchor as the "no
+    /// scroll" baseline.
+    void updateViewForFocus(const ScrollLayoutParams& params);
+    /// Center the active column in the view (niri center-column).
+    void centerActiveColumn(const ScrollLayoutParams& params);
+
+    // ── Relayout ─────────────────────────────────────────────────────────────
+    /// Resolve every non-minimized tile's absolute pixel rect against
+    /// @p params. Pure function of the current model state; does not mutate.
+    ResolvedStrip relayout(const ScrollLayoutParams& params) const;
+
+    // ── Pixel resolution helpers (shared with the engine/tests) ─────────────
+    /// The pixel width @p width resolves to under @p params (gap-aware
+    /// proportions, preset lookup; no min-width clamp).
+    static int resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayoutParams& params);
+
+private:
+    // scrollstrip_structure.cpp
+    void removeColumnAt(int columnIndex);
+    /// Shared body of removeWindow/takeWindow: drop the tile, close up an
+    /// emptied column, fix every index, and keep the view anchored. When
+    /// @p refocus is true the niri close-focus policy picks the new focus.
+    bool removeWindowInternal(const QString& windowId, const ScrollLayoutParams& params, bool refocus);
+    // scrollstrip_relayout.cpp
+    /// Pixel width of column @p c under @p params including its tiles'
+    /// min-width clamp (a fully-minimized column resolves to 0).
+    int columnWidthPx(const Column& c, const ScrollLayoutParams& params) const;
+    /// Strip-coordinate left edge of @p columnIndex under @p params.
+    int columnStripX(int columnIndex, const ScrollLayoutParams& params) const;
+    /// Total strip width under @p params.
+    int stripWidthPx(const ScrollLayoutParams& params) const;
+    /// The derived viewport left edge in strip coordinates.
+    int viewXFor(const ScrollLayoutParams& params) const;
+    /// Anchor value that centers column @p columnIndex in the viewport.
+    int centeredAnchorFor(int columnIndex, const ScrollLayoutParams& params) const;
+    /// Clamp @p anchor so the derived viewX stays within [0, stripW - workW]
+    /// (left-pinned when the strip fits the viewport entirely).
+    int clampedAnchor(int anchor, const ScrollLayoutParams& params) const;
+    /// Apply the center-focused-column policy after the active column moved
+    /// from @p prevIdx at @p oldViewX (strip coords) to the current active.
+    void reanchorAfterFocusChange(int prevIdx, int oldViewX, const ScrollLayoutParams& params);
+    // scrollstrip_sizing.cpp
+    /// Nearest preset index to the current pixel width of @p c (for entering
+    /// the preset cycle from a non-preset width).
+    int nearestPresetWidthIdx(const Column& c, const ScrollLayoutParams& params) const;
+
+    Column* activeColumnMutable();
+    Tile* activeTileMutable();
+    void clampActiveIndices();
+
+    QVector<Column> m_columns;
+    int m_activeColumnIdx = -1;
+    /// Active column's left edge position within the viewport (see class doc).
+    int m_viewAnchor = 0;
+    /// Pre-maximize width intent for the maximize toggle (single slot:
+    /// maximize is a focused-column toggle).
+    ColumnWidth m_preMaximizeWidth;
+    int m_preMaximizeColumnIdx = -1;
+};
+
+} // namespace PhosphorScrollEngine

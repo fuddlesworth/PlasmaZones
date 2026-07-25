@@ -2,19 +2,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * @file test_autotile_state.cpp
- * @brief Unit tests for WindowId utilities and AutotileStateHelpers
+ * @file test_tiling_state.cpp
+ * @brief Unit tests for WindowId utilities and TilingStateHelpers
  *
  * Tests WindowId::extractAppId, WindowId::deriveShortName, and
- * AutotileStateHelpers::cleanupClosedWindowState and removeFromOtherScreens.
+ * TilingStateHelpers::cleanupClosedWindowState and removeFromOtherScreens.
  */
 
 #include <QTest>
 
-#include <PhosphorCompositor/AutotileState.h>
+#include <PhosphorCompositor/TilingState.h>
 #include <PhosphorIdentity/WindowId.h>
 
-class TestAutotileState : public QObject
+class TestTilingState : public QObject
 {
     Q_OBJECT
 
@@ -48,7 +48,7 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // AutotileStateHelpers: cleanupClosedWindowState
+    // TilingStateHelpers: cleanupClosedWindowState
     // =================================================================
 
     void testCleanupClosedWindowState()
@@ -64,11 +64,11 @@ private Q_SLOTS:
         // sibling so we can verify the bucket survives while the closed
         // window is scrubbed from it.
         PhosphorCompositor::BorderState border;
-        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, screenId, windowId);
-        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, staleScreen, windowId);
-        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, staleScreen, sibling);
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, screenId, windowId);
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, staleScreen, windowId);
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, staleScreen, sibling);
 
-        // Set up AutotileWindowState maps
+        // Set up TilingWindowState maps
         QSet<QString> notifiedWindows;
         notifiedWindows.insert(windowId);
 
@@ -78,8 +78,8 @@ private Q_SLOTS:
         QSet<QString> minimizeFloatedWindows;
         minimizeFloatedWindows.insert(windowId);
 
-        QHash<QString, QRect> autotileTargetZones;
-        autotileTargetZones.insert(windowId, QRect(0, 0, 800, 600));
+        QHash<QString, QRect> tileTargetZones;
+        tileTargetZones.insert(windowId, QRect(0, 0, 800, 600));
 
         QHash<QString, QRect> centeredWaylandZones;
         centeredWaylandZones.insert(windowId, QRect(100, 100, 600, 400));
@@ -87,27 +87,27 @@ private Q_SLOTS:
         QSet<QString> monocleMaximizedWindows;
         monocleMaximizedWindows.insert(windowId);
 
-        QHash<QString, QHash<QString, QRectF>> preAutotileGeometries;
-        preAutotileGeometries[screenId].insert(windowId, QRectF(0.1, 0.1, 0.5, 0.5));
+        QHash<QString, QHash<QString, QRectF>> preTileGeometries;
+        preTileGeometries[screenId].insert(windowId, QRectF(0.1, 0.1, 0.5, 0.5));
         // Same cross-screen-stale shape for the geometry store: the closed
         // window's entry in the old screen's bucket plus a sibling entry
         // that must survive the sweep.
-        preAutotileGeometries[staleScreen].insert(windowId, QRectF(0.2, 0.2, 0.4, 0.4));
-        preAutotileGeometries[staleScreen].insert(sibling, QRectF(0.3, 0.3, 0.3, 0.3));
+        preTileGeometries[staleScreen].insert(windowId, QRectF(0.2, 0.2, 0.4, 0.4));
+        preTileGeometries[staleScreen].insert(sibling, QRectF(0.3, 0.3, 0.3, 0.3));
 
-        PhosphorCompositor::AutotileStateHelpers::AutotileWindowState state{
-            notifiedWindows,      notifiedWindowScreens,   minimizeFloatedWindows, autotileTargetZones,
-            centeredWaylandZones, monocleMaximizedWindows, preAutotileGeometries};
+        PhosphorCompositor::TilingStateHelpers::TilingWindowState state{
+            notifiedWindows,      notifiedWindowScreens,   minimizeFloatedWindows, tileTargetZones,
+            centeredWaylandZones, monocleMaximizedWindows, preTileGeometries};
 
         // Perform cleanup
-        PhosphorCompositor::AutotileStateHelpers::cleanupClosedWindowState(windowId, border, state);
+        PhosphorCompositor::TilingStateHelpers::cleanupClosedWindowState(windowId, border, state);
 
         // Verify all maps no longer contain the window
-        QVERIFY(!PhosphorCompositor::AutotileStateHelpers::isTiledWindow(border, windowId));
+        QVERIFY(!PhosphorCompositor::TilingStateHelpers::isTiledWindow(border, windowId));
         QVERIFY(!notifiedWindows.contains(windowId));
         QVERIFY(!notifiedWindowScreens.contains(windowId));
         QVERIFY(!minimizeFloatedWindows.contains(windowId));
-        QVERIFY(!autotileTargetZones.contains(windowId));
+        QVERIFY(!tileTargetZones.contains(windowId));
         QVERIFY(!centeredWaylandZones.contains(windowId));
         QVERIFY(!monocleMaximizedWindows.contains(windowId));
 
@@ -117,13 +117,13 @@ private Q_SLOTS:
         QVERIFY(!border.tiledWindowsByScreen.contains(screenId));
         QVERIFY(!border.tiledWindowsByScreen.value(staleScreen).contains(windowId));
         QVERIFY(border.tiledWindowsByScreen.value(staleScreen).contains(sibling));
-        QVERIFY(!preAutotileGeometries.contains(screenId));
-        QVERIFY(!preAutotileGeometries.value(staleScreen).contains(windowId));
-        QVERIFY(preAutotileGeometries.value(staleScreen).contains(sibling));
+        QVERIFY(!preTileGeometries.contains(screenId));
+        QVERIFY(!preTileGeometries.value(staleScreen).contains(windowId));
+        QVERIFY(preTileGeometries.value(staleScreen).contains(sibling));
     }
 
     // =================================================================
-    // AutotileStateHelpers: removeFromOtherScreens
+    // TilingStateHelpers: removeFromOtherScreens
     // =================================================================
 
     void testRemoveFromOtherScreens()
@@ -135,12 +135,12 @@ private Q_SLOTS:
         const QString solo = QStringLiteral("screen-solo");
 
         PhosphorCompositor::BorderState border;
-        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, keep, windowId);
-        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, shared, windowId);
-        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, shared, other);
-        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, solo, windowId);
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, keep, windowId);
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, shared, windowId);
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, shared, other);
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, solo, windowId);
 
-        PhosphorCompositor::AutotileStateHelpers::removeFromOtherScreens(border, windowId, keep);
+        PhosphorCompositor::TilingStateHelpers::removeFromOtherScreens(border, windowId, keep);
 
         // Window survives only on the keep screen; the sibling that still
         // holds another window survives; the window-only sibling bucket is
@@ -176,5 +176,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_GUILESS_MAIN(TestAutotileState)
-#include "test_autotile_state.moc"
+QTEST_GUILESS_MAIN(TestTilingState)
+#include "test_tiling_state.moc"

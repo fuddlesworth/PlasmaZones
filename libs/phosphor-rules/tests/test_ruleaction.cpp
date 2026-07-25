@@ -72,6 +72,11 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetOverflowBehavior,
     ActionType::SetDragBehavior,
     ActionType::SetAlgorithmParam,
+    // Scrolling parameter overrides are context-domain too — resolved per
+    // screen/desktop/activity and layered onto the scrolling engine's params.
+    ActionType::SetScrollDefaultColumnWidth,
+    ActionType::SetCenterFocusedColumn,
+    ActionType::SetScrollDefaultColumnDisplay,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -107,6 +112,11 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     // Stacking-layer override — window-domain, effect-consumed
     // (reconcileRuleWindowLayer maps the token onto keepAbove/keepBelow).
     ActionType::SetWindowLayer,
+    // Scrolling open overrides — window-domain, read on the daemon open path
+    // for the matched window and layered over the context / config defaults.
+    ActionType::OpenColumnWidth,
+    ActionType::OpenTabbed,
+    ActionType::OpenColumnPlacement,
 };
 } // namespace
 

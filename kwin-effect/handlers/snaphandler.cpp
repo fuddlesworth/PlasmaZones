@@ -3,7 +3,7 @@
 
 #include "snaphandler.h"
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "dragtracker.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "snapassisthandler.h"
@@ -60,14 +60,14 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
         // matters: findWindowById's appId fuzzy fallback can resolve a
         // same-app SIBLING for a dead id, and tracking the sibling under the
         // dead key would strand it.
-        AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+        TilingStateHelpers::removeFromAllScreens(m_border, windowId);
         return;
     }
     // A window can only be snap-managed by one screen at a time. Strip stale
     // tiled tracking from any OTHER screen before recording the new owner
     // (mirrors the autotile cross-screen-transfer cleanup in tiling.cpp).
-    AutotileStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
-    AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
+    TilingStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
+    TilingStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
 
     // Title-bar (borderless) state is driven entirely by rules through
     // the effect's reconcileRuleHiddenTitleBar → DecorationManager path; this
@@ -87,7 +87,7 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
     if (windowId.isEmpty()) {
         return;
     }
-    AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+    TilingStateHelpers::removeFromAllScreens(m_border, windowId);
     // A window that is no longer snap-managed occupies no zone. The zone cache
     // is the source of the IsSnapped / Zone rule-match fields, and several
     // unsnap paths (drag-out unsnap in particular) get their answer in the
@@ -125,7 +125,7 @@ void SnapHandler::onWindowClosed(const QString& windowId)
     // Pure bookkeeping — the window is being destroyed, so no setNoBorder /
     // removeWindowDecoration is needed (the effect's close path drops the border
     // entry / shader redirect and the title bar dies with the window).
-    AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+    TilingStateHelpers::removeFromAllScreens(m_border, windowId);
 }
 
 void SnapHandler::setFocusFollowsMouse(bool enabled)
@@ -257,7 +257,7 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
     // one the user is working in on top of the snap stack; wandering the cursor
     // over a snapped window beneath it must not steal its focus. FFM resumes
     // (follows the cursor between snapped windows) once a snapped window is
-    // active. Scoped to the cursor's screen (mirrors AutotileHandler::
+    // active. Scoped to the cursor's screen (mirrors TilingHandler::
     // handleCursorMoved, discussion #461 + follow-up): a window active on another
     // monitor must not freeze FFM on the monitor the cursor is on. The daemon's
     // own passthrough overlay surface never counts as the kind of active window
@@ -302,7 +302,7 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
         // The window directly under the cursor is not snapped (a floating dialog, popup,
         // or excluded app occluding a snapped window beneath). Don't look through it to
         // focus the snapped window — that would steal focus from what the user is pointing
-        // at. Mirrors AutotileHandler::handleCursorMoved's occlusion guard.
+        // at. Mirrors TilingHandler::handleCursorMoved's occlusion guard.
         if (!isTiledWindow(m_effect->getWindowId(w))) {
             return;
         }
@@ -326,7 +326,7 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
 {
     // Snap-mode-only: the autotile handler runs its own snap-state / float-state
     // machine for autotile screens.
-    if (m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+    if (m_effect->tilingHandler()->isManagedScreen(screenId)) {
         return;
     }
 
@@ -350,7 +350,7 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             return;
         }
         // Defer the whole unfloat commit (restore-net queries included) past
-        // KWin's unminimize animation, mirroring AutotileHandler's deferred
+        // KWin's unminimize animation, mirroring TilingHandler's deferred
         // unfloat and for the same reason: the unfloat re-snaps the window,
         // the daemon applies its zone geometry, and a moveResize landing
         // mid-flight cancels the stock animation (discussion #816). There is
@@ -384,7 +384,7 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 return;
             }
             const QString currentScreenId = m_effect->getWindowScreenId(fw);
-            if (m_effect->autotileHandler()->isAutotileScreen(currentScreenId)) {
+            if (m_effect->tilingHandler()->isManagedScreen(currentScreenId)) {
                 // The screen flipped to autotile during the grace; that
                 // engine's own minimize-float machine owns the window now.
                 // The m_minimizeFloatedWindows entry is deliberately LEFT in
@@ -595,11 +595,11 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
                                                        QStringLiteral("recordSnapIntent"),
                                                        {m_effect->getWindowId(targetWindow), true});
 
-        const bool isAutotile = m_effect->autotileHandler()->isAutotileScreen(screenId);
+        const bool isAutotile = m_effect->tilingHandler()->isManagedScreen(screenId);
 
         // Snap-assist placed the window in a zone — record it in snapping's
         // border set, but only for a resolved snap-mode screen. An empty
-        // (unresolved) or autotile-managed screen is owned by AutotileHandler,
+        // (unresolved) or autotile-managed screen is owned by TilingHandler,
         // so recording it here would double-track the window — same
         // discriminator as slotApplyGeometryRequested / the async snap path.
         if (!screenId.isEmpty() && !isAutotile) {
@@ -613,7 +613,7 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         // Snap Assist continuation: only for manual-mode screens.
         // Autotile screens manage their own window placement; showing snap assist
         // after an autotile resnap is incorrect (the daemon silently ignores the
-        // selection anyway via the isAutotileScreen guard in signals.cpp).
+        // selection anyway via the isManagedScreen guard in signals.cpp).
         if (!isAutotile) {
             m_effect->m_snapAssistHandler->showContinuationIfNeeded(screenId);
         }

@@ -18,7 +18,7 @@
 #include <QPointer>
 #include <QScopeGuard>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/snaphandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/navigationhandler.h"
@@ -148,7 +148,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // placement-state flush.
     reconcileRuleWindowLayer(windowId, w);
 
-    bool onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
+    bool onAutotileScreen = m_tilingHandler->isManagedScreen(getWindowScreenId(w));
 
     // First-frame suppression: KWin places a new window at its centred
     // placement geometry and composites it there before this handler can
@@ -191,7 +191,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // so the next open of the same appId won't re-evaluate a dead entry).
         if (const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(appId)) {
             const bool savedScreenNowAutotile =
-                !cached->screenId.isEmpty() && m_autotileHandler->isAutotileScreen(cached->screenId);
+                !cached->screenId.isEmpty() && m_tilingHandler->isManagedScreen(cached->screenId);
             if (cached->geometry.isValid() && !savedScreenNowAutotile) {
                 qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached->geometry
                                  << "screen:" << cached->screenId;
@@ -207,7 +207,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
                 // Re-evaluate screen after teleport — cross-VS/cross-monitor
                 // moveResize updates KWin's output assignment, so the window
                 // may no longer be on an autotile screen.
-                onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
+                onAutotileScreen = m_tilingHandler->isManagedScreen(getWindowScreenId(w));
             } else if (savedScreenNowAutotile) {
                 qCDebug(lcEffect) << "Skipping instant snap restore for" << appId
                                   << "- saved screen now autotile:" << cached->screenId;
@@ -244,7 +244,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
                 }
                 // Snap restore either moved the window to a snap screen (no-op for
                 // autotile) or didn't apply (window genuinely belongs on autotile).
-                if (!m_autotileHandler->notifyWindowAdded(safeW)) {
+                if (!m_tilingHandler->notifyWindowAdded(safeW)) {
                     endRestoreSuppression(safeW.data());
                 }
             },
@@ -257,7 +257,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // filter, already-notified, etc.), and snap-restore won't run either
     // (the !onAutotileScreen guard below), nothing will move the window —
     // release suppression so it doesn't wait out the deadline.
-    const bool autotileTookOver = m_autotileHandler->notifyWindowAdded(w);
+    const bool autotileTookOver = m_tilingHandler->notifyWindowAdded(w);
     if (!autotileTookOver && onAutotileScreen) {
         endRestoreSuppression(w);
     }
@@ -343,8 +343,8 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // Genuine destruction also drops any desktop-move geometry stash —
     // onWindowClosed itself must not (the desktop-move path creates the
     // stash immediately before calling it).
-    m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId, /*windowDestroyed=*/true);
-    m_autotileHandler->clearDesktopMoveStash(closedWindowId);
+    m_tilingHandler->onWindowClosed(closedWindowId, closedScreenId, /*windowDestroyed=*/true);
+    m_tilingHandler->clearDesktopMoveStash(closedWindowId);
 
     // Mirror that cleanup for snapping's own border set. Pure bookkeeping —
     // the window is being destroyed, so no setNoBorder/removeWindowDecoration is
@@ -588,8 +588,8 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
                                                    QStringLiteral("windowActivated"), {windowId, screenId});
 
     // Notify autotile engine of focus change so m_windowToScreen is updated
-    if (m_autotileHandler->isAutotileScreen(screenId)) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Autotile,
+    if (m_tilingHandler->isManagedScreen(screenId)) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Tiling,
                                                        QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                        QStringLiteral("notifyWindowFocused"));
     }

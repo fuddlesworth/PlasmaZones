@@ -99,6 +99,13 @@ SettingsFlickable {
         var activity = state.activity || "";
         var snapping = "";
         var tiling = "";
+        if (stateView.isScrolling) {
+            // Scrolling has neither a zone layout nor a tiling algorithm, so
+            // the entry carries the mode alone. Both layout fields stay empty
+            // and there is no "Default" pick to honour.
+            settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, "", "");
+            return;
+        }
         if (stateView.localMode === 1) {
             if (stateView.localAlgorithmCleared) {
                 // The user explicitly picked "Default": stage an assignment
@@ -273,6 +280,11 @@ SettingsFlickable {
             // not-yet-touched state without this flag.
             property bool localAlgorithmCleared: false
             property bool isTiling: localMode === 1
+            // The scrolling engine is mode 2. It picks neither a layout nor an
+            // algorithm, so the preview, the selectors and the staged entry all
+            // branch on this instead of treating "not tiling" as snapping.
+            property bool isScrolling: localMode === 2
+            property bool isSnapping: localMode === 0
             // Resolved layout object for LayoutThumbnail
             property var currentLayout: root._findLayout(localLayoutId)
 
@@ -316,7 +328,7 @@ SettingsFlickable {
             // Layout preview (snapping)
             LayoutThumbnail {
                 Layout.alignment: Qt.AlignHCenter
-                visible: !stateView.isTiling
+                visible: stateView.isSnapping
                 // Fallback stands in for a layout the local list doesn't carry,
                 // so there are no zones to draw. The daemon still reports the
                 // resolved name, so show that rather than nothing.
@@ -362,10 +374,20 @@ SettingsFlickable {
                 }
             }
 
+            // Scrolling has no layout to preview or pick, so it gets a short
+            // explanation in place of the thumbnail and selector.
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 32
+                type: Kirigami.MessageType.Information
+                text: i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.")
+                visible: stateView.isScrolling
+            }
+
             // Mode toggle (below preview)
             SettingsButtonGroup {
                 Layout.alignment: Qt.AlignHCenter
-                model: [i18n("Snapping"), i18n("Tiling")]
+                model: [i18n("Snapping"), i18n("Tiling"), i18n("Scrolling")]
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {
                     stateView.localMode = idx;
@@ -383,7 +405,7 @@ SettingsFlickable {
             // Layout selector (snapping)
             LayoutComboBox {
                 Layout.alignment: Qt.AlignHCenter
-                visible: !stateView.isTiling
+                visible: stateView.isSnapping
                 appSettings: root._layoutBridge
                 currentLayoutId: stateView.localLayoutId
                 layoutFilter: 0

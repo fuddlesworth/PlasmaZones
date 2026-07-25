@@ -275,7 +275,8 @@ struct ClosedTokenOption
 QList<ClosedTokenOption> modeOptions()
 {
     return {{QStringLiteral("snapping"), PhosphorI18n::tr("Snapping")},
-            {QStringLiteral("tiling"), PhosphorI18n::tr("Tiling")}};
+            {QStringLiteral("tiling"), PhosphorI18n::tr("Tiling")},
+            {QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling")}};
 }
 QList<ClosedTokenOption> orientationOptions()
 {
@@ -363,6 +364,33 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
         }
         if (wireValue == PhosphorRules::DragBehaviorToken::Reorder) {
             return PhosphorI18n::tr("Reorder in stack");
+        }
+    }
+    if (type == ActionType::SetCenterFocusedColumn && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::CenterFocusedColumnToken::Never) {
+            return PhosphorI18n::tr("Never");
+        }
+        if (wireValue == PhosphorRules::CenterFocusedColumnToken::Always) {
+            return PhosphorI18n::tr("Always");
+        }
+        if (wireValue == PhosphorRules::CenterFocusedColumnToken::OnOverflow) {
+            return PhosphorI18n::tr("On overflow");
+        }
+    }
+    if (type == ActionType::SetScrollDefaultColumnDisplay && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::ColumnDisplayToken::Normal) {
+            return PhosphorI18n::tr("Normal");
+        }
+        if (wireValue == PhosphorRules::ColumnDisplayToken::Tabbed) {
+            return PhosphorI18n::tr("Tabbed");
+        }
+    }
+    if (type == ActionType::OpenColumnPlacement && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::ColumnPlacementToken::NewColumn) {
+            return PhosphorI18n::tr("New column");
+        }
+        if (wireValue == PhosphorRules::ColumnPlacementToken::Consume) {
+            return PhosphorI18n::tr("Consume into focused column");
         }
     }
     if (type == ActionType::SetWindowLayer && key == ActionParam::Value) {

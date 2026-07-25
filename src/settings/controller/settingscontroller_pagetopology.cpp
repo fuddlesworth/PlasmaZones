@@ -130,12 +130,13 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QString kTilingSimple = QStringLiteral("tiling-simple");
     static const QString kTilingBehavior = QStringLiteral("tiling-behavior");
     static const QString kTilingAlgorithm = QStringLiteral("tiling-algorithm");
+    static const QString kTilingScrolling = QStringLiteral("tiling-scrolling");
     static const QSet<QString> kTilingConfigChildren{
         QStringLiteral("tiling-ordering"),
         QStringLiteral("tiling-shortcuts"),
     };
     static const QSet<QString> kTilingAllLeaves =
-        QSet<QString>{kTilingSimple, kTilingBehavior, kTilingAlgorithm} + kTilingConfigChildren;
+        QSet<QString>{kTilingSimple, kTilingBehavior, kTilingAlgorithm, kTilingScrolling} + kTilingConfigChildren;
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
@@ -334,6 +335,16 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::tilingAlgorithmGroup(), CD::maxWindowsKey()},
              {CD::tilingAlgorithmGroup(), CD::perAlgorithmSettingsKey()},
          }},
+        {QStringLiteral("tiling-scrolling"),
+         {
+             {CD::tilingScrollingGroup(), CD::centerFocusedColumnKey()},
+             {CD::tilingScrollingGroup(), CD::alwaysCenterSingleColumnKey()},
+             {CD::tilingScrollingGroup(), CD::defaultColumnWidthKindKey()},
+             {CD::tilingScrollingGroup(), CD::defaultColumnWidthValueKey()},
+             {CD::tilingScrollingGroup(), CD::defaultColumnDisplayKey()},
+             {CD::tilingScrollingGroup(), CD::presetColumnWidthsKey()},
+             {CD::tilingScrollingGroup(), CD::presetWindowHeightsKey()},
+         }},
         // Only the GLOBAL Windows.* / Gaps.* keys are listed. Per-monitor gap
         // overrides live in the per-screen autotile store (AutotileScreen:*), not
         // in flat config keys, so — like the Tiling Algorithm page's per-monitor
@@ -469,6 +480,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("tiling-simple"),
         QStringLiteral("tiling-behavior"),
         QStringLiteral("tiling-algorithm"),
+        QStringLiteral("tiling-scrolling"),
         QStringLiteral("tiling-shortcuts"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),

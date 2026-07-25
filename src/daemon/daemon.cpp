@@ -87,7 +87,7 @@
 #include "dbus/zonedetectionadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
-#include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/shaderadaptor.h"
 #include "dbus/compositorbridgeadaptor.h"

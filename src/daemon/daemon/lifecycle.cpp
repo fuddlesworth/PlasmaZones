@@ -101,6 +101,8 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
+#include "dbus/scrollingadaptor/scrollingadaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/shaderadaptor.h"
 #include "dbus/compositorbridgeadaptor.h"
@@ -212,6 +214,7 @@ void Daemon::start()
     // stays responsive for Wayland protocol events during login.
     m_shortcutManager->registerShortcuts();
     connectShortcutSignals();
+    connectScrollingShortcuts();
     initializeAutotile();
     initializeUnifiedController();
     connectLayoutSignals();
@@ -633,8 +636,14 @@ void Daemon::stop()
     // Adaptors are Qt children of the daemon (destroyed later); a D-Bus call
     // arriving between engine destruction and adaptor destruction would otherwise
     // access freed memory. After clearing, ensureEngine() returns false.
+    if (m_tilingAdaptor) {
+        m_tilingAdaptor->clearEngine();
+    }
     if (m_autotileAdaptor) {
         m_autotileAdaptor->clearEngine();
+    }
+    if (m_scrollingAdaptor) {
+        m_scrollingAdaptor->clearEngine();
     }
     if (m_snapAdaptor) {
         m_snapAdaptor->clearEngine();
@@ -694,14 +703,14 @@ void Daemon::stop()
         // the symmetric clear (snapadaptor.cpp).
         m_windowTrackingAdaptor->setScreenModeRouter(nullptr);
     }
-    if (m_autotileAdaptor) {
+    if (m_tilingAdaptor) {
         // Sever the autotile adaptor's post-construction borrow of the WTA (wired
         // in init() so the autotile open path can resolve RouteToScreen /
         // RouteToDesktop rules). The autotile open path no-ops on a null WTA, so
         // a D-Bus open landing in the teardown gap can't drive routing against
         // half-torn-down state. Symmetric with the resolver / router clears above
-        // and honours the shutdown-nullptr contract documented in autotileadaptor.h.
-        m_autotileAdaptor->setWindowTrackingAdaptor(nullptr);
+        // and honours the shutdown-nullptr contract documented in tilingadaptor.h.
+        m_tilingAdaptor->setWindowTrackingAdaptor(nullptr);
     }
     m_contextResolver.reset();
     m_settingsGateAdapter.reset();
@@ -747,6 +756,7 @@ void Daemon::stop()
     // Destroy engines now (during stop(), before Qt child destruction order).
     m_snapEngine.reset();
     m_autotileEngine.reset();
+    m_scrollEngine.reset();
 
     // Both engines borrowed m_crossSurfaceResolver (injected at construction).
     // They are destroyed immediately above, so the borrow is already dead;
@@ -782,7 +792,7 @@ void Daemon::stop()
     // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
     // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
-    // SnapAdaptor, AutotileAdaptor) all ship destructors that don't
+    // SnapAdaptor, TilingAdaptor) all ship destructors that don't
     // deref any borrowed pointer — most are `= default` / empty-body
     // (no member access), and the two outliers do only self-cleanup
     // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-

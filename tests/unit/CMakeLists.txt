@@ -469,6 +469,7 @@ add_test(NAME test_snap_assist_thumbnail_provider COMMAND test_snap_assist_thumb
 add_executable(test_cheatsheet_compression
     daemon/test_cheatsheet_compression.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_catalog.cpp
 )
 target_link_libraries(test_cheatsheet_compression
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
@@ -886,13 +887,13 @@ target_link_libraries(test_dbus_adaptor_routing PRIVATE Qt6::Test Qt6::Core Qt6:
                                                           PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_dbus_adaptor_routing COMMAND test_dbus_adaptor_routing)
 
-# Panel-ready gate for AutotileAdaptor windowOpened queue. Regression guard
+# Panel-ready gate for TilingAdaptor windowOpened queue. Regression guard
 # for the stale-VS-geometry race: entries arriving before the first panel
 # D-Bus query must be deferred until PhosphorScreens::ScreenManager::panelGeometryReady fires.
-add_executable(test_autotile_adaptor_panel_gate dbus/test_autotile_adaptor_panel_gate.cpp)
-target_link_libraries(test_autotile_adaptor_panel_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus
+add_executable(test_tiling_adaptor_panel_gate dbus/test_tiling_adaptor_panel_gate.cpp)
+target_link_libraries(test_tiling_adaptor_panel_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus
                                                                  plasmazones_core)
-add_test(NAME test_autotile_adaptor_panel_gate COMMAND test_autotile_adaptor_panel_gate)
+add_test(NAME test_tiling_adaptor_panel_gate COMMAND test_tiling_adaptor_panel_gate)
 
 # Truth-table guard for WindowDragAdaptor::computeDragPolicy - pins the
 # (snap, autotile, context) matrix so the daemon's drag routing decision
@@ -1308,7 +1309,7 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 # compositor-common/ - Shared Library Types Tests
 #   test_wire_types: D-Bus wire type signature/roundtrip tests
 #   test_floating_cache: FloatingCache + ZoneCache + TriggerParser tests
-#   test_autotile_state: AutotileStateHelpers + WindowId tests
+#   test_tiling_state: TilingStateHelpers + WindowId tests
 #   test_decoration_manager: DecorationManager ownership/veto behavioral spec
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_wire_types compositor-common/test_wire_types.cpp)
@@ -1320,10 +1321,10 @@ add_executable(test_floating_cache compositor-common/test_floating_cache.cpp)
 target_link_libraries(test_floating_cache PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_floating_cache COMMAND test_floating_cache)
 
-add_executable(test_autotile_state compositor-common/test_autotile_state.cpp)
-target_link_libraries(test_autotile_state PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
+add_executable(test_tiling_state compositor-common/test_tiling_state.cpp)
+target_link_libraries(test_tiling_state PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
                                                   PhosphorIdentity::PhosphorIdentity)
-add_test(NAME test_autotile_state COMMAND test_autotile_state)
+add_test(NAME test_tiling_state COMMAND test_tiling_state)
 
 add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
 target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)

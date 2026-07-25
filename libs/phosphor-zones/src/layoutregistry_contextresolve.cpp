@@ -615,6 +615,49 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     return params;
 }
 
+ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QString& screenId, int virtualDesktop,
+                                                                     const QString& activity) const
+{
+    if (!m_evaluator) {
+        return {};
+    }
+    // Per-slot read, uncached for the same reasons resolveContextTilingParams is:
+    // it runs on screen / layout changes rather than the hot per-cursor path, which
+    // lets the query carry the active layout and the screen orientation without
+    // folding either into a cache key.
+    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+    stampScreenOrientation(query, screenId);
+    query.activeLayout = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+
+    ContextScrollingParams params;
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollDefaultColumnWidth))) {
+        params.defaultColumnWidth = action->params.value(PWR::ActionParam::Value).toDouble();
+    }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::CenterFocusedColumn))) {
+        // Wire token → the centering int (never 0 / always 1 / on overflow 2), the
+        // same value the config store holds.
+        const QString token = action->params.value(PWR::ActionParam::Value).toString();
+        if (token == PWR::CenterFocusedColumnToken::Never) {
+            params.centerFocusedColumn = 0;
+        } else if (token == PWR::CenterFocusedColumnToken::Always) {
+            params.centerFocusedColumn = 1;
+        } else if (token == PWR::CenterFocusedColumnToken::OnOverflow) {
+            params.centerFocusedColumn = 2;
+        }
+    }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollDefaultColumnDisplay))) {
+        // Wire token → the column display int (normal 0 / tabbed 1).
+        const QString token = action->params.value(PWR::ActionParam::Value).toString();
+        if (token == PWR::ColumnDisplayToken::Normal) {
+            params.defaultColumnDisplay = 0;
+        } else if (token == PWR::ColumnDisplayToken::Tabbed) {
+            params.defaultColumnDisplay = 1;
+        }
+    }
+    return params;
+}
+
 bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
     return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;

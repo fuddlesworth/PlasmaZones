@@ -6,6 +6,7 @@
 // Concrete engine includes — only this TU needs them.
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
@@ -38,6 +39,11 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
     // isActiveOnScreen routing.
     snap->setAutotileEngine(autotile.get());
 
+    // --- ScrollEngine ---
+    auto scroll = std::make_unique<PhosphorScrollEngine::ScrollEngine>(windowTracker, screenManager);
+    scroll->setWindowRegistry(windowRegistry);
+    scroll->setEngineSettings(settings);
+
     // --- CrossSurfaceResolver ---
     // One resolver, shared by both engines, resolves neighbour outputs
     // (geometrically) and neighbour desktops (grid arithmetic) when directional
@@ -45,13 +51,15 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
     auto crossSurfaceResolver = std::make_unique<CrossSurfaceResolver>(screenManager, vdm);
     autotile->setCrossSurfaceResolver(crossSurfaceResolver.get());
     snap->setCrossSurfaceResolver(crossSurfaceResolver.get());
+    scroll->setCrossSurfaceResolver(crossSurfaceResolver.get());
 
     // --- ScreenModeRouter ---
-    auto router = std::make_unique<ScreenModeRouter>(layoutManager, snap.get(), autotile.get());
+    auto router = std::make_unique<ScreenModeRouter>(layoutManager, snap.get(), autotile.get(), scroll.get());
 
     return EngineSet{.crossSurfaceResolver = std::move(crossSurfaceResolver),
                      .autotile = std::move(autotile),
                      .snap = std::move(snap),
+                     .scroll = std::move(scroll),
                      .router = std::move(router)};
 }
 

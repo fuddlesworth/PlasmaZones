@@ -59,6 +59,8 @@ Item {
             return root.autotileAvailable && root.currentMode === "autotile";
         if (row.mode === "snapping")
             return root.currentMode === "snapping";
+        if (row.mode === "scrolling")
+            return root.currentMode === "scrolling";
         return true;
     }
 

@@ -87,6 +87,10 @@ Window {
     /// matching show/dismiss signals — the shell is kbd-None so QML
     /// Shortcuts can't fire here.
     readonly property alias cheatsheetSlotItem: cheatsheetSlot
+    /// Scroll tab-strip slot Item — per-screen tab indicators for tabbed
+    /// scrolling columns. Display-only and click-through; content updates
+    /// are plain property writes (no per-update re-instantiation).
+    readonly property alias scrollTabsSlotItem: scrollTabsSlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
     /// the slot-hide animation start (not Surface::hide() — only the
@@ -666,6 +670,43 @@ Window {
             decorationChain: cheatsheetSlot.decorationChain
             decorationOuterPadding: cheatsheetSlot.decorationOuterPadding
             audioSpectrum: cheatsheetSlot.audioSpectrum
+        }
+    }
+
+    Item {
+        id: scrollTabsSlot
+
+        // Tab-strip model — C++ writes a list of strip entries, each a map
+        // with x / y / width (shell-window coordinates), activeIndex, and
+        // tabs (list of {title, active}).
+        property var strips: []
+        // Content lifecycle gate, toggled by C++ on show/hide. Unlike the
+        // OSD-style slots the content is NOT re-instantiated per update —
+        // strip changes are frequent (every relayout) and flow through the
+        // `strips` binding.
+        property bool loaded: false
+
+        anchors.fill: parent
+        // Indicator tier: above the main overlay, below OSDs and modals.
+        z: 0.5
+        opacity: 0
+        visible: false
+
+        Loader {
+            id: scrollTabsLoader
+
+            anchors.fill: parent
+            active: scrollTabsSlot.loaded
+            // SYNCHRONOUS by contract — see snapAssistLoader.
+            sourceComponent: scrollTabsContentComp
+        }
+
+        Component {
+            id: scrollTabsContentComp
+
+            ScrollTabStripContent {
+                strips: scrollTabsSlot.strips
+            }
         }
     }
 

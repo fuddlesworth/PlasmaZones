@@ -97,12 +97,12 @@ set(plasmazones_effect_SRCS
     transitions/desktoptransitionshader.cpp
     transitions/desktoptransitionteardown.cpp
     transitions/desktoptransitionmanager.h
-    autotilehandler/autotilehandler.cpp
-    autotilehandler/autotilehandler.h
-    autotilehandler/signals.cpp
-    autotilehandler/state.cpp
-    autotilehandler/tiling.cpp
-    autotilehandler/wiring.cpp
+    tilinghandler/tilinghandler.cpp
+    tilinghandler/tilinghandler.h
+    tilinghandler/signals.cpp
+    tilinghandler/state.cpp
+    tilinghandler/tiling.cpp
+    tilinghandler/wiring.cpp
     handlers/snaphandler.cpp
     handlers/snaphandler.h
     handlers/navigationhandler.cpp

@@ -29,7 +29,7 @@
 #include <QTimer>
 #include <QVarLengthArray>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "compositor/compositorclock.h"
 #include "handlers/dragtracker.h"
 #include "compositor/compositorbridge.h"
@@ -47,7 +47,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 PlasmaZonesEffect::PlasmaZonesEffect()
     : OffscreenEffect()
-    , m_autotileHandler(std::make_unique<AutotileHandler>(this))
+    , m_tilingHandler(std::make_unique<TilingHandler>(this))
     , m_snapHandler(std::make_unique<SnapHandler>(this))
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
@@ -375,10 +375,10 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // doesn't churn border items during the restore burst (see the
         // daemon-loss site above); restoreAll() covers every owner kind
         // including rule overrides.
-        m_autotileHandler->clearTiledTracking();
+        m_tilingHandler->clearTiledTracking();
         m_snapHandler->clearSnapTracking();
         m_decorationManager->restoreAll();
-        m_autotileHandler->restoreAllMonocleMaximized();
+        m_tilingHandler->restoreAllMonocleMaximized();
         restoreAllRuleWindowLayers();
         clearAllDecorations();
     }

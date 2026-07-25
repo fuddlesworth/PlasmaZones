@@ -465,6 +465,17 @@ public:
     ContextTilingParams resolveContextTilingParams(const QString& screenId, int virtualDesktop,
                                                    const QString& activity) const;
 
+    /// Resolve the per-context scrolling parameter overrides (default column
+    /// width / focused-column centering / default column display) for
+    /// (screen, desktop, activity) — a per-slot read like
+    /// @ref resolveContextTilingParams, and uncached for the same reason (screen /
+    /// layout changes, not the hot per-cursor path). The daemon layers the
+    /// returned values onto the scrolling engine's per-screen parameters, with
+    /// config as the base. Concrete (not on the interface): the daemon holds a
+    /// concrete LayoutRegistry.
+    ContextScrollingParams resolveContextScrollingParams(const QString& screenId, int virtualDesktop,
+                                                         const QString& activity) const;
+
     /// The screen-orientation token from @ref m_screenOrientationProvider ("portrait"
     /// / "landscape"), or an empty string when the provider is unset or returns
     /// nullopt. Shared by @ref stampScreenOrientation (the query value) and the

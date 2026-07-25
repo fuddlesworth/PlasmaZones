@@ -118,6 +118,13 @@ inline constexpr double kMinSplitPercent = 10.0;
 inline constexpr double kMaxSplitPercent = 90.0;
 inline constexpr double kMinSplitRatio = kMinSplitPercent / 100.0;
 inline constexpr double kMaxSplitRatio = kMaxSplitPercent / 100.0;
+// Scrolling column-width bounds, derived the same way as the split-ratio pair so
+// the percent display range and the stored fraction can never drift. A column may
+// legitimately take the whole work area, so the upper bound is 100 %.
+inline constexpr double kMinColumnWidthPercent = 5.0;
+inline constexpr double kMaxColumnWidthPercent = 100.0;
+inline constexpr double kMinColumnWidthRatio = kMinColumnWidthPercent / 100.0;
+inline constexpr double kMaxColumnWidthRatio = kMaxColumnWidthPercent / 100.0;
 
 /// Helper to keep the registerBuiltins body legible — every built-in shares
 /// the same constant slot pattern (no slot-from-params resolution).

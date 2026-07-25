@@ -238,7 +238,7 @@ private Q_SLOTS:
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
 
         const QString routed =
-            m_wta->applyOpenRoutingForAutotile(QStringLiteral("routeapp|inst1"), QStringLiteral("DP-1"));
+            m_wta->applyOpenRoutingForTiling(QStringLiteral("routeapp|inst1"), QStringLiteral("DP-1"));
 
         // Redirected to the autotile target, with both the output- and desktop-move
         // signals emitted for the compositor to act on.
@@ -283,7 +283,7 @@ private Q_SLOTS:
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
 
         const QString routed =
-            m_wta->applyOpenRoutingForAutotile(QStringLiteral("snaproute|inst2"), QStringLiteral("DP-1"));
+            m_wta->applyOpenRoutingForTiling(QStringLiteral("snaproute|inst2"), QStringLiteral("DP-1"));
 
         QVERIFY2(routed.isEmpty(), "a snap-mode RouteToScreen target must not be an autotile redirect");
         QCOMPARE(outputSpy.count(), 0);

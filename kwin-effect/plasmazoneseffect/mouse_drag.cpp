@@ -12,7 +12,7 @@
 
 #include <QLoggingCategory>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/snaphandler.h"
 
@@ -128,7 +128,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     // Focus follows mouse: activate autotile window under cursor when not dragging.
     // Reuse effectiveScreenId computed above to avoid redundant resolveEffectiveScreenId call.
     if (!m_dragTracker->isDragging() && output) {
-        m_autotileHandler->handleCursorMoved(pos, effectiveScreenId);
+        m_tilingHandler->handleCursorMoved(pos, effectiveScreenId);
         // Snapping FFM runs alongside autotile FFM. The two are disjoint: autotile FFM
         // bails when the cursor screen is not an autotile screen, and snapping FFM only
         // acts on windows in the snap tiled set (which live on snapping-mode screens), so

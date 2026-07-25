@@ -67,7 +67,17 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     if (m_autotileEngine && m_service->isWindowInAutotileMode(windowId)) {
         std::swap(primary, secondary);
     }
-    PhosphorEngine::PlacementEngineBase* engines[] = {primary, secondary};
+    // The scrolling engine joins the capture chain the same way. Its
+    // capturePlacement returns nullopt for untracked windows, so trying it
+    // FIRST when it tracks the window is the same ordering insurance the
+    // autotile swap above provides (snap would otherwise claim the window
+    // as a stale floated record).
+    PhosphorEngine::PlacementEngineBase* scrollFirst = nullptr;
+    if (m_scrollEngine && m_scrollEngine->isWindowTracked(windowId)) {
+        scrollFirst = m_scrollEngine.data();
+    }
+    PhosphorEngine::PlacementEngineBase* engines[] = {scrollFirst, primary, secondary,
+                                                      scrollFirst ? nullptr : m_scrollEngine.data()};
     for (PhosphorEngine::PlacementEngineBase* e : engines) {
         if (!e) {
             continue;
@@ -239,7 +249,12 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
 
 bool WindowTrackingAdaptor::isFrameStillOnTileRect(const QString& windowId, const QRect& frame) const
 {
-    return m_autotileEngine && m_autotileEngine->lastManagedRect(windowId) == frame;
+    if (m_autotileEngine && m_autotileEngine->lastManagedRect(windowId) == frame) {
+        return true;
+    }
+    // Scroll-managed windows carry the same float-toggle capture edge: the
+    // strip rect must never be adopted as float-back geometry.
+    return m_scrollEngine && m_scrollEngine->lastManagedRect(windowId) == frame;
 }
 
 void WindowTrackingAdaptor::refreshOpenWindowPlacements()
@@ -318,15 +333,21 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         const QString trackedSnap = m_snapEngine ? m_snapEngine->screenForTrackedWindow(windowId) : QString();
         const QString trackedAutotile =
             m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();
-        const QString trackedScreen = !trackedSnap.isEmpty() ? trackedSnap : trackedAutotile;
+        const QString trackedScroll = m_scrollEngine ? m_scrollEngine->screenForTrackedWindow(windowId) : QString();
+        const QString trackedScreen = !trackedSnap.isEmpty() ? trackedSnap
+            : !trackedAutotile.isEmpty()                     ? trackedAutotile
+                                                             : trackedScroll;
         if (trackedScreen.isEmpty() || PhosphorScreens::ScreenIdentity::screensMatch(trackedScreen, newScreenId)) {
             return;
         }
-        PhosphorEngine::PlacementEngineBase* source =
-            !trackedSnap.isEmpty() ? m_snapEngine.data() : m_autotileEngine.data();
+        PhosphorEngine::PlacementEngineBase* source = !trackedSnap.isEmpty() ? m_snapEngine.data()
+            : !trackedAutotile.isEmpty()                                     ? m_autotileEngine.data()
+                                                                             : m_scrollEngine.data();
         PhosphorEngine::PlacementEngineBase* dest = nullptr;
         if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(newScreenId)) {
             dest = m_autotileEngine.data();
+        } else if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(newScreenId)) {
+            dest = m_scrollEngine.data();
         } else if (m_snapEngine) {
             dest = m_snapEngine.data();
         }
@@ -697,17 +718,24 @@ void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int old
     // Keep the frame shadow in sync with the committed geometry.
     m_frameGeometry[windowId] = newFrame;
 
+    const QRect oldFrame(oldX, oldY, oldWidth, oldHeight);
+    // Scroll strips reconcile the interactive resize into the column's
+    // stored intent; autotile reflows the tree. Route to whichever engine
+    // tracks the window (empty screen ⇒ not tracked there).
+    if (m_scrollEngine) {
+        const QString scrollScreen = m_scrollEngine->screenForTrackedWindow(windowId);
+        if (!scrollScreen.isEmpty()) {
+            m_scrollEngine->onWindowResized(windowId, oldFrame, newFrame, scrollScreen);
+            return;
+        }
+    }
     if (!m_autotileEngine) {
         return;
     }
-    // Empty screen ⇒ the window isn't autotile-tracked (floating, snap-mode, or
-    // unmanaged) — nothing to reflow. The engine re-validates regardless.
     const QString screenId = m_autotileEngine->screenForTrackedWindow(windowId);
     if (screenId.isEmpty()) {
         return;
     }
-
-    const QRect oldFrame(oldX, oldY, oldWidth, oldHeight);
     m_autotileEngine->onWindowResized(windowId, oldFrame, newFrame, screenId);
 }
 
@@ -788,6 +816,17 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
             canonicalAlive.insert(m_service->canonicalizeForLookup(id));
         }
         persistedPruned += m_autotileEngine->pruneStaleWindows(canonicalAlive);
+        if (m_scrollEngine) {
+            persistedPruned += m_scrollEngine->pruneStaleWindows(canonicalAlive);
+        }
+    }
+    if (m_scrollEngine && !m_autotileEngine) {
+        QSet<QString> canonicalAlive;
+        canonicalAlive.reserve(aliveWindowIds.size());
+        for (const QString& id : aliveWindowIds) {
+            canonicalAlive.insert(m_service->canonicalizeForLookup(id));
+        }
+        persistedPruned += m_scrollEngine->pruneStaleWindows(canonicalAlive);
     }
     // Defensive sweep of the frame-geometry shadow store. The primary
     // cleanup path is `windowClosed`, but if a window dies without a

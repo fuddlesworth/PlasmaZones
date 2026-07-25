@@ -45,7 +45,7 @@ using namespace PhosphorProtocol;
 // =========================================================================
 // Minimal owner object that hosts an adaptor on a private connection.
 // We build a dedicated tiny adaptor here rather than reuse the real
-// AutotileAdaptor so we don't drag in the daemon dependency tree.
+// TilingAdaptor so we don't drag in the daemon dependency tree.
 // =========================================================================
 
 class TestTypedAdaptor : public QDBusAbstractAdaptor

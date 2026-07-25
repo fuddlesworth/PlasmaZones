@@ -529,7 +529,7 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
     // dragPolicyChanged. The plugin reacts by calling handleDragToFloat or
     // re-initializing snap-drag state as needed. This replaces the
     // effect-side detection loop in the dragMoved lambda that used the
-    // stale m_autotileScreens cache to decide when to flip.
+    // stale m_managedScreens cache to decide when to flip.
     //
     // Full-struct comparison via PhosphorProtocol::DragPolicy::operator== catches every
     // policy-relevant transition: bypass-reason flips, autotile→autotile

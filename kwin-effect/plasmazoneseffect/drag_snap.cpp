@@ -3,7 +3,7 @@
 
 #include "plasmazoneseffect.h"
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/snaphandler.h"
@@ -81,10 +81,10 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                     // Async snap (keyboard / empty-zone / last-zone / auto-fill)
                     // committed — record in snapping's border set, but only for
                     // a resolved snap-mode screen (autotile windows are tracked
-                    // by AutotileHandler; an empty screen is left untracked,
+                    // by TilingHandler; an empty screen is left untracked,
                     // mirroring the batch path's discriminator).
                     if (const QString asyncScr = getWindowScreenId(window);
-                        !asyncScr.isEmpty() && !m_autotileHandler->isAutotileScreen(asyncScr)) {
+                        !asyncScr.isEmpty() && !m_tilingHandler->isManagedScreen(asyncScr)) {
                         // Defensive stale-float clear — see the drag-drop
                         // commit path; idempotent vs the daemon broadcast.
                         m_navigationHandler->setWindowFloating(windowId, false);
@@ -581,7 +581,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
     // different from the policy in force — tell us so we can apply the
     // compositor-level transition. Replaces the effect-side cross-VS flip
     // loop in the dragMoved lambda that walked KWin::effects->screens()
-    // with a stale m_autotileScreens cache.
+    // with a stale m_managedScreens cache.
     //
     // Guards: this slot only acts if we're actively tracking the drag for
     // this windowId. Stray signals (daemon restart, out-of-order delivery)
@@ -646,7 +646,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // race against the zone snap at drop, making the window jump after
         // the user lets go. onWindowClosed alone clears the tracking state.
         if (dragW) {
-            m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
+            m_tilingHandler->onWindowClosed(windowId, m_dragBypassScreenId);
         }
         m_dragBypassedForAutotile = false;
         m_dragActivation.detected = false;

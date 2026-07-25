@@ -31,7 +31,12 @@ inline constexpr QLatin1String Settings("org.plasmazones.Settings");
 inline constexpr QLatin1String WindowDrag("org.plasmazones.WindowDrag");
 inline constexpr QLatin1String WindowTracking("org.plasmazones.WindowTracking");
 inline constexpr QLatin1String Overlay("org.plasmazones.Overlay");
-inline constexpr QLatin1String Autotile("org.plasmazones.Autotile");
+// Shared tiling-family engine pipeline (autotile + scrolling). Renamed
+// from org.plasmazones.Autotile when the scrolling engine joined; the
+// project ships daemon and effect together, so no wire compatibility
+// alias is kept.
+inline constexpr QLatin1String Tiling("org.plasmazones.Tiling");
+inline constexpr QLatin1String Scrolling("org.plasmazones.Scrolling");
 inline constexpr QLatin1String LayoutRegistry("org.plasmazones.LayoutRegistry");
 inline constexpr QLatin1String Screen("org.plasmazones.Screen");
 inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");

@@ -16,7 +16,7 @@
 #include <QPointer>
 #include <QTimer>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/screenchangehandler.h"
 
@@ -58,18 +58,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         if (window && !window->isOnCurrentDesktop() && !window->isOnAllDesktops()) {
             const QString windowId = getWindowId(window);
             const QString screenId = getWindowScreenId(window);
-            if (m_autotileHandler->isAutotileScreen(screenId)) {
+            if (m_tilingHandler->isManagedScreen(screenId)) {
                 // Save pre-autotile geometry before onWindowClosed clears it.
                 // When the window is re-added on the target desktop, this preserved
                 // geometry is used instead of the current (tiled) frame position.
-                m_autotileHandler->savePreAutotileForDesktopMove(windowId);
+                m_tilingHandler->savePreTileForDesktopMove(windowId);
 
                 // Title-bar state is rule-driven (no autotile decoration claim
                 // to release): KWin's off-desktop noBorder reset is corrected on
                 // desktop return by updateAllDecorations → resyncWindow for any
                 // rule-owned window. onWindowClosed below only clears effect-side
                 // tracking (shared with the genuine-close path).
-                m_autotileHandler->onWindowClosed(windowId, screenId);
+                m_tilingHandler->onWindowClosed(windowId, screenId);
                 removeWindowDecoration(windowId);
                 qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
             }
@@ -123,7 +123,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // protected and KWin's orphan-reassignment got mistaken for the
             // window genuinely entering autotile.
             if (!involuntaryMove) {
-                m_autotileHandler->handleWindowOutputChanged(safeW);
+                m_tilingHandler->handleWindowOutputChanged(safeW);
             }
 
             // For snapping→snapping cross-screen moves: notify the daemon which
@@ -136,10 +136,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // (float, unsnap, size restore, pre-tile cleanup) and handles them
             // in dragStopped() with richer context.
             // Skip involuntary moves: see the involuntaryMove computation above.
-            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId
-                && !m_autotileHandler->isAutotileScreen(oldScreenId)
-                && !m_autotileHandler->isAutotileScreen(newScreenId) && !m_dragTracker->isDragging()
-                && !involuntaryMove) {
+            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId && !m_tilingHandler->isManagedScreen(oldScreenId)
+                && !m_tilingHandler->isManagedScreen(newScreenId) && !m_dragTracker->isDragging() && !involuntaryMove) {
                 const QString windowId = getWindowId(safeW);
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
@@ -156,7 +154,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         //
         // VS crossing detection uses PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing()
         // (<PhosphorIdentity/VirtualScreenId.h>) — the same predicate used by
-        // autotilehandler/tiling.cpp.
+        // tilinghandler/tiling.cpp.
         connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_daemonGate.virtualScreensReady) {
                 return;
@@ -188,17 +186,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // windows it already tracks (m_notifiedWindows). Only untracked
             // windows (snapping-mode entering an autotile VS) need delegation.
             const QString windowId = getWindowId(safeW);
-            if (m_autotileHandler->isTrackedWindow(windowId)) {
+            if (m_tilingHandler->isTrackedWindow(windowId)) {
                 return;
             }
 
             // Delegate autotile handling for untracked cross-VS transitions
             // (snapping→autotile). The autotile handler's own detection only
             // covers windows it already tracks.
-            m_autotileHandler->handleWindowOutputChanged(safeW);
+            m_tilingHandler->handleWindowOutputChanged(safeW);
 
             // For snapping→snapping cross-VS moves: notify the daemon
-            if (!m_autotileHandler->isAutotileScreen(oldScreenId) && !m_autotileHandler->isAutotileScreen(newScreenId)
+            if (!m_tilingHandler->isManagedScreen(oldScreenId) && !m_tilingHandler->isManagedScreen(newScreenId)
                 && !m_screenChangeHandler->isScreenChangeInProgress()) {
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
@@ -568,8 +566,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     });
 
     // Track when user manually unmaximizes a monocle-maximized window
-    connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, m_autotileHandler.get(),
-            &AutotileHandler::slotWindowMaximizedStateChanged);
+    connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, m_tilingHandler.get(),
+            &TilingHandler::slotWindowMaximizedStateChanged);
 
     // Departure-rect capture for the maximize morph wiring below. KWin
     // guarantees windowMaximizedStateAboutToChange fires before the
@@ -592,7 +590,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             });
 
     // window.maximize / window.unmaximize shader transition. Sibling lambda
-    // to the AutotileHandler hookup above (autotile drives the snap-back
+    // to the TilingHandler hookup above (autotile drives the snap-back
     // logic; we drive the shader leg).
     //
     // KWin emits windowMaximizedStateChanged once per axis flip — a
@@ -658,12 +656,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             });
 
     // Track when a monocle-maximized window goes fullscreen
-    connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_autotileHandler.get(),
-            &AutotileHandler::slotWindowFullScreenChanged);
+    connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_tilingHandler.get(),
+            &TilingHandler::slotWindowFullScreenChanged);
 
     // Autotile: center undersized Wayland windows as soon as they commit constrained size
-    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_autotileHandler.get(),
-            &AutotileHandler::slotWindowFrameGeometryChanged);
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_tilingHandler.get(),
+            &TilingHandler::slotWindowFrameGeometryChanged);
 
     // Single windowFrameGeometryChanged lambda combining the effect-side
     // per-tick work — first-frame open suppression release AND debounced
@@ -673,7 +671,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // are independent so collapsing them just runs one capture+vtable
     // hop per tick instead of two. The autotile-handler connection
     // immediately above is kept separate because it dispatches to a slot
-    // on a different receiver (`m_autotileHandler.get()`).
+    // on a different receiver (`m_tilingHandler.get()`).
     //
     // Body 1 — first-frame open suppression release: a window withheld
     // from compositing on open (see RestoreSuppression) is released the
@@ -764,8 +762,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             });
 
     // Autotile: track minimize/unminimize to remove/re-add windows from tiling
-    connect(w, &KWin::EffectWindow::minimizedChanged, m_autotileHandler.get(),
-            &AutotileHandler::slotWindowMinimizedChanged);
+    connect(w, &KWin::EffectWindow::minimizedChanged, m_tilingHandler.get(),
+            &TilingHandler::slotWindowMinimizedChanged);
 
     // Snap mode: track minimize/unminimize to float/unfloat snapped windows
     connect(w, &KWin::EffectWindow::minimizedChanged, this, &PlasmaZonesEffect::slotWindowMinimizedChanged);

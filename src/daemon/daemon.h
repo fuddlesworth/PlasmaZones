@@ -100,7 +100,7 @@ class WindowDragAdaptor;
 class RuleAdaptor;
 class ZoneSelectorController;
 class UnifiedLayoutController;
-class AutotileAdaptor;
+class TilingAdaptor;
 class ScreenModeRouter;
 class CrossSurfaceResolver;
 class DaemonScreenModeAdapter;
@@ -451,6 +451,14 @@ private:
     void connectDesktopActivity();
     void connectShortcutSignals();
     void initializeAutotile();
+    /// Wire the ShortcutManager's scrolling-column signals to the scroll
+    /// engine (scrolling_init.cpp).
+    void connectScrollingShortcuts();
+    /// Push the derived scrolling screen set into the scroll engine —
+    /// order seeding, per-context rule params, setActiveScreens
+    /// (scrolling.cpp). Called from updateEngineScreens so both
+    /// engines' sets flip atomically per context recompute.
+    void updateScrollingScreens(const QSet<QString>& scrollingScreens);
     void initializeUnifiedController();
     void connectLayoutSignals();
     void connectOverlaySignals();
@@ -473,7 +481,7 @@ private:
      * @brief Flip every autotile assignment to Snapping; restore each screen's
      *        saved snap layout; reset autotile-floating state. Caller is
      *        responsible for the post-conditioning calls
-     *        (updateAutotileScreens, updateLayoutFilter, snap resnap).
+     *        (updateEngineScreens, updateLayoutFilter, snap resnap).
      */
     void handleAutotileDisabled();
 
@@ -498,7 +506,7 @@ private:
      * @brief Capture autotile window order for all autotile screens
      *
      * Must be called BEFORE any mode switch that destroys PhosphorTiles::TilingState
-     * (e.g. applyLayoutById, handleAutotileDisabled, updateAutotileScreens).
+     * (e.g. applyLayoutById, handleAutotileDisabled, updateEngineScreens).
      *
      * @return Map of (screen, desktop, activity) -> ordered window IDs (master first)
      */
@@ -507,7 +515,7 @@ private:
     /**
      * @brief Build pre-tile geometry restore entries for autotile-only windows.
      *
-     * Iterates m_lastAutotileOrders and produces a `ZoneAssignmentEntry` per
+     * Iterates m_lastEngineOrders and produces a `ZoneAssignmentEntry` per
      * autotile-only window (no zone assignment, never manually snapped).
      * Returns the batch so the caller can feed it to
      * `SnapEngine::emitBatchedResnap` — one batched signal per autotile
@@ -568,7 +576,7 @@ private:
      * Reads all screen assignments via assignmentIdForScreen(), computes
      * which screens have autotile IDs, calls setActiveScreens() on engine.
      */
-    void updateAutotileScreens();
+    void updateEngineScreens();
 
     /**
      * @brief React to a rule change that may have altered active assignments.
@@ -576,7 +584,7 @@ private:
      * The unified rule store emits rulesChanged on any rule edit, but only a
      * change to the ACTIVE context's resolved assignment needs windows moved.
      * Diffs each screen's resolved assignment id against the snapshot; for the
-     * screens that changed, retiles autotile screens (updateAutotileScreens
+     * screens that changed, retiles autotile screens (updateEngineScreens
      * self-diffs) and drives the legacy resnap/OSD path via the LayoutAdaptor
      * (markScreensChanged + applyAssignmentChanges). A no-op when nothing
      * assignment-affecting changed (appearance / exclude / lock edits, etc.).
@@ -611,7 +619,7 @@ private:
      * @brief Lightweight handler for regions-only VS config changes.
      *
      * Fires on swap/rotate/boundary-resize where the VS ID set is unchanged.
-     * Skips migrate/prune/updateAutotileScreens (all no-ops for regions-only)
+     * Skips migrate/prune/updateEngineScreens (all no-ops for regions-only)
      * and only recalculates zone geometries and triggers a snap-mode resnap
      * tagged with the vs_reconfigure action so the kwin-effect does not fire
      * snap-assist.
@@ -872,6 +880,11 @@ private:
     // borrows the store, so stop() calls detach() before the store unique_ptr
     // is destroyed.
     RuleAdaptor* m_ruleAdaptor = nullptr;
+    /// Scrolling-engine wire surface (org.plasmazones.Scrolling) — the
+    /// scroll-specific screen set; lifecycle traffic rides the shared
+    /// tiling adaptor. Qt-parented; stop() clears its engine pointer
+    /// before the engine unique_ptr resets.
+    class ScrollingAdaptor* m_scrollingAdaptor = nullptr;
     // Compositor bridge adaptor (KWin effect ↔ daemon protocol endpoint).
     // Parented to `this`; holds only plain state, so it needs no detach().
     CompositorBridgeAdaptor* m_compositorBridge = nullptr;
@@ -893,6 +906,7 @@ private:
     // Window engines (held as base class; concrete types known only in daemon.cpp/enginefactory.cpp)
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_snapEngine;
+    std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_scrollEngine;
     /// Single source of truth for "which engine owns screen X". Used by
     /// WindowTrackingAdaptor and the daemon's navigation handlers (via
     /// `navigatorForShortcut` in navigation.cpp). Owns no state of its
@@ -919,7 +933,12 @@ private:
     /// handlers don't need to know about its dependencies.
     std::unique_ptr<PhosphorScreens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
-    AutotileAdaptor* m_autotileAdaptor = nullptr;
+    TilingAdaptor* m_tilingAdaptor = nullptr;
+    /// Autotile-engine wire surface (org.plasmazones.Autotile) — algorithm
+    /// selection, master ops, and autotile config; lifecycle traffic rides
+    /// the shared tiling adaptor. Qt-parented; stop() clears its engine
+    /// pointer before the engine unique_ptr resets.
+    class AutotileAdaptor* m_autotileAdaptor = nullptr;
 
     /// Phase 6: animation shader effect discovery. Scans
     /// `plasmazones/animations` from XDG data dirs and monitors for
@@ -1001,17 +1020,17 @@ private:
      */
     void syncAutotileBatchFloatState(const QStringList& windowIds, const QString& screenId);
 
-    /** @brief Prune m_lastAutotileOrders for stale desktops */
+    /** @brief Prune m_lastEngineOrders for stale desktops */
     void pruneContextMapsForDesktop(int maxDesktop);
     /** @brief Prune context maps for removed activities */
     void pruneContextMapsForActivities(const QSet<QString>& validActivities);
-    /** @brief Prune m_lastAutotileOrders for old virtual screen IDs that no longer exist */
+    /** @brief Prune m_lastEngineOrders for old virtual screen IDs that no longer exist */
     void pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenId);
     /**
      * @brief Drop a closed window from every saved autotile order.
      *
      * Without this, a window that closes while the screen is in manual mode
-     * stays in m_lastAutotileOrders. On the next manual→autotile toggle,
+     * stays in m_lastEngineOrders. On the next manual→autotile toggle,
      * seedAutotileOrderForScreen feeds the stale id back through
      * setInitialWindowOrder; setActiveScreens replays it into the TilingState
      * and recalculateLayout tiles a phantom window. Match by instance id —
@@ -1096,7 +1115,7 @@ private:
     // on re-entry, producing deterministic arrangements across mode toggles.
     // Keyed by TilingStateKey (not plain screen name) so cross-desktop toggles
     // don't overwrite each other's ordering.
-    QHash<TilingStateKey, QStringList> m_lastAutotileOrders;
+    QHash<TilingStateKey, QStringList> m_lastEngineOrders;
 
     // Last-applied active assignment id per effective screen (resolved for that
     // screen's current desktop/activity). Diffed on rulesChanged to find the

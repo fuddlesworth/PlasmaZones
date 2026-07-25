@@ -41,7 +41,7 @@ struct BorderState
  * These functions operate on BorderState and other pure data structures
  * without touching any compositor APIs. Shared by all compositor plugins.
  */
-namespace AutotileStateHelpers {
+namespace TilingStateHelpers {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Border state accessors (pure data queries)
@@ -67,15 +67,15 @@ inline bool isTiledWindow(const BorderState& border, const QString& windowId)
  * Avoids passing 8+ individual references to cleanupClosedWindowState().
  * The caller constructs this from their member variables.
  */
-struct AutotileWindowState
+struct TilingWindowState
 {
     QSet<QString>& notifiedWindows;
     QHash<QString, QString>& notifiedWindowScreens;
     QSet<QString>& minimizeFloatedWindows;
-    QHash<QString, QRect>& autotileTargetZones;
+    QHash<QString, QRect>& tileTargetZones;
     QHash<QString, QRect>& centeredWaylandZones;
     QSet<QString>& monocleMaximizedWindows;
-    QHash<QString, QHash<QString, QRectF>>& preAutotileGeometries;
+    QHash<QString, QHash<QString, QRectF>>& preTileGeometries;
 };
 
 /**
@@ -84,12 +84,12 @@ struct AutotileWindowState
  * Removes the window from all QSet/QHash state maps.
  * Does NOT handle D-Bus calls or compositor-specific cleanup.
  */
-inline void cleanupClosedWindowState(const QString& windowId, BorderState& border, AutotileWindowState& state)
+inline void cleanupClosedWindowState(const QString& windowId, BorderState& border, TilingWindowState& state)
 {
     state.notifiedWindows.remove(windowId);
     state.notifiedWindowScreens.remove(windowId);
     state.minimizeFloatedWindows.remove(windowId);
-    state.autotileTargetZones.remove(windowId);
+    state.tileTargetZones.remove(windowId);
     state.centeredWaylandZones.remove(windowId);
     state.monocleMaximizedWindows.remove(windowId);
     // Closed windows must be removed from every screen bucket — the effect
@@ -107,10 +107,10 @@ inline void cleanupClosedWindowState(const QString& windowId, BorderState& borde
     // cross-screen-stale scenario the tiled sweep above defends against
     // (the window crossed screens before closing) would otherwise leak a
     // geometry entry in the old screen's bucket forever.
-    for (auto it = state.preAutotileGeometries.begin(); it != state.preAutotileGeometries.end();) {
+    for (auto it = state.preTileGeometries.begin(); it != state.preTileGeometries.end();) {
         it->remove(windowId);
         if (it->isEmpty()) {
-            it = state.preAutotileGeometries.erase(it);
+            it = state.preTileGeometries.erase(it);
         } else {
             ++it;
         }
@@ -188,5 +188,5 @@ inline QSet<QString> tiledOnScreen(const BorderState& border, const QString& scr
     return border.tiledWindowsByScreen.value(screenId);
 }
 
-} // namespace AutotileStateHelpers
+} // namespace TilingStateHelpers
 } // namespace PhosphorCompositor

@@ -142,10 +142,13 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     {Field::Zone, QLatin1StringView("zone"), FieldType::String, FieldSource::Window},
     {Field::IsTiled, QLatin1StringView("isTiled"), FieldType::Bool, FieldSource::Window},
     // [34] — Context placement-mode field. String-valued (wire tokens
-    // "snapping" / "tiling") so an `Equals` leaf compares the
+    // "snapping" / "tiling" / "scrolling") so an `Equals` leaf compares the
     // token directly, and Context-sourced so it is present during windowless
     // context resolution — which is what lets a per-mode rule participate in
     // the gap cascade and pass the context-action compatibility check.
+    // The effect-side WINDOW query re-stamps "scrolling" for tiled windows
+    // on scrolling-engine screens (PlasmaZonesEffect::ruleQuery), so the
+    // token matches on both the context and window resolution paths.
     {Field::Mode, QLatin1StringView("mode"), FieldType::String, FieldSource::Context},
     // [35] — Tiled-window count for the screen + desktop being resolved. Int-
     // valued (Equals / GreaterThan / LessThan) and Context-sourced so it is

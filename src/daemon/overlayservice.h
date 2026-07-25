@@ -371,6 +371,13 @@ public:
     /// Screen the visible cheatsheet is bound to; empty when hidden.
     QString cheatsheetScreenId() const;
 
+    /// Tab indicators for tabbed scrolling columns on @p screenId (per
+    /// screen, NOT a singleton). @p strips is a list of maps with x / y /
+    /// width (absolute px — converted to shell coordinates here),
+    /// activeIndex, and tabs (list of {title, active}); an empty list hides
+    /// the screen's indicators. Display-only and click-through.
+    void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
+
     /// Forwarders to the active picker slot's QML moveSelection /
     /// confirmSelection functions. Used by global-accel callbacks
     /// (registered by WindowDragAdaptor on picker show) since the

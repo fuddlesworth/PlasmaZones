@@ -36,8 +36,8 @@ PickerCategory actionCategory(const QString& type)
     }
     const QString& cat = desc->category;
     // Two groups, alphabetised within each: the context-domain categories
-    // (resolved per screen/desktop/activity/mode) come first (orders 0-4), then
-    // the window-domain categories (orders 5-7). Keep these orders in lockstep
+    // (resolved per screen/desktop/activity/mode) come first (orders 0-5), then
+    // the window-domain categories (orders 6-8). Keep these orders in lockstep
     // with each category's action domains in RuleAction.cpp.
     if (cat == QLatin1String("gap")) {
         return {PhosphorI18n::tr("Gaps"), 0};
@@ -59,20 +59,25 @@ PickerCategory actionCategory(const QString& type)
             || type == ActionType::SetDragBehavior) {
             return {PhosphorI18n::tr("Tiling") + QStringLiteral("/") + PhosphorI18n::tr("Behavior"), 3};
         }
+        if (type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::SetCenterFocusedColumn
+            || type == ActionType::SetScrollDefaultColumnDisplay || type == ActionType::OpenColumnWidth
+            || type == ActionType::OpenTabbed || type == ActionType::OpenColumnPlacement) {
+            return {PhosphorI18n::tr("Scrolling"), 4};
+        }
         // Cross-cutting engine controls: SetEngineMode / DisableEngine / LockContext.
         return {PhosphorI18n::tr("Engine"), 1};
     }
     if (cat == QLatin1String("overlay")) {
-        return {PhosphorI18n::tr("Overlay"), 4};
+        return {PhosphorI18n::tr("Overlay"), 5};
     }
     if (cat == QLatin1String("animation")) {
-        return {PhosphorI18n::tr("Animation"), 5};
+        return {PhosphorI18n::tr("Animation"), 6};
     }
     if (cat == QLatin1String("appearance") || cat == QLatin1String("borderAppearance")) {
-        return {PhosphorI18n::tr("Appearance"), 6};
+        return {PhosphorI18n::tr("Appearance"), 7};
     }
     if (cat == QLatin1String("windowManagement")) {
-        return {PhosphorI18n::tr("Window"), 7};
+        return {PhosphorI18n::tr("Window"), 8};
     }
     return {PhosphorI18n::tr("Other"), 99};
 }
@@ -116,6 +121,25 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::SetDragBehavior && key == ActionParam::Value) {
         return PhosphorI18n::tr("Drag behavior");
+    }
+    // Scrolling-engine params (all single-value, keyed ActionParam::Value). The
+    // two width params share a label because the action label already says which
+    // one is the context default and which is the per-window open override.
+    if ((type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::OpenColumnWidth)
+        && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Column width (%)");
+    }
+    if (type == ActionType::SetCenterFocusedColumn && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Centering");
+    }
+    if (type == ActionType::SetScrollDefaultColumnDisplay && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Display");
+    }
+    if (type == ActionType::OpenTabbed && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Open in a tabbed column (off = a normal column)");
+    }
+    if (type == ActionType::OpenColumnPlacement && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Placement");
     }
     if (type == ActionType::DisableEngine && key == ActionParam::Mode) {
         return PhosphorI18n::tr("Engine to disable");
@@ -382,6 +406,24 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetAlgorithmParam) {
         return PhosphorI18n::tr("Set algorithm parameter");
     }
+    if (type == ActionType::SetScrollDefaultColumnWidth) {
+        return PhosphorI18n::tr("Set default column width");
+    }
+    if (type == ActionType::SetCenterFocusedColumn) {
+        return PhosphorI18n::tr("Set focused column centering");
+    }
+    if (type == ActionType::SetScrollDefaultColumnDisplay) {
+        return PhosphorI18n::tr("Set default column display");
+    }
+    if (type == ActionType::OpenColumnWidth) {
+        return PhosphorI18n::tr("Open at column width");
+    }
+    if (type == ActionType::OpenTabbed) {
+        return PhosphorI18n::tr("Open in a tabbed column");
+    }
+    if (type == ActionType::OpenColumnPlacement) {
+        return PhosphorI18n::tr("Open into column");
+    }
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");
     }
@@ -556,6 +598,11 @@ QString boolActionStateLabel(const QString& type, bool on)
     }
     if (type == ActionType::SetOverlayShowZoneNumbers) {
         return on ? PhosphorI18n::tr("Show zone numbers") : PhosphorI18n::tr("Hide zone numbers");
+    }
+    if (type == ActionType::OpenTabbed) {
+        // Off is not inert: it forces a normal column even where the context
+        // default is tabbed, so the off phrase names that outcome.
+        return on ? PhosphorI18n::tr("Open in a tabbed column") : PhosphorI18n::tr("Open in a normal column");
     }
     return QString();
 }

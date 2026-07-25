@@ -166,6 +166,25 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                      {QStringLiteral("float"), PhosphorI18n::tr("Float excess")},
                      {QStringLiteral("unlimited"), PhosphorI18n::tr("Unlimited")},
                  });
+
+        // ── Scrolling ──
+        t.insert(pairKey(CD::tilingScrollingGroup(), CD::centerFocusedColumnKey()),
+                 {
+                     {QStringLiteral("never"), PhosphorI18n::tr("Never")},
+                     {QStringLiteral("always"), PhosphorI18n::tr("Always")},
+                     {QStringLiteral("onOverflow"), PhosphorI18n::tr("On overflow")},
+                 });
+        t.insert(pairKey(CD::tilingScrollingGroup(), CD::defaultColumnWidthKindKey()),
+                 {
+                     {QStringLiteral("proportion"), PhosphorI18n::tr("Proportion of the screen")},
+                     {QStringLiteral("fixed"), PhosphorI18n::tr("Fixed width")},
+                     {QStringLiteral("clientDecides"), PhosphorI18n::tr("Window decides")},
+                 });
+        t.insert(pairKey(CD::tilingScrollingGroup(), CD::defaultColumnDisplayKey()),
+                 {
+                     {QStringLiteral("normal"), PhosphorI18n::tr("Normal")},
+                     {QStringLiteral("tabbed"), PhosphorI18n::tr("Tabbed")},
+                 });
         return t;
     }();
     return table;

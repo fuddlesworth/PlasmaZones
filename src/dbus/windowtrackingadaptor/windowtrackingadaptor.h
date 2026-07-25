@@ -174,9 +174,13 @@ public:
      *
      * @param snapEngine PlacementEngineBase for snap mode (not owned, must outlive adaptor)
      * @param autotileEngine PlacementEngineBase for autotile mode (not owned, must outlive adaptor)
+     * @param scrollEngine PlacementEngineBase for scrolling mode (not owned;
+     *        defaulted to null so the many two-engine test fixtures keep
+     *        exercising the historical pair unchanged)
      */
     void setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
-                    PhosphorEngine::PlacementEngineBase* autotileEngine);
+                    PhosphorEngine::PlacementEngineBase* autotileEngine,
+                    PhosphorEngine::PlacementEngineBase* scrollEngine = nullptr);
 
     /**
      * @brief Set the frozen-snapshot resolver used by saveload's disable
@@ -302,7 +306,7 @@ public Q_SLOTS:
      * No in-tree caller: the effect's unfloat flow moved to
      * SnapAdaptor::calculateUnfloatRestore. Kept as external contract
      * surface (scripting/automation query into the pre-float state),
-     * same policy as AutotileAdaptor::retileAllScreens.
+     * same policy as TilingAdaptor::retileAllScreens.
      */
     bool getPreFloatZone(const QString& windowId, QString& zoneId);
 
@@ -335,7 +339,7 @@ public Q_SLOTS:
      *
      * No in-tree caller (the effect restores via getValidatedPreTileGeometry
      * without a pre-check) — kept as external contract surface, same policy
-     * as AutotileAdaptor::retileAllScreens.
+     * as TilingAdaptor::retileAllScreens.
      */
     bool hasPreTileGeometry(const QString& windowId);
 
@@ -480,7 +484,7 @@ public Q_SLOTS:
      *
      * No in-tree caller (snap-to-last-zone moved to SnapAdaptor) — kept as
      * external contract surface, same policy as
-     * AutotileAdaptor::retileAllScreens.
+     * TilingAdaptor::retileAllScreens.
      */
     QString getLastUsedZoneId();
 
@@ -700,6 +704,13 @@ public:
     /// params are free-form, so the verdict is the presence of the filled slot.
     bool shouldFloatByRule(const QString& windowId);
 
+    /// Per-window scrolling open-behaviour rule slots (openColumnWidth /
+    /// openTabbed / openColumnPlacement), returned as a loose map so the
+    /// header stays free of scroll-engine types. Keys (present only when the
+    /// slot matched): "widthFraction" (double), "tabbed" (bool), "consume"
+    /// (bool). Same resolveCached contract as shouldFloatByRule.
+    QVariantMap scrollOpenRuleParams(const QString& windowId);
+
     /// Resolve the open-placement directive for a window from its matched window
     /// rules: the 1-based `SnapToZone` ordinals to snap into (empty when no
     /// SnapToZone rule matches; multiple ordinals request a zone span) plus the
@@ -726,7 +737,7 @@ public:
     /// tiling state. Returns an empty string when there is no autotile redirect (no
     /// rule, snap/disabled target, or same screen) — the caller then uses the spawn
     /// screen. Snap-mode targets are handled by the snap placement directive, not here.
-    QString applyOpenRoutingForAutotile(const QString& windowId, const QString& screenId);
+    QString applyOpenRoutingForTiling(const QString& windowId, const QString& screenId);
 
     /// Engine-neutral RouteToScreen for a BARE route (no SnapToZone): if a matched
     /// rule pins @p windowId to a different monitor and the rule carries no
@@ -741,7 +752,7 @@ public:
     /// over a remembered float position. No-ops when the target is unset, the spawn
     /// screen, or not currently connected, or when the window has pushed no geometry
     /// yet. A target in autotile mode is moved (not tiled) — cross-engine tiling
-    /// insertion stays with the autotile spawn path (applyOpenRoutingForAutotile).
+    /// insertion stays with the autotile spawn path (applyOpenRoutingForTiling).
     void applyOpenScreenRouting(const QString& windowId, const QString& screenId);
 
     /// Shared by the two open-routing entry points: if @p resolved carries a
@@ -1171,6 +1182,7 @@ private:
     // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     QPointer<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
+    QPointer<PhosphorEngine::PlacementEngineBase> m_scrollEngine;
     QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
     QPointer<PhosphorTileEngine::AutotileEngine> m_cachedAutotileEngine;
 

@@ -66,7 +66,7 @@ void Daemon::showOverlay()
         }
     }
     // Per-screen autotile exclusion is handled by OverlayService::initializeOverlay()
-    // via m_excludedScreens (set in updateAutotileScreens)
+    // via m_excludedScreens (set in updateEngineScreens)
     m_overlayService->show();
 }
 
@@ -619,7 +619,7 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                 const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
                 // Bare autotile (mode set, no concrete algorithm) draws its
                 // algorithm from the suppressed global default, so it won't tile
-                // (see updateAutotileScreens) — show "not assigned" rather than
+                // (see updateEngineScreens) — show "not assigned" rather than
                 // announcing the default algorithm. A concrete assigned algorithm
                 // always shows.
                 if (algoId.isEmpty()

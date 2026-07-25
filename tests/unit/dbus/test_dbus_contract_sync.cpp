@@ -11,8 +11,8 @@
  * PR-608 audit caught exactly the drift class that invites: a capability
  * documented against a deleted method, internal helpers exposed as bus slots,
  * and renamed args. This test pins, for every linkable handwritten
- * (XML, adaptor) pair — the daemon's twelve src/dbus interfaces plus
- * phosphor-screens' org.plasmazones.Screen (thirteen in total):
+ * (XML, adaptor) pair — the daemon's thirteen src/dbus interfaces plus
+ * phosphor-screens' org.plasmazones.Screen (fourteen in total):
  *
  *  1. Every XML method exists as a bus-exposed metaobject method with
  *     matching in/out argument types, names, and return mapping.
@@ -54,6 +54,8 @@
 #include <QXmlStreamReader>
 
 #include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
+#include "dbus/scrollingadaptor/scrollingadaptor.h"
 #include "dbus/compositorbridgeadaptor.h"
 #include "dbus/controladaptor.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
@@ -566,6 +568,11 @@ private Q_SLOTS:
                        {QStringLiteral("windowClosedNotification")});
     }
 
+    void testTilingContract()
+    {
+        verifyContract(TilingAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Tiling"));
+    }
+
     void testAutotileContract()
     {
         verifyContract(AutotileAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Autotile"));
@@ -574,6 +581,11 @@ private Q_SLOTS:
     void testSnapContract()
     {
         verifyContract(SnapAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Snap"));
+    }
+
+    void testScrollingContract()
+    {
+        verifyContract(ScrollingAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Scrolling"));
     }
 
     void testControlContract()
@@ -630,15 +642,23 @@ private Q_SLOTS:
     {
         // Completeness tripwire: every XML under dbus/ must be either tested
         // above or on the documented out-of-scope list (the app-internal
-        // launch adaptors — see the header comment). A 16th XML added later
+        // launch adaptors — see the header comment). A 17th XML added later
         // must not go silently unchecked.
         static const QSet<QString> covered = {
-            QStringLiteral("org.plasmazones.Autotile.xml"),      QStringLiteral("org.plasmazones.CompositorBridge.xml"),
-            QStringLiteral("org.plasmazones.Control.xml"),       QStringLiteral("org.plasmazones.LayoutRegistry.xml"),
-            QStringLiteral("org.plasmazones.Overlay.xml"),       QStringLiteral("org.plasmazones.Screen.xml"),
-            QStringLiteral("org.plasmazones.Settings.xml"),      QStringLiteral("org.plasmazones.Shader.xml"),
-            QStringLiteral("org.plasmazones.Snap.xml"),          QStringLiteral("org.plasmazones.WindowDrag.xml"),
-            QStringLiteral("org.plasmazones.Rules.xml"),         QStringLiteral("org.plasmazones.WindowTracking.xml"),
+            QStringLiteral("org.plasmazones.Autotile.xml"),
+            QStringLiteral("org.plasmazones.Tiling.xml"),
+            QStringLiteral("org.plasmazones.CompositorBridge.xml"),
+            QStringLiteral("org.plasmazones.Control.xml"),
+            QStringLiteral("org.plasmazones.LayoutRegistry.xml"),
+            QStringLiteral("org.plasmazones.Overlay.xml"),
+            QStringLiteral("org.plasmazones.Screen.xml"),
+            QStringLiteral("org.plasmazones.Settings.xml"),
+            QStringLiteral("org.plasmazones.Shader.xml"),
+            QStringLiteral("org.plasmazones.Scrolling.xml"),
+            QStringLiteral("org.plasmazones.Snap.xml"),
+            QStringLiteral("org.plasmazones.WindowDrag.xml"),
+            QStringLiteral("org.plasmazones.Rules.xml"),
+            QStringLiteral("org.plasmazones.WindowTracking.xml"),
             QStringLiteral("org.plasmazones.ZoneDetection.xml"),
         };
         static const QSet<QString> documentedOutOfScope = {

@@ -27,7 +27,7 @@
 
 #include <climits>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "compositor/compositorclock.h"
 #include "compositor/windowanimator.h"
 
@@ -363,7 +363,7 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                         // so slotWindowFrameGeometryChanged does not compare against
                         // the stale pre-config-change screen ID.
                         const QString windowId = self->getWindowId(window);
-                        self->m_autotileHandler->updateNotifiedScreen(windowId, newScreenId);
+                        self->m_tilingHandler->updateNotifiedScreen(windowId, newScreenId);
                     }
                 }
             }

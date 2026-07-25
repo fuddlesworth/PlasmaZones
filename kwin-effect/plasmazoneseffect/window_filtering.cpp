@@ -17,7 +17,7 @@
 
 #include <optional>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
 #include "window_query.h"
 
@@ -120,9 +120,16 @@ void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
 PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);
-    PhosphorRules::WindowQuery query =
-        ruleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
-                     m_autotileHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    const QString screenId = getWindowScreenId(w);
+    PhosphorRules::WindowQuery query = ruleQueryFor(w, screenId, isWindowFloating(windowId), isWindowSnapped(windowId),
+                                                    m_tilingHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    // Scroll-managed windows ride the same tile-request pipeline as autotile,
+    // so ruleQueryFor derives "tiling" from the tiled bit; re-stamp from the
+    // per-screen engine discriminator so a `Mode Equals "scrolling"` window
+    // rule matches strip-managed windows.
+    if (query.mode == QLatin1String("tiling") && m_tilingHandler->isScrollingScreen(screenId)) {
+        query.mode = QStringLiteral("scrolling");
+    }
     applyOwnLayerFlags(query, windowId);
     return query;
 }

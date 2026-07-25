@@ -557,6 +557,142 @@ void ActionRegistry::registerBuiltinsAppearance()
         .displayOrder = 16,
         .tags = {QString(Tag::LayoutEngine)},
     });
+
+    // ── per-context scrolling parameter slots (domain Context) ──
+    // Resolved daemon-side by LayoutRegistry::resolveContextScrollingParams and
+    // layered onto the scrolling engine's per-screen parameters, exactly as the
+    // autotile family above is layered onto the tiling override map.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollDefaultColumnWidth),
+        .slotFor = constantSlot(ActionSlot::ScrollDefaultColumnWidth),
+        .validate =
+            [](const QJsonObject& p) {
+                // Wire is the [kMinColumnWidthRatio, kMaxColumnWidthRatio] fraction of
+                // the work area; edited as a percent (mirrors SetSplitRatio).
+                const QJsonValue v = p.value(ActionParam::Value);
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                return d >= kMinColumnWidthRatio && d <= kMaxColumnWidthRatio;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinColumnWidthPercent,
+                     .max = kMaxColumnWidthPercent,
+                     .scale = 0.01,
+                     .defaultDisplay = 50.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 17,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetCenterFocusedColumn),
+        .slotFor = constantSlot(ActionSlot::CenterFocusedColumn),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == CenterFocusedColumnToken::Never || v == CenterFocusedColumnToken::Always
+                    || v == CenterFocusedColumnToken::OnOverflow;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(CenterFocusedColumnToken::Never),
+                                        QString(CenterFocusedColumnToken::Always),
+                                        QString(CenterFocusedColumnToken::OnOverflow)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 18,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollDefaultColumnDisplay),
+        .slotFor = constantSlot(ActionSlot::ScrollDefaultColumnDisplay),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == ColumnDisplayToken::Normal || v == ColumnDisplayToken::Tabbed;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(ColumnDisplayToken::Normal), QString(ColumnDisplayToken::Tabbed)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 19,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+
+    // ── per-window scrolling open overrides (domain Window) ──
+    // Read on the open path for the matched window and layered over the context /
+    // config defaults above, so one application opens wide, tabbed, or into the
+    // focused column without changing the engine's defaults.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenColumnWidth),
+        .slotFor = constantSlot(ActionSlot::OpenColumnWidth),
+        .validate =
+            [](const QJsonObject& p) {
+                // Same wire shape as SetScrollDefaultColumnWidth — a work-area fraction.
+                const QJsonValue v = p.value(ActionParam::Value);
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                return d >= kMinColumnWidthRatio && d <= kMaxColumnWidthRatio;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinColumnWidthPercent,
+                     .max = kMaxColumnWidthPercent,
+                     .scale = 0.01,
+                     .defaultDisplay = 50.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 20,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenTabbed),
+        .slotFor = constantSlot(ActionSlot::OpenTabbed),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 21,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenColumnPlacement),
+        .slotFor = constantSlot(ActionSlot::OpenColumnPlacement),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == ColumnPlacementToken::NewColumn || v == ColumnPlacementToken::Consume;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{
+            .key = QString(ActionParam::Value),
+            .kind = QStringLiteral("enum"),
+            .enumWireValues = {QString(ColumnPlacementToken::NewColumn), QString(ColumnPlacementToken::Consume)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 22,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
 }
 
 } // namespace PhosphorRules

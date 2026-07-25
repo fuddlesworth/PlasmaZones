@@ -70,7 +70,7 @@ void Daemon::connectLayoutSignals()
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Derive initial per-screen autotile state from assignments
-    updateAutotileScreens();
+    updateEngineScreens();
 
     // Set initial layout filter
     updateLayoutFilter();
@@ -140,7 +140,7 @@ void Daemon::connectLayoutSignals()
     m_restartScopedConnections << connect(
         m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
         [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
-            updateAutotileScreens();
+            updateEngineScreens();
             updateLayoutFilter();
 
             // Sync unified controller cycling index when assignment affects current desktop.

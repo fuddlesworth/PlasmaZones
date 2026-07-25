@@ -504,6 +504,34 @@ inline constexpr QLatin1StringView SetDragBehavior{"setDragBehavior"};
 /// uniforms. Applied only when the target algorithm is the screen's effective
 /// algorithm; layered over the global per-algorithm config. Context domain.
 inline constexpr QLatin1StringView SetAlgorithmParam{"setAlgorithmParam"};
+
+// ── Per-context scrolling parameter overrides (domain Context) ──
+// Override the global (or per-screen config) scrolling-engine parameters for the
+// matched screen / desktop / activity, the same way the autotile family above
+// overrides the tiling params. Each carries a single `value`.
+/// Width a newly-opened column takes, as a fraction of the work area. Carries a
+/// numeric `ActionParam::Value` (the stored wire value is the fraction; the editor
+/// shows a percent).
+inline constexpr QLatin1StringView SetScrollDefaultColumnWidth{"setScrollDefaultColumnWidth"};
+/// When the scroll viewport re-centres on the focused column. Closed enum token
+/// (`ActionParam::Value`, CenterFocusedColumnToken).
+inline constexpr QLatin1StringView SetCenterFocusedColumn{"setCenterFocusedColumn"};
+/// How a newly-opened column displays its windows: side by side, or stacked as
+/// tabs. Closed enum token (`ActionParam::Value`, ColumnDisplayToken).
+inline constexpr QLatin1StringView SetScrollDefaultColumnDisplay{"setScrollDefaultColumnDisplay"};
+
+// ── Per-window scrolling open overrides (domain Window) ──
+// Read on the open path for the matched window, layered over the context /
+// config defaults above, so one application can open wide or tabbed without
+// changing the engine's defaults.
+/// Width the opening window's column takes, as a fraction of the work area.
+/// Numeric `ActionParam::Value` (stored fraction, edited as a percent).
+inline constexpr QLatin1StringView OpenColumnWidth{"openColumnWidth"};
+/// Whether the opening window's column starts tabbed. Boolean `ActionParam::Value`.
+inline constexpr QLatin1StringView OpenTabbed{"openTabbed"};
+/// Whether the opening window starts its own column or is consumed into the
+/// focused one. Closed enum token (`ActionParam::Value`, ColumnPlacementToken).
+inline constexpr QLatin1StringView OpenColumnPlacement{"openColumnPlacement"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -610,6 +638,30 @@ inline constexpr QLatin1StringView Float{"float"}; ///< AutotileDragBehavior::Fl
 inline constexpr QLatin1StringView Reorder{"reorder"}; ///< Reorder (1)
 } // namespace DragBehaviorToken
 
+/// Wire tokens for SetCenterFocusedColumn's `value` param — the closed vocabulary
+/// the descriptor validator, the daemon consumer
+/// (LayoutRegistry::resolveContextScrollingParams maps token → int), and the
+/// settings label layers all read from this single source.
+namespace CenterFocusedColumnToken {
+inline constexpr QLatin1StringView Never{"never"}; ///< never re-centre (0)
+inline constexpr QLatin1StringView Always{"always"}; ///< always re-centre (1)
+inline constexpr QLatin1StringView OnOverflow{"onOverflow"}; ///< re-centre only when the row overflows (2)
+} // namespace CenterFocusedColumnToken
+
+/// Wire tokens for SetScrollDefaultColumnDisplay's `value` param — how a column
+/// lays its windows out. Ints match the scrolling engine's column display mode.
+namespace ColumnDisplayToken {
+inline constexpr QLatin1StringView Normal{"normal"}; ///< windows share the column vertically (0)
+inline constexpr QLatin1StringView Tabbed{"tabbed"}; ///< windows stack as tabs (1)
+} // namespace ColumnDisplayToken
+
+/// Wire tokens for OpenColumnPlacement's `value` param — whether an opening
+/// window starts its own column or joins the focused one.
+namespace ColumnPlacementToken {
+inline constexpr QLatin1StringView NewColumn{"newColumn"}; ///< open in a column of its own
+inline constexpr QLatin1StringView Consume{"consume"}; ///< consume into the focused column
+} // namespace ColumnPlacementToken
+
 /// Wire tokens for SetWindowLayer's `value` param — the closed vocabulary the
 /// descriptor validator, the KWin-effect consumer (resolveWindowLayer), and the
 /// settings label layers all read from this single source. The tokens map onto
@@ -703,6 +755,20 @@ inline constexpr QLatin1StringView InsertPosition{"insert-position"};
 inline constexpr QLatin1StringView OverflowBehavior{"overflow-behavior"};
 inline constexpr QLatin1StringView DragBehavior{"drag-behavior"};
 inline constexpr QLatin1StringView AlgorithmParams{"algorithm-params"};
+// Per-context scrolling parameter slots (one per param). Filled by
+// SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
+// SetScrollDefaultColumnDisplay, read by
+// LayoutRegistry::resolveContextScrollingParams and layered onto the scrolling
+// engine's per-screen config the way the autotile params are.
+inline constexpr QLatin1StringView ScrollDefaultColumnWidth{"scroll-default-column-width"};
+inline constexpr QLatin1StringView CenterFocusedColumn{"center-focused-column"};
+inline constexpr QLatin1StringView ScrollDefaultColumnDisplay{"scroll-default-column-display"};
+// Per-window scrolling open slots (one per property so independent rules
+// cascade per-property). Filled by OpenColumnWidth / OpenTabbed /
+// OpenColumnPlacement, read on the open path by the scrolling engine.
+inline constexpr QLatin1StringView OpenColumnWidth{"open-column-width"};
+inline constexpr QLatin1StringView OpenTabbed{"open-tabbed"};
+inline constexpr QLatin1StringView OpenColumnPlacement{"open-column-placement"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader

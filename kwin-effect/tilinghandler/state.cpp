@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "autotilehandler.h"
+#include "tilinghandler.h"
 #include "handlers/navigationhandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 
@@ -26,7 +26,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 // Monocle helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileHandler::unmaximizeMonocleWindow(const QString& windowId)
+void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
 {
     if (!m_monocleMaximizedWindows.remove(windowId)) {
         return;
@@ -44,7 +44,7 @@ void AutotileHandler::unmaximizeMonocleWindow(const QString& windowId)
     --m_suppressMaximizeChanged;
 }
 
-void AutotileHandler::restoreAllMonocleMaximized()
+void TilingHandler::restoreAllMonocleMaximized()
 {
     if (m_monocleMaximizedWindows.isEmpty()) {
         return;
@@ -63,7 +63,7 @@ void AutotileHandler::restoreAllMonocleMaximized()
     m_monocleMaximizedWindows.clear();
 }
 
-void AutotileHandler::clearTiledTracking()
+void TilingHandler::clearTiledTracking()
 {
     // Bookkeeping only. Physical title-bar restores are the
     // DecorationManager's job — teardown callers pair this with
@@ -71,14 +71,13 @@ void AutotileHandler::clearTiledTracking()
     m_border.tiledWindowsByScreen.clear();
 }
 
-void AutotileHandler::setFocusFollowsMouse(bool enabled)
+void TilingHandler::setFocusFollowsMouse(bool enabled)
 {
     m_focusFollowsMouse = enabled;
 }
 
-void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId,
-                                                       KWin::EffectWindow* w, const QRectF& frameIn,
-                                                       bool knownFreeFloating)
+void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const QString& screenId,
+                                                 KWin::EffectWindow* w, const QRectF& frameIn, bool knownFreeFloating)
 {
     if (windowId.isEmpty() || screenId.isEmpty()) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry save: empty id" << windowId << screenId;
@@ -104,8 +103,8 @@ void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     // empty per-screen bucket (operator[] would); the bucket is created only at the
     // genuine insertion point (below).
     {
-        const auto screenIt = m_preAutotileGeometries.constFind(screenId);
-        if (screenIt != m_preAutotileGeometries.constEnd() && screenIt->contains(windowId)) {
+        const auto screenIt = m_preTileGeometries.constFind(screenId);
+        if (screenIt != m_preTileGeometries.constEnd() && screenIt->contains(windowId)) {
             return;
         }
     }
@@ -136,7 +135,7 @@ void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
         return;
     }
-    m_preAutotileGeometries[screenId][windowId] = frame;
+    m_preTileGeometries[screenId][windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
     if (m_effect->m_daemonGate.serviceRegistered) {
         // overwrite=knownFreeFloating: only the window-opened spawn paths
@@ -162,7 +161,7 @@ void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     }
 }
 
-void AutotileHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QString& windowId)
+void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QString& windowId)
 {
     QPointer<KWin::EffectWindow> safeW = w;
     auto* watcher = new QDBusPendingCallWatcher(
@@ -186,7 +185,7 @@ void AutotileHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const Q
         // autotile, a snap commit, a float toggle, or the user actively
         // moving/resizing it.
         if (!safeW->isOnCurrentDesktop() || m_notifiedWindows.contains(windowId)
-            || m_autotileScreens.contains(m_effect->getWindowScreenId(safeW))
+            || m_managedScreens.contains(m_effect->getWindowScreenId(safeW))
             || m_effect->isWindowMarkedSnapped(windowId) || m_effect->isWindowFloating(windowId) || safeW->isUserMove()
             || safeW->isUserResize()) {
             return;
@@ -213,9 +212,9 @@ void AutotileHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const Q
     });
 }
 
-QRectF AutotileHandler::findPreAutotileGeometry(const QString& windowId, QString* bucketScreenId) const
+QRectF TilingHandler::findPreTileGeometry(const QString& windowId, QString* bucketScreenId) const
 {
-    for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd(); ++sgIt) {
+    for (auto sgIt = m_preTileGeometries.constBegin(); sgIt != m_preTileGeometries.constEnd(); ++sgIt) {
         const QRectF rect = sgIt->value(windowId);
         if (rect.isValid()) {
             if (bucketScreenId) {
@@ -230,12 +229,20 @@ QRectF AutotileHandler::findPreAutotileGeometry(const QString& windowId, QString
     return QRectF();
 }
 
-bool AutotileHandler::isAutotileScreen(const QString& screenId) const
+bool TilingHandler::isManagedScreen(const QString& screenId) const
 {
-    return m_autotileScreens.contains(screenId);
+    return m_managedScreens.contains(screenId);
 }
 
-void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId)
+void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds)
+{
+    // Pure mode discriminator — no per-screen transition handling here; the
+    // union set arriving via slotScreensChanged owns lifecycle transitions.
+    m_scrollingScreens = QSet<QString>(screenIds.cbegin(), screenIds.cend());
+    ++m_scrollingScreensGeneration;
+}
+
+void TilingHandler::savePreTileForDesktopMove(const QString& windowId)
 {
     // Preserve the window's pre-autotile geometry before onWindowClosed clears it.
     // When the window is re-added on the target desktop, this geometry is restored
@@ -245,15 +252,15 @@ void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId)
     // path can detect a cross-screen desktop move and decline a saved rect
     // from a different monitor's coordinate space.
     QString bucketScreenId;
-    const QRectF rect = findPreAutotileGeometry(windowId, &bucketScreenId);
+    const QRectF rect = findPreTileGeometry(windowId, &bucketScreenId);
     if (rect.isValid()) {
-        m_savedPreAutotileForDesktopMove[windowId] = {bucketScreenId, rect};
+        m_savedPreTileForDesktopMove[windowId] = {bucketScreenId, rect};
         qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "bucket"
                           << bucketScreenId << "rect=" << rect;
     }
 }
 
-bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
+bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w) const
 {
     // Close-grabbed dying windows survive in the stacking order for the
     // close-animation duration; announcing one as opened would insert an
@@ -266,20 +273,20 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
     // are never eligible for autotile notification. KWin's InternalWindow::minSize()
     // segfaults when the backing QWindow is null. See discussion #511.
     if (w && w->window() && w->window()->isInternal()) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (internal window)" << m_effect->getWindowId(w);
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (internal window)" << m_effect->getWindowId(w);
         return false;
     }
     if (!w || !m_effect->shouldHandleWindow(w)) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (not handleable)"
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (not handleable)"
                           << (w ? m_effect->getWindowId(w) : QStringLiteral("null"));
         return false;
     }
     if (!m_effect->isTileableWindow(w)) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (not tileable)" << m_effect->getWindowId(w);
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (not tileable)" << m_effect->getWindowId(w);
         return false;
     }
     if (w->isMinimized()) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (minimized)" << m_effect->getWindowId(w);
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (minimized)" << m_effect->getWindowId(w);
         return false;
     }
     // A window that is fullscreen at first contact (opened fullscreen, or
@@ -290,12 +297,11 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
     // won't let move. The exit-fullscreen slot re-announces it via
     // notifyWindowAdded once it returns to a normal frame.
     if (w->isFullScreen()) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (fullscreen)" << m_effect->getWindowId(w);
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (fullscreen)" << m_effect->getWindowId(w);
         return false;
     }
     if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (wrong desktop/activity)"
-                          << m_effect->getWindowId(w);
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (wrong desktop/activity)" << m_effect->getWindowId(w);
         return false;
     }
     // Reject windows smaller than the user-configured minimum size.
@@ -304,18 +310,18 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
     const QRectF frame = w->frameGeometry();
     if ((m_effect->m_cachedMinWindowWidth > 0 && frame.width() < m_effect->m_cachedMinWindowWidth)
         || (m_effect->m_cachedMinWindowHeight > 0 && frame.height() < m_effect->m_cachedMinWindowHeight)) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (too small)" << m_effect->getWindowId(w)
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (too small)" << m_effect->getWindowId(w)
                           << "size=" << frame.size() << "threshold=" << m_effect->m_cachedMinWindowWidth << "x"
                           << m_effect->m_cachedMinWindowHeight;
         return false;
     }
-    qCDebug(lcEffect) << "isEligibleForAutotileNotify: accepted" << m_effect->getWindowId(w) << "size=" << frame.size()
+    qCDebug(lcEffect) << "isEligibleForTilingNotify: accepted" << m_effect->getWindowId(w) << "size=" << frame.size()
                       << "class=" << w->windowClass() << "skipSwitcher=" << w->isSkipSwitcher()
                       << "keepAbove=" << w->keepAbove() << "transient=" << (w->transientFor() != nullptr);
     return true;
 }
 
-void AutotileHandler::applyFloatCleanup(const QString& windowId)
+void TilingHandler::applyFloatCleanup(const QString& windowId)
 {
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
     // A floating window is no longer tile-managed on any screen — clear tiled
@@ -330,7 +336,7 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
     // old zone rect. slotWindowsTileRequested no longer clears these
     // globally (it can't without wiping sibling-VS state), so the float
     // path has to clean up after itself.
-    m_autotileTargetZones.remove(windowId);
+    m_tileTargetZones.remove(windowId);
     m_centeredWaylandZones.remove(windowId);
     // Shared placement-flip funnel (update-or-remove in the same turn) —
     // the bare removal here left the float paths WITHOUT a bulk
@@ -342,10 +348,10 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
     unmaximizeMonocleWindow(windowId);
 }
 
-void AutotileHandler::markWindowTiled(const QString& screenId, const QString& windowId)
+void TilingHandler::markWindowTiled(const QString& screenId, const QString& windowId)
 {
     const bool wasTiled = isTiledWindow(windowId);
-    AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
+    TilingStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
     // Re-resolve only on the false→true transition: a window already tiled on
     // another screen stays tiled, so re-adding it changes no rule outcome.
     if (!wasTiled) {
@@ -353,17 +359,17 @@ void AutotileHandler::markWindowTiled(const QString& screenId, const QString& wi
     }
 }
 
-void AutotileHandler::clearWindowTiledAllScreens(const QString& windowId)
+void TilingHandler::clearWindowTiledAllScreens(const QString& windowId)
 {
-    if (AutotileStateHelpers::removeFromAllScreens(m_border, windowId)) {
+    if (TilingStateHelpers::removeFromAllScreens(m_border, windowId)) {
         // Was tiled on at least one screen and now is not — IsTiled flipped.
         m_effect->invalidateRuleCacheForStateChange(windowId);
     }
 }
 
-void AutotileHandler::clearWindowTiledOnScreen(const QString& screenId, const QString& windowId)
+void TilingHandler::clearWindowTiledOnScreen(const QString& screenId, const QString& windowId)
 {
-    if (AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, windowId) && !isTiledWindow(windowId)) {
+    if (TilingStateHelpers::removeTiledOnScreen(m_border, screenId, windowId) && !isTiledWindow(windowId)) {
         // Removed from this screen and not tiled on any other — IsTiled flipped.
         m_effect->invalidateRuleCacheForStateChange(windowId);
     }

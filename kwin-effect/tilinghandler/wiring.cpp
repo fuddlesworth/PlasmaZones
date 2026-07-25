@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// D-Bus signal wiring and initial-settings load for AutotileHandler.
-// Part of AutotileHandler, in its own translation unit: this file holds the
+// D-Bus signal wiring and initial-settings load for TilingHandler.
+// Part of TilingHandler, in its own translation unit: this file holds the
 // connect/load bring-up that onDaemonReady drives, while signals.cpp holds the
 // slot bodies.
 
-#include "autotilehandler.h"
+#include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -24,7 +24,7 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
-void AutotileHandler::connectSignals()
+void TilingHandler::connectSignals()
 {
     QDBusConnection bus = QDBusConnection::sessionBus();
 
@@ -33,45 +33,52 @@ void AutotileHandler::connectSignals()
     // twice if called twice with identical args, which would cause each
     // signal to invoke the slot N times after N daemon restarts.
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowsTileRequested"), this,
+                   PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowsTileRequested"), this,
                    SLOT(slotWindowsTileRequested(PhosphorProtocol::TileRequestList)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("focusWindowRequested"), this,
+                   PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("focusWindowRequested"), this,
                    SLOT(slotFocusWindowRequested(QString)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("enabledChanged"), this,
+                   PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("enabledChanged"), this,
                    SLOT(slotEnabledChanged(bool)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("autotileScreensChanged"), this,
+                   PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("managedScreensChanged"), this,
                    SLOT(slotScreensChanged(QStringList, bool)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowFloatingChanged"), this,
+                   PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowFloatingChanged"), this,
                    SLOT(slotWindowFloatingChanged(QString, bool, QString)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
+                   SLOT(slotScrollingScreensChanged(QStringList)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowsTileRequested"), this,
+                PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowsTileRequested"), this,
                 SLOT(slotWindowsTileRequested(PhosphorProtocol::TileRequestList)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("focusWindowRequested"), this,
+                PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("focusWindowRequested"), this,
                 SLOT(slotFocusWindowRequested(QString)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("enabledChanged"), this,
+                PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("enabledChanged"), this,
                 SLOT(slotEnabledChanged(bool)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("autotileScreensChanged"), this,
+                PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("managedScreensChanged"), this,
                 SLOT(slotScreensChanged(QStringList, bool)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowFloatingChanged"), this,
+                PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowFloatingChanged"), this,
                 SLOT(slotWindowFloatingChanged(QString, bool, QString)));
 
-    qCInfo(lcEffect) << "Connected to autotile D-Bus signals";
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
+                SLOT(slotScrollingScreensChanged(QStringList)));
+
+    qCInfo(lcEffect) << "Connected to tiling D-Bus signals";
 }
 
-void AutotileHandler::loadSettings()
+void TilingHandler::loadSettings()
 {
     // Query initial autotile screen set from daemon asynchronously. The
     // foreign org.freedesktop.DBus.Properties interface is correct for D-Bus
@@ -81,7 +88,7 @@ void AutotileHandler::loadSettings()
     QDBusMessage msg =
         QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
-    msg << PhosphorProtocol::Service::Interface::Autotile << QStringLiteral("autotileScreens");
+    msg << PhosphorProtocol::Service::Interface::Tiling << QStringLiteral("managedScreens");
 
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
@@ -89,7 +96,7 @@ void AutotileHandler::loadSettings()
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, generationAtDispatch](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
-                // An autotileScreensChanged signal that landed while this query was
+                // A managedScreensChanged signal that landed while this query was
                 // in flight carried a NEWER set and already ran the full per-screen
                 // transition handling — the raw assignment below would clobber it
                 // with the older snapshot.
@@ -101,8 +108,8 @@ void AutotileHandler::loadSettings()
                 if (reply.isValid()) {
                     QStringList screens = reply.value().variant().toStringList();
                     const QSet<QString> added(screens.begin(), screens.end());
-                    m_autotileScreens = added;
-                    qCInfo(lcEffect) << "Loaded autotile screens:" << m_autotileScreens;
+                    m_managedScreens = added;
+                    qCInfo(lcEffect) << "Loaded managed screens:" << m_managedScreens;
 
                     if (!added.isEmpty()) {
                         const auto windows = KWin::effects->stackingOrder();
@@ -112,6 +119,31 @@ void AutotileHandler::loadSettings()
                     }
                 } else {
                     qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";
+                }
+            });
+
+    // Scrolling screen subset — the Mode-stamp discriminator only, no
+    // lifecycle transitions to run, so the reply handling is a guarded
+    // plain assignment.
+    QDBusMessage scrollMsg =
+        QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+    scrollMsg << PhosphorProtocol::Service::Interface::Scrolling << QStringLiteral("scrollingScreens");
+    QDBusPendingCall scrollCall =
+        QDBusConnection::sessionBus().asyncCall(scrollMsg, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    auto* scrollWatcher = new QDBusPendingCallWatcher(scrollCall, this);
+    const quint64 scrollGenerationAtDispatch = m_scrollingScreensGeneration;
+    connect(scrollWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, scrollGenerationAtDispatch](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                if (m_scrollingScreensGeneration != scrollGenerationAtDispatch) {
+                    return; // a live signal carried a newer set
+                }
+                QDBusPendingReply<QDBusVariant> reply = *w;
+                if (reply.isValid()) {
+                    const QStringList screens = reply.value().variant().toStringList();
+                    m_scrollingScreens = QSet<QString>(screens.cbegin(), screens.cend());
+                    qCInfo(lcEffect) << "Loaded scrolling screens:" << m_scrollingScreens;
                 }
             });
 }

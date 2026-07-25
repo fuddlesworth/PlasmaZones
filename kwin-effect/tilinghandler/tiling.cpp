@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Tiling request handling and window centering for AutotileHandler.
-// Part of AutotileHandler — split from autotilehandler.cpp for SRP.
+// Tiling request handling and window centering for TilingHandler.
+// Part of TilingHandler — split from tilinghandler.cpp for SRP.
 
-#include "autotilehandler.h"
+#include "tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/windowanimator.h"
@@ -50,7 +50,7 @@ const char* maximizeModeName(KWin::MaximizeMode mode)
 }
 } // namespace
 
-void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests)
+void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests)
 {
     if (tileRequests.isEmpty()) {
         return;
@@ -98,11 +98,11 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
     }
 
     // Stagger generations are bumped PER SCREEN below, once this batch's target
-    // screens are known (see m_autotileStaggerGenByScreen). A blanket global
+    // screens are known (see m_tileStaggerGenByScreen). A blanket global
     // bump here would let a cross-output move's destination batch cancel the
     // source reflow's still-staggered windows. The global generation is reserved
     // for desktop/screen switches (slotScreensChanged).
-    // NOTE: m_autotileTargetZones and m_centeredWaylandZones are intentionally
+    // NOTE: m_tileTargetZones and m_centeredWaylandZones are intentionally
     // NOT cleared globally here. Each retile fires for a single screen at a
     // time (per-VS retile after a swap/rotate), so a global clear would wipe
     // sibling-VS entries mid-animation and strand their windows without a
@@ -154,7 +154,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // its geometry bucket).
             KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
             if (floatWin) {
-                if (const QRectF savedGeo = findPreAutotileGeometry(windowId); savedGeo.isValid()) {
+                if (const QRectF savedGeo = findPreTileGeometry(windowId); savedGeo.isValid()) {
                     // Daemon-driven apply: the restored rect may lie in a
                     // different virtual screen than the tiled rect, and batch
                     // floats fire in the same swap/rotate window the
@@ -300,7 +300,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
     }
 
     // Global epoch (desktop/screen switch) captured for the apply guards below.
-    const uint64_t gen = m_autotileStaggerGeneration;
+    const uint64_t gen = m_tileStaggerGeneration;
 
     // Build per-screen "new request" sets so the onComplete cleanup can
     // compare each screen's previous bucket against its new bucket in
@@ -340,11 +340,11 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
     // cancel this batch's windows.
     QHash<QString, uint64_t> genByScreen;
     for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
-        genByScreen.insert(it.key(), ++m_autotileStaggerGenByScreen[it.key()]);
+        genByScreen.insert(it.key(), ++m_tileStaggerGenByScreen[it.key()]);
     }
 
     auto onComplete = [this, newTiledByScreen, savedGlobalStack, overlapStackByScreen, gen, genByScreen]() {
-        if (m_autotileStaggerGeneration != gen) {
+        if (m_tileStaggerGeneration != gen) {
             return;
         }
         // Per-screen untile cleanup. For each screen that participated in
@@ -359,11 +359,11 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // screen's untile cleanup now. (Other screens in this batch may still
             // be current, so skip per-screen rather than aborting the whole
             // onComplete.)
-            if (m_autotileStaggerGenByScreen.value(screenId) != genByScreen.value(screenId)) {
+            if (m_tileStaggerGenByScreen.value(screenId) != genByScreen.value(screenId)) {
                 continue;
             }
             const QSet<QString>& newSet = screenIt.value();
-            const QSet<QString> previous = AutotileStateHelpers::tiledOnScreen(m_border, screenId);
+            const QSet<QString> previous = TilingStateHelpers::tiledOnScreen(m_border, screenId);
             const QSet<QString> untiled = previous - newSet;
             for (const QString& wid : untiled) {
                 // Exact resolve only: findWindowById's appId fuzzy fallback
@@ -404,8 +404,8 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 // frameGeometryChanged. Cross-screen transfers are safe: the
                 // apply lambda wrote a fresh entry only for windows in
                 // toApply, which are never in `untiled` for their new screen.
-                if (!AutotileStateHelpers::isTiledWindow(m_border, wid)) {
-                    m_autotileTargetZones.remove(wid);
+                if (!TilingStateHelpers::isTiledWindow(m_border, wid)) {
+                    m_tileTargetZones.remove(wid);
                     m_centeredWaylandZones.remove(wid);
                 }
             }
@@ -424,7 +424,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // restore below and skips it in the fresh-window sweep.
             QHash<const KWin::EffectWindow*, QString> overlapMemberScreen;
             for (auto it = overlapStackByScreen.constBegin(); it != overlapStackByScreen.constEnd(); ++it) {
-                if (m_autotileStaggerGenByScreen.value(it.key()) != genByScreen.value(it.key())) {
+                if (m_tileStaggerGenByScreen.value(it.key()) != genByScreen.value(it.key())) {
                     continue;
                 }
                 for (const auto& gPtr : it.value()) {
@@ -480,7 +480,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // Superseded screens are skipped for the same reason as in the
             // membership build.
             for (auto it = overlapStackByScreen.constBegin(); it != overlapStackByScreen.constEnd(); ++it) {
-                if (m_autotileStaggerGenByScreen.value(it.key()) != genByScreen.value(it.key())) {
+                if (m_tileStaggerGenByScreen.value(it.key()) != genByScreen.value(it.key())) {
                     continue;
                 }
                 for (const auto& gPtr : it.value()) {
@@ -570,8 +570,8 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // epoch) OR by a newer retile of THIS window's screen (per-screen).
             // A batch for a DIFFERENT screen no longer cancels us — that was the
             // cross-output "hole on the source monitor" bug.
-            if (m_autotileStaggerGeneration != gen
-                || m_autotileStaggerGenByScreen.value(snap.screenId) != genByScreen.value(snap.screenId)) {
+            if (m_tileStaggerGeneration != gen
+                || m_tileStaggerGenByScreen.value(snap.screenId) != genByScreen.value(snap.screenId)) {
                 // A genuinely newer retile — of this window's screen, OR a
                 // global bump (desktop/screen switch) — has superseded this
                 // apply; normal during rapid ops. Both epochs are logged
@@ -583,9 +583,9 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 // reflow" bug: a destination batch keyed to the moved window's
                 // STALE screen bumped the source screen's gen).
                 qCDebug(lcEffect) << "Autotile apply: skip superseded" << snap.windowId << "screen" << snap.screenId
-                                  << "| globalGen now" << m_autotileStaggerGeneration << "captured" << gen
-                                  << "| screenGen now" << m_autotileStaggerGenByScreen.value(snap.screenId)
-                                  << "captured" << genByScreen.value(snap.screenId);
+                                  << "| globalGen now" << m_tileStaggerGeneration << "captured" << gen
+                                  << "| screenGen now" << m_tileStaggerGenByScreen.value(snap.screenId) << "captured"
+                                  << genByScreen.value(snap.screenId);
                 return;
             }
             if (!snap.window || snap.window->isDeleted()) {
@@ -613,7 +613,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             const auto guard = qScopeGuard([this] {
                 m_effect->m_daemonGate.inGeometryApply = false;
             });
-            saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
+            saveAndRecordPreTileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
             KWin::Window* kwForLog = snap.window->window();
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry
                              << "monocle=" << snap.isMonocle << "maximizeMode="
@@ -623,7 +623,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // from any other screen before recording the new owner. This
             // keeps the tracking map coherent when e.g. a window drags
             // from an autotile VS onto a sibling autotile VS.
-            AutotileStateHelpers::removeFromOtherScreens(m_border, snap.windowId, snap.screenId);
+            TilingStateHelpers::removeFromOtherScreens(m_border, snap.windowId, snap.screenId);
             markWindowTiled(snap.screenId, snap.windowId);
             // Title-bar (borderless) state is driven by rules through the
             // effect's reconcileRuleHiddenTitleBar → DecorationManager path.
@@ -694,13 +694,13 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             }
 
             if (!snap.isMonocle && snap.window->isWaylandClient()) {
-                m_autotileTargetZones[snap.windowId] = snap.geometry;
+                m_tileTargetZones[snap.windowId] = snap.geometry;
             }
         },
         onComplete);
 }
 
-void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)
+void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)
 {
     Q_UNUSED(oldGeometry)
     if (!w) {
@@ -708,7 +708,7 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     }
 
     // Fast bail: skip getWindowId entirely when neither VS detection nor centering needs it
-    if (m_effect->m_virtualScreenDefs.isEmpty() && m_autotileTargetZones.isEmpty()) {
+    if (m_effect->m_virtualScreenDefs.isEmpty() && m_tileTargetZones.isEmpty()) {
         return;
     }
 
@@ -747,12 +747,12 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
         // Fall through to centering logic below for all windows (including dragged)
     }
 
-    if (m_autotileTargetZones.isEmpty()) {
+    if (m_tileTargetZones.isEmpty()) {
         return;
     }
 
-    auto it = m_autotileTargetZones.find(windowId);
-    if (it == m_autotileTargetZones.end()) {
+    auto it = m_tileTargetZones.find(windowId);
+    if (it == m_tileTargetZones.end()) {
         return;
     }
 
@@ -767,7 +767,7 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // Window fills the zone (or close enough) — no centering needed; consume entry
     if (qAbs(dw) <= MinCenteringDelta && qAbs(dh) <= MinCenteringDelta) {
         qCDebug(lcEffect) << "Autotile centering: matched" << windowId << "dw=" << dw << "dh=" << dh;
-        m_autotileTargetZones.erase(it);
+        m_tileTargetZones.erase(it);
         return;
     }
 
@@ -848,14 +848,14 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // Already at the centered position — record and consume
     if (qAbs(actual.x() - centered.x()) < 1.0 && qAbs(actual.y() - centered.y()) < 1.0) {
         m_centeredWaylandZones[windowId] = targetZone;
-        m_autotileTargetZones.erase(it);
+        m_tileTargetZones.erase(it);
         return;
     }
 
     KWin::Window* kw = w->window();
     if (!kw) {
         // No KWin::Window — consume stale entry to prevent perpetual lookups
-        m_autotileTargetZones.erase(it);
+        m_tileTargetZones.erase(it);
         return;
     }
 
@@ -909,12 +909,12 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // windowFrameGeometryChanged synchronously, which would re-enter
     // this slot and find the entry still present → infinite recursion → crash.
     m_centeredWaylandZones[windowId] = targetZone;
-    m_autotileTargetZones.erase(it);
+    m_tileTargetZones.erase(it);
     m_effect->m_windowAnimator->removeAnimation(w);
     kw->moveResize(centered);
 }
 
-void AutotileHandler::slotFocusWindowRequested(const QString& windowId)
+void TilingHandler::slotFocusWindowRequested(const QString& windowId)
 {
     // Showing-desktop guard (see isShowingDesktop's doc): the tile engine
     // re-emits this after every relayout, and activating a hidden window
@@ -933,7 +933,7 @@ void AutotileHandler::slotFocusWindowRequested(const QString& windowId)
     KWin::effects->activateWindow(w);
 }
 
-void AutotileHandler::reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight)
+void TilingHandler::reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight)
 {
     if (minWidth <= 0 && minHeight <= 0) {
         return;
@@ -943,7 +943,7 @@ void AutotileHandler::reportDiscoveredMinSize(const QString& windowId, int minWi
                      << "- reporting to daemon for future retiles";
 
     PhosphorProtocol::ClientHelpers::fireAndForget(
-        m_effect, PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowMinSizeUpdated"),
+        m_effect, PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowMinSizeUpdated"),
         {windowId, minWidth, minHeight}, QStringLiteral("windowMinSizeUpdated"));
 }
 

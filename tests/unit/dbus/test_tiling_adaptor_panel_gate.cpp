@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * @file test_autotile_adaptor_panel_gate.cpp
+ * @file test_tiling_adaptor_panel_gate.cpp
  *
  * NOTE: the adaptor is parented to a plain QObject, not to the AutotileEngine.
  * QDBusAbstractAdaptor walks its parent's meta-object at construction and some
@@ -21,7 +21,7 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "helpers/AutotileTestHelpers.h"
 #include <PhosphorScreens/Manager.h>
-#include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
@@ -37,7 +37,7 @@ void emitPanelGeometryReady(PhosphorScreens::ScreenManager& mgr)
 }
 } // namespace
 
-class TestAutotileAdaptorPanelGate : public QObject
+class TestTilingAdaptorPanelGate : public QObject
 {
     Q_OBJECT
 
@@ -52,7 +52,8 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, nullptr, PlasmaZones::TestHelpers::testRegistry(), &adaptorParent);
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
 
         adaptor.windowOpened(QStringLiteral("kitty|uuid-1"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
@@ -69,7 +70,8 @@ private Q_SLOTS:
 
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &mgr, PlasmaZones::TestHelpers::testRegistry(), &adaptorParent);
+        TilingAdaptor adaptor(&mgr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
 
         // Single-open path: queues.
         adaptor.windowOpened(QStringLiteral("konsole|uuid-a"), QStringLiteral("HDMI-1"), 100, 50);
@@ -104,7 +106,8 @@ private Q_SLOTS:
 
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &mgr, PlasmaZones::TestHelpers::testRegistry(), &adaptorParent);
+        TilingAdaptor adaptor(&mgr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
 
         adaptor.windowOpened(QString(), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
@@ -131,7 +134,8 @@ private Q_SLOTS:
 
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &mgr, PlasmaZones::TestHelpers::testRegistry(), &adaptorParent);
+        TilingAdaptor adaptor(&mgr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
 
         PhosphorProtocol::WindowOpenedList batch;
         for (int i = 0; i < 5; ++i) {
@@ -165,7 +169,8 @@ private Q_SLOTS:
 
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &mgr, PlasmaZones::TestHelpers::testRegistry(), &adaptorParent);
+        TilingAdaptor adaptor(&mgr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
 
         adaptor.windowOpened(QStringLiteral("a|1"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 1);
@@ -178,5 +183,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestAutotileAdaptorPanelGate)
-#include "test_autotile_adaptor_panel_gate.moc"
+QTEST_MAIN(TestTilingAdaptorPanelGate)
+#include "test_tiling_adaptor_panel_gate.moc"

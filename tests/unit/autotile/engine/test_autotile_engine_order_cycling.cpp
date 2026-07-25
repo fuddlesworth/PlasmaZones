@@ -19,7 +19,7 @@ using namespace PhosphorTileEngine;
  * @brief Tests that window order is preserved across autotile screen removal
  *        and re-addition (the "cycling" path).
  *
- * Exercises the pattern used by Daemon::updateAutotileScreens():
+ * Exercises the pattern used by Daemon::updateEngineScreens():
  *   1. Capture tiledWindowOrder() for screens leaving autotile
  *   2. Remove screens via setAutotileScreens()
  *   3. Seed order via setInitialWindowOrder() for screens re-entering
@@ -71,7 +71,7 @@ private Q_SLOTS:
         // Verify initial order
         QCOMPARE(engine.tiledWindowOrder(screen), originalOrder);
 
-        // Step 2: Capture order BEFORE removing (mirrors updateAutotileScreens)
+        // Step 2: Capture order BEFORE removing (mirrors updateEngineScreens)
         QStringList capturedOrder = engine.tiledWindowOrder(screen);
         QVERIFY(!capturedOrder.isEmpty());
 

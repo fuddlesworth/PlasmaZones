@@ -300,12 +300,12 @@ void UnifiedLayoutController::setLayoutFilter(bool includeManual, bool includeAu
 bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& preview)
 {
     // Handle autotile entries: assign autotile ID to the current screen.
-    // The daemon's layoutAssigned handler calls updateAutotileScreens() which
+    // The daemon's layoutAssigned handler calls updateEngineScreens() which
     // derives per-screen autotile state from assignments automatically.
     if (preview.isAutotile()) {
         if (m_autotileEngine && m_layoutManager) {
             QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(preview.id);
-            // Assign layout FIRST so that layoutAssigned → updateAutotileScreens()
+            // Assign layout FIRST so that layoutAssigned → updateEngineScreens()
             // updates per-screen overrides before setAlgorithm's deferred retile.
             // Without this ordering, setAlgorithm's retile uses stale per-screen
             // overrides (old algorithm), producing wrong zone geometries.
@@ -332,7 +332,7 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
 
     // Manual layout: assign the UUID to the current screen.
     // If the previous assignment was autotile, it gets replaced and
-    // updateAutotileScreens() will remove the screen from autotile set.
+    // updateEngineScreens() will remove the screen from autotile set.
     auto uuidOpt = Utils::parseUuid(preview.id);
     if (uuidOpt && m_layoutManager) {
         PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);

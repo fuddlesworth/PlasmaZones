@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<node>
+    <interface name="org.plasmazones.Scrolling">
+        <annotation name="org.gtk.GDBus.DocString" value="Scroll-engine-specific surface. Window lifecycle and tile-request traffic for scrolling screens rides org.plasmazones.Tiling (the shared tiling-family pipeline, which routes per screen); this interface carries only the scrolling screen set and future columnar operations."/>
+
+        <property name="scrollingScreens" type="as" access="read">
+            <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine. The KWin effect uses it to stamp Mode 'scrolling' in window rule queries."/>
+        </property>
+
+        <signal name="scrollingScreensChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using the scrolling engine changes."/>
+            <arg name="screenIds" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine."/>
+            </arg>
+        </signal>
+    </interface>
+</node>

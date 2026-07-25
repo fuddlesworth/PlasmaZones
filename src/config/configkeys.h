@@ -72,6 +72,7 @@ public:
     P_CONFIG_GROUP(animationsGroup, "Animations")
     P_CONFIG_GROUP(shortcutsGlobalGroup, "Shortcuts.Global")
     P_CONFIG_GROUP(shortcutsTilingGroup, "Shortcuts.Tiling")
+    P_CONFIG_GROUP(shortcutsScrollingGroup, "Shortcuts.Scrolling")
     P_CONFIG_GROUP(orderingGroup, "Ordering")
     P_CONFIG_GROUP(updatesGroup, "Updates")
 
@@ -122,6 +123,7 @@ public:
     P_CONFIG_GROUP(tilingBehaviorGroup, "Tiling.Behavior")
     P_CONFIG_GROUP(tilingBehaviorTriggersGroup, "Tiling.Behavior.Triggers")
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
+    P_CONFIG_GROUP(tilingScrollingGroup, "Tiling.Scrolling")
 
     // Decorations — per-surface decoration tree (DecorationProfileTree:
     // shader-pack chain + per-pack parameters, keyed on a dot-path surface
@@ -385,6 +387,18 @@ public:
     P_CONFIG_KEY(perAlgorithmSettingsKey, "PerAlgorithmSettings")
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Tiling.Scrolling
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(centerFocusedColumnKey, "CenterFocusedColumn")
+    P_CONFIG_KEY(alwaysCenterSingleColumnKey, "AlwaysCenterSingleColumn")
+    P_CONFIG_KEY(defaultColumnWidthKindKey, "DefaultColumnWidthKind")
+    P_CONFIG_KEY(defaultColumnWidthValueKey, "DefaultColumnWidthValue")
+    P_CONFIG_KEY(defaultColumnDisplayKey, "DefaultColumnDisplay")
+    P_CONFIG_KEY(presetColumnWidthsKey, "PresetColumnWidths")
+    P_CONFIG_KEY(presetWindowHeightsKey, "PresetWindowHeights")
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Behavior
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -575,6 +589,31 @@ public:
     P_CONFIG_KEY(swapVirtualScreenDownKey, "SwapVirtualScreenDown")
     P_CONFIG_KEY(rotateVirtualScreensClockwiseKey, "RotateVirtualScreensClockwise")
     P_CONFIG_KEY(rotateVirtualScreensCounterclockwiseKey, "RotateVirtualScreensCounterclockwise")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Shortcuts.Scrolling
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(focusColumnFirstKey, "FocusColumnFirst")
+    P_CONFIG_KEY(focusColumnLastKey, "FocusColumnLast")
+    P_CONFIG_KEY(moveColumnToFirstKey, "MoveColumnToFirst")
+    P_CONFIG_KEY(moveColumnToLastKey, "MoveColumnToLast")
+    P_CONFIG_KEY(consumeWindowKey, "ConsumeWindow")
+    P_CONFIG_KEY(expelWindowKey, "ExpelWindow")
+    P_CONFIG_KEY(consumeOrExpelLeftKey, "ConsumeOrExpelLeft")
+    P_CONFIG_KEY(consumeOrExpelRightKey, "ConsumeOrExpelRight")
+    P_CONFIG_KEY(centerColumnKey, "CenterColumn")
+    P_CONFIG_KEY(toggleColumnTabbedKey, "ToggleColumnTabbed")
+    P_CONFIG_KEY(cycleColumnWidthKey, "CycleColumnWidth")
+    P_CONFIG_KEY(cycleColumnWidthBackKey, "CycleColumnWidthBack")
+    P_CONFIG_KEY(increaseColumnWidthKey, "IncreaseColumnWidth")
+    P_CONFIG_KEY(decreaseColumnWidthKey, "DecreaseColumnWidth")
+    P_CONFIG_KEY(maximizeColumnKey, "MaximizeColumn")
+    P_CONFIG_KEY(expandColumnKey, "ExpandColumn")
+    P_CONFIG_KEY(cycleWindowHeightKey, "CycleWindowHeight")
+    P_CONFIG_KEY(increaseWindowHeightKey, "IncreaseWindowHeight")
+    P_CONFIG_KEY(decreaseWindowHeightKey, "DecreaseWindowHeight")
+    P_CONFIG_KEY(resetWindowHeightsKey, "ResetWindowHeights")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Tiling

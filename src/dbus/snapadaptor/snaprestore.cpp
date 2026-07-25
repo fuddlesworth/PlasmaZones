@@ -228,7 +228,7 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     }
 
     // Disabled-context gate. The interactive drag path (WindowDragAdaptor)
-    // and autotile (Daemon::updateAutotileScreens) already refuse to place
+    // and autotile (Daemon::updateEngineScreens) already refuse to place
     // windows on a monitor / desktop / activity the user marked disabled.
     // The auto-snap-on-open restore path — every snapTo* / resolveWindowRestore
     // slot funnels through here — did not, so windows still snapped on a

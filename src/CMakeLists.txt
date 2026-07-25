@@ -99,6 +99,7 @@ set(plasmazones_core_SRCS
     config/settings/systemcolors.cpp
     config/settings/storescalars.cpp
     config/settings/shortcuts.cpp
+    config/settings/scrolling.cpp
     config/settings.h
     config/configdefaults.cpp
     config/configbackends.h
@@ -171,9 +172,13 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor/dragactivation.cpp
     dbus/windowdragadaptor/dragactivation.h
     dbus/windowdragadaptor/windowdragadaptor.h
+    dbus/scrollingadaptor/scrollingadaptor.cpp
+    dbus/scrollingadaptor/scrollingadaptor.h
     dbus/autotileadaptor/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor/autotileadaptor.h
+    dbus/tilingadaptor/tilingadaptor.cpp
+    dbus/tilingadaptor/tilingadaptor.h
     dbus/snapadaptor/snapadaptor.cpp
     dbus/snapadaptor/commit.cpp
     dbus/snapadaptor/snaprestore.cpp
@@ -232,6 +237,7 @@ target_link_libraries(plasmazones_core
         PhosphorPlacement::PhosphorPlacement
         PhosphorTileEngine::PhosphorTileEngine
         PhosphorSnapEngine::PhosphorSnapEngine
+        PhosphorScrollEngine::PhosphorScrollEngine
         PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::PhosphorProtocol
@@ -473,8 +479,11 @@ set(plasmazones_daemon_SRCS
     daemon/rendering/vulkansupport.cpp
     daemon/daemon.cpp
     daemon/controllers/enginefactory.cpp
+    daemon/controllers/shortcutmanager_catalog.cpp
     daemon/daemon/start.cpp
     daemon/daemon/autotile_init.cpp
+    daemon/daemon/scrolling_init.cpp
+    daemon/daemon/scrolling.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/shader_warmup.cpp
     daemon/daemon/init_services.cpp
@@ -504,6 +513,7 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/priming.cpp
     daemon/overlayservice/rekey.cpp
     daemon/overlayservice/cheatsheet.cpp
+    daemon/overlayservice/scrolltabs.cpp
     daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
     daemon/overlayservice/shellhost_bridge.cpp

@@ -100,7 +100,7 @@
 #include "dbus/zonedetectionadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
-#include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/shaderadaptor.h"
 #include "dbus/compositorbridgeadaptor.h"
@@ -179,7 +179,7 @@ void Daemon::initCoreAdaptors()
     // per-engine *RestoreFloatedWindowsOnLogin settings for matched windows).
     m_windowTrackingAdaptor->setRuleStore(m_ruleStore.get());
 
-    // Drop closed windows from m_lastAutotileOrders so a manual→autotile toggle
+    // Drop closed windows from m_lastEngineOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would
     // then tile N+1 windows for N actual windows).
     connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowDisappeared, this,

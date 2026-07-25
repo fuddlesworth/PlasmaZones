@@ -502,6 +502,76 @@ public:
     {
         return PhosphorTiles::AutotileDefaults::MaxMaxWindows;
     }
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling (Tiling.Scrolling)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// CenterFocusedColumn: 0 = never, 1 = always, 2 = on overflow.
+    static constexpr int scrollingCenterFocusedColumn()
+    {
+        return 0;
+    }
+    static constexpr int scrollingCenterFocusedColumnMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollingCenterFocusedColumnMax()
+    {
+        return 2;
+    }
+    static constexpr bool scrollingAlwaysCenterSingleColumn()
+    {
+        return false;
+    }
+    /// Default column width kind: 0 = proportion, 1 = fixed px, 2 = client decides.
+    static constexpr int scrollingDefaultColumnWidthKind()
+    {
+        return 0;
+    }
+    static constexpr int scrollingDefaultColumnWidthKindMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollingDefaultColumnWidthKindMax()
+    {
+        return 2;
+    }
+    /// Value paired with the kind: a proportion in (0, 1] or a pixel width.
+    static constexpr qreal scrollingDefaultColumnWidthValue()
+    {
+        return 0.5;
+    }
+    static constexpr qreal scrollingDefaultColumnWidthValueMin()
+    {
+        return 0.05;
+    }
+    static constexpr qreal scrollingDefaultColumnWidthValueMax()
+    {
+        return 10000.0;
+    }
+    /// ColumnDisplay new columns open in: 0 = normal, 1 = tabbed.
+    static constexpr int scrollingDefaultColumnDisplay()
+    {
+        return 0;
+    }
+    static constexpr int scrollingDefaultColumnDisplayMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollingDefaultColumnDisplayMax()
+    {
+        return 1;
+    }
+    /// Preset proportion lists, comma-joined decimals (the niri defaults).
+    static QString scrollingPresetColumnWidths()
+    {
+        return QStringLiteral("0.333,0.5,0.667");
+    }
+    static QString scrollingPresetWindowHeights()
+    {
+        return QStringLiteral("0.333,0.5,0.667");
+    }
+
     static bool animationsEnabled()
     {
         return true;
@@ -945,6 +1015,98 @@ public:
     static QString autotileRetileShortcut()
     {
         return QStringLiteral("Meta+Ctrl+R");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling Shortcuts
+    //
+    // Anchored on Meta+Alt so nothing collides with stock Plasma or the
+    // Meta+Shift / Meta+Ctrl families above. Directional focus/move/swap
+    // reuse the existing generic navigation shortcuts; only the
+    // scroll-specific column vocabulary gets its own chords.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString scrollingFocusColumnFirstShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Home");
+    }
+    static QString scrollingFocusColumnLastShortcut()
+    {
+        return QStringLiteral("Meta+Alt+End");
+    }
+    static QString scrollingMoveColumnToFirstShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Shift+Home");
+    }
+    static QString scrollingMoveColumnToLastShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Shift+End");
+    }
+    static QString scrollingConsumeWindowShortcut()
+    {
+        return QStringLiteral("Meta+Alt+,");
+    }
+    static QString scrollingExpelWindowShortcut()
+    {
+        return QStringLiteral("Meta+Alt+.");
+    }
+    static QString scrollingConsumeOrExpelLeftShortcut()
+    {
+        return QStringLiteral("Meta+Alt+[");
+    }
+    static QString scrollingConsumeOrExpelRightShortcut()
+    {
+        return QStringLiteral("Meta+Alt+]");
+    }
+    static QString scrollingCenterColumnShortcut()
+    {
+        return QStringLiteral("Meta+Alt+C");
+    }
+    static QString scrollingToggleColumnTabbedShortcut()
+    {
+        return QStringLiteral("Meta+Alt+T");
+    }
+    static QString scrollingCycleColumnWidthShortcut()
+    {
+        return QStringLiteral("Meta+Alt+R");
+    }
+    static QString scrollingCycleColumnWidthBackShortcut()
+    {
+        // Deliberately unbound: the reverse cycle is a niche refinement and
+        // free chords near Meta+Alt+R are scarce.
+        return QString();
+    }
+    static QString scrollingIncreaseColumnWidthShortcut()
+    {
+        return QStringLiteral("Meta+Alt+=");
+    }
+    static QString scrollingDecreaseColumnWidthShortcut()
+    {
+        return QStringLiteral("Meta+Alt+-");
+    }
+    static QString scrollingMaximizeColumnShortcut()
+    {
+        return QStringLiteral("Meta+Alt+F");
+    }
+    static QString scrollingExpandColumnShortcut()
+    {
+        return QStringLiteral("Meta+Alt+E");
+    }
+    static QString scrollingCycleWindowHeightShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Shift+R");
+    }
+    static QString scrollingIncreaseWindowHeightShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Shift+=");
+    }
+    static QString scrollingDecreaseWindowHeightShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Shift+-");
+    }
+    static QString scrollingResetWindowHeightsShortcut()
+    {
+        return QStringLiteral("Meta+Alt+0");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -301,12 +301,12 @@ void Daemon::initializeAutotile()
                 }
 
                 // Capture autotile window order BEFORE layout switch destroys PhosphorTiles::TilingState.
-                // Merge (not replace) into m_lastAutotileOrders so other desktops' saved
+                // Merge (not replace) into m_lastEngineOrders so other desktops' saved
                 // orders are preserved — a replace would discard them.
                 if (wasAutotile) {
                     auto currentOrders = captureAutotileOrders();
                     for (auto it = currentOrders.constBegin(); it != currentOrders.constEnd(); ++it) {
-                        m_lastAutotileOrders[it.key()] = it.value();
+                        m_lastEngineOrders[it.key()] = it.value();
                     }
                 }
 
@@ -357,7 +357,7 @@ void Daemon::initializeAutotile()
                     // context. Under suppress, switching to autotile applies a bare
                     // "autotile:" assignment (mode set, no algorithm) so the context
                     // selects autotile mode but does NOT tile with the global default;
-                    // updateAutotileScreens skips a suppressed bare context until the
+                    // updateEngineScreens skips a suppressed bare context until the
                     // user assigns a concrete algorithm.
                     if (algoId.isEmpty()
                         && !m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)) {
@@ -377,7 +377,7 @@ void Daemon::initializeAutotile()
                         // mode but does not tile. applyLayoutById can't apply a bare
                         // "autotile:" (it has no matching layout preview and returns
                         // false), so write the entry directly. The emitted layoutAssigned
-                        // drives the daemon's updateAutotileScreens (which skips this bare
+                        // drives the daemon's updateEngineScreens (which skips this bare
                         // suppressed context, so it does not tile) AND updateLayoutFilter,
                         // so the mode filter refreshes off that signal — no explicit call
                         // needed here.
@@ -432,7 +432,7 @@ void Daemon::initializeAutotile()
                     // arrive AFTER the resnap and overwrite the zone positions.
                     // Use per-screen zone count (not global activeLayout) because each screen
                     // may have a different layout assigned with a different zone count.
-                    // Only process entries for the CURRENT desktop (m_lastAutotileOrders
+                    // Only process entries for the CURRENT desktop (m_lastEngineOrders
                     // accumulates entries across desktops after the merge fix).
                     //
                     // Batch all resnap entries into ONE signal to eliminate the race condition
@@ -463,7 +463,7 @@ void Daemon::initializeAutotile()
                         resnappedWindows.insert(e.windowId);
                     }
 
-                    for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
+                    for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
                         if (it.key().desktop != desktop || it.key().activity != activity) {
                             continue;
                         }

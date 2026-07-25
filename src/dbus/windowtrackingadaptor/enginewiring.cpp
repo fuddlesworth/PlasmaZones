@@ -16,6 +16,7 @@
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -34,16 +35,23 @@ namespace PlasmaZones {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Engine wiring — cross-references and shared navigation feedback
 //
-// Signal relay is handled by dedicated adaptors (SnapAdaptor, AutotileAdaptor).
+// Signal relay is handled by dedicated adaptors (SnapAdaptor, TilingAdaptor).
 // This method only wires cross-engine references and the shared OSD path.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
-                                       PhosphorEngine::PlacementEngineBase* autotileEngine)
+                                       PhosphorEngine::PlacementEngineBase* autotileEngine,
+                                       PhosphorEngine::PlacementEngineBase* scrollEngine)
 {
     // Disconnect previous autotile engine nav feedback (the only signal connected here)
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
+    }
+    // The scroll engine gets the same generic base-signal wiring as the other
+    // two below; drop every previous connection first (same anti-duplicate
+    // rule as each block below).
+    if (m_scrollEngine) {
+        disconnect(m_scrollEngine, nullptr, this, nullptr);
     }
     // Drop the cross-desktop move relay from BOTH outgoing engines before
     // reassigning (same anti-duplicate-connection reason as the float relay).
@@ -107,6 +115,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
 
     m_snapEngine = snapEngine;
     m_autotileEngine = autotileEngine;
+    m_scrollEngine = scrollEngine;
     m_cachedSnapEngine = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine);
     m_cachedAutotileEngine = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine);
 
@@ -238,9 +247,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // data on org.plasmazones.WindowTracking regardless of engine mode.
     //
     // SnapEngine's navigation feedback is connected by SnapAdaptor (mirrors
-    // AutotileAdaptor's constructor pattern). This single connection is the
+    // TilingAdaptor's constructor pattern). This single connection is the
     // only autotile signal that routes through WTA — all other autotile
-    // signals go through AutotileAdaptor on org.plasmazones.Autotile.
+    // signals go through TilingAdaptor on org.plasmazones.Tiling.
     //
     // NOTE: AutotileEngine::windowFloatingChanged is NOT relayed here.
     // The daemon intercepts it with a lambda (signals.cpp) for cross-mode
@@ -347,6 +356,46 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (autotileEngine) {
         connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this,
                 floatRestoreRelay);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling engine — the same generic base-class wiring the two engines
+    // above receive: OSD feedback, cross-desktop moves, cross-mode handoff,
+    // float-restore geometry, and the rule-driven open-floating gate.
+    // Tile-request / floating / screens relays live on TilingAdaptor
+    // (the scroll engine shares the org.plasmazones.Tiling surface).
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (scrollEngine) {
+        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this,
+                &WindowTrackingAdaptor::navigationFeedback);
+        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this,
+                &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this,
+                &WindowTrackingAdaptor::windowOutputMoveExpected);
+        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);
+        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
+        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);
+        if (auto* scroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(scrollEngine)) {
+            scroll->setFloatPredicate([this](const QString& windowId) -> bool {
+                return shouldFloatByRule(windowId);
+            });
+            scroll->setOpenParamsResolver([this](const QString& windowId) -> PhosphorScrollEngine::ScrollOpenParams {
+                PhosphorScrollEngine::ScrollOpenParams params;
+                const QVariantMap raw = scrollOpenRuleParams(windowId);
+                if (const auto it = raw.constFind(QStringLiteral("widthFraction")); it != raw.constEnd()) {
+                    params.widthFraction = it->toDouble();
+                }
+                if (const auto it = raw.constFind(QStringLiteral("tabbed")); it != raw.constEnd()) {
+                    params.tabbed = it->toBool();
+                }
+                if (const auto it = raw.constFind(QStringLiteral("consume")); it != raw.constEnd()) {
+                    params.consume = it->toBool();
+                }
+                return params;
+            });
+        }
     }
 }
 

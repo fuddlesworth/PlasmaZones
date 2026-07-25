@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "screenchangehandler.h"
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -260,7 +260,7 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
         }
         if (window && m_effect->shouldHandleWindow(window)) {
             const QString winScreenId = m_effect->getWindowScreenId(window);
-            if (m_effect->m_autotileHandler->isAutotileScreen(winScreenId)) {
+            if (m_effect->m_tilingHandler->isManagedScreen(winScreenId)) {
                 qCDebug(lcScreenChange) << "Skipping autotile-managed window" << entry.windowId << "on screen"
                                         << winScreenId;
                 continue;
@@ -280,7 +280,7 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             // window's screen can flip to autotile during the stagger interval,
             // and a snap-path applyWindowGeometry would then fight the autotile
             // engine for placement.
-            if (m_effect->m_autotileHandler->isAutotileScreen(m_effect->getWindowScreenId(e.window))) {
+            if (m_effect->m_tilingHandler->isManagedScreen(m_effect->getWindowScreenId(e.window))) {
                 return;
             }
             qCInfo(lcScreenChange) << "Repositioning window" << m_effect->getWindowId(e.window) << "to" << e.geometry;

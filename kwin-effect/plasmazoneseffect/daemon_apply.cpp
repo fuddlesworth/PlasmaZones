@@ -29,7 +29,7 @@
 #include <QSet>
 #include <QStringList>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
@@ -102,7 +102,7 @@ void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, co
     }
     // Hand the one-shot to the autotile handler: it owns the cross-output
     // outputChanged transfer path that would otherwise re-issue close/open.
-    if (AutotileHandler* handler = m_autotileHandler.get()) {
+    if (TilingHandler* handler = m_tilingHandler.get()) {
         handler->markExpectedOutputMove(windowId, targetScreenId);
     }
 }
@@ -225,9 +225,9 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // both the snap and autotile border sets:
     //   - empty zoneId         → float-restore: leave snapping's set
     //   - empty/autotile screen → autotile-managed or unresolved: leave the set
-    //                             (AutotileHandler tracks autotile-screen windows)
+    //                             (TilingHandler tracks autotile-screen windows)
     //   - snap-mode screen      → snap commit
-    if (zoneId.isEmpty() || screenId.isEmpty() || m_autotileHandler->isAutotileScreen(screenId)) {
+    if (zoneId.isEmpty() || screenId.isEmpty() || m_tilingHandler->isManagedScreen(screenId)) {
         m_snapHandler->clearWindowSnapped(liveWindowId);
     } else {
         // Clear any stale float marker before marking snapped (mirrors the
@@ -371,7 +371,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // pre-rotation m_virtualScreenDefs and report a phantom cross-VS unsnap.
             if (!p.screenId.isEmpty()) {
                 m_trackedScreenPerWindow[p.window] = p.screenId;
-                m_autotileHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
+                m_tilingHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
             }
             m_daemonGate.inGeometryApply = true;
             const auto guard = qScopeGuard([this] {
@@ -387,10 +387,10 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // misclassify a float-restore as a snap and leave a stale border.
             //   - empty screenId      → float/restore: leave snapping's set
             //   - autotile-mode screen → now autotile-managed: leave snap set
-            //                            (AutotileHandler tracks it)
+            //                            (TilingHandler tracks it)
             //   - snap-mode screen     → snap commit (clears any stale float marker)
             const QString batchWid = getWindowId(p.window);
-            if (p.screenId.isEmpty() || m_autotileHandler->isAutotileScreen(p.screenId)) {
+            if (p.screenId.isEmpty() || m_tilingHandler->isManagedScreen(p.screenId)) {
                 m_snapHandler->clearWindowSnapped(batchWid);
             } else {
                 // Real snap commit on a snap-mode screen. The daemon emits a non-empty
@@ -451,7 +451,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             if (action == QLatin1String("resnap") && m_snapAssistHandler->isEnabled()) {
                 KWin::EffectWindow* activeWin = getActiveWindow();
                 QString activeScreenId = activeWin ? getWindowScreenId(activeWin) : QString();
-                if (activeWin && !activeScreenId.isEmpty() && !m_autotileHandler->isAutotileScreen(activeScreenId)) {
+                if (activeWin && !activeScreenId.isEmpty() && !m_tilingHandler->isManagedScreen(activeScreenId)) {
                     m_snapAssistHandler->showContinuationIfNeeded(activeScreenId, getWindowId(activeWin));
                 }
             }
@@ -499,7 +499,7 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // engines' own commits consume their pending entry and minimize-float
         // tracking BEFORE dispatching the unfloat, so this can never cancel
         // the commit whose echo delivered this signal.
-        m_autotileHandler->removeMinimizeFloated(windowId);
+        m_tilingHandler->removeMinimizeFloated(windowId);
         m_snapHandler->removeMinimizeFloated(windowId);
     } else {
         // Backstop: a window that becomes floating is no longer snap-managed.
@@ -611,7 +611,7 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // Spurious-pair suppression: plasmashell notification stacking makes
     // KWin emit minimizedChanged(true) on tiled windows with the matching
     // unminimize ~1-2 ms later (the same quirk kMinimizeFloatDebounceMs
-    // in autotilehandler/signals.cpp debounces on the float side). The
+    // in tilinghandler/signals.cpp debounces on the float side). The
     // reverse leg installs immediately — a genuine minimize must not
     // start late, and a spurious pair paints at most one barely-started
     // frame — but an unminimize landing inside the window means the pair
@@ -668,7 +668,7 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     }
 
     // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler
-    // (mirrors AutotileHandler running its own minimize→float machine for
+    // (mirrors TilingHandler running its own minimize→float machine for
     // autotile screens). Unlike the shader event above, this state
     // machine only concerns windows the tiling system manages.
     if (!shouldHandleWindow(w) || !isTileableWindow(w)) {

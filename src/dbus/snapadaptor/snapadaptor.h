@@ -72,7 +72,7 @@ public:
     /**
      * @brief Clear the engine pointer during shutdown
      *
-     * Disconnects all signals. Mirrors AutotileAdaptor::clearEngine().
+     * Disconnects all signals. Mirrors TilingAdaptor::clearEngine().
      * Called by Daemon::stop() before the SnapEngine unique_ptr is reset.
      */
     void clearEngine();

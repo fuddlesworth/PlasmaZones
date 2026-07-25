@@ -29,7 +29,7 @@
 #include <QTimer>
 #include <QVarLengthArray>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "compositor/compositorclock.h"
 #include "handlers/dragtracker.h"
 #include "compositor/compositorbridge.h"
@@ -317,7 +317,7 @@ void PlasmaZonesEffect::connectDragTracker()
             // this is an autotile drag.
             //
             // This replaces the previous stale-cache read of
-            // m_autotileHandler->isAutotileScreen() as the single source
+            // m_tilingHandler->isManagedScreen() as the single source
             // of truth for drag-start routing — root cause of the
             // post-settings-reload dead-drag window found in #310 log
             // forensics.
@@ -392,7 +392,7 @@ void PlasmaZonesEffect::connectDragTracker()
                         if (safeW && !safeW->isDeleted() && m_currentDragPolicy.immediateFloatOnStart
                             && !isWindowFloating(capturedWindowId)
                             && !m_dragActivation.floatedWindowIds.contains(capturedWindowId)) {
-                            m_autotileHandler->handleDragToFloat(safeW, capturedWindowId, /*immediate=*/true);
+                            m_tilingHandler->handleDragToFloat(safeW, capturedWindowId, /*immediate=*/true);
                             m_dragActivation.floatedWindowIds.insert(capturedWindowId);
                         }
                     }
@@ -403,7 +403,7 @@ void PlasmaZonesEffect::connectDragTracker()
             // zero latency. The async beginDrag reply above runs as a
             // correction layer for the cases where the cache is stale
             // (post-settings-reload — the #310 scenario).
-            if (m_autotileHandler->isAutotileScreen(startScreenId)) {
+            if (m_tilingHandler->isManagedScreen(startScreenId)) {
                 m_dragBypassedForAutotile = true;
                 m_dragBypassScreenId = startScreenId;
                 // Reorder mode: the daemon owns drag-insert preview for tile
@@ -422,8 +422,8 @@ void PlasmaZonesEffect::connectDragTracker()
                 //
                 // Guarded on isTrackedWindow so we don't touch windows that
                 // are already floating (not in the autotile tree).
-                if (!reorderMode && m_autotileHandler->isTrackedWindow(windowId) && !isWindowFloating(windowId)) {
-                    m_autotileHandler->handleDragToFloat(w, windowId, /*immediate=*/true);
+                if (!reorderMode && m_tilingHandler->isTrackedWindow(windowId) && !isWindowFloating(windowId)) {
+                    m_tilingHandler->handleDragToFloat(w, windowId, /*immediate=*/true);
                     // Mark as drag-floated so the daemon's pre-tile geometry
                     // restore (applyGeometryForFloat, triggered by the
                     // setWindowFloatingForScreen call at drop) is skipped in
@@ -906,8 +906,8 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     connectNavigationSignals();
 
     // Connect to autotile D-Bus signals
-    m_autotileHandler->connectSignals();
-    m_autotileHandler->loadSettings();
+    m_tilingHandler->connectSignals();
+    m_tilingHandler->loadSettings();
 
     // Verify daemon availability asynchronously to avoid blocking the compositor.
     // CRITICAL: Do NOT use synchronous isServiceRegistered() here. The daemon
@@ -1039,7 +1039,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // still get an item recreated and immediately torn down by
         // clearAllDecorations() — bounded, invisible churn that is cheaper than
         // suppressing the handler across the burst.
-        m_autotileHandler->clearTiledTracking();
+        m_tilingHandler->clearTiledTracking();
         m_snapHandler->clearSnapTracking();
         // Drop the zone / floating caches that feed the IsSnapped / Zone /
         // IsFloating rule-match fields. Unlike the exclusion / animation rule
@@ -1063,7 +1063,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // restore) instead of stranding it for the daemon-down interval.
         invalidateAllRuleCaches();
         m_decorationManager->restoreAll();
-        m_autotileHandler->restoreAllMonocleMaximized();
+        m_tilingHandler->restoreAllMonocleMaximized();
         clearAllDecorations();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
         // `m_animationExclusionRuleSet`, or the shader manager's animation

@@ -270,6 +270,14 @@ void SettingsController::buildApplicationController()
             QStringLiteral("pages/tiling/TilingAlgorithmPage.qml"), QStringLiteral("view-grid"), /*collapsible=*/false,
             /*divider=*/true, AdvancedOnly, QStringLiteral("tiling-simple"));
 
+    // Scrolling is the third placement engine's own leaf. It sits beside
+    // Algorithm rather than under it: the scrolling strip has no zone layout
+    // and no tiling algorithm, so none of the Algorithm page's knobs reach it.
+    regVirtual(QStringLiteral("tiling-scrolling"), QStringLiteral("tiling"), PhosphorI18n::tr("Scrolling"),
+               QStringLiteral("pages/tiling/TilingScrollingPage.qml"), QStringLiteral("view-split-left-right"),
+               /*collapsible=*/false,
+               /*divider=*/true, AdvancedOnly);
+
     regVirtual(QStringLiteral("tiling-config-cat"), QStringLiteral("tiling"), PhosphorI18n::tr("Configuration"),
                QString(), QStringLiteral("configure"), /*collapsible=*/true);
     regVirtual(QStringLiteral("tiling-ordering"), QStringLiteral("tiling-config-cat"), PhosphorI18n::tr("Priority"),

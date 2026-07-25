@@ -14,6 +14,7 @@
 #include <PhosphorConfig/Store.h>
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 
@@ -43,10 +44,11 @@ namespace PlasmaZones {
  */
 class PLASMAZONES_EXPORT Settings : public ISettings,
                                     public PhosphorEngine::IAutotileSettings,
-                                    public PhosphorEngine::ISnapSettings
+                                    public PhosphorEngine::ISnapSettings,
+                                    public PhosphorEngine::IScrollSettings
 {
     Q_OBJECT
-    Q_INTERFACES(PhosphorEngine::IAutotileSettings PhosphorEngine::ISnapSettings)
+    Q_INTERFACES(PhosphorEngine::IAutotileSettings PhosphorEngine::ISnapSettings PhosphorEngine::IScrollSettings)
 
 public:
     /** Maximum number of activation triggers per action (drag, multi-zone, zone span).
@@ -324,6 +326,22 @@ public:
                    setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
     Q_PROPERTY(bool autotileDragInsertToggle READ autotileDragInsertToggle WRITE setAutotileDragInsertToggle NOTIFY
                    autotileDragInsertToggleChanged)
+
+    // Scrolling Settings (Tiling.Scrolling)
+    Q_PROPERTY(int scrollingCenterFocusedColumn READ scrollingCenterFocusedColumn WRITE setScrollingCenterFocusedColumn
+                   NOTIFY scrollingCenterFocusedColumnChanged)
+    Q_PROPERTY(bool scrollingAlwaysCenterSingleColumn READ scrollingAlwaysCenterSingleColumn WRITE
+                   setScrollingAlwaysCenterSingleColumn NOTIFY scrollingAlwaysCenterSingleColumnChanged)
+    Q_PROPERTY(int scrollingDefaultColumnWidthKind READ scrollingDefaultColumnWidthKind WRITE
+                   setScrollingDefaultColumnWidthKind NOTIFY scrollingDefaultColumnWidthKindChanged)
+    Q_PROPERTY(qreal scrollingDefaultColumnWidthValue READ scrollingDefaultColumnWidthValue WRITE
+                   setScrollingDefaultColumnWidthValue NOTIFY scrollingDefaultColumnWidthValueChanged)
+    Q_PROPERTY(int scrollingDefaultColumnDisplay READ scrollingDefaultColumnDisplay WRITE
+                   setScrollingDefaultColumnDisplay NOTIFY scrollingDefaultColumnDisplayChanged)
+    Q_PROPERTY(QString scrollingPresetColumnWidths READ scrollingPresetColumnWidthsString WRITE
+                   setScrollingPresetColumnWidths NOTIFY scrollingPresetColumnWidthsChanged)
+    Q_PROPERTY(QString scrollingPresetWindowHeights READ scrollingPresetWindowHeightsString WRITE
+                   setScrollingPresetWindowHeights NOTIFY scrollingPresetWindowHeightsChanged)
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
@@ -959,6 +977,108 @@ public:
     void setAutotileDragInsertTriggers(const QVariantList& triggers) override;
     bool autotileDragInsertToggle() const override;
     void setAutotileDragInsertToggle(bool enable) override;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling Settings (IScrollSettings + Tiling.Scrolling group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Store-backed scalars; the ranged int values rely on the schema
+    // validators for clamping (clampInt / validIntOr), like every other
+    // stored scalar.
+    int scrollingCenterFocusedColumn() const override;
+    void setScrollingCenterFocusedColumn(int mode);
+    bool scrollingAlwaysCenterSingleColumn() const override;
+    void setScrollingAlwaysCenterSingleColumn(bool center);
+    int scrollingDefaultColumnWidthKind() const override;
+    void setScrollingDefaultColumnWidthKind(int kind);
+    qreal scrollingDefaultColumnWidthValue() const override;
+    void setScrollingDefaultColumnWidthValue(qreal value);
+    int scrollingDefaultColumnDisplay() const override;
+    void setScrollingDefaultColumnDisplay(int display);
+    // Preset lists: comma-joined string on disk (canonicalCommaList schema
+    // validator), QStringList through IScrollSettings, raw string for QML.
+    QStringList scrollingPresetColumnWidths() const override;
+    QString scrollingPresetColumnWidthsString() const;
+    void setScrollingPresetColumnWidths(const QString& presets);
+    QStringList scrollingPresetWindowHeights() const override;
+    QString scrollingPresetWindowHeightsString() const;
+    void setScrollingPresetWindowHeights(const QString& presets);
+    // IScrollSettings gap/behaviour forwards — the strip reads the shared
+    // Tiling gap model and the shared focus-new-windows behaviour.
+    int scrollingInnerGap() const override
+    {
+        return innerGap();
+    }
+    bool scrollingUsePerSideOuterGap() const override
+    {
+        return usePerSideOuterGap();
+    }
+    int scrollingOuterGap() const override
+    {
+        return outerGap();
+    }
+    int scrollingOuterGapTop() const override
+    {
+        return outerGapTop();
+    }
+    int scrollingOuterGapBottom() const override
+    {
+        return outerGapBottom();
+    }
+    int scrollingOuterGapLeft() const override
+    {
+        return outerGapLeft();
+    }
+    int scrollingOuterGapRight() const override
+    {
+        return outerGapRight();
+    }
+    bool scrollingFocusNewWindows() const override
+    {
+        return autotileFocusNewWindows();
+    }
+
+    // Scrolling Shortcuts — PhosphorConfig::Store-backed.
+    QString scrollingFocusColumnFirstShortcut() const;
+    void setScrollingFocusColumnFirstShortcut(const QString& shortcut);
+    QString scrollingFocusColumnLastShortcut() const;
+    void setScrollingFocusColumnLastShortcut(const QString& shortcut);
+    QString scrollingMoveColumnToFirstShortcut() const;
+    void setScrollingMoveColumnToFirstShortcut(const QString& shortcut);
+    QString scrollingMoveColumnToLastShortcut() const;
+    void setScrollingMoveColumnToLastShortcut(const QString& shortcut);
+    QString scrollingConsumeWindowShortcut() const;
+    void setScrollingConsumeWindowShortcut(const QString& shortcut);
+    QString scrollingExpelWindowShortcut() const;
+    void setScrollingExpelWindowShortcut(const QString& shortcut);
+    QString scrollingConsumeOrExpelLeftShortcut() const;
+    void setScrollingConsumeOrExpelLeftShortcut(const QString& shortcut);
+    QString scrollingConsumeOrExpelRightShortcut() const;
+    void setScrollingConsumeOrExpelRightShortcut(const QString& shortcut);
+    QString scrollingCenterColumnShortcut() const;
+    void setScrollingCenterColumnShortcut(const QString& shortcut);
+    QString scrollingToggleColumnTabbedShortcut() const;
+    void setScrollingToggleColumnTabbedShortcut(const QString& shortcut);
+    QString scrollingCycleColumnWidthShortcut() const;
+    void setScrollingCycleColumnWidthShortcut(const QString& shortcut);
+    QString scrollingCycleColumnWidthBackShortcut() const;
+    void setScrollingCycleColumnWidthBackShortcut(const QString& shortcut);
+    QString scrollingIncreaseColumnWidthShortcut() const;
+    void setScrollingIncreaseColumnWidthShortcut(const QString& shortcut);
+    QString scrollingDecreaseColumnWidthShortcut() const;
+    void setScrollingDecreaseColumnWidthShortcut(const QString& shortcut);
+    QString scrollingMaximizeColumnShortcut() const;
+    void setScrollingMaximizeColumnShortcut(const QString& shortcut);
+    QString scrollingExpandColumnShortcut() const;
+    void setScrollingExpandColumnShortcut(const QString& shortcut);
+    QString scrollingCycleWindowHeightShortcut() const;
+    void setScrollingCycleWindowHeightShortcut(const QString& shortcut);
+    QString scrollingIncreaseWindowHeightShortcut() const;
+    void setScrollingIncreaseWindowHeightShortcut(const QString& shortcut);
+    QString scrollingDecreaseWindowHeightShortcut() const;
+    void setScrollingDecreaseWindowHeightShortcut(const QString& shortcut);
+    QString scrollingResetWindowHeightsShortcut() const;
+    void setScrollingResetWindowHeightsShortcut(const QString& shortcut);
 
     // Autotile Shortcuts — PhosphorConfig::Store-backed.
     QString autotileToggleShortcut() const;

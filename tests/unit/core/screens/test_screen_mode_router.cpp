@@ -27,6 +27,7 @@
 #include "core/resolve/screenmoderouter.h"
 #include "helpers/AutotileTestHelpers.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 
 using namespace PlasmaZones;
@@ -41,6 +42,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     SnapEngine* m_snapEngine = nullptr;
     AutotileEngine* m_autotileEngine = nullptr;
+    PhosphorScrollEngine::ScrollEngine* m_scrollEngine = nullptr;
     ScreenModeRouter* m_router = nullptr;
 
 private Q_SLOTS:
@@ -66,13 +68,19 @@ private Q_SLOTS:
         // share the test-process registry.
         m_autotileEngine = new AutotileEngine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
-        m_router = new ScreenModeRouter(m_layoutManager, m_snapEngine, m_autotileEngine);
+        // ScrollEngine with null dependencies mirrors the two stubs above —
+        // the router only reads isActiveOnScreen from it.
+        m_scrollEngine = new PhosphorScrollEngine::ScrollEngine(nullptr, nullptr);
+
+        m_router = new ScreenModeRouter(m_layoutManager, m_snapEngine, m_autotileEngine, m_scrollEngine);
     }
 
     void cleanup()
     {
         delete m_router;
         m_router = nullptr;
+        delete m_scrollEngine;
+        m_scrollEngine = nullptr;
         delete m_autotileEngine;
         m_autotileEngine = nullptr;
         delete m_snapEngine;
@@ -229,6 +237,31 @@ private Q_SLOTS:
         const auto result = m_router->partitionByMode(input);
         QVERIFY(result.snap.isEmpty());
         QCOMPARE(result.autotile, input);
+    }
+
+    // ─── Scrolling engine ─────────────────────────────────────────────────
+
+    void modeFor_scrollingScreen_returnsScrolling()
+    {
+        // Seeding the scroll engine's live set takes the same fast path the
+        // autotile set does: modeFor answers from the engine, no cascade.
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-1")});
+        QCOMPARE(m_router->modeFor(QStringLiteral("DP-1")), PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(m_router->engineFor(QStringLiteral("DP-1")),
+                 static_cast<PhosphorEngine::IPlacementEngine*>(m_scrollEngine));
+        QVERIFY(!m_router->isSnapMode(QStringLiteral("DP-1")));
+        QVERIFY(!m_router->isAutotileMode(QStringLiteral("DP-1")));
+    }
+
+    void partitionByMode_scrollingBucket()
+    {
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-2")});
+        m_autotileEngine->setAutotileScreens({QStringLiteral("DP-3")});
+        const QStringList input = {QStringLiteral("DP-1"), QStringLiteral("DP-2"), QStringLiteral("DP-3")};
+        const auto result = m_router->partitionByMode(input);
+        QCOMPARE(result.snap, (QStringList{QStringLiteral("DP-1")}));
+        QCOMPARE(result.scrolling, (QStringList{QStringLiteral("DP-2")}));
+        QCOMPARE(result.autotile, (QStringList{QStringLiteral("DP-3")}));
     }
 };
 

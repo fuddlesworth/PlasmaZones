@@ -826,7 +826,7 @@ void Settings::onRuleStoreChanged()
     // Gaps folds config per-monitor gaps under these rule overrides). Re-sync the
     // geometry consumers — the daemon's perScreenSnappingSettingsChanged handler
     // reschedules the gap resnap, and its settingsChanged handler re-runs the
-    // per-screen autotile config (updateAutotileScreens) plus
+    // per-screen autotile config (updateEngineScreens) plus
     // refreshConfigFromSettings — but ONLY when a gap action somewhere in the rule
     // set actually changed. Emitting on every rulesChanged made a mode/assignment
     // toggle (also a rule write) fire settingsChanged, which drove the daemon to

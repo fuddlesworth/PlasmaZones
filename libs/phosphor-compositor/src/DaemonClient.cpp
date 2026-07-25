@@ -88,20 +88,20 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
 
 void DaemonClient::notifyWindowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Autotile,
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Tiling,
                                                 QStringLiteral("windowOpened"),
                                                 {windowId, screenId, minWidth, minHeight});
 }
 
 void DaemonClient::notifyWindowOpenedBatch(const PhosphorProtocol::WindowOpenedList& windows)
 {
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Autotile,
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Tiling,
                                                 QStringLiteral("windowsOpenedBatch"), {QVariant::fromValue(windows)});
 }
 
 void DaemonClient::notifyWindowClosed(const QString& windowId)
 {
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Autotile,
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Tiling,
                                                 QStringLiteral("windowClosed"), {windowId});
 }
 

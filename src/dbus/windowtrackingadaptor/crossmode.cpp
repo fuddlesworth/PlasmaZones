@@ -17,6 +17,7 @@
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -45,10 +46,21 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
     // == 0).
     const int effectiveDesktop = targetDesktop > 0 ? targetDesktop : currentDesktopForScreen(targetScreenId);
     const QString activity = m_layoutManager->currentActivity();
-    const bool targetIsAutotile = m_layoutManager->modeForScreen(targetScreenId, effectiveDesktop, activity)
-        == PhosphorZones::AssignmentEntry::Autotile;
-    PhosphorEngine::PlacementEngineBase* targetEngine =
-        targetIsAutotile ? m_autotileEngine.data() : m_snapEngine.data();
+    const PhosphorZones::AssignmentEntry::Mode targetMode =
+        m_layoutManager->modeForScreen(targetScreenId, effectiveDesktop, activity);
+    const bool targetIsAutotile = targetMode == PhosphorZones::AssignmentEntry::Autotile;
+    PhosphorEngine::PlacementEngineBase* targetEngine = nullptr;
+    switch (targetMode) {
+    case PhosphorZones::AssignmentEntry::Autotile:
+        targetEngine = m_autotileEngine.data();
+        break;
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        targetEngine = m_scrollEngine.data();
+        break;
+    case PhosphorZones::AssignmentEntry::Snapping:
+        targetEngine = m_snapEngine.data();
+        break;
+    }
     if (!targetEngine || targetEngine == sourceEngine) {
         return; // target engine unavailable, or not actually cross-mode
     }
@@ -83,7 +95,9 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
 
     // Relinquish from the source (tracking-only). An autotile source must reflow
     // — the remaining tiles expand into the vacated slot; handoffRelease does not
-    // retile. A snap source just vacates a zone (no reflow).
+    // retile. A snap source just vacates a zone (no reflow). A scroll source's
+    // handoffRelease schedules its own coalesced retile, so the strip closes up
+    // without an explicit call here.
     sourceEngine->handoffRelease(windowId);
     if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
         sourceEngine->retile(sourceScreen);
@@ -151,11 +165,21 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     }
 
     const QString activity = m_layoutManager->currentActivity();
-    const bool targetIsAutotile =
-        m_layoutManager->modeForScreen(targetScreenId, currentDesktopForScreen(targetScreenId), activity)
-        == PhosphorZones::AssignmentEntry::Autotile;
-    PhosphorEngine::PlacementEngineBase* targetEngine =
-        targetIsAutotile ? m_autotileEngine.data() : m_snapEngine.data();
+    const PhosphorZones::AssignmentEntry::Mode targetMode =
+        m_layoutManager->modeForScreen(targetScreenId, currentDesktopForScreen(targetScreenId), activity);
+    const bool targetIsAutotile = targetMode == PhosphorZones::AssignmentEntry::Autotile;
+    PhosphorEngine::PlacementEngineBase* targetEngine = nullptr;
+    switch (targetMode) {
+    case PhosphorZones::AssignmentEntry::Autotile:
+        targetEngine = m_autotileEngine.data();
+        break;
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        targetEngine = m_scrollEngine.data();
+        break;
+    case PhosphorZones::AssignmentEntry::Snapping:
+        targetEngine = m_snapEngine.data();
+        break;
+    }
     if (!targetEngine || targetEngine == sourceEngine) {
         return; // target engine unavailable, or not actually cross-mode
     }
@@ -176,6 +200,13 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
             if (!partner.isEmpty()) {
                 focusedLandingIndex = autotileTarget->windowOrderIndexForWindow(targetScreenId, partner);
             }
+        }
+    } else if (auto* scrollTarget = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(targetEngine)) {
+        partner = scrollTarget->entryWindowForCrossing(targetScreenId, direction);
+        if (!partner.isEmpty()) {
+            // Scroll landing slots are COLUMN indices; the scroll engine's
+            // handoffReceive consumes insertIndex in that unit.
+            focusedLandingIndex = scrollTarget->columnIndexForWindow(targetScreenId, partner);
         }
     } else if (auto* snapTarget = qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine)) {
         const QString entryZone = snapTarget->entryZoneForCrossing(direction, targetScreenId);
@@ -199,6 +230,8 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         if (auto* autotileSource = qobject_cast<PhosphorTileEngine::AutotileEngine*>(sourceEngine)) {
             partnerLandingIndex = autotileSource->windowOrderIndexForWindow(sourceScreen, windowId);
         }
+    } else if (auto* scrollSource = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(sourceEngine)) {
+        partnerLandingIndex = scrollSource->columnIndexForWindow(sourceScreen, windowId);
     } else if (auto* snapSource = qobject_cast<PhosphorSnapEngine::SnapEngine*>(sourceEngine)) {
         const QString fZone = snapSource->zoneForWindow(windowId);
         if (!fZone.isEmpty()) {

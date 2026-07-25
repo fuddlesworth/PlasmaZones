@@ -3,7 +3,7 @@
 
 #include "plasmazoneseffect.h"
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
 #include "compositor/windowanimator.h"
@@ -39,7 +39,7 @@ void PlasmaZonesEffect::slotSettingsChanged()
     qCInfo(lcEffect) << "settingsChanged: reloading settings";
     loadCachedSettings();
     // Note: loadAutotileSettings() is intentionally NOT called here.
-    // Autotile screen changes are tracked via the dedicated autotileScreensChanged
+    // Autotile screen changes are tracked via the dedicated managedScreensChanged
     // D-Bus signal (→ slotAutotileScreensChanged), which is authoritative.
     // Calling loadAutotileSettings on every settingsChanged causes redundant
     // full window re-notification (N D-Bus windowOpened calls + retile round)
@@ -664,7 +664,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
-        m_autotileHandler->setFocusFollowsMouse(v.toBool());
+        m_tilingHandler->setFocusFollowsMouse(v.toBool());
     });
 
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {

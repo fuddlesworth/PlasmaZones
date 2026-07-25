@@ -922,7 +922,7 @@ public:
      * @param minWidth New minimum width in pixels (0 if unconstrained)
      * @param minHeight New minimum height in pixels (0 if unconstrained)
      */
-    void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight);
+    void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
 
     /**
      * @brief Notify the engine that a window was closed

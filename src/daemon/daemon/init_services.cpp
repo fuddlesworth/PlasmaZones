@@ -100,7 +100,7 @@
 #include "dbus/zonedetectionadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
-#include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/shaderadaptor.h"
 #include "dbus/compositorbridgeadaptor.h"
@@ -318,12 +318,15 @@ void Daemon::initLayoutAndSettingsWiring()
         if (m_autotileEngine) {
             m_autotileEngine->refreshConfigFromSettings();
         }
+        if (m_scrollEngine) {
+            m_scrollEngine->refreshConfigFromSettings();
+        }
         m_previewNotifyTimer.start();
 
         // Capture autotile window order BEFORE any mode switch destroys PhosphorTiles::TilingState.
         // Saved for deterministic re-seeding when autotile is re-enabled.
         if (autotileToggled && !autotileNow) {
-            m_lastAutotileOrders = captureAutotileOrders();
+            m_lastEngineOrders = captureAutotileOrders();
         }
 
         // Handle autotile feature gate toggle
@@ -348,7 +351,7 @@ void Daemon::initLayoutAndSettingsWiring()
 
         // Re-derive autotile screens and apply per-screen overrides.
         // windowsReleased clears floating state for released windows.
-        updateAutotileScreens();
+        updateEngineScreens();
         updateLayoutFilter();
 
         // Resnap after autotile disabled: restore windows to their pre-autotile
@@ -365,7 +368,7 @@ void Daemon::initLayoutAndSettingsWiring()
             // would simply skip the batch (no behaviour regression vs the
             // pre-batch shape, which used per-window D-Bus calls).
             if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-                // updateAutotileScreens() above fired windowsReleased synchronously,
+                // updateEngineScreens() above fired windowsReleased synchronously,
                 // populating m_pendingSnapFloatRestores with the snap-float and
                 // branch-b snap-zone restores for windows that were floated in
                 // autotile. Those windows must be EXCLUDED from the pre-tile geometry

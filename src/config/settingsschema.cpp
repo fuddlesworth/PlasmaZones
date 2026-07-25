@@ -40,6 +40,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendActivationSchema(s);
     appendBehaviorSchema(s);
     appendAutotilingSchema(s);
+    appendScrollingSchema(s);
     appendWindowsSchema(s);
     appendGapsSchema(s);
     appendDecorationsSchema(s);
@@ -528,6 +529,29 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::decMasterCountKey(), CD::autotileDecMasterCountShortcut(), QMetaType::QString},
         {CD::retileKey(), CD::autotileRetileShortcut(), QMetaType::QString},
     };
+
+    schema.groups[CD::shortcutsScrollingGroup()] = {
+        {CD::focusColumnFirstKey(), CD::scrollingFocusColumnFirstShortcut(), QMetaType::QString},
+        {CD::focusColumnLastKey(), CD::scrollingFocusColumnLastShortcut(), QMetaType::QString},
+        {CD::moveColumnToFirstKey(), CD::scrollingMoveColumnToFirstShortcut(), QMetaType::QString},
+        {CD::moveColumnToLastKey(), CD::scrollingMoveColumnToLastShortcut(), QMetaType::QString},
+        {CD::consumeWindowKey(), CD::scrollingConsumeWindowShortcut(), QMetaType::QString},
+        {CD::expelWindowKey(), CD::scrollingExpelWindowShortcut(), QMetaType::QString},
+        {CD::consumeOrExpelLeftKey(), CD::scrollingConsumeOrExpelLeftShortcut(), QMetaType::QString},
+        {CD::consumeOrExpelRightKey(), CD::scrollingConsumeOrExpelRightShortcut(), QMetaType::QString},
+        {CD::centerColumnKey(), CD::scrollingCenterColumnShortcut(), QMetaType::QString},
+        {CD::toggleColumnTabbedKey(), CD::scrollingToggleColumnTabbedShortcut(), QMetaType::QString},
+        {CD::cycleColumnWidthKey(), CD::scrollingCycleColumnWidthShortcut(), QMetaType::QString},
+        {CD::cycleColumnWidthBackKey(), CD::scrollingCycleColumnWidthBackShortcut(), QMetaType::QString},
+        {CD::increaseColumnWidthKey(), CD::scrollingIncreaseColumnWidthShortcut(), QMetaType::QString},
+        {CD::decreaseColumnWidthKey(), CD::scrollingDecreaseColumnWidthShortcut(), QMetaType::QString},
+        {CD::maximizeColumnKey(), CD::scrollingMaximizeColumnShortcut(), QMetaType::QString},
+        {CD::expandColumnKey(), CD::scrollingExpandColumnShortcut(), QMetaType::QString},
+        {CD::cycleWindowHeightKey(), CD::scrollingCycleWindowHeightShortcut(), QMetaType::QString},
+        {CD::increaseWindowHeightKey(), CD::scrollingIncreaseWindowHeightShortcut(), QMetaType::QString},
+        {CD::decreaseWindowHeightKey(), CD::scrollingDecreaseWindowHeightShortcut(), QMetaType::QString},
+        {CD::resetWindowHeightsKey(), CD::scrollingResetWindowHeightsShortcut(), QMetaType::QString},
+    };
 }
 
 // ─── Editor ─────────────────────────────────────────────────────────────────
@@ -957,6 +981,45 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
     // inner/outer gaps live in the top-level Gaps group (appendGapsSchema).
     schema.groups[CD::tilingGapsGroup()] = {
         {CD::smartGapsKey(), CD::autotileSmartGaps(), QMetaType::Bool},
+    };
+}
+
+// ─── Scrolling (Tiling.Scrolling) ───────────────────────────────────────────
+// The niri-style scrolling engine's knobs. The strip reuses the shared Gaps
+// group and Tiling.Behavior focus settings; only scroll-specific values live
+// here. The preset lists are comma-joined decimal proportions.
+
+void appendScrollingSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+
+    schema.groups[CD::tilingScrollingGroup()] = {
+        {CD::centerFocusedColumnKey(),
+         CD::scrollingCenterFocusedColumn(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingCenterFocusedColumnMin(), CD::scrollingCenterFocusedColumnMax()),
+         intChoices({{0, "never"_L1}, {1, "always"_L1}, {2, "onOverflow"_L1}})},
+        {CD::alwaysCenterSingleColumnKey(), CD::scrollingAlwaysCenterSingleColumn(), QMetaType::Bool},
+        {CD::defaultColumnWidthKindKey(),
+         CD::scrollingDefaultColumnWidthKind(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingDefaultColumnWidthKindMin(), CD::scrollingDefaultColumnWidthKindMax()),
+         intChoices({{0, "proportion"_L1}, {1, "fixed"_L1}, {2, "clientDecides"_L1}})},
+        {CD::defaultColumnWidthValueKey(),
+         CD::scrollingDefaultColumnWidthValue(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::scrollingDefaultColumnWidthValueMin(), CD::scrollingDefaultColumnWidthValueMax())},
+        {CD::defaultColumnDisplayKey(),
+         CD::scrollingDefaultColumnDisplay(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingDefaultColumnDisplayMin(), CD::scrollingDefaultColumnDisplayMax()),
+         intChoices({{0, "normal"_L1}, {1, "tabbed"_L1}})},
+        {CD::presetColumnWidthsKey(), CD::scrollingPresetColumnWidths(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::presetWindowHeightsKey(), CD::scrollingPresetWindowHeights(), QMetaType::QString, {}, canonicalCommaList},
     };
 }
 

@@ -3,7 +3,7 @@
 
 #include "plasmazoneseffect.h"
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/screenchangehandler.h"
 #include "handlers/snapassisthandler.h"
@@ -334,10 +334,10 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     // autotile screen — autotile screens handle their own focus via
     // m_pendingAutotileFocusWindowId in the onComplete callback.
     KWin::EffectWindow* activeWin = KWin::effects->activeWindow();
-    if (activeWin && !m_autotileHandler->isAutotileScreen(getWindowScreenId(activeWin))) {
-        m_autotileHandler->setPendingReactivateWindow(activeWin);
+    if (activeWin && !m_tilingHandler->isManagedScreen(getWindowScreenId(activeWin))) {
+        m_tilingHandler->setPendingReactivateWindow(activeWin);
     }
-    m_autotileHandler->onDaemonReady();
+    m_tilingHandler->onDaemonReady();
 
     // Window re-announcement is NOT done here: onDaemonReady's loadSettings
     // queries the new daemon's authoritative autotile screen set and its

@@ -376,6 +376,7 @@ add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + w
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
+add_subdirectory(libs/phosphor-scroll-engine) # niri-style scrolling placement engine (strip model + engine)
 
 
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
@@ -511,12 +512,14 @@ endif()
 # resolve interfaces against these files post-install.
 install(FILES
     dbus/org.plasmazones.Autotile.xml
+    dbus/org.plasmazones.Tiling.xml
     dbus/org.plasmazones.CompositorBridge.xml
     dbus/org.plasmazones.Control.xml
     dbus/org.plasmazones.EditorApp.xml
     dbus/org.plasmazones.LayoutRegistry.xml
     dbus/org.plasmazones.Overlay.xml
     dbus/org.plasmazones.Screen.xml
+    dbus/org.plasmazones.Scrolling.xml
     dbus/org.plasmazones.Settings.xml
     dbus/org.plasmazones.SettingsApp.xml
     dbus/org.plasmazones.Shader.xml

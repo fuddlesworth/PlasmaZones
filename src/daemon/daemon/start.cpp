@@ -26,7 +26,7 @@
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
-#include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
@@ -156,7 +156,7 @@ void Daemon::connectScreenSignals()
 
                 // Drop the removed output's per-output virtual-desktop entries (#648)
                 // so the maps don't retain stale desktops across monitor hot-plug.
-                // The autotile engine self-prunes via updateAutotileScreens; the VDM
+                // The autotile engine self-prunes via updateEngineScreens; the VDM
                 // and layout registry are physical-id keyed (the effect reports
                 // physical output ids), matching removedScreenId. The overlay service
                 // delegates to the layout registry, so clearing it there suffices.
@@ -170,10 +170,17 @@ void Daemon::connectScreenSignals()
                 // The snap engine's per-(screen,desktop,activity) stores are created
                 // lazily on placement, not from an autotile-screens set, so the removed
                 // output's stores must be pruned explicitly here (autotile self-prunes
-                // via updateAutotileScreens). Matches every virtual sub-screen of the
+                // via updateEngineScreens). Matches every virtual sub-screen of the
                 // removed physical id.
                 if (m_snapEngine) {
                     m_snapEngine->pruneStatesForRemovedScreen(removedScreenId);
+                }
+                // The scroll engine's states self-prune for CURRENT-context
+                // screens via updateEngineScreens, but sibling-context
+                // states (other desktops/activities) for the removed output
+                // would leak without the explicit prune, same as snap.
+                if (m_scrollEngine) {
+                    m_scrollEngine->pruneStatesForRemovedScreen(removedScreenId);
                 }
 
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
@@ -265,7 +272,7 @@ void Daemon::connectDesktopActivity()
                     });
                 }
                 // [SEQ C] Set THIS screen's engine desktop context (pure per-screen
-                // swap, no state migration) BEFORE updateAutotileScreens() so the
+                // swap, no state migration) BEFORE updateEngineScreens() so the
                 // engine resolves TilingStates under the new (screen, desktop) key.
                 if (m_autotileEngine) {
                     m_autotileEngine->setCurrentDesktopForScreen(screenId, desktop);
@@ -276,13 +283,16 @@ void Daemon::connectDesktopActivity()
                 if (m_snapEngine) {
                     m_snapEngine->setCurrentDesktopForScreen(screenId, desktop);
                 }
+                if (m_scrollEngine) {
+                    m_scrollEngine->setCurrentDesktopForScreen(screenId, desktop);
+                }
                 // [SEQ D] Per-screen layout/overlay resolution context. The
                 // overlay service delegates to the layout registry for per-output
                 // desktop resolution, so this one push drives both (#648).
                 m_layoutManager->setCurrentVirtualDesktopForScreen(screenId, desktop);
                 // [SEQ E] Per-desktop assignments may differ — recompute autotile
                 // screens, re-sync mode/filter, then refresh overlay geometry.
-                updateAutotileScreens();
+                updateEngineScreens();
                 syncModeFromAssignments();
                 if (m_overlayService->isVisible()) {
                     m_overlayService->updateGeometries();
@@ -326,7 +336,8 @@ void Daemon::connectDesktopActivity()
                 // holding state — filter for anything past the new count and prune,
                 // avoiding the arbitrary upper bound of the old newCount+20 sweep. Both
                 // per-monitor engines carry their own stores, so prune both.
-                for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.get(), m_snapEngine.get()}) {
+                for (PhosphorEngine::PlacementEngineBase* engine :
+                     {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
                     if (!engine) {
                         continue;
                     }
@@ -351,6 +362,9 @@ void Daemon::connectDesktopActivity()
     }
     if (m_snapEngine) {
         m_snapEngine->setCurrentDesktop(initialDesktop);
+    }
+    if (m_scrollEngine) {
+        m_scrollEngine->setCurrentDesktop(initialDesktop);
     }
 
     // Initialize and start activity manager
@@ -384,7 +398,8 @@ void Daemon::connectDesktopActivity()
 
             // Both per-monitor engines carry their own per-(screen,desktop,activity)
             // stores, so prune removed activities from both.
-            for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.get(), m_snapEngine.get()}) {
+            for (PhosphorEngine::PlacementEngineBase* engine :
+                 {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
                 if (engine) {
                     engine->pruneStatesForActivities(activities);
                 }
@@ -401,6 +416,9 @@ void Daemon::connectDesktopActivity()
         }
         if (m_snapEngine) {
             m_snapEngine->setCurrentActivity(initialActivity);
+        }
+        if (m_scrollEngine) {
+            m_scrollEngine->setCurrentActivity(initialActivity);
         }
 
         // Connect activity changes: update all components
@@ -423,15 +441,18 @@ void Daemon::connectDesktopActivity()
                             return service->isWindowSticky(windowId);
                         });
                     }
-                    // Set engine's activity context BEFORE updateAutotileScreens()
+                    // Set engine's activity context BEFORE updateEngineScreens()
                     if (m_autotileEngine) {
                         m_autotileEngine->setCurrentActivity(activityId);
                     }
                     if (m_snapEngine) {
                         m_snapEngine->setCurrentActivity(activityId);
                     }
+                    if (m_scrollEngine) {
+                        m_scrollEngine->setCurrentActivity(activityId);
+                    }
                     // Per-activity assignments may differ — recompute autotile screens
-                    updateAutotileScreens();
+                    updateEngineScreens();
                     // Sync mode, layout filter, and controller state from per-activity assignments.
                     syncModeFromAssignments();
                     if (m_overlayService->isVisible()) {
@@ -819,10 +840,10 @@ void Daemon::connectShortcutSignals()
 
 void Daemon::pruneContextMapsForDesktop(int maxDesktop)
 {
-    auto it = m_lastAutotileOrders.begin();
-    while (it != m_lastAutotileOrders.end()) {
+    auto it = m_lastEngineOrders.begin();
+    while (it != m_lastEngineOrders.end()) {
         if (it.key().desktop > maxDesktop) {
-            it = m_lastAutotileOrders.erase(it);
+            it = m_lastEngineOrders.erase(it);
         } else {
             ++it;
         }
@@ -831,10 +852,10 @@ void Daemon::pruneContextMapsForDesktop(int maxDesktop)
 
 void Daemon::pruneContextMapsForActivities(const QSet<QString>& validActivities)
 {
-    auto it = m_lastAutotileOrders.begin();
-    while (it != m_lastAutotileOrders.end()) {
+    auto it = m_lastEngineOrders.begin();
+    while (it != m_lastEngineOrders.end()) {
         if (!it.key().activity.isEmpty() && !validActivities.contains(it.key().activity)) {
-            it = m_lastAutotileOrders.erase(it);
+            it = m_lastEngineOrders.erase(it);
         } else {
             ++it;
         }
@@ -923,10 +944,10 @@ void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenI
     // Also keep the physical ID itself (in case VS config was removed entirely)
     keepIds.insert(physicalScreenId);
 
-    for (auto it = m_lastAutotileOrders.begin(); it != m_lastAutotileOrders.end();) {
+    for (auto it = m_lastEngineOrders.begin(); it != m_lastEngineOrders.end();) {
         if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key().screenId) == physicalScreenId
             && !keepIds.contains(it.key().screenId)) {
-            it = m_lastAutotileOrders.erase(it);
+            it = m_lastEngineOrders.erase(it);
         } else {
             ++it;
         }
@@ -947,10 +968,10 @@ void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenI
 
 void Daemon::pruneAutotileOrdersForWindow(const QString& instanceId)
 {
-    if (instanceId.isEmpty() || m_lastAutotileOrders.isEmpty()) {
+    if (instanceId.isEmpty() || m_lastEngineOrders.isEmpty()) {
         return;
     }
-    for (auto it = m_lastAutotileOrders.begin(); it != m_lastAutotileOrders.end();) {
+    for (auto it = m_lastEngineOrders.begin(); it != m_lastEngineOrders.end();) {
         QStringList& order = it.value();
         const int before = order.size();
         order.erase(std::remove_if(order.begin(), order.end(),
@@ -959,7 +980,7 @@ void Daemon::pruneAutotileOrdersForWindow(const QString& instanceId)
                                    }),
                     order.end());
         if (order.isEmpty()) {
-            it = m_lastAutotileOrders.erase(it);
+            it = m_lastEngineOrders.erase(it);
         } else {
             if (order.size() != before) {
                 qCDebug(lcDaemon) << "Pruned closed window" << instanceId
@@ -982,7 +1003,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     const PhosphorScreens::VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
 
     // Recalculate zone geometries inline for the affected screens FIRST so
-    // that any PhosphorTiles::TilingState created by the upcoming updateAutotileScreens
+    // that any PhosphorTiles::TilingState created by the upcoming updateEngineScreens
     // call (and the resnap below) reads fresh zone bounds. The screenAdded
     // handler does the same inline recalc for newly-added physical screens.
     const QString activity = currentActivity();
@@ -1032,8 +1053,8 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // assignments already exist on the VS IDs leaves the engine unaware of
     // the screens — onScreenGeometryChanged early-returns and no tiling
     // happens until something else (e.g. an assignment change) fires
-    // layoutAssigned → updateAutotileScreens.
-    updateAutotileScreens();
+    // layoutAssigned → updateEngineScreens.
+    updateEngineScreens();
 
     // Resnap windows on this physical screen and any of its virtual children
     // to their stored zones. Uses calculateResnapFromCurrentAssignments which
@@ -1065,7 +1086,7 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     //   2. Kick the snap-mode resnap (tagged vs_reconfigure → no snap-assist).
     // The autotile retile is handled by AutotileEngine's own
     // virtualScreenRegionsChanged handler — we deliberately do NOT call
-    // updateAutotileScreens() here, because that would force a second retile
+    // updateEngineScreens() here, because that would force a second retile
     // pass on top of the engine's own, producing the visible "move then
     // retile" double-movement reported on VS swap/rotate.
 

@@ -490,6 +490,29 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return PhosphorI18n::tr("Drag: %1")
                 .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
         }
+        // ── scrolling-engine overrides ──
+        // Widths are work-area fractions on the wire, shown as a percent like
+        // SetSplitRatio. The enum actions delegate token→label to the shared
+        // enumOptionLabel, like SetInsertPosition above. OpenTabbed is a bool
+        // action and already returned by boolActionStateLabel.
+        if (action.type == ActionType::SetScrollDefaultColumnWidth) {
+            return PhosphorI18n::tr("Column width: %1%").arg(qRound(raw.toDouble() * 100.0));
+        }
+        if (action.type == ActionType::OpenColumnWidth) {
+            return PhosphorI18n::tr("Open at width: %1%").arg(qRound(raw.toDouble() * 100.0));
+        }
+        if (action.type == ActionType::SetCenterFocusedColumn) {
+            return PhosphorI18n::tr("Centering: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
+        if (action.type == ActionType::SetScrollDefaultColumnDisplay) {
+            return PhosphorI18n::tr("New columns: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
+        if (action.type == ActionType::OpenColumnPlacement) {
+            return PhosphorI18n::tr("Open: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
         // ── window-management overrides ──
         if (action.type == ActionType::SetWindowLayer) {
             const QString v = raw.toString();

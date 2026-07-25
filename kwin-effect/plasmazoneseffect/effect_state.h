@@ -203,7 +203,7 @@ struct DaemonGateState
     /// advanced, and the z-order restore drops only when every screen it
     /// targeted has advanced. Per-screen, not global, so a batch on
     /// one output never strands an in-flight cascade on another — mirrors the
-    /// autotile cascade guard (m_autotileStaggerGenByScreen).
+    /// autotile cascade guard (m_tileStaggerGenByScreen).
     QHash<QString, uint64_t> batchGenByScreen;
     int pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
     uint64_t vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs

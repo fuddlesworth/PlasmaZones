@@ -84,9 +84,12 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     }
     // Engine mode (context field) — derived from the snapped / tiled state above
     // so a per-mode rule (`Mode Equals "tiling"`) resolves this window's border /
-    // title / colour the same way the daemon resolves its per-mode gaps. Snapping
-    // and tiling are the only engine modes; a floating (unmanaged) window has no
-    // mode, so query.mode is left empty and no Mode leaf matches it.
+    // title / colour the same way the daemon resolves its per-mode gaps. A
+    // floating (unmanaged) window has no mode, so query.mode is left empty and
+    // no Mode leaf matches it. Scrolling is indistinguishable from tiling at
+    // this level (strip windows ride the tile pipeline); the effect's
+    // ruleQuery() funnel re-stamps "scrolling" from the per-screen engine
+    // discriminator, which this free helper cannot reach.
     if (isTiled) {
         query.mode = QStringLiteral("tiling");
     } else if (isSnapped) {

@@ -156,6 +156,24 @@ Q_SIGNALS:
     void swapVirtualScreenRequested(NavigationDirection direction);
     void rotateVirtualScreensRequested(bool clockwise);
 
+    // Scrolling-mode column vocabulary. Directional focus/move/swap reuse
+    // the generic navigation signals above; these are the scroll-specific
+    // verbs. Delta-carrying signals: -1 = left/back, +1 = right/forward.
+    void scrollFocusColumnEndRequested(bool last);
+    void scrollMoveColumnToEndRequested(bool last);
+    void scrollConsumeWindowRequested();
+    void scrollExpelWindowRequested();
+    void scrollConsumeOrExpelRequested(int delta);
+    void scrollCenterColumnRequested();
+    void scrollToggleColumnTabbedRequested();
+    void scrollCycleColumnWidthRequested(int delta);
+    void scrollAdjustColumnWidthRequested(int deltaPercent);
+    void scrollMaximizeColumnRequested();
+    void scrollExpandColumnRequested();
+    void scrollCycleWindowHeightRequested(int delta);
+    void scrollAdjustWindowHeightRequested(int deltaPercent);
+    void scrollResetWindowHeightsRequested();
+
 private:
     struct Entry
     {

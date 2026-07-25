@@ -6,7 +6,7 @@
  * @brief Producer-side guard for AutotileEngine::windowsTiled JSON.
  *
  * Phase 1B added PhosphorProtocol::TileRequestEntry::validationError(), and
- * AutotileAdaptor::slotWindowsTileRequested on the effect side drops any
+ * TilingAdaptor::slotWindowsTileRequested on the effect side drops any
  * batch entry that fails validation. The JSON producer in
  * AutotileEngine::applyTiling must therefore populate every field the
  * validator requires — screenId, non-zero windowId, non-zero size on
@@ -19,7 +19,7 @@
  * existing test_dbus_validation pinned the validator's behaviour but
  * never exercised a real producer, so the bug slipped through.
  *
- * This test mirrors the AutotileAdaptor::onWindowsTiled parse logic
+ * This test mirrors the TilingAdaptor::onWindowsTiled parse logic
  * exactly (same field names, same optional flags) so a drift in either
  * producer or consumer that broke round-tripping would fail here too.
  */
@@ -44,8 +44,8 @@ using namespace PhosphorProtocol;
 
 namespace {
 
-/// Mirrors AutotileAdaptor::onWindowsTiled's JSON → PhosphorProtocol::TileRequestList parse.
-/// Kept in sync with src/dbus/autotileadaptor.cpp so the producer test
+/// Mirrors TilingAdaptor::onWindowsTiled's JSON → PhosphorProtocol::TileRequestList parse.
+/// Kept in sync with src/dbus/tilingadaptor/tilingadaptor.cpp so the producer test
 /// exercises the exact same deserialization the D-Bus pipe performs.
 PhosphorProtocol::TileRequestList parseWindowsTiledJson(const QString& json)
 {
@@ -87,7 +87,7 @@ private Q_SLOTS:
     // Set up an engine with a screen and two windows, force calculated
     // zones (bypassing real screen geometry which unit tests don't have),
     // run retile, capture the windowsTiled signal, parse each entry via
-    // the same path the AutotileAdaptor uses, and assert every entry
+    // the same path the TilingAdaptor uses, and assert every entry
     // passes validation.
     // ─────────────────────────────────────────────────────────────────────
     void applyTiling_populatesScreenIdOnEveryTiledEntry()

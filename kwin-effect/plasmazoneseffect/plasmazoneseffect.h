@@ -5,7 +5,7 @@
 
 #include <cstdint>
 
-#include <PhosphorCompositor/AutotileState.h>
+#include <PhosphorCompositor/TilingState.h>
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorCompositor/DecorationManager.h>
 #include <PhosphorCompositor/ICompositorBridge.h>
@@ -79,7 +79,7 @@ using PhosphorCompositor::BorderState;
 using PhosphorCompositor::DecorationManager;
 using PhosphorCompositor::ICompositorBridge;
 using PhosphorCompositor::ParsedTrigger;
-namespace AutotileStateHelpers = PhosphorCompositor::AutotileStateHelpers;
+namespace TilingStateHelpers = PhosphorCompositor::TilingStateHelpers;
 namespace TriggerParser = PhosphorCompositor::TriggerParser;
 
 // Per-call state carried into paintShaderTransitionWindow; defined in
@@ -106,13 +106,13 @@ static_assert(
 // minimizedChanged(true) events on tiled windows, with the matching
 // unminimize ~1-2 ms later. Two suppressions key off this window and MUST
 // agree on its width: the autotile minimize→float debounce
-// (autotilehandler/signals.cpp) and the minimize shader-event
+// (tilinghandler/signals.cpp) and the minimize shader-event
 // spurious-pair cancel (plasmazoneseffect/daemon_apply.cpp,
 // slotWindowMinimizedChanged). Shared here so the two can never desync.
 inline constexpr int kSpuriousMinimizePairMs = 75;
 
 // Forward declarations for helper classes
-class AutotileHandler;
+class TilingHandler;
 class SnapHandler;
 class KWinCompositorBridge;
 class NavigationHandler;
@@ -471,7 +471,7 @@ private:
      * must bail while this is true or a peek collapses on the first cursor move
      * or engine relayout. Both origins are covered: effect-local paths that
      * never touch the bus (focus-follows-mouse in snaphandler and
-     * autotilehandler) and daemon-relayed ones (retile reactivation, unfloat
+     * tilinghandler) and daemon-relayed ones (retile reactivation, unfloat
      * refocus, the snap engine's activate requests, the autotile engine's
      * post-relayout focus flush, and the compositor bridge's activateWindow).
      * For the relayed ones the effect cannot tell a user-initiated daemon
@@ -647,9 +647,9 @@ private:
     /// (Discussion #724). Shared by getWindowScreenId and the activation-time
     /// desktop report in notifyWindowActivated.
     KWin::LogicalOutput* windowOutput(KWin::EffectWindow* w) const;
-    AutotileHandler* autotileHandler() const
+    TilingHandler* tilingHandler() const
     {
-        return m_autotileHandler.get();
+        return m_tilingHandler.get();
     }
     SnapHandler* snapHandler() const
     {
@@ -705,7 +705,7 @@ public Q_SLOTS:
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper class access methods — consumed across the handler split
-    // (AutotileHandler/SnapHandler via decorationManager(), ScreenChangeHandler
+    // (TilingHandler/SnapHandler via decorationManager(), ScreenChangeHandler
     // via applyStaggeredOrImmediate, KWinCompositorBridge via clearScreenIdCache)
     // ═══════════════════════════════════════════════════════════════════════════════
 public:
@@ -760,7 +760,7 @@ public:
 
 private:
     // Friend classes for helpers
-    friend class AutotileHandler;
+    friend class TilingHandler;
     friend class SnapHandler;
     friend class NavigationHandler;
     friend class ScreenChangeHandler;
@@ -773,7 +773,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
-    std::unique_ptr<AutotileHandler> m_autotileHandler;
+    std::unique_ptr<TilingHandler> m_tilingHandler;
     std::unique_ptr<SnapHandler> m_snapHandler;
 
     QHash<QString, WindowDecoration> m_windowDecorations; // windowId → border
@@ -1531,7 +1531,7 @@ private:
 
     /// Resolve the DECORATION SURFACE PATH for @p windowId based on MEMBERSHIP
     /// alone:
-    ///   • autotile member (AutotileStateHelpers::isTiledWindow) → "window.tiled"
+    ///   • autotile member (TilingStateHelpers::isTiledWindow) → "window.tiled"
     ///   • else snap member (SnapHandler::isTiledWindow)         → "window.snapped"
     ///   • else                                                  → "window.floating"
     /// Autotile-first precedence. The resolved profile's effectiveChain() (an
@@ -1935,7 +1935,7 @@ private:
     PhosphorRules::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
 
     // Minimum window size for autotile eligibility. Windows smaller than this
-    // are rejected by isEligibleForAutotileNotify() to prevent small utility
+    // are rejected by isEligibleForTilingNotify() to prevent small utility
     // windows (emoji picker, color picker, etc.) from entering the tiling tree.
     // Defaults match ConfigDefaults::minimumWindowWidth/Height() (200/150).
     // The async loadSettingAsync() call in loadCachedSettings() overrides
@@ -1992,7 +1992,7 @@ private:
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end
-    // handler uses the same decision, preventing a race where m_autotileScreens
+    // handler uses the same decision, preventing a race where m_managedScreens
     // changes mid-drag (e.g., async D-Bus signal) and leaves the popup visible.
     bool m_dragBypassedForAutotile = false;
     QString m_dragBypassScreenId; // Screen at drag start (for float D-Bus call on drag end)
@@ -2067,7 +2067,7 @@ private:
     // minimize→unminimize pairs (plasmashell notification stacking emits
     // them on tiled windows ~1-2 ms apart; the float side debounces the
     // same quirk with the shared kSpuriousMinimizePairMs — see
-    // autotilehandler/signals.cpp). An unminimize landing inside the
+    // tilinghandler/signals.cpp). An unminimize landing inside the
     // window silently drops the reverse leg instead of replaying a full
     // un-minimize animation. `generation` pins the stamp to the exact
     // transition the minimize event installed (or kept running), so the

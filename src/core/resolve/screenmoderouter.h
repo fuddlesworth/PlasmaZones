@@ -21,7 +21,7 @@ namespace PlasmaZones {
  *
  * Every window-lifecycle and cleanup entry point in the daemon and its
  * D-Bus adaptors should route through this class instead of calling
- * `m_autotileEngine->isAutotileScreen()` / `modeForScreen()` ad hoc at
+ * `m_autotileEngine->isActiveOnScreen()` / `modeForScreen()` ad hoc at
  * each site. Engines trust that their callers routed correctly — no
  * defensive mode checks inside SnapEngine or AutotileEngine.
  *
@@ -39,7 +39,7 @@ public:
     /// and layout manager. None of the pointers are owned; they must
     /// outlive the router.
     ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager, PhosphorEngine::IPlacementEngine* snapEngine,
-                     PhosphorEngine::IPlacementEngine* autotileEngine);
+                     PhosphorEngine::IPlacementEngine* autotileEngine, PhosphorEngine::IPlacementEngine* scrollEngine);
 
     /// Current mode for @p screenId. Consults the autotile engine's
     /// live set first (mode is derived from assignment + context) and
@@ -62,18 +62,11 @@ public:
     /// Split a list of screen ids into per-mode buckets. Useful for
     /// multi-screen cleanup and resnap paths that need to iterate one
     /// engine at a time. Preserves input order within each bucket.
-    ///
-    /// Screens assigned to a mode whose engine is not currently wired
-    /// in the router (Scrolling — engine slot reserved, see
-    /// `AssignmentEntry::Mode`) land in @ref passthrough. Existing
-    /// callers that only enumerate `.snap` / `.autotile` correctly
-    /// skip passthrough screens (they are unmanaged by this daemon, so
-    /// cleanup loops should leave them alone).
     struct Partitioned
     {
         QStringList snap;
         QStringList autotile;
-        QStringList passthrough; ///< Scrolling-mode screens — no engine wired
+        QStringList scrolling;
     };
     Partitioned partitionByMode(const QStringList& screenIds) const;
 
@@ -81,6 +74,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorEngine::IPlacementEngine* m_snapEngine;
     PhosphorEngine::IPlacementEngine* m_autotileEngine;
+    PhosphorEngine::IPlacementEngine* m_scrollEngine;
 };
 
 } // namespace PlasmaZones
