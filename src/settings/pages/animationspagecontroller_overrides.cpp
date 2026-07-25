@@ -325,6 +325,12 @@ bool AnimationsPageController::clearOverride(const QString& path)
     // declines, leaving the entry behind. The page is dirty and has to be told
     // even though the clear did not happen. The drop used to own this signal
     // before it was deferred, so the early return has to carry it now.
+    //
+    // UNTESTED, deliberately: reaching it needs the file's bytes to change
+    // between snapshotFileIfFirst and the drop, inside one call, with the
+    // removal also failing. There is no seam in the public surface to
+    // interleave that, and adding one purely for the test would be a worse
+    // trade than saying plainly that this branch rests on inspection.
     if (removeOverrideFile(path) != OverrideFileRemoval::Removed) {
         if (wasPending != hasPendingChanges())
             Q_EMIT pendingChangesChanged();
