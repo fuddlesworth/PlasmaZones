@@ -23,7 +23,10 @@ class CurveRegistry;
 class PhosphorProfileRegistry;
 
 /// Scans JSON profile-definition files and registers them with PhosphorProfileRegistry.
-/// Symmetric with CurveLoader. User curves must already be registered (CurveLoader first).
+/// Shaped like CurveLoader, with one addition: this class also offers a synchronous
+/// `rescanNow()`, for the consumer that writes profile files and reads the registry
+/// back in the same call. Nothing needs that of curves, so CurveLoader has no twin.
+/// User curves must already be registered (CurveLoader first).
 /// Profiles loaded here are preset templates — settings UIs deep-copy into active profiles.
 class PHOSPHORANIMATION_EXPORT ProfileLoader : public QObject
 {
@@ -50,6 +53,14 @@ public:
     /// profile file can read the registry back in the same call. The
     /// debounced `requestRescan` would answer that read with the
     /// pre-write state.
+    ///
+    /// GUI-thread only, like the rest of this class. `profilesChanged`
+    /// (and the registry's own `profileChanged` / `profilesReloaded`) are
+    /// emitted on the CALLER's stack if the rescan sees a change, so a
+    /// caller that is mid-mutation fans out into every listener before
+    /// this returns. Unlike `requestRescan`, this does not defer when a
+    /// scan is already running, so calling it from one of those handlers
+    /// re-enters the scan.
     void rescanNow();
     int registeredCount() const;
 

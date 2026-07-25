@@ -207,6 +207,58 @@ private Q_SLOTS:
         QCOMPARE(reResolved->minDistance.value_or(-1), 9);
     }
 
+    /// `rescanNow()` must commit before it returns — no event loop, no
+    /// QTRY_. That is the whole reason it exists next to the debounced
+    /// `requestRescan()`: a consumer that writes a profile file and reads
+    /// the registry back in the same call cannot wait for a timer.
+    void testRescanNowCommitsSynchronously()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("sync.json"));
+        QVERIFY(writeFile(path, QStringLiteral(R"({
+            "name": "sync",
+            "duration": 111
+        })")));
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
+        loader.loadFromDirectory(dir.path(), LiveReload::On);
+
+        QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
+
+        QVERIFY(QFile::remove(path));
+        QVERIFY(writeFile(path, QStringLiteral(R"({
+            "name": "sync",
+            "duration": 222
+        })")));
+
+        loader.rescanNow();
+        // Both assertions run on the same stack as the call above.
+        QCOMPARE(spy.count(), 1);
+        const auto resolved = m_profileRegistry.resolve(QStringLiteral("sync"));
+        QVERIFY(resolved.has_value());
+        QCOMPARE(resolved->duration.value_or(-1.0), 222.0);
+
+        // A removal is visible just as immediately — the case the settings
+        // app's "Revert to inherited" depends on.
+        QVERIFY(QFile::remove(path));
+        loader.rescanNow();
+        QVERIFY(!m_profileRegistry.resolve(QStringLiteral("sync")).has_value());
+    }
+
+    /// `rescanNow()` on a loader with nothing registered must be a no-op
+    /// rather than a commit of an empty set, which would wipe the owner
+    /// partition of a loader that had not scanned yet.
+    void testRescanNowWithNoDirectoriesIsHarmless()
+    {
+        m_profileRegistry.registerProfile(QStringLiteral("direct"), Profile{}, QStringLiteral("someone-else"));
+
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
+        loader.rescanNow();
+
+        QCOMPARE(loader.registeredCount(), 0);
+        QVERIFY(m_profileRegistry.resolve(QStringLiteral("direct")).has_value());
+    }
+
     /// `profilesChanged` must NOT fire on a no-op rescan — the
     /// commitBatch diff in ProfileLoader::Sink suppresses the consumer
     /// signal when the re-parsed profile set is identical to the

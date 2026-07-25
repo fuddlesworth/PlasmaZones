@@ -10,6 +10,10 @@
  * Pins the file-per-path persistence model: setOverride writes one JSON
  * file under `<userProfilesDir>/<path>.json`, clearOverride deletes it,
  * resolvedProfile walks the parent chain and fills library defaults.
+ * Also pins how that walk stays honest against the process-wide
+ * PhosphorProfileRegistry, which a debounced watcher feeds from the same
+ * directory: the user override files are read ahead of the registry, and a
+ * removal runs the injected refresher so the next read is never stale.
  * The suppression-mirror slots pin `stockSuppressedEvents` (the
  * settings-side twin of the compositor's syncStockEffectSuppression
  * ownership gate) and its NOTIFY inputs.
@@ -35,8 +39,8 @@
 #include <QJsonObject>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
-#include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfileLoader.h>
@@ -96,6 +100,16 @@ class TestAnimationsPageController : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+
+    /// The registry-backed slots below publish a stack-local registry as the
+    /// PROCESS-WIDE default. Catch a leaked publish at its source rather than
+    /// as a mystery failure in whichever slot happens to run next — the same
+    /// guard libs/phosphor-animation/tests/test_phosphorprofileregistry.cpp
+    /// uses.
+    void init()
+    {
+        QCOMPARE(PhosphorAnimation::PhosphorProfileRegistry::defaultRegistry(), nullptr);
+    }
 
     // ─── Slider bounds ────────────────────────────────────────────────────
 
@@ -678,9 +692,14 @@ private Q_SLOTS:
 
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 777}}));
         // Stand in for the debounce landing: from here the registry holds 777
-        // and knows nothing of what follows until it is told.
+        // and knows nothing of what follows until it is told. Unwrapped step by
+        // step — a bare .value().duration.value() would throw out of the test
+        // binary on a regression instead of failing with a readable diff.
         loader.rescanNow();
-        QCOMPARE(registry.resolve(QStringLiteral("editor.snapIn")).value().duration.value(), 777);
+        const auto seeded = registry.resolve(QStringLiteral("editor.snapIn"));
+        QVERIFY(seeded.has_value());
+        QVERIFY(seeded->duration.has_value());
+        QCOMPARE(seeded->duration.value(), 777);
 
         // A second write lands on disk while the registry still holds 777.
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 888}}));
@@ -693,9 +712,63 @@ private Q_SLOTS:
         QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 123);
     }
 
+    /// clearOverride is not the only path that removes an override file: the
+    /// scoped discard, the global discard and the bulk clears all do, and each
+    /// carries the same hazard — the file is gone, so nothing on disk outranks
+    /// the entry the registry is still holding. Deleting the refresh from any
+    /// of the three legs below fails this test.
+    void everyBatchRemovalPathRefreshesTheProfileStore()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        PhosphorAnimation::CurveRegistry curves;
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(&registry);
+        const auto unpublish = qScopeGuard([]() {
+            PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
+        });
+        PhosphorAnimation::ProfileLoader loader(registry, curves, QStringLiteral("test-user-profiles"));
+        loader.loadFromDirectory(tmp.path(), PhosphorAnimation::LiveReload::On);
+        c.setProfileStoreRefresher([&loader]() {
+            loader.rescanNow();
+        });
+
+        // The parent holds the value each leg must fall back to.
+        QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 123}}));
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 777}}));
+        loader.rescanNow();
+
+        // Leg 1 — scoped discard (the per-page kebab Discard). The leaf file
+        // did not exist before this session, so reverting removes it.
+        QVERIFY(c.revertPendingUnder(QStringList{QStringLiteral("editor.snapIn")}));
+        QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 123);
+
+        // Leg 2 — bulk clear (the page Reset buttons), which deletes every
+        // in-scope file and refreshes once for the batch.
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 888}}));
+        loader.rescanNow();
+        QCOMPARE(c.clearOverridesUnder(QStringList{QStringLiteral("editor.snapIn")}), 1);
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 123);
+
+        // Leg 3 — global discard, which takes the parent with it, so the leaf
+        // falls all the way through to the library default.
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 999}}));
+        loader.rescanNow();
+        QVERIFY(c.revertPending());
+        QVERIFY(!c.hasOverride(QStringLiteral("editor")));
+        QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toDouble(),
+                 PhosphorAnimation::Profile::DefaultDuration);
+    }
+
     /// The registry is still the source for every level this controller does
-    /// NOT write: bundled and system-dir profiles, and the shell family seeds.
-    /// Dropping it in favour of the disk read would have silenced all of them.
+    /// NOT write, which in the settings app means bundled and system-dir
+    /// profiles. Dropping it in favour of the disk read would have silenced
+    /// them.
     void resolvedProfile_stillReadsTheRegistryWhereNoUserFileExists()
     {
         QTemporaryDir tmp;

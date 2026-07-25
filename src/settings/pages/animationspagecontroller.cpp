@@ -227,7 +227,7 @@ void AnimationsPageController::setProfileStoreRefresher(std::function<void()> re
     m_profileStoreRefresher = std::move(refresher);
 }
 
-void AnimationsPageController::refreshProfileStore() const
+void AnimationsPageController::refreshProfileStore()
 {
     if (m_profileStoreRefresher)
         m_profileStoreRefresher();

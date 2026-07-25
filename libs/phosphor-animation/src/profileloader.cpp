@@ -17,6 +17,7 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QPair>
+#include <QScopeGuard>
 #include <QUuid>
 
 #include <algorithm>
@@ -45,9 +46,21 @@ public:
 
     /// Parent-loader-visible flag — read by the lambda bound to
     /// `DirectoryLoader::entriesChanged` to decide whether the consumer
-    /// signal (`profilesChanged`) fires. Reset to false at the start of
-    /// every `commitBatch`; flipped to true on any tracked-state change.
+    /// signal (`profilesChanged`) fires. Flipped to true on any
+    /// tracked-state change, and cleared only when the OUTERMOST
+    /// `commitBatch` starts.
+    ///
+    /// Depth-scoped rather than unconditionally cleared: `commitBatch`
+    /// ends in `reloadFromOwner`, which emits `profileChanged` on the
+    /// caller's stack, and `ProfileLoader::rescanNow()` is public, so a
+    /// consumer can re-enter a scan from such a handler. An
+    /// unconditional clear at the top of the nested batch would discard
+    /// the outer batch's evidence, and the outer `entriesChanged` would
+    /// then silently suppress `profilesChanged` for a real change.
     bool lastBatchChanged = false;
+
+    /// Reentry depth for `commitBatch`. See `lastBatchChanged`.
+    int commitDepth = 0;
 
     const QString& ownerTag() const
     {
@@ -80,7 +93,17 @@ public:
     void commitBatch(const QStringList& removedKeys,
                      const QList<PhosphorFsLoader::ParsedEntry>& currentEntries) override
     {
-        lastBatchChanged = false;
+        // Only the outermost batch starts from a clean slate — a nested one
+        // (reached through `reloadFromOwner`'s synchronous `profileChanged`
+        // into a consumer that calls `rescanNow`) accumulates into the
+        // evidence the outer batch has already gathered.
+        if (commitDepth == 0) {
+            lastBatchChanged = false;
+        }
+        ++commitDepth;
+        const auto leaveBatch = qScopeGuard([this] {
+            --commitDepth;
+        });
 
         // Walk removals first so a re-add of the same key on the same
         // pass sees a clean snapshot and registers fresh.
@@ -139,7 +162,8 @@ public:
         // Single reloadFromOwner -> one profilesReloaded signal regardless
         // of how many files changed (decision W: coalesce). The partitioning
         // ensures daemon-direct entries at other paths survive this rescan.
-        Q_ASSERT(registry);
+        // `registry` is bound from a reference in the ctor, so it is never
+        // null and needs no guard.
         registry->reloadFromOwner(m_ownerTag, currentMap);
     }
 
