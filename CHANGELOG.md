@@ -15,6 +15,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Breaking D-Bus interface split**: the shared engine transport moved from org.plasmazones.Autotile to the engine-neutral org.plasmazones.Tiling interface, which serves every tiling-family engine. The moved surface covers the window lifecycle calls (windowOpened, windowsOpenedBatch, windowClosed, windowMinSizeUpdated, notifyWindowFocused), the tile-request and float signals (windowsTileRequested, focusWindowRequested, windowFloatingChanged, tilingChanged, windowsReleasedFromTiling), the retile methods, the enabled property with its change signal, and the screen set, now published as the union property managedScreens. The org.plasmazones.Autotile name still exists but is narrower now, carrying algorithm selection, master operations, focus cycling, and autotile configuration beside the new org.plasmazones.Scrolling interface. Check any external script against the new interface files before relying on it ([#852](https://github.com/fuddlesworth/PlasmaZones/pull/852)).
 
+### Fixed
+
+- **Reverting an animation's duration or curve shows the inherited value right away**: the "Revert to inherited" links cleared the override but left the control showing the value you had just removed, and it only caught up the next time you opened the settings app ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+
 ## [3.3.0] - 2026-07-23
 
 ### Added
