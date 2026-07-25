@@ -695,11 +695,26 @@ configure_file(
 # is absent.
 
 if(BUILD_PHOSPHOR_SHELL)
-    add_executable(phosphor-shell shell/main.cpp)
+    add_executable(phosphor-shell
+        shell/main.cpp
+        # The bar's IBarWidgetFactory registry owner + the generic
+        # QML-component factory. Production's first registry owner; the
+        # Phosphor.Bar QML module stays registry-agnostic (Phase 4.1).
+        shell/BarController.h
+        shell/barcontroller.cpp
+        shell/QmlComponentBarWidgetFactory.h
+        shell/qmlcomponentbarwidgetfactory.cpp
+    )
 
     target_link_libraries(phosphor-shell
         PRIVATE
             PhosphorShell::PhosphorShell
+            # Registry core (Registry<IBarWidgetFactory> + RegistryNotifier)
+            # for BarController, and the Phosphor.Bar QML module + its plugin
+            # registrar so the bar delegates resolve at runtime.
+            PhosphorRegistry::PhosphorRegistry
+            PhosphorShellBar::PhosphorShellBarQml
+            PhosphorShellBarQmlplugin
             PhosphorServiceIconTheme::PhosphorServiceIconTheme
             PhosphorServiceSni::PhosphorServiceSni
             PhosphorServiceUPower::PhosphorServiceUPower

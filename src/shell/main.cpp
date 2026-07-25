@@ -19,12 +19,17 @@
 #include <PhosphorShell/ShellLoader.h>
 #include <PhosphorWayland/LayerShellPluginLoader.h>
 
+#include "BarController.h"
+
 #include <PhosphorLayer/SurfaceFactory.h>
 #include <PhosphorLayer/defaults/DefaultScreenProvider.h>
 #include <PhosphorLayer/defaults/PhosphorWaylandTransport.h>
 
 #include <QGuiApplication>
+#include <QIcon>
 #include <QLoggingCategory>
+#include <QQmlContext>
+#include <QQmlEngine>
 
 Q_LOGGING_CATEGORY(lcShell, "phosphorshell.main")
 
@@ -44,6 +49,15 @@ int main(int argc, char* argv[])
     app.setApplicationName(QStringLiteral("phosphor-shell"));
     app.setApplicationVersion(QStringLiteral("0.1.0"));
     app.setQuitOnLastWindowClosed(false);
+
+    // Guarantee named freedesktop icons resolve (bar widgets use
+    // Kirigami.Icon → QIcon::fromTheme). On a desktop session the platform
+    // theme usually sets a theme already; setting only the FALLBACK leaves
+    // the user's choice intact and just backstops a session that exposes
+    // none, so icons never silently come up blank.
+    if (QIcon::fallbackThemeName().isEmpty()) {
+        QIcon::setFallbackThemeName(QStringLiteral("breeze"));
+    }
 
     // Register every Phosphor.Service.* QML type BEFORE the engine
     // loads shell.qml. Post Phase 2.0 the umbrella is gone; each
@@ -180,6 +194,15 @@ int main(int argc, char* argv[])
     // regardless of the URL scheme.
     qCInfo(lcShell) << "Loading shell from:" << shellUrl.toString();
 
+    // The bar's IBarWidgetFactory registry owner. Declared BEFORE the
+    // engine so C++ reverse-order destruction tears the engine down first
+    // (clearing every QML binding to the BarRegistry context property)
+    // before the controller dies. It is process-global, outliving every
+    // hot-reload engine rebuild; the engine hook below re-binds it on each
+    // fresh QQmlEngine, and createWidgetFor resolves the live engine from
+    // each widget's parent so no stale-engine reference is held.
+    PhosphorShellApp::BarController barController;
+
     PhosphorShell::ShellEngine engine(
         PhosphorShell::ShellEngine::Deps{
             .surfaceFactory = &factory,
@@ -197,6 +220,14 @@ int main(int argc, char* argv[])
     // PhosphorServiceIconTheme::IconImageProvider::setImage.
     engine.addEngineHook([](QQmlEngine* qmlEngine) {
         PhosphorServiceIconTheme::installImageProvider(qmlEngine);
+    });
+
+    // Expose the bar widget registry to QML as the BarRegistry context
+    // property on every engine the shell builds (startup + each
+    // hot-reload). Slot.qml mounts each delegate through
+    // BarRegistry.createWidgetFor(id, parent).
+    engine.addEngineHook([&barController](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("BarRegistry"), &barController);
     });
 
     if (!engine.load(shellUrl)) {
