@@ -940,7 +940,7 @@ Item {
         // and shader controls (picker + parameter editor + color
         // dialog + curve dialog) used to live here. They've been
         // hoisted into the reusable `AnimationProfileEditor` so
-        // both this card and the App Rules page can share one
+        // this card and `GlobalTimingDefaultsCard` share one
         // implementation. See `AnimationProfileEditor.qml`.
         // The editor's working-state properties (timingMode,
         // duration, easingCurve, springOmega, springZeta,

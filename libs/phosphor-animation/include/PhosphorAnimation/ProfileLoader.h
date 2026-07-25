@@ -23,9 +23,10 @@ class CurveRegistry;
 class PhosphorProfileRegistry;
 
 /// Scans JSON profile-definition files and registers them with PhosphorProfileRegistry.
-/// Shaped like CurveLoader, plus a synchronous `rescanNow()` for the consumer that
-/// writes profile files and reads the registry back in the same call. Nothing needs
-/// that of curves, so CurveLoader has no twin.
+/// Shaped like CurveLoader, diverging in three places: an owner-tag constructor
+/// parameter, an O(1) `hasPath()`, and a synchronous `rescanNow()` for the consumer
+/// that writes profile files and reads the registry back in the same call. Nothing
+/// needs the last of curves, so CurveLoader has no twin for it.
 /// User curves must already be registered (CurveLoader first).
 /// Profiles loaded here are preset templates — settings UIs deep-copy into active profiles.
 class PHOSPHORANIMATION_EXPORT ProfileLoader : public QObject
@@ -63,9 +64,9 @@ public:
     /// fires when THIS loader's tracked set or a parsed Profile value
     /// changed. Separately, the registry emits a per-path `profileChanged`
     /// for each entry ITS diff moved, plus at most one `ownerReloaded` —
-    /// and neither when that diff is empty, which includes a batch whose
-    /// every path is already directly owned by someone else. The two can
-    /// each fire without the other.
+    /// and neither when that diff is empty, i.e. when the batch neither
+    /// adds nor removes anything this loader owns. The two can each fire
+    /// without the other.
     ///
     /// Unlike `requestRescan`, this does NOT defer when a scan is already
     /// running, and nothing bounds the recursion: calling it from one of

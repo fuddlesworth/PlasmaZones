@@ -64,7 +64,7 @@ ColumnLayout {
     /// reset-on-shader-change) writes straight through.
     property alias lockedShaderParams: paramEditor.lockedParams
     // ── Configuration inputs ────────────────────────────────────────
-    /// Title for the curve dialog ("Customize Curve: <eventLabel>").
+    /// Title for the curve dialog ("Customize curve for <eventLabel>").
     property string eventLabel: ""
     /// Whether the shader section is rendered at all. The per-event
     /// card sets this false for events whose runtime path doesn't
@@ -165,7 +165,10 @@ ColumnLayout {
     /// slot and the setter caption BOTH have to agree about: telling the
     /// user to set a pack below while the picker holds only "None" is an
     /// instruction they cannot follow.
-    readonly property bool _anyPackAvailable: availableShaders && availableShaders.length > 0
+    // Boolean-coerced: `availableShaders` is untyped, and the `&&` chain
+    // returns the first falsy operand, which for an undefined model is
+    // `undefined` — a typed bool property rejects that outright.
+    readonly property bool _anyPackAvailable: Boolean(availableShaders && availableShaders.length > 0)
     /// Wire-format curve string the rule / profile schema expects.
     readonly property string curveString: {
         if (timingMode === CurvePresets.timingModeSpring)
@@ -429,7 +432,7 @@ ColumnLayout {
                 from: settingsController.generalPage.animationDurationMin
                 to: settingsController.generalPage.animationDurationMax
                 stepSize: 10
-                valueSuffix: " ms"
+                valueSuffix: i18nc("milliseconds, appended to a slider value", " ms")
                 accessibleName: i18n("Animation duration")
                 labelWidth: Kirigami.Units.gridUnit * 4
                 value: root.duration
@@ -466,6 +469,10 @@ ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
 
             Kirigami.LinkButton {
+                // Matches the curve twin's floor: nothing shares this row that
+                // could be squeezed instead, but the two links are read side by
+                // side and an asymmetry here reads as an oversight.
+                Layout.minimumWidth: implicitWidth
                 text: i18n("Revert duration to inherited")
                 font: Kirigami.Theme.smallFont
                 Accessible.name: i18n("Revert duration to inherited")
@@ -493,7 +500,7 @@ ColumnLayout {
         // Points at the setter only when the setter can actually serve.
         text: root._anyPackAvailable ? i18n("No shader pack. Set one below.") : i18n("No shader pack.")
         wrapMode: Text.WordWrap
-        opacity: 0.7
+        color: Kirigami.Theme.disabledTextColor
     }
 
     // Selected-shader row — the same collapsed-row model as a decoration
@@ -542,7 +549,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     visible: root.shaderDescription.length > 0 && !root.shaderSectionExpanded
                     text: root.shaderDescription
-                    opacity: 0.7
+                    color: Kirigami.Theme.disabledTextColor
                     elide: Text.ElideRight
                 }
             }
@@ -620,7 +627,7 @@ ColumnLayout {
                 visible: root.shaderDescription.length > 0
                 text: root.shaderDescription
                 wrapMode: Text.WordWrap
-                opacity: 0.7
+                color: Kirigami.Theme.disabledTextColor
             }
 
             // Inline parameter editor surfaces only when an effect is

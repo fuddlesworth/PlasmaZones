@@ -152,11 +152,24 @@ public:
     /// schema in this library's ecosystem.
     static constexpr qint64 kMaxFileBytes = 1 * 1024 * 1024;
 
-    /// Hard cap on FILES parsed per rescan (summed across every registered
-    /// directory), not on the entries that survive to registration — a file
-    /// that fails to parse or loses a duplicate check has still been read.
-    /// At 10k files a rescan has already burned the 50 ms debounce budget
-    /// many times over.
+    /// Hard cap on files CONSIDERED per rescan (summed across every
+    /// registered directory), not on the entries that survive to
+    /// registration — a file that fails to parse or loses a duplicate check
+    /// has still been read. A file skipped for exceeding `kMaxFileBytes` is
+    /// charged too: the stat is real work, and charging for it is the
+    /// adversarially safer choice. At 10k files a rescan has already burned
+    /// the 50 ms debounce budget many times over.
+    ///
+    /// What this does NOT bound is the `entryList` call that materialises
+    /// and sorts every `*.json` name in a directory before the loop starts.
+    /// That enumeration is kept small by `WatchedDirectorySet`'s
+    /// forbidden-root check (no `$HOME`, no `/`) plus caller path
+    /// discipline, not by this cap.
+    ///
+    /// Note the cost of a trip: keys registered on a previous scan that this
+    /// one never reached are reported to the sink as `removedKeys`, so a
+    /// trip unregisters entries that still exist on disk. At 10k that is
+    /// theoretical, but it is why the cap sits far above any real corpus.
     static constexpr int kMaxEntries = 10'000;
 
     /// Test-only: override the debounce interval (default 50 ms).

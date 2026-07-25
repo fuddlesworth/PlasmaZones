@@ -283,11 +283,6 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        // Declared BEFORE the loader so it outlives it. ~ProfileLoader calls
-        // clearOwner, which emits profileChanged synchronously while this
-        // connection is still live (the destructor body runs before ~QObject
-        // tears connections down), so a latch declared after the loader would
-        // be read past the end of its lifetime.
         bool reentered = false;
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
@@ -296,13 +291,14 @@ private Q_SLOTS:
 
         // One-shot: re-enter exactly once, or the recursion is unbounded
         // (rescanNow deliberately does not defer — see its header docs).
-        connect(&m_profileRegistry, &PhosphorProfileRegistry::profileChanged, &loader, [&]() {
-            if (reentered) {
-                return;
-            }
-            reentered = true;
-            loader.rescanNow();
-        });
+        const auto conn =
+            connect(&m_profileRegistry, &PhosphorProfileRegistry::profileChanged, &loader, [&loader, &reentered]() {
+                if (reentered) {
+                    return;
+                }
+                reentered = true;
+                loader.rescanNow();
+            });
 
         QVERIFY(writeFile(dir.filePath(QStringLiteral("nested.json")), QStringLiteral(R"({
             "name": "nested",
@@ -310,8 +306,22 @@ private Q_SLOTS:
         })")));
         loader.rescanNow();
 
+        // Torn down the moment the subject call returns, and BEFORE the
+        // assertions. ~ProfileLoader ends in clearOwner, which emits
+        // profileChanged synchronously while the destructor body runs; a
+        // connection still live there would re-enter a half-destroyed loader
+        // and re-register the very entries clearOwner just removed. An
+        // assertion failure below returns early, so leaving the connection up
+        // would make that reachable on exactly the failure path.
+        QObject::disconnect(conn);
+
         QVERIFY2(reentered, "the nested path never ran, so this test proves nothing");
-        QVERIFY2(spy.count() >= 1, "the outer batch's change was swallowed by the nested commit");
+        // Exactly two: the nested commit's entriesChanged reads the flag while
+        // it still carries the outer batch's evidence, then the outer one
+        // fires as well. That duplicate is the documented accepted cost of the
+        // depth guard (see Sink::lastBatchChanged) — pinned here so a change
+        // that collapses it cannot leave that comment silently stale.
+        QCOMPARE(spy.count(), 2);
         QVERIFY(m_profileRegistry.resolve(QStringLiteral("nested")).has_value());
     }
 

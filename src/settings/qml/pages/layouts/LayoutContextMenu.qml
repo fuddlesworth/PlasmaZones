@@ -64,7 +64,7 @@ Menu {
     // property, and a plain member read throws a TypeError on that
     // first pass (same failure mode documented on
     // KeyboardShortcutOverlay.qml's shortcutsModel and
-    // EasingSettings.qml's appSettings resolution). The empty-object
+    // the animation pages' appSettings resolution). The empty-object
     // fallback keeps the model sane until the property lands and the
     // binding re-runs.
     readonly property var _aspectRatioOptions: {
@@ -111,7 +111,7 @@ Menu {
     // The `settingsController` deref is guarded for the same
     // creation-time reason as `_aspectRatioOptions` above: the binding
     // can run before Main.qml assigns the required property (precedent:
-    // KeyboardShortcutOverlay.qml, EasingSettings.qml).
+    // KeyboardShortcutOverlay.qml).
     readonly property var _cachedScreens: {
         const s = settingsController ? (settingsController.screens || []) : [];
         return s.length > 1 ? s : [];
