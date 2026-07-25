@@ -1014,18 +1014,18 @@
         <translation>Sets kunnen niet worden gewijzigd terwijl een verwerping bezig is.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="341"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="354"/>
         <source>Cannot save while a discard is in progress.</source>
         <translation>Opslaan kan niet terwijl een verwerping bezig is.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="572"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="594"/>
         <location filename="../src/settings/rules/rulecontroller.cpp" line="150"/>
         <source>Discard already in flight.</source>
         <translation>Er is al een verwerping onderweg.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="642"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="669"/>
         <source>Could not restore %n profile file(s). They remain pending.</source>
         <translation>
             <numerusform>Kon %n profielbestand niet herstellen. Het blijft in behandeling.</numerusform>
@@ -1033,8 +1033,8 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="776"/>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="786"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="803"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="813"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation>Voorinstellingen kunnen niet worden gewijzigd terwijl een verwerping bezig is.</translation>
     </message>
@@ -1137,23 +1137,23 @@
         <translation>Geen geldige indelingen gevonden in bestand</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="110"/>
+        <location filename="../src/settings/main.cpp" line="113"/>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="224"/>
         <source>PlasmaZones Settings</source>
         <translation>PlasmaZones-instellingen</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="115"/>
+        <location filename="../src/settings/main.cpp" line="118"/>
         <source>Open a specific settings page</source>
         <translation>Een specifieke instellingenpagina openen</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="118"/>
+        <location filename="../src/settings/main.cpp" line="121"/>
         <source>Reveal a specific setting on the page (deep link)</source>
         <translation>Een specifieke instelling op de pagina tonen (deeplink)</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="122"/>
+        <location filename="../src/settings/main.cpp" line="125"/>
         <source>Reveal a specific section on the page (deep link)</source>
         <translation>Een specifieke sectie op de pagina tonen (deeplink)</translation>
     </message>
@@ -2734,7 +2734,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="385"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="409"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="427"/>
         <source>Animation duration</source>
         <translation>Animatieduur</translation>
     </message>
@@ -6932,15 +6932,14 @@
         <translation>Kan de voorinstelling &quot;%1&quot; niet verwijderen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="291"/>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="330"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="336"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="401"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="408"/>
         <source>Cannot reset while a discard is in progress.</source>
         <translation>Kan niet herstellen terwijl er wordt verworpen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="313"/>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="345"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="384"/>
         <source>Some animation overrides could not be reset.</source>
         <translation>Sommige animatie-overschrijvingen konden niet worden hersteld.</translation>
     </message>
@@ -9827,7 +9826,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="436"/>
         <source>Capture device or monitor source. Keep &quot;auto&quot; to follow the default output.</source>
-        <translation>Opnameapparaat of schermbron. Behoud "auto" om de standaarduitvoer te volgen.</translation>
+        <translation>Opnameapparaat of schermbron. Behoud &quot;auto&quot; om de standaarduitvoer te volgen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="483"/>
@@ -10003,7 +10002,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="535"/>
         <source>Save did not complete. Some pages still have unsaved changes.</source>
-        <translation>Opslaan is niet voltooid. Sommige pagina's hebben nog niet-opgeslagen wijzigingen.</translation>
+        <translation>Opslaan is niet voltooid. Sommige pagina&apos;s hebben nog niet-opgeslagen wijzigingen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="537"/>
@@ -10446,12 +10445,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="99"/>
         <source>Discard the unsaved changes on this page? Changes on other pages are kept.</source>
-        <translation>Niet-opgeslagen wijzigingen op deze pagina verwerpen? Wijzigingen op andere pagina's blijven behouden.</translation>
+        <translation>Niet-opgeslagen wijzigingen op deze pagina verwerpen? Wijzigingen op andere pagina&apos;s blijven behouden.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="99"/>
         <source>Discarding here also drops the unsaved changes on the other pages in this feature area, including any that are hidden right now. Changes elsewhere are kept.</source>
-        <translation>Verwerpen hier laat ook de niet-opgeslagen wijzigingen op de andere pagina's in dit functiegebied vervallen, inclusief pagina's die nu verborgen zijn. Wijzigingen elders blijven behouden.</translation>
+        <translation>Verwerpen hier laat ook de niet-opgeslagen wijzigingen op de andere pagina&apos;s in dit functiegebied vervallen, inclusief pagina&apos;s die nu verborgen zijn. Wijzigingen elders blijven behouden.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="103"/>
@@ -10652,12 +10651,12 @@
         <translation>Animatievoorbeeldtrack</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="300"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="301"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation>Veer · ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="302"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="303"/>
         <source>%1 · %2 ms</source>
         <translation>%1 · %2 ms</translation>
     </message>
@@ -10695,7 +10694,7 @@
         <translation>Huidig: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="157"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="158"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="102"/>
         <location filename=".qml-stubs/src/shared/CategoryMenuButton.qml.cpp" line="280"/>
         <source>(missing: %1)</source>
@@ -10703,152 +10702,152 @@
         <translation>(ontbreekt: %1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="233"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="235"/>
         <source>Spring · %1</source>
         <translation>Veer · %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="235"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="237"/>
         <source>Spring · Custom</source>
         <translation>Veer · Aangepast</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="243"/>
         <source>Easing · Custom</source>
         <translation>Versoepeling · Aangepast</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="247"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="249"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="263"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="312"/>
         <source>ω=%1 · ζ=%2</source>
         <translation>ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="251"/>
         <source>%1 ms</source>
         <translation>%1 ms</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="316"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="398"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="324"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="416"/>
         <source>Overridden for this event</source>
         <translation>Overschreven voor deze gebeurtenis</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="316"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="398"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="324"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="416"/>
         <source>Following the inherited value</source>
         <translation>Volgt de overgeërfde waarde</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="324"/>
         <source>Revert to inherited</source>
-        <translation>Terug naar overgeërfde waarde</translation>
+        <translation type="vanished">Terug naar overgeërfde waarde</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="326"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="338"/>
         <source>Revert curve to inherited</source>
         <translation>Curve terugzetten naar overgeërfde waarde</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="333"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="351"/>
         <source>Customize…</source>
         <translation>Aanpassen…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="335"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="353"/>
         <source>Customize curve for %1</source>
         <translation>Curve aanpassen voor %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="335"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="353"/>
         <source>Customize curve</source>
         <translation>Curve aanpassen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="347"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="350"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="368"/>
         <source>Timing mode</source>
         <translation>Timingmodus</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="369"/>
         <source>Easing</source>
         <translation>Versoepeling</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="369"/>
         <source>Spring</source>
         <translation>Veer</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="403"/>
         <source>A spring curve is set, so the duration has no effect. Change the curve in Global animation defaults, or switch to Advanced in the sidebar to change it for this event.</source>
         <translation>Er is een veercurve ingesteld, dus de duur heeft geen effect. Wijzig de curve in Globale animatiestandaarden, of schakel over naar Geavanceerd in de zijbalk om dit voor deze gebeurtenis te wijzigen.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="403"/>
         <source>A spring curve derives its own settle time from its parameters, so there is no duration to set. Switch the timing mode to Easing to use a duration.</source>
         <translation>Een veercurve leidt zijn eigen instellingstijd af van zijn parameters, dus er is geen duur om in te stellen. Schakel de timingmodus over naar Versoepeling om een duur te gebruiken.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="393"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="411"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="345"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="349"/>
         <source>Duration</source>
         <translation>Duur</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="436"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="438"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="463"/>
         <source>Revert duration to inherited</source>
         <translation>Duur terugzetten naar overgeërfde waarde</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="486"/>
         <source>No shader pack. Set one below.</source>
         <translation>Geen shaderpakket. Stel er hieronder een in.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="486"/>
         <source>No shader pack.</source>
         <translation>Geen shaderpakket.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="523"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="548"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="256"/>
         <source>Remove %1</source>
         <translation>%1 verwijderen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="664"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="689"/>
         <source>Set shader pack</source>
         <translation>Shaderpakket instellen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="672"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="697"/>
         <source>Swap this event&apos;s pack for another, or clear it</source>
         <translation>Het pakket van deze gebeurtenis wisselen voor een ander, of wissen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="675"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="700"/>
         <source>No shader packs are available for this event</source>
         <translation>Er zijn geen shaderpakketten beschikbaar voor deze gebeurtenis</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="677"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="702"/>
         <source>Apply a shader pack to this event</source>
         <translation>Een shaderpakket toepassen op deze gebeurtenis</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="695"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="720"/>
         <source>Select a pack…</source>
         <comment>@action:button</comment>
         <translation>Een pakket selecteren…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="696"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="721"/>
         <source>Set the shader pack this event uses</source>
         <translation>Het shaderpakket instellen dat deze gebeurtenis gebruikt</translation>
     </message>
@@ -10860,7 +10859,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationWindowFilterCard.qml.cpp" line="46"/>
         <source>Skip animations for dialogs, popups, tooltips, and dropdown menus</source>
-        <translation>Animaties overslaan voor dialoogvensters, pop-ups, tekstballonnen en vervolgkeuzemenu's</translation>
+        <translation>Animaties overslaan voor dialoogvensters, pop-ups, tekstballonnen en vervolgkeuzemenu&apos;s</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationWindowFilterCard.qml.cpp" line="47"/>
@@ -10915,7 +10914,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsDesktopsPage.qml.cpp" line="25"/>
         <source>Animations for virtual desktops. &quot;All Desktop Events&quot; is the default. Each event can override it.</source>
-        <translation>Animaties voor virtuele bureaubladen. "Alle bureaubladgebeurtenissen" is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
+        <translation>Animaties voor virtuele bureaubladen. &quot;Alle bureaubladgebeurtenissen&quot; is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsDesktopsPage.qml.cpp" line="29"/>
@@ -10930,7 +10929,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="13"/>
         <source>Animations inside the layout editor. &quot;All Editor Events&quot; is the default. Each event can override it.</source>
-        <translation>Animaties binnen de indelingseditor. "Alle editorgebeurtenissen" is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
+        <translation>Animaties binnen de indelingseditor. &quot;Alle editorgebeurtenissen&quot; is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="17"/>
@@ -10940,7 +10939,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="48"/>
         <source>These defaults apply to every animation event unless a sub-page (Windows, OSDs, Desktops, etc.) defines its own override.</source>
-        <translation>Deze standaarden gelden voor elke animatiegebeurtenis, tenzij een subpagina (Vensters, OSD's, Bureaubladen, enz.) een eigen overschrijving definieert.</translation>
+        <translation>Deze standaarden gelden voor elke animatiegebeurtenis, tenzij een subpagina (Vensters, OSD&apos;s, Bureaubladen, enz.) een eigen overschrijving definieert.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="63"/>
@@ -11030,7 +11029,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="47"/>
         <source>OSDs</source>
         <comment>@label motion event group</comment>
-        <translation>OSD's</translation>
+        <translation>OSD&apos;s</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="49"/>
@@ -11057,12 +11056,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOsdsPage.qml.cpp" line="16"/>
         <source>Animations for on-screen displays. &quot;All OSDs&quot; is the default. Each event can override it.</source>
-        <translation>Animaties voor on-screen displays. "Alle OSD's" is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
+        <translation>Animaties voor on-screen displays. &quot;Alle OSD&apos;s&quot; is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOsdsPage.qml.cpp" line="20"/>
         <source>All OSDs</source>
-        <translation>Alle OSD's</translation>
+        <translation>Alle OSD&apos;s</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOverlaysPage.qml.cpp" line="12"/>
@@ -11072,7 +11071,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOverlaysPage.qml.cpp" line="13"/>
         <source>Animations for overlays like the zone selector and snap assist. &quot;All Overlays&quot; is the default. Each event can override it.</source>
-        <translation>Animaties voor overlays zoals de zonekiezer en vastklikhulp. "Alle overlays" is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
+        <translation>Animaties voor overlays zoals de zonekiezer en vastklikhulp. &quot;Alle overlays&quot; is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOverlaysPage.qml.cpp" line="17"/>
@@ -11129,12 +11128,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="192"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="337"/>
         <source>&quot;%1&quot; will be permanently removed.</source>
-        <translation>"%1" wordt permanent verwijderd.</translation>
+        <translation>&quot;%1&quot; wordt permanent verwijderd.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="213"/>
         <source>No custom easing presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</source>
-        <translation>Nog geen aangepaste voorinstellingen voor versoepeling. Gebruik "Opslaan als voorinstelling…" in de curve-editor om er een te maken.</translation>
+        <translation>Nog geen aangepaste voorinstellingen voor versoepeling. Gebruik &quot;Opslaan als voorinstelling…&quot; in de curve-editor om er een te maken.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="253"/>
@@ -11145,7 +11144,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="354"/>
         <source>No custom spring presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</source>
-        <translation>Nog geen aangepaste veervoorinstellingen. Gebruik "Opslaan als voorinstelling…" in de curve-editor om er een te maken.</translation>
+        <translation>Nog geen aangepaste veervoorinstellingen. Gebruik &quot;Opslaan als voorinstelling…&quot; in de curve-editor om er een te maken.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShadersPage.qml.cpp" line="22"/>
@@ -11178,7 +11177,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="16"/>
         <source>Animations for side panels that slide in from an edge. &quot;All Side Panels&quot; is the default. Each event can override it.</source>
-        <translation>Animaties voor zijpanelen die vanaf een rand naar binnen schuiven. "Alle zijpanelen" is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
+        <translation>Animaties voor zijpanelen die vanaf een rand naar binnen schuiven. &quot;Alle zijpanelen&quot; is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="20"/>
@@ -11208,7 +11207,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="9"/>
         <source>Animations for widget interactions. &quot;All Widget Events&quot; is the default. Each event can override it.</source>
-        <translation>Animaties voor widget-interacties. "Alle widgetgebeurtenissen" is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
+        <translation>Animaties voor widget-interacties. &quot;Alle widgetgebeurtenissen&quot; is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="13"/>
@@ -11248,7 +11247,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="25"/>
         <source>Animations for windows moving and snapping. &quot;All Windows&quot; is the default. Each event can override it.</source>
-        <translation>Animaties voor vensters die bewegen en vastklikken. "Alle vensters" is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
+        <translation>Animaties voor vensters die bewegen en vastklikken. &quot;Alle vensters&quot; is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="29"/>
@@ -11265,7 +11264,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowsPage.qml.cpp" line="17"/>
         <source>Animations for windows opening and closing. &quot;All Windows&quot; is the default. Each event can override it.</source>
-        <translation>Animaties voor vensters die openen en sluiten. "Alle vensters" is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
+        <translation>Animaties voor vensters die openen en sluiten. &quot;Alle vensters&quot; is de standaard. Elke gebeurtenis kan dit overschrijven.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="40"/>
@@ -11668,7 +11667,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="14"/>
         <source>Decoration for the transient popups. &quot;All Popups&quot; is the default. Each popup can override it.</source>
-        <translation>Decoratie voor tijdelijke pop-ups. "Alle pop-ups" is de standaard. Elke pop-up kan dit overschrijven.</translation>
+        <translation>Decoratie voor tijdelijke pop-ups. &quot;Alle pop-ups&quot; is de standaard. Elke pop-up kan dit overschrijven.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="18"/>
@@ -11715,7 +11714,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="37"/>
         <source>OSDs</source>
         <comment>@label decoration surface group</comment>
-        <translation>OSD's</translation>
+        <translation>OSD&apos;s</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="39"/>
@@ -11731,7 +11730,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="21"/>
         <source>Browse installed decoration packs. Stack packs onto a surface&apos;s chain from the Windows, OSDs, and Popups pages.</source>
-        <translation>Blader door geïnstalleerde decoratiepakketten. Stapel pakketten op de keten van een oppervlak vanaf de pagina's Vensters, OSD's en Pop-ups.</translation>
+        <translation>Blader door geïnstalleerde decoratiepakketten. Stapel pakketten op de keten van een oppervlak vanaf de pagina&apos;s Vensters, OSD&apos;s en Pop-ups.</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="25"/>
@@ -11769,7 +11768,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="17"/>
         <source>Decoration for windows. &quot;All Windows&quot; is the default. Each placement state can override it.</source>
-        <translation>Decoratie voor vensters. "Alle vensters" is de standaard. Elke plaatsingsstatus kan dit overschrijven.</translation>
+        <translation>Decoratie voor vensters. &quot;Alle vensters&quot; is de standaard. Elke plaatsingsstatus kan dit overschrijven.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/OsdCard.qml.cpp" line="36"/>
@@ -11922,7 +11921,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="571"/>
         <source>Skip borders for dialogs, popups, and menus</source>
-        <translation>Randen overslaan voor dialoogvensters, pop-ups en menu's</translation>
+        <translation>Randen overslaan voor dialoogvensters, pop-ups en menu&apos;s</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="572"/>
@@ -12563,7 +12562,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="668"/>
         <source>Are you sure you want to delete &quot;%1&quot;?</source>
-        <translation>Weet je zeker dat je "%1" wilt verwijderen?</translation>
+        <translation>Weet je zeker dat je &quot;%1&quot; wilt verwijderen?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="43"/>

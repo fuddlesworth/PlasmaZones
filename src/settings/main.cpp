@@ -186,7 +186,7 @@ int main(int argc, char* argv[])
     // The animations page writes and deletes the very profile files the
     // bootstrap loader watches, and that watch is debounced by 50 ms with no
     // rescan signal reaching the open page. Hand the page a synchronous
-    // catch-up so a removal (the "Revert to inherited" links, a per-page
+    // catch-up so a removal (the per-field revert links, a per-page
     // Discard) is reflected the moment it happens instead of on the next
     // launch.
     //
@@ -197,8 +197,16 @@ int main(int argc, char* argv[])
     // enforce itself if either declaration ever moves.
     controller.animationsPage()->setProfileStoreRefresher(
         [loader = QPointer<PhosphorAnimation::ProfileLoader>(animationBootstrap.profileLoader())]() {
-            if (loader)
-                loader->rescanNow();
+            if (!loader) {
+                // Never silently: a null here means the loader outlived its
+                // declared order and the page is back to reading a stale
+                // registry, which is exactly the bug this wiring exists to
+                // fix — it must not degrade quietly into it.
+                qCWarning(PlasmaZones::lcCore)
+                    << "profile-store refresher fired after the animation bootstrap was destroyed";
+                return;
+            }
+            loader->rescanNow();
         });
 
     // The launch controller owns the D-Bus single-instance lifecycle. Holds a

@@ -1014,18 +1014,18 @@
         <translation>სიმრავლეების შეცვლა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="341"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="354"/>
         <source>Cannot save while a discard is in progress.</source>
         <translation>შენახვა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="572"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="594"/>
         <location filename="../src/settings/rules/rulecontroller.cpp" line="150"/>
         <source>Discard already in flight.</source>
         <translation>მოცილება უკვე მიმდინარეობს.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="642"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="669"/>
         <source>Could not restore %n profile file(s). They remain pending.</source>
         <translation>
             <numerusform>%n პროფილის ფაილის აღდგენა ვერ მოხერხდა. ის კვლავ მოლოდინშია.</numerusform>
@@ -1033,8 +1033,8 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="776"/>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="786"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="803"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="813"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation>შაბლონების შეცვლა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
     </message>
@@ -1137,23 +1137,23 @@
         <translation>ფაილში სწორი განლაგებები ვერ მოიძებნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="110"/>
+        <location filename="../src/settings/main.cpp" line="113"/>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="224"/>
         <source>PlasmaZones Settings</source>
         <translation>PlasmaZones-ის პარამეტრები</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="115"/>
+        <location filename="../src/settings/main.cpp" line="118"/>
         <source>Open a specific settings page</source>
         <translation>პარამეტრების კონკრეტული გვერდის გახსნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="118"/>
+        <location filename="../src/settings/main.cpp" line="121"/>
         <source>Reveal a specific setting on the page (deep link)</source>
         <translation>გვერდზე კონკრეტული პარამეტრის ჩვენება (ღრმა ბმული)</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="122"/>
+        <location filename="../src/settings/main.cpp" line="125"/>
         <source>Reveal a specific section on the page (deep link)</source>
         <translation>გვერდზე კონკრეტული სექციის ჩვენება (ღრმა ბმული)</translation>
     </message>
@@ -2734,7 +2734,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="385"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="409"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="427"/>
         <source>Animation duration</source>
         <translation>ანიმაციის ხანგრძლივობა</translation>
     </message>
@@ -6932,15 +6932,14 @@
         <translation>შაბლონის &quot;%1&quot; წაშლა ვერ მოხერხდა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="291"/>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="330"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="336"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="401"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="408"/>
         <source>Cannot reset while a discard is in progress.</source>
         <translation>ჩამოყრა ვერ მოხერხდება, სანამ გაუქმება მიმდინარეობს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="313"/>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="345"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="384"/>
         <source>Some animation overrides could not be reset.</source>
         <translation>ანიმაციის ზოგიერთი გადაფარვის ჩამოყრა ვერ მოხერხდა.</translation>
     </message>
@@ -9827,7 +9826,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="436"/>
         <source>Capture device or monitor source. Keep &quot;auto&quot; to follow the default output.</source>
-        <translation>ჩამწერი მოწყობილობა ან მონიტორის წყარო. დატოვეთ "auto", საწყისი გამოსასვლელის მისადევრად.</translation>
+        <translation>ჩამწერი მოწყობილობა ან მონიტორის წყარო. დატოვეთ &quot;auto&quot;, საწყისი გამოსასვლელის მისადევრად.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="483"/>
@@ -10652,12 +10651,12 @@
         <translation>ანიმაციის გადახედვის ტრეკი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="300"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="301"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation>ზამბარა · ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="302"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="303"/>
         <source>%1 · %2 ms</source>
         <translation>%1 · %2 ms</translation>
     </message>
@@ -10695,7 +10694,7 @@
         <translation>მიმდინარე: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="157"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="158"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="102"/>
         <location filename=".qml-stubs/src/shared/CategoryMenuButton.qml.cpp" line="280"/>
         <source>(missing: %1)</source>
@@ -10703,152 +10702,152 @@
         <translation>(აკლია: %1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="233"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="235"/>
         <source>Spring · %1</source>
         <translation>ზამბარა · %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="235"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="237"/>
         <source>Spring · Custom</source>
         <translation>ზამბარა · მორგებული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="243"/>
         <source>Easing · Custom</source>
         <translation>დარბილება · მორგებული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="247"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="249"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="263"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="312"/>
         <source>ω=%1 · ζ=%2</source>
         <translation>ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="251"/>
         <source>%1 ms</source>
         <translation>%1 ms</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="316"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="398"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="324"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="416"/>
         <source>Overridden for this event</source>
         <translation>გადაფარულია ამ მოვლენისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="316"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="398"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="324"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="416"/>
         <source>Following the inherited value</source>
         <translation>მემკვიდრეობით მიღებულ მნიშვნელობას მისდევს</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="324"/>
         <source>Revert to inherited</source>
-        <translation>მემკვიდრეობითზე დაბრუნება</translation>
+        <translation type="vanished">მემკვიდრეობითზე დაბრუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="326"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="338"/>
         <source>Revert curve to inherited</source>
         <translation>მრუდის მემკვიდრეობითზე დაბრუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="333"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="351"/>
         <source>Customize…</source>
         <translation>მორგება…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="335"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="353"/>
         <source>Customize curve for %1</source>
         <translation>%1-ის მრუდის მორგება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="335"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="353"/>
         <source>Customize curve</source>
         <translation>მრუდის მორგება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="347"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="350"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="368"/>
         <source>Timing mode</source>
         <translation>დროზომვის რეჟიმი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="369"/>
         <source>Easing</source>
         <translation>დარბილება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="369"/>
         <source>Spring</source>
         <translation>ზამბარა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="403"/>
         <source>A spring curve is set, so the duration has no effect. Change the curve in Global animation defaults, or switch to Advanced in the sidebar to change it for this event.</source>
         <translation>დაყენებულია ზამბარის მრუდი, ამიტომ ხანგრძლივობას ეფექტი არ აქვს. შეცვალეთ მრუდი გლობალურ ანიმაციის საწყისებში ან გვერდით ზოლში გადართეთ დამატებითზე, ამ მოვლენისთვის მის შესაცვლელად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="403"/>
         <source>A spring curve derives its own settle time from its parameters, so there is no duration to set. Switch the timing mode to Easing to use a duration.</source>
         <translation>ზამბარის მრუდი თავის დამშვიდების დროს საკუთარი პარამეტრებიდან იღებს, ამიტომ ხანგრძლივობის დაყენება საჭირო არაა. ხანგრძლივობის გამოსაყენებლად გადართეთ დროზომვის რეჟიმი დარბილებაზე.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="393"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="411"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="345"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="349"/>
         <source>Duration</source>
         <translation>ხანგრძლივობა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="436"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="438"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="463"/>
         <source>Revert duration to inherited</source>
         <translation>ხანგრძლივობის მემკვიდრეობითზე დაბრუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="486"/>
         <source>No shader pack. Set one below.</source>
         <translation>შეიდერების პაკეტი არაა. დააყენეთ ერთი ქვემოთ.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="486"/>
         <source>No shader pack.</source>
         <translation>შეიდერების პაკეტი არაა.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="523"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="548"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="256"/>
         <source>Remove %1</source>
         <translation>%1-ის წაშლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="664"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="689"/>
         <source>Set shader pack</source>
         <translation>შეიდერების პაკეტის დაყენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="672"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="697"/>
         <source>Swap this event&apos;s pack for another, or clear it</source>
         <translation>შეცვალეთ ამ მოვლენის პაკეტი სხვათი ან გაასუფთავეთ იგი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="675"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="700"/>
         <source>No shader packs are available for this event</source>
         <translation>ამ მოვლენისთვის შეიდერების პაკეტები ხელმისაწვდომი არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="677"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="702"/>
         <source>Apply a shader pack to this event</source>
         <translation>შეიდერების პაკეტის გამოყენება ამ მოვლენაზე</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="695"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="720"/>
         <source>Select a pack…</source>
         <comment>@action:button</comment>
         <translation>აირჩიეთ პაკეტი…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="696"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="721"/>
         <source>Set the shader pack this event uses</source>
         <translation>დააყენეთ პაკეტი, რომელსაც ეს მოვლენა იყენებს</translation>
     </message>
@@ -10915,7 +10914,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsDesktopsPage.qml.cpp" line="25"/>
         <source>Animations for virtual desktops. &quot;All Desktop Events&quot; is the default. Each event can override it.</source>
-        <translation>ანიმაციები ვირტუალური სამუშაო მაგიდებისთვის. საწყისია "ყველა სამუშაო მაგიდის მოვლენა". ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
+        <translation>ანიმაციები ვირტუალური სამუშაო მაგიდებისთვის. საწყისია &quot;ყველა სამუშაო მაგიდის მოვლენა&quot;. ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsDesktopsPage.qml.cpp" line="29"/>
@@ -10930,7 +10929,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="13"/>
         <source>Animations inside the layout editor. &quot;All Editor Events&quot; is the default. Each event can override it.</source>
-        <translation>ანიმაციები განლაგების რედაქტორის შიგნით. საწყისია "ყველა რედაქტორის მოვლენა". ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
+        <translation>ანიმაციები განლაგების რედაქტორის შიგნით. საწყისია &quot;ყველა რედაქტორის მოვლენა&quot;. ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="17"/>
@@ -11057,7 +11056,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOsdsPage.qml.cpp" line="16"/>
         <source>Animations for on-screen displays. &quot;All OSDs&quot; is the default. Each event can override it.</source>
-        <translation>ანიმაციები ეკრანზე ჩვენებებისთვის. საწყისია "ყველა OSD". ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
+        <translation>ანიმაციები ეკრანზე ჩვენებებისთვის. საწყისია &quot;ყველა OSD&quot;. ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOsdsPage.qml.cpp" line="20"/>
@@ -11072,7 +11071,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOverlaysPage.qml.cpp" line="13"/>
         <source>Animations for overlays like the zone selector and snap assist. &quot;All Overlays&quot; is the default. Each event can override it.</source>
-        <translation>ანიმაციები გადადებებისთვის, როგორიცაა ზონის ამომრჩევი და მიმაგრების დამხმარე. საწყისია "ყველა გადადება". ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
+        <translation>ანიმაციები გადადებებისთვის, როგორიცაა ზონის ამომრჩევი და მიმაგრების დამხმარე. საწყისია &quot;ყველა გადადება&quot;. ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOverlaysPage.qml.cpp" line="17"/>
@@ -11129,12 +11128,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="192"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="337"/>
         <source>&quot;%1&quot; will be permanently removed.</source>
-        <translation>"%1" სამუდამოდ წაიშლება.</translation>
+        <translation>&quot;%1&quot; სამუდამოდ წაიშლება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="213"/>
         <source>No custom easing presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</source>
-        <translation>მორგებული დარბილების შაბლონები ჯერ არ არის. ერთის შესაქმნელად მრუდის რედაქტორში გამოიყენეთ "შენახვა შაბლონად…".</translation>
+        <translation>მორგებული დარბილების შაბლონები ჯერ არ არის. ერთის შესაქმნელად მრუდის რედაქტორში გამოიყენეთ &quot;შენახვა შაბლონად…&quot;.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="253"/>
@@ -11145,7 +11144,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="354"/>
         <source>No custom spring presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</source>
-        <translation>მორგებული ზამბარის შაბლონები ჯერ არ არის. ერთის შესაქმნელად მრუდის რედაქტორში გამოიყენეთ "შენახვა შაბლონად…".</translation>
+        <translation>მორგებული ზამბარის შაბლონები ჯერ არ არის. ერთის შესაქმნელად მრუდის რედაქტორში გამოიყენეთ &quot;შენახვა შაბლონად…&quot;.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShadersPage.qml.cpp" line="22"/>
@@ -11178,7 +11177,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="16"/>
         <source>Animations for side panels that slide in from an edge. &quot;All Side Panels&quot; is the default. Each event can override it.</source>
-        <translation>ანიმაციები გვერდითი პანელებისთვის, რომლებიც კიდიდან ცოცხავენ. საწყისია "ყველა გვერდითი პანელი". ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
+        <translation>ანიმაციები გვერდითი პანელებისთვის, რომლებიც კიდიდან ცოცხავენ. საწყისია &quot;ყველა გვერდითი პანელი&quot;. ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="20"/>
@@ -11208,7 +11207,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="9"/>
         <source>Animations for widget interactions. &quot;All Widget Events&quot; is the default. Each event can override it.</source>
-        <translation>ანიმაციები ვიჯეტთან ურთიერთქმედებისთვის. საწყისია "ყველა ვიჯეტის მოვლენა". ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
+        <translation>ანიმაციები ვიჯეტთან ურთიერთქმედებისთვის. საწყისია &quot;ყველა ვიჯეტის მოვლენა&quot;. ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="13"/>
@@ -11248,7 +11247,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="25"/>
         <source>Animations for windows moving and snapping. &quot;All Windows&quot; is the default. Each event can override it.</source>
-        <translation>ანიმაციები ფანჯრების გადაადგილებისა და მიმაგრებისთვის. საწყისია "ყველა ფანჯარა". ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
+        <translation>ანიმაციები ფანჯრების გადაადგილებისა და მიმაგრებისთვის. საწყისია &quot;ყველა ფანჯარა&quot;. ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="29"/>
@@ -11265,7 +11264,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowsPage.qml.cpp" line="17"/>
         <source>Animations for windows opening and closing. &quot;All Windows&quot; is the default. Each event can override it.</source>
-        <translation>ანიმაციები ფანჯრების გახსნისა და დახურვისთვის. საწყისია "ყველა ფანჯარა". ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
+        <translation>ანიმაციები ფანჯრების გახსნისა და დახურვისთვის. საწყისია &quot;ყველა ფანჯარა&quot;. ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="40"/>
@@ -11668,7 +11667,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="14"/>
         <source>Decoration for the transient popups. &quot;All Popups&quot; is the default. Each popup can override it.</source>
-        <translation>მორთულობა წარმავალი ამომხტომი ფანჯრებისთვის. საწყისია "ყველა ამომხტომი ფანჯარა". თითოეულ ამომხტომ ფანჯარას შეუძლია მისი გადაფარვა.</translation>
+        <translation>მორთულობა წარმავალი ამომხტომი ფანჯრებისთვის. საწყისია &quot;ყველა ამომხტომი ფანჯარა&quot;. თითოეულ ამომხტომ ფანჯარას შეუძლია მისი გადაფარვა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="18"/>

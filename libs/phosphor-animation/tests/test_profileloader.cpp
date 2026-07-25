@@ -50,10 +50,12 @@ private Q_SLOTS:
         m_profileRegistry.clear();
     }
 
-    /// Guarantees no registry state leaks between test methods even
+    /// Guarantees no PROFILE-registry state leaks between test methods even
     /// when a test forgets to clean up after itself. `init()` already
     /// clears on entry, but pairing with `cleanup()` keeps the
-    /// guarantee end-to-end rather than entry-only.
+    /// guarantee end-to-end rather than entry-only. The curve registry is
+    /// deliberately not cleared: no test here registers a user curve, and
+    /// the builtin specs the profiles reference are resolved by value.
     void cleanup()
     {
         m_profileRegistry.clear();
@@ -239,24 +241,72 @@ private Q_SLOTS:
         QCOMPARE(resolved->duration.value_or(-1.0), 222.0);
 
         // A removal is visible just as immediately — the case the settings
-        // app's "Revert to inherited" depends on.
+        // app's per-field revert links depend on — and it is a change, so the
+        // consumer signal is owed for it too.
         QVERIFY(QFile::remove(path));
         loader.rescanNow();
+        QCOMPARE(spy.count(), 2);
         QVERIFY(!m_profileRegistry.resolve(QStringLiteral("sync")).has_value());
     }
 
-    /// `rescanNow()` on a loader with nothing registered must be a no-op
-    /// rather than a commit of an empty set, which would wipe the owner
-    /// partition of a loader that had not scanned yet.
-    void testRescanNowWithNoDirectoriesIsHarmless()
+    /// `rescanNow()` on a loader with nothing registered still COMMITS —
+    /// an empty set, under its own owner tag. That is the dangerous shape,
+    /// so pin what it may and may not touch: a pre-existing entry under the
+    /// loader's OWN tag is the loader's to drop, while another owner's entry
+    /// must survive untouched. And with nothing tracked to begin with, no
+    /// consumer signal is owed.
+    void testRescanNowWithNoDirectoriesCommitsOnlyItsOwnPartition()
     {
-        m_profileRegistry.registerProfile(QStringLiteral("direct"), Profile{}, QStringLiteral("someone-else"));
+        m_profileRegistry.registerProfile(QStringLiteral("mine"), Profile{}, QStringLiteral("test"));
+        m_profileRegistry.registerProfile(QStringLiteral("theirs"), Profile{}, QStringLiteral("someone-else"));
 
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
+        QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
         loader.rescanNow();
 
         QCOMPARE(loader.registeredCount(), 0);
-        QVERIFY(m_profileRegistry.resolve(QStringLiteral("direct")).has_value());
+        // Same tag, so the empty commit owns it and takes it.
+        QVERIFY(!m_profileRegistry.resolve(QStringLiteral("mine")).has_value());
+        // Different owner, so it is not this loader's to remove.
+        QVERIFY(m_profileRegistry.resolve(QStringLiteral("theirs")).has_value());
+        // The loader tracked nothing before and tracks nothing now.
+        QCOMPARE(spy.count(), 0);
+    }
+
+    /// The re-entrancy guard in `ProfileLoader::Sink::commitBatch`: a
+    /// consumer that calls `rescanNow()` from a registry `profileChanged`
+    /// handler re-enters the commit, and the nested batch must NOT clear the
+    /// evidence the outer one gathered. Without the depth guard the outer
+    /// `entriesChanged` reads a cleared flag and swallows `profilesChanged`
+    /// for a change that really happened.
+    void testNestedRescanDoesNotSwallowTheOuterChangeSignal()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
+        loader.loadFromDirectory(dir.path());
+
+        QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
+
+        // One-shot: re-enter exactly once, or the recursion is unbounded
+        // (rescanNow deliberately does not defer — see its header docs).
+        bool reentered = false;
+        connect(&m_profileRegistry, &PhosphorProfileRegistry::profileChanged, &loader, [&]() {
+            if (reentered)
+                return;
+            reentered = true;
+            loader.rescanNow();
+        });
+
+        QVERIFY(writeFile(dir.filePath(QStringLiteral("nested.json")), QStringLiteral(R"({
+            "name": "nested",
+            "duration": 321
+        })")));
+        loader.rescanNow();
+
+        QVERIFY2(reentered, "the nested path never ran, so this test proves nothing");
+        QVERIFY2(spy.count() >= 1, "the outer batch's change was swallowed by the nested commit");
+        QVERIFY(m_profileRegistry.resolve(QStringLiteral("nested")).has_value());
     }
 
     /// `profilesChanged` must NOT fire on a no-op rescan — the

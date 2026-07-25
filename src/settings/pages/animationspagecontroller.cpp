@@ -285,7 +285,7 @@ bool AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
     return true;
 }
 
-bool AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePath)
+bool AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePath, SnapshotDropSignal signalPolicy)
 {
     const auto it = m_pendingFileSnapshots.constFind(filePath);
     if (it == m_pendingFileSnapshots.cend())
@@ -314,8 +314,9 @@ bool AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePa
     m_pendingFileSnapshots.remove(filePath);
     // Sole owner of the signal for this transition: the sub-services used to
     // emit alongside their rollback call, which fired twice for one flip and
-    // once even when the rollback declined to drop.
-    if (wasPending != hasPendingChanges())
+    // once even when the rollback declined to drop. A batch caller takes that
+    // ownership back for the duration of its loop (see SnapshotDropSignal).
+    if (signalPolicy == SnapshotDropSignal::Emit && wasPending != hasPendingChanges())
         Q_EMIT pendingChangesChanged();
     return true;
 }

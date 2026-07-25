@@ -57,6 +57,12 @@ public:
     /// unconditional clear at the top of the nested batch would discard
     /// the outer batch's evidence, and the outer `entriesChanged` would
     /// then silently suppress `profilesChanged` for a real change.
+    ///
+    /// The accepted cost is a duplicate: in the nested case the inner
+    /// rescan's `entriesChanged` reads the flag while it still carries the
+    /// OUTER batch's evidence, so `profilesChanged` fires for both. A
+    /// redundant consumer refresh is the right side to err on — the
+    /// alternative is a missed one.
     bool lastBatchChanged = false;
 
     /// Reentry depth for `commitBatch`. See `lastBatchChanged`.
@@ -159,9 +165,12 @@ public:
             currentMap.insert(parsed.key, *payload);
         }
 
-        // Single reloadFromOwner -> one profilesReloaded signal regardless
-        // of how many files changed (decision W: coalesce). The partitioning
-        // ensures daemon-direct entries at other paths survive this rescan.
+        // Single reloadFromOwner -> one `ownerReloaded` for the whole batch
+        // however many files changed (decision W: coalesce), alongside a
+        // per-path `profileChanged` for each entry that actually moved.
+        // (`profilesReloaded` is a different signal, fired only by the
+        // registry's wholesale reloadAll / clear.) The partitioning ensures
+        // daemon-direct entries at other paths survive this rescan.
         // `registry` is bound from a reference in the ctor, so it is never
         // null and needs no guard.
         registry->reloadFromOwner(m_ownerTag, currentMap);
@@ -215,9 +224,7 @@ ProfileLoader::~ProfileLoader()
     // Clean up any registry entries we own so a process hosting multiple
     // sequential loaders (tests, especially) doesn't accumulate ghosts
     // from destroyed loaders.
-    if (m_sink && m_sink->registry) {
-        m_sink->registry->clearOwner(m_sink->ownerTag());
-    }
+    m_sink->registry->clearOwner(m_sink->ownerTag());
 }
 
 int ProfileLoader::loadFromDirectory(const QString& directory, LiveReload liveReload)
@@ -261,7 +268,9 @@ int ProfileLoader::loadLibraryBuiltins(LiveReload liveReload)
 
 QString ProfileLoader::ownerTag() const
 {
-    return m_sink ? m_sink->ownerTag() : QString();
+    // No null guard: m_sink is set in the ctor init-list, never reset, and the
+    // ctor itself already dereferences it. Same invariant as Sink::registry.
+    return m_sink->ownerTag();
 }
 
 void ProfileLoader::requestRescan()

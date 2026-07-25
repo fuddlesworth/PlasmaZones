@@ -4,8 +4,9 @@
 /**
  * @file test_animations_page_controller.cpp
  * @brief AnimationsPageController behaviour pins: path discovery,
- *        override CRUD, the shader-leg support gate, and the
- *        stock-animation suppression mirror.
+ *        override CRUD, the shader-leg support gate, the stock-animation
+ *        suppression mirror, the spring-slider bounds, and the
+ *        simple-page scope coverage.
  *
  * Pins the file-per-path persistence model: setOverride writes one JSON
  * file under `<userProfilesDir>/<path>.json`, clearOverride deletes it,
@@ -37,6 +38,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
+#include <QScopeGuard>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -49,11 +52,8 @@
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAnimation/Spring.h>
 
-#include <QRegularExpression>
-#include <QScopeGuard>
-
-#include "helpers/IsolatedConfigGuard.h"
 #include "config/settings.h"
+#include "helpers/IsolatedConfigGuard.h"
 #include "settings/pages/animationpagescope.h"
 #include "settings/pages/animationspagecontroller.h"
 
@@ -501,6 +501,65 @@ private Q_SLOTS:
         QVERIFY(c.hasPendingChanges());
     }
 
+    /// A batch clear announces its NET dirty state, never an intermediate one.
+    ///
+    /// The trap: the first path's staged snapshot is a phantom ("was absent"),
+    /// so removing it empties the snapshot map and flips the page clean; a
+    /// later path in the same batch then stages a REAL snapshot and the page
+    /// ends dirty again. If the flip mid-loop is announced, the last thing the
+    /// page heard is "clean" while there is still an edit to discard — the
+    /// unsaved-changes footer disappears with restorable content behind it.
+    /// The endpoints are equal, so no terminal signal corrects it.
+    void batchClearAnnouncesTheNetDirtyStateNotAnIntermediateOne()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Staged this session, so its snapshot is "was absent" and removing it
+        // drops the entry.
+        QVERIFY(c.setOverride(QStringLiteral("global"), {{QStringLiteral("duration"), 300}}));
+        // Placed directly on disk: pre-existing, unstaged, so clearing it
+        // stages a real snapshot the user can still discard back.
+        QFile prior(tmp.path() + QStringLiteral("/editor.snapIn.json"));
+        QVERIFY(prior.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QVERIFY(prior.write(QByteArrayLiteral(R"({"name":"editor.snapIn","duration":250})")) > 0);
+        prior.close();
+
+        // pendingChangesChanged carries no payload, so record the state the
+        // page would read at each emission and check the LAST one.
+        QList<bool> announced;
+        connect(&c, &AnimationsPageController::pendingChangesChanged, &c, [&c, &announced]() {
+            announced.append(c.hasPendingChanges());
+        });
+
+        // Explicit path order: the phantom first, the real snapshot second.
+        QCOMPARE(c.clearOverridesUnder(QStringList{QStringLiteral("global"), QStringLiteral("editor.snapIn")}), 2);
+
+        QVERIFY(c.hasPendingChanges());
+        // Whatever was announced, the last of it must describe where the batch
+        // actually ended. Endpoints match here (dirty → dirty), so the correct
+        // behaviour is to say nothing at all.
+        QVERIFY2(announced.isEmpty(), "a batch that started and ended dirty announced an intermediate flip");
+
+        // Second scenario, endpoints DIFFERING, so a signal IS owed. Without
+        // this leg the assertion above would also pass if the batch stopped
+        // announcing anything at all. Start from clean: discard the staged
+        // edit above, then stage one fresh override whose snapshot is a
+        // phantom, so clearing it empties the map and ends the batch clean.
+        QVERIFY(c.revertPending());
+        QVERIFY(!c.hasPendingChanges());
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 400}}));
+        QVERIFY(c.hasPendingChanges());
+
+        announced.clear();
+        QCOMPARE(c.clearOverridesUnder(QStringList{QStringLiteral("osd.show")}), 1);
+        QVERIFY(!c.hasPendingChanges());
+        QCOMPARE(announced.size(), 1);
+        QCOMPARE(announced.last(), false);
+    }
+
     // hasScopedPendingFiles reports the file half of a per-page dirty check and
     // must ignore edits outside the queried scope.
     void hasScopedPendingFiles_reflectsOnlyScope()
@@ -665,7 +724,7 @@ private Q_SLOTS:
     ///   * a delete has nothing left on disk to outrank the stale entry, so
     ///     the controller forces the loader to catch up first
     ///
-    /// The delete half is the reported bug: "Revert to inherited" removed the
+    /// The delete half is the reported bug: the revert link removed the
     /// file, the registry kept serving the removed duration, and the control
     /// did not move until the settings app was restarted.
     void mutationsAreVisibleToTheNextResolveDespiteTheDebouncedWatch()
@@ -705,7 +764,7 @@ private Q_SLOTS:
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 888}}));
         QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 888);
 
-        // Revert to inherited: the file goes, so the leaf must fall through to
+        // Revert the leaf: the file goes, so the leaf must fall through to
         // the parent chain rather than to the entry the registry was holding.
         QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 123}}));
         QVERIFY(c.clearOverride(QStringLiteral("editor.snapIn")));
