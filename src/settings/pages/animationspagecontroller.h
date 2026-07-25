@@ -409,8 +409,8 @@ public:
     /// up on its own once that debounce lands; what does not is the PAGE,
     /// whose only re-read happens synchronously inside the
     /// `overrideChanged` handler. Without this it samples the pre-delete
-    /// state and never re-samples, which is the "Revert to inherited"
-    /// control that appeared to do nothing until the app was reopened.
+    /// state and never re-samples, which is the per-field revert
+    /// link that appeared to do nothing until the app was reopened.
     ///
     /// Removals only. A write is already covered by `resolvedProfile`
     /// reading the user files ahead of the registry, and writes arrive at
@@ -543,31 +543,46 @@ private:
     /// permanently lose pre-edit content — the controller's direct
     /// callers (setOverride / clearOverride) bail in that case.
     bool snapshotFileIfFirst(const QString& filePath);
+    /// Whether a snapshot drop announces the dirty-state flip it causes.
+    /// `Defer` is for a caller mutating several files in a row: an
+    /// intermediate flip is not the batch's outcome, and announcing it
+    /// leaves the page believing whatever the LAST intermediate state
+    /// happened to be. Such a caller owns one emit for the net flip.
+    enum class SnapshotDropSignal {
+        Emit,
+        Defer
+    };
+
     /// Undo a snapshotFileIfFirst() staging when the write it was taken for
     /// never landed. No-op unless the file on disk still matches the staged
     /// content exactly, so a snapshot guarding an earlier successful edit is
     /// left alone. Handed to the sub-services as a callable.
-    /// @return true when the entry was dropped (and pendingChangesChanged was
-    /// emitted if that flipped hasPendingChanges()).
-    bool dropFileSnapshotIfUnchanged(const QString& filePath);
+    /// @return true when the entry was dropped (and, under
+    /// `SnapshotDropSignal::Emit`, pendingChangesChanged was emitted if that
+    /// flipped hasPendingChanges()).
+    bool dropFileSnapshotIfUnchanged(const QString& filePath,
+                                     SnapshotDropSignal signalPolicy = SnapshotDropSignal::Emit);
 
     /// Run the injected profile-store refresher, if any. No-op otherwise.
     /// Not const: it exists to mutate process-global state (a directory
     /// rescan that rewrites the registry partition and fans out signals).
     void refreshProfileStore();
 
-    /// Outcome of removeOverrideFile(), so a caller can tell a real
-    /// failure from a no-op and knows whether the staged-snapshot drop
-    /// already emitted `pendingChangesChanged` for this flip.
-    struct OverrideFileRemoval
-    {
-        bool removed = false;
-        bool droppedSnapshot = false;
+    /// Outcome of removeOverrideFile(). `Absent` is not a failure: the
+    /// desired end state (no override file at this path) already holds,
+    /// which is what the pre-split code reported by re-testing existence
+    /// after a false return.
+    enum class OverrideFileRemoval {
+        Removed,
+        Absent,
+        Failed
     };
 
     /// The file half of clearOverride: snapshot, delete, settle the staged
-    /// entry. Emits nothing of its own beyond what the snapshot drop owns,
-    /// and does NOT refresh the profile store.
+    /// entry. Emits NOTHING — the snapshot drop defers its dirty-state
+    /// signal to the caller — and does not refresh the profile store.
+    /// The caller owns the in-flight gate (`m_asyncRevertInFlight`), the
+    /// path validity gate, the refresh, and every signal.
     ///
     /// Split out so the bulk clears can delete every file, refresh ONCE,
     /// and then emit — the batch shape revertPending already uses. Going

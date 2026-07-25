@@ -97,9 +97,9 @@ public:
      * @brief Register multiple directories in caller-declared priority order.
      *
      * `RegistrationOrder::LowestPriorityFirst` (the default) takes input
-     * in `[sys-lowest, ..., sys-highest, user]` order — the same shape
-     * the daemon's `setupAnimationProfiles` already builds via
-     * `std::reverse(locateAll(...))` + user-dir append. Passing
+     * in `[sys-lowest, ..., sys-highest, user]` order — the shape a
+     * consumer gets from `std::reverse(locateAll(...))` plus a user-dir
+     * append. Passing
      * `HighestPriorityFirst` lets callers feed `locateAll`'s natural
      * output (with the user dir prepended) directly without their own
      * pre-reverse — the base normalises before the strategy runs, so
@@ -127,9 +127,16 @@ public:
     /// the loaded state back before it returns: the debounce would
     /// otherwise answer that read with the pre-write state.
     ///
-    /// GUI-thread only, like every other mutating call on this class.
+    /// GUI-thread only, like every other mutating call on this class —
+    /// debug-asserted in `WatchedDirectorySet`, not enforced in release.
     /// `entriesChanged` is emitted on the caller's stack, so the sink's
-    /// commit step and every consumer slot run before this returns.
+    /// commit step and every DIRECTLY connected consumer slot run before
+    /// this returns (a queued connection still runs later).
+    ///
+    /// Unlike `requestRescan`, this does not defer when a scan is already
+    /// running: calling it from an `entriesChanged` slot re-enters the
+    /// scan, and nothing bounds that recursion. The caller owns
+    /// termination.
     void rescanNow();
 
     /// Count of entries currently tracked by the loader.
@@ -170,8 +177,10 @@ Q_SIGNALS:
     /// Fired after every rescan — regardless of whether the discovered
     /// entry set or any underlying payload actually changed. Rescans
     /// driven by the watcher or `requestRescan()` are coalesced by the
-    /// 50 ms debounce first; `rescanNow()` bypasses that and fires this
-    /// on the caller's stack.
+    /// 50 ms debounce first. `rescanNow()` bypasses that and fires this on
+    /// the caller's stack, and so does the initial scan inside
+    /// `loadFromDirectory[ies]` — which is why a consumer has to wire its
+    /// slots BEFORE it registers directories, not after.
     ///
     /// This is **deliberately** a "rescan completed" signal rather than
     /// a "content changed" signal — the loader has no visibility into
@@ -183,7 +192,9 @@ Q_SIGNALS:
     ///
     /// Tests and debug tooling rely on the per-rescan emission to observe
     /// rescans without payload inspection — do not weaken this contract
-    /// without updating the loader-sink consumers and the test suite. The three sister registries (`ShaderRegistry`,
+    /// without updating the loader-sink consumers and the test suite.
+    ///
+    /// The three sister registries (`ShaderRegistry`,
     /// `AnimationShaderRegistry`, `ScriptedAlgorithmLoader`) gate their
     /// public content-changed signals at the registry level via SHA-1
     /// signature or QHash diff because they own their parse output;

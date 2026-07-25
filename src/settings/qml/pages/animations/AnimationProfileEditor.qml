@@ -81,10 +81,9 @@ ColumnLayout {
     property bool simpleTiming: false
     /// Show the per-axis inheritance status captions (with their revert
     /// links) under the curve summary and the Duration row. The per-event
-    /// card, this component's only consumer, turns this on so a user can
-    /// see WHICH of the two timing fields a direct override actually pins.
-    /// It stays a property rather than a constant so a future host with no
-    /// inheritance to describe (a global-defaults surface) can leave it off.
+    /// card turns this on so a user can see WHICH of the two timing fields
+    /// a direct override actually pins; GlobalTimingDefaultsCard, the other
+    /// consumer, has no inheritance to describe and leaves it off.
     property bool showOverrideStatus: false
     /// Whether the edited event owns a DIRECT curve override (as opposed
     /// to following an ancestor or the Global default). Only rendered
@@ -182,23 +181,23 @@ ColumnLayout {
     /// `shaderParamWriteRequested` signals instead, so consumers can
     /// distinguish a curve edit from a shader switch (which carries
     /// side-effects like dropping the previous effect's params).
-    /// The per-event card connects this to its commit path. Kept alongside
-    /// the per-axis signals below for a host that commits the whole timing
-    /// state at once; the global timing defaults are edited by
-    /// GlobalTimingDefaultsCard, which does not use this component.
+    /// The per-event card and GlobalTimingDefaultsCard each connect this to
+    /// their own commit path. The card commits the whole timing state at
+    /// once through it; the per-event card also listens to the per-axis
+    /// signals below, which is what keeps its writes per field.
     signal valueChanged
     /// Per-axis refinements of `valueChanged`, emitted alongside it (the
     /// specific signal first, then the aggregate). A consumer that
     /// persists per-field overrides (the per-event card) listens to
     /// these so a duration drag writes only the duration field and a
     /// curve edit writes only the curve field, leaving the other field
-    /// inheriting. A host that commits the whole timing state at once
-    /// would keep using `valueChanged`. The timing-mode
+    /// inheriting. Consumers that commit the whole timing state
+    /// (GlobalTimingDefaultsCard) keep using `valueChanged`. The timing-mode
     /// combo and the spring editor count as CURVE edits: the mode and
     /// the spring parameters are encoded in the curve wire string.
     signal durationEdited
     signal curveEdited
-    /// Revert requests from the per-axis "Revert to inherited" links —
+    /// Revert requests from the per-axis revert links —
     /// only reachable when `showOverrideStatus` is on. The consumer
     /// clears the corresponding field from the stored override so the
     /// event follows its ancestors (and the Global defaults) again.
@@ -445,12 +444,12 @@ ColumnLayout {
         // way out has to stay reachable while the Duration row itself
         // is hidden.
         //
-        // It IS gated on simpleTiming implicitly, by living outside the
-        // curve-summary block: simple mode can pin a duration (the slider
-        // above is its only timing control), so it needs the way back. It
-        // cannot pin a curve, so the curve link above stays inside the
-        // block simple mode hides. A curve override can only have been
-        // made in Advanced, which is where its revert link waits.
+        // Nor is it hidden in simple mode, which is what living outside the
+        // curve-summary block buys: simple mode CAN pin a duration (the
+        // slider above is its only timing control), so it needs the way
+        // back. It cannot pin a curve — every curve emitter sits inside the
+        // block simple mode hides — so the curve link stays in there with
+        // them, in Advanced, where such an override can only have been made.
         RowLayout {
             visible: root.showOverrideStatus && root.durationOverridden
             Layout.fillWidth: true

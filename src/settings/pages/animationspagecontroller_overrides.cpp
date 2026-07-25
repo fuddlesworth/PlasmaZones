@@ -259,28 +259,31 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
 
 AnimationsPageController::OverrideFileRemoval AnimationsPageController::removeOverrideFile(const QString& path)
 {
-    OverrideFileRemoval result;
     const QString filePath = profileFilePath(path);
     QFile file(filePath);
     if (!file.exists())
-        return result;
+        return OverrideFileRemoval::Absent;
     // Mirror setOverride's snapshot symmetry, through the one shared rollback
     // primitive: it drops the staged entry only while disk still matches it.
     if (!snapshotFileIfFirst(filePath)) {
         qCWarning(lcConfig) << "removeOverrideFile: refusing to delete" << filePath << "without a recoverable snapshot";
-        return result;
+        return OverrideFileRemoval::Failed;
     }
     if (!file.remove()) {
-        dropFileSnapshotIfUnchanged(filePath);
-        return result;
+        dropFileSnapshotIfUnchanged(filePath, SnapshotDropSignal::Defer);
+        return OverrideFileRemoval::Failed;
     }
     // Deleting a file that did not exist before this session's edits returns it
     // to its pre-edit state (the snapshot is `nullopt` = "was absent"), so the
     // staged entry is a phantom and has to go, or the page stays dirty with
-    // nothing to discard. The drop owns the signal for that flip (see setOverride).
-    result.droppedSnapshot = dropFileSnapshotIfUnchanged(filePath);
-    result.removed = true;
-    return result;
+    // nothing to discard.
+    //
+    // Deferred: mid-sequence that flip is not the outcome, only a step toward
+    // it. A batch that drops a phantom on its first path and then stages a real
+    // snapshot on a later one would otherwise leave "clean" as the last thing
+    // the page heard while ending dirty. Every caller re-samples and emits once.
+    dropFileSnapshotIfUnchanged(filePath, SnapshotDropSignal::Defer);
+    return OverrideFileRemoval::Removed;
 }
 
 bool AnimationsPageController::clearOverride(const QString& path)
@@ -299,11 +302,13 @@ bool AnimationsPageController::clearOverride(const QString& path)
     // invalid path or no-op clear doesn't pay for a hasPendingChanges() walk.
     // Mirrors setOverride() ordering above so a future refactor doesn't see two
     // divergent capture-point shapes.
-    if (!QFileInfo::exists(profileFilePath(path)))
+    if (!hasOverride(path))
         return false;
     const bool wasPending = hasPendingChanges();
-    const OverrideFileRemoval removal = removeOverrideFile(path);
-    if (!removal.removed)
+    // Absent here means the file went away between that check and this call.
+    // The caller's intent is satisfied and nothing was done, so it reports the
+    // same "nothing to clear" as the guard above rather than a failure.
+    if (removeOverrideFile(path) != OverrideFileRemoval::Removed)
         return false;
     // Before the signal, not after: the page re-reads resolvedProfile from
     // inside its overrideChanged handler, and the profile registry is behind
@@ -313,7 +318,9 @@ bool AnimationsPageController::clearOverride(const QString& path)
     refreshProfileStore();
     const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
-    if (!removal.droppedSnapshot && wasPending != nowPending)
+    // Sole emit for this flip now: the snapshot drop inside removeOverrideFile
+    // deferred its own.
+    if (wasPending != nowPending)
         Q_EMIT pendingChangesChanged();
     return true;
 }
@@ -339,25 +346,24 @@ int AnimationsPageController::clearOverridesForPaths(const QStringList& eventPat
 {
     const bool wasPending = hasPendingChanges();
     QStringList cleared;
-    bool anyDropped = false;
     int failed = 0;
     for (const QString& path : eventPaths) {
         if (!isValidEventPath(path))
             continue;
-        // Nothing to clear is not a failure. Testing before the removal (rather
-        // than reading a false return as "still there") keeps the two outcomes
-        // distinguishable without a second stat per path.
-        if (!QFileInfo::exists(profileFilePath(path)))
-            continue;
-        const OverrideFileRemoval removal = removeOverrideFile(path);
-        if (!removal.removed) {
-            // The file was there and is still there, so this is a real failure.
-            // Counting it as a clear would report a reset that did not happen.
+        switch (removeOverrideFile(path)) {
+        case OverrideFileRemoval::Removed:
+            cleared.append(path);
+            break;
+        case OverrideFileRemoval::Absent:
+            // Nothing to clear at this path, which is most of them on any
+            // scoped reset. Not a failure: the desired end state already holds.
+            break;
+        case OverrideFileRemoval::Failed:
+            // The file is there and could not be removed. Counting it as a
+            // clear would report a reset that did not happen.
             ++failed;
-            continue;
+            break;
         }
-        cleared.append(path);
-        anyDropped = anyDropped || removal.droppedSnapshot;
     }
     // ONE rescan for the whole batch, ahead of the signals the pages refresh
     // on. Refreshing inside the loop would re-read and re-parse every file in
@@ -366,9 +372,12 @@ int AnimationsPageController::clearOverridesForPaths(const QStringList& eventPat
         refreshProfileStore();
     for (const QString& path : cleared)
         Q_EMIT overrideChanged(path);
-    // One dirty re-eval for the batch. Suppressed when a snapshot drop already
-    // owned the signal for this flip, exactly as the single-path clear does.
-    if (!anyDropped && wasPending != hasPendingChanges())
+    // One dirty signal for the batch, describing the NET flip. Every snapshot
+    // drop inside the loop deferred its own precisely so an intermediate state
+    // could not be mistaken for the outcome: a batch that drops a phantom
+    // early and stages a real snapshot later ends dirty, and must not have
+    // announced "clean" on the way through.
+    if (wasPending != hasPendingChanges())
         Q_EMIT pendingChangesChanged();
     if (failed > 0) {
         qCWarning(lcConfig) << context << ":" << failed << "override files could not be removed";
