@@ -197,22 +197,27 @@ class MetadataPackScanStrategy : public IScanStrategy
                   "MetadataPackScanStrategy<Payload> requires Payload to expose a public 'QString id' member.");
 
 public:
-    /// Hard cap on **successfully parsed** entries discovered per rescan,
-    /// summed across every registered search path. Mirrors
-    /// `DirectoryLoader::kMaxEntries` — every fsloader-backed registry
-    /// caps at the same scale. Typical pack counts are single digits; the
-    /// cap is purely a DoS guard against pathological user dirs with
-    /// thousands of metadata.json-bearing subdirs.
+    /// Hard cap on subdirs CONSIDERED per rescan, summed across every
+    /// registered search path — not on the entries that survive to
+    /// registration. Mirrors `DirectoryLoader::kMaxEntries`, which counts
+    /// the same way; every fsloader-backed registry caps at the same scale.
+    /// Typical pack counts are single digits, so the cap is purely a DoS
+    /// guard against pathological user dirs.
     ///
-    /// Note: the cap does **not** bound the number of subdirs iterated.
-    /// A search path with N subdirs that all lack a valid `metadata.json`
-    /// will still loop through all N (each one stat'd, then skipped) —
-    /// the cap protects against parsed-payload blowup, not directory-
-    /// walk blowup. The bounded-iteration guarantee comes from
-    /// `WatchedDirectorySet`'s forbidden-root check (which prevents
-    /// `$HOME` and friends from being registered) and from caller-side
-    /// path discipline. If a future caller registers an
-    /// untrusted-tree-of-subdirs they must apply their own iteration cap.
+    /// Counting registrations instead would have missed the whole attack:
+    /// a subdir whose metadata.json is missing, oversize, unparseable or
+    /// id-colliding registers nothing, so a spray of thousands of broken
+    /// packs never advanced the counter while still costing a stat, an
+    /// open, a readAll and a parse EACH, on the GUI thread, on every
+    /// watcher fire — and growing the returned watch set without bound
+    /// along the way.
+    ///
+    /// What it still does not bound is the `entryList` call that
+    /// materialises and sorts the subdir names before the loop begins.
+    /// `WatchedDirectorySet`'s forbidden-root check (which keeps `$HOME`
+    /// and friends from being registered) plus caller-side path discipline
+    /// are what keep that input small. A future caller registering an
+    /// untrusted tree of subdirs needs its own enumeration cap.
     static constexpr int kDefaultMaxEntries = 10'000;
 
     /// Parse one `metadata.json` into a payload. The strategy already
@@ -517,6 +522,15 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
     const QString canonicalUserPath = m_userPath.isEmpty() ? QString() : QFileInfo(m_userPath).canonicalFilePath();
 
     bool capTripped = false;
+    /// Subdirs CONSIDERED this rescan, summed across every search path. The
+    /// cap counts these rather than the entries that survive to registration:
+    /// a subdir whose metadata.json is missing, oversize, unopenable,
+    /// unparseable, non-object, or id-colliding has still cost a stat (and
+    /// usually an open, a readAll and a JSON parse) on the GUI thread, which
+    /// is the work the cap exists to bound. Counting registrations instead
+    /// let a spray of broken packs through the guard untouched — the exact
+    /// attack it names. Mirrors `JsonScanStrategy`'s `filesConsidered`.
+    int subdirsConsidered = 0;
 
     // Reverse-iterate: highest-priority dirs first, first-wins on id
     // collision. The base normalises caller input into the canonical
@@ -546,13 +560,20 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             if (m_subdirSkip && m_subdirSkip(subdir)) {
                 continue;
             }
-            // Per-rescan entry-count DoS guard. Reverse-iteration scans
-            // user-first / system-last, so cap-trip drops *system*
-            // overflow rather than user overrides.
-            if (entries.size() >= static_cast<std::size_t>(m_maxEntries)) {
+            // Per-rescan DoS guard, counting subdirs considered rather than
+            // entries registered. Reverse-iteration scans user-first /
+            // system-last, so cap-trip drops *system* overflow rather than
+            // user overrides.
+            //
+            // Checked BEFORE the watch is armed below, not after: the watch
+            // list is the other unbounded quantity here, and a spray of
+            // broken packs that never register would otherwise grow it until
+            // the inotify per-user watch limit is exhausted.
+            if (subdirsConsidered >= m_maxEntries) {
                 capTripped = true;
                 break;
             }
+            ++subdirsConsidered;
 
             const QString subdirPath = dirObj.filePath(subdir);
             const QString metadataPath = subdirPath + QStringLiteral("/metadata.json");

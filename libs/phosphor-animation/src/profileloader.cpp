@@ -168,9 +168,9 @@ public:
         // Single reloadFromOwner -> AT MOST one `ownerReloaded` for the whole
         // batch however many files changed (decision W: coalesce), alongside a
         // per-path `profileChanged` for each entry that actually moved. None
-        // of either when the registry's own diff comes out empty: a no-op
-        // rescan, or a batch whose every path is already direct-owned and so
-        // skipped. That diff is independent of this sink's lastBatchChanged,
+        // of either when the registry's own diff comes out empty, i.e. when
+        // the batch neither adds nor removes anything this loader owns.
+        // That diff is independent of this sink's lastBatchChanged,
         // so the two signal families do not imply one another in either
         // direction. (`profilesReloaded` is a third signal, fired only by the
         // registry's wholesale reloadAll / clear.) The partitioning ensures
@@ -187,7 +187,7 @@ private:
     QHash<QString, Profile> m_lastCommittedPayloads;
 
     /// Snapshot of (sourcePath, systemSourcePath) per key, used for
-    /// the source-metadata diff (Phase 1c+1d fix).
+    /// the source-metadata diff.
     QHash<QString, QPair<QString, QString>> m_lastCommittedSources;
 };
 

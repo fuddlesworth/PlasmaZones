@@ -53,7 +53,10 @@ public:
 
     void setMaxEntries(int cap)
     {
-        m_maxEntries = cap;
+        // Clamped like MetadataPackScanStrategy::setMaxEntries: a negative cap
+        // would trip on the first file of every scan, which mass-unregisters
+        // every previously tracked key.
+        m_maxEntries = std::max(0, cap);
     }
 
 private:

@@ -601,6 +601,71 @@ private Q_SLOTS:
                                 .arg(kTestCap)));
     }
 
+    /// The counter change has a deliberate cost in ORDINARY scans, not just
+    /// under attack: files that are skipped now consume budget where they
+    /// previously did not, so a directory whose junk sorts before its valid
+    /// files can exhaust the cap before reaching them. That is the accepted
+    /// trade — charging for work actually done — and it is pinned here so a
+    /// future reader does not "fix" it back to counting registrations.
+    void testSkippedFilesConsumeCapBudget()
+    {
+        constexpr int kTestCap = 5;
+        // Alphabetically first, so they are reached first.
+        for (int i = 0; i < kTestCap; ++i) {
+            QFile f(m_tmp->filePath(QStringLiteral("aaa-%1.json").arg(i, 3, 10, QLatin1Char('0'))));
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QVERIFY(f.write(QByteArrayLiteral("{ this is not json")) > 0);
+        }
+        writeJson(m_tmp->filePath(QStringLiteral("zzz.json")), QStringLiteral("good"), QStringLiteral("v"));
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setMaxEntriesForTest(kTestCap);
+        loader.loadFromDirectory(m_tmp->path(), LiveReload::Off);
+
+        // The five junk files spend the whole budget, so `good` is never
+        // reached. Under the old registration-counting cap it would have been.
+        QCOMPARE(loader.registeredCount(), 0);
+        QVERIFY(!sink.registry.contains(QStringLiteral("good")));
+        QCOMPARE(sink.parseCalls, kTestCap);
+    }
+
+    /// Budget is consumed in strictly descending priority order, so a system
+    /// directory cannot starve the user directory however it is filled —
+    /// shadowed duplicates, junk and oversize files all cost the same and are
+    /// all read AFTER the user pass. Guards the reverse iteration in
+    /// performScan against a later "simplification" back to forward order.
+    void testCapCannotStarveUserDirWithShadowedSystemSpray()
+    {
+        constexpr int kTestCap = 5;
+        QTemporaryDir systemDir;
+        QTemporaryDir userDir;
+        QVERIFY(systemDir.isValid());
+        QVERIFY(userDir.isValid());
+
+        // 50 system files, every one of them shadowed by a user key.
+        for (int i = 0; i < 50; ++i) {
+            writeJson(systemDir.filePath(QStringLiteral("sys-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                      QStringLiteral("k-%1").arg(i % 3), QStringLiteral("from-system"));
+        }
+        for (int i = 0; i < 3; ++i) {
+            writeJson(userDir.filePath(QStringLiteral("u-%1.json").arg(i)), QStringLiteral("k-%1").arg(i),
+                      QStringLiteral("from-user"));
+        }
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setMaxEntriesForTest(kTestCap);
+        loader.loadFromDirectories({systemDir.path(), userDir.path()}, LiveReload::Off);
+
+        QCOMPARE(loader.registeredCount(), 3);
+        for (int i = 0; i < 3; ++i) {
+            QCOMPARE(QString::fromStdString(sink.registry.value(QStringLiteral("k-%1").arg(i))),
+                     QStringLiteral("from-user"));
+        }
+        QCOMPARE(sink.parseCalls, kTestCap);
+    }
+
     /// Regression guard for the Phase-1g reverse-scan + first-wins fix.
     /// A system directory that overflows the entry-count cap must NOT
     /// drop the user dir's overrides. With forward-iteration the cap

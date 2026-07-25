@@ -29,12 +29,15 @@ namespace PhosphorTiles {
 // helper used by the scan strategy.
 static constexpr int MaxWatchedFilesPerDir = 100;
 
-// Hard cap on scripts registered per rescan, summed across every
-// registered directory. Mirrors DirectoryLoader::kMaxEntries and
-// MetadataPackScanStrategy::kDefaultMaxEntries — same defensive
-// rationale, identical magnitude — so all fsloader-backed registries
-// cap at the same scale. The per-dir MaxWatchedFilesPerDir above is the
-// secondary guard; this is the global one. Typical script counts are
+// Hard cap on scripts REGISTERED per rescan, summed across every
+// registered directory. Same magnitude as DirectoryLoader::kMaxEntries and
+// MetadataPackScanStrategy::kDefaultMaxEntries, but deliberately NOT the
+// same quantity: those two count files/subdirs considered, because counting
+// registrations let a spray of files that each parse and then register
+// nothing slip past the guard entirely. That hole does not exist here —
+// MaxWatchedFilesPerDir above bounds enumeration per directory
+// independently, so the work a rejected file can cost is already capped at
+// 100 x N_dirs before this counter is consulted. Typical script counts are
 // single digits; 10k is purely a DoS guard.
 static constexpr int kMaxScripts = 10'000;
 

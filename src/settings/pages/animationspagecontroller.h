@@ -213,12 +213,15 @@ public:
     /// in both cases. A caller must not treat -1 as "nothing to clear".
     int clearAllOverrides();
 
-    /// Scoped sibling of clearAllOverrides for the per-page kebab: clear only the
+    /// Scoped sibling of clearAllOverrides, called from the per-page kebab AND
+    /// from the event card's Override toggle (its OFF branch clears the card's
+    /// whole write-path group in one batch). Q_INVOKABLE for that second
+    /// caller: clear only the
     /// override files at @p eventPaths (one settings page's own event-path
     /// subtree), leaving every other page's overrides untouched. Same snapshot /
     /// return-code contract as clearAllOverrides (-1 = refused or partial). @p
     /// eventPaths must be built-in event paths; non-built-in entries are skipped.
-    int clearOverridesUnder(const QStringList& eventPaths);
+    Q_INVOKABLE int clearOverridesUnder(const QStringList& eventPaths);
 
     /// Scoped sibling of revertPending: restore ONLY the snapshotted override
     /// files at @p eventPaths from their pre-edit content, leaving every other

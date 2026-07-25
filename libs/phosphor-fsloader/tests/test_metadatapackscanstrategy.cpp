@@ -209,6 +209,46 @@ private Q_SLOTS:
         // override is present.
     }
 
+    /// The cap must bound subdirs CONSIDERED, not entries registered. A
+    /// spray of packs whose metadata.json never parses registers nothing, so
+    /// a registration-counting cap never trips and every one of them is
+    /// stat'd, opened, read and parsed on the GUI thread on every watcher
+    /// fire — the exact attack the guard names. It also armed a filesystem
+    /// watch per broken pack before any of the reject paths ran, so the spray
+    /// grew the watch set without bound too, toward the inotify per-user
+    /// limit.
+    ///
+    /// The watch list is the cheapest observable for both halves: it is
+    /// appended once per subdir the loop actually reaches.
+    void testCapBoundsSubdirsConsideredNotEntriesRegistered()
+    {
+        const QString dir = m_tmp->filePath(QStringLiteral("broken"));
+        QVERIFY(QDir().mkpath(dir));
+
+        constexpr int kCap = 5;
+        constexpr int kSubdirs = 20;
+        for (int i = 0; i < kSubdirs; ++i) {
+            const QString sub = dir + QStringLiteral("/pkg-%1").arg(i, 3, 10, QLatin1Char('0'));
+            QVERIFY(QDir().mkpath(sub));
+            writeFile(sub + QStringLiteral("/metadata.json"), QByteArrayLiteral("{ nope"));
+        }
+
+        MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
+        strategy.setMaxEntries(kCap);
+
+        CapturingAdapter adapter(strategy);
+        WatchedDirectorySet set(adapter);
+        set.registerDirectory(dir, LiveReload::Off);
+
+        // Nothing parses, so nothing registers either way — that is precisely
+        // why a registration count could not see this.
+        QCOMPARE(strategy.size(), std::size_t{0});
+        QVERIFY2(adapter.lastWatches.size() <= kCap,
+                 qPrintable(QStringLiteral("cap let %1 broken subdirs arm a watch with a cap of %2")
+                                .arg(adapter.lastWatches.size())
+                                .arg(kCap)));
+    }
+
     /// Two scans with identical filesystem state must not invoke the
     /// `OnCommit` callback the second time. Editing the payload's
     /// `score` (which the signature contributor mixes in) must invoke

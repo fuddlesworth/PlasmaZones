@@ -34,13 +34,16 @@
 #include <QTest>
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMetaMethod>
 #include <QRegularExpression>
 #include <QScopeGuard>
+#include <QSet>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -263,6 +266,65 @@ private Q_SLOTS:
     /// `"mirrorPaths": [ … ]` string literals only. A path that came from a JS
     /// expression or a property reference would not be seen, and the page has
     /// never used one. The count guards below are what stop a rewrite in that
+    /// Every `settingsController.animationsPage.<name>` the settings QML calls
+    /// must actually exist on the controller's meta-object. A plain public
+    /// method is invisible to QML, and the call fails at RUNTIME with a
+    /// TypeError that no build and no C++ test can see — which is exactly how
+    /// a `clearOverridesUnder` call shipped from QML against a method that had
+    /// no Q_INVOKABLE, silently breaking the override toggle.
+    ///
+    /// Scrapes the QML rather than listing names by hand so a new call site is
+    /// covered the day it is written.
+    void everyAnimationsPageCallFromQmlIsReachable()
+    {
+        static const QStringList kQmlRoots{QStringLiteral(P_SOURCE_DIR "/src/settings/qml"),
+                                           QStringLiteral(P_SOURCE_DIR "/kcm")};
+
+        // `animationsPage.foo(` — call sites only. A bare property read is
+        // covered by the same lookup, but restricting to calls keeps the regex
+        // from matching prose in comments.
+        static const QRegularExpression callRe(QStringLiteral("animationsPage\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\("));
+
+        QSet<QString> called;
+        for (const QString& rootDir : kQmlRoots) {
+            QDirIterator dirIt(rootDir, QStringList{QStringLiteral("*.qml")}, QDir::Files,
+                               QDirIterator::Subdirectories);
+            while (dirIt.hasNext()) {
+                const QString src = readFile(dirIt.next());
+                auto it = callRe.globalMatch(src);
+                while (it.hasNext())
+                    called.insert(it.next().captured(1));
+            }
+        }
+
+        // Non-vacuity floor: the animations QML calls well over a dozen of
+        // these. A collapse to a handful means the scrape broke, not that the
+        // call sites went away.
+        QVERIFY2(
+            called.size() >= 15,
+            qPrintable(QStringLiteral("scraped only %1 animationsPage calls from the QML tree").arg(called.size())));
+
+        AnimationsPageController c;
+        const QMetaObject* meta = c.metaObject();
+        QStringList unreachable;
+        for (const QString& name : called) {
+            const QByteArray raw = name.toUtf8();
+            if (meta->indexOfProperty(raw.constData()) >= 0)
+                continue;
+            // By NAME, not signature: indexOfMethod needs an exact parameter
+            // list, and QML reaches these through every overload.
+            bool found = false;
+            for (int i = 0; i < meta->methodCount() && !found; ++i)
+                found = meta->method(i).name() == raw;
+            if (!found)
+                unreachable.append(name);
+        }
+        QVERIFY2(unreachable.isEmpty(),
+                 qPrintable(QStringLiteral("QML calls these, but they are absent from the meta-object "
+                                           "(missing Q_INVOKABLE / Q_PROPERTY): %1")
+                                .arg(unreachable.join(QStringLiteral(", ")))));
+    }
+
     /// style from turning this into a test that asserts nothing.
     void simpleScopeCoversEverySimplePageCard()
     {

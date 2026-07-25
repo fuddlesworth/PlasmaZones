@@ -37,7 +37,7 @@ Kirigami.Dialog {
     signal curveApplied(string curve)
     signal springApplied(real omega, real zeta)
 
-    title: i18n("Customize Curve: %1", eventLabel)
+    title: i18nc("@title:window", "Customize curve for %1", eventLabel)
     preferredWidth: Math.min(Kirigami.Units.gridUnit * 40, parent ? parent.width * 0.85 : Kirigami.Units.gridUnit * 40)
     preferredHeight: Math.min(Kirigami.Units.gridUnit * 32, parent ? parent.height * 0.8 : Kirigami.Units.gridUnit * 32)
     standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
@@ -171,7 +171,7 @@ Kirigami.Dialog {
                 readonly property bool isElastic: easingPreviewInDialog.curveType.indexOf("elastic") >= 0
 
                 accessibleName: isElastic ? i18n("Overshoot") : i18n("Amplitude")
-                // Mirrors Easing::clampAmplitude — see EasingSettings.qml. Elastic's
+                // Mirrors Easing::clampAmplitude (js/EasingCurve.js). Elastic's
                 // value is its peak and its floor moves with the period.
                 from: isElastic ? Easing.minElasticPeak(easingPreviewInDialog.elasticPeriod) : 0.5
                 to: isElastic ? 2 : 3
@@ -212,7 +212,7 @@ Kirigami.Dialog {
                 onMoved: value => {
                     var ct = easingPreviewInDialog.curveType;
                     // Re-clamp against the NEW period — elastic's amplitude floor
-                    // moves with it (minElasticPeak); see EasingSettings.qml.
+                    // moves with it (minElasticPeak, js/EasingCurve.js).
                     var amp = Easing.clampAmplitude(true, easingPreviewInDialog.curveAmplitude, value).toFixed(2);
                     root._workingCurve = ct + ":" + amp + "," + value.toFixed(2);
                     root._dirty = true;
@@ -337,7 +337,7 @@ Kirigami.Dialog {
             spacing: Kirigami.Units.smallSpacing
 
             ToolButton {
-                text: i18n("Save as Preset…")
+                text: i18n("Save as preset…")
                 icon.name: "bookmark-new"
                 Accessible.name: i18n("Save current curve as preset")
                 visible: !root._savingPreset
