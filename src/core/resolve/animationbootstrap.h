@@ -169,7 +169,12 @@ public:
     /// The profile loader feeding `profileRegistry()`. Borrowed by a
     /// composition root that also WRITES profile files, so it can force
     /// the loader's debounced watch to catch up before reading the
-    /// registry back (`ProfileLoader::rescanNow`).
+    /// registry back (`ProfileLoader::rescanNow`). Handed out whole,
+    /// matching the two accessors above, rather than as a narrower
+    /// `refreshProfiles()` forward: the loader is a QObject, so a caller
+    /// wiring a long-lived callable can hold it in a `QPointer` and get
+    /// a lifetime guarantee that a forwarding method on this non-QObject
+    /// class could not offer.
     PhosphorAnimation::ProfileLoader* profileLoader()
     {
         return m_profileLoader.get();

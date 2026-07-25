@@ -110,7 +110,8 @@ public:
      * Empty `directories` is a no-op: no scan runs and the return value
      * is the count of entries currently tracked from PRIOR registrations
      * (not zero). Callers needing "force a rescan with no new dirs"
-     * should use `requestRescan()` instead.
+     * should use `requestRescan()`, or `rescanNow()` when the result has
+     * to be readable before the call returns.
      */
     int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off,
                             RegistrationOrder order = RegistrationOrder::LowestPriorityFirst);
@@ -125,6 +126,10 @@ public:
     /// written or deleted a file in a watched directory and must read
     /// the loaded state back before it returns: the debounce would
     /// otherwise answer that read with the pre-write state.
+    ///
+    /// GUI-thread only, like every other mutating call on this class.
+    /// `entriesChanged` is emitted on the caller's stack, so the sink's
+    /// commit step and every consumer slot run before this returns.
     void rescanNow();
 
     /// Count of entries currently tracked by the loader.
@@ -162,9 +167,11 @@ public:
     bool hasParentWatchForTest(const QString& path) const;
 
 Q_SIGNALS:
-    /// Fired after every rescan, coalesced by the 50 ms debounce —
-    /// regardless of whether the discovered entry set or any underlying
-    /// payload actually changed.
+    /// Fired after every rescan — regardless of whether the discovered
+    /// entry set or any underlying payload actually changed. Rescans
+    /// driven by the watcher or `requestRescan()` are coalesced by the
+    /// 50 ms debounce first; `rescanNow()` bypasses that and fires this
+    /// on the caller's stack.
     ///
     /// This is **deliberately** a "rescan completed" signal rather than
     /// a "content changed" signal — the loader has no visibility into

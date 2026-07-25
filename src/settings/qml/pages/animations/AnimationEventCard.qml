@@ -221,9 +221,10 @@ Item {
     /// curve changes. Only a card owning BOTH fields short-circuits before
     /// the walk — Global cannot reach any of its controls. The overlay of the
     /// card's own stored fields uses the _pathProfiles cache, so the cost
-    /// stays one chain walk and no file open. The walk is registry-served in
-    /// the app, though resolvedProfile does fall back to a per-ancestor file
-    /// read when a level has no registry entry.
+    /// stays one chain walk with no file open on THIS side. resolvedProfile
+    /// itself reads a per-ancestor override file first and consults the
+    /// registry only where no user file exists, which is what keeps the walk
+    /// honest immediately after a mutation.
     function _reseedFromInherited() {
         root._inheritRev = root._inheritRev + 1;
         if (root._ownsCurveOverride && root._ownsDurationOverride)

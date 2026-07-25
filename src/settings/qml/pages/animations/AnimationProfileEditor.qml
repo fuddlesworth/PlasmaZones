@@ -81,9 +81,10 @@ ColumnLayout {
     property bool simpleTiming: false
     /// Show the per-axis inheritance status captions (with their revert
     /// links) under the curve summary and the Duration row. The per-event
-    /// card turns this on so a user can see WHICH of the two timing
-    /// fields a direct override actually pins; the Global defaults card
-    /// has no inheritance to describe and leaves it off.
+    /// card, this component's only consumer, turns this on so a user can
+    /// see WHICH of the two timing fields a direct override actually pins.
+    /// It stays a property rather than a constant so a future host with no
+    /// inheritance to describe (a global-defaults surface) can leave it off.
     property bool showOverrideStatus: false
     /// Whether the edited event owns a DIRECT curve override (as opposed
     /// to following an ancestor or the Global default). Only rendered
@@ -103,12 +104,13 @@ ColumnLayout {
     /// so the editor doesn't reach a global context for it.
     property var shaderParamSchema: []
     // ── Shader-param editor feature toggles ─────────────────────────
-    /// Locking is per-event-card-only — the global-defaults page doesn't need it.
+    /// Locking is per-event-card-only. A host with no per-event overrides
+    /// to protect leaves it off.
     property bool enableLocking: false
     /// Randomize same.
     property bool enableRandomize: false
-    /// Reset-all-to-defaults, defaulting to `enableRandomize` so it tracks
-    /// the same contexts (per-event card on, global-defaults page off).
+    /// Reset-all-to-defaults, defaulting to `enableRandomize` so the two
+    /// track the same contexts (per-event card on).
     property bool enableReset: enableRandomize
     /// Image picker is reserved for shader textures (overlay packs);
     /// animation packs don't use it.
@@ -180,16 +182,18 @@ ColumnLayout {
     /// `shaderParamWriteRequested` signals instead, so consumers can
     /// distinguish a curve edit from a shader switch (which carries
     /// side-effects like dropping the previous effect's params).
-    /// The per-event card and the global-defaults page (AnimationsGeneralPage)
-    /// each connect this to their own commit path.
+    /// The per-event card connects this to its commit path. Kept alongside
+    /// the per-axis signals below for a host that commits the whole timing
+    /// state at once; the global timing defaults are edited by
+    /// GlobalTimingDefaultsCard, which does not use this component.
     signal valueChanged
     /// Per-axis refinements of `valueChanged`, emitted alongside it (the
     /// specific signal first, then the aggregate). A consumer that
     /// persists per-field overrides (the per-event card) listens to
     /// these so a duration drag writes only the duration field and a
     /// curve edit writes only the curve field, leaving the other field
-    /// inheriting. Consumers that commit the whole timing state (the
-    /// Global defaults card) keep using `valueChanged`. The timing-mode
+    /// inheriting. A host that commits the whole timing state at once
+    /// would keep using `valueChanged`. The timing-mode
     /// combo and the spring editor count as CURVE edits: the mode and
     /// the spring parameters are encoded in the curve wire string.
     signal durationEdited
@@ -215,8 +219,7 @@ ColumnLayout {
     /// and assigns it to `shaderParams` BEFORE emitting. The signal
     /// payload carries the rolled map so a consumer that wants to
     /// persist (per-event card → controller) doesn't have to re-read
-    /// the editor's state — a consumer with randomize disabled (the
-    /// global-defaults page) never emits it.
+    /// the editor's state. A host with randomize disabled never emits it.
     signal randomizeRequested(var rolled)
     /// Reset all shader params to their schema defaults. Same self-update
     /// contract as `randomizeRequested`: the editor stages the defaults map
@@ -310,13 +313,14 @@ ColumnLayout {
 
                     // maximumWidth pins the caption to its natural width so
                     // the link sits directly after it, the way the duration
-                    // twin below reads. fillWidth stays on so a long
-                    // translation can still shrink and elide instead of
-                    // pushing the link out of the card; without the cap it
-                    // took the whole row and stranded the link against the
-                    // Customize button.
+                    // twin below reads. Without the cap the caption took the
+                    // whole row and stranded the link against the Customize
+                    // button. A long translation still shrinks and elides
+                    // rather than pushing the link out of the card, because
+                    // Layout.minimumWidth defaults to 0 and the layout is
+                    // free to squeeze below the preferred width; fillWidth
+                    // plays no part in that and is deliberately not set.
                     Label {
-                        Layout.fillWidth: true
                         Layout.maximumWidth: implicitWidth
                         text: root.curveOverridden ? i18n("Overridden for this event") : i18n("Following the inherited value")
                         font: Kirigami.Theme.smallFont
@@ -324,9 +328,13 @@ ColumnLayout {
                         elide: Text.ElideRight
                     }
 
+                    // Named for its axis, like the duration twin below: the
+                    // two links sit a few rows apart and a bare "Revert to
+                    // inherited" beside "Revert duration to inherited" reads
+                    // as though it reverted everything.
                     Kirigami.LinkButton {
                         visible: root.curveOverridden
-                        text: i18n("Revert to inherited")
+                        text: i18n("Revert curve to inherited")
                         font: Kirigami.Theme.smallFont
                         Accessible.name: i18n("Revert curve to inherited")
                         onClicked: root.curveRevertRequested()
@@ -436,6 +444,13 @@ ColumnLayout {
         // re-applies the moment the spring goes away upstream, so the
         // way out has to stay reachable while the Duration row itself
         // is hidden.
+        //
+        // It IS gated on simpleTiming implicitly, by living outside the
+        // curve-summary block: simple mode can pin a duration (the slider
+        // above is its only timing control), so it needs the way back. It
+        // cannot pin a curve, so the curve link above stays inside the
+        // block simple mode hides. A curve override can only have been
+        // made in Advanced, which is where its revert link waits.
         RowLayout {
             visible: root.showOverrideStatus && root.durationOverridden
             Layout.fillWidth: true

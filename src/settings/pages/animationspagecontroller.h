@@ -48,11 +48,16 @@ class ISettings;
 ///
 /// ## Effective-value resolution
 ///
-/// `resolvedProfile()` walks the path's parent chain through the
-/// process-wide `PhosphorProfileRegistry::defaultRegistry()` (covers
-/// shipped + user overrides) with library-default fill-in. When the
-/// registry isn't published (unit tests without bootstrap), it falls
-/// back to walking the user dir directly.
+/// `resolvedProfile()` walks the path's parent chain and, at each level,
+/// reads this controller's own override file FIRST, falling back to the
+/// process-wide `PhosphorProfileRegistry::defaultRegistry()` for levels
+/// with no user file (shipped profiles, and whatever the hosting process
+/// has registered), then fills in library defaults. Disk leads because
+/// the registry is fed by a watcher on the same directory this class
+/// writes, and that watcher is debounced — see
+/// `setProfileStoreRefresher()` for the other half of keeping the two in
+/// step. With no registry published (unit tests without a bootstrap) the
+/// walk is purely file-backed, which is self-consistent.
 ///
 /// ## Composition
 ///
@@ -173,10 +178,11 @@ public:
     /// about the Profile fields only.
     Q_INVOKABLE QVariantMap rawProfile(const QString& path) const;
 
-    /// Effective Profile for @p path: walks the parent chain through the
-    /// process-wide registry (or user dir as fallback) and fills any
+    /// Effective Profile for @p path: walks the parent chain reading this
+    /// controller's own override file at each level, falling back to the
+    /// process-wide registry where no user file exists, and fills any
     /// still-missing fields with `Profile::Default*` constants. Always
-    /// returns a populated map.
+    /// returns a populated map. See the class docs for why disk leads.
     Q_INVOKABLE QVariantMap resolvedProfile(const QString& path) const;
 
     /// Write @p profileJson as the user override at @p path. The map
@@ -395,21 +401,25 @@ public:
 
     /// Injected by the composition root: brings the process's profile
     /// registry back in line with this controller's directory
-    /// SYNCHRONOUSLY. Called after every override file this controller
-    /// DELETES, before the matching `overrideChanged`.
+    /// SYNCHRONOUSLY. Run on every path that can REMOVE an override file,
+    /// ahead of the matching `overrideChanged`, once per batch.
     ///
     /// The registry is fed by a `ProfileLoader` watching the same
-    /// directory through a 50 ms debounce, and no rescan signal reaches
-    /// the open page afterwards, so a delete left the registry serving
-    /// the removed profile for the rest of the session. `resolvedProfile`
-    /// reads the user files ahead of the registry, which covers a WRITE
-    /// on its own, but a delete leaves nothing on disk to outrank the
-    /// stale entry — that is the "Revert to inherited" control that
-    /// changed nothing until the settings app was restarted.
+    /// directory through a 50 ms debounce. The registry itself does catch
+    /// up on its own once that debounce lands; what does not is the PAGE,
+    /// whose only re-read happens synchronously inside the
+    /// `overrideChanged` handler. Without this it samples the pre-delete
+    /// state and never re-samples, which is the "Revert to inherited"
+    /// control that appeared to do nothing until the app was reopened.
     ///
-    /// Deletes only. A write is already covered by the disk-first read,
-    /// and writes arrive at slider rate during a duration drag, where a
-    /// synchronous directory rescan per tick would be far too expensive.
+    /// Removals only. A write is already covered by `resolvedProfile`
+    /// reading the user files ahead of the registry, and writes arrive at
+    /// slider rate during a duration drag, where a synchronous directory
+    /// rescan per tick would be far too expensive. The batch revert paths
+    /// run it whenever their batch MAY have removed a file rather than
+    /// tracking removals individually: a pure-write batch pays one
+    /// redundant rescan per click, which is not worth threading a
+    /// per-file "was deleted" flag through the discard worker to avoid.
     ///
     /// Unset (the default, and every unit test) leaves the controller
     /// purely file-backed, which is already self-consistent.
@@ -542,7 +552,34 @@ private:
     bool dropFileSnapshotIfUnchanged(const QString& filePath);
 
     /// Run the injected profile-store refresher, if any. No-op otherwise.
-    void refreshProfileStore() const;
+    /// Not const: it exists to mutate process-global state (a directory
+    /// rescan that rewrites the registry partition and fans out signals).
+    void refreshProfileStore();
+
+    /// Outcome of removeOverrideFile(), so a caller can tell a real
+    /// failure from a no-op and knows whether the staged-snapshot drop
+    /// already emitted `pendingChangesChanged` for this flip.
+    struct OverrideFileRemoval
+    {
+        bool removed = false;
+        bool droppedSnapshot = false;
+    };
+
+    /// The file half of clearOverride: snapshot, delete, settle the staged
+    /// entry. Emits nothing of its own beyond what the snapshot drop owns,
+    /// and does NOT refresh the profile store.
+    ///
+    /// Split out so the bulk clears can delete every file, refresh ONCE,
+    /// and then emit — the batch shape revertPending already uses. Going
+    /// through clearOverride in a loop instead would rescan (and re-parse)
+    /// the whole profiles directory once per deleted file.
+    OverrideFileRemoval removeOverrideFile(const QString& path);
+
+    /// Shared body of clearAllOverrides / clearOverridesUnder: clears every
+    /// override file among @p eventPaths, refreshes the profile store once,
+    /// then emits. @p context names the caller for the failure log.
+    /// @return the number cleared, or -1 if any removal failed.
+    int clearOverridesForPaths(const QStringList& eventPaths, QLatin1String context);
 
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;

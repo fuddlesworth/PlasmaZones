@@ -34,6 +34,7 @@
 #include <QDirIterator>
 #include <QCommandLineParser>
 #include <QIcon>
+#include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -185,16 +186,20 @@ int main(int argc, char* argv[])
     // The animations page writes and deletes the very profile files the
     // bootstrap loader watches, and that watch is debounced by 50 ms with no
     // rescan signal reaching the open page. Hand the page a synchronous
-    // catch-up so a delete (the "Revert to inherited" links, a per-page
+    // catch-up so a removal (the "Revert to inherited" links, a per-page
     // Discard) is reflected the moment it happens instead of on the next
-    // launch. `animationBootstrap` is declared above `controller` and so
-    // outlives it, which the captured pointer relies on.
-    if (controller.animationsPage() != nullptr) {
-        controller.animationsPage()->setProfileStoreRefresher([loader = animationBootstrap.profileLoader()]() {
-            if (loader != nullptr)
+    // launch.
+    //
+    // QPointer, not a raw pointer: declaration order already guarantees
+    // `animationBootstrap` outlives `controller` (and so the page holding this
+    // callable), but that is an invariant of this function's layout, not
+    // something the callable can check. The guard makes the lifetime rule
+    // enforce itself if either declaration ever moves.
+    controller.animationsPage()->setProfileStoreRefresher(
+        [loader = QPointer<PhosphorAnimation::ProfileLoader>(animationBootstrap.profileLoader())]() {
+            if (loader)
                 loader->rescanNow();
         });
-    }
 
     // The launch controller owns the D-Bus single-instance lifecycle. Holds a
     // non-owning pointer to `controller`, which must outlive it (guaranteed by
