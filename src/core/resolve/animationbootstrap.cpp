@@ -250,7 +250,7 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // and curve for both desktop legs — and the desktop transitions are
         // specifically designed to INHERIT them, so that the global slider
         // retimes them (see the desktopChanged and showingDesktopChanged
-        // handlers in lifecycle.cpp). Unseeded, they fall through to the
+        // handlers in lifecycle_wiring.cpp). Unseeded, they fall through to the
         // animator's global profile, which is the contract. Seeds also exist to
         // preserve prior bundled-JSON character, and these transitions are new:
         // there is no prior tuning to preserve.

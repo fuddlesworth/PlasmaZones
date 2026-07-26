@@ -115,6 +115,7 @@ set(phosphorfsloader_public_HDRS
     include/PhosphorFsLoader/IDirectoryLoaderSink.h
     include/PhosphorFsLoader/IScanStrategy.h
     include/PhosphorFsLoader/JsonEnvelopeValidator.h
+    include/PhosphorFsLoader/PackPathGuard.h
     include/PhosphorFsLoader/MetadataPackScanStrategy.h
     include/PhosphorFsLoader/ParsedEntry.h
     include/PhosphorFsLoader/SchemaValidator.h

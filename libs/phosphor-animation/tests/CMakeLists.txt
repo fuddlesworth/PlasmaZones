@@ -4,7 +4,8 @@
 # PhosphorAnimation unit tests. Headless — uses offscreen QPA.
 
 find_package(Qt6 REQUIRED COMPONENTS Test Quick)
-find_program(_pz_dbus_run_session dbus-run-session)
+
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 
 function(pa_add_test _name)
     set(_sources ${ARGN})
@@ -21,16 +22,7 @@ function(pa_add_test _name)
             PhosphorAnimation::PhosphorAnimation
     )
     add_test(NAME ${_name} COMMAND ${_name})
-    # D-Bus isolation, matching tests/unit/CMakeLists.txt's block. Nothing here
-    # touches D-Bus today, but the isolation is a repo-wide invariant: a future
-    # test added through this helper that DID reach the stock session bus would
-    # activate the installed daemon, which then holds the test's stdout pipe
-    # open and hangs ctest after the test passes.
-    if(_pz_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
-        set_target_properties(${_name} PROPERTIES
-            TEST_LAUNCHER
-            "${_pz_dbus_run_session};--config-file=${CMAKE_SOURCE_DIR}/tests/unit/test-session-bus.conf;--")
-    endif()
+    phosphor_apply_test_isolation(${_name})
     set_tests_properties(${_name} PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphoranimation.debug=false"
         LABELS "phosphoranimation"
@@ -80,6 +72,7 @@ function(paq_add_test _name)
             PhosphorAnimation::PhosphorAnimationQml
     )
     add_test(NAME ${_name} COMMAND ${_name})
+    phosphor_apply_test_isolation(${_name})
     set_tests_properties(${_name} PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphoranimation.debug=false"
         LABELS "phosphoranimation;phosphoranimation-qml"
@@ -114,6 +107,7 @@ function(pas_add_test _name)
             PhosphorFsLoader::PhosphorFsLoader
     )
     add_test(NAME ${_name} COMMAND ${_name})
+    phosphor_apply_test_isolation(${_name})
     set_tests_properties(${_name} PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphoranimation.debug=false"
         LABELS "phosphoranimation;phosphoranimationshaders"
@@ -158,6 +152,7 @@ function(pal_add_test _name)
             PhosphorShellPatterns::PhosphorShellPatterns
     )
     add_test(NAME ${_name} COMMAND ${_name})
+    phosphor_apply_test_isolation(${_name})
     set_tests_properties(${_name} PROPERTIES
         LABELS "phosphoranimation;phosphoranimationlayer"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=*.debug=false"

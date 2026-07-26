@@ -181,7 +181,7 @@ private:
     /// built-in collision) own no registry entry and so are never stamped.
     QHash<QString, ScriptStamp> m_scriptStamps;
     /// Signature of the last registered script set — sorted (id, path,
-    /// size, mtime) digest. Used by scanAndRegister() to suppress
+    /// size, mtime) digest. Used by performScan() to suppress
     /// redundant algorithmsChanged() emissions on filesystem pokes that
     /// touched no actual content (editor-save of an unrelated file in the
     /// watched dir, lstat-only events, etc.), so downstream D-Bus fan-out

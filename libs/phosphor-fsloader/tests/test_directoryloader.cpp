@@ -15,6 +15,7 @@
 #include <QTest>
 #include <QTimer>
 
+#include <algorithm>
 #include <any>
 #include <memory>
 #include <string>
@@ -596,10 +597,15 @@ private Q_SLOTS:
         // Ensure the oversized file didn't end up in the tracked set
         // under any key.
         const auto entries = loader.entries();
+        // Collected, not asserted per row: QVERIFY2 returns from the slot on
+        // the first hit, so a second leaked entry would never be reported.
+        QStringList leaked;
         for (const auto& entry : entries) {
-            QVERIFY2(entry.sourcePath != bigPath,
-                     qPrintable(QStringLiteral("oversized file %1 leaked into tracked set").arg(bigPath)));
+            if (entry.sourcePath == bigPath)
+                leaked.append(entry.sourcePath);
         }
+        QVERIFY2(leaked.isEmpty(),
+                 qPrintable(QStringLiteral("oversized file %1 leaked into tracked set").arg(bigPath)));
     }
 
     /// Regression guard for the GUI-thread DoS — a directory sprayed
@@ -892,18 +898,19 @@ private Q_SLOTS:
         // The collide entry survived (alphabetic sort puts `collide`
         // before `flood-*`). Its systemSourcePath must be preserved
         // even though the system dir was never reached on this scan.
+        // Found first, asserted outside the loop. Asserting inside would abort
+        // the slot before the `foundCollide` check below, so "the entry has the
+        // wrong sourcePath" and "the entry is missing entirely" would produce
+        // indistinguishable reports.
         const auto afterEntries = loader.entries();
-        bool foundCollide = false;
-        for (const auto& e : afterEntries) {
-            if (e.key == QLatin1String("collide")) {
-                foundCollide = true;
-                QCOMPARE(e.sourcePath, userFile);
-                QVERIFY2(!e.systemSourcePath.isEmpty(),
-                         "systemSourcePath was cleared on cap-trip — would cause spurious metadata-diff signal");
-                QCOMPARE(e.systemSourcePath, systemFile);
-            }
-        }
-        QVERIFY(foundCollide);
+        const auto collideIt = std::find_if(afterEntries.cbegin(), afterEntries.cend(), [](const auto& e) {
+            return e.key == QLatin1String("collide");
+        });
+        QVERIFY2(collideIt != afterEntries.cend(), "the collide entry did not survive the cap trip at all");
+        QCOMPARE(collideIt->sourcePath, userFile);
+        QVERIFY2(!collideIt->systemSourcePath.isEmpty(),
+                 "systemSourcePath was cleared on cap-trip — would cause spurious metadata-diff signal");
+        QCOMPARE(collideIt->systemSourcePath, systemFile);
     }
 
     /// Regression guard for the shared-ancestor preservation on

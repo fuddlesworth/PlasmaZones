@@ -44,6 +44,26 @@ private:
     /**
      * @brief Unregister any script:* algorithms left over from a test
      */
+    /// Every scripted id any slot in this file can register. Built once and used
+    /// by BOTH cleanup() and cleanupTestCase(): they were two hand-kept lists
+    /// and had already diverged, which left the spray ids live in the
+    /// process-shared registry across slots.
+    QStringList allRegisteredIds() const
+    {
+        QStringList ids{QStringLiteral("script:gamma"),    QStringLiteral("script:valid-name"),
+                        QStringLiteral("script:shared"),   QStringLiteral("script:ephemeral"),
+                        QStringLiteral("script:mutable"),  QStringLiteral("script:has space"),
+                        QStringLiteral("script:has.dot"),  QStringLiteral("script:special!char"),
+                        QStringLiteral("script:priority"), QStringLiteral("script:user_only"),
+                        QStringLiteral("script:notile"),   QStringLiteral("script:wellformed")};
+        // The per-directory cap slot writes cap+N numbered scripts. Covered by
+        // range rather than by name so a change to the fixture size cannot
+        // silently leave ids behind.
+        for (int i = 0; i < 120; ++i)
+            ids.append(QStringLiteral("script:spray-%1").arg(i, 3, 10, QLatin1Char('0')));
+        return ids;
+    }
+
     void cleanupScriptedAlgorithms(const QStringList& ids)
     {
         auto* registry = PlasmaZones::TestHelpers::testRegistry();
@@ -58,16 +78,7 @@ private Q_SLOTS:
 
     void cleanupTestCase()
     {
-        QStringList ids{QStringLiteral("script:gamma"), QStringLiteral("script:valid-name"),
-                        QStringLiteral("script:shared"), QStringLiteral("script:ephemeral"),
-                        QStringLiteral("script:mutable")};
-        // The per-directory cap slot writes cap+N numbered scripts; unregister
-        // every id it could have registered rather than a hand-kept prefix of
-        // them, or a cap regression leaks entries into the process-shared
-        // registry and fails an unrelated slot later.
-        for (int i = 0; i < 120; ++i)
-            ids.append(QStringLiteral("script:spray-%1").arg(i, 3, 10, QLatin1Char('0')));
-        cleanupScriptedAlgorithms(ids);
+        cleanupScriptedAlgorithms(allRegisteredIds());
     }
 
     /**
@@ -79,11 +90,7 @@ private Q_SLOTS:
      */
     void cleanup()
     {
-        cleanupScriptedAlgorithms(
-            {QStringLiteral("script:gamma"), QStringLiteral("script:valid-name"), QStringLiteral("script:shared"),
-             QStringLiteral("script:ephemeral"), QStringLiteral("script:has space"), QStringLiteral("script:has.dot"),
-             QStringLiteral("script:special!char"), QStringLiteral("script:priority"),
-             QStringLiteral("script:user_only"), QStringLiteral("script:notile"), QStringLiteral("script:wellformed")});
+        cleanupScriptedAlgorithms(allRegisteredIds());
     }
 
     // =========================================================================

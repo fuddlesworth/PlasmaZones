@@ -771,13 +771,18 @@ private Q_SLOTS:
         QTest::ignoreMessage(
             QtWarningMsg,
             QRegularExpression(QStringLiteral("clearShaderOverrideDescendants: refusing while async discard")));
+        // Spy attached before the refused call, for the same reason as its
+        // timing-side twin in test_animations_group_writes: a refusal must
+        // mutate nothing, and the tree's contents here would race the discard
+        // worker's restore. The worker cannot emit without an event-loop spin,
+        // and none happens between the call and these assertions.
+        QSignalSpy dirtied(&c, &AnimationsPageController::pendingChangesChanged);
+
         QCOMPARE(c.clearShaderOverrideDescendantsOnPaths(group), -1);
         // Stopped at the FIRST refusal: the second path was never attempted, so
         // exactly one toast, not one per path.
         QCOMPARE(toasts.count(), 1);
-        // The stored tree is deliberately not asserted: the discard started
-        // above is restoring it on a worker thread, so its contents here are a
-        // race with that restore rather than evidence about the refusal.
+        QCOMPARE(dirtied.count(), 0);
         QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
     }
 };

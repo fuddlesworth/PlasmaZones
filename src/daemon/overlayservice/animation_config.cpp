@@ -122,9 +122,11 @@ QVariantMap resolveShaderParameters(const PAS::ShaderProfileTree& tree, const QS
 
 /// Default config - empty. Surfaces that route through the animator
 /// without a registered config fall back to AnimatedValue's library
-/// default (150 ms OutCubic), same as a missing-profile lookup. Every
-/// Surface that goes through Surface::show()/hide() in this service has
-/// an explicit registration below; the empty default is documentation.
+/// default (150 ms OutCubic), same as a missing-profile lookup.
+///
+/// Load-bearing, not documentation: two surface types deliberately have no
+/// per-role config and reach the animator through this default. The
+/// registration site below names them and says why.
 PAL::SurfaceAnimator::Config buildDefaultConfig()
 {
     return PAL::SurfaceAnimator::Config{};

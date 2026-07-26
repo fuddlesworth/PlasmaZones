@@ -6,6 +6,7 @@
 #include <PhosphorShaders/phosphorshaders_export.h>
 
 #include <PhosphorRegistry/IFactoryBase.h>
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
 #include <PhosphorRegistry/MetadataPackLoader.h>
 #include <PhosphorRegistry/Registry.h>
 
@@ -193,7 +194,16 @@ public:
     /// what a pack is. Returns an invalid ShaderInfo and sets @p error on a
     /// missing/unreadable file or non-object JSON root. Does NOT verify that the
     /// frag/buffer files exist on disk — that's a validator lint, not a parse
-    /// failure — so `sourcePath`/`bufferShaderPaths` are returned as declared.
+    /// failure.
+    ///
+    /// Declared paths ARE containment-checked, though: a `fragmentShader`,
+    /// `vertexShader`, `bufferShaders` entry or image param that resolves
+    /// outside the pack directory is refused, because these name files that get
+    /// compiled and run on the GPU or sampled as a texture. A refused
+    /// `sourcePath` comes back EMPTY, and a refused entry drops the whole
+    /// `bufferShaderPaths` list (they are positionally aligned with the
+    /// per-buffer wrap/filter overrides, so compacting one out would shift the
+    /// rest onto the wrong buffer).
     static ShaderInfo parsePackMetadata(const QString& packDir, QString* error = nullptr);
 
     Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;

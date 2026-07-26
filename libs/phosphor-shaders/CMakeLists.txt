@@ -98,6 +98,7 @@ set(phosphorshaders_SRCS
     src/shaderincluderesolver.cpp
     src/shaderparampreamble.cpp
     src/shaderregistry.cpp
+    src/shaderregistry_wallpaper.cpp
     src/wallpaperprovider.cpp
 )
 

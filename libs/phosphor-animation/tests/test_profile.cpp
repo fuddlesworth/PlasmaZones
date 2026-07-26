@@ -386,11 +386,12 @@ private Q_SLOTS:
         // "rejecting sequenceMode" is a string the unguarded path can never
         // produce.
         //
-        // One note for whoever mutation-tests this next: in a DEBUG build the
-        // guard-deleted path aborts on Qt's own Q_ASSERT inside
+        // One note for whoever mutation-tests ANY of the four range guards in
+        // this file (duration, minDistance, sequenceMode, staggerInterval): in
+        // a DEBUG build a guard-deleted path aborts on Qt's own Q_ASSERT inside
         // qCheckedFPConversionToInteger rather than failing cleanly, which
-        // kills the whole binary and takes the slots after this one with it.
-        // The truncated run is collateral, not five more broken slots.
+        // kills the whole binary and takes every slot after it with it. The
+        // truncated run is collateral, not N more broken slots.
         QTest::ignoreMessage(QtWarningMsg,
                              QRegularExpression(QStringLiteral("rejecting sequenceMode .*out of int range")));
         const Profile p = Profile::fromJson(obj, CurveRegistry{});

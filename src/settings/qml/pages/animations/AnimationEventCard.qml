@@ -124,9 +124,18 @@ Item {
     /// to commit a snapshot of the inherited values just to stay visually on
     /// (overrideEnabled is derived from stored state), which silently pinned
     /// a copy of the Global curve and duration the moment it was flipped.
-    /// Cleared by the toggle's OFF path, and by `refreshFromTree` when an
-    /// EXTERNAL clear drops the stored state out from under it. Not persisted.
+    /// Set by the toggle's ON path AND by a successful per-field revert (which
+    /// would otherwise collapse the editor the user is working in, once the
+    /// last stored field goes). Cleared by the toggle's OFF path, and by
+    /// `refreshFromTree` when an EXTERNAL clear moves `overrideEnabled` from
+    /// true to false — a transition, not just a false reading, because the
+    /// broadcasts every card accepts would otherwise close an editor another
+    /// card's edit had nothing to do with. Not persisted.
     property bool _editingTiming: false
+    /// "The timing editor is open." Spelled once, because it drives the toggle,
+    /// the section's visibility AND both edit guards — a fifth site that
+    /// remembered only one half would write while the section was hidden.
+    readonly property bool _timingEditorOpen: root.overrideEnabled || root._editingTiming
     /// This path's own stored TIMING profile, assigned by refreshFromTree from
     /// the read it already performs (so no extra file open). Drives the
     /// per-field status captions and the ownership tests below.
@@ -407,7 +416,7 @@ Item {
         root._shadowingChildrenCount = shadowing;
         // Divergence is deliberately NOT recomputed here. refreshFromTree owns
         // it, and every call site of this function calls refreshFromTree
-        // alongside it (the two group writers' finally blocks and
+        // alongside it (the three shader group writers' finally blocks and
         // onShaderProfileChanged call it immediately after; Component.onCompleted
         // calls it FIRST, which is equally fine because refreshFromTree
         // recomputes the divergence itself from live reads).
@@ -698,7 +707,7 @@ Item {
         // _editingTiming latch). The latch half keeps the toggle honest about
         // what flipping it ON now does: it opens the editor and writes
         // nothing.
-        toggleChecked: root.overrideEnabled || root._editingTiming
+        toggleChecked: root._timingEditorOpen
         // The toggle REPORTS whether this event has any direct override; it is
         // not a precondition for making one. Gating the body on it would
         // disable and hide every row including the shader picker, so a user
@@ -769,12 +778,12 @@ Item {
                 writePathCount: root._writePaths.length
                 parentChain: root.parentChainText()
                 inheritSummary: root.inheritSummaryText()
-                // The -1 refusal sentinel is honoured rather than discarded, so
-                // a refused clear cannot read as "cleared zero children". No
-                // refresh is needed on either branch: the writer's `finally`
-                // has already run refreshShaderFromTree() + refreshFromTree(),
-                // so the shadowing count and the banner are current whether the
-                // clear landed or was refused.
+                // The return is deliberately not read. Both branches are
+                // self-correcting: the writer's `finally` runs
+                // refreshShaderFromTree() + refreshFromTree() whether the clear
+                // landed or was refused, so the shadowing count and the banner
+                // are current either way, and the controller owns the refusal
+                // toast. Reading the -1 here would only duplicate that.
                 onClearShadowingRequested: root._clearShaderOverrideDescendantsOnAll()
             }
 
@@ -792,7 +801,7 @@ Item {
                 Layout.fillWidth: true
                 eventLabel: root.eventLabel
                 shaderLegSupported: root._shaderLegSupported
-                showTimingSection: root.overrideEnabled || root._editingTiming
+                showTimingSection: root._timingEditorOpen
                 simpleTiming: root.simpleTiming
                 showOverrideStatus: true
                 curveOverridden: root._ownsCurveOverride
@@ -808,11 +817,11 @@ Item {
                 // programmatic emit can never write while the editor is
                 // hidden.
                 onDurationEdited: {
-                    if (root.overrideEnabled || root._editingTiming)
+                    if (root._timingEditorOpen)
                         root.commitDurationOverride();
                 }
                 onCurveEdited: {
-                    if (root.overrideEnabled || root._editingTiming)
+                    if (root._timingEditorOpen)
                         root.commitCurveOverride();
                 }
                 // The per-field revert links restore inheritance for one

@@ -288,7 +288,7 @@ QtObject {
             id: screenCombo
 
             readonly property var _param: parent.modelData
-            readonly property var _screens: row.appSettings ? row.appSettings.screens : []
+            readonly property var _screens: (row.appSettings && row.appSettings.screens) || []
             model: _screens.map(function (s) {
                 var label = s.displayLabel || s.name || "";
                 if (s.isPrimary)
@@ -327,7 +327,7 @@ QtObject {
 
             readonly property var _param: parent.modelData
             readonly property int _count: row.appSettings && row.appSettings.virtualDesktopCount > 0 ? row.appSettings.virtualDesktopCount : 1
-            readonly property var _names: row.appSettings ? row.appSettings.virtualDesktopNames : []
+            readonly property var _names: (row.appSettings && row.appSettings.virtualDesktopNames) || []
             model: {
                 var items = [];
                 for (var i = 1; i <= desktopCombo._count; ++i) {

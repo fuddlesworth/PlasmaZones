@@ -480,14 +480,28 @@ private Q_SLOTS:
 
         QTest::ignoreMessage(QtWarningMsg,
                              QRegularExpression(QStringLiteral("refusing while an async discard is in flight")));
+        // What this slot pins is the DIAGNOSTIC, not safety. With a discard in
+        // flight the per-path `setOverride` / `removeOverrideFile` calls refuse
+        // individually anyway, so nothing is mutated whether or not the early
+        // guard is there — moving the guard below the loop keeps every
+        // assertion here green. The guard's value is that the caller gets -1
+        // and a toast instead of a 0 it would read as "the field was already
+        // inherited everywhere", and that is what the -1 mutation test proves.
+        //
+        // The spies are still worth attaching: they would catch a future change
+        // that made the per-path calls stop refusing, which is the only way a
+        // refused batch could start mutating.
+        //
+        // Asserting the FILE instead would race: the discard this slot started
+        // is itself restoring the profiles directory on a worker thread, so the
+        // override's presence on disk says nothing about the refusal.
+        QSignalSpy touched(&c, &AnimationsPageController::overrideChanged);
+        QSignalSpy dirtied(&c, &AnimationsPageController::pendingChangesChanged);
+
         QCOMPARE(c.clearFieldOnPaths(group(), QStringLiteral("duration")), -1);
         QCOMPARE(toasts.count(), 1);
-        // The FILE is deliberately not asserted here. The discard this slot
-        // started is itself restoring the profiles directory on a worker
-        // thread, so the override may or may not still be on disk by the time
-        // this line runs — that is the discard doing its job, not the refusal
-        // failing to. What the refusal owes the caller is the -1 and the toast,
-        // and those are what is pinned.
+        QCOMPARE(touched.count(), 0);
+        QCOMPARE(dirtied.count(), 0);
         QCOMPARE(toasts.first().at(0).toString(),
                  PhosphorI18n::tr("Cannot change this while a discard is in progress."));
 
