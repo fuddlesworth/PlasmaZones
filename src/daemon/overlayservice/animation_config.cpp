@@ -9,8 +9,8 @@
  *   - resolveShaderEffect / resolveShaderParameters (tree → config field
  *     adapters)
  *   - build*Config factories (one per overlay role: Osd, LayoutPicker,
- *     ZoneSelector, SnapAssist, Cheatsheet). Each documents the visual
- *     shape it encodes.
+ *     ZoneSelector, SnapAssist, Cheatsheet), plus buildDefaultConfig for
+ *     everything else. Each documents the visual shape it encodes.
  *   - OverlayService::setupSurfaceAnimator - animator construction +
  *     initial config registration
  *   - OverlayService::applyShaderProfilesToAnimator - per-role re-
@@ -49,8 +49,8 @@ namespace {
 //   - **Popup family (`popup.<surface>.*`)** - non-OSD overlay
 //     surfaces. Each gets its own leaf paths under
 //     `popup.<surface>` per surface's needs:
-//       • `popup.layoutPicker.{show, hide, popIn}` (opacity legs +
-//         scale show; hide-scale couples to `.hide`)
+//       • `popup.layoutPicker.{show, hide}` (opacity legs; the show
+//         leg also scales, and the hide-scale couples to `.hide`)
 //       • `popup.zoneSelector.{show, hide}` (opacity-only)
 //       • `popup.snapAssist.{show, hide}` (opacity-only)
 //       • `popup.cheatsheet.{show, hide}` (opacity-only)
@@ -90,8 +90,9 @@ namespace PAS = PhosphorAnimationShaders;
 ///
 /// **Source-of-truth note.** The settings UI gates its shader picker on
 /// `src/core/types/animationshadersupportedpaths.h::shaderSupportedEventPaths`,
-/// which enumerates exactly the paths consumed by `resolveShaderEffect`
-/// in the build*Config functions below. When a new shader-leg surface
+/// which enumerates the paths consumed HERE by `resolveShaderEffect` in the
+/// build*Config functions below AND the window / desktop legs the kwin-effect
+/// consumes (see that header's own consumer list). When a new shader-leg surface
 /// lands here, append its leg paths to that list in lockstep so the
 /// settings UI starts surfacing the picker on the new path.
 QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const QString& path)

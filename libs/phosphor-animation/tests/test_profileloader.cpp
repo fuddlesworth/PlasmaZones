@@ -10,10 +10,10 @@
 
 #include <QDir>
 #include <QFile>
+#include <QLoggingCategory>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
-#include <QLoggingCategory>
 #include <QTextStream>
 
 using namespace PhosphorAnimation;

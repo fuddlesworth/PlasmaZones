@@ -6946,14 +6946,14 @@
         <translation>Некоторые переопределения анимаций сбросить не удалось.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="133"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="135"/>
         <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="490"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="410"/>
         <source>Cannot change this while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="197"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="199"/>
         <source>Some animation overrides could not be reverted.</source>
         <translation type="unfinished"></translation>
     </message>

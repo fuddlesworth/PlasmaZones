@@ -101,13 +101,12 @@ private Q_SLOTS:
 
         writeScript(algoDir, QStringLiteral("gamma.luau"), validScript(QStringLiteral("Gamma")));
 
-        qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         // XDG_DATA_DIRS pinned alongside XDG_DATA_HOME, like every sibling
-        // slot. This one does not scan today, so an ambient value is harmless
-        // — but XdgEnvGuard saves and restores rather than clearing, so the
-        // moment a scan is added here the machine's installed
-        // /usr/share/plasmazones/algorithms would register every bundled id
-        // into the process-shared test registry.
+        // slot: XdgEnvGuard saves and restores rather than clearing, so an
+        // ambient value would let the scan below pick up the machine's
+        // installed /usr/share/plasmazones/algorithms and register every
+        // bundled id into the process-shared test registry, past a cleanup()
+        // that only knows a hardcoded list.
         qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 

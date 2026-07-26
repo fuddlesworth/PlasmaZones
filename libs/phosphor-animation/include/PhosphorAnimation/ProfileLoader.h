@@ -31,8 +31,10 @@ class PhosphorProfileRegistry;
 /// actively misleading: a path can be tracked here while the registry entry for it
 /// belongs to somebody else, including an untagged direct publish. Ask
 /// `PhosphorProfileRegistry::ownerOf()` instead, which is the ownership question and
-/// is equally O(1). See `animation_profiles.cpp` for the self-poisoning merge this
-/// distinction prevents.
+/// is equally O(1). The distinction prevents a self-poisoning merge: a consumer
+/// that folds its own registered profiles back into the registry this loader
+/// owns would see them wiped on the next rescan, because the loader clears its
+/// OWN tag wholesale. Ownership, not tracking, is what tells the two apart.
 /// User curves must already be registered (CurveLoader first).
 /// Profiles loaded here are preset templates — settings UIs deep-copy into active profiles.
 class PHOSPHORANIMATION_EXPORT ProfileLoader : public QObject

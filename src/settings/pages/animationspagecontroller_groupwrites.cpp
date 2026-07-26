@@ -28,6 +28,8 @@
 
 namespace PlasmaZones {
 
+using namespace animations_controller_detail;
+
 namespace {
 
 /// Canonical form of one path's comparable stored state, as a stable byte

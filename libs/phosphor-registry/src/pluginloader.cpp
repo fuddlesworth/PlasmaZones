@@ -8,9 +8,9 @@
 
 #include <QDebug>
 #include <QDir>
-#include <QLoggingCategory>
 #include <QFileInfo>
 #include <QLibrary>
+#include <QLoggingCategory>
 #include <QObject>
 #include <QSet>
 #include <QStandardPaths>
@@ -332,6 +332,16 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             consideredDirs.insert(pluginDir);
             const QString manifestPath = QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json"));
             if (!QFileInfo::exists(manifestPath)) {
+                // Watch the SUBDIRECTORY instead, the way
+                // MetadataPackScanStrategy does for the same race.
+                // QFileSystemWatcher cannot watch a path that does not exist,
+                // and only the plugin ROOT is directory-watched, not the plugin
+                // dirs under it. Without this, `cp -r myplugin <root>/` loses:
+                // the mkdir wakes the debounced rescan, the rescan finds no
+                // manifest, and the manifest landing a moment later fires
+                // nothing — so the plugin stays invisible until some unrelated
+                // rescan happens by.
+                watchedFiles.append(pluginDir);
                 continue;
             }
             watchedFiles.append(manifestPath);
@@ -381,13 +391,21 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
         return watchedFiles;
     }
 
-    // Prune the warn-once latches to the directories that still exist. A
+    // Prune the warn-once latches to the directories that still exist — but
+    // only when at least one root was actually enumerated. A transient unmount
+    // or rename of the plugin root yields an empty `consideredDirs`, and
+    // intersecting against that would wipe both latches wholesale, so every
+    // broken plugin re-logs on the next cycle.
+    //
+    // A
     // successful load clears them, but a directory that is broken and then
     // deleted (or renamed on each dev iteration) would otherwise leave its
     // path in the set for the process lifetime. Only safe on a complete
     // enumeration, which is why it sits below the cap-tripped early return.
-    m_warnedPluginDirs.intersect(consideredDirs);
-    m_warnedMultiSoDirs.intersect(consideredDirs);
+    if (!consideredDirs.isEmpty()) {
+        m_warnedPluginDirs.intersect(consideredDirs);
+        m_warnedMultiSoDirs.intersect(consideredDirs);
+    }
 
     // Anything in m_plugins not in discoveredIds was removed from
     // disk — unregister it from the registry. The QLibrary stays

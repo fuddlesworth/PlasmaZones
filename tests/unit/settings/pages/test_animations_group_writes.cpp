@@ -29,14 +29,19 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <QRegularExpression>
 #include <QVariant>
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 
+#include "config/settings.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "phosphor_i18n.h"
 #include "settings/pages/animationspagecontroller.h"
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using P = PhosphorAnimation::Profile;
 
 namespace {
@@ -450,6 +455,43 @@ private Q_SLOTS:
         // The engaged-empty "None" sentinel is a stored value too, so an absent
         // override is not equal to it either.
         QVERIFY(!c.allPathsHoldShaderEffect(group(), QString()));
+    }
+    // ─── Refusal ──────────────────────────────────────────────────────────
+
+    /// While an async discard owns the snapshot map, `clearFieldOnPaths` must
+    /// REFUSE the whole call rather than let every write fail individually and
+    /// report the resulting 0 as "the field was already inherited everywhere".
+    /// The sibling `clearShaderOverrideDescendants` has had this shape pinned
+    /// since it was written; this is its timing-side twin.
+    void clearingAFieldIsRefusedWhileAnAsyncDiscardIsInFlight()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c(nullptr, &settings);
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 600}}));
+
+        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
+        QSignalSpy done(&c, &AnimationsPageController::discardResult);
+        c.asyncRevertPending();
+
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("refusing while an async discard is in flight")));
+        QCOMPARE(c.clearFieldOnPaths(group(), QStringLiteral("duration")), -1);
+        QCOMPARE(toasts.count(), 1);
+        // The FILE is deliberately not asserted here. The discard this slot
+        // started is itself restoring the profiles directory on a worker
+        // thread, so the override may or may not still be on disk by the time
+        // this line runs — that is the discard doing its job, not the refusal
+        // failing to. What the refusal owes the caller is the -1 and the toast,
+        // and those are what is pinned.
+        QCOMPARE(toasts.first().at(0).toString(),
+                 PhosphorI18n::tr("Cannot change this while a discard is in progress."));
+
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
     }
 };
 
