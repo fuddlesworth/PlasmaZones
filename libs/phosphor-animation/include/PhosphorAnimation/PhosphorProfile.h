@@ -36,9 +36,10 @@ namespace PhosphorAnimation {
  *
  *   - Reading a property returns the **effective** value (`Profile::
  *     effective*`). Unset fields read back as their library default.
- *   - Writing a property **engages** the optional — the field becomes
- *     "explicitly set". There is no QML-reachable way to reset a field
- *     back to unset (call `Profile::*.reset()` from C++ if needed).
+ *   - Writing a property engages the optional when the value validates, so
+ *     the field becomes "explicitly set". A write that FAILS validation
+ *     disengages it instead, which is the only QML-reachable way to return a
+ *     field to "unset" (from C++, call `Profile::*.reset()` directly).
  *
  * This matches how plugin authors typically use `PhosphorProfile`:
  * construct a compile-time literal with every field they care about,
@@ -90,12 +91,20 @@ public:
 
     // ─── Property delegates ───
     //
-    // Setters mirror the validation in `Profile::fromJson`: NaN/inf
-    // and out-of-range values are silently rejected (the field stays
-    // unset, so `effective*()` substitutes the library default).
-    // QML scripts that pass garbage get the same fault-tolerant
-    // behaviour as a malformed profile JSON file rather than landing
-    // pathological values into a QQuickPropertyAnimation downstream.
+    // Setters apply the same validation as `Profile::fromJson`: NaN/inf and
+    // out-of-range values are rejected, so `effective*()` substitutes the
+    // library default and a QML script that passes garbage gets the same
+    // fault-tolerant behaviour as a malformed profile JSON file rather than
+    // landing pathological values into a QQuickPropertyAnimation downstream.
+    //
+    // Two deliberate differences from `fromJson`. A rejection here leaves the
+    // field UNSET rather than substituting an engaged default, including for
+    // `sequenceMode` — this value type is a plugin-facing handle, not a node in
+    // the ProfileTree, so nothing inherits through it and there is no
+    // inheritance to block. And a rejection here is silent: the JSON path warns
+    // with the offending value because it is parsing a file a user hand-edited,
+    // whereas this is a programming error in the calling script and the value
+    // is visible in the script itself.
 
     PhosphorCurve curve() const
     {
@@ -138,11 +147,13 @@ public:
     }
     void setSequenceMode(SequenceMode mode)
     {
-        // Validated like its scalar siblings. A QML script can assign any int
-        // to a Q_ENUM property, and an unknown enumerator stored here would be
-        // returned verbatim by `effectiveSequenceMode()` and serialized by
-        // `toJson()`, so the wrapper would emit a blob its own `fromJson`
-        // rejects on the next read.
+        // Validated like its scalar siblings, and like them a rejection leaves
+        // the field unset rather than substituting an engaged default the way
+        // `Profile::fromJson` does (see the block comment above for why the two
+        // differ). A QML script can assign any int to a Q_ENUM property, and an
+        // unknown enumerator stored here would be returned verbatim by
+        // `effectiveSequenceMode()` and serialized by `toJson()`, so the wrapper
+        // would emit a blob its own `fromJson` rejects on the next read.
         const int raw = static_cast<int>(mode);
         if (raw != static_cast<int>(PhosphorAnimation::SequenceMode::AllAtOnce)
             && raw != static_cast<int>(PhosphorAnimation::SequenceMode::Cascade)) {

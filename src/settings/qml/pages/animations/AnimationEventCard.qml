@@ -136,6 +136,10 @@ Item {
     /// cached them here to stay off the file-open path on a drag tick; that
     /// merge now happens C++-side against its own memoised reads, so the cache
     /// and its per-path read loop are gone with it.
+    ///
+    /// Not `readonly` because it is assigned rather than derived, but
+    /// `refreshFromTree` is its only writer — an outside assignment is
+    /// overwritten on the next refresh, like every other derived value here.
     property var _primaryRaw: ({})
     /// Whether this event DIRECTLY owns each timing field. Matches the
     /// presence tests the resolver uses: any engaged duration counts, and a
@@ -405,11 +409,10 @@ Item {
         // it, and every call site of this function calls refreshFromTree
         // alongside it (the two group writers' finally blocks and
         // onShaderProfileChanged call it immediately after; Component.onCompleted
-        // calls it FIRST, which is equally fine because refreshFromTree seeds
-        // both caches itself and computes the divergence from them), so the
-        // banner still tracks the shader tree. Recomputing on both would walk every
-        // write path twice per shader-param slider tick, which is drag rate.
-        // A future caller that runs this ALONE must call refreshFromTree too,
+        // calls it FIRST, which is equally fine because refreshFromTree
+        // recomputes the divergence itself from live reads).
+        //
+        // A future caller that runs this ALONE must call refreshFromTree too
         // or the banner goes stale.
     }
 
@@ -440,16 +443,23 @@ Item {
         root.currentDuration = effective.duration !== undefined ? effective.duration : CurvePresets.defaultDurationMs;
     }
 
-    function refreshFromTree() {
+    /// @param selfDriven true when the caller is one of this card's own group
+    /// writers, refreshing after a write it just made. Only the `_editingTiming`
+    /// latch reads it: an EXTERNAL clear must close the timing editor, while our
+    /// own per-field revert must not close it under the user mid-edit. Every
+    /// other caller (Component.onCompleted, the two signal handlers) leaves it
+    /// undefined, which reads as external.
+    function refreshFromTree(selfDriven) {
         var raw = settingsController.animationsPage.rawProfile(root.eventPath);
-        // Every caller that can MOVE the timing chain bumps _inheritRev first
-        // (_setOverrideMerged, onOverrideChanged), so the cached walk is
-        // current here and a second C++ chain walk would be redundant. The two
-        // that do not bump cannot move it: Component.onCompleted runs before
-        // the binding has ever evaluated, and both shader-side callers
-        // (onShaderProfileChanged and _setShaderOverrideOnAll's finally) move
-        // the shader tree, which the timing chain does not read. A fifth caller
-        // that can move the chain MUST bump before calling.
+        // Every caller that can MOVE the timing chain bumps _inheritRev before
+        // calling — the three timing group writers and onOverrideChanged — so
+        // the cached walk is current here and a second C++ chain walk would be
+        // redundant. The callers that do not bump cannot move it:
+        // Component.onCompleted runs before the binding has ever evaluated, and
+        // the shader-side ones (onShaderProfileChanged and the three shader
+        // group writers' finally blocks) move the shader tree, which the timing
+        // chain does not read. Any NEW caller that can move the chain MUST bump
+        // before calling.
         var resolved = root._inheritResolved;
         var hasRaw = raw && Object.keys(raw).length > 0;
         // The card's "Override" toggle reflects ANY direct override at
@@ -485,10 +495,12 @@ Item {
         // Discard, a profile switch, another surface writing this path — drops
         // overrideEnabled without touching the latch, leaving the toggle
         // reading ON and the timing section open over a card that stores
-        // nothing. Own writes are excluded: a per-field revert that happens to
-        // clear the last field must not close the editor under the user
-        // mid-edit.
-        if (!root.overrideEnabled && !root._committing && !root._committingShader)
+        // nothing. Own writes are excluded via `selfDriven`: a per-field revert
+        // that happens to clear the last field must not close the editor under
+        // the user mid-edit. The `_committing` latches cannot stand in for that
+        // — every writer clears them before it refreshes, so they are always
+        // false by the time this runs.
+        if (!root.overrideEnabled && !selfDriven)
             root._editingTiming = false;
         // Effective values feed the controls. With no direct override the
         // controls preview the resolved profile from the parent chain.
@@ -746,7 +758,15 @@ Item {
                 writePathCount: root._writePaths.length
                 parentChain: root.parentChainText()
                 inheritSummary: root.inheritSummaryText()
-                onClearShadowingRequested: root._clearShaderOverrideDescendantsOnAll()
+                // The -1 refusal sentinel is honoured rather than discarded:
+                // the controller toasts why (an async discard owns the tree),
+                // and the count refresh below would otherwise redraw the same
+                // banner with the same number and read as a silent no-op.
+                onClearShadowingRequested: {
+                    if (root._clearShaderOverrideDescendantsOnAll() < 0)
+                        return;
+                    root.refreshShaderFromTree();
+                }
             }
 
             // Section visibility splits the per-axis behaviour the

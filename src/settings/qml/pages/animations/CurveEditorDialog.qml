@@ -306,7 +306,7 @@ Kirigami.Dialog {
         SettingsRow {
             visible: root.timingMode === CurvePresets.timingModeSpring
             title: i18n("Speed (ω)")
-            description: i18n("Higher values make the spring respond faster.")
+            description: i18n("Higher values make the spring respond faster")
 
             SettingsSlider {
                 accessibleName: i18n("Speed")

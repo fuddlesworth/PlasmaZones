@@ -102,16 +102,13 @@ Menu {
             }
         ];
     }
-    // Memoise the screen list result. The getter still re-runs on
-    // `settingsController.screensChanged`, but doesn't re-run on
-    // each popup() / every `_cachedScreens.length` read.
-    // Cache the screens snapshot when there's more than one — the
-    // multi-screen menu items only appear in that case. The binding
-    // tracks settingsController.screens directly so a screensChanged
-    // emit (e.g. daemon-driven hot-plug, late-arriving D-Bus reply)
-    // refreshes the cache without needing a Connections + imperative
-    // seed. Previously Component.onCompleted seeded once and missed
-    // any value that arrived between settingsController construction
+    // Memoised screens snapshot, held only when there is more than one screen
+    // (the multi-screen menu items appear in that case alone). The binding
+    // tracks settingsController.screens directly, so a screensChanged emit
+    // (daemon-driven hot-plug, a late-arriving D-Bus reply) refreshes it with
+    // no Connections + imperative seed, and it does not re-run on each popup()
+    // or on every `.length` read. Previously Component.onCompleted seeded once
+    // and missed any value that arrived between settingsController construction
     // and Main.qml mount.
     // The `settingsController` deref is guarded for the same
     // creation-time reason as `_aspectRatioOptions` above: the binding

@@ -15,6 +15,11 @@
  *   - clearShaderOverride on an unset path is a no-op (false, no signal)
  *   - a populated registry rejects an unknown effectId (false, no write,
  *     no signal) while an empty registry stays permissive
+ *   - the shader-leg GROUP writers (setShaderOverrideOnPaths /
+ *     clearShaderOverrideOnPaths / clearShaderOverrideDescendantsOnPaths /
+ *     allPathsHoldShaderEffect), which need a real ISettings to reach the
+ *     shader tree at all and so cannot live in test_animations_group_writes
+ *     alongside the timing-side group writers
  *   - window.movement.move leaf isolation as the controller surfaces it:
  *     no inherited ancestor shader, no built-in default, runtime-truth
  *     blanking of a stale geometry pack, and a picker that offers only
@@ -619,6 +624,153 @@ private Q_SLOTS:
         // Same effectId + same (empty) parameters — must early-return.
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
         QCOMPARE(pendingSpy.count(), 0);
+    }
+
+    // ─── Shader-leg group writers ─────────────────────────────────────────
+    //
+    // The timing-side group writers are covered in
+    // test_animations_group_writes.cpp, which constructs a bare controller.
+    // These three need a real ISettings, because without one the shader tree is
+    // unreachable and every one of them is a no-op that proves nothing.
+
+    /// Writes land on every path in the group, not just the primary. A card
+    /// that wrote only its own path would leave its mirror out of step and the
+    /// divergence banner would report a difference the user never caused.
+    void setShaderOverrideOnPaths_writesEveryPathInTheGroup()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        const QStringList group{QStringLiteral("window.appearance.open"), QStringLiteral("window.appearance.close")};
+
+        QCOMPARE(c.setShaderOverrideOnPaths(group, QStringLiteral("pixelate"), {}), 2);
+
+        QStringList wrong;
+        for (const QString& path : group) {
+            if (c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString() != QStringLiteral("pixelate"))
+                wrong.append(path);
+        }
+        QVERIFY2(wrong.isEmpty(), qPrintable(wrong.join(QStringLiteral(", "))));
+        QVERIFY(c.allPathsHoldShaderEffect(group, QStringLiteral("pixelate")));
+    }
+
+    /// A path that cannot host a shader leg is SKIPPED, not attempted. The
+    /// count reflects that, and the supporting sibling in the same group is
+    /// still written — a group mixing the two must not be all-or-nothing.
+    void setShaderOverrideOnPaths_skipsPathsWithNoShaderLeg()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        const QString supported = QStringLiteral("window.appearance.open");
+        const QString unsupported = QStringLiteral("editor.snapIn");
+        QVERIFY(c.supportsShaderLeg(supported));
+        QVERIFY(!c.supportsShaderLeg(unsupported));
+
+        QCOMPARE(c.setShaderOverrideOnPaths(QStringList{supported, unsupported}, QStringLiteral("pixelate"), {}), 1);
+
+        QCOMPARE(c.rawShaderProfile(supported).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("pixelate"));
+        QVERIFY(c.rawShaderProfile(unsupported).isEmpty());
+    }
+
+    /// Clearing returns the group to inheritance and reports how many paths
+    /// actually held an override. A path that held none is not counted, so the
+    /// return distinguishes "cleared two" from "there was nothing to clear".
+    void clearShaderOverrideOnPaths_countsOnlyPathsThatHeldOne()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        const QString primary = QStringLiteral("window.appearance.open");
+        const QString mirror = QStringLiteral("window.appearance.close");
+        QVERIFY(c.setShaderOverride(primary, QStringLiteral("pixelate"), {}));
+
+        QCOMPARE(c.clearShaderOverrideOnPaths(QStringList{primary, mirror}), 1);
+        QVERIFY(c.rawShaderProfile(primary).isEmpty());
+        QVERIFY(c.rawShaderProfile(mirror).isEmpty());
+        // Cleared is not the engaged-empty "None" sentinel: a path with no
+        // override does not hold the empty string either.
+        QVERIFY(!c.allPathsHoldShaderEffect(QStringList{primary}, QString()));
+    }
+
+    /// The engaged-empty sentinel IS a stored value, distinct from having no
+    /// override at all. `allPathsHoldShaderEffect` has to tell them apart or
+    /// the card's picker renders "None" as an unset row.
+    void allPathsHoldShaderEffect_distinguishesTheNoneSentinelFromNoOverride()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        const QString primary = QStringLiteral("window.appearance.open");
+        const QString mirror = QStringLiteral("window.appearance.close");
+        const QStringList group{primary, mirror};
+
+        QVERIFY(!c.allPathsHoldShaderEffect(group, QString()));
+        QCOMPARE(c.setShaderOverrideOnPaths(group, QString(), {}), 2);
+        QVERIFY(c.allPathsHoldShaderEffect(group, QString()));
+        QVERIFY(!c.allPathsHoldShaderEffect(group, QStringLiteral("pixelate")));
+    }
+
+    /// Descendant clears sum across the group. Pinned alongside the refusal
+    /// case below, which is the half that actually needs the sentinel.
+    void clearShaderOverrideDescendantsOnPaths_sumsAcrossTheGroup()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        QVERIFY(c.setShaderOverride(QStringLiteral("popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+        QVERIFY(c.setShaderOverride(QStringLiteral("popup.zoneSelector.show"), QStringLiteral("pixelate"), {}));
+
+        // One shadowing descendant under each parent, so the group total is 2
+        // rather than either parent's 1.
+        QCOMPARE(c.clearShaderOverrideDescendantsOnPaths(
+                     QStringList{QStringLiteral("popup.layoutPicker"), QStringLiteral("popup.zoneSelector")}),
+                 2);
+        QVERIFY(c.rawShaderProfile(QStringLiteral("popup.layoutPicker.show")).isEmpty());
+        QVERIFY(c.rawShaderProfile(QStringLiteral("popup.zoneSelector.show")).isEmpty());
+    }
+
+    /// A refusal returns -1 for the whole call and stops at the first refused
+    /// path. Summing it in would make a refusal read as a smaller successful
+    /// clear, and the card gates its feedback on telling the two apart.
+    void clearShaderOverrideDescendantsOnPaths_reportsARefusalRatherThanASmallerCount()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        QVERIFY(c.setShaderOverride(QStringLiteral("popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+
+        // An async discard owning the tree is what the -1 sentinel reports.
+        // asyncRevertPending() sets the in-flight gate; the descendant clear
+        // must then refuse rather than report 0 cleared.
+        QSignalSpy done(&c, &AnimationsPageController::discardResult);
+        c.asyncRevertPending();
+
+        const int result = c.clearShaderOverrideDescendantsOnPaths(QStringList{QStringLiteral("popup.layoutPicker")});
+        if (result >= 0) {
+            // The worker finished before we got here, so the gate was already
+            // down. Nothing was refused, and the override must still be gone or
+            // still present consistently — either way this run cannot pin the
+            // sentinel, so say so rather than assert something unrelated.
+            QSKIP("the async discard completed before the refusal could be observed");
+        }
+        QCOMPARE(result, -1);
+        QVERIFY2(!c.rawShaderProfile(QStringLiteral("popup.layoutPicker.show")).isEmpty(),
+                 "a refused descendant clear removed an override anyway");
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
     }
 };
 

@@ -135,12 +135,6 @@ public:
     // example in the README does.
     [[nodiscard]] QStringList loadedPluginIds() const;
 
-    // Number of live widgets produced by the named plugin. Phase
-    // 1.3 returns -1 ("untracked") — the .so stays mapped for the
-    // process lifetime, so refcounted unload adds no safety yet.
-    // Phase 5's sandbox work will wire this to a real count.
-    [[nodiscard]] int liveWidgetCount(const QString& pluginId) const;
-
 Q_SIGNALS:
     // Fired after every rescan cycle, regardless of whether the
     // plugin set changed. Mirrors WatchedDirectorySet::rescanCompleted's
@@ -265,7 +259,7 @@ private:
     // const ensurePluginRootExists via `mutable` since the logical
     // "did we already complain about this root?" state is not part
     // of the loader's observable contract — the public API
-    // (loadedPluginIds, liveWidgetCount, pluginRoot) returns the
+    // (loadedPluginIds, pluginRoot) returns the
     // same values whether or not we have logged. Plain bool (not a
     // per-path QSet): m_pluginRoot is set in the ctor and never
     // mutated, so a single bool tracks the only path that can ever

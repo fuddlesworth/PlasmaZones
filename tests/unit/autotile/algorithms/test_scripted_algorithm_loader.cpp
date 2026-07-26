@@ -58,8 +58,16 @@ private Q_SLOTS:
 
     void cleanupTestCase()
     {
-        cleanupScriptedAlgorithms({QStringLiteral("script:gamma"), QStringLiteral("script:valid-name"),
-                                   QStringLiteral("script:shared"), QStringLiteral("script:ephemeral")});
+        QStringList ids{QStringLiteral("script:gamma"), QStringLiteral("script:valid-name"),
+                        QStringLiteral("script:shared"), QStringLiteral("script:ephemeral"),
+                        QStringLiteral("script:mutable")};
+        // The per-directory cap slot writes cap+N numbered scripts; unregister
+        // every id it could have registered rather than a hand-kept prefix of
+        // them, or a cap regression leaks entries into the process-shared
+        // registry and fails an unrelated slot later.
+        for (int i = 0; i < 120; ++i)
+            ids.append(QStringLiteral("script:spray-%1").arg(i, 3, 10, QLatin1Char('0')));
+        cleanupScriptedAlgorithms(ids);
     }
 
     /**
@@ -94,6 +102,13 @@ private Q_SLOTS:
         writeScript(algoDir, QStringLiteral("gamma.luau"), validScript(QStringLiteral("Gamma")));
 
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
+        // XDG_DATA_DIRS pinned alongside XDG_DATA_HOME, like every sibling
+        // slot. This one does not scan today, so an ambient value is harmless
+        // — but XdgEnvGuard saves and restores rather than clearing, so the
+        // moment a scan is added here the machine's installed
+        // /usr/share/plasmazones/algorithms would register every bundled id
+        // into the process-shared test registry.
+        qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
         std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
@@ -109,9 +124,6 @@ private Q_SLOTS:
         // Note: both XDG_DATA_DIRS and XDG_DATA_HOME point to the same directory in this
         // test, so the loader treats it as a user script. The testUserOverridesSystem test
         // below verifies isUserScript() with separate system/user directories.
-
-        loader.reset();
-        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
     // =========================================================================
@@ -150,9 +162,6 @@ private Q_SLOTS:
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:has space")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:has.dot")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:special!char")));
-
-        loader.reset();
-        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
     // =========================================================================
@@ -186,9 +195,6 @@ private Q_SLOTS:
         auto* registry = PlasmaZones::TestHelpers::testRegistry();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:wellformed")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:notile")));
-
-        loader.reset();
-        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
     // =========================================================================
@@ -227,9 +233,6 @@ private Q_SLOTS:
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("UserVersion"));
         QVERIFY(algo->isUserScript()); // user version should be marked as user script
-
-        loader.reset();
-        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
     // =========================================================================
@@ -361,9 +364,6 @@ private Q_SLOTS:
         loader->scanAndRegister();
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:ephemeral")));
         QCOMPARE(removalSpy.count(), 1);
-
-        loader.reset();
-        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
     /// Regression guard: passing `LiveReload::Off` disables the
@@ -440,9 +440,6 @@ private Q_SLOTS:
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("HighPriority"));
         QVERIFY(!algo->isUserScript());
-
-        loader.reset();
-        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
     /// Three-tier check: user > sys-high > sys-low. Validates the
@@ -487,9 +484,6 @@ private Q_SLOTS:
         QVERIFY(shared->isUserScript());
 
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:user_only")));
-
-        loader.reset();
-        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
     // =========================================================================
@@ -516,6 +510,119 @@ private Q_SLOTS:
 
         // The directory should now exist
         QVERIFY(QDir(expectedDir).exists());
+    }
+    /// The per-directory file cap bounds files CONSIDERED, not files kept.
+    ///
+    /// Counting survivors instead would let a directory sprayed with `*.luau`
+    /// symlinks that ESCAPE the directory spend one `canonicalFilePath()`
+    /// realpath syscall per entry on the GUI thread while never advancing the
+    /// counter, so the cap would never trip — the exact GUI-thread DoS the
+    /// guard names.
+    ///
+    /// Escaping symlinks specifically, not dangling ones: a dangling symlink is
+    /// not a file, so `QDir::Files` drops it before the cap ever sees it and it
+    /// costs nothing. An escaping symlink IS a file, so it is listed, charged,
+    /// realpath'd, and only then refused by the containment check — which is
+    /// precisely the "considered but not kept" case the counter has to charge
+    /// for. Half the spray here is escaping symlinks, so a survivor-counting
+    /// cap admits every real script past the limit and this slot fails.
+    void testPerDirectoryCapBoundsFilesConsideredNotFilesKept()
+    {
+        XdgEnvGuard envGuard;
+        QTemporaryDir xdgRoot;
+        QVERIFY(xdgRoot.isValid());
+
+        const QString systemAlgoDir = xdgRoot.path() + QStringLiteral("/system/plasmazones/algorithms");
+        const QString userAlgoDir = xdgRoot.path() + QStringLiteral("/user/plasmazones/algorithms");
+        QVERIFY(QDir().mkpath(systemAlgoDir));
+        QVERIFY(QDir().mkpath(userAlgoDir));
+
+        // MaxWatchedFilesPerDir is 100 and is not test-overridable, so the
+        // fixture has to actually exceed it. Sorted names, because the cap
+        // keeps the first `maxFiles` in QDir::Name order.
+        constexpr int kCap = 100;
+        constexpr int kExtra = 10;
+        // A real file OUTSIDE the scanned directory, for the escaping symlinks
+        // to point at. It must exist, or QDir::Files would skip the links.
+        const QString outsideTarget = xdgRoot.path() + QStringLiteral("/outside.luau");
+        writeScript(xdgRoot.path(), QStringLiteral("outside.luau"), validScript(QStringLiteral("Outside")));
+        QVERIFY(QFileInfo::exists(outsideTarget));
+
+        for (int i = 0; i < kCap + kExtra; ++i) {
+            const QString base = QStringLiteral("spray-%1").arg(i, 3, 10, QLatin1Char('0'));
+            const QString linkPath = userAlgoDir + QLatin1Char('/') + base + QStringLiteral(".luau");
+            if (i % 2 == 0)
+                writeScript(userAlgoDir, base + QStringLiteral(".luau"), validScript(base));
+            else
+                QVERIFY(QFile::link(outsideTarget, linkPath));
+        }
+
+        qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
+        qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
+
+        PhosphorTiles::ScriptedAlgorithmLoader loader(QStringLiteral("plasmazones/algorithms"),
+                                                      PlasmaZones::TestHelpers::testRegistry());
+        loader.scanAndRegister();
+
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
+        // Exactly the real scripts among the first kCap entries survive. Every
+        // real script past the cap must be absent: its presence means the cap
+        // counted survivors and the spray bought unbounded work.
+        QStringList admittedPastTheCap;
+        for (int i = kCap; i < kCap + kExtra; ++i) {
+            if (i % 2 != 0)
+                continue;
+            const QString id = QStringLiteral("script:spray-%1").arg(i, 3, 10, QLatin1Char('0'));
+            if (registry->hasAlgorithm(id))
+                admittedPastTheCap.append(id);
+        }
+        QVERIFY2(admittedPastTheCap.isEmpty(),
+                 qPrintable(QStringLiteral("the cap counted survivors, not entries considered: %1")
+                                .arg(admittedPastTheCap.join(QStringLiteral(", ")))));
+        // Non-vacuity: the scan did register the real scripts below the cap, so
+        // an empty result above is not just a scan that did nothing.
+        QVERIFY(registry->hasAlgorithm(QStringLiteral("script:spray-000")));
+    }
+
+    /// A script EDITED in place between scans must be rebuilt, not reused.
+    ///
+    /// The reuse stamp keys on (id, size, mtime). Dropping the size/mtime half
+    /// leaves "any previously stamped path is reused", which serves the OLD
+    /// compiled script forever — invisible to the reuse slots above, because
+    /// they only prove that reuse HAPPENS.
+    void testEditedScriptIsRebuiltRatherThanReused()
+    {
+        XdgEnvGuard envGuard;
+        QTemporaryDir xdgRoot;
+        QVERIFY(xdgRoot.isValid());
+
+        const QString systemAlgoDir = xdgRoot.path() + QStringLiteral("/system/plasmazones/algorithms");
+        const QString userAlgoDir = xdgRoot.path() + QStringLiteral("/user/plasmazones/algorithms");
+        QVERIFY(QDir().mkpath(systemAlgoDir));
+        QVERIFY(QDir().mkpath(userAlgoDir));
+        writeScript(userAlgoDir, QStringLiteral("mutable.luau"), validScript(QStringLiteral("BeforeEdit")));
+        qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
+        qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
+
+        PhosphorTiles::ScriptedAlgorithmLoader loader(QStringLiteral("plasmazones/algorithms"),
+                                                      PlasmaZones::TestHelpers::testRegistry());
+        loader.scanAndRegister();
+
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
+        const auto* before = registry->algorithm(QStringLiteral("script:mutable"));
+        QVERIFY(before != nullptr);
+        QCOMPARE(before->name(), QStringLiteral("BeforeEdit"));
+
+        // Rewrite with a DIFFERENT display name and a different length, so the
+        // stamp's size comparison alone is enough to notice even on a
+        // filesystem with coarse mtime granularity.
+        writeScript(userAlgoDir, QStringLiteral("mutable.luau"),
+                    validScript(QStringLiteral("AfterEditWithALongerName")));
+        loader.scanAndRegister();
+
+        const auto* after = registry->algorithm(QStringLiteral("script:mutable"));
+        QVERIFY(after != nullptr);
+        QCOMPARE(after->name(), QStringLiteral("AfterEditWithALongerName"));
     }
 };
 

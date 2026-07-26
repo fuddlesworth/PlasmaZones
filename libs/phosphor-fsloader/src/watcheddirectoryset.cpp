@@ -293,8 +293,16 @@ int WatchedDirectorySet::setDirectories(const QStringList& directories, LiveRelo
 
 void WatchedDirectorySet::rescanNow()
 {
-    Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::rescanNow",
-               "GUI-thread only — see class docs");
+    // Asserted AND guarded: this is public API now (ProfileLoader::rescanNow
+    // forwards to it), so a debug-only check would leave a release build
+    // re-entering the scan from a worker thread and corrupting m_entries. The
+    // guard refuses rather than crashing, because a wrong-thread caller has
+    // already done nothing destructive at this point.
+    if (thread() != QThread::currentThread()) {
+        Q_ASSERT_X(false, "WatchedDirectorySet::rescanNow", "GUI-thread only — see class docs");
+        qCWarning(lcWatcher) << "rescanNow called off the owning thread; refusing";
+        return;
+    }
     // Cancel any pending debounce — its rescan would just re-do work
     // we're about to perform synchronously below.
     m_debounceTimer.stop();

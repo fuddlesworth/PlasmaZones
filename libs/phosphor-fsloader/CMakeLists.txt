@@ -11,10 +11,13 @@
 # their schema-specific enumeration / parsing / commit logic via
 # `IScanStrategy`.
 #
-# One specialisation ships with the library out of the box:
+# Two specialisations ship with the library out of the box:
 #   • `DirectoryLoader` — top-level `*.json` scan with user-wins layering,
 #                         dispatch to `IDirectoryLoaderSink`. Used by
 #                         CurveLoader, ProfileLoader, etc.
+#   • `MetadataPackScanStrategy<Payload>` — per-subdirectory `metadata.json`
+#                         scan with SHA-1 change detection. Used by the three
+#                         MetadataPackLoader-hosted pack registries.
 #
 # Loaders with different on-disk shapes (subdirectory layouts, non-JSON
 # extensions, custom filename validation) implement `IScanStrategy`

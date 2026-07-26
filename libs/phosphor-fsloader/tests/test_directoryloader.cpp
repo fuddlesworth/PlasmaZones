@@ -339,23 +339,30 @@ private Q_SLOTS:
     {
         RecordingSink sink;
         DirectoryLoader loader(sink);
-        // 50 ms rather than the 1 ms the other live-reload slots use: this one
-        // asserts that three writes COALESCE, so the window has to comfortably
-        // outlast the gap between the watcher's reads of them. At 1 ms the
-        // timer can fire between the first event and the other two and split
-        // the burst into two commits.
+        // 50 ms, and the writes are SPACED with an event-loop spin between
+        // them. Both halves matter. Written back to back with no spin, all
+        // three land before QFileSystemWatcher reads the directory even once,
+        // so it delivers a single directoryChanged and the burst is coalesced
+        // by the watcher rather than by the debounce — the slot then passes
+        // identically with the debounce removed entirely, which is what it is
+        // supposed to detect. Spinning between the writes forces three separate
+        // deliveries, so only the debounce can collapse them, and 50 ms is wide
+        // enough to still cover all three.
         loader.setDebounceIntervalForTest(50);
         loader.loadFromDirectory(m_tmp->path(), LiveReload::On);
         const int baseline = sink.commitCount;
 
-        // Rapid file drops in the same debounce window — should
-        // produce ONE commit, not N.
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+
+        // Three drops inside one debounce window — ONE commit, not three.
         for (int i = 0; i < 3; ++i) {
             QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("burst-%1.json").arg(i)),
                               QStringLiteral("burst-%1").arg(i), QStringLiteral("v")));
+            // Short relative to the 50 ms window, long enough for the watcher
+            // to notice each write separately.
+            QTest::qWait(5);
         }
 
-        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
         QVERIFY(spy.wait(2000));
 
         QCOMPARE(sink.commitCount, baseline + 1);
@@ -623,12 +630,21 @@ private Q_SLOTS:
         // First kTestCap (alphabetically) made it through, the rest were
         // silently dropped — the aggregate qCWarning in the library
         // surfaces the cap in the log once per trip.
+        // Collected, not asserted per row: QVERIFY returns from the slot on the
+        // first failure, so a cap that admitted the wrong SET would report one
+        // key and hide the rest of the picture.
+        QStringList wrong;
         for (int i = 0; i < kTestCap; ++i) {
-            QVERIFY(sink.registry.contains(QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0'))));
+            const QString key = QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0'));
+            if (!sink.registry.contains(key))
+                wrong.append(QStringLiteral("missing ") + key);
         }
         for (int i = kTestCap; i < totalFiles; ++i) {
-            QVERIFY(!sink.registry.contains(QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0'))));
+            const QString key = QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0'));
+            if (sink.registry.contains(key))
+                wrong.append(QStringLiteral("admitted past the cap: ") + key);
         }
+        QVERIFY2(wrong.isEmpty(), qPrintable(wrong.join(QStringLiteral("; "))));
     }
 
     /// The cap must bound files PARSED, not keys registered. A spray of files
@@ -740,10 +756,14 @@ private Q_SLOTS:
         loader.loadFromDirectories({systemDir.path(), userDir.path()}, LiveReload::Off);
 
         QCOMPARE(loader.registeredCount(), 3);
+        QStringList notFromUser;
         for (int i = 0; i < 3; ++i) {
-            QCOMPARE(QString::fromStdString(sink.registry.value(QStringLiteral("k-%1").arg(i))),
-                     QStringLiteral("from-user"));
+            const QString key = QStringLiteral("k-%1").arg(i);
+            const QString value = QString::fromStdString(sink.registry.value(key));
+            if (value != QStringLiteral("from-user"))
+                notFromUser.append(key + QStringLiteral("=") + value);
         }
+        QVERIFY2(notFromUser.isEmpty(), qPrintable(notFromUser.join(QStringLiteral("; "))));
         QCOMPARE(sink.parseCalls, kTestCap);
     }
 

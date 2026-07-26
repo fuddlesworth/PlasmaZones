@@ -6,14 +6,23 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 
+#include <PhosphorFsLoader/JsonEnvelopeValidator.h>
+
 #include <QDir>
 #include <QFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QLoggingCategory>
 #include <QTextStream>
 
 using namespace PhosphorAnimation;
+
+namespace {
+/// Own category so the helper's diagnostics do not have to borrow the
+/// production loader's, which this slot does not go through.
+Q_LOGGING_CATEGORY(lcEnvelopeTest, "phosphoranimation.test.envelope")
+} // namespace
 
 class TestProfileLoader : public QObject
 {
@@ -158,6 +167,10 @@ private Q_SLOTS:
     /// a preset label would engage the optional here and fail the assertion.
     /// The first file only pins that an explicit label survives the envelope
     /// strip.
+    ///
+    /// This does NOT cover the strip itself — `Profile::fromJson` never reads a
+    /// `name` key, so removing the strip is unobservable from here. The strip
+    /// has its own slot below.
     void testNameDoesNotLeakIntoPresetName()
     {
         QTemporaryDir dir;
@@ -439,6 +452,31 @@ private Q_SLOTS:
         resolved = reg.resolve(QStringLiteral("shared"));
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->duration.value_or(0.0), 100.0);
+    }
+    /// The shared envelope helper STRIPS `name` from the root it hands back.
+    ///
+    /// Asserted directly on `validateJsonEnvelope`, because it cannot be seen
+    /// through `ProfileLoader`: `Profile::fromJson` never reads a `name` key,
+    /// so deleting the strip changes nothing a profile-level test can observe.
+    /// The strip is still real contract — `name` is this layer's routing key,
+    /// not schema data, and a sink that preserves unknown fields would
+    /// otherwise round-trip it back out.
+    void testEnvelopeValidatorStripsTheRoutingKeyFromTheRoot()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("overlay.fade.json"));
+        QVERIFY(writeFile(path, QStringLiteral(R"({
+            "name": "overlay.fade",
+            "presetName": "My Overlay Preset"
+        })")));
+
+        const auto envelope = PhosphorFsLoader::validateJsonEnvelope(path, lcEnvelopeTest());
+        QVERIFY(envelope.has_value());
+        QCOMPARE(envelope->name, QStringLiteral("overlay.fade"));
+        QVERIFY2(!envelope->root.contains(QLatin1String("name")),
+                 "the routing key survived into the schema root the sink parses");
+        QCOMPARE(envelope->root.value(QLatin1String("presetName")).toString(), QStringLiteral("My Overlay Preset"));
     }
 };
 

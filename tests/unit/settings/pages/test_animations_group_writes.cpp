@@ -154,25 +154,50 @@ private Q_SLOTS:
         QCOMPARE(c.rawProfile(kMirror).value(QStringLiteral("curve")).toString(), QStringLiteral("spring:14.00,0.60"));
     }
 
-    /// A stored curve that is present-but-EMPTY must not survive a
-    /// duration-only edit. An engaged empty value BLOCKS inheritance where an
-    /// absent one allows it, so keeping it would stop the path following its
-    /// parent's curve without the user asking for that.
-    void anEmptyStoredCurveIsDroppedRatherThanKeptEngaged()
+    /// A curve arriving through @p fields, rather than through
+    /// `curveFromCommit`, must NOT be written. `fields` is "what the user
+    /// edited on this card"; the curve is decided separately precisely so a
+    /// caller cannot hand every path a curve none of them chose. A path with no
+    /// curve of its own must come out of the merge still carrying none.
+    ///
+    /// This is also the only route that reaches the drop at all: `rawProfile`
+    /// sanitises a present-but-empty stored curve away on read, so the merge
+    /// base can never carry one and a fixture built that way passes vacuously.
+    void aCurveSuppliedThroughFieldsIsNotWritten()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         AnimationsPageController c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        QVERIFY(c.setOverride(kPrimary,
-                              QVariantMap{{QStringLiteral("curve"), QString()}, {QStringLiteral("duration"), 200}}));
+        QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 200}}));
 
-        QVERIFY(c.setOverrideMergedOnPaths(QStringList{kPrimary}, QVariantMap{{QStringLiteral("duration"), 400}},
-                                           QVariant()));
+        QVERIFY(c.setOverrideMergedOnPaths(
+            QStringList{kPrimary},
+            QVariantMap{{QStringLiteral("duration"), 400}, {QStringLiteral("curve"), QStringLiteral("0.9,0,0.1,1")}},
+            QVariant()));
 
-        QVERIFY2(!c.rawProfile(kPrimary).contains(QStringLiteral("curve")),
-                 "an engaged-empty curve survived the merge and is now blocking inheritance");
+        const QVariantMap after = c.rawProfile(kPrimary);
+        QCOMPARE(after.value(QStringLiteral("duration")).toInt(), 400);
+        QVERIFY2(!after.contains(QStringLiteral("curve")),
+                 "a curve passed through `fields` was written, so the card decided a curve on the user's behalf");
+    }
+
+    /// The same rule the other way round: a path that DOES own a curve keeps
+    /// its own, and `fields` cannot overwrite it either.
+    void aCurveSuppliedThroughFieldsCannotOverwriteAPathsOwn()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.4,0,0.2,1")}}));
+
+        QVERIFY(c.setOverrideMergedOnPaths(
+            QStringList{kPrimary}, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.9,0,0.1,1")}}, QVariant()));
+
+        QCOMPARE(c.rawProfile(kPrimary).value(QStringLiteral("curve")).toString(), QStringLiteral("0.4,0,0.2,1"));
     }
 
     // ─── clearFieldOnPaths ────────────────────────────────────────────────
@@ -194,12 +219,20 @@ private Q_SLOTS:
 
         QCOMPARE(c.clearFieldOnPaths(group(), QStringLiteral("duration")), 2);
 
+        // Collected, not asserted per iteration: QVERIFY/QCOMPARE return from
+        // the slot on the first failure, so a two-path regression would report
+        // as one and the mirror's state would never be checked at all.
+        QStringList wrong;
         for (const QString& path : group()) {
             const QVariantMap raw = c.rawProfile(path);
-            QVERIFY2(!raw.contains(QStringLiteral("duration")), qPrintable(path));
-            QCOMPARE(raw.value(QStringLiteral("curve")).toString(), QStringLiteral("0.4,0,0.2,1"));
-            QCOMPARE(raw.value(QStringLiteral("minDistance")).toInt(), 42);
+            if (raw.contains(QStringLiteral("duration")))
+                wrong.append(path + QStringLiteral(": duration survived the clear"));
+            if (raw.value(QStringLiteral("curve")).toString() != QStringLiteral("0.4,0,0.2,1"))
+                wrong.append(path + QStringLiteral(": curve did not survive the clear"));
+            if (raw.value(QStringLiteral("minDistance")).toInt() != 42)
+                wrong.append(path + QStringLiteral(": minDistance did not survive the clear"));
         }
+        QVERIFY2(wrong.isEmpty(), qPrintable(wrong.join(QStringLiteral("; "))));
     }
 
     /// A path whose override empties out has its FILE removed, not left as an
@@ -231,6 +264,36 @@ private Q_SLOTS:
         AnimationsPageController c;
         c.setUserProfilesDirOverride(tmp.path());
 
+        // The mirror carries a DIFFERENT field, which is the case that
+        // distinguishes the skip from its absence: without it the mirror gets
+        // rewritten verbatim, the count over-reports, and a spurious
+        // overrideChanged fires for a path nothing asked to change. A mirror
+        // with no file at all cannot tell the two apart, so it is covered by
+        // the slot below rather than here.
+        QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 600}}));
+        QVERIFY(c.setOverride(kMirror, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.4,0,0.2,1")}}));
+
+        QSignalSpy announced(&c, &AnimationsPageController::overrideChanged);
+        QCOMPARE(c.clearFieldOnPaths(group(), QStringLiteral("duration")), 1);
+
+        QCOMPARE(c.rawProfile(kMirror).value(QStringLiteral("curve")).toString(), QStringLiteral("0.4,0,0.2,1"));
+        int mirrorAnnouncements = 0;
+        for (const QList<QVariant>& emission : announced) {
+            if (emission.at(0).toString() == kMirror)
+                ++mirrorAnnouncements;
+        }
+        QCOMPARE(mirrorAnnouncements, 0);
+    }
+
+    /// The degenerate half of the same rule: a path with no override file at
+    /// all must not have one created for it.
+    void clearingAFieldCreatesNoFileForAPathWithoutOne()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 600}}));
 
         QCOMPARE(c.clearFieldOnPaths(group(), QStringLiteral("duration")), 1);
@@ -251,7 +314,10 @@ private Q_SLOTS:
                               QVariantMap{{QStringLiteral("duration"), 600}, {QStringLiteral("minDistance"), 42}}));
 
         QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing to clear unrecognised field")));
-        QCOMPARE(c.clearFieldOnPaths(QStringList{kPrimary}, QStringLiteral("minDistance")), 0);
+        // -1, not 0: a refusal must be distinguishable from "the field was
+        // already inherited everywhere", or a caller reports a revert that
+        // never happened.
+        QCOMPARE(c.clearFieldOnPaths(QStringList{kPrimary}, QStringLiteral("minDistance")), -1);
         QCOMPARE(c.rawProfile(kPrimary).value(QStringLiteral("minDistance")).toInt(), 42);
     }
 

@@ -51,8 +51,6 @@ private Q_SLOTS:
     void rejectsCorruptSoFile();
     void loadsNewPluginAddedOnRescan();
     void emitsRescanCompletedSignal();
-    void liveWidgetCountReturnsMinusOneForLoadedPlugin();
-    void liveWidgetCountReturnsMinusOneForUnknownPlugin();
     void pluginRootReturnsConfiguredPath();
     void pluginRootResolvesXdgWhenEmpty();
 };
@@ -548,39 +546,6 @@ void TestPluginLoader::emitsRescanCompletedSignal()
 
     loader.rescanNow();
     QCOMPARE(rescanSpy.count(), 2);
-}
-
-void TestPluginLoader::liveWidgetCountReturnsMinusOneForLoadedPlugin()
-{
-    // Phase 1.3 leaves widget tracking unwired; liveWidgetCount
-    // returns -1 ("untracked"). Lock the contract so a future
-    // partial Phase-5 wiring doesn't return 0 (which would imply
-    // "no live widgets" — a semantic shift) before the full refcount
-    // path lands.
-    QTemporaryDir tempDir;
-    QVERIFY(tempDir.isValid());
-    const QString pluginRoot = tempDir.path();
-    QString installedDir;
-    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
-
-    Registry<IBarWidgetFactory> registry;
-    PluginLoader loader(&registry, pluginRoot);
-    loader.scanAndLoad();
-    QCOMPARE(loader.liveWidgetCount(QStringLiteral("fake-plugin")), -1);
-}
-
-void TestPluginLoader::liveWidgetCountReturnsMinusOneForUnknownPlugin()
-{
-    // Distinct from the loaded-plugin case: an unknown id today also
-    // returns -1 because the implementation is unconditional, but a
-    // future Phase-5 implementation might split "untracked" (-1)
-    // from "unknown plugin" (0 or some other sentinel). Pin both
-    // separately so the next implementer sees both cases explicitly.
-    QTemporaryDir tempDir;
-    QVERIFY(tempDir.isValid());
-    Registry<IBarWidgetFactory> registry;
-    PluginLoader loader(&registry, tempDir.path());
-    QCOMPARE(loader.liveWidgetCount(QStringLiteral("nonexistent")), -1);
 }
 
 void TestPluginLoader::pluginRootReturnsConfiguredPath()

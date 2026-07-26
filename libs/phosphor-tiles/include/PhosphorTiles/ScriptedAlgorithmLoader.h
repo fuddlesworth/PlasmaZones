@@ -4,13 +4,15 @@
 #pragma once
 
 #include <phosphortiles_export.h>
+
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
+
 #include <QByteArray>
 #include <QHash>
 #include <QObject>
 #include <QSet>
-#include <QStringList>
 #include <QString>
+#include <QStringList>
 
 #include <memory>
 

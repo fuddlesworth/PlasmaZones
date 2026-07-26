@@ -75,7 +75,7 @@ public:
 
     std::optional<PhosphorFsLoader::ParsedEntry> parseFile(const QString& filePath) override
     {
-        // Common envelope checks (read, parse, root-is-object,
+        // Common envelope checks (size cap, read, parse, root-is-object,
         // non-empty `name`, name-matches-filename) live in the shared
         // helper, which also strips `name` from the returned root: it is
         // that layer's routing key, not part of this schema. The registry

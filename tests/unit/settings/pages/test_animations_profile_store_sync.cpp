@@ -33,6 +33,8 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QScopeGuard>
 
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -48,22 +50,31 @@ namespace {
 
 /// Rewrite an override file's duration the way an EXTERNAL writer would: a
 /// hand-edit in the profiles directory, behind the controller's back and with
-/// none of its cache bookkeeping. Rewrites the file the controller itself
-/// wrote, so the envelope stays exactly whatever shape it produces.
-[[nodiscard]] bool rewriteDurationOnDisk(const QString& filePath, int from, int to)
+/// none of its cache bookkeeping. Reads the file the controller itself wrote,
+/// so the envelope keeps exactly the shape it produces.
+///
+/// Parsed and re-serialised rather than text-substituted. A substitution would
+/// be unanchored and global, so it would also rewrite the same digits appearing
+/// in `minDistance`, in a preset name, or in any field added later, and would
+/// silently corrupt the fixture rather than failing.
+[[nodiscard]] bool rewriteDurationOnDisk(const QString& filePath, int expectedFrom, int to)
 {
     QFile f(filePath);
     if (!f.open(QIODevice::ReadOnly))
         return false;
-    QString text = QString::fromUtf8(f.readAll());
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
     f.close();
-    const QString needle = QString::number(from);
-    if (!text.contains(needle))
+    if (!doc.isObject())
         return false;
-    text.replace(needle, QString::number(to));
+    QJsonObject root = doc.object();
+    // Checked, so a fixture whose duration moved fails here rather than
+    // rewriting a value the test did not expect to be there.
+    if (root.value(QLatin1String("duration")).toInt(-1) != expectedFrom)
+        return false;
+    root.insert(QLatin1String("duration"), to);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return false;
-    return f.write(text.toUtf8()) > 0;
+    return f.write(QJsonDocument(root).toJson()) > 0;
 }
 
 } // namespace
@@ -341,8 +352,19 @@ private Q_SLOTS:
         // rescanNow(), with an external edit landing in the same window.
         bool rewrote = false;
         c.setProfileStoreRefresher([&]() {
-            if (!rewrote)
-                rewrote = rewriteDurationOnDisk(tmp.path() + QStringLiteral("/editor.json"), 123, 456);
+            if (rewrote) {
+                c.forgetCachedOverrideFiles();
+                return;
+            }
+            // Re-read BEFORE the out-of-band write, so the memo holds the
+            // pre-edit value when forgetCachedOverrideFiles runs. Without this
+            // the memo is already empty at that point (refreshProfileStore
+            // invalidates unconditionally on its way in), so moving the
+            // suppression early-return ABOVE the invalidation would be
+            // invisible — which is precisely the regression the assertion
+            // below claims to prevent.
+            (void)c.resolvedProfile(QStringLiteral("editor"));
+            rewrote = rewriteDurationOnDisk(tmp.path() + QStringLiteral("/editor.json"), 123, 456);
             c.forgetCachedOverrideFiles();
         });
 

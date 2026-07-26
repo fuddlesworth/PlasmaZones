@@ -203,7 +203,8 @@ private:
     void setupSurfaceShaderEffects();
 
     // init() phase methods, run in order from the thin init() (daemon.cpp); the
-    // order is load-bearing. Defined across daemon/init_*.cpp + shader_warmup.cpp.
+    // order is load-bearing. Defined across daemon/init_*.cpp, shader_warmup.cpp
+    // and animation_profiles.cpp.
     void setupShaderWarmBakes();
     void initLayoutAndSettingsWiring();
     void initCoreAdaptors();
