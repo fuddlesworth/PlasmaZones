@@ -154,20 +154,27 @@ void Daemon::initLayoutAndSettingsWiring()
     // not needed to disambiguate.
     m_layoutManager->setTiledWindowCountProvider(
         [this](const QString& screenId, int, const QString&) -> std::optional<int> {
-            if (!m_autotileEngine) {
-                return std::nullopt;
+            // const overloads throughout: a non-creating lookup that returns
+            // nullptr when the screen has no tiling state. The non-const
+            // overload would lazily CREATE an empty state, both polluting
+            // m_screenStates during a pure resolution query and reporting 0
+            // (not nullopt) for a non-tiling screen, which would make a
+            // TiledWindowCount predicate match there instead of staying
+            // inert. Both tiling-family engines are consulted so a
+            // TiledWindowCount rule works on scrolling screens too.
+            if (m_autotileEngine) {
+                if (const PhosphorEngine::IPlacementState* state =
+                        std::as_const(*m_autotileEngine).stateForScreen(screenId)) {
+                    return state->tiledWindowCount();
+                }
             }
-            // const overload: a non-creating lookup that returns nullptr when the
-            // screen has no tiling state. The non-const overload would lazily
-            // CREATE an empty state, both polluting m_screenStates during a pure
-            // resolution query and reporting 0 (not nullopt) for a non-tiling
-            // screen, which would make a TiledWindowCount predicate match there
-            // instead of staying inert.
-            const PhosphorEngine::IPlacementState* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
-            if (!state) {
-                return std::nullopt;
+            if (m_scrollEngine) {
+                if (const PhosphorEngine::IPlacementState* state =
+                        std::as_const(*m_scrollEngine).stateForScreen(screenId)) {
+                    return state->tiledWindowCount();
+                }
             }
-            return state->tiledWindowCount();
+            return std::nullopt;
         });
     // Orientation provider — derives "portrait" / "landscape" from the screen's
     // geometry so a Field::ScreenOrientation rule can drive any context slot on a

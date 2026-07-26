@@ -82,6 +82,10 @@ public:
     }
     /// Opaque slot id: the window's index in strip order, matching the
     /// autotile convention (order index as string). Empty when floating.
+    /// NOTE: this is the WINDOW index; the engine's capturePlacement stores
+    /// the COLUMN index in slot.order (its comment explains why). The two
+    /// notions coincide only while every column holds one tile — do not
+    /// feed this id into a restore path expecting slot.order semantics.
     QString placementIdForWindow(const QString& windowId) const override
     {
         const int idx = m_strip.windowsInOrder().indexOf(windowId);

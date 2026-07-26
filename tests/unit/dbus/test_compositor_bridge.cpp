@@ -169,8 +169,11 @@ private Q_SLOTS:
 
     void testRegisterBridge_returnsApiVersion()
     {
+        // A NEWER peer version: the reply must carry the DAEMON's own
+        // version, so passing ApiVersion here would make the assertion a
+        // tautological echo check.
         PhosphorProtocol::BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
-            QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+            QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion + 1),
             {QStringLiteral("borderless"), QStringLiteral("animation")});
 
         QCOMPARE(result.apiVersion, QString::number(PhosphorProtocol::Service::ApiVersion));
@@ -210,16 +213,20 @@ private Q_SLOTS:
     // version (< MinPeerApiVersion) must be rejected with the REJECTED
     // sentinel in sessionId, must NOT update the stored bridge name, and
     // must NOT emit bridgeRegistered. If this regresses, stale effects
-    // would silently connect and crash on marshalling mismatches. Peer
-    // string is "3" so this test directly pins the v3→v4 bump (the
-    // setWindowMetadata 4→9-arg signature widening); a peer that was valid
-    // pre-bump is now rejected.
+    // would silently connect and either crash on marshalling mismatches or
+    // hear nothing on a renamed surface. The peer string is derived as
+    // MinPeerApiVersion - 1, so the test pins the CURRENT floor across
+    // every future bump.
     void testRegisterBridge_rejectsOldVersion()
     {
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
 
+        // One below the CURRENT floor, so every future MinPeerApiVersion
+        // bump keeps this test pinning the just-outdated peer instead of an
+        // anciently-rejected one.
         PhosphorProtocol::BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
-            QStringLiteral("kwin"), QStringLiteral("3"), {QStringLiteral("borderless")});
+            QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::MinPeerApiVersion - 1),
+            {QStringLiteral("borderless")});
 
         QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
         QCOMPARE(result.apiVersion, QString::number(PhosphorProtocol::Service::ApiVersion));

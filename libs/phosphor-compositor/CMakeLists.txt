@@ -3,10 +3,10 @@
 #
 # PhosphorCompositor — Compositor-plugin SDK for Phosphor.
 #
-# Provides ICompositorBridge interface, shared types (WindowInfo,
-# TilingState, FloatingCache, ZoneCache), trigger parsing, and snap-assist
-# candidate filtering. Compositor plugins implement ICompositorBridge
-# and talk to the Phosphor daemon over D-Bus.
+# Provides the ICompositorBridge interface, shared types (TilingState,
+# FloatingCache, ZoneCache, DecorationManager/DecorationDefaults), trigger
+# parsing, and snap-assist candidate filtering. Compositor plugins
+# implement ICompositorBridge and talk to the Phosphor daemon over D-Bus.
 
 cmake_minimum_required(VERSION 3.16)
 

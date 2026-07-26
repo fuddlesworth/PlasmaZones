@@ -24,16 +24,20 @@
 
 #include <QTest>
 
+#include <memory>
+
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
 #include "core/resolve/screenmoderouter.h"
 #include "helpers/AutotileTestHelpers.h"
+#include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using namespace PhosphorTileEngine;
 using namespace PhosphorSnapEngine;
 
@@ -42,6 +46,10 @@ class TestScreenModeRouter : public QObject
     Q_OBJECT
 
 private:
+    // setAssignmentEntryDirect PERSISTS a rule via RuleStore::save(); without
+    // this guard the downgrade test would write DP-7 rules into the shared
+    // test-xdg config that every sibling test then loads.
+    std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     SnapEngine* m_snapEngine = nullptr;
     AutotileEngine* m_autotileEngine = nullptr;
@@ -52,6 +60,7 @@ private Q_SLOTS:
 
     void init()
     {
+        m_guard = std::make_unique<IsolatedConfigGuard>();
         // PhosphorZones::LayoutRegistry with no backend — every screen hits the default
         // modeForScreen fallback (Snapping unless explicitly assigned).
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
@@ -90,6 +99,7 @@ private Q_SLOTS:
         m_snapEngine = nullptr;
         delete m_layoutManager;
         m_layoutManager = nullptr;
+        m_guard.reset();
     }
 
     // ─── modeFor ──────────────────────────────────────────────────────────

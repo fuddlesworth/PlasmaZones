@@ -128,6 +128,35 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
     tile.minHeight = minHeight;
     col->tiles.append(tile);
     col->activeTileIdx = col->tiles.size() - 1;
+    // The arrival joins an EXISTING column: the column's width intent is
+    // the host's and deliberately stays (an open-rule width override would
+    // resize every sibling in the stack), but a display override (tabbed)
+    // is column-level presentation the rule can legitimately set.
+    if (display != col->display) {
+        col->display = display;
+    }
+    Q_UNUSED(width)
+    return true;
+}
+
+bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const QString& windowId, int minWidth,
+                                           int minHeight)
+{
+    if (windowId.isEmpty() || containsWindow(windowId) || columnIndex < 0 || columnIndex >= m_columns.size()) {
+        return false;
+    }
+    Column& col = m_columns[columnIndex];
+    Tile tile;
+    tile.windowId = windowId;
+    tile.minWidth = minWidth;
+    tile.minHeight = minHeight;
+    const int at = qBound(0, tileIndex, col.tiles.size());
+    col.tiles.insert(at, tile);
+    if (col.activeTileIdx >= at) {
+        ++col.activeTileIdx;
+    }
+    col.activeTileIdx = at;
+    m_activeColumnIdx = columnIndex;
     return true;
 }
 
@@ -222,6 +251,10 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     // refocus (take/transfer path) the same math applies — the caller wants
     // zero visual churn while it re-homes the window. The one hard rule is
     // the strip's left edge: never expose space left of the first column.
+    // DELIBERATE asymmetry with keepOrRecenterAnchor (minimize-collapse /
+    // consume), which also clamps the RIGHT edge: on a removal the user
+    // just lost a window, and keeping the survivors pixel-stationary beats
+    // reclaiming right-edge dead space — the next focus change reclaims it.
     const int stripX = columnStripX(m_activeColumnIdx, params);
     int anchor = stripX - oldViewX;
     if (stripX - anchor < 0) {
@@ -258,6 +291,12 @@ bool ScrollStrip::takeWindow(const QString& windowId, const ScrollLayoutParams& 
 
 bool ScrollStrip::setWindowMinimized(const QString& windowId, bool minimized, const ScrollLayoutParams& params)
 {
+    // NOTE: PlasmaZones' own daemon does not call this — the compositor
+    // reports minimize as a float toggle (see ScrollEngine.h, "minimize
+    // machinery"), so production minimize rides FloatRestore. This is the
+    // strip-level model for embedders that deliver a real minimize signal;
+    // the relayout/focus/anchor machinery it drives is pinned by the
+    // library's own tests.
     const int colIdx = columnOfWindow(windowId);
     if (colIdx < 0) {
         return false;
@@ -436,6 +475,12 @@ bool ScrollStrip::consumeWindowIntoColumn(const ScrollLayoutParams& params)
     if (m_activeColumnIdx < 0 || m_activeColumnIdx + 1 >= m_columns.size()) {
         return false;
     }
+    // A fully-minimized neighbour is invisible (every focus verb skips it);
+    // pulling a hidden tile out of it would surprise. Match the focus
+    // verbs and refuse.
+    if (m_columns.at(m_activeColumnIdx + 1).isFullyMinimized()) {
+        return false;
+    }
     const int oldViewX = viewXFor(params);
     Column& source = m_columns[m_activeColumnIdx + 1];
     const int takeIdx = qBound(0, source.activeTileIdx, source.tiles.size() - 1);
@@ -523,7 +568,11 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
     dest.tiles.append(taken);
     dest.activeTileIdx = dest.tiles.size() - 1;
     m_activeColumnIdx = destIdx;
-    reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    // The previously-active column ceased to exist and later indices
+    // shifted, so prevIdx no longer names it — passing it through would
+    // make the OnOverflow test read a DIFFERENT column's width as prevW
+    // (same hazard removeWindowInternal documents).
+    reanchorAfterFocusChange(-1, oldViewX, params);
     return true;
 }
 

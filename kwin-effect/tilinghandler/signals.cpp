@@ -380,8 +380,8 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                              << "managed screens:" << m_managedScreens;
             for (const QString& screenId : added) {
                 for (KWin::EffectWindow* w : windows) {
-                    if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop() && w->isOnCurrentActivity()
-                        && m_effect->getWindowScreenId(w) == screenId) {
+                    if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
+                        && w->isOnCurrentActivity() && m_effect->getWindowScreenId(w) == screenId) {
                         const QString windowId = m_effect->getWindowId(w);
                         if (m_savedNotifiedForDesktopReturn.contains(windowId)
                             || m_notifiedWindows.contains(windowId)) {
@@ -406,8 +406,8 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // must remain in the set for when their screen returns.
             for (const QString& screenId : added) {
                 for (KWin::EffectWindow* w : windows) {
-                    if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop() && w->isOnCurrentActivity()
-                        && m_effect->getWindowScreenId(w) == screenId) {
+                    if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
+                        && w->isOnCurrentActivity() && m_effect->getWindowScreenId(w) == screenId) {
                         m_savedNotifiedForDesktopReturn.remove(m_effect->getWindowId(w));
                     }
                 }
@@ -424,8 +424,8 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // notifyWindowAdded is idempotent (checks m_notifiedWindows).
             for (const QString& screenId : m_managedScreens) {
                 for (KWin::EffectWindow* w : windows) {
-                    if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()
-                        || w->isMinimized()) {
+                    if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
+                        || !w->isOnCurrentActivity() || w->isMinimized()) {
                         continue;
                     }
                     if (m_effect->getWindowScreenId(w) != screenId) {
@@ -482,7 +482,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // explains why an overflow float must not clobber a correct
             // existing entry).
             for (KWin::EffectWindow* w : windows) {
-                if (!w || !m_effect->shouldHandleWindow(w)) {
+                if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w)) {
                     continue;
                 }
                 if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {

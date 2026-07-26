@@ -151,7 +151,7 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       path resolves live. A stale effect sending an older form would fail
 //       marshalling, so the bridge handshake rejects mismatched peers up front.
 //
-//   5 - the org.plasmazones.Autotile lifecycle surface moved wholesale to
+//   v5: the org.plasmazones.Autotile lifecycle surface moved wholesale to
 //       the engine-neutral org.plasmazones.Tiling interface (property
 //       managedScreens, signal managedScreensChanged), with engine-specific
 //       verbs split onto org.plasmazones.Autotile / org.plasmazones.Scrolling.

@@ -82,7 +82,7 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
     const int count = params.presetColumnWidths.size();
     int idx;
     if (col->width.kind == ColumnWidth::Preset) {
-        idx = (col->width.presetIdx + delta % count + count) % count;
+        idx = (qBound(0, col->width.presetIdx, count - 1) + delta + count) % count;
     } else {
         // Enter the cycle from the nearest preset; step only if that preset
         // is already (near) the current size, so the first press lands on a
@@ -90,7 +90,7 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
         idx = nearestPresetWidthIdx(*col, params);
         const int nearPx = resolveColumnWidthPx(ColumnWidth::makePreset(idx), params);
         if (qAbs(nearPx - resolveColumnWidthPx(col->width, params)) <= 1) {
-            idx = (idx + delta % count + count) % count;
+            idx = (idx + delta + count) % count;
         }
     }
     const ColumnWidth result = ColumnWidth::makePreset(idx);
@@ -172,6 +172,13 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
 
 bool ScrollStrip::setActiveWindowHeight(const WindowHeight& height)
 {
+    // Lone tile: relayout unconditionally overrides its height with the
+    // full column height, so accepting the write would report success for
+    // a shortcut that provably does nothing (same guard reconcile uses).
+    const Column* col = activeColumn();
+    if (!col || col->tiles.size() <= 1) {
+        return false;
+    }
     Tile* tile = activeTileMutable();
     if (!tile || tile->height == height) {
         return false;
@@ -182,6 +189,11 @@ bool ScrollStrip::setActiveWindowHeight(const WindowHeight& height)
 
 bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params)
 {
+    // Lone tile: see setActiveWindowHeight.
+    const Column* colGuard = activeColumn();
+    if (!colGuard || colGuard->tiles.size() <= 1) {
+        return false;
+    }
     Tile* tile = activeTileMutable();
     if (!tile || params.presetWindowHeights.isEmpty() || (delta != -1 && delta != 1)) {
         return false;
@@ -189,7 +201,7 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     const int count = params.presetWindowHeights.size();
     int idx;
     if (tile->height.kind == WindowHeight::Preset) {
-        idx = (tile->height.presetIdx + delta % count + count) % count;
+        idx = (qBound(0, tile->height.presetIdx, count - 1) + delta + count) % count;
     } else {
         // Mirror the width cycle: enter from the nearest preset, stepping
         // once when that preset already matches the current height so the
@@ -198,7 +210,7 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
         const qreal nearFrac = params.presetWindowHeights.at(qBound(0, idx, count - 1));
         const qreal curFrac = currentHeightFraction(*tile, params);
         if (curFrac >= 0 && qAbs(nearFrac - curFrac) < 0.01) {
-            idx = (idx + delta % count + count) % count;
+            idx = (idx + delta + count) % count;
         }
     }
     const WindowHeight result = WindowHeight::makePreset(idx);
@@ -211,6 +223,11 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
 
 bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params)
 {
+    // Lone tile: see setActiveWindowHeight.
+    const Column* colGuard = activeColumn();
+    if (!colGuard || colGuard->tiles.size() <= 1) {
+        return false;
+    }
     Tile* tile = activeTileMutable();
     if (!tile || qFuzzyIsNull(deltaPercent)) {
         return false;

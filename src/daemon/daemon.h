@@ -308,15 +308,15 @@ private:
     bool isFocusedContextGated(const QString& screenId) const;
 
     /**
-     * @brief Mode-explicit sibling of isFocusedContextGated for autotile-only
-     * shortcuts.
+     * @brief Mode-explicit sibling of isFocusedContextGated for
+     * single-engine shortcuts.
      *
      * Same fail-closed null-resolver semantics, but queries the resolver
      * with an explicit mode (skipping the router-driven mode lookup).
-     * Used by handleRetile / handleIncreaseMasterRatio /
-     * handleDecreaseMasterRatio / HANDLE_AUTOTILE_ONLY — paths that
-     * must gate against the Autotile disable list specifically rather
-     * than the live mode for the screen.
+     * Used by the autotile verbs (handleRetile / master-ratio /
+     * HANDLE_AUTOTILE_ONLY, gating against the Autotile disable list) and
+     * by the scrolling shortcut resolver (scrolling_init.cpp, gating
+     * against the Scrolling disable list).
      */
     bool isFocusedContextGatedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
@@ -399,14 +399,22 @@ private:
     void handleSnappingToAutotile();
 
     /**
-     * @brief Pre-save snap-mode floating state before entering autotile
+     * @brief Pre-save snap-mode floating state before entering a tiling mode
      *
-     * Saves non-autotile-floated floating windows to WTS's savedSnapFloating set.
-     * When screenId is provided, only saves windows on that screen. When empty,
-     * saves all floating windows (used for global autotile enable).
-     * Idempotent (QSet::insert).
+     * Captures each floating window's placement into its unified
+     * WindowPlacement record (captureWindowPlacement — there is no parallel
+     * saved-float set), so the snap slot survives the autotile or scrolling
+     * session and the release handler can restore it. When screenId is
+     * provided, only windows on that screen are captured; empty captures
+     * all floating windows (global enable). Idempotent.
      */
     void presaveSnapFloats(const QString& screenId = QString());
+    /// Shared windowsReleased handler for both tiling-family engines:
+    /// restores snap float/zone state for windows returning to snapping and
+    /// clears the releasing engine's mode-specific float markers. See the
+    /// definition in autotile.cpp.
+    void handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* releasingEngine, const QStringList& windowIds,
+                                     const QSet<QString>& releasedScreenIds);
 
     /**
      * @brief Capture autotile window order for all autotile screens
@@ -477,10 +485,13 @@ private:
     void showOsdForScreens(const QStringList& screenIds, const QString& activity);
 
     /**
-     * @brief Recompute which screens use autotile from layout assignments
+     * @brief Recompute BOTH tiling-family engines' screen sets from the cascade
      *
-     * Reads all screen assignments via assignmentIdForScreen(), computes
-     * which screens have autotile IDs, calls setActiveScreens() on engine.
+     * Reads every screen's assignment, derives the autotile and scrolling
+     * sets in one walk, and pushes them through the shared
+     * capture-all → seed-all → apply-all phase (captureScrollingOrders /
+     * updateScrollingScreens run in the same pass so a same-flip
+     * autotile↔scrolling transition replays window order deterministically).
      */
     void updateEngineScreens();
 

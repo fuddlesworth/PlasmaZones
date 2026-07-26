@@ -18,7 +18,6 @@
  */
 
 #include <QKeySequence>
-#include <QSet>
 #include <QTest>
 
 #include <PhosphorConfig/Schema.h>
@@ -93,11 +92,13 @@ private Q_SLOTS:
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
         // Structural check through QKeySequence, not a text regex: it sees
-        // every combination of a multi-chord sequence, tolerates whitespace
-        // and modifier-order variants, and catches a symbol spelled as a
-        // named key. A combination offends when Shift is held and the base
-        // key is a printable non-alphanumeric (letters, digits, and
-        // navigation keys like Home/PgUp are fine).
+        // every combination of a multi-chord sequence and tolerates
+        // whitespace and modifier-order variants. A combination offends
+        // when Shift is held and the base key is a printable
+        // non-alphanumeric (letters, digits, and navigation keys like
+        // Home/PgUp are fine). A symbol spelled as a NAMED key ("Plus")
+        // decodes to Key_unknown and is caught by allDefaultsParseCleanly
+        // below, not by this guard.
         QStringList offenders;
         for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
             if (!git.key().startsWith(QLatin1String("Shortcuts"))) {
@@ -117,6 +118,38 @@ private Q_SLOTS:
                     }
                 }
                 if (offends) {
+                    offenders.append(git.key() + QLatin1Char('/') + def.key + QLatin1String(" = ") + chord);
+                }
+            }
+        }
+        QVERIFY2(offenders.isEmpty(), qPrintable(offenders.join(QLatin1String("; "))));
+    }
+
+    /// Every non-empty shortcut default must parse to a real key sequence
+    /// with no Key_unknown combination — an unparsable spelling is a DEAD
+    /// shortcut (KGlobalAccel cannot bind it), which is exactly the defect
+    /// class this file exists to prevent, and both guards above silently
+    /// tolerate it (the duplicate check falls back to the raw string; the
+    /// Shift guard's key < 0x100 filter excludes Key_unknown).
+    void allDefaultsParseCleanly()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        QStringList offenders;
+        for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
+            if (!git.key().startsWith(QLatin1String("Shortcuts"))) {
+                continue;
+            }
+            for (const PhosphorConfig::KeyDef& def : git.value()) {
+                const QString chord = def.defaultValue.toString();
+                if (chord.isEmpty()) {
+                    continue;
+                }
+                const QKeySequence seq = QKeySequence::fromString(chord, QKeySequence::PortableText);
+                bool bad = seq.count() == 0;
+                for (int i = 0; i < seq.count() && !bad; ++i) {
+                    bad = seq[i].key() == Qt::Key_unknown;
+                }
+                if (bad) {
                     offenders.append(git.key() + QLatin1Char('/') + def.key + QLatin1String(" = ") + chord);
                 }
             }

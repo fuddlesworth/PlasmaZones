@@ -517,6 +517,61 @@ private Q_SLOTS:
         QVERIFY(roundTrip.snappingLayout.isEmpty());
     }
 
+    void testAssignmentEntry_modeOnlySnapping_explicitPinHolds()
+    {
+        // The Monitors-page mode-only Snapping pin (staged when leaving
+        // Scrolling while the context suppresses the default layout) must
+        // be cascade-VISIBLE despite its empty activeLayoutId. The
+        // discriminator: an autotile-flavoured default tier — without the
+        // hasExplicitSnappingModePin carve-out the empty-id rejection falls
+        // through to the default and reports Autotile.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        mgr->setDefaultAutotileAlgorithmProvider([] {
+            return QStringLiteral("bsp");
+        });
+        mgr->setSnappingPreferredProvider([] {
+            return false;
+        });
+
+        PhosphorZones::AssignmentEntry modeOnly;
+        modeOnly.mode = PhosphorZones::AssignmentEntry::Snapping;
+        mgr->setAssignmentEntryDirect(QStringLiteral("DP-1"), 0, QString(), modeOnly);
+        QVERIFY(modeOnly.activeLayoutId().isEmpty());
+
+        // BOTH cascade APIs settle on the explicit pin, consistently:
+        // Snapping mode, and an EMPTY id (there is no layout identity to
+        // report — never the default tier's autotile id).
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 0), QString());
+    }
+
+    void testAssignmentEntry_modeOnlySnapping_disabledRuleFallsThrough()
+    {
+        // A DISABLED exact-context rule is not an explicit pin: the
+        // resolution must fall through to the default tier (autotile here).
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        mgr->setDefaultAutotileAlgorithmProvider([] {
+            return QStringLiteral("bsp");
+        });
+        mgr->setSnappingPreferredProvider([] {
+            return false;
+        });
+
+        PhosphorZones::AssignmentEntry modeOnly;
+        modeOnly.mode = PhosphorZones::AssignmentEntry::Snapping;
+        mgr->setAssignmentEntryDirect(QStringLiteral("DP-1"), 0, QString(), modeOnly);
+
+        auto* store = mgr->findChild<PhosphorRules::RuleStore*>();
+        QVERIFY(store);
+        // The isolated store holds exactly the one rule the pin authored.
+        const auto rules = store->ruleSet().rules();
+        QCOMPARE(rules.size(), 1);
+        QVERIFY(store->setRuleEnabled(rules.first().id, false));
+
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 0), QStringLiteral("autotile:bsp"));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // P6: Config round-trip
     // ═══════════════════════════════════════════════════════════════════════════

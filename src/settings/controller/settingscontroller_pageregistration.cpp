@@ -515,10 +515,10 @@ bool SettingsController::hasUnseenWhatsNew() const
     // mis-order "1.10" vs "1.9", so go through QVersionNumber.
     const QVersionNumber latestV = QVersionNumber::fromString(latest);
     const QVersionNumber seenV = QVersionNumber::fromString(m_lastSeenWhatsNewVersion);
-    // App-version gate: whatsnew entries are pre-staged in the tree before
-    // the release's version bump lands, so without this a development build
-    // advertises "What's new in X" while About still reports the previous
-    // release. Only entries at or below the RUNNING version count.
+    // Belt-and-braces: the ctor already clamps m_whatsNewEntries to
+    // VERSION_STRING (settingscontroller.cpp), so latestV can only exceed
+    // the running version if that filter regresses. Same version source on
+    // both sides, so the two can never disagree.
     const QVersionNumber appV = QVersionNumber::fromString(VERSION_STRING);
     if (!appV.isNull() && appV < latestV) {
         return false;

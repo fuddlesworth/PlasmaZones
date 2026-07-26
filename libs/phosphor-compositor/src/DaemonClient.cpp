@@ -3,6 +3,7 @@
 
 #include <PhosphorCompositor/DaemonClient.h>
 #include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
@@ -19,6 +20,12 @@ namespace PhosphorCompositor {
 DaemonClient::DaemonClient(QObject* parent)
     : QObject(parent)
 {
+    // The struct-typed subscriptions below (WindowGeometryList,
+    // EmptyZoneList, DragPolicy) demarshal silently to garbage unless the
+    // wire types are registered in this process. Idempotent, so a host
+    // that already registered pays nothing.
+    PhosphorProtocol::registerWireTypes();
+
     m_serviceWatcher = new QDBusServiceWatcher(
         PhosphorProtocol::Service::Name, QDBusConnection::sessionBus(),
         QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration, this);
@@ -360,7 +367,7 @@ void DaemonClient::disconnectDaemonSignals()
                    QStringLiteral("reapplyWindowGeometriesRequested"), this, SIGNAL(reapplyGeometriesRequested()));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("dragPolicyChanged"), this,
-                   SLOT(handleDragPolicyChanged(QString, int)));
+                   SLOT(handleDragPolicyChanged(QString, PhosphorProtocol::DragPolicy)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("snapAssistReady"), this,
                    SLOT(handleSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
@@ -476,6 +483,10 @@ void DaemonClient::handleSnapAssistReady(const QString& windowId, const QString&
     Q_EMIT snapAssistReady(windowId, screenId, zones);
 }
 
+// NOTE: a successful probe reports ready WITHOUT wiring the daemon signal
+// subscriptions — only registerBridge's success path calls
+// connectDaemonSignals. The probe is a liveness check, not a session
+// bring-up; callers that need the signal stream must still register.
 void DaemonClient::probeDaemonAvailable(int timeoutMs)
 {
     QDBusMessage msg = QDBusMessage::createMethodCall(

@@ -243,7 +243,9 @@ QString engineModeDisplayLabel(const QString& wire)
     case PhosphorZones::AssignmentEntry::Snapping:
         return PhosphorI18n::tr("Snapping");
     case PhosphorZones::AssignmentEntry::Autotile:
-        return PhosphorI18n::tr("Autotile");
+        // "Tiling" everywhere the rule editor names the engine (matches the
+        // Mode predicate options and the Monitors page's button).
+        return PhosphorI18n::tr("Tiling");
     case PhosphorZones::AssignmentEntry::Scrolling:
         return PhosphorI18n::tr("Scrolling", "tiling mode name");
     }

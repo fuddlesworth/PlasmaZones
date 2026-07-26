@@ -547,8 +547,11 @@ private:
      * restore to a maximized size when it later floats. Returns @p fallback unless @p w
      * is maximized/fullscreen, in which case it returns the pre-maximize / pre-fullscreen
      * RESTORE rect (a sane free size), falling back to @p fallback again if that restore
-     * rect is empty. Shared by the snap and autotile capture paths, which write the SAME
-     * daemon free-geometry store.
+     * rect is empty. Every candidate — restore rects AND the fallback — passes the
+     * off-screen poison guard, so the function can also return an INVALID rect (a frame
+     * parked outside every screen by the scrolling engine is never a legitimate free
+     * geometry); callers MUST check isValid() before storing. Shared by the snap and
+     * autotile capture paths, which write the SAME daemon free-geometry store.
      */
     static QRectF freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback);
 

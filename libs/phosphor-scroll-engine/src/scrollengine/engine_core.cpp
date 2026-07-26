@@ -122,13 +122,8 @@ void ScrollEngine::setActiveScreenHint(const QString& screenId)
 void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedWindows)
 {
     const QString screenId = state->screenId();
-    const QStringList windows = state->managedWindows();
-    for (const QString& windowId : windows) {
-        m_lastAppliedRect.remove(windowId);
-        m_floatRestore.remove(windowId);
-        m_scrollFloatedWindows.remove(windowId);
-        releasedWindows.append(windowId);
-    }
+    dropWindowBookkeeping(state);
+    releasedWindows.append(state->managedWindows());
     // Per-screen bookkeeping dies with the state: a stale seed must not
     // replay on re-entry, and the tab-strip overlay must be told to clear —
     // no relayout will ever run for a departed screen to do it.
@@ -141,6 +136,7 @@ void ScrollEngine::clearTabStripsForScreen(const QString& screenId)
 {
     // Latch-guarded single clear: only screens that actually showed a strip
     // get the "[]" broadcast, so plain relayouts never spam the overlay.
+    m_lastTabStripPayload.remove(screenId);
     if (m_screensWithTabStrips.remove(screenId)) {
         Q_EMIT tabStripsChanged(screenId, QStringLiteral("[]"));
     }
@@ -287,12 +283,19 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         }
     }
     QSet<QString> affectedScreens;
+    // Per-screen params cache: layoutParamsForScreen costs a ScreenManager
+    // query plus a context-gap provider invocation, and a batch prune of N
+    // dead windows on one screen needs it once, not N times.
+    QHash<QString, ScrollLayoutParams> paramsByScreen;
     for (const QString& windowId : dead) {
         PhosphorEngine::PlacementStateKey key;
         ScrollState* state = stateForWindow(windowId, &key);
         if (state) {
-            const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
-            state->strip().removeWindow(windowId, params);
+            auto paramsIt = paramsByScreen.find(key.screenId);
+            if (paramsIt == paramsByScreen.end()) {
+                paramsIt = paramsByScreen.insert(key.screenId, layoutParamsForScreen(key.screenId));
+            }
+            state->strip().removeWindow(windowId, *paramsIt);
             state->removeFloating(windowId);
             affectedScreens.insert(key.screenId);
         }
@@ -393,7 +396,9 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
 {
     const auto matches = [&physicalScreenId](const QString& screenId) {
         // Match the physical id and every virtual sub-screen of it.
-        return screenId == physicalScreenId || screenId.startsWith(physicalScreenId + QStringLiteral("#"));
+        return screenId == physicalScreenId
+            || (screenId.size() > physicalScreenId.size() && screenId.startsWith(physicalScreenId)
+                && screenId.at(physicalScreenId.size()) == QLatin1Char('#'));
     };
     m_states.removeStatesIf(
         [&matches](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
@@ -406,6 +411,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
             dropWindowBookkeeping(state);
             m_pendingInitialOrder.remove(state->screenId());
             m_screensWithTabStrips.remove(state->screenId());
+            m_lastTabStripPayload.remove(state->screenId());
             m_perScreenOverrides.remove(state->screenId());
             state->deleteLater();
         });
@@ -457,12 +463,16 @@ void ScrollEngine::refreshConfigFromSettings()
         (center >= 0 && center <= 2) ? static_cast<CenterFocusedColumn>(center) : CenterFocusedColumn::Never;
     m_alwaysCenterSingleColumn = settings->scrollingAlwaysCenterSingleColumn();
 
-    const int widthKind = settings->scrollingDefaultColumnWidthKind();
+    const auto widthKind = static_cast<DefaultWidthKind>(settings->scrollingDefaultColumnWidthKind());
     const qreal widthValue = settings->scrollingDefaultColumnWidthValue();
-    m_defaultWidthClientDecides = (widthKind == 2);
-    if (widthKind == 1) {
+    m_defaultWidthClientDecides = (widthKind == DefaultWidthKind::ClientDecides);
+    if (widthKind == DefaultWidthKind::Fixed) {
         m_defaultColumnWidth = ColumnWidth::makeFixed(qMax(1, qRound(widthValue)));
     } else {
+        // KEEP IN SYNC: the 0.05 proportion floor mirrors
+        // ConfigDefaults::scrollingDefaultColumnWidthValueMin and the
+        // rules-side kMinColumnWidthRatio (both app-side; this LGPL lib
+        // cannot include them).
         m_defaultColumnWidth = ColumnWidth::makeProportion(qBound<qreal>(0.05, widthValue, 1.0));
     }
     const int display = settings->scrollingDefaultColumnDisplay();

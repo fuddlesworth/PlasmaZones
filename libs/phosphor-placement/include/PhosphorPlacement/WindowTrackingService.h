@@ -226,7 +226,7 @@ public:
     using EngineTiledPredicate = std::function<bool(const QString& windowId)>;
     void setEngineTiledPredicate(EngineTiledPredicate predicate);
 
-    /// True if the autotile engine reports the window actively tiled.
+    /// True if a tiling-family engine (autotile / scrolling) reports the window actively tiled.
     /// Returns false when the predicate is unwired (snap-only tests).
     bool isWindowEngineTiled(const QString& windowId) const;
 

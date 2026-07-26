@@ -3,33 +3,17 @@
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
+#include "scrollstriptestutils.h"
+
 #include <QtTest>
 
 using namespace PhosphorScrollEngine;
 
 namespace {
 
-ScrollLayoutParams defaultParams()
-{
-    ScrollLayoutParams p;
-    p.workArea = QRect(0, 0, 1200, 800);
-    p.gap = 10;
-    return p;
-}
-
-const ColumnWidth kHalf = ColumnWidth::makeProportion(0.5);
-
-QRect rectOf(const ResolvedStrip& resolved, const QString& windowId)
-{
-    for (const ResolvedColumn& rc : resolved.columns) {
-        for (const ResolvedTile& rt : rc.tiles) {
-            if (rt.windowId == windowId) {
-                return rt.rect;
-            }
-        }
-    }
-    return {};
-}
+using ScrollTestUtils::defaultParams;
+using ScrollTestUtils::kHalf;
+using ScrollTestUtils::rectOf;
 
 } // namespace
 
@@ -130,9 +114,8 @@ void TestScrollStripCore::closeSelectsSensibleFocus()
     QVERIFY(strip.removeWindow(QStringLiteral("b"), params));
     QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
 
-    // Closing an unfocused column keeps the focused window focused.
-    QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
     QVERIFY(strip.removeWindow(QStringLiteral("a"), params));
+    // Closing an unfocused column keeps the focused window focused.
     QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
 }
 
@@ -205,7 +188,9 @@ void TestScrollStripCore::focusOnOverflowMode()
     QCOMPARE(r.viewX, 0);
     QCOMPARE(rectOf(r, QStringLiteral("b")).x(), 310);
 
-    // A wide pair that cannot both fit: the newly focused column centers.
+    // Opening a second wide column centers it: the INSERT's reanchor sees
+    // prevIdx = the old column and takes the same OnOverflow branch a
+    // focus change would (no explicit focus call happens here).
     ScrollStrip wide;
     QVERIFY(wide.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(700), ColumnDisplay::Normal, params));
     QVERIFY(wide.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(700), ColumnDisplay::Normal, params));
@@ -246,6 +231,11 @@ void TestScrollStripCore::minimizeKeepsSlotAndRestores()
 
     QVERIFY(strip.setWindowMinimized(QStringLiteral("b"), false, params));
     QCOMPARE(strip.windowsInOrder(), (QStringList{QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
+    // The restored window takes the column's active slot back.
+    {
+        const Column& col = strip.columns().at(0);
+        QCOMPARE(col.tiles.at(col.activeTileIdx).windowId, QStringLiteral("b"));
+    }
     QVERIFY(!rectOf(strip.relayout(params), QStringLiteral("b")).isNull());
     // Restored in the middle slot: b sits between a and c vertically.
     const ResolvedStrip r = strip.relayout(params);

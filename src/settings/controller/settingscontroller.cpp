@@ -951,7 +951,14 @@ SettingsController::SettingsController(QObject* parent)
             // would both SEE the unreleased entry and get it stamped as seen,
             // so the badge never fires when that release actually ships. An
             // unparsable app version fails open (no filtering).
-            const QVersionNumber appVersion = QVersionNumber::fromString(QCoreApplication::applicationVersion());
+            // VERSION_STRING, not applicationVersion(): the latter is only
+            // set by the settings app's own main(); a host that skips
+            // setApplicationVersion would fail the clamp open, let the
+            // unreleased entry through, AND let markWhatsNewSeen stamp it —
+            // exactly the badge-never-fires bug the clamp prevents. An
+            // unparsable VERSION_STRING (impossible for a release build)
+            // fails open: no filtering, and the stamp risk returns with it.
+            const QVersionNumber appVersion = QVersionNumber::fromString(PlasmaZones::VERSION_STRING);
             for (const auto& entry : releases) {
                 const auto obj = entry.toObject();
                 const QVersionNumber entryVersion =

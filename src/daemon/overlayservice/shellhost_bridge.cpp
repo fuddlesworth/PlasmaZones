@@ -274,7 +274,8 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     // not know about. m_scrollTabsHideGuard / m_scrollTabsHidePending are
     // deliberately NOT erased here: the guard is a monotonic generation
     // counter that must never restart (see its header doc), and a stale
-    // pending bit is self-clearing on the next show/hide cycle.
+    // pending bit is benign — the next non-empty update treats it as
+    // "hide was in flight" and simply re-runs the show choreography.
     QObject::disconnect(it->overlayGeomConnection);
     it->overlayGeomConnection = {};
     it->overlayPhysScreen = nullptr;

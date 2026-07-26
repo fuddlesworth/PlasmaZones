@@ -65,7 +65,13 @@ bool AutotileEngine::isWindowTiled(const QString& rawWindowId) const
         return false;
     }
     const PhosphorTiles::TilingState* state = m_states.stateForKey(it.value());
-    return state && !state->isFloating(windowId);
+    // Membership is required, not just a live key: windowOpened keys the
+    // window BEFORE onWindowAdded can refuse it (shouldTileWindow false,
+    // max-windows cap), and isFloating() answers false for a window the
+    // state does not hold — without the containsWindow check a refused
+    // window reads as "tiled" forever and the engine-tiled predicate then
+    // refuses to record its free geometry (fails closed on a free window).
+    return state && state->containsWindow(windowId) && !state->isFloating(windowId);
 }
 
 bool AutotileEngine::isWindowFloatingInAutotile(const QString& rawWindowId) const
@@ -75,8 +81,9 @@ bool AutotileEngine::isWindowFloatingInAutotile(const QString& rawWindowId) cons
     if (it == m_states.windowKeys().constEnd()) {
         return false;
     }
+    // containsWindow for the same phantom-key reason as isWindowTiled.
     const PhosphorTiles::TilingState* state = m_states.stateForKey(it.value());
-    return state && state->isFloating(windowId);
+    return state && state->containsWindow(windowId) && state->isFloating(windowId);
 }
 
 QStringList AutotileEngine::allFloatingWindows() const

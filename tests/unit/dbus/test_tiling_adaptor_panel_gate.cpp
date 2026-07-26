@@ -56,6 +56,70 @@ private Q_SLOTS:
 
         adaptor.windowOpened(QStringLiteral("kitty|uuid-1"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
+        // No screens announce pending, engine claims nothing → the open is
+        // DROPPED, never parked (parking is a mid-flip mechanism only).
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // m_unclaimedOpens contract: an open landing while a screens announce is
+    // pending (mid-flip) parks; the coalesced announce retries it exactly
+    // once, in arrival order, into whichever engine claims the screen by
+    // then; a still-unclaimed retry drops; windowClosed/clearEngine sweep.
+    // -------------------------------------------------------------------------
+    void testUnclaimedOpens_parkRetryAndSweep()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+
+        // Arm the coalesced announce (the flip marker), then deliver opens
+        // for a screen no engine claims yet: they must park in order.
+        adaptor.notifyEngineScreensChanged(false);
+        adaptor.windowOpened(QStringLiteral("app|one"), QStringLiteral("HDMI-1"), 0, 0);
+        adaptor.windowOpened(QStringLiteral("app|two"), QStringLiteral("HDMI-1"), 0, 0);
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 2);
+
+        // A close while parked sweeps that entry.
+        adaptor.windowClosed(QStringLiteral("app|two"));
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 1);
+        adaptor.windowOpened(QStringLiteral("app|two"), QStringLiteral("HDMI-1"), 0, 0);
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 2);
+
+        // The flip settles: the engine now claims the screen, and the
+        // queued announce retries the parked entries in arrival order.
+        engine.setAutotileScreens({QStringLiteral("HDMI-1")});
+        QCoreApplication::processEvents();
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 0);
+        QVERIFY(engine.isWindowTracked(QStringLiteral("app|one")));
+        QVERIFY(engine.isWindowTracked(QStringLiteral("app|two")));
+        const QStringList order = engine.managedWindowOrder(QStringLiteral("HDMI-1"));
+        QCOMPARE(order, (QStringList{QStringLiteral("app|one"), QStringLiteral("app|two")}));
+    }
+
+    void testUnclaimedOpens_retryWithoutClaimDrops()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+
+        adaptor.notifyEngineScreensChanged(false);
+        adaptor.windowOpened(QStringLiteral("app|gone"), QStringLiteral("HDMI-9"), 0, 0);
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 1);
+        // Announce fires with the screen still unclaimed: exactly one
+        // retry, then the entry is dropped — never re-parked.
+        QCoreApplication::processEvents();
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 0);
+        QVERIFY(!engine.isWindowTracked(QStringLiteral("app|gone")));
+
+        // clearEngine sweeps a parked queue outright.
+        adaptor.notifyEngineScreensChanged(false);
+        adaptor.windowOpened(QStringLiteral("app|swept"), QStringLiteral("HDMI-9"), 0, 0);
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 1);
+        adaptor.clearEngine();
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 0);
     }
 
     // -------------------------------------------------------------------------

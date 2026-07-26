@@ -436,8 +436,12 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
             } else if (!PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-                // Scrolling screens contribute to NEITHER bucket: the picker
-                // must not offer manual snap layouts as this screen's list.
+                // A scrolling screen sets neither flag here, but the
+                // includeManual fallback below (manualActive ||
+                // !autotileActive) still offers the MANUAL list for it —
+                // deliberately: picking a snap layout is the exit from
+                // scrolling mode (same policy as
+                // resolvePerScreenLayoutInclude in overlayservice.cpp).
                 manualActive = true;
             }
         } else {

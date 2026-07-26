@@ -15,6 +15,10 @@
 #include <QHash>
 #include <QObject>
 #include <QRect>
+#include <QVariantMap>
+
+#include <functional>
+#include <optional>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -374,6 +378,10 @@ private:
         int column = -1;
         ColumnWidth width;
         ColumnDisplay display = ColumnDisplay::Normal;
+        /// The tile slot inside a SHARED column (-1 when the window had its
+        /// own column). A stacked tile's float round-trip re-enters its
+        /// surviving stack instead of spawning a new column at the index.
+        int tileIndex = -1;
     };
     QHash<QString, FloatRestore> m_floatRestore;
     /// Windows floated BY scroll mode (mode-transition marker, ephemeral).
@@ -386,6 +394,10 @@ private:
     /// Whether the last tabStripsChanged emission for a screen was
     /// non-empty, so an empty state is announced exactly once.
     QSet<QString> m_screensWithTabStrips;
+    /// Last non-empty tab-strip payload broadcast per screen — the
+    /// emit-on-change gate for tabStripsChanged (the empty case latches via
+    /// m_screensWithTabStrips instead). Swept with the screen's state.
+    QHash<QString, QString> m_lastTabStripPayload;
 
     /// Effective per-screen values: the rule override when present, else the
     /// cached config default.

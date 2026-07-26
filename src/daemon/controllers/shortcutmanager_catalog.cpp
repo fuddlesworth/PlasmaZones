@@ -73,12 +73,11 @@ CatalogMeta catalogMetaForId(const QString& id)
                               const char* categoryDisambiguation = nullptr, const char* shortLabel = nullptr) {
             m.insert(QLatin1String(id), {category, order, mode, categoryDisambiguation, shortLabel});
         };
-        // The scrolling category word needs a disambiguation or it inherits
-        // the scrollbar-sense translation (extraction marker below; the
-        // rows pass the same comment).
-        static constexpr const char* kScrollingCategory[] =
-            QT_TRANSLATE_NOOP3("plasmazones", "Scrolling", "tiling mode name");
-        Q_UNUSED(kScrollingCategory)
+        // The scrolling category word needs the "tiling mode name"
+        // disambiguation or it inherits the scrollbar-sense translation.
+        // The (source, comment) pair is extracted through osd.cpp's live
+        // PhosphorI18n::tr("Scrolling", "tiling mode name") call, so no
+        // separate extraction marker is needed here.
         constexpr const char* kModeNameContext = "tiling mode name";
         add(kIdOpenEditor, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdOpenSettings, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");

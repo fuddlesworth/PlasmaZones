@@ -168,12 +168,13 @@ public:
     /// override (no rule gaps); a registry that does not model context rules —
     /// e.g. a fixture stub — keeps the legacy per-screen/layout/global cascade.
     ///
-    /// @p mode is the placement-mode wire token ("snapping" / "tiling") of the
-    /// engine asking. It is matched against a context rule's `Mode` leaf, so a
-    /// per-mode gap rule (e.g. a wider inner gap only while tiling) resolves for
-    /// the matching engine and stays inert for the other. The snapping geometry
-    /// path passes "snapping"; the autotile path passes "tiling". Left empty for
-    /// a mode-agnostic caller (no Mode leaf then matches).
+    /// @p mode is the placement-mode wire token ("snapping" / "tiling" /
+    /// "scrolling") of the engine asking. It is matched against a context
+    /// rule's `Mode` leaf, so a per-mode gap rule (e.g. a wider inner gap
+    /// only while tiling) resolves for the matching engine and stays inert
+    /// for the others. The snapping geometry path passes "snapping", the
+    /// autotile path "tiling", the scroll engine's provider "scrolling".
+    /// Left empty for a mode-agnostic caller (no Mode leaf then matches).
     virtual ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
                                                   const QString& mode = QString()) const
     {

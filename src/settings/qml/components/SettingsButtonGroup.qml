@@ -36,6 +36,11 @@ Row {
 
     signal indexChanged(int index)
 
+    // Grouping role so a consumer-supplied Accessible.name labels a real
+    // group node above the delegates' RadioButton roles instead of landing
+    // on a role-less container.
+    Accessible.role: Accessible.Grouping
+
     spacing: Kirigami.Units.smallSpacing / 2
 
     Repeater {

@@ -373,9 +373,9 @@ public:
 
     /// Tab indicators for tabbed scrolling columns on @p screenId (per
     /// screen, NOT a singleton). @p strips is a list of maps with x / y /
-    /// width (absolute px — converted to shell coordinates here),
-    /// and tabs (list of {title, active}); an empty list hides
-    /// the screen's indicators. Display-only and click-through.
+    /// width (absolute px, converted to shell coordinates here) and tabs
+    /// ({title, active} list); empty hides the screen's indicators.
+    /// Display-only and click-through.
     void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
 
     /// Forwarders to the active picker slot's QML moveSelection /
@@ -639,22 +639,18 @@ private:
     //
     // ~OverlayService explicitly resets m_shellHost AFTER draining
     // m_screenStates and BEFORE implicit member destruction, so the lib
-    // dtor's PreDestroyCallback re-fire (for any entry the explicit
-    // drain missed) runs while m_screenStates and friends are still
-    // alive. The decl order below (m_screenStates before m_shellHost)
-    // also makes reverse-destruction order safe - m_shellHost
-    // (declared later) destroys FIRST, while m_screenStates is still
-    // alive - even if a future change removes the explicit reset.
+    // dtor's PreDestroyCallback re-fire (for entries the drain missed)
+    // runs while m_screenStates and friends are still alive. The decl
+    // order (m_screenStates before m_shellHost) keeps reverse-destruction
+    // safe even if a future change removes the explicit reset.
     QHash<QString, PerScreenOverlayState> m_screenStates;
     /// Per-screen generation guard for the scroll tab-strip animated hide:
-    /// bumped by every updateScrollTabStrips call, so a hide completion
-    /// that lost the race to a newer non-empty update no-ops instead of
-    /// tearing down a repopulated slot. Entries are retained after teardown
-    /// on purpose — monotonic counters must never restart.
+    /// bumped per updateScrollTabStrips call so a hide completion that lost
+    /// the race to a newer non-empty update no-ops instead of tearing down
+    /// a repopulated slot. Retained after teardown (monotonic).
     QHash<QString, quint64> m_scrollTabsHideGuard;
-    /// Screens with a hide animation currently in flight. The show path
-    /// treats these as "not visible" so a mid-hide repopulation re-runs
-    /// beginShow instead of stranding the slot at opacity 0.
+    /// Screens with a hide in flight; the show path treats these as not
+    /// visible so a mid-hide repopulation re-runs beginShow.
     QSet<QString> m_scrollTabsHidePending;
     std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
 

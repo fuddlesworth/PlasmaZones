@@ -21,6 +21,9 @@ SettingsFlickable {
     // 2 the window decides. The paired value row shows the control that
     // matches the kind and collapses out entirely for "window decides",
     // which has no value to set.
+    // KEEP IN SYNC with ConfigDefaults::scrollingWidthKind*() and the
+    // engine's DefaultWidthKind enum (ScrollTypes.h) — the QML bridge has
+    // no C++ enum exposure for this vocabulary.
     readonly property int widthKindProportion: 0
     readonly property int widthKindFixed: 1
     readonly property int widthKindClientDecides: 2
@@ -197,14 +200,14 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Column widths")
                     searchAnchor: "presetColumnWidths"
-                    description: i18n("Comma separated fractions of the work area, cycled by the preset shortcuts")
+                    description: i18n("Comma separated fractions of the work area width, cycled by the preset shortcuts")
 
                     TextField {
                         id: widthPresetField
 
                         width: root.fieldWidth
                         Accessible.name: i18n("Column width presets")
-                        placeholderText: i18nc("@info:placeholder comma separated column width fractions", "0.333, 0.5, 0.667")
+                        placeholderText: i18nc("@info:placeholder comma separated column width fractions", "0.333,0.5,0.667")
                         // Echo the stored value back after the write: Enter
                         // fires editingFinished with focus still held, and the
                         // guarded Binding below is blocked while focused — so a
@@ -232,14 +235,14 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Window heights")
                     searchAnchor: "presetWindowHeights"
-                    description: i18n("Comma separated fractions of the work area, cycled by the preset shortcuts")
+                    description: i18n("Comma separated fractions of the work area height, cycled by the preset shortcuts")
 
                     TextField {
                         id: heightPresetField
 
                         width: root.fieldWidth
                         Accessible.name: i18n("Window height presets")
-                        placeholderText: i18nc("@info:placeholder comma separated window height fractions", "0.333, 0.5, 0.667")
+                        placeholderText: i18nc("@info:placeholder comma separated window height fractions", "0.333,0.5,0.667")
                         // Same echo rationale as the width field.
                         onEditingFinished: {
                             appSettings.scrollingPresetWindowHeights = text;

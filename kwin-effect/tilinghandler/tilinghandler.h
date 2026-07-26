@@ -176,20 +176,42 @@ public:
         return m_managedScreens;
     }
 
+    /// The engine-authoritative screen for a window the scrolling engine is
+    /// ACTIVELY TILING, or empty. Parked scroll frames sit inside a
+    /// neighbouring output's geometry by design, so position-derived screen
+    /// resolution must yield to this for strip-placed windows. Gated on
+    /// tiled membership: a FLOATED window on a scrolling screen is never
+    /// parked — its frame is its real position — and answering for it would
+    /// pin every consumer (drag drop, rule Mode stamp, minimize routing) to
+    /// the screen it floated away from.
+    QString scrollTrackedScreenFor(const QString& windowId) const
+    {
+        const QString tracked = m_notifiedWindowScreens.value(windowId);
+        if (tracked.isEmpty() || !m_scrollingScreens.contains(tracked)) {
+            return QString();
+        }
+        return TilingStateHelpers::isTiledWindow(m_border, windowId) ? tracked : QString();
+    }
+
+    /// Cheap gate for callers that want to skip scroll-specific work in a
+    /// session with no scrolling screens at all.
+    bool hasScrollingScreens() const
+    {
+        return !m_scrollingScreens.isEmpty();
+    }
+
+    /// Daemon-loss teardown: drop the dead session's scrolling snapshot
+    /// through the same chokepoint the live signal uses (generation bump +
+    /// change-gated rule-cache invalidate).
+    void clearScrollingScreens()
+    {
+        setScrollingScreens({});
+    }
+
     /// True when @p screenId runs the SCROLLING engine. A subset of the
     /// engine-managed set the daemon publishes as managedScreens (which is
     /// the union of both tiling-family engines); tracked separately so
     /// window rule queries can stamp Mode "scrolling" instead of "tiling".
-    /// The engine-authoritative screen for a window notified onto a
-    /// SCROLLING screen, or empty. Parked scroll frames sit inside a
-    /// neighbouring output's geometry by design, so position-derived screen
-    /// resolution must yield to this for scroll-managed windows.
-    QString scrollTrackedScreenFor(const QString& windowId) const
-    {
-        const QString tracked = m_notifiedWindowScreens.value(windowId);
-        return (!tracked.isEmpty() && m_scrollingScreens.contains(tracked)) ? tracked : QString();
-    }
-
     bool isScrollingScreen(const QString& screenId) const
     {
         return m_scrollingScreens.contains(screenId);

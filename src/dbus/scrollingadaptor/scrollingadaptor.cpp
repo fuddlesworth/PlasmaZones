@@ -5,6 +5,8 @@
 
 #include "core/platform/logging.h"
 
+#include <algorithm>
+
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
 namespace PlasmaZones {
@@ -49,6 +51,10 @@ QStringList ScrollingAdaptor::scrollingScreens() const
 
 void ScrollingAdaptor::clearEngine()
 {
+    // Reset the dedup gate with the engine: the property read reports {}
+    // from here on, and a stale gate value could suppress the restarted
+    // session's first genuine broadcast.
+    m_lastBroadcastScreens.clear();
     if (m_engine) {
         disconnect(m_engine, nullptr, this, nullptr);
         m_engine = nullptr;

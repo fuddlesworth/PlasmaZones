@@ -948,7 +948,8 @@ Q_SIGNALS:
 public Q_SLOTS:
     /**
      * @brief Set a window's floating state explicitly (directional, not toggle).
-     * Routes to autotile engine for autotile screens, handles snap mode locally.
+     * Routes to the engine that owns the screen's mode (autotile or
+     * scrolling adopt via the cross-engine handoff; snap is handled locally).
      * Used by minimize/unminimize, drag-to-float, and monocle unmaximize handlers.
      */
     void setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating);

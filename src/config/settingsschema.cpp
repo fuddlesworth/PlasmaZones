@@ -151,9 +151,16 @@ QVariant canonicalCommaList(const QVariant& v)
 /// the defaults instead of storing an accepted-but-dead value.
 QVariant canonicalProportionList(const QVariant& v)
 {
+    // Same size-cap rationale as canonicalTriggerList: a hand-edited file
+    // must not smuggle an unbounded list past the setter path (each entry
+    // is walked on every width/height preset cycle).
+    constexpr int kMaxPresetEntries = 16;
     const QStringList parts = v.toString().split(QLatin1Char(','));
     QStringList kept;
     for (const QString& raw : parts) {
+        if (kept.size() >= kMaxPresetEntries) {
+            break;
+        }
         bool ok = false;
         const double val = raw.trimmed().toDouble(&ok);
         if (!ok || val <= 0.0 || val > 1.0) {
@@ -1044,8 +1051,12 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          CD::scrollingDefaultColumnWidthKind(),
          QMetaType::Int,
          {},
-         validIntOr({0, 1, 2}, CD::scrollingDefaultColumnWidthKind()),
-         intChoices({{0, "proportion"_L1}, {1, "fixed"_L1}, {2, "clientDecides"_L1}})},
+         validIntOr(
+             {CD::scrollingWidthKindProportion(), CD::scrollingWidthKindFixed(), CD::scrollingWidthKindClientDecides()},
+             CD::scrollingDefaultColumnWidthKind()),
+         intChoices({{CD::scrollingWidthKindProportion(), "proportion"_L1},
+                     {CD::scrollingWidthKindFixed(), "fixed"_L1},
+                     {CD::scrollingWidthKindClientDecides(), "clientDecides"_L1}})},
         {CD::defaultColumnWidthValueKey(),
          CD::scrollingDefaultColumnWidthValue(),
          QMetaType::Double,

@@ -116,16 +116,24 @@ SettingsFlickable {
                 settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
                 return;
             }
-            // The || fallback serves the mode-toggle path, which stages the
-            // currently-resolved algorithm when the user has not picked one.
-            var algoId = stateView.localAlgorithmId || state.algorithmId;
+            // The || chain serves the mode-toggle path: stage the user's
+            // pick, else the currently-resolved algorithm, else the GLOBAL
+            // default. The last link matters on a fresh config — a screen
+            // resolving to Snapping/Scrolling has an empty
+            // state.algorithmId, and unstaging here used to silently drop
+            // the Tiling switch while the button group kept showing Tiling
+            // (the exact dead-end pass 2 fixed for Snapping). A bare mode=1
+            // entry is not an option: an empty tiling id fails the
+            // cascade's activeLayoutId filter.
+            var algoId = stateView.localAlgorithmId || state.algorithmId || root._layoutBridge.defaultAutotileAlgorithm;
             if (!algoId) {
-                // Nothing resolved to pin. Unstage any stale staged entry
-                // for this context (e.g. an opposite-mode pick from earlier
-                // in the session) so Apply cannot commit it while the UI
-                // shows Default. A true unstage, not a staged clear — a
-                // staged clear is pushed on Apply and would wipe a
-                // pre-existing daemon-side assignment the user never touched.
+                // Genuinely nothing to pin (unreachable while the default
+                // algorithm accessor is non-empty). Unstage any stale
+                // staged entry for this context so Apply cannot commit it
+                // while the UI shows Default. A true unstage, not a staged
+                // clear — a staged clear is pushed on Apply and would wipe
+                // a pre-existing daemon-side assignment the user never
+                // touched.
                 if (Object.keys(settingsController.getStagedAssignment(_selectedScreen, desktop, activity)).length > 0)
                     settingsController.removeStagedAssignment(_selectedScreen, desktop, activity);
                 return;

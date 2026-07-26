@@ -54,6 +54,14 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // updateEngineScreens).
     const QSet<QString> currentScrollScreens = m_scrollEngine->activeScreens();
     for (const QString& screenId : scrollingScreens - currentScrollScreens) {
+        // Pre-save snap-float state before the screen enters scrolling, so
+        // a later scrolling→snapping flip can restore it — the exact
+        // counterpart of the presave on autotile entry. Only for screens
+        // coming FROM snapping; an autotile→scrolling flip's snap slots
+        // were already captured when the screen first left snapping.
+        if (m_autotileEngine && !m_autotileEngine->isActiveOnScreen(screenId)) {
+            presaveSnapFloats(screenId);
+        }
         const int desktop = currentDesktopForScreen(screenId);
         const auto it = m_lastEngineOrders.constFind(TilingStateKey{screenId, desktop, activity});
         if (it != m_lastEngineOrders.constEnd()) {

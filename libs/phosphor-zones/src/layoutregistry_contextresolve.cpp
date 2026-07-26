@@ -560,9 +560,16 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     // screen orientation onto the query without folding either into a cache key
     // (no cached entry to go stale). Safe from recursion: assignmentIdForScreen
     // routes through resolveAssignmentEntry, which never calls this resolver.
-    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+    // Mode IS stamped (same rationale as resolveContextScrollingParams): the
+    // resolver only runs for autotile screens, and a user rule pinning
+    // `Mode Equals "tiling"` alongside a tiling-param action would silently
+    // never fire against an unstamped query.
+    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QStringLiteral("tiling"));
     stampScreenOrientation(query, screenId);
     query.activeLayout = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    // Unfiltered resolve (no managed catch-all exclusion like
+    // resolveContextGaps'): the baseline rule carries only gap/default
+    // slots, never tiling params, so nothing to exclude here.
     const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
 
     ContextTilingParams params;
@@ -633,6 +640,8 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QStringLiteral("scrolling"));
     stampScreenOrientation(query, screenId);
     query.activeLayout = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    // Unfiltered resolve: same baseline-slot rationale as the tiling-param
+    // resolver above.
     const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
 
     ContextScrollingParams params;

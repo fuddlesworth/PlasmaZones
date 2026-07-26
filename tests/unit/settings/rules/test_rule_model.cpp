@@ -371,11 +371,14 @@ void TestRuleModel::actionSummaryRendersAllEngineModes()
     // the i18n surface may add prefixes ("Engine: ") but the casing of
     // the engine name is the load-bearing contract.
     QVERIFY2(s0.contains(QStringLiteral("Snapping")), qPrintable(s0));
-    QVERIFY2(s1.contains(QStringLiteral("Autotile")), qPrintable(s1));
+    // "Tiling" is the one user-facing word for the autotile engine across
+    // the rule editor (the wire token stays "autotile").
+    QVERIFY2(s1.contains(QStringLiteral("Tiling")), qPrintable(s1));
     QVERIFY2(s2.contains(QStringLiteral("Scrolling")), qPrintable(s2));
     // Negative assertion: no summary should leak the lowercase wire
     // token — that would indicate the i18n branch fell through.
     QVERIFY2(!s2.contains(QStringLiteral("scrolling")), qPrintable(s2));
+    QVERIFY2(!s1.contains(QStringLiteral("autotile")), qPrintable(s1));
 }
 
 void TestRuleModel::disableEngineNamesTheModeBeingDisabled()
@@ -403,7 +406,7 @@ void TestRuleModel::disableEngineNamesTheModeBeingDisabled()
     const QString s1 = model.data(model.index(1, 0), RuleModel::ActionSummaryRole).toString();
     const QString s2 = model.data(model.index(2, 0), RuleModel::ActionSummaryRole).toString();
     QVERIFY2(s0.contains(QStringLiteral("Snapping")), qPrintable(s0));
-    QVERIFY2(s1.contains(QStringLiteral("Autotile")), qPrintable(s1));
+    QVERIFY2(s1.contains(QStringLiteral("Tiling")), qPrintable(s1));
     QVERIFY2(s2.contains(QStringLiteral("Scrolling")), qPrintable(s2));
     // The three labels must be pairwise-distinct — otherwise a user with
     // multiple disable rules sees ambiguous "Disabled" rows.

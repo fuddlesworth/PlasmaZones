@@ -866,7 +866,15 @@ private Q_SLOTS:
             o.insert(QStringLiteral("value"), 0.05); // inclusive lower bound accepted
             QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
             o.insert(QStringLiteral("value"), 1.0); // inclusive upper bound accepted
-            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+            const auto accepted = RuleAction::fromJson(o);
+            QVERIFY2(accepted.has_value(), type.data());
+            // Slot pin: these two actions are the pair most likely to be
+            // cross-wired by a copy-pasted constantSlot — a swap passes
+            // every bounds assertion above but not this.
+            const QString expectedSlot = (type == ActionType::SetScrollDefaultColumnWidth)
+                ? QString(ActionSlot::ScrollDefaultColumnWidth)
+                : QString(ActionSlot::OpenColumnWidth);
+            QCOMPARE(ActionRegistry::instance().slotFor(*accepted), expectedSlot);
         }
         // SetCenterFocusedColumn: closed token vocabulary.
         {

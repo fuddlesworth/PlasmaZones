@@ -325,7 +325,10 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Snapping");
         }
         if (wireValue == QLatin1String("autotile")) {
-            return PhosphorI18n::tr("Autotile");
+            // Label "Tiling" like the Mode predicate options — one
+            // user-facing word for the engine; only the wire tokens differ
+            // ("autotile" action vs "tiling" match, a frozen vocabulary).
+            return PhosphorI18n::tr("Tiling");
         }
         if (wireValue == QLatin1String("scrolling")) {
             return PhosphorI18n::tr("Scrolling", "tiling mode name");

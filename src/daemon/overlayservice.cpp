@@ -730,9 +730,10 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
         flags.manual = false;
         flags.autotile = true;
     } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-        // Scrolling: offer the manual list (picking one is the exit from
-        // scrolling mode) but no autotile cards; nothing is highlighted
-        // active (see activeLayoutIdForScreen).
+        // Same flags as the snapping arm below — the branch exists to carry
+        // the policy, not to differ behaviourally: offer the manual list
+        // (picking one is the exit from scrolling mode) but no autotile
+        // cards; nothing is highlighted active (see activeLayoutIdForScreen).
         flags.manual = true;
         flags.autotile = false;
     } else {

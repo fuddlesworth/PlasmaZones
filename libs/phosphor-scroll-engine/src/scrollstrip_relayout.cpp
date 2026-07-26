@@ -30,6 +30,14 @@ qreal presetAt(const QList<qreal>& presets, int idx)
 int ScrollStrip::resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayoutParams& params)
 {
     const int workW = params.workArea.width();
+    // Degenerate work area (unknown/removed screen, or outer gaps wider
+    // than the screen): resolve every column to 1px instead of feeding a
+    // negative bound into qBound below — its Q_ASSERT(!(max < min)) would
+    // abort a debug daemon exactly during screen teardown, when
+    // windowClosed/handoffRelease still build params for the dying screen.
+    if (workW <= 0) {
+        return 1;
+    }
     switch (width.kind) {
     case ColumnWidth::Proportion:
         return qMin(workW, proportionalPx(width.proportion, workW, params.gap));
@@ -195,7 +203,10 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
     for (int ci = 0; ci < m_columns.size(); ++ci) {
         const Column& col = m_columns.at(ci);
         const int colW = columnWidthPx(col, params);
-        if (colW <= 0) {
+        // col.isEmpty() is unreachable by construction (every removal path
+        // closes an emptied column) but kept local so the invariant does
+        // not depend on every future mutation site remembering it.
+        if (colW <= 0 || col.isEmpty()) {
             continue; // fully minimized — occupies no strip width
         }
 
@@ -304,6 +315,39 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 const Tile& t = col.tiles.at(visible.at(vi));
                 if (t.minHeight > 0 && heights[vi] < t.minHeight) {
                     heights[vi] = qMin(t.minHeight, availH);
+                }
+            }
+            // The clamp can push the stack past availH again (it has no
+            // budget of its own). Rebalance by shrinking tiles that still
+            // have slack above their own floor, proportionally to that
+            // slack; when every tile sits at its floor the overflow stands
+            // and the caller's cannot-fit policy applies.
+            if (n > 1) {
+                int total = 0;
+                for (int vi = 0; vi < n; ++vi) {
+                    total += heights[vi];
+                }
+                int excess = total - availH;
+                while (excess > 0) {
+                    int slackTotal = 0;
+                    for (int vi = 0; vi < n; ++vi) {
+                        const Tile& t = col.tiles.at(visible.at(vi));
+                        slackTotal += qMax(0, heights[vi] - qMax(1, t.minHeight));
+                    }
+                    if (slackTotal <= 0) {
+                        break;
+                    }
+                    for (int vi = 0; vi < n && excess > 0; ++vi) {
+                        const Tile& t = col.tiles.at(visible.at(vi));
+                        const int slack = qMax(0, heights[vi] - qMax(1, t.minHeight));
+                        if (slack <= 0) {
+                            continue;
+                        }
+                        const int cut =
+                            qMin(slack, qMax(1, static_cast<int>(static_cast<qint64>(excess) * slack / slackTotal)));
+                        heights[vi] -= cut;
+                        excess -= cut;
+                    }
                 }
             }
 

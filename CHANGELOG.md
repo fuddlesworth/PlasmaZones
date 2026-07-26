@@ -13,7 +13,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Breaking D-Bus interface split**: the old org.plasmazones.Autotile interface was split in two. Window lifecycle, tile requests, and the managed screen set now live on the engine-neutral org.plasmazones.Tiling interface, which serves every tiling-family engine and publishes the union screen set as managedScreens. Autotile-specific control (algorithm selection, master operations, focus cycling, and autotile configuration) moved to a new org.plasmazones.Autotile interface, the sibling of the new org.plasmazones.Scrolling interface. External scripts calling the old combined interface need to switch to the matching new one ([#852](https://github.com/fuddlesworth/PlasmaZones/pull/852)).
+- **Breaking D-Bus interface split**: window lifecycle, tile requests, and the managed screen set moved from org.plasmazones.Autotile to the engine-neutral org.plasmazones.Tiling interface, which serves every tiling-family engine and publishes the union screen set as managedScreens. The org.plasmazones.Autotile name still exists but is narrower now, carrying only autotile-specific control (algorithm selection, master operations, focus cycling, and autotile configuration) beside the new org.plasmazones.Scrolling interface. Scripts calling autotile-specific methods need no change; scripts using the lifecycle, tile-request, or screen-set surface must switch to org.plasmazones.Tiling ([#852](https://github.com/fuddlesworth/PlasmaZones/pull/852)).
 
 ## [3.3.0] - 2026-07-23
 

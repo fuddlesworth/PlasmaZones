@@ -319,7 +319,7 @@ Item {
                                                 }
 
                                                 delegate: KeyChip {
-                                                    required property var modelData
+                                                    required property string modelData
 
                                                     text: modelData
                                                     fontFamily: root.fontFamily

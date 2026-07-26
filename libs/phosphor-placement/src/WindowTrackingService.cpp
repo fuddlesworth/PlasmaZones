@@ -438,7 +438,7 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
     // with overwrite=true. The engine-backed predicate survives that reload.
     if (isWindowEngineTiled(windowId)) {
         qCDebug(lcPlacement) << "recordFreeGeometry: refusing tiled frame for" << windowId
-                             << "— float-back stays frozen while the autotile engine tiles it";
+                             << "— float-back stays frozen while a tiling-family engine tiles it";
         return;
     }
     const QString appId = currentAppIdFor(windowId);
@@ -473,10 +473,14 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     if (windowId.isEmpty() || screenId.isEmpty() || !geometry.isValid()) {
         return;
     }
-    // Never let a tile rect become the float-back — same invariant recordFreeGeometry
-    // enforces. (An orphaned cross-screen-dragged window is floating, not tiled, so
-    // this is belt-and-braces.)
+    // Never let a tile rect OR a zone rect become the float-back — the same
+    // pair of invariants recordFreeGeometry enforces. (An orphaned
+    // cross-screen-dragged window is floating, so both are belt-and-braces
+    // here — but the sibling carries both guards and this map is shared.)
     if (isWindowEngineTiled(windowId)) {
+        return;
+    }
+    if (isWindowSnapped(windowId) && !isWindowFloating(windowId)) {
         return;
     }
     const QString appId = currentAppIdFor(windowId);

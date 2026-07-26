@@ -69,11 +69,12 @@ struct WindowQuery
     QString screenId;
     int virtualDesktop = 0; ///< 0 = all desktops
     QString activity; ///< empty = all activities
-    QString mode; ///< current placement mode wire token ("snapping" / "tiling"); a floating window has no mode (empty)
+    QString mode; ///< placement-mode wire token ("snapping" / "tiling" / "scrolling"); a floating window has no mode
+                  ///< (empty)
     QString
         screenOrientation; ///< "portrait" / "landscape" of the resolving screen; empty = unknown (no geometry provider)
-    QString
-        activeLayout; ///< layout id resolved for the screen (snap UUID / "autotile:<algo>"); empty where unpopulated
+    QString activeLayout; ///< layout id resolved for the screen (snap UUID / "autotile:<algo>" / "scrolling:"); empty
+                          ///< where unpopulated
 
     /// Tiled-window count for the screen + desktop being resolved. Optional
     /// rather than defaulted because 0 is a meaningful value (an empty tiled

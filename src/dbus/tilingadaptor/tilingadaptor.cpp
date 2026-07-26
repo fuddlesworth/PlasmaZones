@@ -147,12 +147,15 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
             Q_EMIT managedScreensChanged(combinedManagedScreens(), desktopSwitch);
             relayEnabledChanged();
             // Retry opens parked during the flip (see m_unclaimedOpens):
-            // engines have their post-flip screen sets by now. Still-
-            // unclaimed entries re-park inside dispatchWindowOpened.
+            // engines have their post-flip screen sets by now. Insertion
+            // order is preserved (column order / master assignment depend
+            // on it), routing is NOT re-run (already baked into the parked
+            // entry), and a still-unclaimed entry is dropped rather than
+            // re-parked.
             if (!m_unclaimedOpens.isEmpty()) {
                 const auto parked = std::exchange(m_unclaimedOpens, {});
                 for (const auto& entry : parked) {
-                    dispatchWindowOpened(entry);
+                    dispatchOpenToClaimingEngine(entry, /*allowPark=*/false);
                 }
             }
         },
@@ -249,36 +252,62 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     // monitor, returns that screen so we insert the window into its placement state
     // instead of the spawn screen's (snap-mode targets are handled by the snap
     // placement path, so the returned screen is always empty or engine-managed).
-    QString screenId = entry.screenId;
+    // Routing runs ONCE per open: applyOpenRoutingForTiling has side
+    // effects (RouteToDesktop move request, expected-output-move arming),
+    // so a parked entry must not re-run it on retry — the routed screen is
+    // baked into the parked entry instead.
+    PhosphorProtocol::WindowOpenedEntry routedEntry = entry;
     if (m_windowTrackingAdaptor) {
         const QString routed = m_windowTrackingAdaptor->applyOpenRoutingForTiling(entry.windowId, entry.screenId);
         if (!routed.isEmpty()) {
-            screenId = routed;
+            routedEntry.screenId = routed;
         }
     }
+    dispatchOpenToClaimingEngine(routedEntry, /*allowPark=*/true);
+}
+
+void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark)
+{
     // Per-screen engine dispatch: the effect reports opens for every
     // engine-managed screen through this interface, so hand the window to
     // whichever pipeline engine CLAIMS the (possibly rule-routed) screen.
     // Deliberately NOT the primary-fallback helper: during a mode flip a
     // brief window exists where neither engine claims the screen, and the
     // fallback would let the primary engine silently adopt and tile a
-    // window on a screen it does not own. Dropping is safe — the effect
-    // re-notifies every window on the screen via the managedScreensChanged
-    // batch re-add once the flip settles.
+    // window on a screen it does not own.
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
-        if (engine->isActiveOnScreen(screenId)) {
-            m_unclaimedOpens.remove(entry.windowId);
-            engine->windowOpened(entry.windowId, screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
+        if (engine->isActiveOnScreen(entry.screenId)) {
+            removeUnclaimedOpen(entry.windowId);
+            engine->windowOpened(entry.windowId, entry.screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
             return;
         }
     }
-    // Mid-flip: neither engine claims the screen yet. Park the entry — a
-    // same-union flip (autotile↔scrolling) never re-adds via the effect's
-    // managedScreensChanged diff, so the coalesced announce retries these
-    // once the flip settles.
-    m_unclaimedOpens.insert(entry.windowId, entry);
-    qCDebug(lcDbusTiling) << "dispatchWindowOpened: no pipeline engine claims" << screenId << "for" << entry.windowId
-                          << "- parked until the screens announce retries it";
+    // Neither engine claims the screen. Park ONLY while a screens announce
+    // is actually pending (mid-flip; a same-union autotile↔scrolling flip
+    // never re-adds via the effect's managedScreensChanged diff, so the
+    // coalesced announce retries these once the flip settles). Outside a
+    // flip the screen is genuinely unmanaged — the effect's view merely
+    // lags the daemon's — and parking would resurrect the window on some
+    // unrelated later announce; drop instead. The retry itself passes
+    // allowPark=false, so a still-unclaimed entry gets exactly one retry.
+    if (allowPark && m_screensAnnouncePending) {
+        removeUnclaimedOpen(entry.windowId);
+        m_unclaimedOpens.append(entry);
+        qCDebug(lcDbusTiling) << "dispatchOpenToClaimingEngine: no pipeline engine claims" << entry.screenId << "for"
+                              << entry.windowId << "- parked until the screens announce retries it";
+        return;
+    }
+    qCDebug(lcDbusTiling) << "dispatchOpenToClaimingEngine: no pipeline engine claims" << entry.screenId << "for"
+                          << entry.windowId << "- dropped (screen not engine-managed)";
+}
+
+void TilingAdaptor::removeUnclaimedOpen(const QString& windowId)
+{
+    for (int i = m_unclaimedOpens.size() - 1; i >= 0; --i) {
+        if (m_unclaimedOpens.at(i).windowId == windowId) {
+            m_unclaimedOpens.removeAt(i);
+        }
+    }
 }
 
 bool TilingAdaptor::deferUntilPanelReady()
@@ -404,7 +433,7 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     // arriving after clearEngine() (shutdown) must not leak it, or a stale
     // value could suppress the first genuine broadcast of a reused id.
     m_lastFloatBroadcast.remove(windowId);
-    m_unclaimedOpens.remove(windowId);
+    removeUnclaimedOpen(windowId);
     if (!ensurePipeline("windowClosed")) {
         return;
     }
@@ -443,12 +472,17 @@ void TilingAdaptor::notifyWindowFocused(const QString& windowId, const QString& 
 void TilingAdaptor::clearEngine()
 {
     // Interface-only borrows, no connections to drop. Also neutralise any
-    // pending coalesced announce (its lambda re-checks the empty list, and
-    // the flags must not leak into a restart).
+    // pending coalesced announce (its lambda re-checks the empty list) and
+    // every per-session queue/dedup cache — none of it may leak into a
+    // restart (a stale dedup value could suppress the first genuine
+    // broadcast of the new session).
     m_lifecycleEngines.clear();
     m_screensAnnouncePending = false;
     m_pendingIsDesktopSwitch = false;
     m_unclaimedOpens.clear();
+    m_pendingOpens.clear();
+    m_lastFloatBroadcast.clear();
+    m_lastEnabledBroadcast.reset();
 }
 
 } // namespace PlasmaZones

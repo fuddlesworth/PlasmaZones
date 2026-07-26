@@ -177,7 +177,11 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     m_floatRestore.remove(windowId);
     m_scrollFloatedWindows.remove(windowId);
 
-    if (inStrip) {
+    if (inStrip && key == currentKeyForScreen(key.screenId)) {
+        // Background-context guard: applyLayout resolves the screen's
+        // CURRENT context, so a close on another desktop's state would
+        // relayout the wrong strip (the mutated one must stay silent
+        // until its desktop returns).
         applyLayout(key.screenId, wasActive && !state->strip().activeWindowId().isEmpty());
     }
     Q_EMIT placementChanged(key.screenId);
@@ -197,8 +201,11 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
     if (state->strip().focusWindow(windowId, params)) {
         // The focus change may scroll the viewport; never re-activate here
-        // (the compositor initiated this focus).
-        applyLayout(key.screenId, false);
+        // (the compositor initiated this focus). Background-context guard:
+        // see windowClosed.
+        if (key == currentKeyForScreen(key.screenId)) {
+            applyLayout(key.screenId, false);
+        }
     }
 }
 
@@ -259,19 +266,30 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
     const int columnIdx = state->strip().columnOfWindow(windowId);
     if (columnIdx < 0) {
+        // Tracked in the reverse map yet in neither the strip nor the
+        // floating set — a genuine bookkeeping inconsistency, not a
+        // documented no-op like the other bails in this file.
+        qCWarning(lcScrollEngine) << "floatWindowInternal:" << windowId
+                                  << "tracked but absent from strip and floating set on" << key.screenId;
         return false;
     }
     FloatRestore restore;
     restore.column = columnIdx;
     restore.width = state->strip().columns().at(columnIdx).width;
     restore.display = state->strip().columns().at(columnIdx).display;
+    if (state->strip().columns().at(columnIdx).tiles.size() > 1) {
+        restore.tileIndex = state->strip().columns().at(columnIdx).indexOfWindow(windowId);
+    }
     state->strip().takeWindow(windowId, params);
     state->addFloating(windowId);
     m_floatRestore.insert(windowId, restore);
     m_scrollFloatedWindows.insert(windowId);
     m_lastAppliedRect.remove(windowId);
     Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
-    applyLayout(key.screenId, false);
+    // Background-context guard: see windowClosed.
+    if (key == currentKeyForScreen(key.screenId)) {
+        applyLayout(key.screenId, false);
+    }
     Q_EMIT placementChanged(key.screenId);
     return true;
 }
@@ -288,7 +306,14 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     const bool hadSlot = m_floatRestore.contains(windowId);
     const FloatRestore restore = m_floatRestore.take(windowId);
     bool inserted = false;
-    if (hadSlot) {
+    if (hadSlot && restore.tileIndex >= 0) {
+        // The window left a SHARED column: return to the surviving stack
+        // (the column outlived the float since the other tiles stayed).
+        // The column index can have shifted; a miss falls through to a
+        // fresh column at the remembered index.
+        inserted = state->strip().insertWindowIntoColumnAt(restore.column, restore.tileIndex, windowId);
+    }
+    if (!inserted && hadSlot) {
         inserted = state->strip().insertWindowAt(restore.column, windowId, restore.width, restore.display);
     }
     if (!inserted) {
@@ -373,6 +398,10 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     m_states.removeWindow(windowId);
     m_lastAppliedRect.remove(windowId);
     m_floatRestore.remove(windowId);
+    // The mode-transition float marker must not outlive this engine's
+    // tracking: the receiving engine owns the float bit from here, and a
+    // stale entry would keep isModeSpecificFloated answering true.
+    m_scrollFloatedWindows.remove(windowId);
     scheduleRetileForScreen(key.screenId);
 }
 
@@ -394,6 +423,9 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         state->addFloating(windowId);
         m_states.setKeyForWindow(windowId, key);
         Q_EMIT windowFloatingChanged(windowId, true, ctx.toScreenId);
+        // The screen's placement changed too (managed set grew), even
+        // though no strip geometry moved.
+        Q_EMIT placementChanged(ctx.toScreenId);
         return;
     }
     const ScrollLayoutParams params = layoutParamsForScreen(ctx.toScreenId);

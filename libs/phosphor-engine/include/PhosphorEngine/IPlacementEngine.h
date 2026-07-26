@@ -439,8 +439,10 @@ public:
                            ///< state/layout, not the currently-visible one.
         QPoint dropPos; ///< cursor position at drop, or invalid for non-drag handoffs
         QRect sourceGeometry; ///< window's frame at handoff time (for size preservation)
-        QSize minSize; ///< client-reported minimum size as last known by the
-                       ///< SOURCE engine (0x0 when unknown). The compositor only
+        QSize minSize; ///< minimum size as the SOURCE engine models it (0x0
+                       ///< when unknown) — autotile stores it screen-capped,
+                       ///< scrolling raw, so treat it as a hint, not the
+                       ///< client's exact value. The compositor only
                        ///< re-reports a min size when it changes or a retile
                        ///< discovers a refusal, so the receiver seeds its own
                        ///< min-size model from this instead of waiting a

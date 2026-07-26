@@ -168,6 +168,10 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                  });
 
         // ── Scrolling ──
+        // DefaultColumnWidthValue carries NO descriptor on purpose: its unit
+        // is kind-dependent (a fraction under Proportion, pixels under
+        // Fixed), and a fixed pct/px declaration would mislabel one of the
+        // two. The diff view shows the raw number.
         t.insert(pairKey(CD::tilingScrollingGroup(), CD::centerFocusedColumnKey()),
                  {
                      {QStringLiteral("never"), PhosphorI18n::tr("Never")},

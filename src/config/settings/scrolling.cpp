@@ -39,17 +39,27 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
     if (after == before) {
         return;
     }
-    // Setter-side coercion only: a hand-edited config with an inconsistent
-    // kind/value pair is left as-is until the next write — the engine's own
-    // load clamps whatever it reads, so the mismatch cannot produce an
-    // out-of-range layout, just a value the page rewrites on first touch.
+    // Coercion is driven by the KIND transition, never by sniffing the
+    // value's magnitude — the Fixed floor is 1px and a proportion tops out
+    // at 1.0, so magnitude cannot distinguish Fixed(1) from a 100%
+    // proportion. Setter-side only: a hand-edited config with an
+    // inconsistent pair (kind=Fixed, value=0.5) is left as-is until the
+    // next write and the engine renders a degenerate-but-clamped column
+    // (its own load applies qMax(1, …)) — the page rewrites the pair on
+    // first touch of either row.
     const qreal stored =
         m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
-    if (after == ConfigDefaults::scrollingWidthKindFixed() && stored <= 1.0) {
-        // Entering Fixed with a proportion stored: seed a sane pixel width.
+    const bool wasFixed = before == ConfigDefaults::scrollingWidthKindFixed();
+    const bool isFixed = after == ConfigDefaults::scrollingWidthKindFixed();
+    if (isFixed && !wasFixed) {
+        // Entering Fixed: seed a sane pixel width.
         setScrollingDefaultColumnWidthValue(ConfigDefaults::scrollingDefaultColumnWidthFixedPx());
-    } else if (after != ConfigDefaults::scrollingWidthKindFixed() && stored > 1.0) {
-        // Leaving Fixed with pixels stored: fall back to the proportion default.
+    } else if (wasFixed && after == ConfigDefaults::scrollingWidthKindProportion()) {
+        // Fixed → Proportion: pixels are meaningless, fall back to the
+        // proportion default. Fixed → ClientDecides deliberately KEEPS the
+        // stored pixels — ClientDecides ignores the value, and wiping it
+        // would lose the user's width across a Fixed→ClientDecides→Fixed
+        // round trip.
         setScrollingDefaultColumnWidthValue(ConfigDefaults::scrollingDefaultColumnWidthValue());
     }
     Q_EMIT scrollingDefaultColumnWidthKindChanged();
@@ -71,7 +81,8 @@ P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, tilingScrollingGroup, defau
 void Settings::setScrollingDefaultColumnWidthValue(qreal value)
 {
     const bool isFixed = scrollingDefaultColumnWidthKind() == ConfigDefaults::scrollingWidthKindFixed();
-    value = isFixed ? qBound<qreal>(1.0, value, ConfigDefaults::scrollingDefaultColumnWidthValueMax())
+    value = isFixed ? qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthFixedMin(), value,
+                                    ConfigDefaults::scrollingDefaultColumnWidthValueMax())
                     : qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value, 1.0);
     const qreal before =
         m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());

@@ -54,6 +54,17 @@ enum class ColumnDisplay : int {
 /// Column width INTENT — the source of truth the strip stores. Pixel rects are
 /// recomputed from this on every relayout against the current work area;
 /// pixels are never authoritative.
+/// Wire vocabulary of the DEFAULT-column-width KIND setting
+/// (IScrollSettings::scrollingDefaultColumnWidthKind). Deliberately
+/// distinct from ColumnWidth::Kind — this enum's 2 means "client decides"
+/// (a settings-level policy with no per-column representation), while
+/// ColumnWidth::Kind's 2 is Preset. Never static_cast between the two.
+enum class DefaultWidthKind : int {
+    Proportion = 0,
+    Fixed = 1,
+    ClientDecides = 2,
+};
+
 struct ColumnWidth
 {
     enum Kind : int {

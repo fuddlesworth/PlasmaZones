@@ -118,9 +118,10 @@ struct AssignmentEntry
         // "scrolling:". This is LOAD-BEARING: the assignment cascade's
         // visitors reject entries with an empty activeLayoutId(), and a
         // fresh mode-only Scrolling entry (empty preserved snappingLayout)
-        // would otherwise silently fail to assign. `ActiveLayout Equals X`
-        // matches remain not meaningful on scrolling screens — consumers
-        // that need the engine discriminate on Mode.
+        // would otherwise silently fail to assign. The context resolvers
+        // stamp this sentinel into query.activeLayout, so `ActiveLayout
+        // Equals "scrolling:"` DOES match on scrolling screens — there is
+        // just no per-layout identity to distinguish beyond the mode.
         if (mode == Scrolling) {
             return QString(PhosphorLayout::LayoutId::ScrollingId);
         }

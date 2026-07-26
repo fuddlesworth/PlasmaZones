@@ -42,7 +42,7 @@ endif()
 # ═══════════════════════════════════════════════════════════════════════════════
 # Step 2: Remove all known PlasmaZones files (full /usr prefix coverage)
 # Covers: bin, lib, share/applications, share/autostart, share/dbus-1/interfaces,
-# share/config.kcfg, share/icons, share/plasmazones, lib/.../qml, lib/.../plugins
+# share/icons, share/kglobalaccel, share/plasmazones, lib/.../qml, lib/.../plugins
 # ═══════════════════════════════════════════════════════════════════════════════
 
 message(STATUS "")
@@ -54,7 +54,10 @@ message(STATUS "[2/5] Removing all known PlasmaZones files and directories...")
 set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazonesd"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-editor"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-report"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-settings"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-shader-validate"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/kglobalaccel/plasmazonesd.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.daemon.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.editor.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.settings.desktop"
@@ -97,8 +100,11 @@ foreach(f ${KNOWN_FILES})
     endif()
 endforeach()
 
-# Core library (libplasmazones_core.so, .so.1, .so.1.0, etc.)
-file(GLOB CORE_LIBS "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/libplasmazones_core.so*")
+# Shared libraries: every libplasmazones_* (core, rendering, shaderpreview)
+# and every libPhosphor* engine/support lib, all soversion variants.
+file(GLOB CORE_LIBS
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/libplasmazones_*.so*"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/libPhosphor*.so*")
 foreach(f ${CORE_LIBS})
     message(STATUS "  Removing: ${f}")
     execute_process(COMMAND "@CMAKE_COMMAND@" -E remove "${f}" ERROR_QUIET)

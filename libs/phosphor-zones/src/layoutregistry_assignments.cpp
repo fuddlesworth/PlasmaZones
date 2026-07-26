@@ -373,6 +373,29 @@ bool LayoutRegistry::hasExplicitAssignment(const QString& screenId, int virtualD
     return hasExactContextRule(screenId, virtualDesktop, activity);
 }
 
+// Shared predicate for the two cascade visitors below: a resolved entry
+// with an EMPTY activeLayoutId() is still an EXPLICIT Snapping mode pin
+// when the user stored an ENABLED exact-context rule for this tuple that
+// actually carries a SetEngineMode action — the Monitors page stages one
+// when leaving Scrolling while the context suppresses the default layout,
+// so there is no layout to pin. Requiring the mode action keeps a
+// layout-only exact rule (which pins no mode) from anchoring an entry
+// whose mode came from elsewhere. Both visitors MUST honour this the same
+// way, or modeForScreen and assignmentIdForScreen disagree about the same
+// context (mode Snapping while the id path synthesizes the default tier's
+// autotile id). (Autotile and Scrolling mode-only entries stay visible
+// through their bare id sentinels; only Snapping has no sentinel because
+// its ids are layout UUIDs.)
+bool LayoutRegistry::hasExplicitSnappingModePin(const QString& sid, int virtualDesktop, const QString& activity,
+                                                const AssignmentEntry& entry) const
+{
+    if (entry.mode != AssignmentEntry::Snapping) {
+        return false;
+    }
+    const PWR::Rule* exact = findExactContextRule(sid, virtualDesktop, activity);
+    return exact != nullptr && exact->enabled && hasEngineModeAction(*exact);
+}
+
 QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtualDesktop,
                                               const QString& activity) const
 {
@@ -385,7 +408,17 @@ QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtu
             return std::nullopt;
         }
         const QString id = entry->activeLayoutId();
-        return id.isEmpty() ? std::nullopt : std::optional<QString>(id);
+        if (id.isEmpty()) {
+            // An explicit mode-only Snapping pin SETTLES the chain with an
+            // empty id (there is genuinely no layout identity) instead of
+            // deferring to a sibling screen or the default tier — keeping
+            // this API consistent with assignmentEntryForScreen's mode.
+            if (hasExplicitSnappingModePin(sid, virtualDesktop, activity, *entry)) {
+                return std::optional<QString>(QString());
+            }
+            return std::nullopt;
+        }
+        return std::optional<QString>(id);
     };
 
     if (const auto result = resolveWithScreenFallback(screenId, tryResolve)) {
@@ -408,18 +441,10 @@ AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId
             return std::nullopt;
         }
         if (entry->activeLayoutId().isEmpty()) {
-            // Payload-less Snapping is still an EXPLICIT mode pin when the
-            // user stored an enabled exact-context rule for this tuple —
-            // the Monitors page stages one when leaving Scrolling while the
-            // context suppresses the default layout, so there is no layout
-            // to pin. Without this carve-out the empty-id rejection would
-            // defer to a sibling screen's entry or the default tier, and
-            // the staged mode switch would hold only when those happen to
-            // resolve Snapping anyway. (Autotile and Scrolling mode-only
-            // entries stay visible through their bare id sentinels; only
-            // Snapping has no sentinel because its ids are layout UUIDs.)
-            const PWR::Rule* exact = findExactContextRule(sid, virtualDesktop, activity);
-            if (exact != nullptr && exact->enabled && entry->mode == AssignmentEntry::Snapping) {
+            // See hasExplicitSnappingModePin above: an explicit mode-only
+            // Snapping pin is accepted; anything else defers to the
+            // connector/VS fallback and then the default tier.
+            if (hasExplicitSnappingModePin(sid, virtualDesktop, activity, *entry)) {
                 return entry;
             }
             return std::nullopt;

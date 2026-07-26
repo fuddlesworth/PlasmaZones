@@ -531,8 +531,10 @@ public:
                                            const QString& activity = QString()) const;
 
     /// Raw assignment id for a (screen, desktop, activity) context.
-    /// Returns the stored string (manual-layout UUID or
-    /// @c "autotile:<algorithmId>") without resolving to a @ref Layout*.
+    /// Returns the stored string (manual-layout UUID,
+    /// @c "autotile:<algorithmId>", or the bare @c "scrolling:" sentinel)
+    /// without resolving to a @ref Layout*. An explicit mode-only Snapping
+    /// pin settles as an EMPTY id (no layout identity exists for it).
     /// On cascade-miss, falls through to the level-1 global defaults
     /// (snap provider first, then autotile provider; see
     /// @ref setDefaultLayoutIdProvider /
@@ -655,6 +657,13 @@ public:
     void setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QHash<int, QString>& slots);
     QHash<int, QString> quickLayoutSlots(AssignmentEntry::Mode mode) const
     {
+        // Scrolling carries NO quick slots: a Meta+Alt+N press on a
+        // scrolling screen must be a no-op, not a silent application of
+        // the SNAPPING slot (which would assign a zone layout and flip
+        // the screen out of scrolling with no user intent).
+        if (mode == AssignmentEntry::Scrolling) {
+            return {};
+        }
         return m_quickLayoutSlots[modeIndex(mode)];
     }
 
@@ -757,8 +766,9 @@ private:
     void readQuickLayouts();
     void writeQuickLayouts();
     /// Map a tiling mode to its @ref m_quickLayoutSlots array index.
-    /// Only Snapping and Autotile carry quick slots; any other value
-    /// clamps to Snapping.
+    /// Only Snapping and Autotile carry quick slots; Scrolling never
+    /// reaches this (quickLayoutSlots returns empty for it first), and any
+    /// other value clamps to Snapping for the WRITE paths.
     static constexpr int modeIndex(AssignmentEntry::Mode mode)
     {
         return mode == AssignmentEntry::Autotile ? 1 : 0;
@@ -843,6 +853,13 @@ private:
     /// disabled rule in place rather than appending a duplicate) but rejects
     /// any match carrying a window-property leaf — only a pure context-only
     /// match is an exact context rule.
+    /// True when @p entry is a payload-less Snapping resolution anchored by
+    /// an ENABLED exact-context rule carrying a SetEngineMode action — the
+    /// Monitors page's mode-only pin. Shared by assignmentIdForScreen and
+    /// assignmentEntryForScreen so the two cascade visitors settle
+    /// identically (see the definition for the full rationale).
+    bool hasExplicitSnappingModePin(const QString& screenId, int virtualDesktop, const QString& activity,
+                                    const AssignmentEntry& entry) const;
     const PhosphorRules::Rule* findExactContextRule(const QString& screenId, int virtualDesktop,
                                                     const QString& activity) const;
 

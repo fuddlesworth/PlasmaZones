@@ -272,6 +272,9 @@ void ScrollEngine::reapplyLayout(const PhosphorEngine::NavigationContext& ctx)
     if (!screen.isEmpty()) {
         applyLayout(screen, false);
     }
+    Q_EMIT navigationFeedback(!screen.isEmpty(), QStringLiteral("retile"),
+                              screen.isEmpty() ? QStringLiteral("no_screen") : QString(), ctx.windowId, QString(),
+                              screen);
 }
 
 void ScrollEngine::snapAllWindows(const PhosphorEngine::NavigationContext& ctx)
@@ -361,7 +364,7 @@ void ScrollEngine::toggleFocusedFloat(const PhosphorEngine::NavigationContext& c
         Q_EMIT placementChanged(screen);                                                                               \
     }                                                                                                                  \
     Q_EMIT navigationFeedback(changed, QStringLiteral(actionStr), changed ? QString() : QStringLiteral("no_target"),   \
-                              QString(), state->strip().activeWindowId(), screen)
+                              QString(), changed ? state->strip().activeWindowId() : QString(), screen)
 
 void ScrollEngine::focusColumnFirst(const QString& screenId)
 {

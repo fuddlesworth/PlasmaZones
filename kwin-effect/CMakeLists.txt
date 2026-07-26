@@ -48,6 +48,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
     plasmazoneseffect/lifecycle_wiring.cpp
+    plasmazoneseffect/lifecycle_wiring_daemon.cpp
     plasmazoneseffect/decoration_appearance.cpp
     plasmazoneseffect/decorations.cpp
     plasmazoneseffect/decoration_teardown.cpp

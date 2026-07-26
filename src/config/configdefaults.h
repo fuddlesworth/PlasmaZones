@@ -546,11 +546,11 @@ public:
     }
     static constexpr int scrollingDefaultColumnWidthKindMin()
     {
-        return 0;
+        return scrollingWidthKindProportion();
     }
     static constexpr int scrollingDefaultColumnWidthKindMax()
     {
-        return 2;
+        return scrollingWidthKindClientDecides();
     }
     /// Value paired with the kind: a proportion in (0, 1] or a pixel width.
     static constexpr qreal scrollingDefaultColumnWidthValue()
@@ -560,6 +560,12 @@ public:
     static constexpr qreal scrollingDefaultColumnWidthValueMin()
     {
         return 0.05;
+    }
+    /// Fixed-kind pixel floor, shared with the settings page's SpinBox so a
+    /// D-Bus write cannot persist a width the UI cannot display.
+    static constexpr qreal scrollingDefaultColumnWidthFixedMin()
+    {
+        return 100.0;
     }
     static constexpr qreal scrollingDefaultColumnWidthValueMax()
     {

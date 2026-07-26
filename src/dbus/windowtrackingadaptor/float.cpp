@@ -13,6 +13,7 @@
 #include "core/interfaces/interfaces.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
+#include <array>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 
@@ -189,15 +190,31 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
 
     // Route to the correct engine based on screen mode. Both directions go
     // through the explicit cross-engine handoff contract when the window
-    // isn't yet tracked by the destination engine.
+    // isn't yet tracked by the destination engine. The scrolling engine is
+    // a first-class destination here: the effect fires this call for
+    // minimize-float / unminimize-unfloat and drag ApplyFloat on EVERY
+    // engine-managed screen, and routing a scrolling screen to snap would
+    // apply the float bit to an engine that does not own the window.
     PhosphorEngine::PlacementEngineBase* dest = nullptr;
-    PhosphorEngine::PlacementEngineBase* source = nullptr;
     if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
         dest = m_autotileEngine.data();
-        source = m_snapEngine.data();
+    } else if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(screenId)) {
+        dest = m_scrollEngine.data();
     } else if (m_snapEngine) {
         dest = m_snapEngine.data();
-        source = m_autotileEngine.data();
+    }
+    // Source: whichever OTHER engine currently tracks the window (the
+    // window may be crossing engines when its float bit flips mid-move).
+    PhosphorEngine::PlacementEngineBase* source = nullptr;
+    const std::array<PhosphorEngine::PlacementEngineBase*, 3> candidates{
+        static_cast<PhosphorEngine::PlacementEngineBase*>(m_autotileEngine.data()),
+        static_cast<PhosphorEngine::PlacementEngineBase*>(m_scrollEngine.data()),
+        static_cast<PhosphorEngine::PlacementEngineBase*>(m_snapEngine.data())};
+    for (PhosphorEngine::PlacementEngineBase* candidate : candidates) {
+        if (candidate && candidate != dest && candidate->isWindowTracked(windowId)) {
+            source = candidate;
+            break;
+        }
     }
 
     // Float: adopt an untracked window unconditionally (a brand-new floating
@@ -226,8 +243,12 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     bool recaptureAfterFloatWrite = false;
     if (dest && !dest->isWindowTracked(windowId)) {
         const bool sourceTracked = source && source->isWindowTracked(windowId);
-        const bool destIsAutotile = m_autotileEngine && dest == m_autotileEngine.data();
-        if (floating || (sourceTracked && destIsAutotile)) {
+        // Autotile AND scrolling destinations adopt via the handoff (their
+        // handoffReceive tiles a wasFloating=false arrival); only a snap
+        // destination takes the no-adoption unfloat path documented above.
+        const bool destAdopts =
+            (m_autotileEngine && dest == m_autotileEngine.data()) || (m_scrollEngine && dest == m_scrollEngine.data());
+        if (floating || (sourceTracked && destAdopts)) {
             PhosphorEngine::IPlacementEngine::HandoffContext ctx;
             ctx.windowId = windowId;
             ctx.toScreenId = screenId;

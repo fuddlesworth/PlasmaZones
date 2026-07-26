@@ -434,6 +434,7 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         // Autotile drag-insert: if a preview is live, commit it so the
         // window takes its picked slot in the stack on the next retile.
         // The autotile engine owns final geometry; no float outcome needed.
+        // Deliberately autotile-only (see the drop.cpp twin).
         if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
             m_autotileEngine->commitDragInsertPreview();
             outcome.action = PhosphorProtocol::DragOutcome::NoOp;

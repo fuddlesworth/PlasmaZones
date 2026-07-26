@@ -4,6 +4,7 @@
 #include "plasmazoneseffect.h"
 
 #include <PhosphorIdentity/ScreenId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -135,10 +136,25 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
     // misattribute the window (wrong minimize routing, wrong close/float
     // record, wrong Mode stamp). Scroll windows change screens only through
     // engine-driven handoffs, which update the tracked screen first.
-    if (m_tilingHandler) {
+    // hasScrollingScreens short-circuit keeps the common no-scrolling
+    // session on the pure positional path (no id-cache lookups per call).
+    // m_tilingHandler is constructed first and lives for the effect's
+    // lifetime (the VS re-resolve loop below derefs it unguarded for the
+    // same reason).
+    if (m_tilingHandler->hasScrollingScreens()) {
         const QString tracked = m_tilingHandler->scrollTrackedScreenFor(getWindowId(w));
         if (!tracked.isEmpty()) {
-            return tracked;
+            // The override only holds while the tracked screen's physical
+            // output still exists: on unplug/DPMS-off KWin reassigns the
+            // window and the daemon's scrollingScreensChanged lags — until
+            // it lands, every id-keyed consumer would otherwise keep
+            // resolving to the dead output.
+            const QString trackedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(tracked);
+            for (const auto* output : KWin::effects->screens()) {
+                if (outputScreenId(output) == trackedPhysical) {
+                    return tracked;
+                }
+            }
         }
     }
     const QPointF cf = w->frameGeometry().center();

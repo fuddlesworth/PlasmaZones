@@ -112,9 +112,10 @@ private Q_SLOTS:
         // Must be called before any adaptors are constructed.
         PhosphorProtocol::registerWireTypes();
 
-        // Each test run gets its own bus name on the session bus so tests
-        // can run in parallel without stepping on each other. We use a UUID
-        // suffix so the name is unique per invocation.
+        // ctest already gives every test a PRIVATE bus (the TEST_LAUNCHER
+        // dbus-run-session wrapper), so the name can never be pre-owned
+        // there; the UUID suffix is belt-and-braces for direct runs on the
+        // developer's real session bus.
         m_serviceName =
             QStringLiteral("org.plasmazones.test.Routing_") + QUuid::createUuid().toString(QUuid::WithoutBraces);
         m_objectPath = QStringLiteral("/Routing");

@@ -162,9 +162,17 @@ void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const
 {
     state->toggleFloating(windowId);
     m_overflow.clearOverflow(windowId); // User explicitly toggled, no longer overflow
-    retileAfterOperation(screenId, true);
 
     const bool isNowFloating = state->isFloating(windowId);
+    // Same staleness policy as setWindowFloat's unfloat arm: the window's
+    // min size may have changed while floating, and a stale entry can
+    // inflate enforceMinSizes past the user's split ratio. The effect
+    // re-discovers and re-reports a live one on the next retile.
+    if (!isNowFloating) {
+        m_windowMinSizes.remove(windowId);
+    }
+    retileAfterOperation(screenId, true);
+
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "Window" << windowId << (isNowFloating ? "now floating" : "now tiled") << "on screen" << screenId;
     Q_EMIT windowFloatingChanged(windowId, isNowFloating, screenId);
@@ -174,6 +182,10 @@ void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const
 // Cross-engine handoff (see IPlacementEngine.h for contract)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// NOTE: autotile ignores ctx.toDesktop — arrivals always land in the
+// CURRENT desktop's TilingState. Cross-desktop moves onto an autotile
+// desktop must use the reactive catch-scan path instead (the cross-mode
+// dispatcher's reactiveAutotileDesktopArrival branch does exactly that).
 void AutotileEngine::handoffReceive(const HandoffContext& ctx)
 {
     if (ctx.windowId.isEmpty() || ctx.toScreenId.isEmpty() || !isAutotileScreen(ctx.toScreenId)) {
@@ -199,6 +211,11 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     const auto trackedKeyIt = m_states.windowKeys().constFind(windowId);
     if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() == destKey
         && state->containsWindow(windowId)) {
+        // Already adopted — nothing structural to do, but a re-handoff can
+        // carry a FRESHER min size; the seed is cheap and change-gated.
+        if (ctx.minSize.width() > 0 || ctx.minSize.height() > 0) {
+            storeWindowMinSize(windowId, ctx.minSize.width(), ctx.minSize.height());
+        }
         return;
     }
     // Already tracked but on a DIFFERENT autotile state (cross-screen
@@ -216,12 +233,24 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     //     window takes the departed partner's exact slot;
     //   - a drag-drop carrying a cursor position, which the drag-insert path
     //     places separately — there we keep the simple append so the drop wins.
+    bool inserted = false;
     if (ctx.insertIndex >= 0 && ctx.dropPos.isNull()) {
-        state->addWindow(windowId, ctx.insertIndex);
+        inserted = state->addWindow(windowId, ctx.insertIndex);
     } else if (ctx.dropPos.isNull()) {
         insertWindowByConfigOrder(state, windowId, ctx.toScreenId);
+        inserted = state->containsWindow(windowId);
     } else {
-        state->addWindow(windowId);
+        inserted = state->addWindow(windowId);
+    }
+    if (!inserted) {
+        // The destination refused (MaxRuntimeTreeDepth cap). The source has
+        // already released the window at every daemon call site, so keying
+        // it here would strand it: present in neither engine yet reading as
+        // tiled through the phantom key. Leave it unmanaged (free) instead —
+        // the same outcome as a window neither engine ever tracked.
+        qCWarning(PhosphorTileEngine::lcTileEngine) << "handoffReceive: destination state refused" << windowId << "on"
+                                                    << ctx.toScreenId << "- window left unmanaged";
+        return;
     }
     // Autotile-engine policy on receive: a window arriving as "floating in
     // the source" stays floating here too — drag-from-snap typically falls
@@ -300,6 +329,12 @@ void AutotileEngine::handoffRelease(const QString& windowId)
         state->removeWindow(canonical);
     }
     m_states.removeWindow(canonical);
+    // The min-size cache leaves with the tracking: the daemon queries
+    // windowMinimumSize BEFORE calling release (the HandoffContext
+    // contract), and a re-receive re-seeds from ctx.minSize — keeping the
+    // entry would replay a possibly other-screen-capped value on re-entry
+    // (same rationale as windowFocused's cross-screen clear).
+    m_windowMinSizes.remove(canonical);
 }
 
 void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, const QString& callerScreenId)

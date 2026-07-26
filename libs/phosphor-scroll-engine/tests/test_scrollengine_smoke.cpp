@@ -7,6 +7,7 @@
 // is covered by the strip-model tests, not here).
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorScrollEngine/ScrollState.h>
 
 #include <QSignalSpy>
 #include <QtTest>
@@ -24,6 +25,10 @@ private Q_SLOTS:
     void capturePlacementReportsSlot();
     void handoffReleaseIsTrackingOnly();
     void contextKeysSeparateDesktops();
+    void floatRestoresDisplayIntent();
+    void pruneDropsWindowBookkeeping();
+    void operationScreenFallbackIsDeterministic();
+    void minSizeSeedsAndCarries();
 
 private:
     static ScrollEngine* makeEngine(QObject* parent)
@@ -170,6 +175,83 @@ void TestScrollEngineSmoke::contextKeysSeparateDesktops()
     engine->pruneStatesForDesktop(2);
     QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{1}));
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|b")));
+}
+
+void TestScrollEngineSmoke::floatRestoresDisplayIntent()
+{
+    // FloatRestore regression (pass-2 fix): the intent a floated column
+    // held must survive the round trip — replacing restore.display with
+    // the engine default in unfloatWindowInternal fails this.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+
+    auto columnDisplayOf = [engine](const QString& windowId) {
+        auto* state = static_cast<ScrollState*>(engine->stateForScreen(QStringLiteral("S1")));
+        const int col = state->strip().columnOfWindow(windowId);
+        return col >= 0 ? state->strip().columns().at(col).display : ColumnDisplay::Normal;
+    };
+    QCOMPARE(columnDisplayOf(QStringLiteral("app|b")), ColumnDisplay::Tabbed);
+
+    engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
+    engine->setWindowFloat(QStringLiteral("app|b"), false, QStringLiteral("S1"));
+    QCOMPARE(columnDisplayOf(QStringLiteral("app|b")), ColumnDisplay::Tabbed);
+}
+
+void TestScrollEngineSmoke::pruneDropsWindowBookkeeping()
+{
+    // dropWindowBookkeeping regression: pruning a desktop's state must
+    // sweep the per-window side maps — the float marker is the observable
+    // one headless (m_lastAppliedRect never populates without a screen
+    // manager).
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setCurrentDesktop(2);
+    engine->windowOpened(QStringLiteral("app|d2"), QStringLiteral("S1"), 0, 0);
+    engine->setWindowFloat(QStringLiteral("app|d2"), true, QStringLiteral("S1"));
+    QVERIFY(engine->isModeSpecificFloated(QStringLiteral("app|d2")));
+
+    engine->pruneStatesForDesktop(2);
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|d2")));
+    QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|d2")));
+}
+
+void TestScrollEngineSmoke::operationScreenFallbackIsDeterministic()
+{
+    // With no active screen, a screen-less operation must land on the
+    // lexicographic minimum of the active set — QSet iteration order is
+    // unspecified, so reverting the deterministic pick is invisible to a
+    // casual repro but not to this assertion.
+    QObject owner;
+    auto* engine = new ScrollEngine(nullptr, nullptr, &owner);
+    engine->setActiveScreens({QStringLiteral("S2"), QStringLiteral("S1")});
+    engine->setWindowFloat(QStringLiteral("app|f"), false, QString());
+    QCOMPARE(engine->screenForTrackedWindow(QStringLiteral("app|f")), QStringLiteral("S1"));
+}
+
+void TestScrollEngineSmoke::minSizeSeedsAndCarries()
+{
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+
+    // windowOpened's min args land in the strip and surface through the
+    // IPlacementEngine::windowMinimumSize override.
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 500, 400);
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(500, 400));
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|nope")), QSize());
+
+    // handoffReceive seeds ctx.minSize so the first relayout clamps
+    // without a refuse/re-discover round trip.
+    PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+    ctx.windowId = QStringLiteral("app|x");
+    ctx.toScreenId = QStringLiteral("S2");
+    ctx.fromEngineId = QStringLiteral("autotile");
+    ctx.minSize = QSize(640, 360);
+    engine->handoffReceive(ctx);
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|x")), QSize(640, 360));
 }
 
 QTEST_APPLESS_MAIN(TestScrollEngineSmoke)

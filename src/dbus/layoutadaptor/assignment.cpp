@@ -53,7 +53,10 @@ QString LayoutAdaptor::getLayoutForScreen(const QString& screenId)
 
     // Check for autotile assignment first (layoutForScreen returns nullptr for autotile)
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, desktop, activity);
-    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        // Autotile ids and the bare scrolling sentinel have no snap Layout*
+        // to resolve; report the id itself so the read path agrees with
+        // what the batch setters accept.
         return assignmentId;
     }
 
@@ -69,7 +72,7 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 
     // For manual layouts, validate UUID and verify layout exists
     PhosphorZones::Layout* layout = nullptr;
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)) {
         layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen"));
         if (!layout) {
             return;
@@ -224,7 +227,10 @@ QString LayoutAdaptor::getLayoutForScreenDesktop(const QString& screenId, int vi
 {
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, virtualDesktop, QString());
-    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        // Autotile ids and the bare scrolling sentinel have no snap Layout*
+        // to resolve; report the id itself so the read path agrees with
+        // what the batch setters accept.
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, virtualDesktop, QString());
@@ -238,7 +244,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop"));
         if (!layout) {
             return;
@@ -497,7 +503,10 @@ QString LayoutAdaptor::getLayoutForScreenActivity(const QString& screenId, const
 {
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, 0, activityId);
-    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        // Autotile ids and the bare scrolling sentinel have no snap Layout*
+        // to resolve; report the id itself so the read path agrees with
+        // what the batch setters accept.
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, 0, activityId);
@@ -515,7 +524,7 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen activity"));
         if (!layout) {
             return;
@@ -648,7 +657,10 @@ QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenId
 {
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, virtualDesktop, activityId);
-    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        // Autotile ids and the bare scrolling sentinel have no snap Layout*
+        // to resolve; report the id itself so the read path agrees with
+        // what the batch setters accept.
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, virtualDesktop, activityId);
@@ -663,7 +675,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop activity"));
         if (!layout) {
             return;

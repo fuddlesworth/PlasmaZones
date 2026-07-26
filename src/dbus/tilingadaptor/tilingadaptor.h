@@ -118,6 +118,12 @@ public:
      * Always zero once @c panelGeometryReady has fired.
      */
     int pendingWindowOpensCount() const;
+    /// Test seam: parked mid-flip opens awaiting the screens-announce
+    /// retry (the m_unclaimedOpens queue).
+    int pendingUnclaimedOpensCount() const
+    {
+        return m_unclaimedOpens.size();
+    }
 
     // Property accessors
     bool enabled() const;
@@ -350,13 +356,19 @@ private:
     // until panelGeometryReady fires. Non-blocking — no nested event loops, no reentrancy.
     PhosphorProtocol::WindowOpenedList m_pendingOpens;
     bool m_pendingOpensListenerInstalled = false;
-    /// Opens that arrived while NO pipeline engine claimed their screen (the
-    /// brief mid-flip window). An autotile↔scrolling flip keeps the UNION
-    /// unchanged, so the effect's managedScreensChanged batch re-add never
-    /// fires for it — these are retried from the coalesced screens announce
-    /// instead (the flip has settled by then). Latest entry per window wins;
-    /// dropped on close and on clearEngine.
-    QHash<QString, PhosphorProtocol::WindowOpenedEntry> m_unclaimedOpens;
+    /// Opens that arrived while NO pipeline engine claimed their screen AND
+    /// a screens announce was pending (the mid-flip window). An
+    /// autotile↔scrolling flip keeps the UNION unchanged, so the effect's
+    /// managedScreensChanged batch re-add never fires for it — these are
+    /// retried ONCE from the coalesced screens announce (the flip has
+    /// settled by then; still-unclaimed entries are dropped, never
+    /// re-parked). Order-preserving: replay order decides strip column
+    /// order and master assignment. Rule routing is baked into the parked
+    /// entry's screenId so its side effects run once. Entries are dropped
+    /// on close and on clearEngine.
+    QList<PhosphorProtocol::WindowOpenedEntry> m_unclaimedOpens;
+    void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark);
+    void removeUnclaimedOpen(const QString& windowId);
 
 public:
     /**

@@ -22,6 +22,8 @@ namespace {
 /// gives scroll animations a believable enter/leave origin, and it is the
 /// structural fix for the stuck-off-screen-window folklore (extreme
 /// coordinates are never committed).
+// All parked rects on a side share the same x (no per-distance spread);
+// the margin just keeps them clear of edge-snap heuristics.
 constexpr int kParkMargin = 16;
 
 } // namespace
@@ -67,8 +69,13 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
             right = overrides.value(PSK::OuterGapRight, right).toInt();
         }
     }
-    area.adjust(qMax(0, left), qMax(0, top), -qMax(0, right), -qMax(0, bottom));
-    params.workArea = area;
+    // Outer gaps must never invert the rect: an unknown/removed screen
+    // yields a null area, and adjust() on it (or oversized gaps on a small
+    // screen) would drive the width/height negative. Downstream consumers
+    // only check isValid() on the apply path; strip math runs on every
+    // params consumer, so clamp here.
+    const QRect adjusted = area.adjusted(qMax(0, left), qMax(0, top), -qMax(0, right), -qMax(0, bottom));
+    params.workArea = (adjusted.width() > 0 && adjusted.height() > 0) ? adjusted : QRect();
     params.gap = innerGap;
     params.presetColumnWidths = m_presetColumnWidths;
     params.presetWindowHeights = m_presetWindowHeights;
@@ -89,6 +96,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         qCWarning(lcScrollEngine) << "applyLayout: no valid work area for screen" << screenId;
         return;
     }
+    // Re-apply the centering policy before resolving: a work-area change
+    // (resolution, panels, outer gaps) or a centering-settings flip leaves
+    // the stored anchor relative to the OLD width, and nothing else
+    // re-derives it until the next focus move. Idempotent for a settled
+    // strip (a fully-visible column stays put under Never/OnOverflow).
+    state->strip().updateViewForFocus(params);
     const ResolvedStrip resolved = state->strip().relayout(params);
     if (resolved.columns.isEmpty()) {
         // The strip just emptied (last window closed / floated / released).
@@ -107,6 +120,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     }
 
     QJsonArray arr;
+    bool anyRectMoved = false;
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             QRect rect = tile.rect;
@@ -129,6 +143,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             obj[QLatin1String("width")] = rect.width();
             obj[QLatin1String("height")] = rect.height();
             arr.append(obj);
+            const auto lastIt = m_lastAppliedRect.constFind(tile.windowId);
+            if (lastIt == m_lastAppliedRect.constEnd() || *lastIt != rect) {
+                anyRectMoved = true;
+            }
             m_lastAppliedRect.insert(tile.windowId, rect);
         }
     }
@@ -136,11 +154,18 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         clearTabStripsForScreen(screenId);
         return;
     }
-    Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
+    // Emit-on-change: a relayout that resolved every window to the exact
+    // rect already applied (focus move under Never-centering, redundant
+    // scheduled retile) must not re-feed the compositor's apply path.
+    if (anyRectMoved) {
+        Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
+    }
 
-    // Tab-strip indicator model: one entry per VISIBLE tabbed column. An
-    // empty state is announced exactly once so the overlay clears without
-    // being spammed on every plain relayout.
+    // Tab-strip indicator model: one entry per VISIBLE tabbed column.
+    // Change-gated: the payload is re-derived on every relayout, but an
+    // unchanged strip set (the common focus-move / plain-retile case) must
+    // not re-drive an overlay repaint — and an empty state is announced
+    // exactly once (clearTabStripsForScreen latches on the tracked set).
     QJsonArray strips;
     for (const ResolvedColumn& column : resolved.columns) {
         if (!column.tabbed || !column.rect.intersects(params.workArea)) {
@@ -151,6 +176,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         strip[QLatin1String("y")] = column.rect.y();
         strip[QLatin1String("width")] = column.rect.width();
         QJsonArray tabs;
+        // 0 is a safe seed, not a fallback: a resolved tabbed column always
+        // carries exactly one non-hidden tile (relayout marks every tile
+        // but the column's active one hidden), so the loop below always
+        // overwrites it. An all-hidden column cannot be resolved — a
+        // fully-minimized column is skipped before ResolvedColumns are
+        // built.
         int activeIndex = 0;
         for (int i = 0; i < column.tiles.size(); ++i) {
             tabs.append(column.tiles.at(i).windowId);
@@ -163,8 +194,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         strips.append(strip);
     }
     if (!strips.isEmpty()) {
-        m_screensWithTabStrips.insert(screenId);
-        Q_EMIT tabStripsChanged(screenId, QString::fromUtf8(QJsonDocument(strips).toJson(QJsonDocument::Compact)));
+        const QString payload = QString::fromUtf8(QJsonDocument(strips).toJson(QJsonDocument::Compact));
+        if (m_lastTabStripPayload.value(screenId) != payload) {
+            m_lastTabStripPayload.insert(screenId, payload);
+            m_screensWithTabStrips.insert(screenId);
+            Q_EMIT tabStripsChanged(screenId, payload);
+        }
     } else {
         clearTabStripsForScreen(screenId);
     }
