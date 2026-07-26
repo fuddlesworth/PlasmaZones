@@ -371,15 +371,21 @@ public:
     /// which purges every previously registered pack. Asserted in debug builds
     /// and, in release, ignored in favour of `kDefaultMaxEntries` so a bad cap
     /// costs the caller its setting rather than the registry its contents.
+    ///
+    /// Zero is a DIFFERENT case and is honoured, matching
+    /// `DirectoryLoader::JsonScanStrategy::setMaxEntries`: "admit nothing" is a
+    /// coherent thing for a caller to ask for, where "admit fewer than nothing"
+    /// is a bug. The two sibling scanners must not diverge on this.
     void setMaxEntries(int cap)
     {
         Q_ASSERT_X(cap >= 0, "MetadataPackScanStrategy::setMaxEntries", "cap must be non-negative");
-        // Release fallback is the DEFAULT, not zero. Clamping to zero would
-        // make the assert's release counterpart destructive in exactly the way
-        // the assert exists to prevent: the cap trips on the first subdir,
-        // `m_packs` rebuilds empty, and `OnCommit` fires as though every pack
-        // had been uninstalled. Falling back to the default degrades to
-        // "the caller's cap was ignored", which is recoverable and obvious.
+        // Release fallback for a NEGATIVE cap is the DEFAULT, not zero.
+        // Clamping to zero would make the assert's release counterpart
+        // destructive in exactly the way the assert exists to prevent: the cap
+        // trips on the first subdir, `m_packs` rebuilds empty, and `OnCommit`
+        // fires as though every pack had been uninstalled. Falling back to the
+        // default degrades to "the caller's cap was ignored", which is
+        // recoverable and obvious. An explicit zero is honoured — see above.
         m_maxEntries = cap >= 0 ? cap : kDefaultMaxEntries;
     }
 
@@ -591,12 +597,18 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
         }
 
         // Symlinked pack directories are FOLLOWED, with no canonical-
-        // containment check, for the same reason JsonScanStrategy follows
-        // symlinked `*.json` (see the note there): a pack is parsed data behind
-        // a size cap rather than executed code, and symlinking a pack directory
-        // out of a dotfiles repo or a shared drive is the normal way people
-        // manage them. PluginLoader is the counter-example in this library and
-        // uses QDir::NoSymLinks, because a plugin subdir leads to a dlopen.
+        // containment check. Symlinking a pack directory out of a dotfiles repo
+        // or a shared drive is the normal way people manage them, and the
+        // threat model here is same-user: anything a symlink reaches, the user
+        // could have copied in.
+        //
+        // This is NOT the claim that a pack is inert. Every production consumer
+        // is a shader registry, and a pack's metadata NAMES source files that
+        // are compiled and run on the GPU — so the containment that matters is
+        // on the paths a pack DECLARES, not on the directory it was found
+        // through, and it belongs in the parser that resolves them.
+        // PluginLoader is the counter-example in this library and uses
+        // QDir::NoSymLinks, because a plugin subdir leads to a dlopen.
         const QStringList subdirs = dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QString& subdir : subdirs) {
             // Per-rescan DoS guard, counting subdirs considered rather than

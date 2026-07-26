@@ -490,17 +490,28 @@ Item {
         var hasShaderEffect = Boolean(rawShader && typeof rawShader.effectId === "string" && rawShader.effectId.length > 0);
         var hasShaderParams = Boolean(rawShader && rawShader.parameters && Object.keys(rawShader.parameters).length > 0);
         var hasShader = hasShaderEffect || hasShaderParams;
+        const wasEnabled = root.overrideEnabled;
         root.overrideEnabled = Boolean(hasRaw) || hasShader;
         // A clear that did not come through the toggle's OFF arm — a page
         // Discard, a profile switch, another surface writing this path — drops
         // overrideEnabled without touching the latch, leaving the toggle
         // reading ON and the timing section open over a card that stores
-        // nothing. Own writes are excluded via `selfDriven`: a per-field revert
-        // that happens to clear the last field must not close the editor under
-        // the user mid-edit. The `_committing` latches cannot stand in for that
-        // — every writer clears them before it refreshes, so they are always
-        // false by the time this runs.
-        if (!root.overrideEnabled && !selfDriven)
+        // nothing.
+        //
+        // Gated on a true→false TRANSITION, not on the current value. Both
+        // signal handlers refresh far more often than this card changes: the
+        // shader signal is a path-agnostic broadcast every card accepts, and
+        // onOverrideChanged accepts any ancestor path. Testing
+        // `!overrideEnabled` alone therefore closed the timing editor of a card
+        // the user had just latched open whenever ANY other card on the page
+        // was edited.
+        //
+        // Own writes are excluded via `selfDriven` on top of that: a per-field
+        // revert that happens to clear the last field must not close the editor
+        // under the user mid-edit. The `_committing` latches cannot stand in
+        // for it — every writer clears them before it refreshes, so they are
+        // always false by the time this runs.
+        if (wasEnabled && !root.overrideEnabled && !selfDriven)
             root._editingTiming = false;
         // Effective values feed the controls. With no direct override the
         // controls preview the resolved profile from the parent chain.
@@ -758,15 +769,13 @@ Item {
                 writePathCount: root._writePaths.length
                 parentChain: root.parentChainText()
                 inheritSummary: root.inheritSummaryText()
-                // The -1 refusal sentinel is honoured rather than discarded:
-                // the controller toasts why (an async discard owns the tree),
-                // and the count refresh below would otherwise redraw the same
-                // banner with the same number and read as a silent no-op.
-                onClearShadowingRequested: {
-                    if (root._clearShaderOverrideDescendantsOnAll() < 0)
-                        return;
-                    root.refreshShaderFromTree();
-                }
+                // The -1 refusal sentinel is honoured rather than discarded, so
+                // a refused clear cannot read as "cleared zero children". No
+                // refresh is needed on either branch: the writer's `finally`
+                // has already run refreshShaderFromTree() + refreshFromTree(),
+                // so the shadowing count and the banner are current whether the
+                // clear landed or was refused.
+                onClearShadowingRequested: root._clearShaderOverrideDescendantsOnAll()
             }
 
             // Section visibility splits the per-axis behaviour the
@@ -808,8 +817,25 @@ Item {
                 }
                 // The per-field revert links restore inheritance for one
                 // field without touching the other or the shader leg.
-                onCurveRevertRequested: root._clearFieldOnAll("curve")
-                onDurationRevertRequested: root._clearFieldOnAll("duration")
+                //
+                // The latch is set on SUCCESS so the timing editor stays open
+                // afterwards. `selfDriven` alone is not enough: it only helps a
+                // card whose latch is already set, and the common case is an
+                // override that predates the session, where the section is open
+                // via `overrideEnabled` and the latch is false. Reverting the
+                // last remaining field then drops overrideEnabled and collapses
+                // the editor under the cursor of the user who just clicked
+                // inside it. Gated on the return so a refused clear (an async
+                // discard is in flight, and the controller toasts) does not
+                // latch open a card that changed nothing.
+                onCurveRevertRequested: {
+                    if (root._clearFieldOnAll("curve"))
+                        root._editingTiming = true;
+                }
+                onDurationRevertRequested: {
+                    if (root._clearFieldOnAll("duration"))
+                        root._editingTiming = true;
+                }
                 // Picker model fed via the registry-tick dependency
                 // so the binding re-evaluates on
                 // `shaderEffectsChanged`.

@@ -140,10 +140,11 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
         // `*.luau` resolving outside its directory. The difference is what the
         // file buys an attacker. A script is executed, so a symlinked one is a
         // code-execution primitive worth refusing even same-user. A curve or
-        // profile JSON is parsed into a bounded value type behind a size cap,
-        // so following a symlink reads a file the same user could have copied
-        // in anyway. Refusing them would break the one legitimate use people
-        // actually have: symlinking a curve out of a dotfiles repo.
+        // profile JSON parses into a bounded value type behind a size cap and
+        // names no further files, so following a symlink reads something the
+        // same user could have copied in anyway. Refusing them would break the
+        // one legitimate use people actually have: symlinking a curve out of a
+        // dotfiles repo.
         QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
 
         // Track keys already seen within THIS directory so we can warn

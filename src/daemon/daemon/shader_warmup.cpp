@@ -13,7 +13,6 @@
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
-#include <PhosphorAnimation/QtQuickClockManager.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
@@ -22,7 +21,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
-#include <QLatin1StringView>
 #include <QList>
 #include <QPointer>
 #include <QStandardPaths>

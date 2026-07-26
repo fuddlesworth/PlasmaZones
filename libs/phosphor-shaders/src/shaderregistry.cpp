@@ -84,6 +84,38 @@ namespace {
 /// strategy) has already validated the file exists, fits under
 /// kMaxFileBytes, parses as JSON, and has an object root. We own only
 /// the schema-specific bits.
+/// Resolve a pack-declared file name against the pack's own directory, or
+/// return empty when it escapes.
+///
+/// `QDir::filePath` returns an ABSOLUTE argument unchanged and never normalises
+/// `..`, so `"fragmentShader": "/etc/shadow"` or `"../../../x.frag"` in a
+/// third-party pack would otherwise resolve outside the pack entirely — and
+/// these paths name files that get compiled and run on the GPU, or pulled into
+/// a texture the shader can sample. CLAUDE.md: "Sanitize file paths to prevent
+/// directory traversal."
+///
+/// Subdirectories INSIDE the pack stay legal (`"shaders/effect.frag"`), because
+/// containment is checked on the resolved canonical path rather than by
+/// refusing separators. A name that does not exist yet resolves lexically, so a
+/// pack referencing a file it does not ship is still rejected later by the
+/// existence checks rather than here.
+QString resolveWithinPack(const QDir& dir, const QString& declaredName)
+{
+    if (declaredName.isEmpty()) {
+        return {};
+    }
+    const QString candidate = dir.filePath(declaredName);
+    const QString packRoot = QDir::cleanPath(dir.absolutePath());
+    const QString resolved = QDir::cleanPath(QDir(dir).absoluteFilePath(declaredName));
+    if (resolved != packRoot && !resolved.startsWith(packRoot + QLatin1Char('/'))) {
+        qCWarning(lcShaderRegistry) << "Shader pack declared a path outside its own directory:" << declaredName << "in"
+                                    << packRoot << "— ignoring";
+        return {};
+    }
+    Q_UNUSED(candidate)
+    return resolved;
+}
+
 ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const QJsonObject& root)
 {
     ShaderRegistry::ShaderInfo info;
@@ -103,13 +135,13 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
 
     // Fragment shader path (default: effect.frag).
     const QString fragShaderName = root.value(QLatin1String("fragmentShader")).toString(QStringLiteral("effect.frag"));
-    info.sourcePath = dir.filePath(fragShaderName);
+    info.sourcePath = resolveWithinPack(dir, fragShaderName);
     // Vertex shader: explicit metadata declaration, per-shader zone.vert, or empty
     // (ZoneShaderItem falls back to the shared zone.vert from search paths at render time).
     const QString vertShaderName = root.value(QLatin1String("vertexShader")).toString();
     if (!vertShaderName.isEmpty()) {
-        const QString resolved = dir.filePath(vertShaderName);
-        if (QFile::exists(resolved)) {
+        const QString resolved = resolveWithinPack(dir, vertShaderName);
+        if (!resolved.isEmpty() && QFile::exists(resolved)) {
             info.vertexShaderPath = resolved;
         } else {
             qCWarning(lcShaderRegistry) << "Declared vertexShader" << vertShaderName << "not found in"
@@ -128,15 +160,19 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     if (!bufferShadersArray.isEmpty()) {
         for (int i = 0; i < qMin(bufferShadersArray.size(), 4); ++i) {
             const QString name = bufferShadersArray.at(i).toString();
-            if (!name.isEmpty()) {
-                info.bufferShaderPaths.append(dir.filePath(name));
+            const QString resolved = resolveWithinPack(dir, name);
+            if (!resolved.isEmpty()) {
+                info.bufferShaderPaths.append(resolved);
             }
         }
     }
     if (info.bufferShaderPaths.isEmpty()) {
         const QString bufferShaderName =
             root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
-        info.bufferShaderPaths.append(dir.filePath(bufferShaderName));
+        const QString resolvedBuffer = resolveWithinPack(dir, bufferShaderName);
+        if (!resolvedBuffer.isEmpty()) {
+            info.bufferShaderPaths.append(resolvedBuffer);
+        }
     }
     if (info.isMultipass) {
         bool allExist = true;
@@ -1042,8 +1078,8 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
             const QString imgPath = result.value(uName).toString();
             if (!imgPath.isEmpty() && QFileInfo(imgPath).isRelative()) {
                 const QDir shaderDir = QFileInfo(info.sourcePath).absoluteDir();
-                const QString resolved = shaderDir.absoluteFilePath(imgPath);
-                if (QFile::exists(resolved)) {
+                const QString resolved = resolveWithinPack(shaderDir, imgPath);
+                if (!resolved.isEmpty() && QFile::exists(resolved)) {
                     result[uName] = resolved;
                 }
             }

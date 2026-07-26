@@ -122,7 +122,9 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
     // field — the result registers under the inner-name key while the
     // file on disk suggests a different identity. Reject up front with a
     // clear diagnostic naming both sides.
-    const QString basename = QFileInfo(filePath).completeBaseName();
+    // Reuses the QFileInfo built for the size cap above rather than stat-ing
+    // the same path a second time on this per-file hot path.
+    const QString basename = info.completeBaseName();
     if (name != basename) {
         qCWarning(category).nospace() << "Skipping " << filePath << ": name '" << name << "' does not match filename '"
                                       << basename << "' — rejecting to avoid silent shadowing";

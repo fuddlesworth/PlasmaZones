@@ -752,24 +752,32 @@ private Q_SLOTS:
         AnimationsPageController c(&registry, &settings);
 
         QVERIFY(c.setShaderOverride(QStringLiteral("popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+        QVERIFY(c.setShaderOverride(QStringLiteral("popup.zoneSelector.show"), QStringLiteral("pixelate"), {}));
+
+        // TWO paths, and that is the point. With one path, `cleared += -1` and
+        // an early `return -1` are indistinguishable — both yield -1 — so a
+        // single-path fixture cannot pin either the "never summed in" rule or
+        // the "stops at the first refusal" one. The gate is global, so both
+        // paths refuse: summing would give -2.
+        const QStringList group{QStringLiteral("popup.layoutPicker"), QStringLiteral("popup.zoneSelector")};
 
         // An async discard owning the tree is what the -1 sentinel reports.
-        // asyncRevertPending() sets the in-flight gate; the descendant clear
-        // must then refuse rather than report 0 cleared.
+        // The gate is cleared only in the watcher's `finished` handler, and no
+        // event loop spins between here and the call below, so it is still up.
+        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
         QSignalSpy done(&c, &AnimationsPageController::discardResult);
         c.asyncRevertPending();
 
-        const int result = c.clearShaderOverrideDescendantsOnPaths(QStringList{QStringLiteral("popup.layoutPicker")});
-        if (result >= 0) {
-            // The worker finished before we got here, so the gate was already
-            // down. Nothing was refused, and the override must still be gone or
-            // still present consistently — either way this run cannot pin the
-            // sentinel, so say so rather than assert something unrelated.
-            QSKIP("the async discard completed before the refusal could be observed");
-        }
-        QCOMPARE(result, -1);
-        QVERIFY2(!c.rawShaderProfile(QStringLiteral("popup.layoutPicker.show")).isEmpty(),
-                 "a refused descendant clear removed an override anyway");
+        QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression(QStringLiteral("clearShaderOverrideDescendants: refusing while async discard")));
+        QCOMPARE(c.clearShaderOverrideDescendantsOnPaths(group), -1);
+        // Stopped at the FIRST refusal: the second path was never attempted, so
+        // exactly one toast, not one per path.
+        QCOMPARE(toasts.count(), 1);
+        // The stored tree is deliberately not asserted: the discard started
+        // above is restoring it on a worker thread, so its contents here are a
+        // race with that restore rather than evidence about the refusal.
         QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
     }
 };

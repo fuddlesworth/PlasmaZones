@@ -127,10 +127,11 @@ public:
 
     // @p registry must be non-null and must outlive the loader — it is a
     // hard precondition (the loader is useless without a store and every
-    // reconcile dereferences it). The debug Q_ASSERT_X catches a null in
-    // development; passing null in a release build is a programmer-error
-    // contract violation (undefined behaviour / crash on first reconcile),
-    // not a recoverable condition. In practice callers pass the address of a
+    // reconcile dereferences it). The ctor `qFatal`s on null in EVERY build:
+    // it is a programmer-error contract violation, not a recoverable
+    // condition, and crashing deterministically at construction with a
+    // greppable message beats crashing inside the first reconcile, far from
+    // the cause. In practice callers pass the address of a
     // Registry member they own, so null cannot legitimately occur. @p parser
     // is required (a null parser would silently skip every pack). @p logCat is
     // stored by reference and must outlive the loader (a Q_LOGGING_CATEGORY

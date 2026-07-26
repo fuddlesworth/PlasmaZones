@@ -109,9 +109,13 @@ public:
     QJsonObject toJson() const;
 
     /// Parse from JSON. Missing keys produce unset fields. Curve resolved
-    /// via @p registry. Out-of-range `duration` / `minDistance` /
-    /// `staggerInterval` are rejected: logged and left unset, so the field
-    /// inherits from a parent profile or falls back to the library default.
+    /// via @p registry. `duration` / `minDistance` / `staggerInterval` that
+    /// are out of range, OR that hold something which is not a JSON number,
+    /// are rejected: logged and left unset, so the field inherits from a parent
+    /// profile or falls back to the library default. The type check is not
+    /// redundant — `QJsonValue::toDouble(default)` hands back the default for
+    /// any non-number, and every library default passes the range checks, so
+    /// without it a malformed value would land ENGAGED and block inheritance.
     ///
     /// `sequenceMode` is the one exception. A value that is out of range or
     /// not a known enumerator is logged and replaced with
