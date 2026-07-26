@@ -195,19 +195,26 @@ int main(int argc, char* argv[])
     // callable), but that is an invariant of this function's layout, not
     // something the callable can check. The guard makes the lifetime rule
     // enforce itself if either declaration ever moves.
-    controller.animationsPage()->setProfileStoreRefresher(
-        [loader = QPointer<PhosphorAnimation::ProfileLoader>(animationBootstrap.profileLoader())]() {
-            if (!loader) {
-                // Never silently: a null here means the loader outlived its
-                // declared order and the page is back to reading a stale
-                // registry, which is exactly the bug this wiring exists to
-                // fix — it must not degrade quietly into it.
-                qCWarning(PlasmaZones::lcCore)
-                    << "profile-store refresher fired after the animation bootstrap was destroyed";
-                return;
-            }
-            loader->rescanNow();
-        });
+    //
+    // Null-checked like every other page accessor in this file and in
+    // SettingsController's own call sites. Construction is unconditional today,
+    // so this cannot fire — but one file carrying two contradictory nullability
+    // contracts for the same pointer is how the check that matters gets dropped.
+    if (auto* animationsPage = controller.animationsPage()) {
+        animationsPage->setProfileStoreRefresher(
+            [loader = QPointer<PhosphorAnimation::ProfileLoader>(animationBootstrap.profileLoader())]() {
+                if (!loader) {
+                    // Never silently: a null here means the loader outlived its
+                    // declared order and the page is back to reading a stale
+                    // registry, which is exactly the bug this wiring exists to
+                    // fix — it must not degrade quietly into it.
+                    qCWarning(PlasmaZones::lcCore)
+                        << "profile-store refresher fired after the animation bootstrap was destroyed";
+                    return;
+                }
+                loader->rescanNow();
+            });
+    }
 
     // The launch controller owns the D-Bus single-instance lifecycle. Holds a
     // non-owning pointer to `controller`, which must outlive it (guaranteed by

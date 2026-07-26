@@ -44,7 +44,12 @@ Menu {
     /// for the next snap-layout show). Doing the dance on every
     /// show would also churn the popup chain needlessly.
     property string _aspectRatioMenuKind: "none"
-    readonly property bool isAutotile: layout && layout.isAutotile === true
+    // Boolean-coerced: `layout` is untyped `var` and defaults to null, and the
+    // `&&` chain yields the first falsy operand rather than `false`. It works
+    // today only because QML coerces null to false on assignment to a typed
+    // bool; the same shape is documented elsewhere in this tree as an
+    // "Cannot assign [undefined] to bool" hazard.
+    readonly property bool isAutotile: Boolean(layout && layout.isAutotile === true)
     readonly property string layoutId: layout ? (layout.id || "") : ""
     // Cache the aspect-ratio options + screen list rather than
     // re-deriving them on every binding read. The Instantiator
@@ -321,8 +326,8 @@ Menu {
     }
 
     MenuItem {
-        readonly property bool perLayoutAuto: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true
-        readonly property bool globalAuto: layoutContextMenu.appSettings && layoutContextMenu.appSettings.autoAssignAllLayouts === true
+        readonly property bool perLayoutAuto: Boolean(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true)
+        readonly property bool globalAuto: Boolean(layoutContextMenu.appSettings && layoutContextMenu.appSettings.autoAssignAllLayouts === true)
 
         text: globalAuto ? i18n("Auto-assign forced on (global setting)") : (perLayoutAuto ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign"))
         icon.name: (perLayoutAuto || globalAuto) ? "window-duplicate" : "window-new"
@@ -366,13 +371,13 @@ Menu {
     }
 
     MenuSeparator {
-        visible: layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+        visible: Boolean(layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile)
     }
 
     MenuItem {
         text: i18n("Delete")
         icon.name: "edit-delete"
-        visible: layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+        visible: Boolean(layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile)
         onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
     }
 
@@ -395,13 +400,13 @@ Menu {
     }
 
     MenuSeparator {
-        visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
+        visible: Boolean(layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem)
     }
 
     MenuItem {
         text: i18n("Delete")
         icon.name: "edit-delete"
-        visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
+        visible: Boolean(layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem)
         onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
     }
 }

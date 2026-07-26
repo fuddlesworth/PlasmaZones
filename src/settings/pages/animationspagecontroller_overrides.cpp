@@ -100,6 +100,22 @@ QVariantMap AnimationsPageController::rawProfile(const QString& path) const
     return readProfileJson(profileFilePath(path)).toVariantMap();
 }
 
+QVariantMap AnimationsPageController::cachedDiskProfile(const QString& path) const
+{
+    const auto cached = m_diskProfileCache.constFind(path);
+    if (cached != m_diskProfileCache.constEnd()) {
+        return cached.value();
+    }
+    QVariantMap fresh = sanitizedProfileMap(readProfileJson(profileFilePath(path)));
+    m_diskProfileCache.insert(path, fresh);
+    return fresh;
+}
+
+void AnimationsPageController::invalidateDiskProfileCache() const
+{
+    m_diskProfileCache.clear();
+}
+
 QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
 {
     using namespace PhosphorAnimation;
@@ -125,16 +141,22 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
             // so disk is the answer. Skipped for non-event paths so a crafted
             // parent like "../" can't cause a stray file open.
             //
-            // Cost, stated honestly: a level that HAD a registry entry used to
-            // resolve from RAM with no filesystem I/O at all, and now pays a
-            // stat plus, when a user file exists, an open and a JSON parse.
-            // Bounded by chain depth (four levels at the deepest, e.g.
-            // window.movement.snapIn), over files of a few hundred bytes that
-            // this process itself just wrote and the page cache still holds.
-            // The alternative — keeping the RAM read and forcing a rescan on
-            // writes too — costs a full directory re-parse per slider tick
-            // during a duration drag, which is orders of magnitude worse.
-            source = readProfileJson(profileFilePath(cur)).toVariantMap();
+            // Cost: a level that HAD a registry entry used to resolve from RAM
+            // with no filesystem I/O at all. Bounded by chain depth (four levels
+            // at the deepest, e.g. window.movement.snapIn), but this function
+            // backs a QML binding that every card in scope re-evaluates on each
+            // overrideChanged, and setOverride emits one of those per write path
+            // per slider tick — so the naive form costs (visible cards x 4)
+            // synchronous opens and parses per tick of a duration drag. The
+            // per-path cache below collapses that back to one read per path per
+            // mutation; see `invalidateDiskProfileCache` for the invalidation
+            // points. The alternative — keeping the RAM read and forcing a
+            // rescan on writes too — costs a full directory re-parse per tick,
+            // which is worse again.
+            //
+            // Sanitised, not raw: the registry path this replaces ran every file
+            // through Profile::fromJson. See `sanitizedProfileMap`.
+            source = cachedDiskProfile(cur);
         }
         if (source.isEmpty() && registry) {
             // No user file at this level: the registry supplies whatever the
@@ -245,6 +267,11 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
         return false;
     }
 
+    // Disk changed under the cache. Must happen before any signal below, since
+    // the QML handlers wired to `overrideChanged` re-read through
+    // `resolvedProfile` synchronously on this stack.
+    invalidateDiskProfileCache();
+
     // The write may have restored the file to exactly its pre-edit content (the
     // user undid an edit by hand). The staged snapshot is then a phantom: disk
     // already holds what Discard would write back, so keeping it would leave the
@@ -253,8 +280,14 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // The drop owns the signal for the transition it causes, so the compare below
     // must not fire again for the same flip.
     // Emit-side convention here (the clear paths use Defer and own the signal
-    // themselves): `dropped` stands in for "the drop already emitted", which
-    // holds because a drop on this path always flips. The early return above
+    // themselves): `dropped` stands in for "the drop already emitted". Note
+    // this does NOT rest on a drop always flipping — it often does not, since
+    // hasPendingChanges() is equally true when other files are snapshotted or
+    // the shader tree diverges from its committed baseline. It rests on the
+    // weaker and actually true property: a drop that flipped has already
+    // emitted, and a drop that did not flip left wasPending == nowPending, so
+    // suppressing the compare below loses nothing either way.
+    // The early return above
     // guarantees the written content differs from what was on disk, so a
     // snapshot staged by THIS call can never match afterwards — a successful
     // drop therefore means a pre-existing entry went away, which is a real
@@ -293,6 +326,11 @@ AnimationsPageController::OverrideFileRemoval AnimationsPageController::removeOv
     // snapshot on a later one would otherwise leave "clean" as the last thing
     // the page heard while ending dirty. Every caller re-samples and emits once.
     dropFileSnapshotIfUnchanged(filePath, SnapshotDropSignal::Defer);
+    // This function deliberately does not refresh the profile store, so the
+    // cache drop cannot ride along on `refreshProfileStore`. Without it the
+    // next `resolvedProfile` would serve the deleted file's contents back — the
+    // stale-inherited-value bug, reintroduced one layer down.
+    invalidateDiskProfileCache();
     return OverrideFileRemoval::Removed;
 }
 

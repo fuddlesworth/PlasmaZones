@@ -26,12 +26,13 @@ private:
     /// composition roots and tests own their own registries. Each test
     /// method gets a freshly cleared registry via init() / cleanup().
     PhosphorProfileRegistry m_profileRegistry;
-    /// Returns false instead of QVERIFY-ing, so a failed write fails the
-    /// TEST rather than just returning from this helper. QVERIFY expands to
-    /// `if (!...) return;`, which in a void helper is silent: the fixture
-    /// carried on with an empty directory, and every rejection test then
-    /// "passed" because loadFromDirectory found nothing to reject. Call sites
-    /// must wrap this in QVERIFY.
+    /// Returns false instead of QVERIFY-ing, so the failure stops the caller.
+    /// QVERIFY expands to `if (!...) return;`, which in a void helper does mark
+    /// the test failed (qVerify routes to QTestResult::addFailure) but then
+    /// hands control back to a fixture that carries on against an empty
+    /// directory — turning one clear failure into a pile of misleading
+    /// secondary ones from tests that found nothing to reject. Call sites must
+    /// wrap this in QVERIFY.
     [[nodiscard]] bool writeFile(const QString& path, const QString& contents) const
     {
         QFile f(path);

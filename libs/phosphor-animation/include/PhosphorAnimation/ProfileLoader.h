@@ -4,13 +4,11 @@
 #pragma once
 
 #include <PhosphorAnimation/CurveLoader.h> // LiveReload re-export
-#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <PhosphorFsLoader/DirectoryLoader.h>
 #include <PhosphorFsLoader/IDirectoryLoaderSink.h>
 
-#include <QtCore/QHash>
 #include <QtCore/QObject>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
@@ -23,10 +21,18 @@ class CurveRegistry;
 class PhosphorProfileRegistry;
 
 /// Scans JSON profile-definition files and registers them with PhosphorProfileRegistry.
-/// Shaped like CurveLoader, diverging in three places: an owner-tag constructor
-/// parameter, an O(1) `hasPath()`, and a synchronous `rescanNow()` for the consumer
-/// that writes profile files and reads the registry back in the same call. Nothing
-/// needs the last of curves, so CurveLoader has no twin for it.
+/// Shaped like CurveLoader, diverging in two places: an owner-tag constructor
+/// parameter, and a synchronous `rescanNow()` for the consumer that writes profile
+/// files and reads the registry back in the same call. Nothing needs the second of
+/// curves, so CurveLoader has no twin for it.
+///
+/// There is deliberately no membership accessor here. "Is this path tracked by this
+/// loader" is almost never the question a consumer means, and answering it is
+/// actively misleading: a path can be tracked here while the registry entry for it
+/// belongs to somebody else, including an untagged direct publish. Ask
+/// `PhosphorProfileRegistry::ownerOf()` instead, which is the ownership question and
+/// is equally O(1). See `shader_warmup.cpp` for the self-poisoning merge this
+/// distinction prevents.
 /// User curves must already be registered (CurveLoader first).
 /// Profiles loaded here are preset templates — settings UIs deep-copy into active profiles.
 class PHOSPHORANIMATION_EXPORT ProfileLoader : public QObject
@@ -83,13 +89,6 @@ public:
         QString systemSourcePath;
     };
     QList<Entry> entries() const;
-
-    /// O(1) membership check over this loader's OWN bookkeeping — prefer
-    /// over entries() when that is the question. For "who owns this path in
-    /// the registry", which is what a consumer usually wants, ask
-    /// `PhosphorProfileRegistry::ownerOf()` instead: a path can be tracked
-    /// here and yet be owned by a direct registration in the registry.
-    bool hasPath(const QString& path) const;
 
 Q_SIGNALS:
     void profilesChanged();

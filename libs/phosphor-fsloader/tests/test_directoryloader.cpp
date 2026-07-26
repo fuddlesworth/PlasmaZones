@@ -99,14 +99,24 @@ public:
     }
 };
 
-void writeJson(const QString& path, const QString& name, const QString& value)
+/// `[[nodiscard]] bool`, not a void helper containing QVERIFY: QVERIFY expands
+/// to `if (!qVerify(...)) return;`, so a void fixture helper marks the test
+/// failed and then hands control back to a caller that carries on against a
+/// missing or empty file, turning one clear failure into a pile of misleading
+/// secondary ones. Returning the outcome lets the call site QVERIFY and stop.
+/// The write result is checked too, so a short or failed write is not silently
+/// accepted. Same shape as `test_profileloader.cpp`'s helper.
+[[nodiscard]] bool writeJson(const QString& path, const QString& name, const QString& value)
 {
     QJsonObject obj;
     obj[QLatin1String("name")] = name;
     obj[QLatin1String("value")] = value;
     QFile f(path);
-    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    f.write(QJsonDocument(obj).toJson());
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    const QByteArray bytes = QJsonDocument(obj).toJson();
+    return f.write(bytes) == bytes.size();
 }
 
 } // namespace
@@ -139,7 +149,7 @@ private Q_SLOTS:
     void testScan_singleFile()
     {
         const QString f = m_tmp->filePath(QStringLiteral("a.json"));
-        writeJson(f, QStringLiteral("alpha"), QStringLiteral("v1"));
+        QVERIFY(writeJson(f, QStringLiteral("alpha"), QStringLiteral("v1")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -152,7 +162,8 @@ private Q_SLOTS:
     void testScan_skipsMalformedFile()
     {
         // Good file + bad file — the good one must still load.
-        writeJson(m_tmp->filePath(QStringLiteral("good.json")), QStringLiteral("good-key"), QStringLiteral("ok"));
+        QVERIFY(
+            writeJson(m_tmp->filePath(QStringLiteral("good.json")), QStringLiteral("good-key"), QStringLiteral("ok")));
         QFile bad(m_tmp->filePath(QStringLiteral("bad.json")));
         QVERIFY(bad.open(QIODevice::WriteOnly));
         bad.write("{ not valid json ");
@@ -168,8 +179,8 @@ private Q_SLOTS:
 
     void testRescan_purgesDeletedEntries()
     {
-        writeJson(m_tmp->filePath(QStringLiteral("a.json")), QStringLiteral("alpha"), QStringLiteral("v1"));
-        writeJson(m_tmp->filePath(QStringLiteral("b.json")), QStringLiteral("beta"), QStringLiteral("v2"));
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("a.json")), QStringLiteral("alpha"), QStringLiteral("v1")));
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("b.json")), QStringLiteral("beta"), QStringLiteral("v2")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -196,9 +207,10 @@ private Q_SLOTS:
         QVERIFY(systemDir.isValid() && userDir.isValid());
 
         // Both files have the same key "shared" — user version wins.
-        writeJson(systemDir.filePath(QStringLiteral("x.json")), QStringLiteral("shared"),
-                  QStringLiteral("from-system"));
-        writeJson(userDir.filePath(QStringLiteral("x.json")), QStringLiteral("shared"), QStringLiteral("from-user"));
+        QVERIFY(writeJson(systemDir.filePath(QStringLiteral("x.json")), QStringLiteral("shared"),
+                          QStringLiteral("from-system")));
+        QVERIFY(writeJson(userDir.filePath(QStringLiteral("x.json")), QStringLiteral("shared"),
+                          QStringLiteral("from-user")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -228,8 +240,8 @@ private Q_SLOTS:
 
         const QString systemPath = systemDir.filePath(QStringLiteral("x.json"));
         const QString userPath = userDir.filePath(QStringLiteral("x.json"));
-        writeJson(systemPath, QStringLiteral("shared"), QStringLiteral("from-system"));
-        writeJson(userPath, QStringLiteral("shared"), QStringLiteral("from-user"));
+        QVERIFY(writeJson(systemPath, QStringLiteral("shared"), QStringLiteral("from-system")));
+        QVERIFY(writeJson(userPath, QStringLiteral("shared"), QStringLiteral("from-user")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -271,7 +283,8 @@ private Q_SLOTS:
 
         // Drop a file — watcher fires directoryChanged, debounce
         // timer expires, rescan happens.
-        writeJson(m_tmp->filePath(QStringLiteral("new.json")), QStringLiteral("new-key"), QStringLiteral("hot"));
+        QVERIFY(
+            writeJson(m_tmp->filePath(QStringLiteral("new.json")), QStringLiteral("new-key"), QStringLiteral("hot")));
 
         QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
         QVERIFY(spy.wait(500));
@@ -291,8 +304,8 @@ private Q_SLOTS:
         // Rapid file drops in the same debounce window — should
         // produce ONE commit, not N.
         for (int i = 0; i < 3; ++i) {
-            writeJson(m_tmp->filePath(QStringLiteral("burst-%1.json").arg(i)), QStringLiteral("burst-%1").arg(i),
-                      QStringLiteral("v"));
+            QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("burst-%1.json").arg(i)),
+                              QStringLiteral("burst-%1").arg(i), QStringLiteral("v")));
         }
 
         QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
@@ -322,7 +335,7 @@ private Q_SLOTS:
         // directory creation; the rescan+promote logic attaches a
         // direct watch and subsequent file edits work normally.
         QVERIFY(QDir(m_tmp->path()).mkdir(QStringLiteral("profiles")));
-        writeJson(target + QStringLiteral("/first.json"), QStringLiteral("first"), QStringLiteral("v"));
+        QVERIFY(writeJson(target + QStringLiteral("/first.json"), QStringLiteral("first"), QStringLiteral("v")));
 
         QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
         // Parent-dir change fires on the mkdir; the loader promotes
@@ -332,6 +345,8 @@ private Q_SLOTS:
         // ~1 ms debounce — the watcher can take several hundred ms to
         // deliver the parent-dir-changed event on some kernels / CI
         // loads.
+        // Result is asserted below rather than discarded: the fallback rescan
+        // must not be allowed to paper over a watcher that never fired.
         const bool watcherFired = spy.wait(2000);
 
         // Known race: on some filesystems the parent-watch fires for
@@ -349,11 +364,17 @@ private Q_SLOTS:
         }
         QCOMPARE(loader.registeredCount(), 1);
         QVERIFY(sink.registry.contains(QStringLiteral("first")));
-        // Silence unused-variable warning while keeping the wait
-        // outcome introspectable for debugging. If the watcher never
-        // fires AND the explicit rescan didn't succeed, the test
-        // would have already failed above.
-        Q_UNUSED(watcherFired);
+
+        // The entry count alone does not test what this slot is named for: the
+        // fallback rescan above produces it whether or not the parent watch was
+        // ever promoted. Assert the promotion directly. Either the watcher
+        // fired (in which case promotion must already have happened), or it did
+        // not and the explicit rescan is what promoted it — both end with the
+        // ancestor watch released and a direct watch on the target.
+        QVERIFY2(watcherFired || loader.registeredCount() == 1,
+                 "neither the parent watch nor the fallback rescan produced the entry");
+        QVERIFY2(loader.watchedAncestorForTest(target).isEmpty(),
+                 "parent watch was never promoted — the loader is still watching the ancestor");
     }
 
     /// Regression guard for the grandparent-watch leak. When the
@@ -456,7 +477,7 @@ private Q_SLOTS:
     /// event is silently dropped.
     void testRescanRace_requestDuringRescan()
     {
-        writeJson(m_tmp->filePath(QStringLiteral("a.json")), QStringLiteral("alpha"), QStringLiteral("v1"));
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("a.json")), QStringLiteral("alpha"), QStringLiteral("v1")));
 
         RacyRecordingSink sink;
         DirectoryLoader loader(sink);
@@ -498,7 +519,7 @@ private Q_SLOTS:
 
         // A small valid sibling must still load — the size guard must
         // not short-circuit the entire scan.
-        writeJson(m_tmp->filePath(QStringLiteral("small.json")), QStringLiteral("small"), QStringLiteral("v"));
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("small.json")), QStringLiteral("small"), QStringLiteral("v")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -530,8 +551,8 @@ private Q_SLOTS:
         for (int i = 0; i < totalFiles; ++i) {
             // Zero-padded names so alphabetic sort is deterministic and
             // the surviving set is always the first kTestCap files.
-            writeJson(m_tmp->filePath(QStringLiteral("entry-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
-                      QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0')), QStringLiteral("v"));
+            QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("entry-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                              QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0')), QStringLiteral("v")));
         }
 
         RecordingSink sink;
@@ -585,8 +606,8 @@ private Q_SLOTS:
         QTemporaryDir sameKeyDir;
         QVERIFY(sameKeyDir.isValid());
         for (int i = 0; i < totalFiles; ++i) {
-            writeJson(sameKeyDir.filePath(QStringLiteral("dup-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
-                      QStringLiteral("one-key"), QStringLiteral("v"));
+            QVERIFY(writeJson(sameKeyDir.filePath(QStringLiteral("dup-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                              QStringLiteral("one-key"), QStringLiteral("v")));
         }
 
         RecordingSink dupSink;
@@ -616,7 +637,7 @@ private Q_SLOTS:
             QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
             QVERIFY(f.write(QByteArrayLiteral("{ this is not json")) > 0);
         }
-        writeJson(m_tmp->filePath(QStringLiteral("zzz.json")), QStringLiteral("good"), QStringLiteral("v"));
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("zzz.json")), QStringLiteral("good"), QStringLiteral("v")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -645,12 +666,12 @@ private Q_SLOTS:
 
         // 50 system files, every one of them shadowed by a user key.
         for (int i = 0; i < 50; ++i) {
-            writeJson(systemDir.filePath(QStringLiteral("sys-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
-                      QStringLiteral("k-%1").arg(i % 3), QStringLiteral("from-system"));
+            QVERIFY(writeJson(systemDir.filePath(QStringLiteral("sys-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                              QStringLiteral("k-%1").arg(i % 3), QStringLiteral("from-system")));
         }
         for (int i = 0; i < 3; ++i) {
-            writeJson(userDir.filePath(QStringLiteral("u-%1.json").arg(i)), QStringLiteral("k-%1").arg(i),
-                      QStringLiteral("from-user"));
+            QVERIFY(writeJson(userDir.filePath(QStringLiteral("u-%1.json").arg(i)), QStringLiteral("k-%1").arg(i),
+                              QStringLiteral("from-user")));
         }
 
         RecordingSink sink;
@@ -686,23 +707,26 @@ private Q_SLOTS:
         // alphabetic ordering is deterministic on every platform.
         const int systemTotal = kTestCap + 5;
         for (int i = 0; i < systemTotal; ++i) {
-            writeJson(systemDir.filePath(QStringLiteral("sys-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
-                      QStringLiteral("sys-key-%1").arg(i, 3, 10, QLatin1Char('0')),
-                      QStringLiteral("from-system-%1").arg(i));
+            QVERIFY(writeJson(systemDir.filePath(QStringLiteral("sys-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                              QStringLiteral("sys-key-%1").arg(i, 3, 10, QLatin1Char('0')),
+                              QStringLiteral("from-system-%1").arg(i)));
         }
-        // One of the system files uses a key the user dir will collide
-        // with — pick a low-index name so it definitely isn't dropped
-        // by the cap on the system side. Index "001" sorts early.
-        writeJson(systemDir.filePath(QStringLiteral("sys-collide.json")), QStringLiteral("collide"),
-                  QStringLiteral("from-system"));
+        // One of the system files uses a key the user dir will collide with.
+        // Named `sys-000-collide.json` so it sorts INSIDE the surviving budget:
+        // reverse iteration spends the cap as 3 user files + 2 system files, so
+        // anything sorting after `sys-001.json` is never parsed and the
+        // collision below would resolve by never happening rather than by
+        // user-wins.
+        QVERIFY(writeJson(systemDir.filePath(QStringLiteral("sys-000-collide.json")), QStringLiteral("collide"),
+                          QStringLiteral("from-system")));
 
         // User dir holds 3 files: two unique keys plus the colliding key.
-        writeJson(userDir.filePath(QStringLiteral("user-a.json")), QStringLiteral("user-only-a"),
-                  QStringLiteral("from-user-a"));
-        writeJson(userDir.filePath(QStringLiteral("user-b.json")), QStringLiteral("user-only-b"),
-                  QStringLiteral("from-user-b"));
-        writeJson(userDir.filePath(QStringLiteral("collide.json")), QStringLiteral("collide"),
-                  QStringLiteral("from-user"));
+        QVERIFY(writeJson(userDir.filePath(QStringLiteral("user-a.json")), QStringLiteral("user-only-a"),
+                          QStringLiteral("from-user-a")));
+        QVERIFY(writeJson(userDir.filePath(QStringLiteral("user-b.json")), QStringLiteral("user-only-b"),
+                          QStringLiteral("from-user-b")));
+        QVERIFY(writeJson(userDir.filePath(QStringLiteral("collide.json")), QStringLiteral("collide"),
+                          QStringLiteral("from-user")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -722,13 +746,19 @@ private Q_SLOTS:
         QVERIFY2(sink.registry.contains(QStringLiteral("user-only-b")),
                  "user file 'user-only-b' was dropped — cap evicted user overrides");
 
-        // Collision resolves to user content, not system.
+        // Collision resolves to user content, not system. The system file
+        // declaring the same key sorts inside the surviving budget, so this
+        // really is decided by first-wins rather than by the system file never
+        // being reached.
         QVERIFY(sink.registry.contains(QStringLiteral("collide")));
         QCOMPARE(sink.registry.value(QStringLiteral("collide")), std::string("from-user"));
 
-        // Cap honoured at exactly kTestCap entries total (the 3 user
-        // files + 2 system files = 5).
-        QCOMPARE(loader.registeredCount(), kTestCap);
+        // kTestCap files CONSIDERED (3 user + 2 system), which is what the cap
+        // counts, but only 4 distinct keys registered: the second system file
+        // is the shadowed `collide` duplicate and takes budget without adding a
+        // key. Asserting kTestCap here would be asserting that the collision
+        // above never happened.
+        QCOMPARE(loader.registeredCount(), kTestCap - 1);
     }
 
     /// When the entry-count cap trips during the user-dir pass, the
@@ -751,8 +781,8 @@ private Q_SLOTS:
         // same key. Cap is generous enough for both passes.
         const QString systemFile = systemDir.filePath(QStringLiteral("collide.json"));
         const QString userFile = userDir.filePath(QStringLiteral("collide.json"));
-        writeJson(systemFile, QStringLiteral("collide"), QStringLiteral("from-system"));
-        writeJson(userFile, QStringLiteral("collide"), QStringLiteral("from-user"));
+        QVERIFY(writeJson(systemFile, QStringLiteral("collide"), QStringLiteral("from-system")));
+        QVERIFY(writeJson(userFile, QStringLiteral("collide"), QStringLiteral("from-user")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -767,14 +797,17 @@ private Q_SLOTS:
         // Reverse-iteration scans user first; with kTestCap=3 and 5
         // user files, the cap trips before system is touched.
         for (int i = 0; i < 5; ++i) {
-            writeJson(userDir.filePath(QStringLiteral("flood-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
-                      QStringLiteral("flood-key-%1").arg(i, 3, 10, QLatin1Char('0')),
-                      QStringLiteral("from-user-flood-%1").arg(i));
+            QVERIFY(writeJson(userDir.filePath(QStringLiteral("flood-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                              QStringLiteral("flood-key-%1").arg(i, 3, 10, QLatin1Char('0')),
+                              QStringLiteral("from-user-flood-%1").arg(i)));
         }
         loader.setMaxEntriesForTest(kTestCap);
-        loader.requestRescan();
+        // Spy attached BEFORE the trigger, per the convention the sibling file
+        // documents: a rescan that fires early cannot slip past it.
         QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
-        QVERIFY(spy.wait(2000));
+        loader.setDebounceIntervalForTest(1);
+        loader.requestRescan();
+        QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 2000);
 
         // The collide entry survived (alphabetic sort puts `collide`
         // before `flood-*`). Its systemSourcePath must be preserved
@@ -859,7 +892,7 @@ private Q_SLOTS:
     void testAtomicRenameSaveDetected()
     {
         const QString target = m_tmp->filePath(QStringLiteral("doc.json"));
-        writeJson(target, QStringLiteral("doc"), QStringLiteral("v1"));
+        QVERIFY(writeJson(target, QStringLiteral("doc"), QStringLiteral("v1")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -874,7 +907,7 @@ private Q_SLOTS:
         // on the new inode during the next rescan so subsequent edits
         // fire entriesChanged.
         const QString tmpPath = m_tmp->filePath(QStringLiteral("doc.json.tmp"));
-        writeJson(tmpPath, QStringLiteral("doc"), QStringLiteral("v2"));
+        QVERIFY(writeJson(tmpPath, QStringLiteral("doc"), QStringLiteral("v2")));
         QVERIFY2(QFile::remove(target), "could not remove pre-rename target");
         QVERIFY2(QFile::rename(tmpPath, target), "atomic rename failed");
 
@@ -895,7 +928,7 @@ private Q_SLOTS:
         // the assertion is on the post-condition: a single rescan must
         // reflect the v3 content).
         QVERIFY(QFile::remove(target));
-        writeJson(target, QStringLiteral("doc"), QStringLiteral("v3"));
+        QVERIFY(writeJson(target, QStringLiteral("doc"), QStringLiteral("v3")));
 
         QSignalSpy spy2(&loader, &DirectoryLoader::entriesChanged);
         QVERIFY(spy2.wait(2000));

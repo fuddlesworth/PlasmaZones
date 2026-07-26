@@ -46,16 +46,28 @@ struct FakePayload
     QString fragmentShaderPath; // exercised by the watch-list contract
 };
 
-void writeFile(const QString& path, const QByteArray& bytes)
+/// `[[nodiscard]] bool`, not a void helper containing QVERIFY: QVERIFY expands
+/// to `if (!qVerify(...)) return;`, so a void fixture helper marks the test
+/// failed and then hands control back to a caller that carries on against a
+/// missing or empty file, turning one clear failure into a pile of misleading
+/// secondary ones. Returning the outcome lets the call site QVERIFY and stop.
+/// The write result is checked too, so a short or failed write is not silently
+/// accepted. Same shape as `test_profileloader.cpp`'s helper.
+[[nodiscard]] bool writeFile(const QString& path, const QByteArray& bytes)
 {
     QFile f(path);
-    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    f.write(bytes);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    return f.write(bytes) == bytes.size();
 }
 
-void writeMetadata(const QString& subdirPath, const QString& id, int score, const QString& fragName = QString())
+[[nodiscard]] bool writeMetadata(const QString& subdirPath, const QString& id, int score,
+                                 const QString& fragName = QString())
 {
-    QVERIFY(QDir().mkpath(subdirPath));
+    if (!QDir().mkpath(subdirPath)) {
+        return false;
+    }
     QJsonObject obj;
     obj.insert(QStringLiteral("id"), id);
     obj.insert(QStringLiteral("score"), score);
@@ -63,9 +75,11 @@ void writeMetadata(const QString& subdirPath, const QString& id, int score, cons
         obj.insert(QStringLiteral("fragmentShader"), fragName);
         // Materialise the referenced file too so per-entry watch
         // extraction can see something on disk.
-        writeFile(subdirPath + QLatin1Char('/') + fragName, QByteArrayLiteral("// frag\n"));
+        if (!writeFile(subdirPath + QLatin1Char('/') + fragName, QByteArrayLiteral("// frag\n"))) {
+            return false;
+        }
     }
-    writeFile(subdirPath + QStringLiteral("/metadata.json"), QJsonDocument(obj).toJson(QJsonDocument::Compact));
+    return writeFile(subdirPath + QStringLiteral("/metadata.json"), QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 
 /// Default parser: trivial `metadata.json` → `FakePayload`.
@@ -146,8 +160,8 @@ private Q_SLOTS:
         QVERIFY(QDir().mkpath(sysDir));
         QVERIFY(QDir().mkpath(userDir));
 
-        writeMetadata(sysDir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), /*score=*/1);
-        writeMetadata(userDir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), /*score=*/2);
+        QVERIFY(writeMetadata(sysDir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), /*score=*/1));
+        QVERIFY(writeMetadata(userDir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), /*score=*/2));
 
         int commits = 0;
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [&]() {
@@ -180,13 +194,13 @@ private Q_SLOTS:
         QVERIFY(QDir().mkpath(userDir));
 
         // User: one entry.
-        writeMetadata(userDir + QStringLiteral("/user-pkg"), QStringLiteral("user-pkg"), /*score=*/100);
+        QVERIFY(writeMetadata(userDir + QStringLiteral("/user-pkg"), QStringLiteral("user-pkg"), /*score=*/100));
 
         // System: 5 entries. Cap will be 3, so the system pass trips
         // after 2 (user pass already added 1).
         for (int i = 0; i < 5; ++i) {
-            writeMetadata(sysDir + QStringLiteral("/sys-pkg-%1").arg(i), QStringLiteral("sys-pkg-%1").arg(i),
-                          /*score=*/i);
+            QVERIFY(writeMetadata(sysDir + QStringLiteral("/sys-pkg-%1").arg(i), QStringLiteral("sys-pkg-%1").arg(i),
+                                  /*score=*/i));
         }
 
         int commits = 0;
@@ -230,7 +244,7 @@ private Q_SLOTS:
         for (int i = 0; i < kSubdirs; ++i) {
             const QString sub = dir + QStringLiteral("/pkg-%1").arg(i, 3, 10, QLatin1Char('0'));
             QVERIFY(QDir().mkpath(sub));
-            writeFile(sub + QStringLiteral("/metadata.json"), QByteArrayLiteral("{ nope"));
+            QVERIFY(writeFile(sub + QStringLiteral("/metadata.json"), QByteArrayLiteral("{ nope")));
         }
 
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
@@ -242,7 +256,7 @@ private Q_SLOTS:
 
         // Nothing parses, so nothing registers either way — that is precisely
         // why a registration count could not see this.
-        QCOMPARE(strategy.size(), std::size_t{0});
+        QCOMPARE(strategy.size(), 0);
         QVERIFY2(adapter.lastWatches.size() <= kCap,
                  qPrintable(QStringLiteral("cap let %1 broken subdirs arm a watch with a cap of %2")
                                 .arg(adapter.lastWatches.size())
@@ -258,7 +272,7 @@ private Q_SLOTS:
     {
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
         QVERIFY(QDir().mkpath(dir));
-        writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), /*score=*/7);
+        QVERIFY(writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), /*score=*/7));
 
         int commits = 0;
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [&]() {
@@ -276,7 +290,7 @@ private Q_SLOTS:
         QCOMPARE(commits, 1);
 
         // Edit the payload's score field — signature differs, commit fires.
-        writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), /*score=*/42);
+        QVERIFY(writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), /*score=*/42));
         set.rescanNow();
         QCOMPARE(commits, 2);
         QCOMPARE(strategy.pack(QStringLiteral("pkg-a")).score, 42);
@@ -292,8 +306,8 @@ private Q_SLOTS:
         QVERIFY(QDir().mkpath(sysDir));
         QVERIFY(QDir().mkpath(userDir));
 
-        writeMetadata(sysDir + QStringLiteral("/sys-pkg"), QStringLiteral("sys-pkg"), 1);
-        writeMetadata(userDir + QStringLiteral("/user-pkg"), QStringLiteral("user-pkg"), 2);
+        QVERIFY(writeMetadata(sysDir + QStringLiteral("/sys-pkg"), QStringLiteral("sys-pkg"), 1));
+        QVERIFY(writeMetadata(userDir + QStringLiteral("/user-pkg"), QStringLiteral("user-pkg"), 2));
 
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
         strategy.setUserPath(userDir);
@@ -316,12 +330,13 @@ private Q_SLOTS:
     {
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
         QVERIFY(QDir().mkpath(dir));
-        writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0, QStringLiteral("effect.frag"));
+        QVERIFY(
+            writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0, QStringLiteral("effect.frag")));
         // Top-level shared file in the search path itself, not in any
         // pack subdir. Mirrors how the shader-pack registry adds
         // `common.glsl` to the watch list.
         const QString sharedInclude = dir + QStringLiteral("/common.glsl");
-        writeFile(sharedInclude, QByteArrayLiteral("// shared\n"));
+        QVERIFY(writeFile(sharedInclude, QByteArrayLiteral("// shared\n")));
 
         // Hand-rolled IScanStrategy adapter (defined at namespace scope
         // above) captures the watch list `WatchedDirectorySet` requested.
@@ -361,9 +376,9 @@ private Q_SLOTS:
     {
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
         QVERIFY(QDir().mkpath(dir));
-        writeMetadata(dir + QStringLiteral("/c"), QStringLiteral("ccc"), 0);
-        writeMetadata(dir + QStringLiteral("/a"), QStringLiteral("aaa"), 0);
-        writeMetadata(dir + QStringLiteral("/b"), QStringLiteral("bbb"), 0);
+        QVERIFY(writeMetadata(dir + QStringLiteral("/c"), QStringLiteral("ccc"), 0));
+        QVERIFY(writeMetadata(dir + QStringLiteral("/a"), QStringLiteral("aaa"), 0));
+        QVERIFY(writeMetadata(dir + QStringLiteral("/b"), QStringLiteral("bbb"), 0));
 
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
 
@@ -387,14 +402,25 @@ private Q_SLOTS:
         const QString pkgDir = dir + QStringLiteral("/big");
         QVERIFY(QDir().mkpath(pkgDir));
 
-        // Write a metadata.json one byte over the cap. Body content is
-        // arbitrary; the strategy must reject before opening for parse.
-        QByteArray oversize(static_cast<int>(DirectoryLoader::kMaxFileBytes) + 1, 'x');
-        writeFile(pkgDir + QStringLiteral("/metadata.json"), oversize);
+        // Structurally VALID JSON, padded past the cap — not a run of 'x'.
+        // Junk bytes are rejected by the parser whether or not the size guard
+        // exists, so a junk payload makes this test pass with the guard deleted
+        // and proves nothing. Valid oversize JSON separates the two: with the
+        // guard, size() stays 1; without it, the pack parses and size() is 2.
+        // Same construction, and the same reason, as
+        // `test_directoryloader.cpp::testOversizedFileIsSkipped`.
+        QJsonObject bigObj;
+        bigObj.insert(QStringLiteral("id"), QStringLiteral("big-pkg"));
+        bigObj.insert(QStringLiteral("score"), 0);
+        const qint64 cap = DirectoryLoader::kMaxFileBytes;
+        bigObj.insert(QStringLiteral("pad"), QString(static_cast<int>(cap), QLatin1Char('x')));
+        const QByteArray oversize = QJsonDocument(bigObj).toJson(QJsonDocument::Compact);
+        QVERIFY(oversize.size() > cap);
+        QVERIFY(writeFile(pkgDir + QStringLiteral("/metadata.json"), oversize));
 
         // Plus a small valid sibling so we can verify the strategy
         // didn't bail on the whole scan.
-        writeMetadata(dir + QStringLiteral("/small"), QStringLiteral("small-pkg"), 0);
+        QVERIFY(writeMetadata(dir + QStringLiteral("/small"), QStringLiteral("small-pkg"), 0));
 
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
 
@@ -403,8 +429,9 @@ private Q_SLOTS:
 
         QCOMPARE(strategy.size(), 1);
         QVERIFY(strategy.contains(QStringLiteral("small-pkg")));
-        // The big pack must not have been parsed even partially —
-        // its id never lands in the map.
+        // The big pack is well-formed and declares a usable id, so the ONLY
+        // thing keeping it out of the map is the size guard.
+        QVERIFY(!strategy.contains(QStringLiteral("big-pkg")));
     }
 
     /// Between scans, removing one pack's `metadata.json` purges that
@@ -414,8 +441,8 @@ private Q_SLOTS:
     {
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
         QVERIFY(QDir().mkpath(dir));
-        writeMetadata(dir + QStringLiteral("/keep"), QStringLiteral("keep"), 0);
-        writeMetadata(dir + QStringLiteral("/drop"), QStringLiteral("drop"), 0);
+        QVERIFY(writeMetadata(dir + QStringLiteral("/keep"), QStringLiteral("keep"), 0));
+        QVERIFY(writeMetadata(dir + QStringLiteral("/drop"), QStringLiteral("drop"), 0));
 
         int commits = 0;
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [&]() {
@@ -439,16 +466,20 @@ private Q_SLOTS:
         QCOMPARE(commits, 2);
     }
 
-    /// A parser returning `std::nullopt` skips the entry — neither
-    /// inserted in the map nor counted toward the cap. Pinned because
-    /// the production parsers use this path for inline validation
+    /// A parser returning `std::nullopt` skips the entry: it is not
+    /// inserted in the map. It IS counted toward the cap, because
+    /// `subdirsConsidered` is incremented before the parser runs — the
+    /// stat, open and JSON parse it already cost are exactly the work the
+    /// cap exists to bound. See
+    /// `testCapBoundsSubdirsConsideredNotEntriesRegistered` above. Pinned
+    /// because the production parsers use this path for inline validation
     /// failure (e.g. multipass-without-buffer-shader).
     void testParserReturnsNullopt()
     {
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
         QVERIFY(QDir().mkpath(dir));
-        writeMetadata(dir + QStringLiteral("/pkg-good"), QStringLiteral("pkg-good"), 1);
-        writeMetadata(dir + QStringLiteral("/pkg-skip"), QStringLiteral("pkg-skip"), 99);
+        QVERIFY(writeMetadata(dir + QStringLiteral("/pkg-good"), QStringLiteral("pkg-good"), 1));
+        QVERIFY(writeMetadata(dir + QStringLiteral("/pkg-skip"), QStringLiteral("pkg-skip"), 99));
 
         MetadataPackScanStrategy<FakePayload> strategy(
             [](const QString& subdirPath, const QJsonObject& root, bool isUser) -> std::optional<FakePayload> {
@@ -473,11 +504,13 @@ private Q_SLOTS:
     }
 
     /// Empty `directoriesInScanOrder` runs cleanly: empty packs map,
-    /// empty watch list. The first scan with any entries (even empty)
-    /// commits once to seed the signature; the second empty scan does
-    /// NOT commit. This is the "no-content baseline" contract — the
-    /// strategy must distinguish "first observation, results empty"
-    /// from "results identical to last time, also empty".
+    /// empty watch list, and no commit on either scan. This is the
+    /// "no-content baseline" contract. `changed` is
+    /// `isFirstScan ? !fresh.isEmpty() : signature != m_lastSignature`, so
+    /// an empty result set cannot commit on ANY scan, first or later — the
+    /// strategy never announces a state it has nothing to report about.
+    /// The purge half of the contract, where a non-empty scan is followed
+    /// by an empty one and the drop DOES commit, is pinned below.
     void testEmptyDirectoriesInScanOrder()
     {
         // First scan: no directories registered → empty packs, no
@@ -485,11 +518,9 @@ private Q_SLOTS:
         // there's nothing to report).
         int commits = 0;
 
-        // Adapter to drive the strategy directly with an empty list,
-        // since `WatchedDirectorySet` always passes the registered list
-        // (which would never be empty after registerDirectory). The
-        // base's `setDirectories({})` path is the closest production
-        // analogue.
+        // `setDirectories({})` is used rather than calling performScan with
+        // an empty list directly: `WatchedDirectorySet` always passes its
+        // registered list, so it is the closest production analogue.
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [&]() {
             ++commits;
         });
@@ -537,7 +568,8 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("id"), QStringLiteral("pkg-a"));
         obj.insert(QStringLiteral("score"), 0);
         obj.insert(QStringLiteral("displayName"), QStringLiteral("First"));
-        writeFile(pkgDir + QStringLiteral("/metadata.json"), QJsonDocument(obj).toJson(QJsonDocument::Compact));
+        QVERIFY(
+            writeFile(pkgDir + QStringLiteral("/metadata.json"), QJsonDocument(obj).toJson(QJsonDocument::Compact)));
 
         int commits = 0;
         MetadataPackScanStrategy<FakePayload> strategy(
@@ -580,7 +612,8 @@ private Q_SLOTS:
         // contributor's view is identical), but bytes change so
         // metadata.json size+mtime shift.
         obj[QStringLiteral("displayName")] = QStringLiteral("Second-edition");
-        writeFile(pkgDir + QStringLiteral("/metadata.json"), QJsonDocument(obj).toJson(QJsonDocument::Compact));
+        QVERIFY(
+            writeFile(pkgDir + QStringLiteral("/metadata.json"), QJsonDocument(obj).toJson(QJsonDocument::Compact)));
 
         set.rescanNow();
 
@@ -602,10 +635,10 @@ private Q_SLOTS:
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
         QVERIFY(QDir().mkpath(dir));
         // One legit pack.
-        writeMetadata(dir + QStringLiteral("/keep"), QStringLiteral("keep"), 1);
+        QVERIFY(writeMetadata(dir + QStringLiteral("/keep"), QStringLiteral("keep"), 1));
         // One pack inside the sentinel subdir — would be valid if not
         // skipped, so this test fails loudly if skip is broken.
-        writeMetadata(dir + QStringLiteral("/none"), QStringLiteral("none-pkg"), 2);
+        QVERIFY(writeMetadata(dir + QStringLiteral("/none"), QStringLiteral("none-pkg"), 2));
 
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
         strategy.setPerSubdirSkip([](const QString& name) {
@@ -631,7 +664,7 @@ private Q_SLOTS:
     {
         const QString userDir = m_tmp->filePath(QStringLiteral("user"));
         QVERIFY(QDir().mkpath(userDir));
-        writeMetadata(userDir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 1);
+        QVERIFY(writeMetadata(userDir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 1));
 
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
         WatchedDirectorySet set(strategy);
@@ -666,8 +699,8 @@ private Q_SLOTS:
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
         const QString sharedInclude = dir + QStringLiteral("/common.glsl");
         QVERIFY(QDir().mkpath(dir));
-        writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0);
-        writeFile(sharedInclude, QByteArrayLiteral("// shared v1\n"));
+        QVERIFY(writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0));
+        QVERIFY(writeFile(sharedInclude, QByteArrayLiteral("// shared v1\n")));
 
         int commits = 0;
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [&]() {
@@ -688,7 +721,7 @@ private Q_SLOTS:
         // the second; the qWait pads the mtime resolution edge for those
         // that don't round.
         QTest::qWait(10);
-        writeFile(sharedInclude, QByteArrayLiteral("// shared v2 (different bytes)\n"));
+        QVERIFY(writeFile(sharedInclude, QByteArrayLiteral("// shared v2 (different bytes)\n")));
         set.rescanNow();
 
         QCOMPARE(commits, 2);
@@ -705,12 +738,13 @@ private Q_SLOTS:
     {
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
         QVERIFY(QDir().mkpath(dir));
-        writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0, QStringLiteral("effect.frag"));
+        QVERIFY(
+            writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0, QStringLiteral("effect.frag")));
         // Sibling file the parser doesn't reference but the per-entry
         // watch callback exposes — production analogue is a pack's
         // `helpers.glsl` only reachable via `#include` from `effect.frag`.
         const QString helpersPath = dir + QStringLiteral("/pkg-a/helpers.glsl");
-        writeFile(helpersPath, QByteArrayLiteral("// helpers v1\n"));
+        QVERIFY(writeFile(helpersPath, QByteArrayLiteral("// helpers v1\n")));
 
         int commits = 0;
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [&]() {
@@ -731,7 +765,7 @@ private Q_SLOTS:
         QCOMPARE(commits, 1);
 
         QTest::qWait(10);
-        writeFile(helpersPath, QByteArrayLiteral("// helpers v2 (different bytes)\n"));
+        QVERIFY(writeFile(helpersPath, QByteArrayLiteral("// helpers v2 (different bytes)\n")));
         set.rescanNow();
 
         QCOMPARE(commits, 2);
@@ -739,7 +773,7 @@ private Q_SLOTS:
 
     /// `setMaxEntries(0)` is a degenerate but legal cap: the strategy
     /// must register zero entries and not commit (no-content baseline).
-    /// Pinned because the cap-trip check (`entries.size() >= cap`)
+    /// Pinned because the cap-trip check (`subdirsConsidered >= m_maxEntries`)
     /// triggers on every iteration when `cap == 0`; if a future change
     /// flips `>=` to `>`, the guard silently disappears and the cap is
     /// off-by-one. Boundary test catches that regression.
@@ -747,8 +781,8 @@ private Q_SLOTS:
     {
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
         QVERIFY(QDir().mkpath(dir));
-        writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0);
-        writeMetadata(dir + QStringLiteral("/pkg-b"), QStringLiteral("pkg-b"), 0);
+        QVERIFY(writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0));
+        QVERIFY(writeMetadata(dir + QStringLiteral("/pkg-b"), QStringLiteral("pkg-b"), 0));
 
         int commits = 0;
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [&]() {
@@ -776,7 +810,7 @@ private Q_SLOTS:
     {
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
         QVERIFY(QDir().mkpath(dir));
-        writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0);
+        QVERIFY(writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0));
 
         int commits = 0;
         bool reentered = false;
@@ -829,11 +863,12 @@ private Q_SLOTS:
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
         QVERIFY(QDir().mkpath(dir));
         // One valid pack.
-        writeMetadata(dir + QStringLiteral("/good"), QStringLiteral("good"), 1);
+        QVERIFY(writeMetadata(dir + QStringLiteral("/good"), QStringLiteral("good"), 1));
         // One subdir with garbage `metadata.json`.
         const QString badDir = dir + QStringLiteral("/bad");
         QVERIFY(QDir().mkpath(badDir));
-        writeFile(badDir + QStringLiteral("/metadata.json"), QByteArrayLiteral("{ this is { definitely : not json"));
+        QVERIFY(writeFile(badDir + QStringLiteral("/metadata.json"),
+                          QByteArrayLiteral("{ this is { definitely : not json")));
 
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
 

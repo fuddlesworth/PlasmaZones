@@ -251,7 +251,7 @@ Item {
     // "All Panel Events" parent or `panel.slideIn`) and silently
     // persist a dead override that the daemon resolver would shadow
     // any user-intended setting with via deeper-leaf-wins overlay.
-    // Source-of-truth list: `src/core/animationshadersupportedpaths.h`.
+    // Source-of-truth list: `src/core/types/animationshadersupportedpaths.h`.
     readonly property bool _shaderLegSupported: settingsController.animationsPage.supportsShaderLeg(root.eventPath)
     // Number of shader overrides on paths strictly DEEPER than this card's
     // eventPath. Only meaningful for parent-node cards: a stale leaf
@@ -827,6 +827,17 @@ Item {
         // edit landing on a mirror alone (the same event's own card on the
         // advanced page) has to re-run this card's refresh or the banner goes
         // stale. Refreshing costs a re-read of the unchanged primary.
+        // "global" is the tree ROOT, and ProfilePaths::parentPath maps every
+        // category root to it as a bare literal, not as a dotted prefix. A
+        // startsWith(path + ".") test therefore never matches it, so clearing
+        // or reverting a field on the Global card left every descendant card
+        // showing the pre-revert value — this card's whole reason for
+        // listening, still broken for the one path every card inherits from.
+        // Special-cased rather than folded into the prefix test because the
+        // root genuinely is not spelled like an ancestor of anything.
+        if (path === "global")
+            return true;
+
         const paths = root._writePaths;
         for (var i = 0; i < paths.length; ++i) {
             if (path === paths[i] || paths[i].startsWith(path + "."))
@@ -920,20 +931,6 @@ Item {
         // `root.<id>` references would silently resolve to undefined
         // (defaulting `visible:` to true and showing the picker on
         // every event regardless of daemon support).
-        // Toggle OFF semantic: clear timing override AND write
-        // an inheritance-blocking shader override. Plain
-        // `clearShaderOverride` only removes the entry at this
-        // path, leaving inheritance from an ancestor (e.g.
-        // `panel` -> "dissolve") to cascade down — exactly the
-        // user-reported "I disabled all popups but dissolve
-        // still plays" bug. `setShaderOverride(path, "", {})`
-        // writes an engaged-empty effectId that
-        // `ShaderProfile::overlay` treats as "explicitly no
-        // shader", winning over the parent's effectId and
-        // blocking the cascade. Same call works for parent
-        // cards (popup, window, osd, etc.) so a single
-        // OFF toggle on the parent disables every descendant
-        // that doesn't have its own override.
         // ── Shared timing + shader editor body ────────────────────
         // All the inline timing controls (curve thumbnail,
         // Customize… button, timing-mode combo, duration slider)

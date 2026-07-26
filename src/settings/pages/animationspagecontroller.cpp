@@ -220,6 +220,8 @@ AnimationsPageController::~AnimationsPageController() = default;
 void AnimationsPageController::setUserProfilesDirOverride(const QString& dir)
 {
     m_userProfilesDirOverride = dir;
+    // Every cached entry was keyed on a path resolved against the OLD directory.
+    invalidateDiskProfileCache();
 }
 
 void AnimationsPageController::setProfileStoreRefresher(std::function<void()> refresher)
@@ -229,6 +231,11 @@ void AnimationsPageController::setProfileStoreRefresher(std::function<void()> re
 
 void AnimationsPageController::refreshProfileStore()
 {
+    // Unconditional, not inside the `if`: a refresh is the point at which the
+    // controller admits the files on disk may have moved under it, and that is
+    // true whether or not a refresher happens to be wired (the async revert
+    // worker rewrites files in a process with no refresher installed).
+    invalidateDiskProfileCache();
     if (m_profileStoreRefresher)
         m_profileStoreRefresher();
 }

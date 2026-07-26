@@ -265,10 +265,12 @@ void Daemon::publishActiveAnimationProfile()
 
     const Profile settingsProfile = m_settings->animationProfile();
     for (const QString* path : kSettingsDrivenProfilePaths) {
-        // OWNERSHIP, not existence. hasPath() asks the loader's own bookkeeping
-        // whether it parsed a file for this path. That stays true even when the
-        // registry entry is something else entirely — including this function's
-        // OWN untagged publish from a previous tick. Merging over that is
+        // OWNERSHIP, not existence. Asking the loader's own bookkeeping whether
+        // it parsed a file for this path answers the wrong question: it stays
+        // true even when the registry entry is something else entirely —
+        // including this function's OWN untagged publish from a previous tick.
+        // (ProfileLoader deliberately exposes no such accessor for exactly this
+        // reason; see its class doc.) Merging over that is
         // self-poisoning: the settings profile has every field engaged, so
         // nothing falls back, the entry freezes, and every later slider move is
         // silently dropped until the daemon restarts.

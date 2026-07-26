@@ -25,7 +25,7 @@ PhosphorAnimationShaders::ShaderProfileTree Settings::shaderProfileTree() const
     // can never shadow a user-intended parent override at runtime. The
     // resolver walks deeper-leaf-wins, so an unsupported leaf entry
     // would otherwise silently beat the supported parent entry the user
-    // can actually edit. See `src/core/animationshadersupportedpaths.h`
+    // can actually edit. See `src/core/types/animationshadersupportedpaths.h`
     // for the rationale + the full SSOT.
     return pruneShaderProfileTreeToSupportedPaths(
         PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(map)));

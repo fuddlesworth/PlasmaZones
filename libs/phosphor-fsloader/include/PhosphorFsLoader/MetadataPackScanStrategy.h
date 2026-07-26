@@ -8,6 +8,7 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QCryptographicHash>
+#include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -17,6 +18,7 @@
 #include <QtCore/QJsonParseError>
 #include <QtCore/QList>
 #include <QtCore/QLoggingCategory>
+#include <QtCore/QSet>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 
@@ -352,10 +354,12 @@ public:
 
     /// Per-rescan entry cap. Default: `kDefaultMaxEntries`.
     ///
-    /// Negative values are a programming error — the cap loop casts to
-    /// `size_t` for the comparison, and a negative cast wraps to
-    /// `SIZE_MAX` and silently disables the guard. Asserted in debug
-    /// builds and clamped to zero in release so the wrap can't happen.
+    /// Negative values are a programming error. The cap comparison is
+    /// `subdirsConsidered >= m_maxEntries` with both sides `int`, so a negative
+    /// cap does not wrap — it trips on the very first subdir of every scan,
+    /// which purges every previously registered pack. Asserted in debug builds
+    /// and clamped in release so the worst case is "cap of zero", not a
+    /// silently emptied registry with no diagnostic.
     void setMaxEntries(int cap)
     {
         Q_ASSERT_X(cap >= 0, "MetadataPackScanStrategy::setMaxEntries", "cap must be non-negative");
@@ -481,6 +485,17 @@ PHOSPHORFSLOADER_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcMetadataPackScan)
 template<typename Payload>
 QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& directoriesInScanOrder)
 {
+    // Release-build counterpart to the ctor's `Q_ASSERT_X(m_parser)`. An empty
+    // `std::function` would throw `std::bad_function_call` out of the parse
+    // loop below, on the GUI thread, from inside a filesystem-watch callback.
+    // Refusing the whole scan instead leaves the previously registered packs
+    // in place and logs something an operator can grep for.
+    if (!m_parser) {
+        qCWarning(m_loggingCat ? *m_loggingCat : detail::lcMetadataPackScan())
+            << "MetadataPackScanStrategy: no parser configured, skipping scan";
+        return {};
+    }
+
     // Per-entry filesystem fingerprint (`metadata.json` size+mtime +
     // `isUser`) captured during the parse loop and mixed into the SHA-1
     // signature below. Decoupled from `Payload` so the strategy can
@@ -619,9 +634,10 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
                 continue;
             }
 
-            // Schema-specific parse. The ctor asserts `m_parser` is
-            // non-null and there is no setter to clear it, so it is
-            // safe to invoke unconditionally.
+            // Schema-specific parse. `m_parser` is guarded once at the top of
+            // this function rather than here, so the ctor's debug assert has a
+            // release-build counterpart and this call cannot throw
+            // `std::bad_function_call` out of a GUI-thread rescan.
             std::optional<Payload> parsed = m_parser(subdirPath, doc.object(), isUserDir);
             if (!parsed.has_value()) {
                 qCDebug(log) << "MetadataPackScanStrategy: parser declined" << metadataPath;

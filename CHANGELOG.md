@@ -17,7 +17,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **Reverting an animation's duration or curve shows the inherited value right away**: the per-field revert links cleared the override but left the control showing the value you had just removed, and it only caught up the next time you opened the settings app ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **Reverting an animation's duration or curve shows the inherited value right away**: the per-field revert links cleared the override but left the control showing the value you had just removed, and it only caught up the next time you opened the settings app. Turning an event's Override toggle off and resetting an animations page had the same problem and are fixed too ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **Clearing an override on the Global animation card now updates the events below it**: every event inheriting from Global kept showing the old value until the page was rebuilt ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+
+### Changed
+
+- The two revert links on an animation event now say which field they revert, and the curve editor is titled "Customize curve for &lt;event&gt;" ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
 
 ## [3.3.0] - 2026-07-23
 

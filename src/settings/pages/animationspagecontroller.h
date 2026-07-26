@@ -279,7 +279,7 @@ public:
     /// shader leg — the QML picker hides itself on those rows so the
     /// user gets clear "this control does nothing here" feedback rather
     /// than picking a shader and seeing no change. Single source of
-    /// truth lives in @c src/core/animationshadersupportedpaths.h —
+    /// truth lives in @c src/core/types/animationshadersupportedpaths.h —
     /// adding a new shader-leg surface in the daemon means appending
     /// its leg paths there in lockstep.
     Q_INVOKABLE bool supportsShaderLeg(const QString& path) const;
@@ -601,6 +601,34 @@ private:
     /// toast, exactly as it does for removeOverrideFile above.
     /// @return the number cleared, or -1 if any removal failed.
     int clearOverridesForPaths(const QStringList& eventPaths, QLatin1String context);
+
+    /// Sanitised contents of the user override file at @p path, cached.
+    ///
+    /// `resolvedProfile` walks up to four ancestor levels and reads each
+    /// level's override file off disk. It backs a QML binding that every card
+    /// in scope re-evaluates on each `overrideChanged`, and `setOverride` emits
+    /// one of those per write path per slider tick, so without a cache a
+    /// duration drag costs (visible cards x chain depth) synchronous file opens
+    /// and JSON parses per tick on the GUI thread. One read per path per
+    /// mutation instead.
+    ///
+    /// Empty map for "no override file here", which is also what a file that
+    /// fails every validity check normalises to — both mean the same thing to
+    /// the caller (fall through to the registry), so they share a cache slot.
+    QVariantMap cachedDiskProfile(const QString& path) const;
+
+    /// Drop the `cachedDiskProfile` entries. Called from every path that
+    /// writes, deletes, or re-reads override files: `setOverride`,
+    /// `removeOverrideFile`, `clearOverridesForPaths`, `refreshProfileStore`,
+    /// and the profiles-directory override hook. Clearing wholesale rather than
+    /// per path is deliberate — the map holds at most one small entry per event
+    /// path, and a partial invalidation is one missed call site away from
+    /// serving a stale inherited value, which is the exact class of bug this
+    /// controller's disk-first read exists to fix.
+    void invalidateDiskProfileCache() const;
+
+    /// Event path -> sanitised override-file contents. See `cachedDiskProfile`.
+    mutable QHash<QString, QVariantMap> m_diskProfileCache;
 
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;

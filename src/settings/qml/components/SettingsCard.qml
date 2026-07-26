@@ -445,7 +445,11 @@ Item {
             // property animation does not drop the binding, so an imperative fade
             // was re-evaluated out from under itself whenever the master toggle
             // changed while the card was shut.
-            opacity: (root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1) * root._expandProgress
+            // `gateBodyOnToggle` gates the dim as well as the `enabled:` below.
+            // Without it here, a card that opted out still rendered its body
+            // greyed while every control in it stayed clickable, which reads as
+            // "this is disabled" about controls that work.
+            opacity: (root.showToggle && root.gateBodyOnToggle && !root.toggleChecked ? root.disabledContentOpacity : 1) * root._expandProgress
             // Clipping a shut card to nothing still leaves its controls in the
             // tab order, so tabbing through the page walks fields nobody can see.
             // Disabling the body takes them out of the focus chain, and the header

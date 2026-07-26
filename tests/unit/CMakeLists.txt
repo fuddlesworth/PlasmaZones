@@ -1093,6 +1093,25 @@ target_link_libraries(test_animations_page_controller
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
 
+# Companion test executable: how inheritance resolution stays honest against
+# the debounced-watcher-fed PhosphorProfileRegistry. Split out of
+# test_animations_page_controller.cpp to keep both files under the size ceiling.
+add_executable(test_animations_profile_store_sync
+    settings/pages/test_animations_profile_store_sync.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationpagescope.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_profile_store_sync
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_profile_store_sync COMMAND test_animations_profile_store_sync)
+
 # Companion test executable: motion-set + pending-changes coverage.
 add_executable(test_animations_motion_sets
     settings/pages/test_animations_motion_sets.cpp

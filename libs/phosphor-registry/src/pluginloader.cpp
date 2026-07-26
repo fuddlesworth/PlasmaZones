@@ -16,6 +16,11 @@
 
 namespace PhosphorRegistry {
 
+// Hard cap on plugin subdirectories CONSIDERED per scan cycle, summed across
+// every plugin root. Same magnitude and same counted quantity as
+// DirectoryLoader::kMaxEntries and MetadataPackScanStrategy::kDefaultMaxEntries.
+static constexpr int kMaxPluginSubdirsPerCycle = 1000;
+
 // Live state for one loaded plugin. The QLibrary holds the .so
 // mapped for the PluginLoader's lifetime — Phase 1.3 deliberately
 // does NOT unload .so files during the process lifetime to avoid the
@@ -290,7 +295,22 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
     QSet<QString> discoveredIds; // ids seen this cycle (for removal detection)
     QStringList watchedFiles; // returned to the watcher for per-file re-arm
 
+    // Subdirs CONSIDERED this cycle, summed across every root. Counts the same
+    // quantity as MetadataPackScanStrategy's and JsonScanStrategy's caps, and
+    // for the same reason: a subdir that fails `Manifest::parse` has still cost
+    // a stat, an open and a JSON parse on the calling thread, and — because the
+    // manifest is appended to `watchedFiles` BEFORE it is validated — has also
+    // cost an inotify watch. Counting only the plugins that load would let a
+    // spray of broken plugin directories grow the watch list until the per-user
+    // inotify limit is exhausted, taking every other watcher in the process
+    // down with it. Bounded here, before the watch is armed.
+    int subdirsConsidered = 0;
+    bool capTripped = false;
+
     for (const QString& root : directoriesInScanOrder) {
+        if (capTripped) {
+            break;
+        }
         QDir rootDir(root);
         if (!rootDir.exists()) {
             continue;
@@ -304,6 +324,11 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
         // entries outright.
         const QStringList subdirs = rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDir::Name);
         for (const QString& subdir : subdirs) {
+            if (subdirsConsidered >= kMaxPluginSubdirsPerCycle) {
+                capTripped = true;
+                break;
+            }
+            ++subdirsConsidered;
             const QString pluginDir = rootDir.absoluteFilePath(subdir);
             const QString manifestPath = QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json"));
             if (!QFileInfo::exists(manifestPath)) {
@@ -336,6 +361,17 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             // edited concurrently).
             loadPluginFromDir(pluginDir, m);
         }
+    }
+
+    if (capTripped) {
+        qWarning().noquote().nospace()
+            << "PluginLoader: reached the per-cycle subdirectory cap (" << kMaxPluginSubdirsPerCycle
+            << ") — later plugin directories were not scanned. Prune the plugin roots or raise the cap.";
+        // A truncated enumeration is not evidence that anything was deleted, so
+        // the removal sweep below is skipped: running it would unload every
+        // already-loaded plugin whose directory happened to sort past the cap.
+        // Loaded plugins simply stay loaded until a cycle completes in full.
+        return watchedFiles;
     }
 
     // Anything in m_plugins not in discoveredIds was removed from
