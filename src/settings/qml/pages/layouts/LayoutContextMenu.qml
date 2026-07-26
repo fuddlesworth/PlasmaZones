@@ -188,8 +188,8 @@ Menu {
     signal deleteRequested(var layout)
     signal exportRequested(string layoutId)
 
-    function showForLayout(layout) {
-        layoutContextMenu.layout = layout;
+    function showForLayout(nextLayout) {
+        layoutContextMenu.layout = nextLayout;
         var wantKind = layoutContextMenu.isAutotile ? "autotile" : "snap";
         if (wantKind !== layoutContextMenu._aspectRatioMenuKind) {
             if (wantKind === "snap") {

@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
@@ -612,9 +613,11 @@ private Q_SLOTS:
         loader.loadFromDirectory(m_tmp->path(), LiveReload::Off);
 
         QCOMPARE(loader.registeredCount(), 0);
-        QVERIFY2(
-            sink.parseCalls <= kTestCap,
-            qPrintable(QStringLiteral("cap let %1 files through with a cap of %2").arg(sink.parseCalls).arg(kTestCap)));
+        // `==`, not `<=`: paired with registeredCount() == 0 above, a `<=` bound
+        // is satisfied by parseCalls == 0, i.e. by a loader that scanned nothing
+        // at all. The exact count is deterministic — the cap charges one per
+        // file considered and trips on the (cap+1)-th.
+        QCOMPARE(sink.parseCalls, kTestCap);
 
         // Shape 2: every file parses but they all claim the same key, so at
         // most one ever registers.
@@ -631,7 +634,7 @@ private Q_SLOTS:
         dupLoader.loadFromDirectory(sameKeyDir.path(), LiveReload::Off);
 
         QCOMPARE(dupLoader.registeredCount(), 1);
-        QVERIFY2(dupSink.parseCalls <= kTestCap,
+        QVERIFY2(dupSink.parseCalls == kTestCap,
                  qPrintable(QStringLiteral("cap let %1 same-key files through with a cap of %2")
                                 .arg(dupSink.parseCalls)
                                 .arg(kTestCap)));

@@ -32,16 +32,17 @@ import org.kde.kirigami as Kirigami
  * Optional properties:
  *   - isParentNode: bool — flips the inheritance banner copy
  *   - collapsible: bool — header click collapses the body
- * Internal state (`overrideEnabled`, the `current*` and `locked*` aliases) is
- * public only so the aliases resolve, and must not be assigned by consumers:
- * the card seeds it from the profile tree and commits it back, so an outside
- * write is either overwritten on the next refresh or persisted as a user edit.
- *
  *   - simpleTiming: bool — hides the timing-mode combo and the curve editor
  *     (the per-field write rule already keeps a duration-only edit from
  *     pinning the inherited curve; simple mode just trims the chrome)
  *   - mirrorPaths: list<string> — extra event paths every write is echoed to,
  *     so one card can front several events (open mirrored onto close)
+ *
+ * The `current*` and `locked*` aliases, and `overrideEnabled`, are public only
+ * because the aliases have to resolve and the toggle state is derived. Do not
+ * assign them from outside: the card seeds them from the profile tree and
+ * commits them back, so an outside write is either overwritten on the next
+ * refresh or persisted as a user edit.
  */
 Item {
     // Both the curve editor and the colour picker now live inside the
@@ -252,6 +253,12 @@ Item {
     // persist a dead override that the daemon resolver would shadow
     // any user-intended setting with via deeper-leaf-wins overlay.
     // Source-of-truth list: `src/core/types/animationshadersupportedpaths.h`.
+    //
+    // Declared on the card ROOT rather than inside the editor, because the card
+    // is what reaches `settingsController` and hands the answer down as the
+    // editor's `shaderLegSupported` property. The editor takes it as an input so
+    // it stays reusable by hosts with no per-event path at all
+    // (GlobalTimingDefaultsCard).
     readonly property bool _shaderLegSupported: settingsController.animationsPage.supportsShaderLeg(root.eventPath)
     // Number of shader overrides on paths strictly DEEPER than this card's
     // eventPath. Only meaningful for parent-node cards: a stale leaf
@@ -482,10 +489,15 @@ Item {
     /// per cleared path, and an unguarded handler would recompute the
     /// divergence banner against a half-refreshed card, flickering it on
     /// mid-batch.
+    /// Returns false when the controller refused (an async discard is in
+    /// flight). The caller has to honour that: the controller raises the
+    /// refusal toast itself, so turning the toggle off anyway would leave the
+    /// user looking at an off switch beside a message saying it could not be
+    /// turned off.
     function _clearOverrideOnAll() {
         root._committing = true;
         try {
-            settingsController.animationsPage.clearOverridesUnder(root._writePaths);
+            return settingsController.animationsPage.clearOverridesUnder(root._writePaths) >= 0;
         } finally {
             root._committing = false;
             root._inheritRev++;
@@ -525,18 +537,35 @@ Item {
     // controller's "async discard in flight" sentinel). Summing a -1 into
     // the count would make a refusal indistinguishable from a smaller
     // successful clear.
+    //
+    // Suppressed with _committingShader for the same reason as the two timing
+    // group writers: each successful clear writes the shader tree, which the
+    // controller relays as a path-agnostic shaderProfileChanged, and an
+    // unguarded handler would run refreshShaderFromTree mid-loop and recompute
+    // the shadowing-children count and the divergence banner against a
+    // half-cleared tree.
+    //
+    // Stops at the first refusal. The controller toasts per refused call, so
+    // carrying on would raise one identical toast per write path for a single
+    // user action, and a refusal is all-or-nothing anyway (the in-flight gate
+    // does not change between iterations).
     function _clearShaderOverrideDescendantsOnAll() {
-        const paths = root._writePaths;
-        var cleared = 0;
-        var refused = false;
-        for (var i = 0; i < paths.length; ++i) {
-            const n = settingsController.animationsPage.clearShaderOverrideDescendants(paths[i]);
-            if (n < 0)
-                refused = true;
-            else
+        root._committingShader = true;
+        try {
+            const paths = root._writePaths;
+            var cleared = 0;
+            for (var i = 0; i < paths.length; ++i) {
+                const n = settingsController.animationsPage.clearShaderOverrideDescendants(paths[i]);
+                if (n < 0)
+                    return -1;
                 cleared += n;
+            }
+            return cleared;
+        } finally {
+            root._committingShader = false;
+            root.refreshShaderFromTree();
+            root.refreshFromTree();
         }
-        return refused ? -1 : cleared;
     }
 
     /// True iff every write path already carries @p effectId as its DIRECT
@@ -673,9 +702,11 @@ Item {
         root._shadowingChildrenCount = shadowing;
         // Divergence is deliberately NOT recomputed here. refreshFromTree owns
         // it, and every call site of this function calls refreshFromTree
-        // immediately after (the two group writers' finally blocks,
-        // onShaderProfileChanged, and Component.onCompleted), so the banner
-        // still tracks the shader tree. Recomputing on both would walk every
+        // alongside it (the two group writers' finally blocks and
+        // onShaderProfileChanged call it immediately after; Component.onCompleted
+        // calls it FIRST, which is equally fine because refreshFromTree seeds
+        // both caches itself and computes the divergence from them), so the
+        // banner still tracks the shader tree. Recomputing on both would walk every
         // write path twice per shader-param slider tick, which is drag rate.
         // A future caller that runs this ALONE must call refreshFromTree too,
         // or the banner goes stale.
@@ -927,10 +958,6 @@ Item {
     }
 
     SettingsCard {
-        // ── Shader effect picker (independent of timing override) ─
-        // Independent of timing override — users can drop a shader on
-        // an event without touching its timing. The visibility gate
-        // `root._shaderLegSupported` is declared on the card root so
         // ── Shared timing + shader editor body ────────────────────
         // All the inline timing controls (curve thumbnail,
         // Customize… button, timing-mode combo, duration slider)
@@ -1000,8 +1027,15 @@ Item {
                 if (root._anyWritePathSupportsShaderLeg())
                     root._clearShaderOverrideOnAll();
 
-                root._clearOverrideOnAll();
-                root._editingTiming = false;
+                // Only close the timing editor if the clear was actually
+                // accepted. The controller refuses (and toasts) while an async
+                // discard is in flight, including when there was nothing to
+                // clear, so latching the editor shut regardless left the toggle
+                // visibly off next to a message saying it could not be changed.
+                // refreshFromTree has already run inside the call, so the
+                // toggle re-derives its own state from the tree either way.
+                if (root._clearOverrideOnAll())
+                    root._editingTiming = false;
             }
         }
 

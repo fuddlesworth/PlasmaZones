@@ -152,7 +152,7 @@ SettingsFlickable {
                         CurveThumbnail {
                             implicitWidth: Kirigami.Units.gridUnit * 5
                             implicitHeight: Kirigami.Units.gridUnit * 3
-                            curve: modelData.curve || "0.33,1.00,0.68,1.00"
+                            curve: modelData.curve || CurvePresets.defaultEasingCurve
                             timingMode: CurvePresets.timingModeEasing
                             Accessible.name: i18n("Curve preview for %1", modelData.name)
                         }

@@ -1073,15 +1073,11 @@ set(_animations_ctrl_SRCS
 # surfaces the built-in taxonomy as section-grouped lists for the QML
 # drilldown. Compiles the controller source directly (it lives in the
 # plasmazones-settings executable, not plasmazones_core).
+# No animationpagescope.cpp and no P_SOURCE_DIR: the slots that needed either
+# moved to test_animations_qml_contracts.
 add_executable(test_animations_page_controller
     settings/pages/test_animations_page_controller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationpagescope.cpp
     ${_animations_ctrl_SRCS}
-)
-# simpleScopeCoversEverySimplePageCard reads AnimationsSimplePage.qml from the
-# source tree to prove the C++ scope roots still cover every card the page hosts.
-target_compile_definitions(test_animations_page_controller
-    PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\""
 )
 target_link_libraries(test_animations_page_controller
     PRIVATE
@@ -1120,8 +1116,8 @@ add_test(NAME test_animations_qml_contracts COMMAND test_animations_qml_contract
 # Companion test executable: how inheritance resolution stays honest against
 # the debounced-watcher-fed PhosphorProfileRegistry. Split out of
 # test_animations_page_controller.cpp to keep both files under the size ceiling.
-# No animationpagescope.cpp here, unlike the sibling: nothing in these slots
-# or in _animations_ctrl_SRCS references AnimationPageScope.
+# No animationpagescope.cpp: nothing in these slots or in _animations_ctrl_SRCS
+# references AnimationPageScope. Only test_animations_qml_contracts needs it.
 add_executable(test_animations_profile_store_sync
     settings/pages/test_animations_profile_store_sync.cpp
     ${_animations_ctrl_SRCS}

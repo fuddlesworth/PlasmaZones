@@ -77,7 +77,15 @@ if(Qt6LinguistTools_FOUND AND Python3_Interpreter_FOUND)
             --out-dir ${_qml_stub_dir}
             --list ${_qml_stub_dir}/stubs.txt
             ${PLASMAZONES_I18N_QML}
+        # -no-obsolete: drop `type="vanished"` / `type="obsolete"` entries for
+        # sources that no longer exist. Without it every rename leaves its old
+        # string behind in all seven catalogs forever, and a routine refresh
+        # produces dozens of dead <message> blocks that bury the real diff. The
+        # committed catalogs already carry none, so this makes the target
+        # reproduce the state the repo is actually kept in rather than relying
+        # on whoever runs it remembering the flag.
         COMMAND Qt6::lupdate
+            -no-obsolete
             -I ${CMAKE_SOURCE_DIR}/src
             ${_all_i18n_sources}
             "@${_qml_stub_dir}/stubs.txt"

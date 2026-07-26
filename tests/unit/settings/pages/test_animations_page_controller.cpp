@@ -5,10 +5,9 @@
  * @file test_animations_page_controller.cpp
  * @brief AnimationsPageController behaviour pins: path discovery,
  *        override CRUD, the batch and scoped dirty-state announcements,
- *        the path-traversal gate, the QML meta-object reachability of every
- *        name the settings QML calls, the shader-leg support gate, the
- *        stock-animation suppression mirror, the spring-slider bounds,
- *        and the simple-page scope coverage.
+ *        the path-traversal gate, the disk-read normalisation, the
+ *        shader-leg support gate, the stock-animation suppression mirror,
+ *        and the spring-slider bounds.
  *
  * Pins the file-per-path persistence model: setOverride writes one JSON
  * file under `<userProfilesDir>/<path>.json`, clearOverride deletes it,
@@ -25,6 +24,8 @@
  * the test never touches the real user XDG dirs.
  *
  * Companion test files:
+ *   - test_animations_qml_contracts.cpp    — QML↔controller contracts, scraped
+ *                                            from the QML source
  *   - test_animations_profile_store_sync.cpp — registry/disk staleness
  *   - test_animations_motion_sets.cpp      — motion-set CRUD and async discard
  *   - test_animations_presets.cpp          — the user-preset library
@@ -37,15 +38,11 @@
 #include <QTest>
 
 #include <QDir>
-#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QMetaMethod>
-#include <QRegularExpression>
-#include <QSet>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/Easing.h>
@@ -58,7 +55,6 @@
 
 #include "config/settings.h"
 #include "helpers/IsolatedConfigGuard.h"
-#include "settings/pages/animationpagescope.h"
 #include "settings/pages/animationspagecontroller.h"
 
 using namespace PlasmaZones;
@@ -590,40 +586,103 @@ private Q_SLOTS:
     /// substituting the library default blocks inheritance at this level.
     void resolvedProfile_rejectsFieldsProfileFromJsonWouldReject_data()
     {
+        using P = PhosphorAnimation::Profile;
+        QTest::addColumn<QByteArray>("field");
         QTest::addColumn<QByteArray>("leafJson");
-        QTest::addColumn<int>("expectedDuration");
-        QTest::addColumn<bool>("leafOwnsDuration");
+        QTest::addColumn<QVariant>("parentValue");
+        QTest::addColumn<QVariant>("expectedResolved");
+        QTest::addColumn<bool>("leafOwnsField");
 
-        // Out-of-range NUMBERS are dropped, so the parent's 123 comes through.
-        QTest::newRow("negative") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":-50})") << 123 << false;
-        QTest::newRow("zero") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":0})") << 123 << false;
-        QTest::newRow("over max") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":1e9})") << 123 << false;
-        // Finite but far outside int range — the bound-before-round case.
-        QTest::newRow("astronomical") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":1e300})") << 123
-                                      << false;
+        const QByteArray kDur = QByteArrayLiteral("duration");
+        const QByteArray kMin = QByteArrayLiteral("minDistance");
+        const QByteArray kStag = QByteArrayLiteral("staggerInterval");
+        const QByteArray kCurve = QByteArrayLiteral("curve");
+        const QByteArray kPreset = QByteArrayLiteral("presetName");
+        const QVariant kParentCurve = QVariant(QStringLiteral("0.4,0,0.2,1"));
+
+        // ── duration: out-of-range NUMBERS are dropped, so the parent shows ──
+        QTest::newRow("duration negative")
+            << kDur << QByteArrayLiteral(R"({"duration":-50})") << QVariant(123) << QVariant(123) << false;
+        QTest::newRow("duration zero") << kDur << QByteArrayLiteral(R"({"duration":0})") << QVariant(123)
+                                       << QVariant(123) << false;
+        QTest::newRow("duration over max")
+            << kDur << QByteArrayLiteral(R"({"duration":1e9})") << QVariant(123) << QVariant(123) << false;
+        QTest::newRow("duration astronomical")
+            << kDur << QByteArrayLiteral(R"({"duration":1e300})") << QVariant(123) << QVariant(123) << false;
 
         // A NON-NUMBER is a different case, and the difference is deliberate.
         // `QJsonValue::toDouble(default)` hands back the default for anything
-        // that is not a JSON double, and DefaultDuration passes every range
-        // check — so the field ends up ENGAGED at the library default and
-        // blocks inheritance, rather than being dropped. `Profile::fromJson`
-        // does exactly the same thing, which is the whole point: the settings
-        // app must show what the daemon will animate, and the daemon animates
-        // 150 here, not the parent's 123.
-        QTest::newRow("string") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":"900"})")
-                                << int(PhosphorAnimation::Profile::DefaultDuration) << true;
-        QTest::newRow("bool") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":true})")
-                              << int(PhosphorAnimation::Profile::DefaultDuration) << true;
+        // that is not a JSON double, and the library default passes every range
+        // check — so the field ends up ENGAGED at that default and BLOCKS
+        // inheritance, rather than being dropped. `Profile::fromJson` does
+        // exactly the same, which is the whole point: the settings app must
+        // show what the daemon will animate, and the daemon uses the default
+        // here, not the parent's value.
+        QTest::newRow("duration string") << kDur << QByteArrayLiteral(R"({"duration":"900"})") << QVariant(123)
+                                         << QVariant(int(P::DefaultDuration)) << true;
+        QTest::newRow("duration bool") << kDur << QByteArrayLiteral(R"({"duration":true})") << QVariant(123)
+                                       << QVariant(int(P::DefaultDuration)) << true;
+        QTest::newRow("duration valid") << kDur << QByteArrayLiteral(R"({"duration":900})") << QVariant(123)
+                                        << QVariant(900) << true;
 
-        // The control: a legitimate value survives untouched.
-        QTest::newRow("valid") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":900})") << 900 << true;
+        // ── minDistance: same split. The 1e300 row pins the bound-before-round
+        // guard — `qRound` on an unbounded finite double is undefined
+        // behaviour, so the value must be rejected by RANGE first.
+        QTest::newRow("minDistance negative")
+            << kMin << QByteArrayLiteral(R"({"minDistance":-5})") << QVariant(7) << QVariant(7) << false;
+        QTest::newRow("minDistance astronomical")
+            << kMin << QByteArrayLiteral(R"({"minDistance":1e300})") << QVariant(7) << QVariant(7) << false;
+        QTest::newRow("minDistance string") << kMin << QByteArrayLiteral(R"({"minDistance":"5"})") << QVariant(7)
+                                            << QVariant(int(P::DefaultMinDistance)) << true;
+        QTest::newRow("minDistance valid")
+            << kMin << QByteArrayLiteral(R"({"minDistance":5})") << QVariant(7) << QVariant(5) << true;
+
+        // ── staggerInterval ─────────────────────────────────────────────────
+        QTest::newRow("stagger negative")
+            << kStag << QByteArrayLiteral(R"({"staggerInterval":-1})") << QVariant(40) << QVariant(40) << false;
+        QTest::newRow("stagger over max")
+            << kStag << QByteArrayLiteral(R"({"staggerInterval":1e9})") << QVariant(40) << QVariant(40) << false;
+        QTest::newRow("stagger string") << kStag << QByteArrayLiteral(R"({"staggerInterval":"20"})") << QVariant(40)
+                                        << QVariant(int(P::DefaultStaggerInterval)) << true;
+        QTest::newRow("stagger valid") << kStag << QByteArrayLiteral(R"({"staggerInterval":20})") << QVariant(40)
+                                       << QVariant(20) << true;
+
+        // ── curve ───────────────────────────────────────────────────────────
+        // A non-string is dropped, matching fromJson (whose `toString()` yields
+        // empty and leaves the field unset).
+        QTest::newRow("curve non-string")
+            << kCurve << QByteArrayLiteral(R"({"curve":42})") << kParentCurve << kParentCurve << false;
+        // The ONE deliberate divergence from fromJson, pinned so nobody "fixes"
+        // it without reading why: an unresolvable-but-string spec is KEPT here,
+        // because resolving it needs a CurveRegistry this translation unit does
+        // not have, and dropping every unresolvable spec would drop legitimate
+        // user-authored curves too. See `sanitizedProfileMap`.
+        QTest::newRow("curve unresolvable string") << kCurve << QByteArrayLiteral(R"({"curve":"srping:14,0.6"})")
+                                                   << kParentCurve << QVariant(QStringLiteral("srping:14,0.6")) << true;
+        QTest::newRow("curve valid") << kCurve << QByteArrayLiteral(R"({"curve":"0.1,0,0.9,1"})") << kParentCurve
+                                     << QVariant(QStringLiteral("0.1,0,0.9,1")) << true;
+
+        // ── presetName ──────────────────────────────────────────────────────
+        // Guarded on isString() for fromJson's reason: `toString()` on a
+        // non-string engages the optional with an EMPTY value, and
+        // engaged-empty means "explicit empty override", not "inherit".
+        QTest::newRow("presetName non-string")
+            << kPreset << QByteArrayLiteral(R"({"presetName":42})") << QVariant(QStringLiteral("Snappy"))
+            << QVariant(QStringLiteral("Snappy")) << false;
+        QTest::newRow("presetName valid")
+            << kPreset << QByteArrayLiteral(R"({"presetName":"Gentle"})") << QVariant(QStringLiteral("Snappy"))
+            << QVariant(QStringLiteral("Gentle")) << true;
     }
 
     void resolvedProfile_rejectsFieldsProfileFromJsonWouldReject()
     {
+        QFETCH(QByteArray, field);
         QFETCH(QByteArray, leafJson);
-        QFETCH(int, expectedDuration);
-        QFETCH(bool, leafOwnsDuration);
+        QFETCH(QVariant, parentValue);
+        QFETCH(QVariant, expectedResolved);
+        QFETCH(bool, leafOwnsField);
+
+        const QString key = QString::fromUtf8(field);
 
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -631,23 +690,25 @@ private Q_SLOTS:
         c.setUserProfilesDirOverride(tmp.path());
 
         // The parent carries a value the leaf can fall back to, so "rejected"
-        // and "kept" produce visibly different numbers.
-        QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 123}}));
+        // and "kept" produce visibly different results.
+        QVERIFY(c.setOverride(QStringLiteral("editor"), {{key, parentValue}}));
 
         QFile leaf(tmp.path() + QStringLiteral("/editor.snapIn.json"));
         QVERIFY(leaf.open(QIODevice::WriteOnly | QIODevice::Truncate));
         QCOMPARE(leaf.write(leafJson), qint64(leafJson.size()));
         leaf.close();
 
-        const int resolved =
-            c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt();
-        QCOMPARE(resolved, expectedDuration);
+        const QVariant resolved = c.resolvedProfile(QStringLiteral("editor.snapIn")).value(key);
+        if (expectedResolved.typeId() == QMetaType::QString) {
+            QCOMPARE(resolved.toString(), expectedResolved.toString());
+        } else {
+            QCOMPARE(resolved.toInt(), expectedResolved.toInt());
+        }
 
-        // rawProfile is sanitised on the same terms, so a card reports field
+        // rawProfile is normalised on the same terms, so a card reports field
         // ownership the same way the resolve does — no live revert link beside
         // a value the event does not actually own.
-        const bool ownsDuration = c.rawProfile(QStringLiteral("editor.snapIn")).contains(QStringLiteral("duration"));
-        QCOMPARE(ownsDuration, leafOwnsDuration);
+        QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).contains(key), leafOwnsField);
     }
 
     /// `sequenceMode` is the one field `Profile::fromJson` SUBSTITUTES rather
