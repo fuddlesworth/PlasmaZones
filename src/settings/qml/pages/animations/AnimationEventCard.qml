@@ -534,7 +534,7 @@ Item {
     // each clear writes the shader tree, relayed as a path-agnostic
     // shaderProfileChanged, and an unguarded handler would recompute the
     // shadowing count and divergence banner against a half-cleared tree.
-    // Stops at the first refusal — the controller toasts per call, and the
+    // Stops at the first refusal — the controller toasts per REFUSED call, and the
     // in-flight gate cannot change between iterations.
     function _clearShaderOverrideDescendantsOnAll() {
         root._committingShader = true;

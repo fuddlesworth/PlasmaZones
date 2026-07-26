@@ -145,7 +145,7 @@ public:
 
     // ── Search paths (forwarded to the internal MetadataPackLoader) ───
     //
-    // Same surface the legacy MetadataPackRegistryBase provided. liveReload
+    // Same surface the since-removed MetadataPackRegistryBase provided. liveReload
     // defaults to On (production hot-reload); pass Off for one-shot scans.
     void addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
     void addSearchPaths(

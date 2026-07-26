@@ -14,7 +14,8 @@
  *     silent no-op in the running app;
  *   - every event path the simple Animations page hosts falls inside the C++
  *     page-scope roots, so a per-page Reset covers what the page shows;
- *   - the Override toggle's ON branch writes nothing, which lives entirely in
+ *   - the Override toggle's ON branch writes nothing, and its OFF branch closes
+ *     the timing editor only when the clear was accepted. Both live entirely in
  *     QML and so cannot be observed by driving the controller from C++.
  *
  * Split out of `test_animations_page_controller.cpp`, which owns the
@@ -139,7 +140,7 @@ private Q_SLOTS:
     /// directly would stay green no matter what the branch did. What CAN be
     /// pinned is the property this test actually cares about: that the branch
     /// body reaches no controller method at all.
-    void overrideToggleOnBranchCallsNothingOnTheController()
+    void overrideToggleArmsMatchTheirQmlOnlyContracts()
     {
         const QString qmlPath =
             QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationEventCard.qml");
@@ -218,7 +219,12 @@ private Q_SLOTS:
         // GATED on the clear being accepted. Unconditional, a refusal during an
         // async discard leaves the toggle visibly off beside a toast saying it
         // could not be changed.
-        static const QRegularExpression elseRe(QStringLiteral("\\G\\s*else\\s*\\{"));
+        // Comments are allowed in the gap: a `// Turning the toggle off clears
+        // both axes.` between the arms is an ordinary edit and must not redden
+        // the build. `\G` anchors the match at the offset passed to match(),
+        // so a later `else {` elsewhere in the file cannot be picked up instead.
+        static const QRegularExpression elseRe(QStringLiteral("\\G(?:\\s|//[^\\n]*|/\\*.*?\\*/)*else\\s*\\{"),
+                                               QRegularExpression::DotMatchesEverythingOption);
         const QRegularExpressionMatch elseHead = elseRe.match(src, onArmEnd);
         QVERIFY2(elseHead.hasMatch(), "onToggleClicked's ON arm is no longer followed by an `else {`");
 
@@ -229,8 +235,10 @@ private Q_SLOTS:
 
         QVERIFY2(offCode.contains(QStringLiteral("_editingTiming = false")),
                  "the OFF arm no longer closes the timing editor at all");
+        // Brace optional: `if (…) { root._editingTiming = false; }` is the same
+        // thing, and failing it would accuse the code of not gating when it does.
         static const QRegularExpression gatedResetRe(
-            QStringLiteral("if\\s*\\(\\s*root\\._clearOverrideOnAll\\(\\s*\\)\\s*\\)\\s*"
+            QStringLiteral("if\\s*\\(\\s*root\\._clearOverrideOnAll\\(\\s*\\)\\s*\\)\\s*\\{?\\s*"
                            "root\\._editingTiming\\s*=\\s*false\\s*;"));
         QVERIFY2(gatedResetRe.match(QString(offCode).replace(wsRe, QStringLiteral(" "))).hasMatch(),
                  "the OFF arm closes the timing editor WITHOUT gating on _clearOverrideOnAll's result — a refused "

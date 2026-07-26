@@ -443,6 +443,36 @@ private Q_SLOTS:
     /// Between scans, removing one pack's `metadata.json` purges that
     /// id from the next scan's accessor and the change-only emit
     /// callback fires (the signature now differs).
+    /// A subdirectory with no `metadata.json` yet is watched via the DIRECTORY,
+    /// because `QFileSystemWatcher` cannot watch a file that does not exist. Only
+    /// the registered search paths get directory watches, so without this a
+    /// `cp -r mypack <packs>/` whose mkdir wakes the debounced scan before the
+    /// metadata lands leaves the pack invisible until an unrelated rescan.
+    ///
+    /// Deleting `desiredWatches.append(subdirPath)` drops the subdir from the
+    /// returned list and fails the contains() below.
+    void testSubdirWithoutMetadataIsWatched()
+    {
+        const QString dir = m_tmp->filePath(QStringLiteral("d"));
+        const QString emptyPack = dir + QStringLiteral("/pkg-pending");
+        QVERIFY(QDir().mkpath(emptyPack));
+        QVERIFY(writeMetadata(dir + QStringLiteral("/pkg-ready"), QStringLiteral("pkg-ready"), 0));
+
+        MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
+        CapturingAdapter adapter(strategy);
+        WatchedDirectorySet set(adapter);
+        set.registerDirectory(dir, LiveReload::Off);
+
+        // The ready pack registered; the pending one did not.
+        QCOMPARE(strategy.size(), 1);
+        QVERIFY(strategy.contains(QStringLiteral("pkg-ready")));
+
+        // But the pending pack's DIRECTORY is watched, so the metadata.json
+        // landing inside it will wake the next rescan.
+        QVERIFY2(adapter.lastWatches.contains(QDir::cleanPath(emptyPack)),
+                 "a subdir with no metadata.json is not watched, so its metadata landing fires nothing");
+    }
+
     void testStaleEntryPurgeOnRescan()
     {
         const QString dir = m_tmp->filePath(QStringLiteral("d"));

@@ -327,6 +327,45 @@ private Q_SLOTS:
         QCOMPARE(p.effectiveMinDistance(), Profile::DefaultMinDistance);
     }
 
+    /// The bound is checked BEFORE the round. `qRound` on a value outside the
+    /// int range is undefined behaviour, and this value comes from a file a user
+    /// can hand-edit, so the old post-round check only worked by accident — on
+    /// the platform where the UB conversion happens to pin to INT_MIN, which the
+    /// negative test then caught. Deleting the range clause makes this row hit
+    /// that UB again.
+    void testFromJsonRejectsOutOfRangeMinDistance_data()
+    {
+        QTest::addColumn<double>("raw");
+        QTest::newRow("astronomical") << 1e300;
+        QTest::newRow("just over the domain cap") << double(Profile::MaxMinDistancePx) + 1.0;
+        QTest::newRow("infinity") << std::numeric_limits<double>::infinity();
+        QTest::newRow("nan") << std::numeric_limits<double>::quiet_NaN();
+    }
+
+    void testFromJsonRejectsOutOfRangeMinDistance()
+    {
+        QFETCH(double, raw);
+        QJsonObject obj;
+        obj.insert(QLatin1String("minDistance"), raw);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(!p.minDistance.has_value());
+        QCOMPARE(p.effectiveMinDistance(), Profile::DefaultMinDistance);
+    }
+
+    /// Same shape for sequenceMode, which is finiteness-checked AND now
+    /// range-checked. An out-of-range value falls through to the
+    /// unknown-enumerator path, so it lands on the library default ENGAGED
+    /// (unlike minDistance, which is left unset) — that asymmetry is
+    /// `Profile::fromJson`'s, and `sanitizedProfileMap` mirrors it.
+    void testFromJsonSubstitutesDefaultForOutOfRangeSequenceMode()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("sequenceMode"), 1e300);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.sequenceMode.has_value());
+        QCOMPARE(*p.sequenceMode, Profile::DefaultSequenceMode);
+    }
+
     void testFromJsonAcceptsZeroMinDistance()
     {
         // Zero = "no skip threshold" — the documented default. Must

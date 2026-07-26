@@ -40,6 +40,13 @@ public:
     // Upper bounds — anything beyond 1 hour is clearly malformed.
     static constexpr qreal MaxDurationMs = 60.0 * 60.0 * 1000.0;
     static constexpr int MaxStaggerIntervalMs = 60 * 60 * 1000;
+    /// Upper bound on `minDistance`, in pixels. Sized well past any real display
+    /// diagonal, so it never rejects a value a user could mean, while giving the
+    /// validator a DOMAIN bound like its two siblings above rather than the
+    /// int range: a minDistance of two billion pixels is not a large threshold,
+    /// it is "never animate anything", which is exactly what these caps exist
+    /// to refuse.
+    static constexpr int MaxMinDistancePx = 100000;
 
     Profile() = default;
 

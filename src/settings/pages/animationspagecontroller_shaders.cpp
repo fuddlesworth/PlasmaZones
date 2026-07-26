@@ -392,7 +392,7 @@ int AnimationsPageController::shaderOverrideDescendantCount(const QString& path)
 {
     if (!m_settings)
         return 0;
-    return collectShaderOverrideDescendants(m_settings->shaderProfileTree(), path).size();
+    return int(collectShaderOverrideDescendants(m_settings->shaderProfileTree(), path).size());
 }
 
 int AnimationsPageController::clearShaderOverrideDescendants(const QString& path)
@@ -418,7 +418,7 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
         tree.clearOverride(p);
     m_settings->setShaderProfileTree(tree);
     // pendingChangesChanged is emitted by the shaderProfileTreeChanged handler.
-    return toClear.size();
+    return int(toClear.size());
 }
 
 QVariantList AnimationsPageController::shaderEffectUsages(const QString& effectId) const

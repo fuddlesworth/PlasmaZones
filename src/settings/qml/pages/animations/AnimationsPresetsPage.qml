@@ -15,11 +15,12 @@ import org.kde.kirigami as Kirigami
  * `AnimationsPageController.userPresets()` (file-per-preset, name field
  * disambiguates from per-event override files).
  *
- * "Use as Default" routes through `appSettings.animationEasingCurve`,
- * which is the existing config-driven Global path. For a spring preset
- * the curve string is the wire form `"spring:omega,zeta"`; the
- * Settings::animationProfile getter routes it through CurveRegistry like
- * any other curve string.
+ * "Use as Default" routes through `appSettings.animationEasingCurve`, which is
+ * the existing config-driven Global path, and additionally through
+ * `animationDuration` when the preset carries one (user easing presets do;
+ * built-ins and spring presets do not). For a spring preset the curve string is
+ * the wire form `"spring:omega,zeta"`; the Settings::animationProfile getter
+ * routes it through CurveRegistry like any other curve string.
  */
 SettingsFlickable {
     id: root
@@ -68,7 +69,10 @@ SettingsFlickable {
         // publishActiveAnimationProfile pick it up via the same wire
         // every other Global edit uses.
         root.appSettings.animationEasingCurve = curveStr;
-        if (duration !== undefined && duration > 0)
+        // Type-checked, not just truthy: the entry comes straight out of a JSON
+        // file in a directory the user can hand-edit, so `"500"` would otherwise
+        // pass `> 0` and be assigned to an int Q_PROPERTY.
+        if (typeof duration === "number" && isFinite(duration) && duration > 0)
             root.appSettings.animationDuration = duration;
     }
 

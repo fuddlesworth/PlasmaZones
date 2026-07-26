@@ -29,23 +29,24 @@ The library factors the work into:
 - **`DirectoryLoader`** is the flat `*.json` specialisation that pairs with
   an `IDirectoryLoaderSink` (the schema-specific parse + commit
   strategy). Used by curve and profile loaders.
-- **`MetadataPackScanStrategy<Payload>` + `MetadataPackRegistryBase`** form the
-  templated specialisation for "subdirectory-with-metadata-json" packs.
-  There is one pack per top-level subfolder, validated by a `metadata.json`,
-  with the payload type chosen by the registry. Used by
-  [`phosphor-shaders`](../phosphor-shaders/README.md)' `ShaderRegistry`
-  and [`phosphor-animation`](../phosphor-animation/README.md)'s
-  `AnimationShaderRegistry`.
+- **`MetadataPackScanStrategy<Payload>`** is the templated specialisation for
+  "subdirectory-with-metadata-json" packs. There is one pack per top-level
+  subfolder, validated by a `metadata.json`, with the payload type chosen by the
+  registry. Hosted by `PhosphorRegistry::MetadataPackLoader<T>`, which owns the
+  strategy and the watcher and adds the per-id fingerprint diff. Used by
+  [`phosphor-shaders`](../phosphor-shaders/README.md)' `ShaderRegistry`,
+  [`phosphor-animation`](../phosphor-animation/README.md)'s
+  `AnimationShaderRegistry`, and `PhosphorSurfaceShaders::SurfaceShaderRegistry`.
 - **`validateJsonEnvelope`** is the shared envelope validation. It parses the
   file, checks the `"name"` field is non-empty and matches the
   filename, and returns a `JsonEnvelope` carrying the rest of the JSON
   object for the sink's schema-specific `fromJson`.
 
-`MetadataPackRegistryBase` is the QObject base every metadata-pack
-registry inherits from. It owns the `WatchedDirectorySet` plus the
-strategy and provides the search-path management surface
-(`addSearchPath`, `setUserPath`, `refresh`) that every consumer was
-hand-rolling identically.
+A metadata-pack registry does not inherit anything from this library: it
+COMPOSES a `PhosphorRegistry::MetadataPackLoader<T>`, which owns the
+`WatchedDirectorySet` plus the strategy and provides the search-path management
+surface (`addSearchPath`, `setUserPath`, `refresh`) every consumer was otherwise
+hand-rolling.
 
 ## Key types
 
@@ -57,7 +58,6 @@ hand-rolling identically.
 | `PhosphorFsLoader::IDirectoryLoaderSink`          | Per-schema strategy: `parseFile()` + `commitBatch()` |
 | `PhosphorFsLoader::ParsedEntry`                   | Parse-result value type with source-path metadata and `std::any` payload |
 | `PhosphorFsLoader::MetadataPackScanStrategy<P>`   | Subdirectory-with-`metadata.json` strategy |
-| `PhosphorFsLoader::MetadataPackRegistryBase`      | QObject base that owns the strategy + watcher and provides the search-path surface |
 | `PhosphorFsLoader::validateJsonEnvelope`          | Shared `"name"`-field envelope validator returning a `JsonEnvelope` |
 
 ## Typical use
@@ -89,11 +89,18 @@ loader.requestRescan();
 A metadata-pack registry (used by shader / animation-shader registries):
 
 ```cpp
-class MyPackRegistry : public PhosphorFsLoader::MetadataPackRegistryBase {
+class MyPackRegistry : public QObject {
 public:
     MyPackRegistry()
-        : MetadataPackRegistryBase(myLogCategory(), makeStrategy()) {}
-    // … expose payload-typed lookups
+        : m_loader(std::make_unique<PhosphorRegistry::MetadataPackLoader<MyPack>>(
+              myLogCategory(), makeParser()))
+    {
+        m_loader->setOnCommitted([this] { Q_EMIT packsChanged(); });
+    }
+    // … expose payload-typed lookups over m_loader
+
+private:
+    std::unique_ptr<PhosphorRegistry::MetadataPackLoader<MyPack>> m_loader;
 };
 // Composition root then wires:
 registry.addSearchPath(systemDir);
@@ -127,4 +134,4 @@ registry.refresh();
 ## See also
 
 - [`phosphor-animation`](../phosphor-animation/README.md) — `ProfileLoader`, `CurveLoader`, and `AnimationShaderRegistry` are clients.
-- [`phosphor-shaders`](../phosphor-shaders/README.md) — `ShaderRegistry` inherits `MetadataPackRegistryBase`.
+- [`phosphor-shaders`](../phosphor-shaders/README.md) — `ShaderRegistry` composes a `MetadataPackLoader` over this library's strategy.
