@@ -175,7 +175,6 @@ public:
 
     PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) override;
     const PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) const override;
-    ScrollState* scrollStateForScreen(const QString& screenId);
     bool isWindowTracked(const QString& windowId) const override;
     bool isWindowTiled(const QString& windowId) const override;
     bool isWindowManaged(const QString& windowId) const override;
@@ -280,7 +279,8 @@ public:
 Q_SIGNALS:
     /// Batch of absolute pixel rects for the KWin effect, same JSON contract
     /// as AutotileEngine::windowsTiled ({windowId, screenId, x, y, width,
-    /// height} plus {windowId, floating:true, screenId} release entries).
+    /// height}). Float transitions are signalled separately via
+    /// windowFloatingChanged — this batch never carries release entries.
     void windowsTiled(const QString& tileRequestsJson);
     /// Scrolling twin of autotileScreensChanged, with the same
     /// identical-set re-emit contract on desktop/activity switches.
@@ -305,7 +305,14 @@ private:
     /// The screen the engine should operate on for a screen-hinted verb:
     /// @p screenId when it is a scrolling screen, else the active screen.
     QString resolveOperationScreen(const QString& screenId) const;
-    void releaseScreenState(const QString& screenId, ScrollState* state, QStringList& releasedWindows);
+    /// Tear down one context state: appends its windows to
+    /// @p releasedWindows, drops all per-window and per-screen bookkeeping
+    /// (float markers, pending seed, tab-strip latch — with the "[]" clear
+    /// broadcast), and deleteLater()s the state.
+    void releaseScreenState(ScrollState* state, QStringList& releasedWindows);
+    /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
+    /// screen that had a strip showing, no-op otherwise.
+    void clearTabStripsForScreen(const QString& screenId);
     // engine_apply.cpp
     ScrollLayoutParams layoutParamsForScreen(const QString& screenId) const;
     /// Relayout the strip and emit the geometry batch for @p screenId's
@@ -317,7 +324,8 @@ private:
                             int minHeight);
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
                              const QString& screenId);
-    bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId);
+    bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
+                               bool applyAfter = true);
     // engine_navigation.cpp
     /// Move the active window off the strip's boundary onto the adjacent
     /// output in @p direction. Scroll→scroll crossings migrate internally;

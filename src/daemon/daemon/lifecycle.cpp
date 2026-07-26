@@ -73,6 +73,7 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
@@ -392,6 +393,7 @@ void Daemon::stop()
     // idempotent, so running this on an already-stopped daemon costs nothing.
     if (m_windowDragAdaptor) {
         m_windowDragAdaptor->setAutotileEngine(nullptr);
+        m_windowDragAdaptor->setScrollEngine(nullptr);
         m_windowDragAdaptor->setShortcutRegistrar(nullptr);
     }
 
@@ -751,6 +753,12 @@ void Daemon::stop()
     // `PlacementEngineBase*`; setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
+    }
+    // Scroll twin of the clear above: its context-gap provider captures the
+    // same Daemon `this` (init_engines.cpp) and honours the same
+    // clear-before-destroy contract (ScrollEngine.h documents it).
+    if (auto* concreteScroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
+        concreteScroll->setContextGapProvider({});
     }
 
     // Destroy engines now (during stop(), before Qt child destruction order).

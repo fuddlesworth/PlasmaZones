@@ -82,7 +82,7 @@ public:
      *   category (translated QString), categoryOrder (int),
      *   triggers (QStringList — the user's EFFECTIVE keys via backend
      *   read-back, falling back to the config value), assigned (bool),
-     *   mode ("all" | "snapping" | "autotile" — which tiling mode the
+     *   mode ("all" | "snapping" | "autotile" | "scrolling" — which tiling mode the
      *   action is meaningful in; the overlay filters on it).
      * Ad-hoc/transient grabs never appear. Empty before registerShortcuts().
      */
@@ -170,7 +170,7 @@ Q_SIGNALS:
     void scrollAdjustColumnWidthRequested(int deltaPercent);
     void scrollMaximizeColumnRequested();
     void scrollExpandColumnRequested();
-    void scrollCycleWindowHeightRequested(int delta);
+    void scrollCycleWindowHeightRequested();
     void scrollAdjustWindowHeightRequested(int deltaPercent);
     void scrollResetWindowHeightsRequested();
 

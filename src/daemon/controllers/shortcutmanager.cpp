@@ -385,7 +385,7 @@ const StaticEntry kStaticEntries[] = {
     {kIdScrollCycleWindowHeight, &ConfigDefaults::scrollingCycleWindowHeightShortcut,
      &Settings::scrollingCycleWindowHeightShortcut, QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height Preset"),
      [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollCycleWindowHeightRequested(1);
+         Q_EMIT sm->scrollCycleWindowHeightRequested();
      }},
     {kIdScrollIncreaseWindowHeight, &ConfigDefaults::scrollingIncreaseWindowHeightShortcut,
      &Settings::scrollingIncreaseWindowHeightShortcut, QT_TRANSLATE_NOOP("plasmazones", "Increase Window Height"),

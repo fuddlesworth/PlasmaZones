@@ -83,6 +83,18 @@ public:
     }
 
     /**
+     * @brief Set the scrolling engine for per-screen drag policy.
+     *
+     * The scrolling engine owns placement on its screens exactly like
+     * autotile does, so drags there take the engine bypass (drag-to-float)
+     * instead of the snap pipeline. Pass nullptr during shutdown.
+     */
+    void setScrollEngine(PhosphorEngine::IPlacementEngine* engine)
+    {
+        m_scrollEngine = engine;
+    }
+
+    /**
      * @brief Set the frozen-snapshot resolver used to gate snap/drag handlers
      *        on the per-screen disable + lock cascade.
      *
@@ -408,11 +420,10 @@ public:
      *        context-disabled check. nullptr disables the disable gate
      *        (matches the historical `settings == nullptr` fallback).
      */
-    static PhosphorProtocol::DragPolicy computeDragPolicy(const ISettings* settings,
-                                                          const PhosphorEngine::IPlacementEngine* autotileEngine,
-                                                          const QString& windowId, const QString& screenId,
-                                                          const PhosphorContext::IContextResolver* resolver,
-                                                          bool reorderMode);
+    static PhosphorProtocol::DragPolicy
+    computeDragPolicy(const ISettings* settings, const PhosphorEngine::IPlacementEngine* autotileEngine,
+                      const PhosphorEngine::IPlacementEngine* scrollEngine, const QString& windowId,
+                      const QString& screenId, const PhosphorContext::IContextResolver* resolver, bool reorderMode);
 
 private:
     /// Whether reorder (drag-to-swap) mode is effective for @p screenId: a matched
@@ -459,6 +470,7 @@ private:
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     PhosphorEngine::IPlacementEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
+    PhosphorEngine::IPlacementEngine* m_scrollEngine = nullptr; // Optional: per-screen scrolling check
     PhosphorContext::IContextResolver* m_contextResolver =
         nullptr; // Non-owning; set via setContextResolver after Daemon builds it.
     PhosphorShortcutsIntegration::IAdhocRegistrar* m_shortcutRegistrar =

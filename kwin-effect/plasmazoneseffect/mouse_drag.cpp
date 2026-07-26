@@ -82,7 +82,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // overlay destroy/create churn that prompted discussion #310's
             // sibling regression.
             const bool bypassed = m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen
-                || m_dragBypassedForAutotile;
+                || m_dragBypassedForEngine;
             const bool shouldForward =
                 bypassed || detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded;
             if (shouldForward) {

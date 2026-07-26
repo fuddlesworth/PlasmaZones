@@ -423,7 +423,7 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
     // occupying the zone. (The autotile-tiled case is NOT gated here: a window that
     // is on an autotile screen but not yet tiled — a fresh spawn — legitimately has a
     // free frame, and "autotile mode + not floating" cannot tell that apart from a
-    // tiled window. The effect's saveAndRecordPreAutotileGeometry guards the tiled
+    // tiled window. The effect's saveAndRecordPreTileGeometry guards the tiled
     // case at capture time instead.)
     if (isWindowSnapped(windowId) && !isWindowFloating(windowId)) {
         qCDebug(lcPlacement) << "recordFreeGeometry: refusing snapped frame for" << windowId
@@ -431,7 +431,7 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
         return;
     }
     // Same invariant for the tiled case: an actively-tiled window's frame IS
-    // the tile rect. The effect's saveAndRecordPreAutotileGeometry guards its
+    // the tile rect. The effect's saveAndRecordPreTileGeometry guards its
     // own capture paths, but cannot help when the effect reloads (kwin
     // restart with the daemon alive) — its border tracking starts empty and
     // the re-announce batch would push every tiled window's zone rect here

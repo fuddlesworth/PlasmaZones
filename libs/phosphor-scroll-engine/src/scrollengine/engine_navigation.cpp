@@ -188,11 +188,13 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         targetState->strip().takeWindow(partner, targetParams);
         Q_EMIT windowOutputMoveExpected(partner, screenId);
     }
-    targetState->strip().insertWindowAt(columnIdx, windowId, m_defaultColumnWidth, m_defaultColumnDisplay);
+    targetState->strip().insertWindowAt(columnIdx, windowId, effectiveDefaultColumnWidth(target),
+                                        effectiveDefaultColumnDisplay(target));
     targetState->strip().focusWindow(windowId, targetParams);
     m_states.setKeyForWindow(windowId, targetKey);
     if (!partner.isEmpty()) {
-        state->strip().insertWindowAt(qMax(0, partnerLanding), partner, m_defaultColumnWidth, m_defaultColumnDisplay);
+        state->strip().insertWindowAt(qMax(0, partnerLanding), partner, effectiveDefaultColumnWidth(screenId),
+                                      effectiveDefaultColumnDisplay(screenId));
         m_states.setKeyForWindow(partner, sourceKey);
     }
     m_activeScreen = target;
@@ -241,13 +243,7 @@ void ScrollEngine::moveFocusedToPosition(int position, const PhosphorEngine::Nav
         return;
     }
     const int target = qBound(0, position - 1, state->strip().columnCount() - 1);
-    bool moved = false;
-    while (state->strip().activeColumnIndex() > target && state->strip().moveActiveColumn(-1, params)) {
-        moved = true;
-    }
-    while (state->strip().activeColumnIndex() < target && state->strip().moveActiveColumn(1, params)) {
-        moved = true;
-    }
+    const bool moved = state->strip().moveActiveColumnTo(target, params);
     if (moved) {
         applyLayout(screen, true);
         Q_EMIT placementChanged(screen);
@@ -281,8 +277,15 @@ void ScrollEngine::snapAllWindows(const PhosphorEngine::NavigationContext& ctx)
         return;
     }
     const QStringList floating = state->floatingWindows();
+    bool any = false;
     for (const QString& windowId : floating) {
-        unfloatWindowInternal(state, windowId, screen);
+        // Batched: one relayout + one placementChanged for the whole pull,
+        // not N (each per-window call would relayout the strip again).
+        any = unfloatWindowInternal(state, windowId, screen, /*applyAfter=*/false) || any;
+    }
+    if (any) {
+        applyLayout(screen, false);
+        Q_EMIT placementChanged(screen);
     }
 }
 
@@ -373,6 +376,12 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
     P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToLast(params), "move");
 }
 
+// NOTE on the P_SCROLL_* macros above: they deliberately inject `screen`,
+// `state`, and `params` into the caller's scope and embed an early return.
+// A helper struct + lambda was considered and rejected: every verb would
+// still need the three names plus the bail-out, and the macro keeps the 20
+// verb bodies one line each. The names are part of the macro's documented
+// contract, and both macros are #undef'd at the end of this file.
 void ScrollEngine::consumeWindowIntoColumn(const QString& screenId)
 {
     P_SCROLL_VERB(screenId, state->strip().consumeWindowIntoColumn(params), "consume");
@@ -390,12 +399,7 @@ void ScrollEngine::consumeOrExpelWindow(int delta, const QString& screenId)
 
 void ScrollEngine::centerColumn(const QString& screenId)
 {
-    P_SCROLL_RESOLVE(screenId);
-    if (!state || state->strip().isEmpty()) {
-        return;
-    }
-    state->strip().centerActiveColumn(params);
-    applyLayout(screen, false);
+    P_SCROLL_VERB(screenId, state->strip().centerActiveColumn(params), "center");
 }
 
 void ScrollEngine::toggleColumnTabbed(const QString& screenId)
@@ -415,7 +419,7 @@ void ScrollEngine::adjustColumnWidth(qreal deltaPercent, const QString& screenId
 
 void ScrollEngine::toggleMaximizeColumn(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().toggleMaximizeActiveColumn(), "resize");
+    P_SCROLL_VERB(screenId, state->strip().toggleMaximizeActiveColumn(params), "resize");
 }
 
 void ScrollEngine::expandColumnToAvailableWidth(const QString& screenId)

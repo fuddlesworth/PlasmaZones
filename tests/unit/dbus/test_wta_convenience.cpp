@@ -201,7 +201,7 @@ private Q_SLOTS:
     // =====================================================================
 
     // ── Open routing: RouteToScreen / RouteToDesktop rules ──
-    void testApplyOpenRoutingForAutotile_routesToAutotileScreenAndDesktop()
+    void testApplyOpenRoutingForTiling_routesToAutotileScreenAndDesktop()
     {
         // DP-2 is an AUTOTILE screen; DP-1 (the spawn screen) stays snapping (the
         // registry default).
@@ -252,7 +252,48 @@ private Q_SLOTS:
         m_wta->setWindowRegistry(nullptr);
     }
 
-    void testApplyOpenRoutingForAutotile_declinesSnapModeTarget()
+    void testApplyOpenRoutingForTiling_acceptsScrollingTarget()
+    {
+        // DP-2 is a SCROLLING screen: org.plasmazones.Tiling serves both
+        // tiling-family engines, so a RouteToScreen rule targeting a
+        // scrolling monitor must redirect exactly like an autotile target.
+        PhosphorZones::AssignmentEntry scrolling;
+        scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), scrolling);
+
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst3"), QStringLiteral("scrollroute"), QString(), QString(),
+                                 QString(), 0, 0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("scrollroute"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToScreen);
+        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
+        rule.actions = {route};
+
+        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
+        QVERIFY(store.addRule(rule));
+        m_wta->setRuleStore(&store);
+
+        QSignalSpy outputSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
+
+        const QString routed =
+            m_wta->applyOpenRoutingForTiling(QStringLiteral("scrollroute|inst3"), QStringLiteral("DP-1"));
+
+        QCOMPARE(routed, QStringLiteral("DP-2"));
+        QCOMPARE(outputSpy.count(), 1);
+        QCOMPARE(outputSpy.at(0).at(1).toString(), QStringLiteral("DP-2"));
+
+        m_wta->setRuleStore(nullptr);
+        m_wta->setWindowRegistry(nullptr);
+    }
+
+    void testApplyOpenRoutingForTiling_declinesSnapModeTarget()
     {
         // DP-2 stays SNAPPING (registry default): autotile must NOT redirect onto a
         // snap-mode monitor (the snap placement path owns those), but RouteToDesktop

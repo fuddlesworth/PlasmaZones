@@ -21,108 +21,7 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmPreviewParams.h>
 
-namespace PhosphorScreens {
-class PlasmaPanelSource;
-class DBusScreenAdaptor;
-}
-
-#include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorAnimation/PhosphorProfileRegistry.h>
-#include <PhosphorAnimation/QtQuickClockManager.h>
-#include <PhosphorConfig/IBackend.h>
-
-namespace PhosphorAnimation {
-class CurveLoader;
-class ProfileLoader;
-}
-
-namespace PhosphorAnimationShaders {
-class AnimationShaderRegistry;
-}
-
-namespace PhosphorSurfaceShaders {
-class SurfaceShaderRegistry;
-}
-
-namespace PhosphorEngine {
-class WindowRegistry;
-}
-
-namespace PhosphorWorkspaces {
-class ActivityManager;
-class VirtualDesktopManager;
-}
-
-namespace PhosphorServiceIdle {
-class IdleService;
-}
-
-// PhosphorRules::RuleSet is held as a value member below
-// (m_excludeRuleSet) — needs a complete type, so include the header
-// rather than forward-declare. RuleStore stays in the header by
-// pointer only; including RuleSet.h leaves the store forward
-// declared here.
-#include <PhosphorRules/RuleSet.h>
-
-namespace PhosphorRules {
-class RuleStore;
-}
-
-namespace PhosphorZones {
-class Layout;
-class LayoutComputeService;
-class LayoutRegistry;
-class ZoneDetector;
-} // namespace PhosphorZones
-
-// `AssignmentEntry::Mode` appears in member-function signatures below, so
-// the full struct definition must be visible here (a forward declaration
-// can't surface a nested enum). The header is LGPL-LGPL safe (PhosphorZones
-// to daemon header is the standard direction).
-#include <PhosphorZones/AssignmentEntry.h>
-
-namespace PlasmaZones {
-
-enum class DisabledReason;
-class Settings;
-class OverlayService;
-
-class ShortcutManager;
-class LayoutAdaptor;
-class SettingsAdaptor;
-class ShaderAdaptor;
-class ControlAdaptor;
-class CompositorBridgeAdaptor;
-class OverlayAdaptor;
-class ZoneDetectionAdaptor;
-class WindowTrackingAdaptor;
-class WindowDragAdaptor;
-class RuleAdaptor;
-class ZoneSelectorController;
-class UnifiedLayoutController;
-class TilingAdaptor;
-class ScreenModeRouter;
-class CrossSurfaceResolver;
-class DaemonScreenModeAdapter;
-class DaemonSettingsGateAdapter;
-class DaemonWorkspaceStateAdapter;
-
-} // namespace PlasmaZones
-
-namespace PhosphorContext {
-class ContextResolver;
-} // namespace PhosphorContext
-
-namespace PlasmaZones {
-class SettingsConfigStore;
-class SnapAdaptor;
-class ShaderRegistry;
-} // namespace PlasmaZones
-
-namespace PhosphorTiles {
-class AlgorithmRegistry;
-class ScriptedAlgorithmLoader;
-}
+#include "daemon/daemon_fwd.h"
 
 namespace PlasmaZones {
 
@@ -459,6 +358,10 @@ private:
     /// (scrolling.cpp). Called from updateEngineScreens so both
     /// engines' sets flip atomically per context recompute.
     void updateScrollingScreens(const QSet<QString>& scrollingScreens);
+    /// Shared capture phase: store leaving-scrolling screens' column order
+    /// into m_lastEngineOrders BEFORE either engine seeds (see
+    /// updateEngineScreens' capture-all → seed-all ordering).
+    void captureScrollingOrders(const QSet<QString>& scrollingScreens);
     void initializeUnifiedController();
     void connectLayoutSignals();
     void connectOverlaySignals();
@@ -884,7 +787,7 @@ private:
     /// scroll-specific screen set; lifecycle traffic rides the shared
     /// tiling adaptor. Qt-parented; stop() clears its engine pointer
     /// before the engine unique_ptr resets.
-    class ScrollingAdaptor* m_scrollingAdaptor = nullptr;
+    ScrollingAdaptor* m_scrollingAdaptor = nullptr;
     // Compositor bridge adaptor (KWin effect ↔ daemon protocol endpoint).
     // Parented to `this`; holds only plain state, so it needs no detach().
     CompositorBridgeAdaptor* m_compositorBridge = nullptr;
@@ -938,7 +841,7 @@ private:
     /// selection, master ops, and autotile config; lifecycle traffic rides
     /// the shared tiling adaptor. Qt-parented; stop() clears its engine
     /// pointer before the engine unique_ptr resets.
-    class AutotileAdaptor* m_autotileAdaptor = nullptr;
+    AutotileAdaptor* m_autotileAdaptor = nullptr;
 
     /// Phase 6: animation shader effect discovery. Scans
     /// `plasmazones/animations` from XDG data dirs and monitors for

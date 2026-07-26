@@ -100,16 +100,12 @@ struct AssignmentEntry
     enum Mode {
         Snapping = 0,
         Autotile = 1,
-        /// Reserved engine slot for a future scrolling-workspace engine.
-        /// The settings UI exposes the mode and persists per-mode disable
-        /// lists / config groups, but the router currently has no engine
-        /// to hand windows to — see `ScreenModeRouter::engineFor` for the
-        /// passthrough fallback (returns nullptr for Scrolling) that lets
-        /// KWin place the window naturally rather than blocking on a
-        /// missing engine. A real engine implementer adds an adapter to
-        /// the router and removes the passthrough; no daemon-internal
-        /// switch needs to be edited because the (Mode, Family) settings
-        /// table here drives all downstream config routing.
+        /// The niri-style scrolling engine (PhosphorScrollEngine): windows
+        /// form columns on an endless horizontal strip per context.
+        /// `ScreenModeRouter::engineFor` hands Scrolling screens to the
+        /// live ScrollEngine; the (Mode, Family) settings table here still
+        /// drives all downstream config routing. Scrolling has no layout
+        /// entity of its own — the mode lookup is the discriminator.
         Scrolling = 2
     };
     Mode mode = Snapping;
@@ -118,6 +114,16 @@ struct AssignmentEntry
 
     QString activeLayoutId() const
     {
+        // Scrolling has no layout entity, so the id is the bare sentinel
+        // "scrolling:". This is LOAD-BEARING: the assignment cascade's
+        // visitors reject entries with an empty activeLayoutId(), and a
+        // fresh mode-only Scrolling entry (empty preserved snappingLayout)
+        // would otherwise silently fail to assign. `ActiveLayout Equals X`
+        // matches remain not meaningful on scrolling screens — consumers
+        // that need the engine discriminate on Mode.
+        if (mode == Scrolling) {
+            return QString(PhosphorLayout::LayoutId::ScrollingId);
+        }
         if (mode == Autotile) {
             // Autotile mode always produces a non-empty id so the cascade
             // visitors in LayoutRegistry accept it (they reject on

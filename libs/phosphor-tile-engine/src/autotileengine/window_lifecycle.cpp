@@ -51,6 +51,16 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     // m_states / PhosphorTiles::TilingState / m_windowMinSizes stay consistent.
     const QString windowId = canonicalizeWindowId(rawWindowId);
 
+    // Self-guard, symmetric with ScrollEngine::windowOpened: never adopt a
+    // window for a screen this engine does not own. The adaptor dispatches
+    // by live-set claim, but a mid-flip caller (or a future one) must not be
+    // able to make autotile tile a window on another engine's screen.
+    if (!screenId.isEmpty() && !isActiveOnScreen(screenId)) {
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "windowOpened:" << windowId << "ignored - screen" << screenId << "not autotile-active";
+        return;
+    }
+
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "windowOpened:" << windowId << "screen=" << screenId << "minSize=" << minWidth << "x" << minHeight;
 

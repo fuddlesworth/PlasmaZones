@@ -15,7 +15,7 @@
 namespace PhosphorCompositor {
 
 /**
- * @brief Compositor-agnostic autotile border state
+ * @brief Compositor-agnostic engine-managed (tiling-family) border state
  *
  * Tracks which windows are tile-managed (drives border RENDERING). Title-bar/
  * borderless state lives in the DecorationManager's owner model, not here, and
@@ -36,7 +36,7 @@ struct BorderState
 };
 
 /**
- * @brief Compositor-agnostic autotile state accessors and pure helpers
+ * @brief Compositor-agnostic tiling-family state accessors and pure helpers
  *
  * These functions operate on BorderState and other pure data structures
  * without touching any compositor APIs. Shared by all compositor plugins.
@@ -103,7 +103,7 @@ inline void cleanupClosedWindowState(const QString& windowId, BorderState& borde
         }
     }
 
-    // Sweep the pre-autotile geometry out of EVERY screen bucket — the same
+    // Sweep the pre-tile geometry out of EVERY screen bucket — the same
     // cross-screen-stale scenario the tiled sweep above defends against
     // (the window crossed screens before closing) would otherwise leak a
     // geometry entry in the old screen's bucket forever.

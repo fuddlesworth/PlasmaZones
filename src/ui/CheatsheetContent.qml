@@ -26,7 +26,8 @@ Item {
 
     /// Catalog rows from ShortcutManager::cheatsheetModel(): one object per
     /// shortcut with id, label, category, categoryOrder, triggers (list of
-    /// display strings), assigned (bool), mode ("all"|"snapping"|"autotile").
+    /// display strings), assigned (bool), mode
+    /// ("all"|"snapping"|"autotile"|"scrolling").
     property var shortcuts: []
     /// Tiling mode of the screen the sheet opened on:
     /// "snapping" | "autotile" | "scrolling".

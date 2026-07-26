@@ -726,6 +726,16 @@ void TilingHandler::onDaemonReady()
     // strictly sound — a signal lost pre-AddMatch implies the Get (served
     // after the change) already returns the new set.
     connectSignals();
+    // The scrolling set is a pure discriminator with no lifecycle attached,
+    // so clear the DEAD session's snapshot before loadSettings re-queries:
+    // an errored/timed-out Properties.Get (daemon still starting, or one
+    // without org.plasmazones.Scrolling) is reply.isValid()-gated and would
+    // otherwise leave the old set stamping Mode "scrolling" indefinitely.
+    // m_managedScreens is deliberately NOT cleared here — it carries real
+    // per-screen lifecycle state whose removal transitions run through
+    // slotScreensChanged / the serviceUnregistered teardown.
+    m_scrollingScreens.clear();
+    ++m_scrollingScreensGeneration;
     loadSettings();
     m_notifiedWindows.clear();
     m_notifiedWindowScreens.clear();

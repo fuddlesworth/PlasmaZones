@@ -70,18 +70,6 @@ public:
     /// minimized tiles (their slot is part of the order contract).
     QStringList windowsInOrder() const;
     int windowCount() const;
-    /// The view anchor: the active column's left edge position within the
-    /// viewport (work-area-relative pixels; may be negative for a column
-    /// partially scrolled off the left edge).
-    int viewAnchor() const
-    {
-        return m_viewAnchor;
-    }
-    void setViewAnchor(int anchor)
-    {
-        m_viewAnchor = anchor;
-    }
-
     // ── Structure: open / close / minimize ──────────────────────────────────
     /// Insert a new single-tile column for @p windowId immediately to the
     /// right of the active column (or at index 0 on an empty strip), focus
@@ -127,6 +115,9 @@ public:
     // ── Structure: move / consume / expel ───────────────────────────────────
     /// Swap the active column with its neighbour. @p delta is -1/+1.
     bool moveActiveColumn(int delta, const ScrollLayoutParams& params);
+    /// Move the active column directly to @p target (one list move + one
+    /// reanchor — a positional move must not pay per-step swap costs).
+    bool moveActiveColumnTo(int target, const ScrollLayoutParams& params);
     bool moveActiveColumnToFirst(const ScrollLayoutParams& params);
     bool moveActiveColumnToLast(const ScrollLayoutParams& params);
     /// Reorder the active tile within its column. @p delta is -1/+1.
@@ -158,7 +149,7 @@ public:
     bool adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Full work-area width, still tiled (niri maximize-column). Toggles back
     /// to the pre-maximize intent when already maximized.
-    bool toggleMaximizeActiveColumn();
+    bool toggleMaximizeActiveColumn(const ScrollLayoutParams& params);
     /// Grow the active column into the on-screen space not covered by any
     /// column at the current view (niri expand-column-to-available-width).
     bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
@@ -174,7 +165,7 @@ public:
     /// Reconcile a column's stored intent to a size the client actually
     /// acked (app-initiated resize): the owning column takes the acked width
     /// as Fixed, the tile the acked height. Other columns untouched.
-    bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize);
+    bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool widthChanged = true);
 
     // ── Display ──────────────────────────────────────────────────────────────
     /// Toggle the active column between Normal and Tabbed presentation.
@@ -186,7 +177,8 @@ public:
     /// scroll" baseline.
     void updateViewForFocus(const ScrollLayoutParams& params);
     /// Center the active column in the view (niri center-column).
-    void centerActiveColumn(const ScrollLayoutParams& params);
+    /// Returns true when the anchor actually moved.
+    bool centerActiveColumn(const ScrollLayoutParams& params);
 
     // ── Relayout ─────────────────────────────────────────────────────────────
     /// Resolve every non-minimized tile's absolute pixel rect against
@@ -227,6 +219,10 @@ private:
     /// Nearest preset index to the current pixel width of @p c (for entering
     /// the preset cycle from a non-preset width).
     int nearestPresetWidthIdx(const Column& c, const ScrollLayoutParams& params) const;
+    int nearestPresetHeightIdx(const Tile& t, const ScrollLayoutParams& params) const;
+    /// The tile's current height as a fraction of the column height, or -1
+    /// when it has no determinate fraction (Auto weight).
+    qreal currentHeightFraction(const Tile& t, const ScrollLayoutParams& params) const;
 
     Column* activeColumnMutable();
     Tile* activeTileMutable();

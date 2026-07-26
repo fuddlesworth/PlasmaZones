@@ -28,12 +28,11 @@ namespace {
 /// nullptr when the focused screen is not in scrolling mode (the shortcut is
 /// then a quiet no-op, matching the master-op handlers' behaviour off
 /// autotile).
-PhosphorScrollEngine::ScrollEngine* scrollTargetFor(Daemon* daemon, PhosphorScreens::ScreenManager* screenManager,
+PhosphorScrollEngine::ScrollEngine* scrollTargetFor(PhosphorScreens::ScreenManager* screenManager,
                                                     WindowTrackingAdaptor* wta, ScreenModeRouter* router,
                                                     PhosphorEngine::PlacementEngineBase* engineBase,
                                                     QString* outScreenId)
 {
-    Q_UNUSED(daemon)
     if (!router || !engineBase) {
         return nullptr;
     }
@@ -42,11 +41,11 @@ PhosphorScrollEngine::ScrollEngine* scrollTargetFor(Daemon* daemon, PhosphorScre
         return nullptr;
     }
     auto* scroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(engineBase);
-    if (scroll) {
-        scroll->setActiveScreenHint(screenId);
-        if (outScreenId) {
-            *outScreenId = screenId;
-        }
+    if (scroll && outScreenId) {
+        // No engine-state mutation here — the active-screen hint is pushed
+        // by the caller AFTER the context-disable gate passes, so a refused
+        // shortcut leaves the engine untouched.
+        *outScreenId = screenId;
     }
     return scroll;
 }
@@ -62,7 +61,7 @@ void Daemon::connectScrollingShortcuts()
     // context-disable gate, then the concrete engine.
     const auto engineFor = [this](QString* outScreenId) -> PhosphorScrollEngine::ScrollEngine* {
         QString screenId;
-        auto* scroll = scrollTargetFor(this, m_screenManager.get(), m_windowTrackingAdaptor, m_screenModeRouter.get(),
+        auto* scroll = scrollTargetFor(m_screenManager.get(), m_windowTrackingAdaptor, m_screenModeRouter.get(),
                                        m_scrollEngine.get(), &screenId);
         if (!scroll) {
             return nullptr;
@@ -70,6 +69,8 @@ void Daemon::connectScrollingShortcuts()
         if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Scrolling)) {
             return nullptr;
         }
+        // Gate passed — only now touch engine state.
+        scroll->setActiveScreenHint(screenId);
         if (outScreenId) {
             *outScreenId = screenId;
         }
@@ -143,10 +144,12 @@ void Daemon::connectScrollingShortcuts()
             scroll->expandColumnToAvailableWidth(screenId);
         }
     });
-    connect(m_shortcutManager.get(), &ShortcutManager::scrollCycleWindowHeightRequested, this, [engineFor](int delta) {
+    // Parameterless: only a forward chord ships (no CycleWindowHeightBack
+    // sibling), so a delta here would be a constant.
+    connect(m_shortcutManager.get(), &ShortcutManager::scrollCycleWindowHeightRequested, this, [engineFor]() {
         QString screenId;
         if (auto* scroll = engineFor(&screenId)) {
-            scroll->cycleWindowPresetHeight(delta, screenId);
+            scroll->cycleWindowPresetHeight(1, screenId);
         }
     });
     connect(m_shortcutManager.get(), &ShortcutManager::scrollAdjustWindowHeightRequested, this,

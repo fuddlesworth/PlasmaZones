@@ -325,8 +325,16 @@ void Daemon::initLayoutAndSettingsWiring()
 
         // Capture autotile window order BEFORE any mode switch destroys PhosphorTiles::TilingState.
         // Saved for deterministic re-seeding when autotile is re-enabled.
+        // MERGE (not replace): the map is shared with the scrolling engine
+        // and with other contexts' saved orders — a wholesale assign here
+        // would discard every scrolling column order and every other
+        // context's entries (same rationale as the mode-toggle path in
+        // autotile_init.cpp).
         if (autotileToggled && !autotileNow) {
-            m_lastEngineOrders = captureAutotileOrders();
+            const QHash<TilingStateKey, QStringList> captured = captureAutotileOrders();
+            for (auto it = captured.constBegin(); it != captured.constEnd(); ++it) {
+                m_lastEngineOrders.insert(it.key(), it.value());
+            }
         }
 
         // Handle autotile feature gate toggle

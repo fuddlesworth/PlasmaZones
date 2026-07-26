@@ -90,9 +90,27 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (!safeW || safeW->isDeleted()) {
                 return;
             }
+            // Daemon-driven geometry applies must not be mistaken for user
+            // moves (symmetric with the frameGeometryChanged VS-crossing
+            // handler below). This matters for the scrolling engine: parked
+            // columns sit ENTIRELY outside the screen rect, so on a
+            // multi-head layout the parked frame's centre can land on the
+            // neighbouring output — KWin fires outputChanged and, without
+            // this guard, the parked window would be handed to the other
+            // screen's engine mid-apply.
+            if (m_daemonGate.inGeometryApply) {
+                return;
+            }
             const QString newScreenId = getWindowScreenId(safeW);
             const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
             m_trackedScreenPerWindow[safeW] = newScreenId;
+            // A cross-screen move changes the Mode/screenId inputs of the
+            // window's cached rule verdict (tiling vs scrolling screens
+            // especially); nothing else invalidates it when the window stays
+            // tiled through the move.
+            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId) {
+                invalidateRuleCacheForStateChange(getWindowId(safeW));
+            }
 
             // Detect involuntary moves up front: when a monitor drops out
             // (DPMS standby on Wayland, hotplug-unplug) KWin reassigns the

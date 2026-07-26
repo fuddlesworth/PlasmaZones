@@ -679,8 +679,8 @@ namespace {
 const QLatin1String kCheatsheetDismissId("cheatsheet_dismiss");
 
 // String form of the per-screen tiling mode as CheatsheetContent consumes
-// it. Scrolling has no engine yet but is a real router state; the sheet
-// shows the mode-independent groups there.
+// it. All three engines are live; the sheet filters each mode's group plus
+// the mode-independent ones.
 QString cheatsheetModeString(PhosphorZones::AssignmentEntry::Mode mode)
 {
     switch (mode) {

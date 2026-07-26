@@ -175,7 +175,7 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
         return false;
     }
     const int oldViewX = viewXFor(params);
-    const int prevIdx = m_activeColumnIdx;
+    int prevIdx = m_activeColumnIdx;
 
     Column& col = m_columns[colIdx];
     const int tileIdx = col.indexOfWindow(windowId);
@@ -198,6 +198,14 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
 
     // Index fixups: the active column keeps identity when it survived.
     if (columnClosed) {
+        // prevIdx is consumed by reanchorAfterFocusChange AFTER the removal
+        // shifted indices — adjust it too, or OnOverflow reads a DIFFERENT
+        // column's width as prevW and the entering-edge test can invert.
+        if (prevIdx > colIdx) {
+            --prevIdx;
+        } else if (prevIdx == colIdx) {
+            prevIdx = -1; // the previously-active column no longer exists
+        }
         if (m_activeColumnIdx > colIdx) {
             --m_activeColumnIdx;
         } else if (m_activeColumnIdx == colIdx) {
@@ -275,8 +283,9 @@ bool ScrollStrip::setWindowMinimized(const QString& windowId, bool minimized, co
         col.activeTileIdx = tileIdx;
     }
     // A column collapsing to / expanding from fully-minimized shifts strip
-    // positions; keep the view where it was.
-    m_viewAnchor = columnStripX(m_activeColumnIdx, params) - oldViewX;
+    // positions; keep the view where it was — clamped, so the collapse can
+    // never leave dead space beyond the strip's right end.
+    m_viewAnchor = clampedAnchor(columnStripX(m_activeColumnIdx, params) - oldViewX, params);
     return true;
 }
 
@@ -321,6 +330,29 @@ bool ScrollStrip::moveActiveColumn(int delta, const ScrollLayoutParams& params)
         m_preMaximizeColumnIdx = target;
     } else if (m_preMaximizeColumnIdx == target) {
         m_preMaximizeColumnIdx = m_activeColumnIdx;
+    }
+    m_activeColumnIdx = target;
+    reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    return true;
+}
+
+bool ScrollStrip::moveActiveColumnTo(int target, const ScrollLayoutParams& params)
+{
+    if (m_activeColumnIdx < 0 || target < 0 || target >= m_columns.size() || target == m_activeColumnIdx) {
+        return false;
+    }
+    const int prevIdx = m_activeColumnIdx;
+    const int oldViewX = viewXFor(params);
+    m_columns.move(m_activeColumnIdx, target);
+    // Pre-maximize slot follows the same element move.
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = target;
+    } else if (m_preMaximizeColumnIdx >= 0) {
+        if (m_activeColumnIdx < m_preMaximizeColumnIdx && m_preMaximizeColumnIdx <= target) {
+            --m_preMaximizeColumnIdx;
+        } else if (target <= m_preMaximizeColumnIdx && m_preMaximizeColumnIdx < m_activeColumnIdx) {
+            ++m_preMaximizeColumnIdx;
+        }
     }
     m_activeColumnIdx = target;
     reanchorAfterFocusChange(prevIdx, oldViewX, params);

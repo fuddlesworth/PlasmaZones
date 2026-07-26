@@ -49,6 +49,10 @@ class SnapEngine;
 class SnapNavigationTargetResolver;
 }
 
+namespace PhosphorScrollEngine {
+class ScrollEngine;
+}
+
 namespace PhosphorWorkspaces {
 class VirtualDesktopManager;
 class ActivityManager;
@@ -1185,6 +1189,7 @@ private:
     QPointer<PhosphorEngine::PlacementEngineBase> m_scrollEngine;
     QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
     QPointer<PhosphorTileEngine::AutotileEngine> m_cachedAutotileEngine;
+    QPointer<PhosphorScrollEngine::ScrollEngine> m_cachedScrollEngine;
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /
     // restore calls through this instead of direct engine pointer checks.

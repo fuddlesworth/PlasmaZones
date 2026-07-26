@@ -433,13 +433,14 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
             destDesktop = d;
         }
     }
-    if (m_layoutManager->modeForScreen(target, destDesktop, m_layoutManager->currentActivity())
-        != PhosphorZones::AssignmentEntry::Mode::Autotile) {
+    const auto targetMode = m_layoutManager->modeForScreen(target, destDesktop, m_layoutManager->currentActivity());
+    if (targetMode != PhosphorZones::AssignmentEntry::Mode::Autotile
+        && targetMode != PhosphorZones::AssignmentEntry::Mode::Scrolling) {
         qCDebug(lcDbusWindow) << "applyOpenRoutingForTiling: RouteToScreen target" << target
-                              << "is not in autotile mode — not redirecting" << windowId;
+                              << "is not in a tiling-family mode — not redirecting" << windowId;
         return QString();
     }
-    qCInfo(lcDbusWindow) << "applyOpenRoutingForTiling: routing" << windowId << "to autotile screen" << target;
+    qCInfo(lcDbusWindow) << "applyOpenRoutingForTiling: routing" << windowId << "to engine-managed screen" << target;
     Q_EMIT windowOutputMoveExpected(windowId, target);
     return target;
 }

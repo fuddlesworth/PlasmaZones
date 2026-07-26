@@ -15,6 +15,7 @@
 // as settingscontroller.cpp, separate translation unit, no API change.
 
 #include "settingscontroller.h"
+#include "version.h"
 
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
@@ -273,7 +274,8 @@ void SettingsController::buildApplicationController()
     // Scrolling is the third placement engine's own leaf. It sits beside
     // Algorithm rather than under it: the scrolling strip has no zone layout
     // and no tiling algorithm, so none of the Algorithm page's knobs reach it.
-    regVirtual(QStringLiteral("tiling-scrolling"), QStringLiteral("tiling"), PhosphorI18n::tr("Scrolling"),
+    regVirtual(QStringLiteral("tiling-scrolling"), QStringLiteral("tiling"),
+               PhosphorI18n::tr("Scrolling", "tiling mode name"),
                QStringLiteral("pages/tiling/TilingScrollingPage.qml"), QStringLiteral("view-split-left-right"),
                /*collapsible=*/false,
                /*divider=*/true, AdvancedOnly);
@@ -508,6 +510,14 @@ bool SettingsController::hasUnseenWhatsNew() const
     // mis-order "1.10" vs "1.9", so go through QVersionNumber.
     const QVersionNumber latestV = QVersionNumber::fromString(latest);
     const QVersionNumber seenV = QVersionNumber::fromString(m_lastSeenWhatsNewVersion);
+    // App-version gate: whatsnew entries are pre-staged in the tree before
+    // the release's version bump lands, so without this a development build
+    // advertises "What's new in X" while About still reports the previous
+    // release. Only entries at or below the RUNNING version count.
+    const QVersionNumber appV = QVersionNumber::fromString(VERSION_STRING);
+    if (!appV.isNull() && appV < latestV) {
+        return false;
+    }
     return seenV < latestV;
 }
 

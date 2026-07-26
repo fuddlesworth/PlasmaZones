@@ -9,8 +9,9 @@
  * engine-mode / layout assignment cascade, this one covers the non-assignment
  * context resolvers that share the same priority-wins, per-slot-composition
  * model: gaps, orientation / active-layout stamping, autotile tiling params,
- * overlay shader / style / appearance overrides, context locks, and the
- * per-mode gap routing through the context `Mode` field. The shared harness
+ * scrolling context params, overlay shader / style / appearance overrides,
+ * context locks, and the per-mode gap routing through the context `Mode`
+ * field. The shared harness
  * lives in RuleCascadeFixture.h.
  */
 
@@ -826,6 +827,31 @@ private Q_SLOTS:
         const PhosphorZones::ContextGapOverride none =
             f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString());
         QVERIFY(!none.innerGap.has_value());
+
+        // Scrolling arm: a `Mode Equals "scrolling"` gap rule fires for the
+        // scrolling asker and stays inert for tiling — the third engine's
+        // gap provider resolves with the "scrolling" token.
+        PWR::RuleAction scrollGapAction;
+        scrollGapAction.type = QString(PWR::ActionType::SetInnerGap);
+        scrollGapAction.params.insert(QString(PWR::ActionParam::Value), 8);
+        PWR::Rule scrollGap;
+        scrollGap.id = QUuid::createUuid();
+        scrollGap.name = QStringLiteral("Scrolling inner gap");
+        scrollGap.enabled = true;
+        scrollGap.priority = 500;
+        scrollGap.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("scrolling"));
+        scrollGap.actions = {scrollGapAction};
+        QVERIFY(scrollGap.match.isContextOnly());
+        QVERIFY(f.store->setAllRules({scrollGap}));
+
+        const PhosphorZones::ContextGapOverride scrolled =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("scrolling"));
+        QVERIFY(scrolled.innerGap.has_value());
+        QCOMPARE(*scrolled.innerGap, 8);
+        const PhosphorZones::ContextGapOverride tiledAgain =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("tiling"));
+        QVERIFY(!tiledAgain.innerGap.has_value());
     }
 
     // ─── Per-monitor gap beats a global per-mode gap (specificity, not priority) ─

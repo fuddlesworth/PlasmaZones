@@ -43,10 +43,11 @@ class ICrossSurfaceResolver;
 ///
 /// ## Design Rationale
 ///
-/// Both snap-mode (manual zone layouts) and autotile-mode (automatic
-/// tiling algorithms) implement this so the daemon can dispatch all
-/// window lifecycle events and user navigation intents through a single
-/// polymorphic call — zero mode branches.
+/// All three engines — snap (manual zone layouts), autotile (automatic
+/// tiling algorithms), and scrolling (niri-style column strip) — implement
+/// this so the daemon can dispatch all window lifecycle events and user
+/// navigation intents through a single polymorphic call — zero mode
+/// branches.
 ///
 /// Each method represents a USER INTENT, not a mode-specific
 /// implementation step. "Move focused window left" has different internal
@@ -201,7 +202,7 @@ public:
     //
     // The single seam for the unified WindowPlacement restore model. An engine
     // implements exactly these two methods to participate in save+restore; a new
-    // engine (e.g. a future scrolling engine) needs no core/schema change — it keys
+    // engine (e.g. the scrolling engine) needs no core/schema change — it keys
     // its own EngineSlot (state token + slot reference) under its engineId() in the
     // single per-window record and reads/writes the shared freeGeometryByScreen.
     // ═══════════════════════════════════════════════════════════════════════════
@@ -417,7 +418,7 @@ public:
     struct HandoffContext
     {
         QString windowId;
-        QString fromEngineId; ///< source engine identity ("snap" / "autotile" / "")
+        QString fromEngineId; ///< source engine identity ("snap" / "autotile" / "scrolling" / "")
         QString toScreenId; ///< destination screen (must be owned by `to` engine)
         int toDesktop = 0; ///< destination virtual desktop (1-based); 0 = current
                            ///< desktop (drag-drop / same-desktop monitor crossing).
@@ -428,11 +429,13 @@ public:
         QRect sourceGeometry; ///< window's frame at handoff time (for size preservation)
         QStringList sourceZoneIds; ///< zones the window held at source (empty if not snapped)
         bool wasFloating = false; ///< window was floating in source engine
-        int insertIndex = -1; ///< autotile target: raw window-order index (position
-                              ///< in windowOrder(), counting floats — NOT the
-                              ///< tiled-only index) to insert at. -1 = insertion-order
-                              ///< policy. Used by a cross-mode SWAP so the arriving
-                              ///< window takes the departed partner's exact slot.
+        int insertIndex = -1; ///< PER-TARGET unit. Autotile target: raw
+                              ///< window-order index (position in windowOrder(),
+                              ///< counting floats — NOT the tiled-only index).
+                              ///< Scrolling target: COLUMN index (0 = first
+                              ///< column; -1 appends at the strip's right end).
+                              ///< Used by cross-mode SWAP (partner's exact slot)
+                              ///< and by edge-aware cross-mode MOVE entry.
                               ///< Ignored by snap targets.
     };
 
@@ -472,7 +475,7 @@ public:
     }
 
     /// Stable engine identity for HandoffContext.fromEngineId. Conventional
-    /// values: "snap" / "autotile". Empty string means "unidentified" and
+    /// values: "snap" / "autotile" / "scrolling". Empty string means "unidentified" and
     /// disables receive-side reasoning that depends on the source mode.
     virtual QString engineId() const
     {

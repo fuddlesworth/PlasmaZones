@@ -59,6 +59,9 @@ bool Daemon::isAnyScreenAutotile() const
 
 void Daemon::updateEngineScreens()
 {
+    // Pre-init calls bail here; after initEnginesAndWiring the factory
+    // contract guarantees BOTH engines exist (asserted there), so this
+    // early return can never freeze the scrolling half on its own.
     if (!m_autotileEngine || !m_layoutManager || !m_screenManager) {
         return;
     }
@@ -131,6 +134,14 @@ void Daemon::updateEngineScreens()
             m_lastEngineOrders[TilingStateKey{screenId, desktop, activity}] = order;
         }
     }
+
+    // Capture the SCROLLING engine's leaving orders in the same phase, before
+    // EITHER engine seeds: a screen flipping scrolling→autotile in this very
+    // pass must find its fresh column order in m_lastEngineOrders when
+    // seedAutotileOrderForScreen runs below (and the reverse flip finds the
+    // tiled order when updateScrollingScreens seeds). Capture-all →
+    // seed-all → apply-all; the map is shared between the engines by design.
+    captureScrollingOrders(scrollingScreens);
 
     // Seed window order for screens ENTERING autotile from saved state.
     // Must happen before setActiveScreens() which retiles added screens.

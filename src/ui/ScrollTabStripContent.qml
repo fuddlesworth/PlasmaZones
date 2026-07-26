@@ -7,12 +7,19 @@
  * Display-only and click-through: one compact pill per tabbed column,
  * centered on the column's top edge, listing the column's tabs with the
  * active one highlighted. The model arrives from C++ as `strips` — a list
- * of maps with x / y / width (shell-window coordinates), activeIndex, and
+ * of maps with x / y / width (shell-window coordinates) and
  * tabs (list of {title, active}). Updates are plain property writes; the
  * component is not re-instantiated per relayout.
+ *
+ * Overflow: a column narrower than its tab row clips the trailing chips
+ * (no "+N" affordance) — a deliberate v1 trade-off for a passive
+ * indicator; the active tab is always laid out first-fit within the
+ * clamped labels, and the strip carries no accessible surface because it
+ * is click-through by design.
  */
 
 import QtQuick
+import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 
 Item {
@@ -20,6 +27,14 @@ Item {
 
     /// Strip entries pushed by the daemon (see file doc).
     property var strips: []
+    // User overlay font, pushed by the daemon (writeFontProperties) like
+    // every other overlay slot; falls back to the theme's small font.
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Normal
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
 
     anchors.fill: parent
 
@@ -38,7 +53,7 @@ Item {
 
             x: columnX + (columnWidth - width) / 2
             y: columnY + Kirigami.Units.smallSpacing
-            width: Math.min(tabRow.implicitWidth + Kirigami.Units.largeSpacing * 2, columnWidth - Kirigami.Units.largeSpacing * 2)
+            width: Math.max(0, Math.min(tabRow.implicitWidth + Kirigami.Units.largeSpacing * 2, columnWidth - Kirigami.Units.largeSpacing * 2))
             height: tabRow.implicitHeight + Kirigami.Units.smallSpacing * 2
             radius: height / 2
             color: Qt.alpha(Kirigami.Theme.backgroundColor, 0.85)
@@ -62,12 +77,15 @@ Item {
 
                         readonly property bool active: modelData.active === true
 
-                        width: chipLabel.implicitWidth + Kirigami.Units.largeSpacing
+                        // The label's ELIDED width, not implicitWidth — a
+                        // long title must not blow the chip (and thereby the
+                        // row) past the pill's clamp and clip its siblings.
+                        width: chipLabel.width + Kirigami.Units.largeSpacing
                         height: chipLabel.implicitHeight + Kirigami.Units.smallSpacing
                         radius: height / 2
                         color: chip.active ? Kirigami.Theme.highlightColor : "transparent"
 
-                        Text {
+                        QQC2.Label {
                             id: chipLabel
 
                             anchors.centerIn: parent
@@ -75,7 +93,15 @@ Item {
                             elide: Text.ElideRight
                             width: Math.min(implicitWidth, Kirigami.Units.gridUnit * 8)
                             color: chip.active ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            // pixelSize (not pointSize, which is -1 for
+                            // pixel-defined theme fonts) scaled by the user's
+                            // overlay font scale; the user family wins when set.
+                            font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.smallFont.family
+                            font.pixelSize: Math.round((Kirigami.Theme.smallFont.pixelSize > 0 ? Kirigami.Theme.smallFont.pixelSize : Kirigami.Units.gridUnit * 0.6) * root.fontSizeScale)
+                            font.weight: root.fontWeight
+                            font.italic: root.fontItalic
+                            font.underline: root.fontUnderline
+                            font.strikeout: root.fontStrikeout
                         }
                     }
                 }

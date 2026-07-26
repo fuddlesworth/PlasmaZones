@@ -338,6 +338,11 @@ public:
                    setScrollingDefaultColumnWidthValue NOTIFY scrollingDefaultColumnWidthValueChanged)
     Q_PROPERTY(int scrollingDefaultColumnDisplay READ scrollingDefaultColumnDisplay WRITE
                    setScrollingDefaultColumnDisplay NOTIFY scrollingDefaultColumnDisplayChanged)
+    // QML-facing STRING facade: the Q_PROPERTY shares its name with the
+    // C++ QStringList accessor (the IScrollSettings surface the engine
+    // consumes). Deliberate — QML edits the raw comma-joined text while the
+    // engine gets the parsed list; moc and the compiler resolve the two
+    // unambiguously.
     Q_PROPERTY(QString scrollingPresetColumnWidths READ scrollingPresetColumnWidthsString WRITE
                    setScrollingPresetColumnWidths NOTIFY scrollingPresetColumnWidthsChanged)
     Q_PROPERTY(QString scrollingPresetWindowHeights READ scrollingPresetWindowHeightsString WRITE
@@ -405,6 +410,52 @@ public:
                    setAutotileDecMasterCountShortcut NOTIFY autotileDecMasterCountShortcutChanged)
     Q_PROPERTY(QString autotileRetileShortcut READ autotileRetileShortcut WRITE setAutotileRetileShortcut NOTIFY
                    autotileRetileShortcutChanged)
+
+    // Scrolling Shortcuts — Q_PROPERTY presence is load-bearing:
+    // Settings::load()'s change detection and the per-page reset/discard
+    // snapshot walk the metaobject property table, so a shortcut without a
+    // property is invisible to reload, profile activation, and batch
+    // NOTIFY replay.
+    Q_PROPERTY(QString scrollingFocusColumnFirstShortcut READ scrollingFocusColumnFirstShortcut WRITE
+                   setScrollingFocusColumnFirstShortcut NOTIFY scrollingFocusColumnFirstShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusColumnLastShortcut READ scrollingFocusColumnLastShortcut WRITE
+                   setScrollingFocusColumnLastShortcut NOTIFY scrollingFocusColumnLastShortcutChanged)
+    Q_PROPERTY(QString scrollingMoveColumnToFirstShortcut READ scrollingMoveColumnToFirstShortcut WRITE
+                   setScrollingMoveColumnToFirstShortcut NOTIFY scrollingMoveColumnToFirstShortcutChanged)
+    Q_PROPERTY(QString scrollingMoveColumnToLastShortcut READ scrollingMoveColumnToLastShortcut WRITE
+                   setScrollingMoveColumnToLastShortcut NOTIFY scrollingMoveColumnToLastShortcutChanged)
+    Q_PROPERTY(QString scrollingConsumeWindowShortcut READ scrollingConsumeWindowShortcut WRITE
+                   setScrollingConsumeWindowShortcut NOTIFY scrollingConsumeWindowShortcutChanged)
+    Q_PROPERTY(QString scrollingExpelWindowShortcut READ scrollingExpelWindowShortcut WRITE
+                   setScrollingExpelWindowShortcut NOTIFY scrollingExpelWindowShortcutChanged)
+    Q_PROPERTY(QString scrollingConsumeOrExpelLeftShortcut READ scrollingConsumeOrExpelLeftShortcut WRITE
+                   setScrollingConsumeOrExpelLeftShortcut NOTIFY scrollingConsumeOrExpelLeftShortcutChanged)
+    Q_PROPERTY(QString scrollingConsumeOrExpelRightShortcut READ scrollingConsumeOrExpelRightShortcut WRITE
+                   setScrollingConsumeOrExpelRightShortcut NOTIFY scrollingConsumeOrExpelRightShortcutChanged)
+    Q_PROPERTY(QString scrollingCenterColumnShortcut READ scrollingCenterColumnShortcut WRITE
+                   setScrollingCenterColumnShortcut NOTIFY scrollingCenterColumnShortcutChanged)
+    Q_PROPERTY(QString scrollingToggleColumnTabbedShortcut READ scrollingToggleColumnTabbedShortcut WRITE
+                   setScrollingToggleColumnTabbedShortcut NOTIFY scrollingToggleColumnTabbedShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleColumnWidthShortcut READ scrollingCycleColumnWidthShortcut WRITE
+                   setScrollingCycleColumnWidthShortcut NOTIFY scrollingCycleColumnWidthShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleColumnWidthBackShortcut READ scrollingCycleColumnWidthBackShortcut WRITE
+                   setScrollingCycleColumnWidthBackShortcut NOTIFY scrollingCycleColumnWidthBackShortcutChanged)
+    Q_PROPERTY(QString scrollingIncreaseColumnWidthShortcut READ scrollingIncreaseColumnWidthShortcut WRITE
+                   setScrollingIncreaseColumnWidthShortcut NOTIFY scrollingIncreaseColumnWidthShortcutChanged)
+    Q_PROPERTY(QString scrollingDecreaseColumnWidthShortcut READ scrollingDecreaseColumnWidthShortcut WRITE
+                   setScrollingDecreaseColumnWidthShortcut NOTIFY scrollingDecreaseColumnWidthShortcutChanged)
+    Q_PROPERTY(QString scrollingMaximizeColumnShortcut READ scrollingMaximizeColumnShortcut WRITE
+                   setScrollingMaximizeColumnShortcut NOTIFY scrollingMaximizeColumnShortcutChanged)
+    Q_PROPERTY(QString scrollingExpandColumnShortcut READ scrollingExpandColumnShortcut WRITE
+                   setScrollingExpandColumnShortcut NOTIFY scrollingExpandColumnShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleWindowHeightShortcut READ scrollingCycleWindowHeightShortcut WRITE
+                   setScrollingCycleWindowHeightShortcut NOTIFY scrollingCycleWindowHeightShortcutChanged)
+    Q_PROPERTY(QString scrollingIncreaseWindowHeightShortcut READ scrollingIncreaseWindowHeightShortcut WRITE
+                   setScrollingIncreaseWindowHeightShortcut NOTIFY scrollingIncreaseWindowHeightShortcutChanged)
+    Q_PROPERTY(QString scrollingDecreaseWindowHeightShortcut READ scrollingDecreaseWindowHeightShortcut WRITE
+                   setScrollingDecreaseWindowHeightShortcut NOTIFY scrollingDecreaseWindowHeightShortcutChanged)
+    Q_PROPERTY(QString scrollingResetWindowHeightsShortcut READ scrollingResetWindowHeightsShortcut WRITE
+                   setScrollingResetWindowHeightsShortcut NOTIFY scrollingResetWindowHeightsShortcutChanged)
 
     // Rendering
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)

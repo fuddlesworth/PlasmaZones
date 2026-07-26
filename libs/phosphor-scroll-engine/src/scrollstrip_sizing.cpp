@@ -5,8 +5,6 @@
 
 #include <QtGlobal>
 
-#include <cmath>
-
 namespace PhosphorScrollEngine {
 
 int ScrollStrip::nearestPresetWidthIdx(const Column& c, const ScrollLayoutParams& params) const
@@ -26,6 +24,42 @@ int ScrollStrip::nearestPresetWidthIdx(const Column& c, const ScrollLayoutParams
         }
     }
     return best;
+}
+
+int ScrollStrip::nearestPresetHeightIdx(const Tile& t, const ScrollLayoutParams& params) const
+{
+    if (params.presetWindowHeights.isEmpty()) {
+        return 0;
+    }
+    const qreal current = currentHeightFraction(t, params);
+    if (current < 0) {
+        return 0; // Auto height: no determinate fraction — enter at the first preset
+    }
+    int best = 0;
+    qreal bestDist = -1;
+    for (int i = 0; i < params.presetWindowHeights.size(); ++i) {
+        const qreal dist = qAbs(params.presetWindowHeights.at(i) - current);
+        if (bestDist < 0 || dist < bestDist) {
+            best = i;
+            bestDist = dist;
+        }
+    }
+    return best;
+}
+
+qreal ScrollStrip::currentHeightFraction(const Tile& t, const ScrollLayoutParams& params) const
+{
+    switch (t.height.kind) {
+    case WindowHeight::Preset: {
+        const int count = params.presetWindowHeights.size();
+        return count > 0 ? params.presetWindowHeights.at(qBound(0, t.height.presetIdx, count - 1)) : -1;
+    }
+    case WindowHeight::Fixed:
+        return params.workArea.height() > 0 ? static_cast<qreal>(t.height.fixedPx) / params.workArea.height() : -1;
+    case WindowHeight::Auto:
+        return -1;
+    }
+    return -1;
 }
 
 bool ScrollStrip::setActiveColumnWidth(const ColumnWidth& width)
@@ -59,7 +93,13 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
             idx = (idx + delta % count + count) % count;
         }
     }
-    col->width = ColumnWidth::makePreset(idx);
+    const ColumnWidth result = ColumnWidth::makePreset(idx);
+    if (col->width == result) {
+        // Single-entry preset list (or a step that landed where we already
+        // are): report no change so the engine skips a pointless relayout.
+        return false;
+    }
+    col->width = result;
     m_preMaximizeColumnIdx = -1;
     return true;
 }
@@ -81,7 +121,7 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
     return true;
 }
 
-bool ScrollStrip::toggleMaximizeActiveColumn()
+bool ScrollStrip::toggleMaximizeActiveColumn(const ScrollLayoutParams& params)
 {
     Column* col = activeColumnMutable();
     if (!col) {
@@ -94,7 +134,12 @@ bool ScrollStrip::toggleMaximizeActiveColumn()
         return true;
     }
     if (col->width == full) {
-        return false;
+        // Full-width without a stored intent for THIS column (maximized in
+        // an earlier session, or another column's maximize discarded the
+        // single stored slot): fall back to the default width so the toggle
+        // can always un-maximize instead of dead-ending.
+        col->width = params.defaultColumnWidth;
+        return !(col->width == full);
     }
     m_preMaximizeWidth = col->width;
     m_preMaximizeColumnIdx = m_activeColumnIdx;
@@ -142,11 +187,25 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
         return false;
     }
     const int count = params.presetWindowHeights.size();
-    int idx = 0;
+    int idx;
     if (tile->height.kind == WindowHeight::Preset) {
         idx = (tile->height.presetIdx + delta % count + count) % count;
+    } else {
+        // Mirror the width cycle: enter from the nearest preset, stepping
+        // once when that preset already matches the current height so the
+        // first press always lands on a visible change.
+        idx = nearestPresetHeightIdx(*tile, params);
+        const qreal nearFrac = params.presetWindowHeights.at(qBound(0, idx, count - 1));
+        const qreal curFrac = currentHeightFraction(*tile, params);
+        if (curFrac >= 0 && qAbs(nearFrac - curFrac) < 0.01) {
+            idx = (idx + delta % count + count) % count;
+        }
     }
-    tile->height = WindowHeight::makePreset(idx);
+    const WindowHeight result = WindowHeight::makePreset(idx);
+    if (tile->height == result) {
+        return false;
+    }
+    tile->height = result;
     return true;
 }
 
@@ -197,18 +256,27 @@ bool ScrollStrip::resetActiveColumnHeights()
     return changed;
 }
 
-bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& ackedSize)
+bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool widthChanged)
 {
     const int colIdx = columnOfWindow(windowId);
-    if (colIdx < 0 || !ackedSize.isValid()) {
+    // isEmpty (not merely isValid): a 0x0 ack is "valid" to QSize but would
+    // reconcile into a 1px column.
+    if (colIdx < 0 || ackedSize.isEmpty()) {
         return false;
     }
     Column& col = m_columns[colIdx];
     bool changed = false;
-    const ColumnWidth acked = ColumnWidth::makeFixed(ackedSize.width());
-    if (!(col.width == acked)) {
-        col.width = acked;
-        changed = true;
+    // Only take the width when the resize actually MOVED it (the engine
+    // compares against the last applied rect): a purely vertical interactive
+    // resize must not convert a Proportion/Preset intent into Fixed pixels —
+    // that would stop the column reflowing on work-area, preset-list, and
+    // DPI changes.
+    if (widthChanged) {
+        const ColumnWidth acked = ColumnWidth::makeFixed(ackedSize.width());
+        if (!(col.width == acked)) {
+            col.width = acked;
+            changed = true;
+        }
     }
     // Only meaningful for multi-tile columns: a lone tile always fills the
     // column height, so recording it as Fixed would fight the work area.

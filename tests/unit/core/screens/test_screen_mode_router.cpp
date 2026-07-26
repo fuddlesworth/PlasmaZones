@@ -170,19 +170,26 @@ private Q_SLOTS:
 
     void modePredicates_areMutuallyExclusive()
     {
-        // For any given screen, isSnapMode and isAutotileMode must disagree.
-        // Today PhosphorZones::AssignmentEntry::Mode is 2-valued so this is tautological;
-        // the test pins the invariant so if the enum gains a third state
-        // (e.g. a "Disabled" mode) the predicate pair is forced to update
-        // in lockstep.
-        const QStringList screens = {QStringLiteral("DP-1"), QStringLiteral("DP-2"), QStringLiteral("HDMI-1"),
-                                     QStringLiteral("phys/vs:0"), QString()};
+        // For any given screen, EXACTLY ONE of {snapping, autotile,
+        // scrolling} must hold — derived from modeFor(), whose switch is
+        // exhaustive by construction. The old two-predicate xor became a
+        // false guard the moment Scrolling landed (both predicates are
+        // false on a scrolling screen), so the loop now seeds all three
+        // modes and counts.
+        const QStringList screens = {QStringLiteral("DP-1"),      QStringLiteral("DP-2"), QStringLiteral("HDMI-1"),
+                                     QStringLiteral("phys/vs:0"), QStringLiteral("DP-9"), QString()};
         m_autotileEngine->setAutotileScreens({QStringLiteral("DP-1"), QStringLiteral("phys/vs:0")});
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-9")});
 
         for (const QString& sid : screens) {
             const bool isSnap = m_router->isSnapMode(sid);
             const bool isAuto = m_router->isAutotileMode(sid);
-            QVERIFY2(isSnap != isAuto, qPrintable(QStringLiteral("mode predicate collision on %1").arg(sid)));
+            const bool isScroll = m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Scrolling;
+            const int claims = int(isSnap) + int(isAuto) + int(isScroll);
+            QCOMPARE_EQ(claims, 1);
+            // The predicate pair must agree with modeFor's verdict.
+            QCOMPARE(isSnap, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Snapping);
+            QCOMPARE(isAuto, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Autotile);
         }
     }
 

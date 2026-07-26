@@ -254,14 +254,14 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         }
         // Defer retile instead of running immediately. When setAlgorithm is called
         // from applyEntry() or connectToSettings(), the per-screen overrides haven't
-        // been updated yet (updateAutotileScreens runs after). An immediate retile
+        // been updated yet (updateEngineScreens runs after). An immediate retile
         // would use effectiveAlgorithm() with the stale per-screen override (OLD algo),
         // producing wrong geometries and emitting a bad windowsTiled signal to KWin.
         // Deferring to the next event loop pass ensures per-screen overrides are current.
         //
         // Only retile screens that actually use the global algorithm (no per-screen
         // override). Screens with per-screen algorithm overrides are unaffected by
-        // this global change and are handled by updateAutotileScreens() when the
+        // this global change and are handled by updateEngineScreens() when the
         // layoutAssigned signal fires from applyEntry().
         for (const QString& screen : m_autotileScreens) {
             if (effectiveAlgorithmId(screen) == newId) {
@@ -365,7 +365,7 @@ void AutotileEngine::restoreStashedScriptState(const TilingStateKey& key, Phosph
         // may only mean the resolver is not authoritative yet.
         //
         // Concretely: this runs from a find-or-CREATE factory with many callers,
-        // and Daemon::updateAutotileScreens seeds window order for added screens
+        // and Daemon::updateEngineScreens seeds window order for added screens
         // BEFORE its applyPerScreenConfig loop reinstates per-screen overrides.
         // Seeding materialises the state whenever it resolves a non-empty order.
         // In that window a screen pinned to its own algorithm resolves to the

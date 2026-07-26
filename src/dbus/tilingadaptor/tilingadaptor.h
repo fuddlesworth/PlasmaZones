@@ -15,6 +15,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include <optional>
+
 namespace PhosphorScreens {
 class ScreenManager;
 }
@@ -95,10 +97,17 @@ public:
     /// D-Bus-marshallable; the caller strips it).
     void relayWindowsReleased(const QStringList& windowIds);
     /// Screen-set change on any pipeline engine: re-emits the UNION set
-    /// plus the enabled state (they flip together).
+    /// plus the enabled state (they flip together). COALESCED onto a 0ms
+    /// single shot: a mode flip moves a screen between two engines in one
+    /// synchronous pass, and announcing after the FIRST engine's change
+    /// would broadcast an intermediate union without the screen — the
+    /// effect would run its full per-window restore and immediately re-add
+    /// (restore-then-retile churn). One deferred emission carries the final
+    /// state of the whole pass.
     void notifyEngineScreensChanged(bool isDesktopSwitch);
     /// Enabled-state change on any pipeline engine: re-emits the combined
-    /// any-engine-enabled state.
+    /// any-engine-enabled state (deduped — multiple engines feed the one
+    /// signal, same rationale as the float-broadcast gate).
     void relayEnabledChanged();
 
     /**
@@ -245,8 +254,10 @@ Q_SIGNALS:
      * @brief Emitted when windows are released from engine management
      *
      * Fired when screens leave an engine-managed mode (e.g., switching to
-     * manual snapping). The KWin effect should restore these windows to
-     * their pre-tile geometry or leave them at their current position.
+     * manual snapping). NOTE: no effect-side subscriber exists — the
+     * restore actually runs through the daemon-internal in-process
+     * `windowsReleased` wiring plus the resnap path; this D-Bus signal is
+     * external contract surface only.
      *
      * NOTE: This is the D-Bus-facing signal and carries only @p windowIds —
      * the in-process `PlacementEngineBase::windowsReleased` signal
@@ -321,6 +332,11 @@ private:
     QVector<PhosphorEngine::IPlacementEngine*> m_lifecycleEngines;
     /// Last floating state broadcast per window (the dedup gate's memory).
     QHash<QString, bool> m_lastFloatBroadcast;
+    /// Coalescing state for notifyEngineScreensChanged (see its doc).
+    bool m_screensAnnouncePending = false;
+    bool m_pendingIsDesktopSwitch = false;
+    /// Last enabled value broadcast (unset until the first emission).
+    std::optional<bool> m_lastEnabledBroadcast;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     /// Borrowed; outlives adaptor. Wired post-construction by the daemon so the
     /// tiling open path can resolve RouteToScreen / RouteToDesktop rules

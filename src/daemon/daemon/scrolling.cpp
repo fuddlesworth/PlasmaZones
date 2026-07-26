@@ -22,19 +22,17 @@
 
 namespace PlasmaZones {
 
-void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
+void Daemon::captureScrollingOrders(const QSet<QString>& scrollingScreens)
 {
-    if (!m_scrollEngine || !m_layoutManager) {
+    // Capture window order for screens LEAVING scrolling before their strip
+    // states are destroyed. Called from updateEngineScreens in the shared
+    // capture phase (capture-all → seed-all → apply-all), BEFORE either
+    // engine seeds, so a same-pass scrolling→autotile flip replays the
+    // column order as tiles and the reverse replays tiles as columns.
+    if (!m_scrollEngine) {
         return;
     }
     const QString activity = currentActivity();
-
-    // Capture window order for screens LEAVING scrolling before their strip
-    // states are destroyed, and seed order for screens ENTERING scrolling
-    // from a captured order — the same deterministic mode-transition
-    // contract autotile keeps via m_lastEngineOrders (the map is shared:
-    // an autotile→scrolling flip replays the tiled order as columns and the
-    // reverse replays columns as tiles).
     const QSet<QString> currentScrollScreens = m_scrollEngine->activeScreens();
     for (const QString& screenId : currentScrollScreens - scrollingScreens) {
         const int desktop = currentDesktopForScreen(screenId);
@@ -43,6 +41,21 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             m_lastEngineOrders[TilingStateKey{screenId, desktop, activity}] = order;
         }
     }
+}
+
+void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
+{
+    if (!m_scrollEngine || !m_layoutManager) {
+        return;
+    }
+    const QString activity = currentActivity();
+
+    // Seed order for screens ENTERING scrolling from a captured order — the
+    // deterministic mode-transition contract shared with autotile via
+    // m_lastEngineOrders. Leaving-screen capture already ran in
+    // captureScrollingOrders (the shared capture phase in
+    // updateEngineScreens).
+    const QSet<QString> currentScrollScreens = m_scrollEngine->activeScreens();
     for (const QString& screenId : scrollingScreens - currentScrollScreens) {
         const int desktop = currentDesktopForScreen(screenId);
         const auto it = m_lastEngineOrders.constFind(TilingStateKey{screenId, desktop, activity});
@@ -60,13 +73,16 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             m_layoutManager->resolveContextScrollingParams(screenId, desktop, activity);
         QVariantMap overrides;
         if (params.centerFocusedColumn) {
-            overrides.insert(QStringLiteral("CenterFocusedColumn"), *params.centerFocusedColumn);
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::centerFocusedColumn(),
+                             *params.centerFocusedColumn);
         }
         if (params.defaultColumnWidth) {
-            overrides.insert(QStringLiteral("DefaultColumnWidth"), *params.defaultColumnWidth);
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultColumnWidth(),
+                             *params.defaultColumnWidth);
         }
         if (params.defaultColumnDisplay) {
-            overrides.insert(QStringLiteral("DefaultColumnDisplay"), *params.defaultColumnDisplay);
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultColumnDisplay(),
+                             *params.defaultColumnDisplay);
         }
         if (overrides.isEmpty()) {
             m_scrollEngine->clearPerScreenConfig(screenId);
@@ -74,8 +90,27 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             m_scrollEngine->applyPerScreenConfig(screenId, overrides);
         }
     }
+    // Screens LEAVING scrolling drop their override entries too — otherwise a
+    // stale map is replayed on re-entry before any rule change re-resolves it.
+    for (const QString& screenId : currentScrollScreens - scrollingScreens) {
+        m_scrollEngine->clearPerScreenConfig(screenId);
+    }
 
     m_scrollEngine->setActiveScreens(scrollingScreens);
+
+    // setActiveScreens retiles only ADDED screens on a changed set (the
+    // identical-set branch retiles everything itself). Force a retile for
+    // every already-active screen so a rule save that changes GAP rules on a
+    // screen whose overrides map did not move still applies live — gaps
+    // resolve through the context-gap provider at retile time, never through
+    // the overrides diff. Mirrors the load-bearing autotile loop in
+    // updateEngineScreens; scheduleRetileForScreen coalesces, so the
+    // identical-set overlap costs nothing.
+    if (scrollingScreens != currentScrollScreens) {
+        for (const QString& screenId : scrollingScreens& currentScrollScreens) {
+            m_scrollEngine->scheduleRetileForScreen(screenId);
+        }
+    }
 }
 
 } // namespace PlasmaZones

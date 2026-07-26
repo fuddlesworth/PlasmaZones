@@ -9,11 +9,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Scrolling mode**: a third placement mode alongside Snapping and Autotile, modelled on the niri compositor. Windows form columns on an endless horizontal strip and the screen is a window onto it, so opening a new window never resizes the ones you have. It slides them aside and scrolls the view instead. Columns cycle through width presets or take any width, windows in a column split its height or show one at a time as tabs with a compact indicator above the column, and windows can be consumed into a neighbouring column or expelled into their own. A column can be centered on demand or follow one of niri's focus centering policies. Scrolling is assigned per screen, desktop, and activity from the Monitors page, gets its own settings page under Tiling, its own shortcut family on Meta+Alt, and its own rule actions for per-app and per-context behaviour. Windows too large for the strip float instead, using the existing floating support, and a minimized window returns to the slot it left.
+- **Scrolling mode**: a third placement mode alongside Snapping and Autotile, modelled on the niri compositor. Windows form columns on an endless horizontal strip and the screen is a window onto it, so opening a new window never resizes the ones you have. The strip slides them aside and scrolls the view instead. Columns cycle through width presets or take any width, windows in a column split its height or show one at a time as tabs with a compact indicator above the column, and windows can be consumed into a neighbouring column or expelled into their own. A column can be centered on demand or follow one of niri's focus centering policies. Scrolling is assigned per screen, desktop, and activity from the Monitors page. It has a settings page under Tiling and a shortcut family on Meta+Alt, and rule actions cover per-app and per-context behaviour. Windows too large for the strip float instead, using the existing floating support, and a minimized window returns to the slot it left.
 
 ### Changed
 
-- **D-Bus interfaces**: the old org.plasmazones.Autotile interface was split in two. Window lifecycle, tile requests, and the managed screen set now live on the engine-neutral org.plasmazones.Tiling interface, which serves every tiling-family engine and publishes the union screen set as managedScreens. Autotile-specific control (algorithm selection, master operations, focus cycling, and autotile configuration) moved to a new org.plasmazones.Autotile interface, the sibling of the new org.plasmazones.Scrolling interface. External scripts calling the old combined interface need to switch to the matching new one.
+- **Breaking – D-Bus interfaces**: the old org.plasmazones.Autotile interface was split in two. Window lifecycle, tile requests, and the managed screen set now live on the engine-neutral org.plasmazones.Tiling interface, which serves every tiling-family engine and publishes the union screen set as managedScreens. Autotile-specific control (algorithm selection, master operations, focus cycling, and autotile configuration) moved to a new org.plasmazones.Autotile interface, the sibling of the new org.plasmazones.Scrolling interface. External scripts calling the old combined interface need to switch to the matching new one.
 
 ## [3.3.0] - 2026-07-23
 
@@ -1745,6 +1745,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.0...HEAD
 [3.3.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.7...v3.3.0
 [3.2.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.6...v3.2.7
 [3.2.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.5...v3.2.6

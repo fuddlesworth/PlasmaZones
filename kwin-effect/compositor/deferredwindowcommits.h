@@ -57,6 +57,12 @@ public:
     /// bookkeeping behind.
     void schedule(const QString& windowId, int intervalMs, std::function<void()> fire)
     {
+        // Enforce one-pending-commit-per-window AT THE CLASS, not by caller
+        // convention: a double-schedule would otherwise leave the OLD timer
+        // alive to consume the (rekeyed) entry, deleteLater the NEW timer,
+        // and run the stale callback. Callers that want "an existing pending
+        // commit wins" still gate on contains() before calling.
+        cancel(windowId);
         auto* timer = new QTimer(m_owner);
         timer->setSingleShot(true);
         timer->setInterval(intervalMs);

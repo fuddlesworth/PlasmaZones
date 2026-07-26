@@ -193,6 +193,13 @@ private:
      */
     bool ensureEngineAndConfig(const char* methodName) const;
 
+    /**
+     * @brief Release-build pair of the ctor registry assert
+     * @param methodName Name of the calling method for logging
+     * @return true if the algorithm registry is available
+     */
+    bool ensureRegistry(const char* methodName) const;
+
     PhosphorTileEngine::AutotileEngine* m_engine = nullptr; ///< Borrowed; cleared on shutdown
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives adaptor
 };

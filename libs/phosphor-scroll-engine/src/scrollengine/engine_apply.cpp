@@ -74,6 +74,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
     params.presetWindowHeights = m_presetWindowHeights;
     params.centerFocusedColumn = effectiveCenterFocusedColumn(screenId);
     params.alwaysCenterSingleColumn = m_alwaysCenterSingleColumn;
+    params.defaultColumnWidth = effectiveDefaultColumnWidth(screenId);
     return params;
 }
 
@@ -90,6 +91,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     }
     const ResolvedStrip resolved = state->strip().relayout(params);
     if (resolved.columns.isEmpty()) {
+        // The strip just emptied (last window closed / floated / released).
+        // The tab-strip clear must still run — returning before it would
+        // leave the indicator painted on an empty screen forever.
+        clearTabStripsForScreen(screenId);
         return;
     }
 
@@ -128,6 +133,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         }
     }
     if (arr.isEmpty()) {
+        clearTabStripsForScreen(screenId);
         return;
     }
     Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
@@ -159,8 +165,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     if (!strips.isEmpty()) {
         m_screensWithTabStrips.insert(screenId);
         Q_EMIT tabStripsChanged(screenId, QString::fromUtf8(QJsonDocument(strips).toJson(QJsonDocument::Compact)));
-    } else if (m_screensWithTabStrips.remove(screenId)) {
-        Q_EMIT tabStripsChanged(screenId, QStringLiteral("[]"));
+    } else {
+        clearTabStripsForScreen(screenId);
     }
 
     if (focusWindowAfter) {

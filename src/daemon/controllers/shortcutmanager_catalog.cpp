@@ -42,14 +42,20 @@ using namespace ShortcutIds;
 //  - zone-centric ops (snap-to-zone slots, empty-zone push, restore size,
 //    cycle/rotate within zones) are hard no-ops off snapping → snapping
 //  - master-stack ops are hard no-ops off autotile → autotile
+//  - column/strip ops (consume/expel, column widths, tab display) are hard
+//    no-ops off scrolling → scrolling
 //  - toggle_autotile is the doorway INTO autotile → all modes, always shown
 struct CatalogMeta
 {
     const char* category;
     int categoryOrder;
-    // "all" | "snapping" | "autotile" — string form matches what the QML
+    // "all" | "snapping" | "autotile" | "scrolling" — string form matches what the QML
     // filter consumes; no enum round-trip needed.
     const char* mode;
+    // Optional tr() disambiguation for the category word (e.g. the mode
+    // name "Scrolling", whose bare source would otherwise inherit the
+    // scrollbar-sense translation lupdate merges by source text).
+    const char* categoryDisambiguation = nullptr;
     // Optional cheatsheet display label. The registration description must
     // stand alone (System Settings lists it without context), but on the
     // sheet the group heading already carries the context, so rows that
@@ -64,9 +70,15 @@ CatalogMeta catalogMetaForId(const QString& id)
     static const QHash<QString, CatalogMeta> kMeta = [] {
         QHash<QString, CatalogMeta> m;
         const auto add = [&m](const char* id, const char* category, int order, const char* mode,
-                              const char* shortLabel = nullptr) {
-            m.insert(QLatin1String(id), {category, order, mode, shortLabel});
+                              const char* shortLabel = nullptr, const char* categoryDisambiguation = nullptr) {
+            m.insert(QLatin1String(id), {category, order, mode, categoryDisambiguation, shortLabel});
         };
+        // The scrolling category word needs a disambiguation or it inherits
+        // the scrollbar-sense translation (extraction marker below; the
+        // rows pass the same comment).
+        static const auto kScrollingCategory = QT_TRANSLATE_NOOP3("plasmazones", "Scrolling", "tiling mode name");
+        Q_UNUSED(kScrollingCategory)
+        constexpr const char* kModeNameContext = "tiling mode name";
         add(kIdOpenEditor, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdOpenSettings, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleCheatsheet, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
@@ -127,31 +139,31 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdIncreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         add(kIdDecreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         add(kIdRetile, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
-        add(kIdScrollFocusColumnFirst, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollFocusColumnLast, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollMoveColumnToFirst, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollMoveColumnToLast, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollConsumeWindow, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling",
-            QT_TRANSLATE_NOOP("plasmazones", "Consume Window"));
-        add(kIdScrollExpelWindow, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling",
-            QT_TRANSLATE_NOOP("plasmazones", "Expel Window"));
-        add(kIdScrollConsumeOrExpelLeft, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollConsumeOrExpelRight, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollCenterColumn, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollToggleColumnTabbed, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollCycleColumnWidth, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling",
-            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"));
-        add(kIdScrollCycleColumnWidthBack, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling",
-            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width Back"));
-        add(kIdScrollIncreaseColumnWidth, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollDecreaseColumnWidth, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollMaximizeColumn, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollExpandColumn, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling",
-            QT_TRANSLATE_NOOP("plasmazones", "Expand Column"));
-        add(kIdScrollCycleWindowHeight, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollIncreaseWindowHeight, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollDecreaseWindowHeight, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
-        add(kIdScrollResetWindowHeights, QT_TRANSLATE_NOOP("plasmazones", "Scrolling"), 10, "scrolling");
+        add(kIdScrollFocusColumnFirst, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollFocusColumnLast, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollMoveColumnToFirst, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollMoveColumnToLast, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollConsumeWindow, "Scrolling", 10, "scrolling", QT_TRANSLATE_NOOP("plasmazones", "Consume Window"),
+            kModeNameContext);
+        add(kIdScrollExpelWindow, "Scrolling", 10, "scrolling", QT_TRANSLATE_NOOP("plasmazones", "Expel Window"),
+            kModeNameContext);
+        add(kIdScrollConsumeOrExpelLeft, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollConsumeOrExpelRight, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollCenterColumn, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollToggleColumnTabbed, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollCycleColumnWidth, "Scrolling", 10, "scrolling",
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"), kModeNameContext);
+        add(kIdScrollCycleColumnWidthBack, "Scrolling", 10, "scrolling",
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width Back"), kModeNameContext);
+        add(kIdScrollIncreaseColumnWidth, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollDecreaseColumnWidth, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollMaximizeColumn, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollExpandColumn, "Scrolling", 10, "scrolling", QT_TRANSLATE_NOOP("plasmazones", "Expand Column"),
+            kModeNameContext);
+        add(kIdScrollCycleWindowHeight, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollIncreaseWindowHeight, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollDecreaseWindowHeight, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollResetWindowHeights, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
         return m;
     }();
 
@@ -201,7 +213,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
         QVariantMap row;
         row.insert(QStringLiteral("id"), e.id);
         row.insert(QStringLiteral("label"), meta.shortLabel ? PhosphorI18n::tr(meta.shortLabel) : e.description);
-        row.insert(QStringLiteral("category"), PhosphorI18n::tr(meta.category));
+        row.insert(QStringLiteral("category"), PhosphorI18n::tr(meta.category, meta.categoryDisambiguation));
         row.insert(QStringLiteral("categoryOrder"), meta.categoryOrder);
         row.insert(QStringLiteral("triggers"), triggers);
         row.insert(QStringLiteral("assigned"), !triggers.isEmpty());
@@ -259,6 +271,24 @@ QVariantList ShortcutManager::cheatsheetModel() const
          // Group heading ("Virtual Screens") carries the context.
          PhosphorI18n::tr("Swap Screens"),
          arrowsTail},
+        // The scrolling family's natural pairs collapse the same way the
+        // directional quads do, trimming the 20-row Scrolling group.
+        {{QString::fromLatin1(kIdScrollConsumeWindow), QString::fromLatin1(kIdScrollExpelWindow)},
+         {QStringLiteral(";"), QStringLiteral("'")},
+         PhosphorI18n::tr("Consume / Expel Window"),
+         QStringLiteral("; '")},
+        {{QString::fromLatin1(kIdScrollConsumeOrExpelLeft), QString::fromLatin1(kIdScrollConsumeOrExpelRight)},
+         {QStringLiteral("U"), QStringLiteral("O")},
+         PhosphorI18n::tr("Consume or Expel Left / Right"),
+         QStringLiteral("U O")},
+        {{QString::fromLatin1(kIdScrollIncreaseColumnWidth), QString::fromLatin1(kIdScrollDecreaseColumnWidth)},
+         {QStringLiteral("="), QStringLiteral("-")},
+         PhosphorI18n::tr("Adjust Column Width"),
+         QStringLiteral("= -")},
+        {{QString::fromLatin1(kIdScrollIncreaseWindowHeight), QString::fromLatin1(kIdScrollDecreaseWindowHeight)},
+         {QStringLiteral("PgUp"), QStringLiteral("PgDown")},
+         PhosphorI18n::tr("Adjust Window Height"),
+         QStringLiteral("PgUp PgDown")},
     };
 
     QVector<QVariantMap> out = compressCheatsheetFamilies(rows, families);

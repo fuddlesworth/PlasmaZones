@@ -104,7 +104,7 @@ void AutotileEngine::rotateWindows(bool clockwise, const QString& screenId)
 void AutotileEngine::setCurrentDesktop(int desktop)
 {
     // The daemon pushes the initial desktop in start() BEFORE the first
-    // updateAutotileScreens(); that first push must NOT read as a switch — or
+    // updateEngineScreens(); that first push must NOT read as a switch — or
     // login with autotile enabled suppresses enabledChanged and the effect
     // treats the first autotileScreensChanged as a "desktop return", skipping
     // window notification to the daemon entirely. The tracker owns that

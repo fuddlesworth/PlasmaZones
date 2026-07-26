@@ -236,10 +236,22 @@ bool TilingHandler::isManagedScreen(const QString& screenId) const
 
 void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds)
 {
-    // Pure mode discriminator — no per-screen transition handling here; the
-    // union set arriving via slotScreensChanged owns lifecycle transitions.
-    m_scrollingScreens = QSet<QString>(screenIds.cbegin(), screenIds.cend());
+    // Mode discriminator — no per-screen LIFECYCLE transitions here (the
+    // union set arriving via slotScreensChanged owns those). But the set IS
+    // an input to ruleQuery's Mode stamp, and rule verdicts are memoised per
+    // window: on an autotile↔scrolling flip the union does not move, so
+    // slotScreensChanged never invalidates anything and a `Mode Equals
+    // "scrolling"` border/opacity/decoration rule would keep its stale
+    // verdict indefinitely. Invalidate + sweep on a GENUINE change only
+    // (identical-set desktop-switch re-emits stay free).
+    const QSet<QString> newSet(screenIds.cbegin(), screenIds.cend());
+    if (newSet == m_scrollingScreens) {
+        return;
+    }
+    m_scrollingScreens = newSet;
     ++m_scrollingScreensGeneration;
+    m_effect->invalidateAllRuleCaches();
+    m_effect->scheduleBorderSweep();
 }
 
 void TilingHandler::savePreTileForDesktopMove(const QString& windowId)

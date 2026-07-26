@@ -150,7 +150,7 @@ inline const QStringList& engineModeOptions()
 {
     // NOTE: this is the engine-mode ACTION vocabulary (SetEngineMode param) and
     // is DELIBERATELY distinct from the Mode MATCH-field vocabulary in
-    // MatchTypes.h, which uses "snapping" / "tiling" (no "autotile"). The action
+    // MatchTypes.h, which uses "snapping" / "tiling" / "scrolling" (no "autotile"). The action
     // names the engine ("autotile"); the match field names the placement mode a
     // window is in ("tiling"). Do not unify them — a Mode match rule authored
     // with "autotile" would silently never match.

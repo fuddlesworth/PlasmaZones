@@ -10,6 +10,25 @@
 
 namespace PhosphorScrollEngine {
 
+/// Per-screen override-map keys for ScrollEngine::applyPerScreenConfig.
+/// Both sides of the daemon↔engine seam MUST use these accessors — a raw
+/// string literal here is a silent rule-override drop when it drifts
+/// (mirrors the autotile PerScreenKeys convention).
+namespace ScrollPerScreenKeys {
+inline QString centerFocusedColumn()
+{
+    return QStringLiteral("CenterFocusedColumn");
+}
+inline QString defaultColumnWidth()
+{
+    return QStringLiteral("DefaultColumnWidth");
+}
+inline QString defaultColumnDisplay()
+{
+    return QStringLiteral("DefaultColumnDisplay");
+}
+} // namespace ScrollPerScreenKeys
+
 /// Persistent view-centering policy for the focused column (niri's
 /// center-focused-column). Wire/config encoding is the int value; append only.
 enum class CenterFocusedColumn : int {
@@ -211,6 +230,9 @@ struct ScrollLayoutParams
     QList<qreal> presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0};
     CenterFocusedColumn centerFocusedColumn = CenterFocusedColumn::Never;
     bool alwaysCenterSingleColumn = false;
+    /// The context's default column width — the un-maximize fallback for a
+    /// full-width column with no stored pre-maximize intent.
+    ColumnWidth defaultColumnWidth = ColumnWidth::makeProportion(0.5);
 };
 
 /// One tile's resolved output for a relayout pass.

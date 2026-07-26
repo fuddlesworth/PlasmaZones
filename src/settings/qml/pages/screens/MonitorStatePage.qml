@@ -146,14 +146,14 @@ SettingsFlickable {
             // currently-resolved layout when the user has not picked one.
             var layoutId = stateView.localLayoutId || state.layoutId;
             if (!layoutId) {
-                // Nothing resolved to pin. Unstage any stale staged entry
-                // for this context (e.g. an opposite-mode pick from earlier
-                // in the session) so Apply cannot commit it while the UI
-                // shows Default. A true unstage, not a staged clear — a
-                // staged clear is pushed on Apply and would wipe a
-                // pre-existing daemon-side assignment the user never touched.
-                if (Object.keys(settingsController.getStagedAssignment(_selectedScreen, desktop, activity)).length > 0)
-                    settingsController.removeStagedAssignment(_selectedScreen, desktop, activity);
+                // Nothing resolved to pin (the context suppresses the
+                // default layout, so state.layoutId is empty). The MODE
+                // change must still commit — leaving from Scrolling used to
+                // fall into an unstage here and silently drop the switch
+                // while the button group showed Snapping. Stage a mode-only
+                // entry; the daemon accepts a bare mode exactly as it does
+                // for Scrolling above.
+                settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, "", "");
                 return;
             }
 
@@ -387,7 +387,7 @@ SettingsFlickable {
             // Mode toggle (below preview)
             SettingsButtonGroup {
                 Layout.alignment: Qt.AlignHCenter
-                model: [i18n("Snapping"), i18n("Tiling"), i18n("Scrolling")]
+                model: [i18n("Snapping"), i18n("Tiling"), i18nc("tiling mode name", "Scrolling")]
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {
                     stateView.localMode = idx;

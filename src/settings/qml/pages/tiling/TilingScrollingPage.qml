@@ -50,7 +50,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Center the focused column")
                     searchAnchor: "centerFocusedColumn"
-                    description: i18n("Never keeps the strip still until the focused column would leave the screen. Always parks the focused column in the middle. On overflow centers it only once the strip is wider than the screen.")
+                    description: i18n("With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.")
 
                     WideComboBox {
                         Accessible.name: i18n("Center the focused column")
@@ -67,7 +67,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Center a lone column")
                     searchAnchor: "alwaysCenterSingleColumn"
-                    description: i18n("When the strip holds a single column, center it whatever the setting above says")
+                    description: i18n("When the strip holds a single column, center it no matter what the setting above says")
 
                     SettingsSwitch {
                         checked: appSettings.scrollingAlwaysCenterSingleColumn
@@ -200,11 +200,21 @@ SettingsFlickable {
                     description: i18n("Comma separated fractions of the work area, cycled by the preset shortcuts")
 
                     TextField {
+                        id: widthPresetField
+
                         width: root.fieldWidth
                         Accessible.name: i18n("Column width presets")
-                        text: appSettings.scrollingPresetColumnWidths
                         placeholderText: i18nc("@info:placeholder comma separated column width fractions", "0.333, 0.5, 0.667")
                         onEditingFinished: appSettings.scrollingPresetColumnWidths = text
+                        // Guarded Binding, not a plain `text:` one — typing
+                        // severs a plain binding, and per-page Discard/Reset,
+                        // profile switches, and schema canonicalisation would
+                        // then never reach the field again.
+                        Binding on text {
+                            value: appSettings.scrollingPresetColumnWidths
+                            when: !widthPresetField.activeFocus
+                            restoreMode: Binding.RestoreNone
+                        }
                     }
                 }
 
@@ -216,11 +226,18 @@ SettingsFlickable {
                     description: i18n("Comma separated fractions of the work area, cycled by the preset shortcuts")
 
                     TextField {
+                        id: heightPresetField
+
                         width: root.fieldWidth
                         Accessible.name: i18n("Window height presets")
-                        text: appSettings.scrollingPresetWindowHeights
                         placeholderText: i18nc("@info:placeholder comma separated window height fractions", "0.333, 0.5, 0.667")
                         onEditingFinished: appSettings.scrollingPresetWindowHeights = text
+                        // Same guarded-binding rationale as the width field.
+                        Binding on text {
+                            value: appSettings.scrollingPresetWindowHeights
+                            when: !heightPresetField.activeFocus
+                            restoreMode: Binding.RestoreNone
+                        }
                     }
                 }
             }

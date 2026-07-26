@@ -1990,11 +1990,11 @@ private:
     PhosphorRules::RuleSet m_animationExclusionRuleSet;
     PhosphorRules::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
 
-    // Autotile: true when the current drag was started on an autotile screen
+    // Autotile: true when the current drag was started on an engine-managed (autotile or scrolling) screen
     // (callDragStarted was skipped). Captured at drag start so the drag end
     // handler uses the same decision, preventing a race where m_managedScreens
     // changes mid-drag (e.g., async D-Bus signal) and leaves the popup visible.
-    bool m_dragBypassedForAutotile = false;
+    bool m_dragBypassedForEngine = false;
     QString m_dragBypassScreenId; // Screen at drag start (for float D-Bus call on drag end)
 
     // Cached activation settings (loaded from daemon via D-Bus, updated on settingsChanged)

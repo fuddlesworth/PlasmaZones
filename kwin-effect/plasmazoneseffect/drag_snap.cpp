@@ -623,9 +623,9 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // active snap overlay, enter bypass mode. Mirrors the old
         // effect-side flip block's "snap→autotile" branch, but driven by
         // daemon truth rather than an effect-cached screen set.
-        if (!m_dragBypassedForAutotile) {
+        if (!m_dragBypassedForEngine) {
             m_snapHandler->callCancelSnap();
-            m_dragBypassedForAutotile = true;
+            m_dragBypassedForEngine = true;
             m_dragBypassScreenId = newPolicy.screenId;
         } else {
             // Already in bypass but on a different autotile screen — just
@@ -648,7 +648,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         if (dragW) {
             m_tilingHandler->onWindowClosed(windowId, m_dragBypassScreenId);
         }
-        m_dragBypassedForAutotile = false;
+        m_dragBypassedForEngine = false;
         m_dragActivation.detected = false;
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);

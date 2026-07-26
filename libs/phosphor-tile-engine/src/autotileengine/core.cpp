@@ -307,7 +307,7 @@ void AutotileEngine::connectSignals()
         // orphan cleanup (no VSs removed/added) and just retile each VS with
         // its new geometry. This is the single authoritative retile for the
         // change; the Daemon's regions-only handler deliberately does NOT
-        // call updateAutotileScreens so there is no second retile pass.
+        // call updateEngineScreens so there is no second retile pass.
         connect(m_screenManager, &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this,
                 [this](const QString& physicalScreenId) {
                     const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);

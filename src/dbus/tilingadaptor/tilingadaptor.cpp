@@ -25,7 +25,7 @@ TilingAdaptor::TilingAdaptor(PhosphorScreens::ScreenManager* screenManager, QObj
     // Engine-agnostic by construction: the adaptor holds no engine until the
     // composition root supplies the pipeline list via setLifecycleEngines and
     // wires each engine's outbound signals to the relay entry points.
-    qCDebug(lcDbusAutotile) << "TilingAdaptor initialized";
+    qCDebug(lcDbusTiling) << "TilingAdaptor initialized";
 }
 
 void TilingAdaptor::setLifecycleEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines)
@@ -41,7 +41,7 @@ void TilingAdaptor::setLifecycleEngines(const QVector<PhosphorEngine::IPlacement
 bool TilingAdaptor::ensurePipeline(const char* methodName) const
 {
     if (m_lifecycleEngines.isEmpty()) {
-        qCWarning(lcDbusAutotile) << "Cannot" << methodName << "- no pipeline engines available";
+        qCWarning(lcDbusTiling) << "Cannot" << methodName << "- no pipeline engines available";
         return false;
     }
     return true;
@@ -76,7 +76,7 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
     QJsonParseError parseError;
     QJsonDocument doc = QJsonDocument::fromJson(tileRequestsJson.toUtf8(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        qCWarning(lcDbusAutotile) << "relayTileRequestsJson: invalid JSON:" << parseError.errorString();
+        qCWarning(lcDbusTiling) << "relayTileRequestsJson: invalid JSON:" << parseError.errorString();
         return;
     }
 
@@ -92,7 +92,7 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
             entry.width = obj.value(QLatin1String("width")).toInt();
             entry.height = obj.value(QLatin1String("height")).toInt();
             if (entry.width <= 0 || entry.height <= 0) {
-                qCDebug(lcDbusAutotile) << "relayTileRequestsJson: invalid geometry for" << entry.windowId;
+                qCDebug(lcDbusTiling) << "relayTileRequestsJson: invalid geometry for" << entry.windowId;
                 continue;
             }
         }
@@ -104,7 +104,7 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
     }
 
     if (!requests.isEmpty()) {
-        qCDebug(lcDbusAutotile) << "Emitting windowsTileRequested:" << requests.size() << "windows";
+        qCDebug(lcDbusTiling) << "Emitting windowsTileRequested:" << requests.size() << "windows";
         Q_EMIT windowsTileRequested(requests);
     }
 }
@@ -116,15 +116,38 @@ void TilingAdaptor::relayWindowsReleased(const QStringList& windowIds)
 
 void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
 {
-    // Screen set and enabled state flip together on the emitting engine;
-    // re-announce both (the effect's property reads dedup a no-op).
-    Q_EMIT managedScreensChanged(combinedManagedScreens(), isDesktopSwitch);
-    Q_EMIT enabledChanged(enabled());
+    // Coalesce (see header doc): a mode flip fires this once per engine in
+    // one synchronous pass; emitting eagerly would broadcast an intermediate
+    // union that momentarily drops the flipping screen and triggers the
+    // effect's full restore path. Defer to the event loop so one emission
+    // carries the pass's final state.
+    m_pendingIsDesktopSwitch = m_pendingIsDesktopSwitch || isDesktopSwitch;
+    if (m_screensAnnouncePending) {
+        return;
+    }
+    m_screensAnnouncePending = true;
+    QMetaObject::invokeMethod(
+        this,
+        [this]() {
+            m_screensAnnouncePending = false;
+            const bool desktopSwitch = m_pendingIsDesktopSwitch;
+            m_pendingIsDesktopSwitch = false;
+            Q_EMIT managedScreensChanged(combinedManagedScreens(), desktopSwitch);
+            relayEnabledChanged();
+        },
+        Qt::QueuedConnection);
 }
 
 void TilingAdaptor::relayEnabledChanged()
 {
-    Q_EMIT enabledChanged(enabled());
+    // Dedup: two engines feed one signal, and every screen-set change on
+    // either would otherwise re-broadcast an unchanged bool.
+    const bool now = enabled();
+    if (m_lastEnabledBroadcast.has_value() && *m_lastEnabledBroadcast == now) {
+        return;
+    }
+    m_lastEnabledBroadcast = now;
+    Q_EMIT enabledChanged(now);
 }
 
 QStringList TilingAdaptor::combinedManagedScreens() const
@@ -133,7 +156,11 @@ QStringList TilingAdaptor::combinedManagedScreens() const
     for (const PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
         all += engine->activeScreens();
     }
-    return QStringList(all.cbegin(), all.cend());
+    // Sorted: set iteration order is unspecified and wire consumers compare
+    // successive payloads.
+    QStringList out(all.cbegin(), all.cend());
+    out.sort();
+    return out;
 }
 
 void TilingAdaptor::relayWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId)
@@ -172,7 +199,7 @@ void TilingAdaptor::retile(const QString& screenId)
     if (!ensurePipeline("retile")) {
         return;
     }
-    qCDebug(lcDbusAutotile) << "retile: screen=" << (screenId.isEmpty() ? QStringLiteral("all") : screenId);
+    qCDebug(lcDbusTiling) << "retile: screen=" << (screenId.isEmpty() ? QStringLiteral("all") : screenId);
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
         if (screenId.isEmpty() || engine->isActiveOnScreen(screenId)) {
             engine->retile(screenId);
@@ -210,10 +237,21 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     }
     // Per-screen engine dispatch: the effect reports opens for every
     // engine-managed screen through this interface, so hand the window to
-    // whichever pipeline engine owns the (possibly rule-routed) screen.
-    if (PhosphorEngine::IPlacementEngine* engine = engineOwningScreen(screenId)) {
-        engine->windowOpened(entry.windowId, screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
+    // whichever pipeline engine CLAIMS the (possibly rule-routed) screen.
+    // Deliberately NOT the primary-fallback helper: during a mode flip a
+    // brief window exists where neither engine claims the screen, and the
+    // fallback would let the primary engine silently adopt and tile a
+    // window on a screen it does not own. Dropping is safe — the effect
+    // re-notifies every window on the screen via the managedScreensChanged
+    // batch re-add once the flip settles.
+    for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
+        if (engine->isActiveOnScreen(screenId)) {
+            engine->windowOpened(entry.windowId, screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
+            return;
+        }
     }
+    qCDebug(lcDbusTiling) << "dispatchWindowOpened: no pipeline engine claims" << screenId << "for" << entry.windowId
+                          << "- dropped (mid-transition; batch re-add will recover)";
 }
 
 bool TilingAdaptor::deferUntilPanelReady()
@@ -252,8 +290,8 @@ void TilingAdaptor::flushPendingWindowOpens()
     // than mutating the one we're iterating.
     const PhosphorProtocol::WindowOpenedList toFlush = std::move(m_pendingOpens);
     m_pendingOpens.clear();
-    qCInfo(lcDbusAutotile) << "flushPendingWindowOpens: processing" << toFlush.size()
-                           << "deferred windows after panel geometry became ready";
+    qCInfo(lcDbusTiling) << "flushPendingWindowOpens: processing" << toFlush.size()
+                         << "deferred windows after panel geometry became ready";
     for (const auto& entry : toFlush) {
         dispatchWindowOpened(entry);
     }
@@ -265,11 +303,11 @@ void TilingAdaptor::windowOpened(const QString& windowId, const QString& screenI
         return;
     }
     if (windowId.isEmpty()) {
-        qCDebug(lcDbusAutotile) << "windowOpened: empty window ID";
+        qCDebug(lcDbusTiling) << "windowOpened: empty window ID";
         return;
     }
     if (screenId.isEmpty()) {
-        qCDebug(lcDbusAutotile) << "windowOpened: empty screen ID for window" << windowId;
+        qCDebug(lcDbusTiling) << "windowOpened: empty screen ID for window" << windowId;
         return;
     }
     // Non-blocking startup gate: if the first panel D-Bus query has not completed
@@ -280,13 +318,13 @@ void TilingAdaptor::windowOpened(const QString& windowId, const QString& screenI
     // flushPendingWindowOpens() when panelGeometryReady fires.
     PhosphorProtocol::WindowOpenedEntry entry{windowId, screenId, minWidth, minHeight};
     if (deferUntilPanelReady()) {
-        qCInfo(lcDbusAutotile) << "windowOpened: deferring" << windowId
-                               << "until panel geometry ready (queue size=" << (m_pendingOpens.size() + 1) << ")";
+        qCInfo(lcDbusTiling) << "windowOpened: deferring" << windowId
+                             << "until panel geometry ready (queue size=" << (m_pendingOpens.size() + 1) << ")";
         m_pendingOpens.append(entry);
         return;
     }
-    qCDebug(lcDbusAutotile) << "windowOpened: windowId=" << windowId << "screen=" << screenId << "minSize=" << minWidth
-                            << "x" << minHeight;
+    qCDebug(lcDbusTiling) << "windowOpened: windowId=" << windowId << "screen=" << screenId << "minSize=" << minWidth
+                          << "x" << minHeight;
     dispatchWindowOpened(entry);
 }
 
@@ -300,13 +338,13 @@ void TilingAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
     // all entries atomically so windows in the same batch retain their original order
     // when flushed.
     if (deferUntilPanelReady()) {
-        qCInfo(lcDbusAutotile) << "windowsOpenedBatch: deferring" << entries.size()
-                               << "windows until panel geometry ready";
+        qCInfo(lcDbusTiling) << "windowsOpenedBatch: deferring" << entries.size()
+                             << "windows until panel geometry ready";
         m_pendingOpens.append(entries);
         return;
     }
 
-    qCInfo(lcDbusAutotile) << "windowsOpenedBatch: processing" << entries.size() << "windows";
+    qCInfo(lcDbusTiling) << "windowsOpenedBatch: processing" << entries.size() << "windows";
 
     for (const auto& entry : entries) {
         dispatchWindowOpened(entry);
@@ -319,11 +357,11 @@ void TilingAdaptor::windowMinSizeUpdated(const QString& windowId, int minWidth, 
         return;
     }
     if (windowId.isEmpty()) {
-        qCDebug(lcDbusAutotile) << "windowMinSizeUpdated: empty window ID";
+        qCDebug(lcDbusTiling) << "windowMinSizeUpdated: empty window ID";
         return;
     }
-    qCDebug(lcDbusAutotile) << "windowMinSizeUpdated: windowId=" << windowId << "minSize=" << minWidth << "x"
-                            << minHeight;
+    qCDebug(lcDbusTiling) << "windowMinSizeUpdated: windowId=" << windowId << "minSize=" << minWidth << "x"
+                          << minHeight;
     if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
         engine->windowMinSizeUpdated(windowId, qMax(0, minWidth), qMax(0, minHeight));
     }
@@ -331,15 +369,18 @@ void TilingAdaptor::windowMinSizeUpdated(const QString& windowId, int minWidth, 
 
 void TilingAdaptor::windowClosed(const QString& windowId)
 {
+    if (windowId.isEmpty()) {
+        qCDebug(lcDbusTiling) << "windowClosed: empty window ID";
+        return;
+    }
+    // The dedup-gate entry dies with the window UNCONDITIONALLY — a close
+    // arriving after clearEngine() (shutdown) must not leak it, or a stale
+    // value could suppress the first genuine broadcast of a reused id.
+    m_lastFloatBroadcast.remove(windowId);
     if (!ensurePipeline("windowClosed")) {
         return;
     }
-    if (windowId.isEmpty()) {
-        qCDebug(lcDbusAutotile) << "windowClosed: empty window ID";
-        return;
-    }
-    qCDebug(lcDbusAutotile) << "windowClosed: windowId=" << windowId;
-    m_lastFloatBroadcast.remove(windowId);
+    qCDebug(lcDbusTiling) << "windowClosed: windowId=" << windowId;
     if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
         engine->windowClosed(windowId);
     }
@@ -351,14 +392,14 @@ void TilingAdaptor::notifyWindowFocused(const QString& windowId, const QString& 
         return;
     }
     if (windowId.isEmpty()) {
-        qCDebug(lcDbusAutotile) << "notifyWindowFocused: empty window ID (focus cleared)";
+        qCDebug(lcDbusTiling) << "notifyWindowFocused: empty window ID (focus cleared)";
         return;
     }
     if (screenId.isEmpty()) {
-        qCDebug(lcDbusAutotile) << "notifyWindowFocused: empty screenId";
+        qCDebug(lcDbusTiling) << "notifyWindowFocused: empty screenId";
         return;
     }
-    qCDebug(lcDbusAutotile) << "notifyWindowFocused: windowId=" << windowId << "screen=" << screenId;
+    qCDebug(lcDbusTiling) << "notifyWindowFocused: windowId=" << windowId << "screen=" << screenId;
     // R2 fix: Pass screen ID to engine so m_windowToScreen is updated on focus
     // change. This also addresses R5 (cross-screen window movement detection) since
     // focus events carry the current screen, updating stale m_windowToScreen entries.

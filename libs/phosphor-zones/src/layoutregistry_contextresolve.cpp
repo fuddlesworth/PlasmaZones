@@ -555,7 +555,7 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
         return {};
     }
     // Per-slot read (mirrors resolveContextGaps), but NOT cached: this runs on
-    // screen / layout changes via the daemon's updateAutotileScreens, not the hot
+    // screen / layout changes via the daemon's updateEngineScreens, not the hot
     // per-cursor path. Being uncached lets us stamp the active layout AND the
     // screen orientation onto the query without folding either into a cache key
     // (no cached entry to go stale). Safe from recursion: assignmentIdForScreen
@@ -625,6 +625,12 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     // it runs on screen / layout changes rather than the hot per-cursor path, which
     // lets the query carry the active layout and the screen orientation without
     // folding either into a cache key.
+    // Field::Mode is deliberately NOT stamped here (mirrors
+    // resolveContextTilingParams): the scrolling actions are already
+    // engine-specific, so a `Mode Equals "scrolling"` pin on a rule carrying
+    // one would be redundant — and this resolver only runs for screens the
+    // cascade already put in Scrolling mode. resolveContextGaps is the one
+    // mode-stamping resolver, because gap actions are engine-neutral.
     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
     stampScreenOrientation(query, screenId);
     query.activeLayout = assignmentIdForScreen(screenId, virtualDesktop, activity);
@@ -632,7 +638,11 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
 
     ContextScrollingParams params;
     if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollDefaultColumnWidth))) {
-        params.defaultColumnWidth = action->params.value(PWR::ActionParam::Value).toDouble();
+        // Defense in depth (the descriptor validator already rejects
+        // out-of-range payloads at load): a hand-edited rules.json can only
+        // fall through to a sane bound, matching resolveContextOverlay's
+        // documented policy. Bounds mirror the engine's own [0.05, 1.0].
+        params.defaultColumnWidth = qBound(0.05, action->params.value(PWR::ActionParam::Value).toDouble(), 1.0);
     }
     if (const auto action = resolved.slot(QString(PWR::ActionSlot::CenterFocusedColumn))) {
         // Wire token → the centering int (never 0 / always 1 / on overflow 2), the

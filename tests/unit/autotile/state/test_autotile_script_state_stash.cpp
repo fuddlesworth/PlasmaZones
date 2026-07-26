@@ -118,10 +118,12 @@ private Q_SLOTS:
     }
 
     /// A memory algorithm's split tree is the same class of per-context state as
-    /// the script bag: it holds the user's manual resizes, in its per-node split
-    /// ratios. A toggle-off destroys the TilingState, and the stash rescues only
-    /// the bag, so the tree dies and prepareTilingState rebuilds a fresh one with
-    /// UNIFORM ratios — the adjustments are gone exactly as they were for the bag.
+    /// the script bag: it holds the user's manual resizes in its per-node split
+    /// ratios. A toggle-off destroys the TilingState, but the stash rescues the
+    /// tree alongside the bag, and re-entry restores it ONE-SHOT — the body
+    /// asserts the adjusted root ratio (0.75) survives the round trip rather
+    /// than reverting to the rebuilt uniform default (see the one-shot-restore
+    /// rationale further down).
     void testSplitTreeSurvivesToggleOff()
     {
         // A real screen provider, so recalculateLayout resolves geometry and the

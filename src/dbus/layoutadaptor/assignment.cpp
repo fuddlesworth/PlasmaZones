@@ -713,8 +713,17 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
         }
     }
 
+    // Reject rather than clamp: clamping an unknown future mode int to the
+    // nearest enumerator would silently apply the WRONG engine (this bug
+    // shipped once — Scrolling(2) was clamped to Autotile(1) and the third
+    // mode button applied Tiling).
+    if (mode < 0 || mode > static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
+        qCWarning(lcDbusLayout) << "setAssignmentEntry: out-of-range mode" << mode << "for" << resolvedId;
+        return;
+    }
+
     PhosphorZones::AssignmentEntry entry;
-    entry.mode = static_cast<PhosphorZones::AssignmentEntry::Mode>(qBound(0, mode, 1));
+    entry.mode = static_cast<PhosphorZones::AssignmentEntry::Mode>(mode);
     entry.snappingLayout = snappingLayout;
     entry.tilingAlgorithm = tilingAlgorithm;
 

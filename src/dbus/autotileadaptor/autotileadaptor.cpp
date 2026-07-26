@@ -29,6 +29,18 @@ AutotileAdaptor::AutotileAdaptor(PhosphorTileEngine::AutotileEngine* engine,
     qCDebug(lcDbusAutotile) << "AutotileAdaptor initialized";
 }
 
+bool AutotileAdaptor::ensureRegistry(const char* methodName) const
+{
+    // Release-build pair of the ctor Q_ASSERT_X: these are D-Bus-callable
+    // slots, so a wiring bug must degrade to a warning, not a crash
+    // triggerable from the bus.
+    if (!m_algorithmRegistry) {
+        qCWarning(lcDbusAutotile) << "Cannot" << methodName << "- algorithm registry not available";
+        return false;
+    }
+    return true;
+}
+
 QString AutotileAdaptor::algorithm() const
 {
     if (!m_engine) {
@@ -39,7 +51,7 @@ QString AutotileAdaptor::algorithm() const
 
 void AutotileAdaptor::setAlgorithm(const QString& algorithmId)
 {
-    if (!ensureEngine("setAlgorithm")) {
+    if (!ensureEngine("setAlgorithm") || !ensureRegistry("setAlgorithm")) {
         return;
     }
     if (!m_algorithmRegistry->algorithm(algorithmId)) {
@@ -126,11 +138,17 @@ void AutotileAdaptor::focusPrevious()
 
 QStringList AutotileAdaptor::availableAlgorithms()
 {
+    if (!ensureRegistry("availableAlgorithms")) {
+        return {};
+    }
     return m_algorithmRegistry->availableAlgorithms();
 }
 
 PhosphorProtocol::AlgorithmInfoEntry AutotileAdaptor::algorithmInfo(const QString& algorithmId)
 {
+    if (!ensureRegistry("algorithmInfo")) {
+        return {};
+    }
     PhosphorTiles::TilingAlgorithm* algo = m_algorithmRegistry->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDbusAutotile) << "Unknown algorithm:" << algorithmId;

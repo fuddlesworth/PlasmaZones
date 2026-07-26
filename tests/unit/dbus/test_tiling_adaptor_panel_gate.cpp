@@ -4,7 +4,8 @@
 /**
  * @file test_tiling_adaptor_panel_gate.cpp
  *
- * NOTE: the adaptor is parented to a plain QObject, not to the AutotileEngine.
+ * NOTE: the adaptor is parented to a plain QObject rather than a
+ * D-Bus-registered object.
  * QDBusAbstractAdaptor walks its parent's meta-object at construction and some
  * code paths in Qt6DBus assume the parent is a D-Bus-registered object; using
  * a vanilla QObject parent sidesteps that entirely.
@@ -13,8 +14,6 @@
 #include <QTest>
 #include <QCoreApplication>
 #include <QObject>
-#include <QScopeGuard>
-#include <QSignalSpy>
 
 #include <PhosphorProtocol/WindowMarshalling.h>
 
@@ -123,12 +122,12 @@ private Q_SLOTS:
     }
 
     // -------------------------------------------------------------------------
-    // Order preservation: a batch containing many entries must flush in the
-    // same order it arrived. Autotile algorithms are order-sensitive (e.g.
-    // master-stack places the first window in the master slot), so reordering
-    // during defer-and-flush would change the final layout.
+    // Batch path queues atomically and the flush drains it. Only queue
+    // COUNTS are observable here (the null-dep engine drops the dispatches),
+    // so this deliberately does NOT claim order coverage — arrival order
+    // through the engine is pinned by the engine-side order tests.
     // -------------------------------------------------------------------------
-    void testBatchOrderPreservedAcrossFlush()
+    void testBatchQueuesAndDrains()
     {
         PhosphorScreens::ScreenManager mgr;
 
@@ -152,16 +151,17 @@ private Q_SLOTS:
         // m_panelGeometryReceived got set on the real ScreenManager (we only
         // emitted the signal, didn't flip the flag), the adaptor either
         // dispatches synchronously (count stays 0) or re-queues (count = 1).
-        // The contract we care about here is simply that flush did empty the
-        // queue and order was maintained for the drained batch; the "arrive
-        // after ready" path is covered by testNoScreenManager_passThrough.
+        // The contract pinned here is only that the flush drained the queue;
+        // the "arrive after ready" path is covered by
+        // testNoScreenManager_passThrough.
     }
 
     // -------------------------------------------------------------------------
-    // Null-engine safety: if the daemon tears the engine down mid-session, the
-    // adaptor's clearEngine() is called. Any flush that fires afterward must
-    // not dereference a null engine. This test doesn't reach into clearEngine
-    // but models the invariant: the flush slot handles missing engine cleanly.
+    // Empty-pipeline safety: Daemon::stop() calls clearEngine(), which
+    // empties the lifecycle-engine list. A flush firing afterward must hit
+    // ensurePipeline()'s empty check (dropping the queue) instead of
+    // dereferencing anything — this test calls clearEngine() directly and
+    // pins exactly that.
     // -------------------------------------------------------------------------
     void testFlushWithClearedEngine_noCrash()
     {

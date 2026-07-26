@@ -43,15 +43,24 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                                        PhosphorEngine::PlacementEngineBase* autotileEngine,
                                        PhosphorEngine::PlacementEngineBase* scrollEngine)
 {
-    // Disconnect previous autotile engine nav feedback (the only signal connected here)
+    // Disconnect previous autotile engine nav feedback (its other five
+    // signals get their own targeted disconnect blocks below)
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
     }
-    // The scroll engine gets the same generic base-signal wiring as the other
-    // two below; drop every previous connection first (same anti-duplicate
-    // rule as each block below).
+    // The scroll engine gets the same generic base-signal wiring as the
+    // other two below; drop the SAME six signals, targeted — a blanket
+    // disconnect(engine, nullptr, this, nullptr) would also sever
+    // connections OTHER classes made with this adaptor as receiver context
+    // (concretely the composition root's placementChanged→markDirty
+    // save-scheduling lambda).
     if (m_scrollEngine) {
-        disconnect(m_scrollEngine, nullptr, this, nullptr);
+        disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
+        disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this, nullptr);
+        disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this, nullptr);
+        disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
+        disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
+        disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, nullptr);
     }
     // Drop the cross-desktop move relay from BOTH outgoing engines before
     // reassigning (same anti-duplicate-connection reason as the float relay).
@@ -112,12 +121,19 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         m_cachedAutotileEngine->setRestorePositionPredicate({});
         m_cachedAutotileEngine->setFloatPredicate({});
     }
+    // Scroll twin: both closures capture `this` (WTA) and ScrollEngine.h
+    // documents the clear-before-destroy contract they must honour.
+    if (m_cachedScrollEngine) {
+        m_cachedScrollEngine->setFloatPredicate({});
+        m_cachedScrollEngine->setOpenParamsResolver({});
+    }
 
     m_snapEngine = snapEngine;
     m_autotileEngine = autotileEngine;
     m_scrollEngine = scrollEngine;
     m_cachedSnapEngine = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine);
     m_cachedAutotileEngine = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine);
+    m_cachedScrollEngine = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(scrollEngine);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Cross-engine references — SnapEngine needs AutotileEngine for
@@ -377,7 +393,17 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);
-        if (auto* scroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(scrollEngine)) {
+        if (auto* scroll = m_cachedScrollEngine.data()) {
+            // DELIBERATE SCOPE NOTE: the scroll engine takes only the float
+            // predicate + open-params resolver — it has no
+            // setRestorePositionPredicate / setManagedRestorePredicate /
+            // setExclusionQueryProvider twins BY DESIGN. Scroll floats ride
+            // the shared WTS float model (free geometry lives in the unified
+            // placement record, restored by the common layer), and window
+            // exclusion is enforced effect-side before a scroll screen ever
+            // sees the open. If scroll-specific restore semantics ever
+            // diverge from the shared path, the hooks get added to
+            // ScrollEngine first and wired here second.
             scroll->setFloatPredicate([this](const QString& windowId) -> bool {
                 return shouldFloatByRule(windowId);
             });

@@ -5,8 +5,6 @@
 
 #include <QtGlobal>
 
-#include <cmath>
-
 namespace PhosphorScrollEngine {
 
 namespace {
@@ -158,12 +156,17 @@ void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
     reanchorAfterFocusChange(m_activeColumnIdx, viewXFor(params), params);
 }
 
-void ScrollStrip::centerActiveColumn(const ScrollLayoutParams& params)
+bool ScrollStrip::centerActiveColumn(const ScrollLayoutParams& params)
 {
     if (m_activeColumnIdx < 0) {
-        return;
+        return false;
     }
-    m_viewAnchor = centeredAnchorFor(m_activeColumnIdx, params);
+    const int centered = centeredAnchorFor(m_activeColumnIdx, params);
+    if (m_viewAnchor == centered) {
+        return false;
+    }
+    m_viewAnchor = centered;
+    return true;
 }
 
 ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
@@ -243,6 +246,21 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             if (n == 1) {
                 heights[0] = availH;
             } else {
+                // Renormalize when the Fixed/Preset heights alone overflow
+                // the column: scale them down proportionally so the last
+                // window is not laid out past the bottom of the work area
+                // (each tile was only clamped individually above).
+                if (fixedTotal > availH && fixedTotal > 0) {
+                    int scaledTotal = 0;
+                    for (int vi = 0; vi < n; ++vi) {
+                        if (heights[vi] > 0) {
+                            heights[vi] =
+                                qMax(1, static_cast<int>(static_cast<qint64>(heights[vi]) * availH / fixedTotal));
+                            scaledTotal += heights[vi];
+                        }
+                    }
+                    fixedTotal = scaledTotal;
+                }
                 int autoAvail = qMax(0, availH - fixedTotal);
                 qreal weightLeft = autoWeightTotal;
                 for (int vi = 0; vi < n; ++vi) {

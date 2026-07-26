@@ -365,6 +365,13 @@ p_add_test(test_configmigration_v2tov3 config/migrations/test_configmigration_v2
 p_add_test(test_migration_v1_animation config/migrations/test_migration_v1_animation.cpp)
 p_add_test(test_layoutsettings_relocation config/migrations/test_layoutsettings_relocation.cpp)
 
+# Tiling.Scrolling schema guards: duplicate/Wayland-dead shortcut defaults,
+# enum fall-back-to-default validators, preset-list canonicalization.
+add_executable(test_scrolling_settings config/settings/test_scrolling_settings.cpp)
+target_link_libraries(test_scrolling_settings
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_scrolling_settings COMMAND test_scrolling_settings)
+
 # Binds the schema's declared choices to their user-facing labels.
 add_executable(test_settingsvaluelabels config/settings/test_settingsvaluelabels.cpp)
 target_link_libraries(test_settingsvaluelabels

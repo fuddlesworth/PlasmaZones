@@ -25,8 +25,9 @@ namespace PlasmaZones {
 
 PhosphorProtocol::DragPolicy
 WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEngine::IPlacementEngine* autotileEngine,
-                                     const QString& windowId, const QString& screenId,
-                                     const PhosphorContext::IContextResolver* resolver, bool reorderMode)
+                                     const PhosphorEngine::IPlacementEngine* scrollEngine, const QString& windowId,
+                                     const QString& screenId, const PhosphorContext::IContextResolver* resolver,
+                                     bool reorderMode)
 {
     PhosphorProtocol::DragPolicy policy;
     policy.screenId = screenId;
@@ -67,6 +68,23 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
         // context SetDragBehavior rule wins over the global setting for this screen.
         if (!windowId.isEmpty() && !reorderMode) {
             policy.immediateFloatOnStart = autotileEngine->isWindowTracked(windowId);
+        }
+        return policy;
+    }
+
+    // 2b) Scrolling screen — same engine-owns-placement bypass as autotile
+    //     (the wire reason is shared; the effect treats it as "engine-managed
+    //     screen"). No reorder/drag-insert preview exists for the strip, so a
+    //     tracked window always floats immediately: drag-to-float, reposition,
+    //     unfloat restores the column slot. Without this branch a drag on a
+    //     scrolling screen fell through to the SNAP pipeline — cursor
+    //     streaming, keyboard grab, zone detection, and an ApplySnap drop
+    //     against a snap layout the screen does not run.
+    if (scrollEngine && !screenId.isEmpty() && scrollEngine->isActiveOnScreen(screenId)) {
+        policy.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
+        policy.captureGeometry = true;
+        if (!windowId.isEmpty()) {
+            policy.immediateFloatOnStart = scrollEngine->isWindowTracked(windowId);
         }
         return policy;
     }
@@ -159,8 +177,8 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     // Resolve once and reuse: effectiveReorderMode runs a full context rule
     // resolve, and the reorder-fallback branch below needs the same answer.
     const bool startReorderMode = effectiveReorderMode(startScreenId);
-    const PhosphorProtocol::DragPolicy policy =
-        computeDragPolicy(m_settings, m_autotileEngine, windowId, startScreenId, m_contextResolver, startReorderMode);
+    const PhosphorProtocol::DragPolicy policy = computeDragPolicy(
+        m_settings, m_autotileEngine, m_scrollEngine, windowId, startScreenId, m_contextResolver, startReorderMode);
 
     // Reusable mutable copy — the reorder fallback path below may need to
     // restore immediateFloatOnStart that computeDragPolicy proactively cleared.
@@ -546,8 +564,8 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
         // rule evaluation for a value that would be discarded.
         const bool reorderMode = m_autotileEngine && m_autotileEngine->isActiveOnScreen(cursorScreenId)
             && effectiveReorderMode(cursorScreenId);
-        const PhosphorProtocol::DragPolicy candidate =
-            computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, m_contextResolver, reorderMode);
+        const PhosphorProtocol::DragPolicy candidate = computeDragPolicy(
+            m_settings, m_autotileEngine, m_scrollEngine, windowId, cursorScreenId, m_contextResolver, reorderMode);
         if (candidate != m_currentDragPolicy) {
             // Log both bypass reason and screenId on each side so same-reason
             // flips (snap→snap or autotile→autotile cross-VS) aren't opaque in

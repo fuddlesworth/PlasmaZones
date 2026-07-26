@@ -148,7 +148,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // placement-state flush.
     reconcileRuleWindowLayer(windowId, w);
 
-    bool onAutotileScreen = m_tilingHandler->isManagedScreen(getWindowScreenId(w));
+    bool onManagedScreen = m_tilingHandler->isManagedScreen(getWindowScreenId(w));
 
     // First-frame suppression: KWin places a new window at its centred
     // placement geometry and composites it there before this handler can
@@ -160,7 +160,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // autotile screen (which the autotile engine tiles). The window is
     // released by endRestoreSuppression on geometry-settle, on a negative
     // resolve, or on the hard deadline.
-    if (canSnapRestore || (tileableAppWindow && onAutotileScreen)) {
+    if (canSnapRestore || (tileableAppWindow && onManagedScreen)) {
         beginRestoreSuppression(w);
     }
 
@@ -177,7 +177,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // snap-mode zone". Cross-VS/cross-monitor teleport works because moveResize
     // takes absolute compositor coordinates, so applyWindowGeometry moves the
     // window to whichever screen the cached rect lives on. After teleport,
-    // re-evaluate onAutotileScreen because KWin updates the window's output
+    // re-evaluate onManagedScreen because KWin updates the window's output
     // assignment.
     //
     // Rare race: the saved screen may have flipped from snap→autotile between
@@ -190,9 +190,9 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // entry has been considered for routing whether or not it was applied,
         // so the next open of the same appId won't re-evaluate a dead entry).
         if (const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(appId)) {
-            const bool savedScreenNowAutotile =
+            const bool savedScreenNowManaged =
                 !cached->screenId.isEmpty() && m_tilingHandler->isManagedScreen(cached->screenId);
-            if (cached->geometry.isValid() && !savedScreenNowAutotile) {
+            if (cached->geometry.isValid() && !savedScreenNowManaged) {
                 qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached->geometry
                                  << "screen:" << cached->screenId;
                 // skipAnimation=true: teleport straight into the zone.
@@ -207,8 +207,8 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
                 // Re-evaluate screen after teleport — cross-VS/cross-monitor
                 // moveResize updates KWin's output assignment, so the window
                 // may no longer be on an autotile screen.
-                onAutotileScreen = m_tilingHandler->isManagedScreen(getWindowScreenId(w));
-            } else if (savedScreenNowAutotile) {
+                onManagedScreen = m_tilingHandler->isManagedScreen(getWindowScreenId(w));
+            } else if (savedScreenNowManaged) {
                 qCDebug(lcEffect) << "Skipping instant snap restore for" << appId
                                   << "- saved screen now autotile:" << cached->screenId;
             } else {
@@ -220,7 +220,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         }
     }
 
-    if (onAutotileScreen && canSnapRestore) {
+    if (onManagedScreen && canSnapRestore) {
         // Window landed on an autotile screen, but may have a pending snap restore
         // to a non-autotile screen. KWin's session restore places windows at their
         // saved geometry, which may be a pre-snap floating position in the autotile
@@ -255,14 +255,14 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Standard path: notify autotile first, then try snap restore. If
     // autotile is on this screen but doesn't actually act (daemon-side
     // filter, already-notified, etc.), and snap-restore won't run either
-    // (the !onAutotileScreen guard below), nothing will move the window —
+    // (the !onManagedScreen guard below), nothing will move the window —
     // release suppression so it doesn't wait out the deadline.
     const bool autotileTookOver = m_tilingHandler->notifyWindowAdded(w);
-    if (!autotileTookOver && onAutotileScreen) {
+    if (!autotileTookOver && onManagedScreen) {
         endRestoreSuppression(w);
     }
 
-    if (!onAutotileScreen && canSnapRestore) {
+    if (!onManagedScreen && canSnapRestore) {
         // Always run the daemon round-trip — INCLUDING after an instant
         // restore. Instant restore only teleports the window to the cached
         // zone geometry; it does NOT register the window in the daemon's

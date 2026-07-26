@@ -21,12 +21,56 @@ P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, tilingScrollingGroup, alw
                  scrollingAlwaysCenterSingleColumnChanged)
 
 P_STORE_GET(int, scrollingDefaultColumnWidthKind, tilingScrollingGroup, defaultColumnWidthKindKey, int)
-P_STORE_SET_INT(setScrollingDefaultColumnWidthKind, tilingScrollingGroup, defaultColumnWidthKindKey,
-                scrollingDefaultColumnWidthKindChanged)
+
+// Hand-written kind setter: the shared value key serves two kinds under one
+// schema clamp, so a kind flip must coerce the stored value into the new
+// kind's range — otherwise Fixed→Proportion leaves 800 stored (engine clamps
+// to 100%) or Proportion→Fixed leaves 0.5 stored (a 1px column) while the
+// page displays something else entirely.
+void Settings::setScrollingDefaultColumnWidthKind(int value)
+{
+    const int before =
+        m_store->read<int>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthKindKey());
+    m_store->write(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthKindKey(), value);
+    const int after =
+        m_store->read<int>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthKindKey());
+    if (after == before) {
+        return;
+    }
+    const qreal stored =
+        m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
+    if (after == 1 && stored <= 1.0) {
+        // Entering Fixed with a proportion stored: seed a sane pixel width.
+        setScrollingDefaultColumnWidthValue(ConfigDefaults::scrollingDefaultColumnWidthFixedPx());
+    } else if (after != 1 && stored > 1.0) {
+        // Leaving Fixed with pixels stored: fall back to the proportion default.
+        setScrollingDefaultColumnWidthValue(ConfigDefaults::scrollingDefaultColumnWidthValue());
+    }
+    Q_EMIT scrollingDefaultColumnWidthKindChanged();
+    Q_EMIT settingsChanged();
+}
 
 P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, tilingScrollingGroup, defaultColumnWidthValueKey, double)
-P_STORE_SET_DOUBLE(setScrollingDefaultColumnWidthValue, tilingScrollingGroup, defaultColumnWidthValueKey,
-                   scrollingDefaultColumnWidthValueChanged)
+
+// Hand-written value setter: kind-aware clamp (Proportion values live in
+// (0.05, 1.0]; Fixed in pixels) — the schema clamp alone spans both ranges.
+void Settings::setScrollingDefaultColumnWidthValue(qreal value)
+{
+    const bool isFixed = scrollingDefaultColumnWidthKind() == 1;
+    value = isFixed ? qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value,
+                                    ConfigDefaults::scrollingDefaultColumnWidthValueMax())
+                    : qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value, 1.0);
+    const qreal before =
+        m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
+    m_store->write(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey(), value);
+    const qreal after =
+        m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
+    if (qFuzzyCompare(1.0 + before, 1.0 + after)) {
+        return;
+    }
+    Q_EMIT scrollingDefaultColumnWidthValueChanged();
+    Q_EMIT settingsChanged();
+}
 
 P_STORE_GET(int, scrollingDefaultColumnDisplay, tilingScrollingGroup, defaultColumnDisplayKey, int)
 P_STORE_SET_INT(setScrollingDefaultColumnDisplay, tilingScrollingGroup, defaultColumnDisplayKey,

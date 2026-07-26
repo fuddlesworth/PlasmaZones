@@ -60,9 +60,19 @@ PickerCategory actionCategory(const QString& type)
             return {PhosphorI18n::tr("Tiling") + QStringLiteral("/") + PhosphorI18n::tr("Behavior"), 3};
         }
         if (type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::SetCenterFocusedColumn
-            || type == ActionType::SetScrollDefaultColumnDisplay || type == ActionType::OpenColumnWidth
-            || type == ActionType::OpenTabbed || type == ActionType::OpenColumnPlacement) {
-            return {PhosphorI18n::tr("Scrolling"), 4};
+            || type == ActionType::SetScrollDefaultColumnDisplay) {
+            return {PhosphorI18n::tr("Scrolling", "tiling mode name"), 4};
+        }
+        // The per-app open actions are WINDOW-domain: they must sit in the
+        // window block so the picker's context/window divider stays honest
+        // (a mixed top-level category takes its group from the first item
+        // and would render window actions above the divider). Nested under
+        // Window as a Scrolling submenu for discoverability.
+        if (type == ActionType::OpenColumnWidth || type == ActionType::OpenTabbed
+            || type == ActionType::OpenColumnPlacement) {
+            return {PhosphorI18n::tr("Window") + QStringLiteral("/")
+                        + PhosphorI18n::tr("Scrolling", "tiling mode name"),
+                    8};
         }
         // Cross-cutting engine controls: SetEngineMode / DisableEngine / LockContext.
         return {PhosphorI18n::tr("Engine"), 1};

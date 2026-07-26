@@ -61,7 +61,9 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // compositor effect's catch-scan; an empty identical set has nothing
         // to catch.
         if (!screens.isEmpty()) {
-            Q_EMIT scrollingScreensChanged(QStringList(screens.cbegin(), screens.cend()), true);
+            QStringList sortedSame(screens.cbegin(), screens.cend());
+            sortedSame.sort();
+            Q_EMIT scrollingScreensChanged(sortedSame, true);
             for (const QString& screenId : screens) {
                 scheduleRetileForScreen(screenId);
             }
@@ -84,7 +86,7 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 return key.screenId == screenId;
             },
             [this, &releasedWindows](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
-                releaseScreenState(state->screenId(), state, releasedWindows);
+                releaseScreenState(state, releasedWindows);
             });
         releasedScreens.insert(screenId);
         m_context.removeScreen(screenId);
@@ -100,7 +102,11 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         scheduleRetileForScreen(screenId);
     }
 
-    Q_EMIT scrollingScreensChanged(QStringList(screens.cbegin(), screens.cend()), false);
+    // Sorted: QSet iteration order is unspecified across runs, and a wire
+    // consumer comparing successive payloads must not see phantom changes.
+    QStringList sorted(screens.cbegin(), screens.cend());
+    sorted.sort();
+    Q_EMIT scrollingScreensChanged(sorted, false);
     if (wasEnabled != isEnabled()) {
         Q_EMIT enabledChanged(isEnabled());
     }
@@ -113,16 +119,31 @@ void ScrollEngine::setActiveScreenHint(const QString& screenId)
     }
 }
 
-void ScrollEngine::releaseScreenState(const QString& screenId, ScrollState* state, QStringList& releasedWindows)
+void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedWindows)
 {
-    Q_UNUSED(screenId)
+    const QString screenId = state->screenId();
     const QStringList windows = state->managedWindows();
     for (const QString& windowId : windows) {
         m_lastAppliedRect.remove(windowId);
         m_floatRestoreColumn.remove(windowId);
+        m_scrollFloatedWindows.remove(windowId);
         releasedWindows.append(windowId);
     }
+    // Per-screen bookkeeping dies with the state: a stale seed must not
+    // replay on re-entry, and the tab-strip overlay must be told to clear —
+    // no relayout will ever run for a departed screen to do it.
+    m_pendingInitialOrder.remove(screenId);
+    clearTabStripsForScreen(screenId);
     state->deleteLater();
+}
+
+void ScrollEngine::clearTabStripsForScreen(const QString& screenId)
+{
+    // Latch-guarded single clear: only screens that actually showed a strip
+    // get the "[]" broadcast, so plain relayouts never spam the overlay.
+    if (m_screensWithTabStrips.remove(screenId)) {
+        Q_EMIT tabStripsChanged(screenId, QStringLiteral("[]"));
+    }
 }
 
 // ── State resolution ────────────────────────────────────────────────────────
@@ -153,11 +174,6 @@ PhosphorEngine::IPlacementState* ScrollEngine::stateForScreen(const QString& scr
 const PhosphorEngine::IPlacementState* ScrollEngine::stateForScreen(const QString& screenId) const
 {
     return m_states.stateForKey(m_context.currentKeyForScreen(screenId));
-}
-
-ScrollState* ScrollEngine::scrollStateForScreen(const QString& screenId)
-{
-    return stateForKey(currentKeyForScreen(screenId), true);
 }
 
 QString ScrollEngine::resolveOperationScreen(const QString& screenId) const
@@ -444,7 +460,7 @@ void ScrollEngine::clearPerScreenConfig(const QString& screenId)
 CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QString& screenId) const
 {
     const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    const auto it = overrides.constFind(QStringLiteral("CenterFocusedColumn"));
+    const auto it = overrides.constFind(ScrollPerScreenKeys::centerFocusedColumn());
     if (it != overrides.constEnd()) {
         const int mode = it->toInt();
         if (mode >= 0 && mode <= 2) {
@@ -457,7 +473,7 @@ CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QString& sc
 ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const
 {
     const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    const auto it = overrides.constFind(QStringLiteral("DefaultColumnWidth"));
+    const auto it = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidth());
     if (it != overrides.constEnd()) {
         const qreal fraction = it->toDouble();
         if (fraction >= 0.05 && fraction <= 1.0) {
@@ -470,7 +486,7 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) c
 ColumnDisplay ScrollEngine::effectiveDefaultColumnDisplay(const QString& screenId) const
 {
     const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    const auto it = overrides.constFind(QStringLiteral("DefaultColumnDisplay"));
+    const auto it = overrides.constFind(ScrollPerScreenKeys::defaultColumnDisplay());
     if (it != overrides.constEnd()) {
         return it->toInt() == 1 ? ColumnDisplay::Tabbed : ColumnDisplay::Normal;
     }

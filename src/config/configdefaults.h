@@ -549,6 +549,12 @@ public:
     {
         return 10000.0;
     }
+    /// Pixel width seeded when the kind flips to Fixed while a proportion
+    /// is stored (the shared value key serves both kinds).
+    static constexpr qreal scrollingDefaultColumnWidthFixedPx()
+    {
+        return 800.0;
+    }
     /// ColumnDisplay new columns open in: 0 = normal, 1 = tabbed.
     static constexpr int scrollingDefaultColumnDisplay()
     {
@@ -563,6 +569,10 @@ public:
         return 1;
     }
     /// Preset proportion lists, comma-joined decimals (the niri defaults).
+    /// KEEP IN SYNC with the engine's hard-coded fallback in
+    /// ScrollEngine (engine_core.cpp refreshConfigFromSettings) — same
+    /// {1/3, 1/2, 2/3} intent spelled twice because the LGPL engine cannot
+    /// include this GPL header.
     static QString scrollingPresetColumnWidths()
     {
         return QStringLiteral("0.333,0.5,0.667");
@@ -1006,11 +1016,15 @@ public:
     }
     static QString autotileIncMasterCountShortcut()
     {
-        return QStringLiteral("Meta+Shift+]");
+        // NOT Meta+Shift+] — Shift+symbol chords never fire on Wayland
+        // (KWin consumes Shift in the keysym translation; see
+        // toggleCheatsheetShortcut). Meta+Ctrl+[ ] belong to the rotate
+        // pair; = and - are the free count-adjust idiom.
+        return QStringLiteral("Meta+Ctrl+=");
     }
     static QString autotileDecMasterCountShortcut()
     {
-        return QStringLiteral("Meta+Shift+[");
+        return QStringLiteral("Meta+Ctrl+-");
     }
     static QString autotileRetileShortcut()
     {
@@ -1020,10 +1034,17 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // Scrolling Shortcuts
     //
-    // Anchored on Meta+Alt so nothing collides with stock Plasma or the
-    // Meta+Shift / Meta+Ctrl families above. Directional focus/move/swap
-    // reuse the existing generic navigation shortcuts; only the
-    // scroll-specific column vocabulary gets its own chords.
+    // Anchored on Meta+Alt to stay clear of stock Plasma and the Meta+Shift /
+    // Meta+Ctrl families above. NOTE: the Meta+Alt family is SHARED with the
+    // layouts pair (Meta+Alt+[ ]), the cheatsheet (Meta+Alt+/), cycle-in-zone
+    // (Meta+Alt+, .), and the zone digits (Meta+Alt+0-9) — KGlobalAccel routes
+    // one action per chord, so every default here must be unique across the
+    // WHOLE file (test_scrolling_settings pins this). Shift+symbol spellings
+    // are forbidden: see toggleCheatsheetShortcut() — KWin consumes Shift in
+    // the keysym translation on Wayland and the chord can never fire.
+    // Directional focus/move/swap reuse the existing generic navigation
+    // shortcuts; only the scroll-specific column vocabulary gets its own
+    // chords.
     // ═══════════════════════════════════════════════════════════════════════════
 
     static QString scrollingFocusColumnFirstShortcut()
@@ -1044,19 +1065,22 @@ public:
     }
     static QString scrollingConsumeWindowShortcut()
     {
-        return QStringLiteral("Meta+Alt+,");
+        // Meta+Alt+, and Meta+Alt+. belong to cycle-in-zone; the semicolon
+        // pair is the nearest free punctuation.
+        return QStringLiteral("Meta+Alt+;");
     }
     static QString scrollingExpelWindowShortcut()
     {
-        return QStringLiteral("Meta+Alt+.");
+        return QStringLiteral("Meta+Alt+'");
     }
     static QString scrollingConsumeOrExpelLeftShortcut()
     {
-        return QStringLiteral("Meta+Alt+[");
+        // Meta+Alt+[ and Meta+Alt+] belong to the layouts pair.
+        return QStringLiteral("Meta+Alt+U");
     }
     static QString scrollingConsumeOrExpelRightShortcut()
     {
-        return QStringLiteral("Meta+Alt+]");
+        return QStringLiteral("Meta+Alt+O");
     }
     static QString scrollingCenterColumnShortcut()
     {
@@ -1098,11 +1122,14 @@ public:
     }
     static QString scrollingIncreaseWindowHeightShortcut()
     {
-        return QStringLiteral("Meta+Alt+Shift+=");
+        // NOT Meta+Alt+Shift+= — Shift+symbol chords never fire on Wayland
+        // (see toggleCheatsheetShortcut). PgUp/PgDown are named keys and
+        // pair naturally with the height axis.
+        return QStringLiteral("Meta+Alt+PgUp");
     }
     static QString scrollingDecreaseWindowHeightShortcut()
     {
-        return QStringLiteral("Meta+Alt+Shift+-");
+        return QStringLiteral("Meta+Alt+PgDown");
     }
     static QString scrollingResetWindowHeightsShortcut()
     {

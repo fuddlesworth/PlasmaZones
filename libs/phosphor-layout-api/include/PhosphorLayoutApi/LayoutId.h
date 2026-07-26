@@ -24,10 +24,20 @@ namespace PhosphorLayout {
 namespace LayoutId {
 
 inline constexpr QLatin1String AutotilePrefix{"autotile:"};
+/// Scrolling has no layout entity, so its whole id is the bare sentinel —
+/// it exists so a mode-only Scrolling assignment carries a NON-EMPTY
+/// activeLayoutId() and survives the assignment cascade's non-empty-id
+/// visitors (exactly like the bare "autotile:" shape the KCM writes).
+inline constexpr QLatin1String ScrollingId{"scrolling:"};
 
 inline bool isAutotile(const QString& id)
 {
     return id.startsWith(AutotilePrefix);
+}
+
+inline bool isScrolling(const QString& id)
+{
+    return id.startsWith(ScrollingId);
 }
 
 /// Extract the algorithm id portion from an autotile preview id.

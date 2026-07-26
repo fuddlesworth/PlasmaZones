@@ -133,6 +133,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     if (useOverlayZone && releaseScreen && m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId)) {
         useOverlayZone = false;
     }
+    // Same rule for a scrolling-mode release screen: the strip owns
+    // placement there, a manual drag-snap would fight it.
+    if (useOverlayZone && releaseScreen && m_scrollEngine && m_scrollEngine->isActiveOnScreen(releaseScreenId)) {
+        useOverlayZone = false;
+    }
 
     // Cross-screen drag: when the window's owning engine differs from the
     // engine that owns the release screen, run the IPlacementEngine handoff
@@ -154,6 +159,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         const QString snapScreen = snapEngine ? snapEngine->screenForTrackedWindow(windowId) : QString();
         const QString autotileScreen =
             m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();
+        const QString scrollScreen = m_scrollEngine ? m_scrollEngine->screenForTrackedWindow(windowId) : QString();
         PhosphorEngine::IPlacementEngine* sourceEngine = nullptr;
         QString sourceScreen;
         if (!snapScreen.isEmpty() && snapScreen != releaseScreenId) {
@@ -162,10 +168,19 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         } else if (!autotileScreen.isEmpty() && autotileScreen != releaseScreenId) {
             sourceEngine = m_autotileEngine;
             sourceScreen = autotileScreen;
+        } else if (!scrollScreen.isEmpty() && scrollScreen != releaseScreenId) {
+            sourceEngine = m_scrollEngine;
+            sourceScreen = scrollScreen;
         }
         if (sourceEngine) {
-            const bool destIsAutotile = m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId);
-            PhosphorEngine::IPlacementEngine* destEngine = destIsAutotile ? m_autotileEngine : snapEngine;
+            // Destination = whichever tiling-family engine claims the release
+            // screen, else snap (the mode fallback for unmanaged screens).
+            PhosphorEngine::IPlacementEngine* destEngine = snapEngine;
+            if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId)) {
+                destEngine = m_autotileEngine;
+            } else if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(releaseScreenId)) {
+                destEngine = m_scrollEngine;
+            }
             const bool engineTypeChanged = destEngine && destEngine != sourceEngine;
 
             sourceEngine->handoffRelease(windowId);

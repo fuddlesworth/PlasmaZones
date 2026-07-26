@@ -37,7 +37,7 @@ namespace TilingStateHelpers = PhosphorCompositor::TilingStateHelpers;
 class PlasmaZonesEffect;
 
 /**
- * @brief Handles autotile integration for PlasmaZones
+ * @brief Handles tiling-family engine integration (autotile + scrolling) for PlasmaZones
  *
  * Manages the autotile D-Bus interface, screen tracking, window tiling,
  * monocle mode, tiled-tracking for border rendering, and pre-autotile
@@ -78,7 +78,7 @@ public:
     bool notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating = true);
 
     /**
-     * @brief Batch-notify windows added to autotile screens
+     * @brief Batch-notify windows added to engine-managed screens
      *
      * Filters windows the same way as notifyWindowAdded, then sends one
      * windowsOpenedBatch D-Bus call instead of per-window windowOpened calls.

@@ -3,6 +3,8 @@
 
 #include "settingsschema.h"
 
+#include <PhosphorScrollEngine/ScrollTypes.h>
+
 #include "settingsschemachoices.h"
 
 #include "configdefaults.h"
@@ -139,6 +141,28 @@ QVariant canonicalCommaList(const QVariant& v)
     parts.removeAll(QString());
     parts.removeDuplicates();
     return QVariant(parts.join(QLatin1Char(',')));
+}
+
+/// Canonicalize a comma-joined proportion list: parse each entry as a
+/// decimal, keep only values in (0, 1], de-dupe, and re-serialize — so the
+/// stored value always equals the effective one (the scroll engine ignores
+/// anything else and would otherwise silently diverge from the page).
+QVariant canonicalProportionList(const QVariant& v)
+{
+    const QStringList parts = v.toString().split(QLatin1Char(','));
+    QStringList kept;
+    for (const QString& raw : parts) {
+        bool ok = false;
+        const double val = raw.trimmed().toDouble(&ok);
+        if (!ok || val <= 0.0 || val > 1.0) {
+            continue;
+        }
+        const QString canonical = QString::number(val);
+        if (!kept.contains(canonical)) {
+            kept.append(canonical);
+        }
+    }
+    return QVariant(kept.join(QLatin1Char(',')));
 }
 
 /// Canonicalize a trigger list: cap size, coerce each entry to a
@@ -994,18 +1018,31 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     using CD = ConfigDefaults;
 
     schema.groups[CD::tilingScrollingGroup()] = {
+        // validIntOr (not clampInt) for every enum here: clamping snaps an
+        // out-of-range stored value to the MAX enumerator, which both
+        // contradicts this file's documented reader-agreement convention and
+        // disagrees with the engine's own snap-to-default guard.
         {CD::centerFocusedColumnKey(),
          CD::scrollingCenterFocusedColumn(),
          QMetaType::Int,
          {},
-         clampInt(CD::scrollingCenterFocusedColumnMin(), CD::scrollingCenterFocusedColumnMax()),
-         intChoices({{0, "never"_L1}, {1, "always"_L1}, {2, "onOverflow"_L1}})},
+         validIntOr({static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never),
+                     static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always),
+                     static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::OnOverflow)},
+                    CD::scrollingCenterFocusedColumn()),
+         intChoices({{static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never), "never"_L1},
+                     {static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always), "always"_L1},
+                     {static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::OnOverflow), "onOverflow"_L1}})},
         {CD::alwaysCenterSingleColumnKey(), CD::scrollingAlwaysCenterSingleColumn(), QMetaType::Bool},
+        // NOTE: the width-kind CONFIG space {0 proportion, 1 fixed,
+        // 2 clientDecides} deliberately does NOT map onto
+        // ColumnWidth::Kind (whose 2 is Preset) — never static_cast between
+        // them; the engine translates with explicit ifs.
         {CD::defaultColumnWidthKindKey(),
          CD::scrollingDefaultColumnWidthKind(),
          QMetaType::Int,
          {},
-         clampInt(CD::scrollingDefaultColumnWidthKindMin(), CD::scrollingDefaultColumnWidthKindMax()),
+         validIntOr({0, 1, 2}, CD::scrollingDefaultColumnWidthKind()),
          intChoices({{0, "proportion"_L1}, {1, "fixed"_L1}, {2, "clientDecides"_L1}})},
         {CD::defaultColumnWidthValueKey(),
          CD::scrollingDefaultColumnWidthValue(),
@@ -1016,10 +1053,25 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          CD::scrollingDefaultColumnDisplay(),
          QMetaType::Int,
          {},
-         clampInt(CD::scrollingDefaultColumnDisplayMin(), CD::scrollingDefaultColumnDisplayMax()),
-         intChoices({{0, "normal"_L1}, {1, "tabbed"_L1}})},
-        {CD::presetColumnWidthsKey(), CD::scrollingPresetColumnWidths(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::presetWindowHeightsKey(), CD::scrollingPresetWindowHeights(), QMetaType::QString, {}, canonicalCommaList},
+         validIntOr({static_cast<int>(PhosphorScrollEngine::ColumnDisplay::Normal),
+                     static_cast<int>(PhosphorScrollEngine::ColumnDisplay::Tabbed)},
+                    CD::scrollingDefaultColumnDisplay()),
+         intChoices({{static_cast<int>(PhosphorScrollEngine::ColumnDisplay::Normal), "normal"_L1},
+                     {static_cast<int>(PhosphorScrollEngine::ColumnDisplay::Tabbed), "tabbed"_L1}})},
+        // Numeric canonicalizer, not the plain comma-list: entries must be
+        // proportions in (0, 1] or the engine silently drops the whole list
+        // and falls back to its built-ins while the page keeps displaying
+        // the accepted-but-dead value.
+        {CD::presetColumnWidthsKey(),
+         CD::scrollingPresetColumnWidths(),
+         QMetaType::QString,
+         {},
+         canonicalProportionList},
+        {CD::presetWindowHeightsKey(),
+         CD::scrollingPresetWindowHeights(),
+         QMetaType::QString,
+         {},
+         canonicalProportionList},
     };
 }
 

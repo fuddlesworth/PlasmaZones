@@ -220,14 +220,14 @@ void TestScrollStripOps::maximizeColumnToggle()
     QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
     QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
 
-    QVERIFY(strip.toggleMaximizeActiveColumn());
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
     ResolvedStrip r = strip.relayout(params);
     QCOMPARE(rectOf(r, QStringLiteral("b")).width(), params.workArea.width());
     // Still tiled: a keeps its size and its slot in the strip.
     QCOMPARE(rectOf(r, QStringLiteral("a")).width(), 400);
 
     // Toggle back restores the pre-maximize intent.
-    QVERIFY(strip.toggleMaximizeActiveColumn());
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
     QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("b")).width(), 400);
 }
 

@@ -133,6 +133,16 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         ctx.fromEngineId = sourceEngine->engineId();
         ctx.sourceZoneIds = landingZoneIds;
         ctx.wasFloating = false; // an explicit move always places, never floats
+        // Edge-aware entry for a SCROLLING target: moving right crosses into
+        // the strip's LEFT edge, so the arrival becomes the FIRST column
+        // (index 0); moving left enters from the right and appends
+        // (insertIndex -1 → columnCount() in handoffReceive). This mirrors
+        // the snap target's entryZoneForCrossing and the scroll engine's own
+        // in-strip boundary semantics — without it every crossing appended
+        // at the far end, the opposite edge from the one the window entered.
+        if (targetMode == PhosphorZones::AssignmentEntry::Scrolling && direction == QLatin1String("right")) {
+            ctx.insertIndex = 0;
+        }
         // An autotile target's handoffReceive also announces the arrival's
         // tiled (non-floating) state on the passive float-sync channel —
         // intended: the arrival IS tiled, and the relay's last-broadcast

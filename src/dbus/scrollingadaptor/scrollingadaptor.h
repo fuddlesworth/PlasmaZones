@@ -54,6 +54,9 @@ Q_SIGNALS:
 
 private:
     PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;
+    /// Last set broadcast on the bus (the change gate's memory; the engine
+    /// re-emits identical sets on desktop switches for the tiling channel).
+    QStringList m_lastBroadcastScreens;
 };
 
 } // namespace PlasmaZones

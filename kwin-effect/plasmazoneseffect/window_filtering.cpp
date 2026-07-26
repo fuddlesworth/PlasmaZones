@@ -94,6 +94,25 @@ QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QR
             return restore;
         }
     }
+    // Off-screen poison guard: the scrolling engine parks off-viewport
+    // columns and hidden tabs ENTIRELY outside every screen rect, so a
+    // capture that runs while the frame is parked (float toggle on a parked
+    // tile, unminimize-unfloat, cross-screen transfer) would persist an
+    // off-screen rect as the window's restore geometry and the window would
+    // later restore off-screen. A rect intersecting no screen is never a
+    // legitimate free geometry — return invalid so the caller skips the
+    // capture entirely (this is the shared chokepoint for both engines'
+    // free-geometry capture paths).
+    bool onAnyScreen = false;
+    for (const auto* screen : KWin::effects->screens()) {
+        if (fallback.intersects(QRectF(screen->geometry()))) {
+            onAnyScreen = true;
+            break;
+        }
+    }
+    if (!onAnyScreen) {
+        return QRectF();
+    }
     return fallback;
 }
 

@@ -379,8 +379,8 @@ void PlasmaZonesEffect::connectDragTracker()
                     // this catches the stale-cache case where the fast
                     // path missed.
                     if (m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen) {
-                        if (!m_dragBypassedForAutotile) {
-                            m_dragBypassedForAutotile = true;
+                        if (!m_dragBypassedForEngine) {
+                            m_dragBypassedForEngine = true;
                             m_dragBypassScreenId = capturedScreenId;
                             qCInfo(lcEffect) << "beginDrag: retroactive autotile bypass for" << capturedWindowId;
                         }
@@ -395,6 +395,19 @@ void PlasmaZonesEffect::connectDragTracker()
                             m_tilingHandler->handleDragToFloat(safeW, capturedWindowId, /*immediate=*/true);
                             m_dragActivation.floatedWindowIds.insert(capturedWindowId);
                         }
+                    } else if (m_dragBypassedForEngine) {
+                        // The correction layer must correct BOTH ways: the
+                        // fast path latched the engine bypass from the
+                        // effect's cached union set, but the daemon (the
+                        // authority) answered a non-bypass policy. Without
+                        // this clear, effect and daemon stay divergent for
+                        // the whole drag — the effect suppresses its snap
+                        // path while the daemon runs zone detection, and the
+                        // drop can apply an untracked snap.
+                        m_dragBypassedForEngine = false;
+                        m_dragBypassScreenId.clear();
+                        qCInfo(lcEffect) << "beginDrag: daemon rejected engine bypass for" << capturedWindowId
+                                         << "- reverting to policy" << m_currentDragPolicy.bypassReason;
                     }
                 });
 
@@ -404,7 +417,7 @@ void PlasmaZonesEffect::connectDragTracker()
             // correction layer for the cases where the cache is stale
             // (post-settings-reload — the #310 scenario).
             if (m_tilingHandler->isManagedScreen(startScreenId)) {
-                m_dragBypassedForAutotile = true;
+                m_dragBypassedForEngine = true;
                 m_dragBypassScreenId = startScreenId;
                 // Reorder mode: the daemon owns drag-insert preview for tile
                 // swapping. Skip the synchronous float transition — we want
@@ -433,7 +446,7 @@ void PlasmaZonesEffect::connectDragTracker()
                 }
                 return;
             }
-            m_dragBypassedForAutotile = false;
+            m_dragBypassedForEngine = false;
             m_dragActivation.detected = false;
 
             // beginDrag already initialized daemon-side snap-drag state
@@ -465,7 +478,7 @@ void PlasmaZonesEffect::connectDragTracker()
             // the daemon's updateDragCursor still watches for a flip
             // BACK to snap mode.
             const bool bypassed = m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen
-                || m_dragBypassedForAutotile;
+                || m_dragBypassedForEngine;
             if (!bypassed) {
                 // Gate D-Bus calls on activation trigger state so a drag
                 // without any intent to use zones doesn't flood the bus
@@ -531,7 +544,7 @@ void PlasmaZonesEffect::connectDragTracker()
 
                 // Clear drag state for the next session.
                 m_currentDragPolicy = PhosphorProtocol::DragPolicy{};
-                m_dragBypassedForAutotile = false;
+                m_dragBypassedForEngine = false;
                 m_dragBypassScreenId.clear();
                 m_dragActivation.detected = false;
             });

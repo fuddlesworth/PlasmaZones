@@ -36,7 +36,16 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         if (it == m_screenStates.end() || !it->scrollTabsSlot() || !it->scrollTabsSlot()->isVisible()) {
             return;
         }
-        m_shellHost->hideSlot(screenId, PhosphorSlotKeys::ScrollTabs(), [this, screenId]() {
+        // Generation-guard the animated hide: a non-empty update landing
+        // while this hide is in flight bumps the guard, and the completion
+        // below must then NOT tear down the slot it just repopulated —
+        // otherwise the indicator stays hidden until the next strip change
+        // (which a stable layout never produces).
+        const quint64 hideGeneration = ++m_scrollTabsHideGuard[screenId];
+        m_shellHost->hideSlot(screenId, PhosphorSlotKeys::ScrollTabs(), [this, screenId, hideGeneration]() {
+            if (m_scrollTabsHideGuard.value(screenId) != hideGeneration) {
+                return; // superseded by a newer non-empty update
+            }
             auto stateIt = m_screenStates.find(screenId);
             if (stateIt == m_screenStates.end() || !stateIt->scrollTabsSlot()) {
                 return;
@@ -47,6 +56,8 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         });
         return;
     }
+    // Any non-empty update invalidates a pending hide (see the guard above).
+    ++m_scrollTabsHideGuard[screenId];
 
     QScreen* screen = resolveTargetScreen(m_screenManager, screenId);
     if (!screen) {
@@ -80,6 +91,9 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     auto* shellWindow = state->shell->shellWindow();
 
     writeQmlProperty(slot, QStringLiteral("strips"), shifted);
+    // Same user-font pipeline as every other overlay slot (OSD, cheatsheet,
+    // picker): the pills must honour the overlay font family and size scale.
+    writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     if (slot->isVisible()) {
         return; // live model update — no show choreography needed

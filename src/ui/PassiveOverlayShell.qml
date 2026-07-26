@@ -48,7 +48,8 @@ Window {
     // true` so vertex shaders bind to the visible OSD body rather than
     // the fullscreen slot Item.
     // Sibling slots below: snapAssistSlot (z=2), layoutPickerSlot (z=2),
-    // cheatsheetSlot (z=2), zoneSelectorSlot (z=1), mainOverlaySlot (z=0).
+    // cheatsheetSlot (z=2), zoneSelectorSlot (z=1), scrollTabsSlot (z=0.5),
+    // mainOverlaySlot (z=0).
     // The osdSlot's z is
     // dynamic (3 normally, 1.5 while a modal slot is visible — see the
     // binding on osdSlot). Each is a sibling Item with its own
@@ -677,14 +678,22 @@ Window {
         id: scrollTabsSlot
 
         // Tab-strip model — C++ writes a list of strip entries, each a map
-        // with x / y / width (shell-window coordinates), activeIndex, and
-        // tabs (list of {title, active}).
+        // with x / y / width (shell-window coordinates) and tabs
+        // (list of {title, active}).
         property var strips: []
         // Content lifecycle gate, toggled by C++ on show/hide. Unlike the
         // OSD-style slots the content is NOT re-instantiated per update —
         // strip changes are frequent (every relayout) and flow through the
         // `strips` binding.
         property bool loaded: false
+        // User overlay font, pushed by C++ writeFontProperties (same
+        // pipeline as every other slot).
+        property string fontFamily: ""
+        property real fontSizeScale: 1
+        property int fontWeight: Font.Normal
+        property bool fontItalic: false
+        property bool fontUnderline: false
+        property bool fontStrikeout: false
 
         anchors.fill: parent
         // Indicator tier: above the main overlay, below OSDs and modals.
@@ -706,6 +715,12 @@ Window {
 
             ScrollTabStripContent {
                 strips: scrollTabsSlot.strips
+                fontFamily: scrollTabsSlot.fontFamily
+                fontSizeScale: scrollTabsSlot.fontSizeScale
+                fontWeight: scrollTabsSlot.fontWeight
+                fontItalic: scrollTabsSlot.fontItalic
+                fontUnderline: scrollTabsSlot.fontUnderline
+                fontStrikeout: scrollTabsSlot.fontStrikeout
             }
         }
     }

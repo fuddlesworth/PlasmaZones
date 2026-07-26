@@ -59,7 +59,7 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
         // Apply PhosphorTiles::TilingState-level overrides (splitRatio, masterCount).
         // These are STATEFUL: an unset key normally means "leave the state alone" so a
         // user's live drag-adjusted split / master count survives an unrelated
-        // updateAutotileScreens pass. But if the key was PRESENT in the previous map
+        // updateEngineScreens pass. But if the key was PRESENT in the previous map
         // and is now gone (a SetSplitRatio / SetMasterCount rule was removed while the
         // map stayed non-empty), the state would keep the stale rule value — so revert
         // it to the global config baseline, matching clearPerScreenConfig.
@@ -146,7 +146,7 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
     // order the two halves of a global-switch transaction can run in:
     //
     //  * overrides first (applyEntry: assignLayoutById → layoutAssigned →
-    //    updateAutotileScreens → here, and only then setAlgorithm at
+    //    updateEngineScreens → here, and only then setAlgorithm at
     //    UnifiedLayoutController::applyEntry) — m_algorithmId is still the OLD
     //    global, which is exactly what a screen with no Algorithm key in
     //    `previous` was following, so an override pinning that same id reads as
@@ -175,7 +175,7 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
 
     // Schedule a deferred retile so the new config takes effect. Deferred (not
     // immediate) to coalesce with other pending retiles — e.g., when applyEntry()
-    // triggers both updateAutotileScreens() → applyPerScreenConfig() and
+    // triggers both updateEngineScreens() → applyPerScreenConfig() and
     // setAlgorithm() → scheduleRetileForScreen(), a single retile fires with
     // all state consistent, avoiding the double-D-Bus-signal problem that caused
     // stagger generation conflicts and window overlap during algorithm switches.

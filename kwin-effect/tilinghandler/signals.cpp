@@ -377,7 +377,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // Re-add current-desktop windows to m_notifiedWindows so they're not
             // re-notified by later notifyWindowAdded calls (e.g., window moves).
             qCInfo(lcEffect) << "slotScreensChanged: desktop return, added screens:" << added
-                             << "autotile screens:" << m_managedScreens;
+                             << "managed screens:" << m_managedScreens;
             for (const QString& screenId : added) {
                 for (KWin::EffectWindow* w : windows) {
                     if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop() && w->isOnCurrentActivity()
@@ -500,6 +500,11 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                     // floating-but-maximized window's frame is the full monitor, which
                     // must not be pushed as the free-float geometry.
                     QRectF frame = PlasmaZonesEffect::freeGeometryForCapture(w, w->frameGeometry());
+                    if (frame.width() <= 0 || frame.height() <= 0) {
+                        // Off-screen/parked frame rejected by the capture
+                        // chokepoint — nothing valid to store for THIS window.
+                        continue;
+                    }
                     // Use overwrite=false: an overflow-floated window may still have its
                     // frame at the tiled position. If a correct pre-tile entry already
                     // exists, preserve it. If no entry exists, the floating window's

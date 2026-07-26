@@ -40,7 +40,7 @@ void PlasmaZonesEffect::slotSettingsChanged()
     loadCachedSettings();
     // Note: loadAutotileSettings() is intentionally NOT called here.
     // Autotile screen changes are tracked via the dedicated managedScreensChanged
-    // D-Bus signal (→ slotAutotileScreensChanged), which is authoritative.
+    // D-Bus signal (→ slotScreensChanged), which is authoritative.
     // Calling loadAutotileSettings on every settingsChanged causes redundant
     // full window re-notification (N D-Bus windowOpened calls + retile round)
     // on every algorithm/gap/setting change — the daemon already retiles and

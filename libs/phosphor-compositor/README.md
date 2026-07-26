@@ -29,7 +29,7 @@ applies *how*.
 | `IDragHandler` | Callback interface for drag start/move/end/policy-change |
 | `IGeometryHandler` | Callback interface for geometry apply, batch operations, raise/activate |
 | `ILifecycleHandler` | Callback interface for window open/close/activate/float-change |
-| `BorderState` + `AutotileStateHelpers` | Per-screen border-state value type plus pure helper functions |
+| `BorderState` + `TilingStateHelpers` | Per-screen border-state value type plus pure helper functions |
 | `FloatingCache` | Compositor-side mirror of daemon float state |
 | `SnapAssistFilter` | Snap-assist candidate building via bridge |
 | `TriggerParser` | Modifier/button activation matching from config |

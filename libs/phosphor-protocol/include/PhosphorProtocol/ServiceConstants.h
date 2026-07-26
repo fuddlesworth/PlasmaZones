@@ -36,6 +36,11 @@ inline constexpr QLatin1String Overlay("org.plasmazones.Overlay");
 // project ships daemon and effect together, so no wire compatibility
 // alias is kept.
 inline constexpr QLatin1String Tiling("org.plasmazones.Tiling");
+// Engine-specific sibling interfaces (autotile verbs / scrolling screen
+// set). Listed so this namespace stays a complete index of published
+// interfaces even though the adaptors' Q_CLASSINFO must repeat the
+// literal (macro argument).
+inline constexpr QLatin1String Autotile("org.plasmazones.Autotile");
 inline constexpr QLatin1String Scrolling("org.plasmazones.Scrolling");
 inline constexpr QLatin1String LayoutRegistry("org.plasmazones.LayoutRegistry");
 inline constexpr QLatin1String Screen("org.plasmazones.Screen");

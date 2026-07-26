@@ -11,8 +11,8 @@
  * PR-608 audit caught exactly the drift class that invites: a capability
  * documented against a deleted method, internal helpers exposed as bus slots,
  * and renamed args. This test pins, for every linkable handwritten
- * (XML, adaptor) pair — the daemon's thirteen src/dbus interfaces plus
- * phosphor-screens' org.plasmazones.Screen (fourteen in total):
+ * (XML, adaptor) pair — the daemon's fourteen src/dbus interfaces plus
+ * phosphor-screens' org.plasmazones.Screen (fifteen in total):
  *
  *  1. Every XML method exists as a bus-exposed metaobject method with
  *     matching in/out argument types, names, and return mapping.
@@ -642,7 +642,7 @@ private Q_SLOTS:
     {
         // Completeness tripwire: every XML under dbus/ must be either tested
         // above or on the documented out-of-scope list (the app-internal
-        // launch adaptors — see the header comment). A 17th XML added later
+        // launch adaptors — see the header comment). A new XML added later
         // must not go silently unchecked.
         static const QSet<QString> covered = {
             QStringLiteral("org.plasmazones.Autotile.xml"),

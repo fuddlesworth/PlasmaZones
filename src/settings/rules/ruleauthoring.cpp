@@ -177,7 +177,7 @@ QString fieldDescription(Field f)
     case Field::Activity:
         return PhosphorI18n::tr("The KDE Activity the window is on.");
     case Field::Mode:
-        return PhosphorI18n::tr("The engine mode the window is placed by (snapping or tiling).");
+        return PhosphorI18n::tr("The engine mode the window is placed by (snapping, tiling or scrolling).");
     case Field::TiledWindowCount:
         return PhosphorI18n::tr(
             "How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as "

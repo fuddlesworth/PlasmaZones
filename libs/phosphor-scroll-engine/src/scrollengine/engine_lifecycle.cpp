@@ -77,15 +77,19 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
 
     // Deterministic mode-transition seeding: when the previous engine's
     // window order was captured for this screen, insert each arriving window
-    // at its recorded relative position instead of next-to-focus.
+    // at its recorded relative position instead of next-to-focus. Each id is
+    // CONSUMED on use and the entry is dropped once empty — the header's
+    // "consumed as windows arrive" contract. Without consumption a stale
+    // seed would re-position an unrelated later open that happens to share
+    // an id with the captured list.
     bool inserted = false;
-    const QStringList pendingOrder = m_pendingInitialOrder.value(screenId);
-    if (!pendingOrder.isEmpty()) {
-        const int orderIdx = pendingOrder.indexOf(windowId);
+    const auto pendingIt = m_pendingInitialOrder.find(screenId);
+    if (pendingIt != m_pendingInitialOrder.end()) {
+        const int orderIdx = pendingIt->indexOf(windowId);
         if (orderIdx >= 0) {
             int columnIdx = 0;
             const QStringList present = state->strip().windowsInOrder();
-            for (const QString& earlier : pendingOrder.mid(0, orderIdx)) {
+            for (const QString& earlier : pendingIt->mid(0, orderIdx)) {
                 if (present.contains(earlier)) {
                     ++columnIdx;
                 }
@@ -93,6 +97,10 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             inserted = state->strip().insertWindowAt(columnIdx, windowId, width, display);
             if (inserted) {
                 state->strip().setWindowMinimumSize(windowId, minWidth, minHeight);
+            }
+            pendingIt->removeAll(windowId);
+            if (pendingIt->isEmpty()) {
+                m_pendingInitialOrder.erase(pendingIt);
             }
         }
     }
@@ -216,8 +224,12 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     }
     // Reconcile the column to the size the client/user actually settled on;
     // only the owning column relayouts (a resize never reflows neighbours'
-    // widths — they just shift).
-    if (state->strip().reconcileWindowSize(windowId, newFrame.size())) {
+    // widths — they just shift). Width intent is only rewritten when the
+    // WIDTH moved relative to the last applied rect — a vertical-only
+    // resize must not pin a Proportion/Preset column to pixels.
+    const QRect lastApplied = m_lastAppliedRect.value(windowId);
+    const bool widthChanged = !lastApplied.isValid() || lastApplied.width() != newFrame.width();
+    if (state->strip().reconcileWindowSize(windowId, newFrame.size(), widthChanged)) {
         scheduleRetileForScreen(screenId.isEmpty() ? key.screenId : screenId);
     }
 }
@@ -246,7 +258,8 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     return true;
 }
 
-bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId)
+bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
+                                         bool applyAfter)
 {
     if (!state->removeFloating(windowId)) {
         return false;
@@ -258,18 +271,23 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     const int restoreColumn = m_floatRestoreColumn.take(windowId);
     bool inserted = false;
     if (hadSlot) {
-        inserted = state->strip().insertWindowAt(restoreColumn, windowId, m_defaultColumnWidth, m_defaultColumnDisplay);
+        inserted = state->strip().insertWindowAt(restoreColumn, windowId, effectiveDefaultColumnWidth(screenId),
+                                                 effectiveDefaultColumnDisplay(screenId));
     }
     if (!inserted) {
-        inserted = state->strip().insertWindow(windowId, m_defaultColumnWidth, m_defaultColumnDisplay, params);
+        inserted = state->strip().insertWindow(windowId, effectiveDefaultColumnWidth(screenId),
+                                               effectiveDefaultColumnDisplay(screenId), params);
     }
     if (inserted) {
         state->strip().focusWindow(windowId, params);
     }
     m_scrollFloatedWindows.remove(windowId);
     Q_EMIT windowFloatingChanged(windowId, false, screenId);
-    applyLayout(screenId, false);
-    Q_EMIT placementChanged(screenId);
+    // Batch callers (snapAllWindows) relayout once for the whole batch.
+    if (applyAfter) {
+        applyLayout(screenId, false);
+        Q_EMIT placementChanged(screenId);
+    }
     return inserted;
 }
 
@@ -295,7 +313,8 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
             return;
         }
         const ScrollLayoutParams params = layoutParamsForScreen(targetScreen);
-        if (target->strip().insertWindow(windowId, m_defaultColumnWidth, m_defaultColumnDisplay, params)) {
+        if (target->strip().insertWindow(windowId, effectiveDefaultColumnWidth(targetScreen),
+                                         effectiveDefaultColumnDisplay(targetScreen), params)) {
             m_states.setKeyForWindow(windowId, currentKeyForScreen(targetScreen));
             Q_EMIT windowFloatingChanged(windowId, false, targetScreen);
             applyLayout(targetScreen, false);
@@ -361,14 +380,16 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         return;
     }
     const ScrollLayoutParams params = layoutParamsForScreen(ctx.toScreenId);
-    ColumnWidth width = m_defaultColumnWidth;
+    ColumnWidth width = effectiveDefaultColumnWidth(ctx.toScreenId);
     if (ctx.sourceGeometry.isValid()) {
         width = ColumnWidth::makeFixed(ctx.sourceGeometry.width());
     }
-    // Arriving from the left edge enters as the FIRST column, from the right
-    // as the LAST — mirroring the niri "entered from this edge" intuition.
+    // Entry position comes from the CALLER: the cross-mode dispatcher
+    // derives insertIndex from the crossing direction (0 when entering from
+    // the strip's left edge), and -1 appends at the right end. This
+    // function has no direction of its own to derive an edge from.
     const int columnIdx = (ctx.insertIndex >= 0) ? ctx.insertIndex : state->strip().columnCount();
-    if (state->strip().insertWindowAt(columnIdx, windowId, width, m_defaultColumnDisplay)) {
+    if (state->strip().insertWindowAt(columnIdx, windowId, width, effectiveDefaultColumnDisplay(ctx.toScreenId))) {
         m_states.setKeyForWindow(windowId, key);
         const bool isCurrentContext = key == currentKeyForScreen(ctx.toScreenId);
         if (isCurrentContext) {
@@ -401,7 +422,11 @@ std::optional<PhosphorEngine::WindowPlacement> ScrollEngine::capturePlacement(co
         slot.state = PhosphorEngine::WindowPlacement::stateFloating();
     } else {
         slot.state = PhosphorEngine::WindowPlacement::stateTiled();
-        slot.order = state->strip().windowsInOrder().indexOf(windowId);
+        // COLUMN index, not window index: the restore path feeds slot.order
+        // to insertWindowAt(), which takes a column position. The two only
+        // coincide while every column is single-tile — a stacked column
+        // would shift every later window's restore slot.
+        slot.order = state->strip().columnOfWindow(windowId);
     }
     placement.engines.insert(engineId(), slot);
     return placement;

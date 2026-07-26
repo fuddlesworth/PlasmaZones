@@ -80,7 +80,7 @@ void TilingHandler::connectSignals()
 
 void TilingHandler::loadSettings()
 {
-    // Query initial autotile screen set from daemon asynchronously. The
+    // Query initial engine-managed screen set from daemon asynchronously. The
     // foreign org.freedesktop.DBus.Properties interface is correct for D-Bus
     // property access; ClientHelpers can't be used here because it hard-wires
     // the org.plasmazones interface. Bound by SyncCallTimeoutMs so a wedged
@@ -107,18 +107,27 @@ void TilingHandler::loadSettings()
                 QDBusPendingReply<QDBusVariant> reply = *w;
                 if (reply.isValid()) {
                     QStringList screens = reply.value().variant().toStringList();
-                    const QSet<QString> added(screens.begin(), screens.end());
-                    m_managedScreens = added;
+                    // The ENTIRE published set, not a diff. The raw replace is
+                    // safe only because removals are covered elsewhere: a
+                    // daemon restart that manages fewer screens is preceded by
+                    // the serviceUnregistered teardown (which already restored
+                    // and untracked every window), so there is never a
+                    // carried-over screen for this reply to miss. If that
+                    // teardown ever stops being load-bearing, this handler
+                    // must route through slotScreensChanged's removed/added
+                    // diff instead.
+                    const QSet<QString> published(screens.begin(), screens.end());
+                    m_managedScreens = published;
                     qCInfo(lcEffect) << "Loaded managed screens:" << m_managedScreens;
 
-                    if (!added.isEmpty()) {
+                    if (!published.isEmpty()) {
                         const auto windows = KWin::effects->stackingOrder();
-                        // Batch-notify all windows on autotile screens in one D-Bus call
+                        // Batch-notify all windows on managed screens in one D-Bus call
                         // instead of per-window windowOpened round-trips.
-                        notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true);
+                        notifyWindowsAddedBatch(windows, published, /*resetNotified=*/true);
                     }
                 } else {
-                    qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";
+                    qCDebug(lcEffect) << "Managed screens: query failed, daemon may not be running";
                 }
             });
 
@@ -144,6 +153,10 @@ void TilingHandler::loadSettings()
                     const QStringList screens = reply.value().variant().toStringList();
                     m_scrollingScreens = QSet<QString>(screens.cbegin(), screens.cend());
                     qCInfo(lcEffect) << "Loaded scrolling screens:" << m_scrollingScreens;
+                } else {
+                    // Without this trail, "Mode == scrolling rules never
+                    // match" has no diagnostic at all.
+                    qCDebug(lcEffect) << "Scrolling screens: query failed, daemon may not be running";
                 }
             });
 }

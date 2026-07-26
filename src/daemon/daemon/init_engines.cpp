@@ -123,6 +123,13 @@ void Daemon::initEnginesAndWiring()
     auto* autotileEngine = engines.autotile.get();
     auto* snapEngine = engines.snap.get();
     auto* scrollEngine = engines.scroll.get();
+    // Factory contract: createEngines always constructs all three engines
+    // and the router. Assert once here; the code below dereferences the
+    // raw pointers unconditionally, so a sometimes-null contract would need
+    // guards on EVERY use, not just some (release pair: the router's own
+    // ctor qFatals on a null engine, so a violated contract still fails
+    // loudly before any window is placed).
+    Q_ASSERT(autotileEngine && snapEngine && scrollEngine && engines.router);
     // Move the shared cross-surface resolver BEFORE the engines so it is
     // destroyed AFTER them (they borrow it). Declared earlier than the engines
     // in daemon.h for the same reason.
@@ -145,37 +152,33 @@ void Daemon::initEnginesAndWiring()
     // Scrolling twin of the autotile provider below: resolves against the
     // "scrolling" placement mode so a `Mode Equals "scrolling"` gap rule
     // applies to the strip and stays inert elsewhere.
-    if (scrollEngine) {
-        scrollEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
-            if (!m_layoutManager || screenId.isEmpty()) {
-                return {};
-            }
-            return GeometryUtils::mergeConfigPerScreenGaps(
-                GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
-                    screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("scrolling"))),
-                m_settings.get(), screenId);
-        });
-    }
+    scrollEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
+        if (!m_layoutManager || screenId.isEmpty()) {
+            return {};
+        }
+        return GeometryUtils::mergeConfigPerScreenGaps(
+            GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("scrolling"))),
+            m_settings.get(), screenId);
+    });
 
-    if (autotileEngine) {
-        autotileEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
-            if (!m_layoutManager || screenId.isEmpty()) {
-                return {};
-            }
-            // This is the autotile gap path, so resolve against the "tiling"
-            // placement mode — a per-mode `Mode Equals "tiling"` gap rule then
-            // applies here and a "snapping" one stays inert. The same
-            // GeometryUtils::contextGapOverrideMap shaping the snap provider uses
-            // below keeps the two paths byte-identical (PerScreenKeys form, with
-            // the per-side toggle gating the per-side entries). The config per-
-            // monitor gap is merged UNDER the rule override so a user gap rule
-            // still wins per slot.
-            return GeometryUtils::mergeConfigPerScreenGaps(
-                GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
-                    screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling"))),
-                m_settings.get(), screenId);
-        });
-    }
+    autotileEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
+        if (!m_layoutManager || screenId.isEmpty()) {
+            return {};
+        }
+        // This is the autotile gap path, so resolve against the "tiling"
+        // placement mode — a per-mode `Mode Equals "tiling"` gap rule then
+        // applies here and a "snapping" one stays inert. The same
+        // GeometryUtils::contextGapOverrideMap shaping the snap provider uses
+        // below keeps the two paths byte-identical (PerScreenKeys form, with
+        // the per-side toggle gating the per-side entries). The config per-
+        // monitor gap is merged UNDER the rule override so a user gap rule
+        // still wins per slot.
+        return GeometryUtils::mergeConfigPerScreenGaps(
+            GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling"))),
+            m_settings.get(), screenId);
+    });
 
     // Build the PhosphorContext::ContextResolver wiring NOW — after the
     // workspace managers, settings, and router exist; before any D-Bus
@@ -223,6 +226,7 @@ void Daemon::initEnginesAndWiring()
     // autotile checks (overlay suppression and snap rejection on autotile screens).
     // Uses the base-class pointer — WDA only needs isActiveOnScreen().
     m_windowDragAdaptor->setAutotileEngine(m_autotileEngine.get());
+    m_windowDragAdaptor->setScrollEngine(m_scrollEngine.get());
 
     // SnapEngine owns its per-(screen,desktop,activity) snap stores (symmetric with
     // AutotileEngine/TilingState). Wire the WTS facade through the engine's resolver
@@ -777,8 +781,11 @@ void Daemon::initEnginesAndWiring()
 
             const QString activity = currentActivity();
 
-            // Collect autotile screens and per-screen OSD data in one pass
-            QSet<QString> autotileScreens;
+            // Collect ENGINE-MANAGED screens (autotile AND scrolling — both
+            // must be excluded from the snap resnap below; a scrolling
+            // screen's "scrolling:" assignment id makes mode flips visible
+            // in changedScreenIds now) and per-screen OSD data in one pass.
+            QSet<QString> engineManagedScreens;
             struct ScreenOsd
             {
                 QString screenId;
@@ -791,12 +798,13 @@ void Daemon::initEnginesAndWiring()
                 // Per-output virtual desktops (#648): each screen resolves its own desktop.
                 const int desktop = currentDesktopForScreen(screenId);
                 const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-                if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
-                    autotileScreens.insert(screenId);
+                const bool isAutotileScreen = PhosphorLayout::LayoutId::isAutotile(assignmentId);
+                if (isAutotileScreen || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+                    engineManagedScreens.insert(screenId);
                 }
                 // Only show OSD for screens that actually changed
                 if (changedScreenIds.isEmpty() || changedScreenIds.contains(screenId)) {
-                    if (autotileScreens.contains(screenId)) {
+                    if (isAutotileScreen) {
                         osdEntries.append({screenId, true, PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId)});
                     } else {
                         osdEntries.append({screenId, false, {}});
@@ -814,8 +822,8 @@ void Daemon::initEnginesAndWiring()
             // just-assigned layout's zones — the user sees one desktop's layout
             // leak onto every desktop. Mirrors resnapIfManualMode (navigation.cpp).
             armResnapOsdSuppression(osdEntries.size());
-            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds,
-                                                                                  currentDesktop());
+            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens,
+                                                                                  changedScreenIds, currentDesktop());
             m_snapAdaptor->resnapToNewLayout();
             // Restore snap-float positions for windows this KCM apply released
             // from autotile — the buffer-based resnap above cannot cover

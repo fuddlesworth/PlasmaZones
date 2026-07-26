@@ -480,6 +480,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon.cpp
     daemon/controllers/enginefactory.cpp
     daemon/controllers/shortcutmanager_catalog.cpp
+    daemon/controllers/shortcutmanager_ids.h
     daemon/daemon/start.cpp
     daemon/daemon/autotile_init.cpp
     daemon/daemon/scrolling_init.cpp
@@ -495,6 +496,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/autotile.cpp
     daemon/daemon/osd.cpp
     daemon/daemon.h
+    daemon/daemon_fwd.h
     daemon/daemon/helpers.h
     daemon/daemon/macros.h
     # Concrete daemon-side adapters bridging the existing services

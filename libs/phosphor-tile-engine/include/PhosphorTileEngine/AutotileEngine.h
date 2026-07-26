@@ -268,7 +268,7 @@ public:
      * @brief Set the current virtual desktop for per-desktop tiling state
      *
      * Swaps the active PhosphorTiles::TilingState set without releasing windows. Must be
-     * called BEFORE updateAutotileScreens() on desktop switch so the engine
+     * called BEFORE updateEngineScreens() on desktop switch so the engine
      * resolves states for the correct desktop.
      *
      * @param desktop Virtual desktop number (1-based from KWin)
@@ -283,7 +283,7 @@ public:
      * currentKeyForScreen() resolves that screen's per-(screen, desktop) state. Does
      * NOT migrate windows between states — the other desktop's state stays put so it
      * reappears when the screen returns. Like setCurrentDesktop(), call BEFORE
-     * updateAutotileScreens() so the new key resolves.
+     * updateEngineScreens() so the new key resolves.
      */
     void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
 
@@ -301,7 +301,7 @@ public:
      * @brief Set the current activity for per-activity tiling state
      *
      * Swaps the active PhosphorTiles::TilingState set without releasing windows. Must be
-     * called BEFORE updateAutotileScreens() on activity switch so the engine
+     * called BEFORE updateEngineScreens() on activity switch so the engine
      * resolves states for the correct activity.
      *
      * @param activity Activity ID (empty string for no activity)
@@ -1553,7 +1553,7 @@ private:
     // desktop overrides (#648), the sticky-desktop pin, the current activity, and
     // the "ever set" arming flags. Used by tilingStateForScreen() to construct
     // the owning key via currentKeyForScreen(). Fed by setCurrentDesktop()/
-    // setCurrentActivity()/setCurrentDesktopForScreen() BEFORE updateAutotileScreens()
+    // setCurrentActivity()/setCurrentDesktopForScreen() BEFORE updateEngineScreens()
     // runs on a desktop/activity switch.
     PhosphorEngine::ScreenContextTracker m_context;
 

@@ -14,11 +14,22 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
     , m_engine(engine)
 {
     if (!m_engine) {
-        qCWarning(lcDaemon) << "ScrollingAdaptor created with null engine";
+        qCWarning(lcDbusScrolling) << "ScrollingAdaptor created with null engine";
         return;
     }
     connect(m_engine, &PhosphorScrollEngine::ScrollEngine::scrollingScreensChanged, this,
             [this](const QStringList& screenIds, bool /*isDesktopSwitch*/) {
+                // Change-gated: the engine's identical-set desktop-switch
+                // re-emit exists for the TILING channel's catch-scan; this
+                // interface is a pure Mode discriminator, so an unchanged
+                // set must not hit the bus (emit-on-change rule). The
+                // isDesktopSwitch flag is deliberately not carried on this
+                // wire — the effect's handler has no per-screen transitions
+                // to skip.
+                if (screenIds == m_lastBroadcastScreens) {
+                    return;
+                }
+                m_lastBroadcastScreens = screenIds;
                 Q_EMIT scrollingScreensChanged(screenIds);
             });
 }

@@ -796,9 +796,9 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
 {
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
     int persistedPruned = m_service->pruneStaleAssignments(alive);
-    if (m_autotileEngine) {
-        // The autotile engine keys every internal map (m_states reverse map,
-        // m_windowMinSizes, m_autotileFloatedWindows, TilingState membership)
+    if (m_autotileEngine || m_scrollEngine) {
+        // The engines key every internal map (m_states reverse maps,
+        // m_windowMinSizes, float markers, TilingState/strip membership)
         // on each window's CANONICAL id — its FIRST-seen composite, frozen by
         // the daemon-side WindowRegistry. The alive list, by contrast, carries
         // the effect's CURRENT composites: on an effect reload the effect
@@ -807,26 +807,20 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
         // class the canonicalization machinery exists for) the current
         // composite differs from the canonical. A raw comparison would then
         // miss the live window in the alive set and FORCE-REMOVE it from the
-        // layout. Canonicalize each alive id back to its registry identity so
-        // the engine compares canonical-to-canonical (passthrough for ids the
-        // registry never saw — never worse than the raw set).
+        // layout. Canonicalize each alive id back to its registry identity
+        // ONCE, then prune every non-null engine with the same set
+        // (passthrough for ids the registry never saw — never worse than
+        // the raw set).
         QSet<QString> canonicalAlive;
         canonicalAlive.reserve(aliveWindowIds.size());
         for (const QString& id : aliveWindowIds) {
             canonicalAlive.insert(m_service->canonicalizeForLookup(id));
         }
-        persistedPruned += m_autotileEngine->pruneStaleWindows(canonicalAlive);
-        if (m_scrollEngine) {
-            persistedPruned += m_scrollEngine->pruneStaleWindows(canonicalAlive);
+        for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.data(), m_scrollEngine.data()}) {
+            if (engine) {
+                persistedPruned += engine->pruneStaleWindows(canonicalAlive);
+            }
         }
-    }
-    if (m_scrollEngine && !m_autotileEngine) {
-        QSet<QString> canonicalAlive;
-        canonicalAlive.reserve(aliveWindowIds.size());
-        for (const QString& id : aliveWindowIds) {
-            canonicalAlive.insert(m_service->canonicalizeForLookup(id));
-        }
-        persistedPruned += m_scrollEngine->pruneStaleWindows(canonicalAlive);
     }
     // Defensive sweep of the frame-geometry shadow store. The primary
     // cleanup path is `windowClosed`, but if a window dies without a

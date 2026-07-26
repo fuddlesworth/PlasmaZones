@@ -374,7 +374,7 @@ public:
     /// Tab indicators for tabbed scrolling columns on @p screenId (per
     /// screen, NOT a singleton). @p strips is a list of maps with x / y /
     /// width (absolute px — converted to shell coordinates here),
-    /// activeIndex, and tabs (list of {title, active}); an empty list hides
+    /// and tabs (list of {title, active}); an empty list hides
     /// the screen's indicators. Display-only and click-through.
     void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
 
@@ -646,6 +646,11 @@ private:
     // (declared later) destroys FIRST, while m_screenStates is still
     // alive - even if a future change removes the explicit reset.
     QHash<QString, PerScreenOverlayState> m_screenStates;
+    /// Per-screen generation guard for the scroll tab-strip animated hide:
+    /// bumped by every updateScrollTabStrips call, so a hide completion
+    /// that lost the race to a newer non-empty update no-ops instead of
+    /// tearing down a repopulated slot.
+    QHash<QString, quint64> m_scrollTabsHideGuard;
     std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
 
     QPointer<PhosphorZones::Layout> m_layout;

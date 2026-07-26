@@ -388,6 +388,7 @@ set(PHOSPHOR_ENGINE_TARGETS
     PhosphorZones
     PhosphorSnapEngine
     PhosphorTileEngine
+    PhosphorScrollEngine
     PhosphorEngine
     PhosphorWorkspaces
     PhosphorPlacement
@@ -512,7 +513,6 @@ endif()
 # resolve interfaces against these files post-install.
 install(FILES
     dbus/org.plasmazones.Autotile.xml
-    dbus/org.plasmazones.Tiling.xml
     dbus/org.plasmazones.CompositorBridge.xml
     dbus/org.plasmazones.Control.xml
     dbus/org.plasmazones.EditorApp.xml
@@ -524,6 +524,7 @@ install(FILES
     dbus/org.plasmazones.SettingsApp.xml
     dbus/org.plasmazones.Shader.xml
     dbus/org.plasmazones.Snap.xml
+    dbus/org.plasmazones.Tiling.xml
     dbus/org.plasmazones.WindowDrag.xml
     dbus/org.plasmazones.Rules.xml
     dbus/org.plasmazones.WindowTracking.xml

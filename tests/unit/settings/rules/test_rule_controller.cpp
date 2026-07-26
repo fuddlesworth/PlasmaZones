@@ -499,8 +499,10 @@ void TestRuleController::authoringMetadata()
     // Every action carries a picker category; collect the order per wire so the
     // grouping can be spot-checked. Context-domain categories come first
     // (Gaps=0, Engine=1, Snapping=2, Tiling=3, Scrolling=4, Overlay=5), then the
-    // window-domain categories (Animation=6, Appearance=7, Window=8). The old
-    // flat "Layout & engine" category was split into Engine / Snapping / Tiling /
+    // window-domain categories (Animation=6, Appearance=7, Window=8 — the
+    // per-app scrolling Open* actions live in a Window/Scrolling submenu so
+    // the picker's context/window divider stays honest). The old flat
+    // "Layout & engine" category was split into Engine / Snapping / Tiling /
     // Scrolling.
     QHash<QString, int> actionCategoryOrder;
     for (const QVariant& v : actions) {
@@ -519,7 +521,7 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setTilingAlgorithm")), 3); // Tiling (context)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setAlgorithmParam")), 3); // Tiling (context)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setCenterFocusedColumn")), 4); // Scrolling (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed")), 4); // Scrolling (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed")), 8); // Window/Scrolling (window)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("overrideOverlayShader")), 5); // Overlay (context)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 6); // Animation (window)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity")), 7); // Appearance (window)
@@ -616,8 +618,6 @@ void TestRuleController::asyncCommitAndRevertAreInvokable()
              "'Discard and reload' action calls it directly from QML");
 }
 
-QTEST_MAIN(TestRuleController)
-
 /// stageUserRules is the profile-activation staging path — a public entry
 /// that bypasses addRule. It must enforce the same boundary: an invalid rule
 /// (constructed directly; Rule::fromJson cannot produce one) is dropped
@@ -657,5 +657,7 @@ void TestRuleController::stageUserRulesEnforcesTheAddRuleBoundary()
     QCOMPARE(controller.model()->rowCount(), 1);
     QCOMPARE(controller.model()->rules().first().id, good.id);
 }
+
+QTEST_MAIN(TestRuleController)
 
 #include "test_rule_controller.moc"
