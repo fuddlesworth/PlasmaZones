@@ -160,18 +160,29 @@ private Q_SLOTS:
         QVERIFY2(head.hasMatch(),
                  "could not locate the onToggleClicked `if (checked) {` arm in AnimationEventCard.qml");
 
-        int depth = 1;
-        int i = head.capturedEnd();
-        const int armStart = i;
-        for (; i < src.size() && depth > 0; ++i) {
-            const QChar c = src.at(i);
-            if (c == QLatin1Char('{'))
-                ++depth;
-            else if (c == QLatin1Char('}'))
-                --depth;
-        }
-        QVERIFY2(depth == 0, "unbalanced braces while scanning the onToggleClicked ON arm");
-        const QString arm = src.mid(armStart, i - 1 - armStart);
+        // Brace-count to the arm's closing `}`, then to the `else {` that
+        // follows it, then to the OFF arm's closing `}`. Both arms are scanned:
+        // the ON arm is the no-write latch, and the OFF arm carries the
+        // refusal-gated `_editingTiming` reset, which is pure QML that no
+        // controller call can distinguish — reverting it to an unconditional
+        // reset is invisible to every other test in the suite.
+        const auto scanBlock = [&src](int from, int* endOut) {
+            int depth = 1;
+            int i = from;
+            for (; i < src.size() && depth > 0; ++i) {
+                const QChar c = src.at(i);
+                if (c == QLatin1Char('{'))
+                    ++depth;
+                else if (c == QLatin1Char('}'))
+                    --depth;
+            }
+            *endOut = i;
+            return depth == 0 ? src.mid(from, i - 1 - from) : QString();
+        };
+
+        int onArmEnd = 0;
+        const QString arm = scanBlock(head.capturedEnd(), &onArmEnd);
+        QVERIFY2(!arm.isEmpty(), "unbalanced braces while scanning the onToggleClicked ON arm");
 
         // Strip comments: the arm's own comment explains the behaviour by naming
         // the calls it does NOT make, and matching those would fail the test for
@@ -199,6 +210,31 @@ private Q_SLOTS:
         code = code.replace(wsRe, QStringLiteral(" ")).trimmed();
 
         QCOMPARE(code, QStringLiteral("root._editingTiming = true;"));
+
+        // ── OFF arm ────────────────────────────────────────────────────────
+        // Not an equality check: this arm legitimately carries several
+        // statements and will grow. What is pinned is the one property a
+        // controller-driven test cannot see — that closing the timing editor is
+        // GATED on the clear being accepted. Unconditional, a refusal during an
+        // async discard leaves the toggle visibly off beside a toast saying it
+        // could not be changed.
+        static const QRegularExpression elseRe(QStringLiteral("\\G\\s*else\\s*\\{"));
+        const QRegularExpressionMatch elseHead = elseRe.match(src, onArmEnd);
+        QVERIFY2(elseHead.hasMatch(), "onToggleClicked's ON arm is no longer followed by an `else {`");
+
+        int offArmEnd = 0;
+        const QString offArm = scanBlock(elseHead.capturedEnd(), &offArmEnd);
+        QVERIFY2(!offArm.isEmpty(), "unbalanced braces while scanning the onToggleClicked OFF arm");
+        const QString offCode = QString(offArm).remove(commentRe);
+
+        QVERIFY2(offCode.contains(QStringLiteral("_editingTiming = false")),
+                 "the OFF arm no longer closes the timing editor at all");
+        static const QRegularExpression gatedResetRe(
+            QStringLiteral("if\\s*\\(\\s*root\\._clearOverrideOnAll\\(\\s*\\)\\s*\\)\\s*"
+                           "root\\._editingTiming\\s*=\\s*false\\s*;"));
+        QVERIFY2(gatedResetRe.match(QString(offCode).replace(wsRe, QStringLiteral(" "))).hasMatch(),
+                 "the OFF arm closes the timing editor WITHOUT gating on _clearOverrideOnAll's result — a refused "
+                 "clear would turn the toggle off while the controller toasts that it could not");
     }
 
     // ─── Simple-page scope contract ───────────────────────────────────────

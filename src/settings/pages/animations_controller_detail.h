@@ -229,8 +229,12 @@ inline QJsonObject readProfileJson(const QString& path)
 /// Field-by-field equivalence with `Profile::fromJson` is the contract, and the
 /// per-field comments below say where each one drops a key versus substitutes
 /// the library default, because the two are not interchangeable under
-/// `mergeMissingFields`. The single deliberate divergence is that `curve` is
-/// type-checked but not RESOLVED; see the comment at its branch.
+/// `mergeMissingFields`. Two deliberate divergences: `curve` is type-checked
+/// but not RESOLVED (see the comment at its branch), and every numeric field is
+/// range-checked BEFORE rounding, where fromJson's `minDistance` branch rounded
+/// first. That second one is defensive rather than behavioural — the library's
+/// unguarded `qRound` on an out-of-range double was undefined behaviour, and
+/// has since been given the same bound-first treatment.
 inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
 {
     using P = PhosphorAnimation::Profile;
@@ -280,9 +284,9 @@ inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
         // the key here BLOCKS `mergeMissingFields` at this level and every
         // descendant. So a typo'd spec in global.json shows a curve tree-wide
         // that the daemon will never play, and hides the one it will. Accepted
-        // because the alternative — dropping every spec this TU cannot resolve —
-        // would drop legitimate user-authored curves, which is the same failure
-        // for a much more common input. A non-string value is a different case
+        // because the alternative — validating against a built-ins-only registry
+        // — would drop legitimate user-authored curves, which is the same
+        // failure for a much more common input. A non-string value is a different case
         // and IS rejected: it would reach QML as a map or an int where every
         // consumer expects a wire string, and fromJson rejects it too via
         // `toString()` yielding empty.

@@ -31,11 +31,11 @@ constexpr QLatin1StringView kSecondaryProfilesOwnerTag{"plasmazones-secondary-pr
 QStringList discoverDataDirs(QLatin1StringView xdgRelative)
 {
     // `QStandardPaths::locateAll` returns directories in priority order —
-    // the writable user location FIRST, system dirs AFTER. The loader
-    // iterates in caller-supplied order and lets later entries override
-    // earlier on key collision, so we reverse to achieve the standard
-    // "system first, user wins last" layering. Matches
-    // LayoutManager::loadLayouts.
+    // the writable user location FIRST, system dirs AFTER. Reverse it so the
+    // list reads `sys-lowest, ..., sys-highest, user`, which is the shape the
+    // loader documents as its input: it reverse-iterates that and applies
+    // FIRST-registration-wins, so the user dir claims its keys before any
+    // system dir gets to. Matches LayoutManager::loadLayouts.
     QStringList dirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QString(xdgRelative),
                                                  QStandardPaths::LocateDirectory);
     std::reverse(dirs.begin(), dirs.end());

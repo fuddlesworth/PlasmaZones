@@ -490,9 +490,14 @@ QtObject {
                 id: curveDialog
 
                 parent: curveSlot.Window.window ? curveSlot.Window.window.contentItem : curveSlot
-                // Through the controller's humaniser, not the raw dotted path: the
-                // dialog renders this as "Customize curve for %1", and the
-                // animations card feeds it a human label there.
+                // Through the controller's humaniser rather than the raw dotted
+                // path, so the title reads "Customize curve for Open" instead of
+                // "…for window.appearance.open". `eventLabel()` returns the raw
+                // ENGLISH form by its documented contract, so this one word is
+                // untranslated — the animations pages avoid that by passing
+                // hand-written i18n() literals, which a rule's free-form event
+                // field cannot. Better than the dotted path, and the alternative
+                // is a translated label table this PR does not introduce.
                 eventLabel: row.action.event ? settingsController.animationsPage.eventLabel(row.action.event) : ""
                 timingMode: curveSlot._isSpring ? CurvePresets.timingModeSpring : CurvePresets.timingModeEasing
                 easingCurve: curveSlot._easingCurve

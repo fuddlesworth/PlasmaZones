@@ -95,6 +95,15 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
     // never violated either way.
     QHash<QString, Entry> fresh;
     QHash<QString, ParsedEntry> freshParsedByKey;
+    // Files this scan looked at and did not register — unparseable, empty key,
+    // intra-directory duplicate, or cross-directory shadowed. They own no entry,
+    // but they still get a per-file watch below: an in-place edit that FIXES a
+    // broken file is the most common way an entry goes from invisible to
+    // visible, and a directory watch does not fire on content changes to a file
+    // that already exists. Both sibling scanners do the same
+    // (MetadataPackScanStrategy re-arms the metadata.json watch regardless of
+    // the parse outcome; ScriptedAlgorithmLoader keeps m_refusedFilePaths).
+    QStringList refusedPaths;
 
     bool capTripped = false;
     /// Files CONSIDERED this rescan, summed across every registered directory.
@@ -174,17 +183,20 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
             if (fileInfo.size() > DirectoryLoader::kMaxFileBytes) {
                 qCWarning(lcLoader) << "Skipping oversized file" << fullPath << "(" << fileInfo.size() << "bytes, cap"
                                     << DirectoryLoader::kMaxFileBytes << ")";
+                refusedPaths.append(fullPath);
                 continue;
             }
 
             auto parsed = m_sink->parseFile(fullPath);
             if (!parsed) {
+                refusedPaths.append(fullPath);
                 continue;
             }
             const QString key = parsed->key;
             if (key.isEmpty()) {
                 qCWarning(lcLoader) << "parseFile returned entry with empty key from" << fullPath
                                     << "— sinks must set ParsedEntry::key";
+                refusedPaths.append(fullPath);
                 continue;
             }
 
@@ -197,6 +209,7 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
                 qCWarning(lcLoader).nospace()
                     << "Duplicate key '" << key << "' within directory " << directory << " — kept '" << winnerIt.value()
                     << "', ignored '" << fullPath << "' (winner is alphabetically first)";
+                refusedPaths.append(fullPath);
                 continue;
             }
             keysInThisDir.insert(foldedKey, fullPath);
@@ -290,10 +303,11 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
 
     // Tell the base which paths to install per-file watches on.
     QStringList desiredFileWatches;
-    desiredFileWatches.reserve(m_entries.size());
+    desiredFileWatches.reserve(m_entries.size() + refusedPaths.size());
     for (const auto& entry : std::as_const(m_entries)) {
         desiredFileWatches.append(entry.sourcePath);
     }
+    desiredFileWatches.append(refusedPaths);
     return desiredFileWatches;
 }
 
