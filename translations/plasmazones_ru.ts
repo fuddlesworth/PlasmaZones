@@ -1009,23 +1009,23 @@
         <translation>Не удалось записать файл алгоритма. Проверьте наличие свободного места на диске и права доступа.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="108"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="109"/>
         <source>Cannot modify sets while a discard is in progress.</source>
         <translation>Невозможно изменить наборы, пока выполняется отмена изменений.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="353"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="369"/>
         <source>Cannot save while a discard is in progress.</source>
         <translation>Невозможно сохранить, пока выполняется отмена изменений.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="593"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="609"/>
         <location filename="../src/settings/rules/rulecontroller.cpp" line="150"/>
         <source>Discard already in flight.</source>
         <translation>Отмена изменений уже выполняется.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="668"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="684"/>
         <source>Could not restore %n profile file(s). They remain pending.</source>
         <translation>
             <numerusform>Не удалось восстановить %n файл профиля. Он остаётся в ожидании.</numerusform>
@@ -1034,8 +1034,8 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="802"/>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="812"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="818"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="828"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation>Невозможно изменить предустановки, пока выполняется отмена изменений.</translation>
     </message>
@@ -6227,7 +6227,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="788"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="238"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="241"/>
         <source>Spring Presets</source>
         <translation>Предустановки пружины</translation>
     </message>
@@ -10660,12 +10660,12 @@
         <translation>Дорожка предпросмотра анимации</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="302"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="304"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation>Пружина · ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="304"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="306"/>
         <source>%1 · %2 ms</source>
         <translation>%1 · %2 мс</translation>
     </message>
@@ -10727,8 +10727,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="257"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="274"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="323"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="277"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="326"/>
         <source>ω=%1 · ζ=%2</source>
         <translation>ω=%1 · ζ=%2</translation>
     </message>
@@ -11095,64 +11095,70 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="140"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="184"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="280"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="329"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="187"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="283"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="332"/>
         <source>Use %1 as default</source>
         <translation>Использовать %1 по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="141"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="185"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="281"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="330"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="188"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="284"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="333"/>
         <source>Use as Default</source>
         <translation>Использовать по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="173"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="318"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="321"/>
         <source>★ %1</source>
         <translation>★ %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="190"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="335"/>
-        <source>Delete preset %1</source>
-        <translation>Удалить предустановку %1</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="181"/>
+        <source>%1 · %2 ms</source>
+        <comment>curve wire format, then the preset&apos;s duration</comment>
+        <translation type="unfinished">%1 · %2 мс</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="193"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="338"/>
+        <source>Delete preset %1</source>
+        <translation>Удалить предустановку %1</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="196"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="341"/>
         <source>Delete preset</source>
         <translation>Удалить предустановку</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="202"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="347"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="205"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="350"/>
         <source>Delete preset?</source>
         <translation>Удалить предустановку?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="203"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="348"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="206"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="351"/>
         <source>&quot;%1&quot; will be permanently removed.</source>
         <translation>«%1» будет удалена без возможности восстановления.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="224"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="227"/>
         <source>No custom easing presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
         <oldsource>No custom easing presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</oldsource>
         <translation>Пользовательских предустановок плавности пока нет. Используйте «Сохранить как предустановку…» в редакторе кривых, чтобы создать её.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="264"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="313"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="267"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="316"/>
         <source>Spring preview for %1</source>
         <translation>Предпросмотр пружины для %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="368"/>
         <source>No custom spring presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
         <oldsource>No custom spring presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</oldsource>
         <translation>Пользовательских предустановок пружины пока нет. Используйте «Сохранить как предустановку…» в редакторе кривых, чтобы создать её.</translation>

@@ -630,6 +630,12 @@ private Q_SLOTS:
         // behaviour, so the value must be rejected by RANGE first.
         QTest::newRow("minDistance negative")
             << kMin << QByteArrayLiteral(R"({"minDistance":-5})") << QVariant(7) << QVariant(7) << false;
+        // The bound both sides share. Before this row the two disagreed: the
+        // library capped at MaxMinDistancePx while the settings mirror still
+        // capped at INT_MAX, so a hand-placed 200000 showed in the card and
+        // blocked inheritance while the daemon dropped it.
+        QTest::newRow("minDistance over the domain cap")
+            << kMin << QByteArrayLiteral(R"({"minDistance":200000})") << QVariant(7) << QVariant(7) << false;
         QTest::newRow("minDistance astronomical")
             << kMin << QByteArrayLiteral(R"({"minDistance":1e300})") << QVariant(7) << QVariant(7) << false;
         QTest::newRow("minDistance string") << kMin << QByteArrayLiteral(R"({"minDistance":"5"})") << QVariant(7)
@@ -652,7 +658,7 @@ private Q_SLOTS:
         // empty and leaves the field unset).
         QTest::newRow("curve non-string")
             << kCurve << QByteArrayLiteral(R"({"curve":42})") << kParentCurve << kParentCurve << false;
-        // The ONE deliberate divergence from fromJson, pinned so nobody "fixes"
+        // The one deliberate divergence from fromJson, pinned so nobody "fixes"
         // it without reading why: an unresolvable-but-string spec is KEPT here,
         // because resolving it needs a CurveRegistry this translation unit does
         // not have, and dropping every unresolvable spec would drop legitimate

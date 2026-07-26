@@ -298,7 +298,7 @@ public:
     {
         // An empty `Parser` would silently skip every entry on every
         // rescan and look like a configuration bug from the outside ("my
-        // packs all disappeared"). Both real consumers always pass a
+        // packs all disappeared"). Every real consumer always passes a
         // real parser; assert in debug builds so a future caller doesn't
         // have to debug an empty registry from a default-constructed
         // `std::function`. `OnCommit` is allowed to be empty (a consumer
@@ -807,9 +807,11 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
     // dedupes again internally via `QSet<QString> m_watchedFiles`, so
     // this isn't a correctness fix — but the strategy already paid for
     // dedup + sort during the signature pass, so handing the cleaned
-    // list back saves the watcher its own dedup pass and removes a
-    // class of "watcher diagnostics in nondeterministic order" from
-    // the system. Costs nothing.
+    // list back saves the watcher its own dedup pass, gives the signature
+    // pass a deterministic input, and lets a test assert on the returned
+    // list directly. (It does NOT make the watcher's own diagnostics
+    // deterministic — syncFileWatches copies into a QSet and iterates that.)
+    // Costs nothing.
     return sortedWatches;
 }
 

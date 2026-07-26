@@ -173,6 +173,14 @@ public:
     /// one never reached are reported to the sink as `removedKeys`, so a
     /// trip unregisters entries that still exist on disk. At 10k that is
     /// theoretical, but it is why the cap sits far above any real corpus.
+    /// NOTE this now bounds real kernel watches, not just parses: a file this
+    /// scan REFUSES is added to the per-file watch list (so repairing it in
+    /// place wakes the loader), and a refused file exists, so it takes an
+    /// inotify watch. 10,000 unparseable `*.json` in one directory therefore
+    /// holds 10,000 watches — above the 8192 `fs.inotify.max_user_watches`
+    /// default several distributions still ship, which would starve every other
+    /// QFileSystemWatcher in the process. `PluginLoader` sets its own cap an
+    /// order of magnitude lower for exactly this reason.
     static constexpr int kMaxEntries = 10'000;
 
     /// Test-only: override the debounce interval (default 50 ms).

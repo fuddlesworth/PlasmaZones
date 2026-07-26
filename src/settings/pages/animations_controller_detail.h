@@ -309,7 +309,7 @@ inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
         // fromJson leaves this unset when negative, so absent is right here too.
         std::optional<int> rounded;
         boundedRound(obj.value(QLatin1String(P::JsonFieldMinDistance)).toDouble(P::DefaultMinDistance), 0.0,
-                     double(std::numeric_limits<int>::max()), rounded);
+                     double(P::MaxMinDistancePx), rounded);
         if (rounded.has_value()) {
             out.insert(QLatin1String(P::JsonFieldMinDistance), *rounded);
         }

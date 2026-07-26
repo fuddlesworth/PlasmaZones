@@ -453,12 +453,21 @@ public:
     /// on the next read instead of serving the pre-edit value for the rest of
     /// the session. Emits `overrideChanged(QString())` — the tree-wide reload
     /// broadcast — so an OPEN page re-reads too, rather than only the next one.
+    ///
+    /// The broadcast is suppressed while this controller's own
+    /// `refreshProfileStore()` is on the stack, because the loader's rescan
+    /// re-enters here synchronously and the caller is already about to emit the
+    /// precise per-path signals. External writers are the case this exists for.
     /// Cheap and idempotent: worst case the next read re-parses a few hundred
     /// bytes per level.
     void forgetCachedOverrideFiles();
 
 Q_SIGNALS:
-    /// Emitted on any successful set/clearOverride. @p path is the
+    /// Emitted on any successful set/clearOverride, and — with an EMPTY path —
+    /// from `forgetCachedOverrideFiles` as a tree-wide reload broadcast when
+    /// somebody outside this controller wrote to the profiles directory. A
+    /// consumer must therefore treat an empty path as "re-read everything"
+    /// rather than indexing into it. Otherwise @p path is the
     /// affected event path.
     void overrideChanged(const QString& path);
 
@@ -656,6 +665,15 @@ private:
     /// away from serving a stale inherited value, which is the exact class of
     /// bug this controller's disk-first read exists to fix.
     void invalidateDiskProfileCache() const;
+
+    /// Non-zero while this controller's own `refreshProfileStore()` is running.
+    /// The loader's `rescanNow()` emits `profilesChanged` synchronously on that
+    /// stack, and `forgetCachedOverrideFiles` is wired to it — so without this
+    /// the controller would answer its own rescan with a tree-wide reload
+    /// broadcast, on top of the precise per-path signals the caller is already
+    /// about to send. A depth counter rather than a bool because the revert
+    /// paths can nest a refresh inside a batch.
+    int m_selfDrivenRescanDepth = 0;
 
     /// Event path -> sanitised override-file contents. See `cachedDiskProfile`.
     /// Mutated only from the GUI thread, like `m_pendingFileSnapshots`. It is

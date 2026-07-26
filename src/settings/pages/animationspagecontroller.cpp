@@ -25,6 +25,7 @@
 #include <QFutureWatcher>
 #include <QLoggingCategory>
 #include <QSaveFile>
+#include <QScopeGuard>
 #include <QSet>
 #include <QStandardPaths>
 #include <QtConcurrent/QtConcurrent>
@@ -209,6 +210,15 @@ void AnimationsPageController::setProfileStoreRefresher(std::function<void()> re
 void AnimationsPageController::forgetCachedOverrideFiles()
 {
     invalidateDiskProfileCache();
+    if (m_selfDrivenRescanDepth > 0) {
+        // Our own refreshProfileStore() is on the stack: it called the loader's
+        // synchronous rescanNow(), which emitted profilesChanged straight back
+        // into here. Dropping the memo is right, but the broadcast is not — the
+        // caller is about to emit a precise overrideChanged per affected path,
+        // so a tree-wide reload on top of it just refreshes every other card
+        // twice for one user action.
+        return;
+    }
     // …and tell the page. Dropping the memo alone only guarantees the NEXT read
     // is honest; an open card does not re-read on its own, so a hand-edit to the
     // profiles directory would still show the pre-edit value until something
@@ -221,6 +231,12 @@ void AnimationsPageController::forgetCachedOverrideFiles()
 
 void AnimationsPageController::refreshProfileStore()
 {
+    // Marks the loader's synchronous profilesChanged as self-inflicted for the
+    // duration of the rescan; see forgetCachedOverrideFiles.
+    ++m_selfDrivenRescanDepth;
+    const auto leave = qScopeGuard([this] {
+        --m_selfDrivenRescanDepth;
+    });
     // Unconditional, not inside the `if`: a refresh is the point at which the
     // controller admits the files on disk may have moved under it, and that is
     // true whether or not a refresher happens to be wired (the async revert

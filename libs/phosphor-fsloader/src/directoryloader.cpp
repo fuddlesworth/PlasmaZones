@@ -99,7 +99,9 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
     // empty key, or an intra-directory duplicate. NOT the cross-directory
     // shadowed ones: a shadowed file's content changes nothing observable while
     // the override that shadows it exists, and its removal is a directory event
-    // the search-path watch already catches. They own no entry,
+    // the search-path watch already catches.
+    //
+    // The refused files own no entry,
     // but they still get a per-file watch below: an in-place edit that FIXES a
     // broken file is the most common way an entry goes from invisible to
     // visible, and a directory watch does not fire on content changes to a file

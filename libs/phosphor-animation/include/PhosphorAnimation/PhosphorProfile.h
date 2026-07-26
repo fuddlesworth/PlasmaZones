@@ -124,7 +124,7 @@ public:
     }
     void setMinDistance(int px)
     {
-        if (px < 0) {
+        if (px < 0 || px > Profile::MaxMinDistancePx) {
             m_value.minDistance.reset();
             return;
         }
