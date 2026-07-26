@@ -174,7 +174,12 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // below, which is where it belongs.
         const bool roundable = std::isfinite(rawDouble) && rawDouble >= qreal(std::numeric_limits<int>::min())
             && rawDouble <= qreal(std::numeric_limits<int>::max());
-        const int raw = roundable ? qRound(rawDouble) : static_cast<int>(DefaultSequenceMode);
+        // Sentinel, not DefaultSequenceMode: substituting the default here would
+        // land on a VALID enumerator and take the accepting branch below, so an
+        // out-of-range value would be swallowed with no diagnostic — the exact
+        // schema-drift blindness the warning further down exists to prevent.
+        // INT_MIN can never be a real enumerator, so it routes to that warning.
+        const int raw = roundable ? qRound(rawDouble) : std::numeric_limits<int>::min();
         // Map valid enumerators; anything else falls back to the library
         // default. This is NOT forward-compat with future enumerators
         // written by a newer client — those would silently land on

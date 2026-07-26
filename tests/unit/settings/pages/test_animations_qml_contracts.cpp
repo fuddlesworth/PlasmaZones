@@ -240,9 +240,17 @@ private Q_SLOTS:
         static const QRegularExpression gatedResetRe(
             QStringLiteral("if\\s*\\(\\s*root\\._clearOverrideOnAll\\(\\s*\\)\\s*\\)\\s*\\{?\\s*"
                            "root\\._editingTiming\\s*=\\s*false\\s*;"));
-        QVERIFY2(gatedResetRe.match(QString(offCode).replace(wsRe, QStringLiteral(" "))).hasMatch(),
+        const QString offFlat = QString(offCode).replace(wsRe, QStringLiteral(" "));
+        QVERIFY2(gatedResetRe.match(offFlat).hasMatch(),
                  "the OFF arm closes the timing editor WITHOUT gating on _clearOverrideOnAll's result — a refused "
                  "clear would turn the toggle off while the controller toasts that it could not");
+
+        // Exactly one, not merely at-least-one. A gated reset plus a second
+        // UNGATED one elsewhere in the arm satisfies the match above while
+        // reintroducing the whole defect, and the brace-optional form widened
+        // that hole. Counting is what closes it.
+        static const QRegularExpression anyResetRe(QStringLiteral("_editingTiming\\s*=\\s*false"));
+        QCOMPARE(offFlat.count(anyResetRe), 1);
     }
 
     // ─── Simple-page scope contract ───────────────────────────────────────

@@ -45,10 +45,10 @@ Menu {
     /// show would also churn the popup chain needlessly.
     property string _aspectRatioMenuKind: "none"
     // Boolean-coerced: `layout` is untyped `var` and defaults to null, and the
-    // `&&` chain yields the first falsy operand rather than `false`. It works
-    // today only because QML coerces null to false on assignment to a typed
-    // bool; the same shape is documented elsewhere in this tree as an
-    // "Cannot assign [undefined] to bool" hazard.
+    // `&&` chain yields the first falsy operand rather than `false`. Wrapped
+    // rather than leaning on QML's null-to-false coercion, because the same
+    // shape is documented elsewhere in this tree as a "Cannot assign
+    // [undefined] to bool" hazard.
     readonly property bool isAutotile: Boolean(layout && layout.isAutotile === true)
     readonly property string layoutId: layout ? (layout.id || "") : ""
     // Cache the aspect-ratio options + screen list rather than

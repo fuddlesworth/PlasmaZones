@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/Spring.h>
 
+#include <QRegularExpression>
 #include <QTest>
 
 #include <limits>
@@ -357,10 +358,28 @@ private Q_SLOTS:
     /// unknown-enumerator path, so it lands on the library default ENGAGED
     /// (unlike minDistance, which is left unset) — that asymmetry is
     /// `Profile::fromJson`'s, and `sanitizedProfileMap` mirrors it.
+    /// The ACCEPTED side of the same boundary. Without it, flipping the
+    /// validator's `>` to `>=` would reject exactly MaxMinDistancePx and every
+    /// test would still pass.
+    void testFromJsonAcceptsMinDistanceAtTheCap()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("minDistance"), double(Profile::MaxMinDistancePx));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.minDistance.has_value());
+        QCOMPARE(*p.minDistance, Profile::MaxMinDistancePx);
+    }
+
     void testFromJsonSubstitutesDefaultForOutOfRangeSequenceMode()
     {
         QJsonObject obj;
         obj.insert(QLatin1String("sequenceMode"), 1e300);
+        // The warning is the load-bearing assertion. Without the range guard the
+        // value reaches `qRound` as undefined behaviour, and on a Release build
+        // (where Qt's own Q_ASSERT is compiled out) the result happens to be
+        // INT_MIN — which lands on this same branch and produces the same
+        // sequenceMode. Only the diagnostic distinguishes guarded from not.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("unknown sequenceMode -?[0-9]+")));
         const Profile p = Profile::fromJson(obj, CurveRegistry{});
         QVERIFY(p.sequenceMode.has_value());
         QCOMPARE(*p.sequenceMode, Profile::DefaultSequenceMode);

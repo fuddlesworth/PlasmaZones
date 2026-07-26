@@ -175,7 +175,10 @@ SettingsFlickable {
                         }
 
                         Label {
-                            text: modelData.curve || ""
+                            // Names the duration when the preset carries one:
+                            // "Use as Default" writes it, so it has to be
+                            // visible before the click.
+                            text: (typeof modelData.duration === "number" && modelData.duration > 0) ? i18nc("curve wire format, then the preset's duration", "%1 · %2 ms", modelData.curve || "", modelData.duration) : (modelData.curve || "")
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
                         }

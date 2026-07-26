@@ -89,17 +89,29 @@ loader.requestRescan();
 A metadata-pack registry (used by shader / animation-shader registries):
 
 ```cpp
+// `MyPack` must derive PhosphorRegistry::IFactoryBase — the loader
+// static_asserts on it. The registry is OWNED by the consumer and BORROWED by
+// the loader, so declare it first.
 class MyPackRegistry : public QObject {
 public:
     MyPackRegistry()
         : m_loader(std::make_unique<PhosphorRegistry::MetadataPackLoader<MyPack>>(
-              myLogCategory(), makeParser()))
+              &m_registry,
+              [](const QString& subdir, const QJsonObject& root, bool isUser)
+                  -> std::shared_ptr<MyPack> {
+                  return parseMyPack(subdir, root, isUser);
+              },
+              myLogCategory()))
     {
         m_loader->setOnCommitted([this] { Q_EMIT packsChanged(); });
     }
-    // … expose payload-typed lookups over m_loader
+
+    void addSearchPath(const QString& dir) { m_loader->addSearchPath(dir); }
+    void setUserPath(const QString& dir) { m_loader->setUserPath(dir); }
+    // … expose payload-typed lookups over m_registry
 
 private:
+    PhosphorRegistry::Registry<MyPack> m_registry;
     std::unique_ptr<PhosphorRegistry::MetadataPackLoader<MyPack>> m_loader;
 };
 // Composition root then wires:
