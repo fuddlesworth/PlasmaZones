@@ -3,11 +3,14 @@
 
 #pragma once
 
-// Shared helpers between animationspagecontroller.cpp and
-// animationspagecontroller_shaders.cpp. The two TUs split the same class across
-// files, and both need to convert shader-effect / parameter / shader-profile
-// values to QVariantMap for QML consumption. Inline definitions here ensure both
-// TUs get their own copy without relying on unity-build TU merging for cross-TU
+// Shared helpers for the four TUs that split AnimationsPageController across
+// files (animationspagecontroller.cpp and its _overrides / _shaders / _paths
+// siblings). Covers the shader-effect / parameter / shader-profile conversions
+// those TUs hand to QML, the override-file read and normalisation
+// (readProfileJson, sanitizedProfileMap, mergeMissingFields,
+// fillLibraryDefaults), and the two path helpers (humanizeSegment,
+// collectShaderOverrideDescendants). Inline definitions here ensure every TU
+// gets its own copy without relying on unity-build TU merging for cross-TU
 // linkage.
 
 #include "core/platform/logging.h"
@@ -271,12 +274,18 @@ inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
         // built-ins-only registry instead would silently drop legitimate
         // user-authored curves, which is worse than not validating. An unresolvable spec
         // reaching QML renders as an unrecognised curve, which is visible and
-        // harmless — though not level-local: the kept spec also merges into
-        // every DESCENDANT card's resolved profile, so a bogus one in global.json
-        // shows a curve across the tree that the daemon (which drops it) will
-        // never play. A non-string value would reach QML as a map or an int where
-        // every consumer expects a wire string, so that IS rejected here —
-        // fromJson rejects it too, via `toString()` yielding empty.
+        // harmless. This is the ONE field where this function knowingly diverges
+        // from fromJson, and the divergence is not free: fromJson drops a spec it
+        // cannot resolve, letting the ancestor's curve through, whereas keeping
+        // the key here BLOCKS `mergeMissingFields` at this level and every
+        // descendant. So a typo'd spec in global.json shows a curve tree-wide
+        // that the daemon will never play, and hides the one it will. Accepted
+        // because the alternative — dropping every spec this TU cannot resolve —
+        // would drop legitimate user-authored curves, which is the same failure
+        // for a much more common input. A non-string value is a different case
+        // and IS rejected: it would reach QML as a map or an int where every
+        // consumer expects a wire string, and fromJson rejects it too via
+        // `toString()` yielding empty.
         const QJsonValue v = obj.value(QLatin1String(P::JsonFieldCurve));
         if (v.isString() && !v.toString().isEmpty()) {
             out.insert(QLatin1String(P::JsonFieldCurve), v.toString());

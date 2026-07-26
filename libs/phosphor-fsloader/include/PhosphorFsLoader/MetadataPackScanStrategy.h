@@ -34,9 +34,9 @@ namespace PhosphorFsLoader {
 /**
  * @brief Reusable scan strategy for `metadata.json`-driven subdirectory pack registries.
  *
- * Owns the cross-cutting scaffolding both `PhosphorShaders::ShaderRegistry`
- * and `PhosphorAnimationShaders::AnimationShaderRegistry` were duplicating
- * verbatim:
+ * Owns the cross-cutting scaffolding all three pack registries
+ * (`PhosphorShaders::ShaderRegistry`, `PhosphorAnimationShaders::AnimationShaderRegistry`
+ * and `PhosphorSurface::SurfaceShaderRegistry`) were duplicating verbatim:
  *
  *   1. Reverse-iterate `directoriesInScanOrder` (the canonical
  *      `[lowest-priority, ..., highest-priority]` shape from
@@ -128,10 +128,13 @@ namespace PhosphorFsLoader {
  *   - `OnCommit` — invoked synchronously inside `performScan` after the
  *     fresh map has replaced the prior one, AND ONLY WHEN the SHA-1
  *     signature differs. The consumer wires its content-changed signal
- *     in here. NOT invoked when the signature is unchanged, which covers
- *     the no-content baseline: repeated empty scans over the same watch set
- *     do not fire. An empty scan whose WATCH set changed still fires — see
- *     the known wrinkle above.
+ *     in here. `changed` is `isFirstScan ? !fresh.isEmpty() : signature !=
+ *     m_lastSignature`, so: a FIRST scan that found nothing never fires (the
+ *     no-content baseline, and note this comes from the isFirstScan branch,
+ *     not from signature equality — the SHA-1 of nothing does differ from the
+ *     empty seed); a later scan fires whenever the signature moved, including
+ *     one that drops to an empty result, and including one whose result set is
+ *     unchanged but whose WATCH set moved — see the known wrinkle above.
  *
  * ## API choice — why a class template over a virtual interface
  *
@@ -153,7 +156,7 @@ namespace PhosphorFsLoader {
  * cost is unmeasurable — keeping the policy types out of the template
  * signature is the better readability tradeoff. The price is one set of
  * compiler instantiations per consumer payload — negligible given there
- * are exactly two of them.
+ * are three of them.
  *
  * ## Lifetime
  *
@@ -180,9 +183,10 @@ namespace PhosphorFsLoader {
  * `performScan` runs on the same thread the registry was constructed on.
  *
  * @tparam Payload  POD-ish struct exposing a public `QString id` member.
- *                  Must be default-constructible and movable. Both real
- *                  consumers (`ShaderInfo`, `AnimationShaderEffect`) satisfy
- *                  this. Bespoke payloads without an `id` field can wrap
+ *                  Must be default-constructible and movable. Every real
+ *                  consumer satisfies this: in production the argument is
+ *                  `PhosphorRegistry::MetadataPackLoader<T>::Entry`, wrapping
+ *                  `ShaderPack`, `AnimationPack` or `SurfacePack`. Bespoke payloads without an `id` field can wrap
  *                  their data in a thin POD that adds one.
  */
 template<typename Payload>
@@ -190,8 +194,8 @@ class MetadataPackScanStrategy : public IScanStrategy
 {
     // The strategy hashes `id` into the per-rescan signature and uses it
     // as the QHash key for first-wins layering — neither works without
-    // a public QString id member. ShaderInfo and AnimationShaderEffect
-    // both satisfy this; bespoke payloads must too.
+    // a public QString id member. Every production Entry type satisfies
+    // this; bespoke payloads must too.
     //
     // `decltype(... .id)` on an lvalue Payload yields `QString&`; strip
     // the reference before comparing so the assertion fires only when
@@ -341,8 +345,9 @@ public:
      * rescan — the new value takes effect on the next scan, whenever
      * that fires. Production consumers reach the strategy through
      * `PhosphorRegistry::MetadataPackLoader::setUserPath`, which forwards the
-     * value and then runs a synchronous `rescanNow()`, so existing pack
-     * classifications refresh immediately. Direct strategy access (e.g. tests
+     * value and then runs a synchronous `rescanNow()` — but only when the value
+     * actually changed AND at least one search path is registered, so setting
+     * the user path before any registration does not rescan either. Direct strategy access (e.g. tests
      * using `static_cast<ScanStrategy*>(strategy())`) bypasses that
      * orchestration; pair the call with an explicit
      * `WatchedDirectorySet::rescanNow()` if immediate reclassification
@@ -383,7 +388,7 @@ public:
     /// The standard caller pattern — `setLoggingCategory(lcMyRegistry())`
     /// where `lcMyRegistry` is defined via `Q_LOGGING_CATEGORY` — gives
     /// a static-lifetime category and trivially satisfies this. Reference
-    /// (not pointer) parameter mirrors `MetadataPackRegistryBase`'s
+    /// (not pointer) parameter mirrors `MetadataPackLoader`'s
     /// ctor and makes "always non-null" a compile-time guarantee.
     void setLoggingCategory(const QLoggingCategory& cat)
     {

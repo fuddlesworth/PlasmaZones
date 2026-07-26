@@ -6932,17 +6932,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="407"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="411"/>
         <source>Cannot reset while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="461"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="465"/>
         <source>Some animation overrides could not be reset.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="481"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="485"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="410"/>
         <source>Cannot change this while a discard is in progress.</source>
         <translation type="unfinished"></translation>
@@ -10654,12 +10654,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="301"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="307"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="309"/>
         <source>%1 · %2 ms</source>
         <translation type="unfinished"></translation>
     </message>

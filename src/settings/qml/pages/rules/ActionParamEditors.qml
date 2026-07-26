@@ -490,7 +490,10 @@ QtObject {
                 id: curveDialog
 
                 parent: curveSlot.Window.window ? curveSlot.Window.window.contentItem : curveSlot
-                eventLabel: row.action.event || ""
+                // Through the controller's humaniser, not the raw dotted path: the
+                // dialog renders this as "Customize curve for %1", and the
+                // animations card feeds it a human label there.
+                eventLabel: row.action.event ? settingsController.animationsPage.eventLabel(row.action.event) : ""
                 timingMode: curveSlot._isSpring ? CurvePresets.timingModeSpring : CurvePresets.timingModeEasing
                 easingCurve: curveSlot._easingCurve
                 springOmega: curveSlot._springOmega

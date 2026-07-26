@@ -32,11 +32,10 @@ extern PLASMAZONES_EXPORT const QLatin1StringView kShellAnimationFamilySeedsOwne
 
 /// XDG-discovered curve and profile directories — `plasmazones/curves`
 /// and `plasmazones/profiles` resolved against `XDG_DATA_DIRS` (lowest-
-/// priority first), with the user-writable dir appended last so
-/// last-writer-wins layering produces `sys-lowest, ..., sys-highest,
-/// user`. The user dirs are materialised on disk so live-reload
-/// watchers attach via `WatchedDirectorySet`'s parent-watch climb on
-/// fresh installs.
+/// priority first), with the user-writable dir appended last, giving
+/// `sys-lowest, ..., sys-highest, user`. The scan reverse-iterates that and
+/// applies first-registration-wins, so the user dir claims its keys first. The user dirs are materialised on disk so
+/// live-reload watchers attach via `WatchedDirectorySet`'s parent-watch climb on fresh installs.
 ///
 /// Returned alongside the loader pair from
 /// `constructAnimationLoaders` so callers that wire additional signals

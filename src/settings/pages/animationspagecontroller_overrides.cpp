@@ -7,7 +7,8 @@
 //
 // Group covers:
 //   * Path derivation (userProfilesDir / profileFilePath / userMotionSetsDir)
-//   * Existence + read (hasOverride / rawProfile / resolvedProfile)
+//   * Existence + read (hasOverride / rawProfile / resolvedProfile), including
+//     the per-path disk-read memo (cachedDiskProfile / invalidateDiskProfileCache)
 //   * Write + clear (setOverride, and the clear family: removeOverrideFile /
 //     clearOverride / clearOverridesForPaths / clearAllOverrides /
 //     clearOverridesUnder)
@@ -104,7 +105,11 @@ QVariantMap AnimationsPageController::rawProfile(const QString& path) const
     // "Overridden for this event", with a live revert link, next to the
     // INHERITED value the sanitizer had substituted — the card contradicting
     // itself on the one screen this controller exists to make honest.
-    return sanitizedProfileMap(readProfileJson(profileFilePath(path)));
+    // Through the memo, not a second read of the same file: QML calls this once
+    // per write path on every refreshFromTree, which runs after every commit —
+    // i.e. every tick of a duration drag. An uncached read here would falsify
+    // `cachedDiskProfile`'s own "one read per path per mutation" contract.
+    return cachedDiskProfile(path);
 }
 
 QVariantMap AnimationsPageController::cachedDiskProfile(const QString& path) const

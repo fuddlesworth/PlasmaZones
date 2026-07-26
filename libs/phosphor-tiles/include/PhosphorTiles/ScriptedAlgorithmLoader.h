@@ -36,8 +36,10 @@ class ITileAlgorithmRegistry;
  * brand-agnostic. For Phosphor this is `"plasmazones/algorithms"`.
  *
  * User scripts under `writableLocation/<subdirectory>/` override system
- * scripts with the same filename (system dirs come from every XDG
- * GenericDataLocation entry, in order). A script may only ever shadow another
+ * scripts declaring the same script ID (which defaults to `script:<basename>`
+ * but is overridden by the script's own `id` metadata, so it is not simply the
+ * filename). System dirs come from every XDG GenericDataLocation entry, in
+ * order. A script may only ever shadow another
  * script by that XDG priority, never a C++ built-in: a script whose id collides
  * with a built-in is refused outright.
  */
@@ -64,9 +66,14 @@ public:
     /**
      * @brief Discover and load all .luau algorithms from system + user dirs
      *
-     * Clears existing scripted algorithms from the registry, then rescans
-     * all algorithm directories. System directories are loaded first so that
-     * user directories can override by filename.
+     * Rescans every algorithm directory and diffs the result against the
+     * previous scan: unchanged files keep their existing registry entry, new
+     * and edited ones are (re)built, and entries whose file disappeared are
+     * unregistered. Nothing is cleared up front.
+     *
+     * Directories are iterated USER-FIRST with first-registration-wins on
+     * script ID, which is what produces `user > sys-highest > … > sys-lowest`.
+     * (The list handed in is system-first; `performScan` reverse-iterates it.)
      *
      * @p liveReload defaults to `On` so production callers (daemon,
      * editor, settings) get hot-reload by default. Pass `Off` from

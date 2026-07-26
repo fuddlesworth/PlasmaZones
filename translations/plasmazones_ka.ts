@@ -6932,17 +6932,17 @@
         <translation>შაბლონის &quot;%1&quot; წაშლა ვერ მოხერხდა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="407"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="411"/>
         <source>Cannot reset while a discard is in progress.</source>
         <translation>ჩამოყრა ვერ მოხერხდება, სანამ გაუქმება მიმდინარეობს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="461"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="465"/>
         <source>Some animation overrides could not be reset.</source>
         <translation>ანიმაციის ზოგიერთი გადაფარვის ჩამოყრა ვერ მოხერხდა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="481"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="485"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="410"/>
         <source>Cannot change this while a discard is in progress.</source>
         <translation type="unfinished"></translation>
@@ -10654,12 +10654,12 @@
         <translation>ანიმაციის გადახედვის ტრეკი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="301"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="307"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation>ზამბარა · ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="309"/>
         <source>%1 · %2 ms</source>
         <translation>%1 · %2 ms</translation>
     </message>
@@ -10742,10 +10742,6 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="430"/>
         <source>Following the inherited value</source>
         <translation>მემკვიდრეობით მიღებულ მნიშვნელობას მისდევს</translation>
-    </message>
-    <message>
-        <source>Revert to inherited</source>
-        <translation type="vanished">მემკვიდრეობითზე დაბრუნება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="350"/>
@@ -10846,11 +10842,6 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="725"/>
         <source>Apply a shader pack to this event</source>
         <translation>შეიდერების პაკეტის გამოყენება ამ მოვლენაზე</translation>
-    </message>
-    <message>
-        <source>Select a pack…</source>
-        <comment>@info:placeholder</comment>
-        <translation type="obsolete">აირჩიეთ პაკეტი…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="747"/>
@@ -11281,10 +11272,6 @@
         <translation>ანიმაციები ფანჯრების გახსნისა და დახურვისთვის. საწყისია &quot;ყველა ფანჯარა&quot;. ყოველ მოვლენას შეუძლია მისი გადაფარვა.</translation>
     </message>
     <message>
-        <source>Customize Curve: %1</source>
-        <translation type="vanished">მრუდის მორგება: %1</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="45"/>
         <source>Customize curve for %1</source>
         <comment>@title:window</comment>
@@ -11401,10 +11388,6 @@
         <translation>შენახვა შაბლონად…</translation>
     </message>
     <message>
-        <source>Higher = faster spring response</source>
-        <translation type="vanished">მეტი = ზამბარის უფრო სწრაფი გამოხმაურება</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="309"/>
         <source>Speed</source>
         <translation>სიჩქარე</translation>
@@ -11415,17 +11398,9 @@
         <translation>დამილევის კოეფიციენტი (ζ)</translation>
     </message>
     <message>
-        <source>&lt; 1 bouncy, = 1 critical, &gt; 1 overdamped</source>
-        <translation type="vanished">&lt; 1 ცხრიალა, = 1 კრიტიკული, &gt; 1 ზედმეტად დამილული</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="334"/>
         <source>Damping ratio</source>
         <translation>დამილევის კოეფიციენტი</translation>
-    </message>
-    <message>
-        <source>Save as Preset…</source>
-        <translation type="vanished">შენახვა შაბლონად…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="358"/>
@@ -11588,22 +11563,6 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingPreview.qml.cpp" line="537"/>
         <source>Drag to adjust easing curve control points</source>
         <translation>გადაათრიეთ დარბილების მრუდის საკონტროლო წერტილების დასარეგულირებლად</translation>
-    </message>
-    <message>
-        <source>Controls how acceleration feels</source>
-        <translation type="vanished">აკონტროლებს, როგორ იგრძნობა აჩქარება</translation>
-    </message>
-    <message>
-        <source>Easing style</source>
-        <translation type="vanished">დარბილების სტილი</translation>
-    </message>
-    <message>
-        <source>Ease In accelerates, Ease Out decelerates, In-Out does both</source>
-        <translation type="vanished">შესვლის დარბილება აჩქარებს, გამოსვლის დარბილება ანელებს, შესვლა-გამოსვლა ორივეს აკეთებს</translation>
-    </message>
-    <message>
-        <source>Total animation time in milliseconds</source>
-        <translation type="vanished">ანიმაციის მთლიანი დრო მილიწამებში</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/SpringPreview.qml.cpp" line="86"/>

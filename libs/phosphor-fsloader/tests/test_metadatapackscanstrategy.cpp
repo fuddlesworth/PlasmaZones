@@ -5,10 +5,11 @@
 // synthetic `FakePayload` POD. Pins the scaffolding contract — the
 // reverse-iterate first-wins layering, per-rescan cap, SHA-1 change-only
 // emit, sorted-by-id output, isUser classification, metadata-size cap,
-// stale-entry purge — independently of either real consumer's schema
-// (`ShaderInfo`, `AnimationShaderEffect`). The two real consumers
-// collapse onto this strategy in the C2 follow-up; their schema tests
-// pin schema parsing, this file pins everything else.
+// stale-entry purge — independently of any real consumer's schema. All
+// three production consumers (ShaderPack, AnimationPack, SurfacePack, each
+// hosted by PhosphorRegistry::MetadataPackLoader) sit on this strategy
+// today; their own schema tests pin schema parsing, this file pins
+// everything else.
 
 #include <PhosphorFsLoader/IScanStrategy.h>
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
@@ -26,7 +27,6 @@
 
 #include <memory>
 #include <optional>
-#include <utility>
 
 using namespace PhosphorFsLoader;
 
@@ -317,6 +317,11 @@ private Q_SLOTS:
         // Canonical lowest-first: sys then user.
         set.registerDirectories({sysDir, userDir}, LiveReload::Off);
 
+        // Anchor existence first: `pack()` returns a default-constructed payload
+        // (isUser == false) for an id it does not hold, so the isUser assertion
+        // alone is satisfied by a regression that drops the system path entirely.
+        QCOMPARE(strategy.size(), 2);
+        QVERIFY(strategy.contains(QStringLiteral("sys-pkg")));
         QCOMPARE(strategy.pack(QStringLiteral("sys-pkg")).isUser, false);
         QCOMPARE(strategy.pack(QStringLiteral("user-pkg")).isUser, true);
     }
@@ -690,7 +695,7 @@ private Q_SLOTS:
     /// Setting the user path *after* `registerDirectories` must
     /// reclassify already-discovered entries — the prior scan baked in
     /// the OLD (empty) user path, so every entry was `isUser=false`.
-    /// `MetadataPackRegistryBase::setUserPath` triggers a synchronous
+    /// `MetadataPackLoader::setUserPath` triggers a synchronous
     /// rescan when directories are registered; we drive the strategy
     /// through `WatchedDirectorySet` directly here so the test pins
     /// the strategy contract independently of the base wrapper.

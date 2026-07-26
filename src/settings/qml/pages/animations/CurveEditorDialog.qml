@@ -11,8 +11,9 @@ import org.kde.kirigami as Kirigami
  * @brief Popup dialog for full curve editing (drag-handle bezier or spring sliders).
  *
  * Spring axis uses (omega, zeta) per `PhosphorAnimation::Spring`. The
- * `Save as preset…` footer saves the working curve, plus the duration the
- * host passes in, through `AnimationsPageController::addUserPreset`.
+ * `Save as preset…` footer saves the working curve through
+ * `AnimationsPageController::addUserPreset`, plus the duration the host passes
+ * in — easing mode only, since a spring has no duration the user can see.
  */
 Kirigami.Dialog {
     id: root
@@ -382,13 +383,19 @@ Kirigami.Dialog {
                     // a single `curve` string (easing wire format or
                     // "spring:omega,zeta") plus duration. The controller
                     // stamps `name` automatically.
-                    var profile = {
-                        "duration": root.duration
-                    };
-                    if (root.timingMode === CurvePresets.timingModeEasing)
+                    var profile = {};
+                    if (root.timingMode === CurvePresets.timingModeEasing) {
                         profile.curve = root._workingCurve;
-                    else
+                        profile.duration = root.duration;
+                    } else {
+                        // No duration on a spring preset. A spring derives its
+                        // own settle time from omega and zeta, so the editor
+                        // hides the Duration row entirely in this mode — the
+                        // value here would be the easing-side duration the user
+                        // cannot see on this card, silently pinned onto
+                        // whatever event the preset is later applied to.
                         profile.curve = "spring:" + root._workingOmega.toFixed(2) + "," + root._workingZeta.toFixed(2);
+                    }
                     // addUserPreset rejects names that collide with a
                     // built-in event path (would shadow an override
                     // slot on disk). On rejection, leave the entry

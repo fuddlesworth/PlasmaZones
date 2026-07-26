@@ -173,14 +173,21 @@ public:
     /// traversal attempts).
     Q_INVOKABLE bool hasOverride(const QString& path) const;
 
-    /// Per-path override file content as a QVariantMap. The `name` field is
-    /// stripped, and so is any field `Profile::fromJson` would reject, exactly
-    /// as `resolvedProfile` drops it — otherwise a card would show a live
-    /// revert link beside the INHERITED value it claims is overridden.
+    /// Per-path override file content as a QVariantMap, normalised exactly as
+    /// `resolvedProfile` normalises it — otherwise a card would show a live
+    /// revert link beside the INHERITED value it claims is overridden. The
+    /// `name` field is stripped.
+    ///
+    /// Normalised, NOT uniformly stripped: a field `Profile::fromJson` leaves
+    /// unset is dropped here (so the ancestor's value shows through), and a
+    /// field fromJson substitutes a default for is substituted here too (so it
+    /// keeps blocking inheritance, as the daemon's copy does). See
+    /// `animations_controller_detail::sanitizedProfileMap` for the per-field
+    /// table.
     ///
     /// An empty map therefore means EITHER no override file exists OR no field
-    /// in it survived validation. Callers that must tell those apart ask
-    /// `hasOverride()`, which tests the file itself.
+    /// in it survived. Callers that must tell those apart ask `hasOverride()`,
+    /// which tests the file itself.
     Q_INVOKABLE QVariantMap rawProfile(const QString& path) const;
 
     /// Effective Profile for @p path: walks the parent chain reading this

@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **The curve revert link names the field it reverts**: it now reads "Revert curve to inherited", matching the duration link beside it, and the curve editor is titled "Customize curve for &lt;event&gt;". The spring Speed and Damping ratio hints are worded as sentences instead of comparison operators ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **The curve revert link names the field it reverts**: it now reads "Revert curve to inherited", matching the duration link beside it, and the curve editor is titled `Customize curve for <event>`. The spring Speed and Damping ratio hints are worded as sentences instead of comparison operators ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
 
 ### Fixed
 

@@ -6936,17 +6936,17 @@
         <translation>Не удалось удалить предустановку &quot;%1&quot;.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="407"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="411"/>
         <source>Cannot reset while a discard is in progress.</source>
         <translation>Нельзя выполнить сброс, пока идёт отмена изменений.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="461"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="465"/>
         <source>Some animation overrides could not be reset.</source>
         <translation>Некоторые переопределения анимаций сбросить не удалось.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="481"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="485"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="410"/>
         <source>Cannot change this while a discard is in progress.</source>
         <translation type="unfinished"></translation>
@@ -10660,12 +10660,12 @@
         <translation>Дорожка предпросмотра анимации</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="301"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="307"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation>Пружина · ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="309"/>
         <source>%1 · %2 ms</source>
         <translation>%1 · %2 мс</translation>
     </message>
@@ -10748,10 +10748,6 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="430"/>
         <source>Following the inherited value</source>
         <translation>Следует унаследованному значению</translation>
-    </message>
-    <message>
-        <source>Revert to inherited</source>
-        <translation type="vanished">Вернуть унаследованное значение</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="350"/>
@@ -10852,11 +10848,6 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="725"/>
         <source>Apply a shader pack to this event</source>
         <translation>Применить пакет шейдеров к этому событию</translation>
-    </message>
-    <message>
-        <source>Select a pack…</source>
-        <comment>@info:placeholder</comment>
-        <translation type="obsolete">Выбрать пакет…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="747"/>
@@ -11289,10 +11280,6 @@
         <translation>Анимации для открытия и закрытия окон. Значение по умолчанию задаёт «Все окна». Каждое событие может его переопределить.</translation>
     </message>
     <message>
-        <source>Customize Curve: %1</source>
-        <translation type="vanished">Настроить кривую: %1</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="45"/>
         <source>Customize curve for %1</source>
         <comment>@title:window</comment>
@@ -11409,10 +11396,6 @@
         <translation>Сохранить как предустановку…</translation>
     </message>
     <message>
-        <source>Higher = faster spring response</source>
-        <translation type="vanished">Выше значение — быстрее реакция пружины</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="309"/>
         <source>Speed</source>
         <translation>Скорость</translation>
@@ -11423,17 +11406,9 @@
         <translation>Коэффициент затухания (ζ)</translation>
     </message>
     <message>
-        <source>&lt; 1 bouncy, = 1 critical, &gt; 1 overdamped</source>
-        <translation type="vanished">&lt; 1 — пружинит, = 1 — критическое затухание, &gt; 1 — избыточное затухание</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="334"/>
         <source>Damping ratio</source>
         <translation>Коэффициент затухания</translation>
-    </message>
-    <message>
-        <source>Save as Preset…</source>
-        <translation type="vanished">Сохранить как предустановку…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="358"/>
@@ -11596,22 +11571,6 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingPreview.qml.cpp" line="537"/>
         <source>Drag to adjust easing curve control points</source>
         <translation>Перетащите, чтобы настроить контрольные точки кривой плавности</translation>
-    </message>
-    <message>
-        <source>Controls how acceleration feels</source>
-        <translation type="vanished">Управляет ощущением ускорения</translation>
-    </message>
-    <message>
-        <source>Easing style</source>
-        <translation type="vanished">Стиль плавности</translation>
-    </message>
-    <message>
-        <source>Ease In accelerates, Ease Out decelerates, In-Out does both</source>
-        <translation type="vanished">«Ускорение» разгоняет, «Замедление» тормозит, «Ускорение-замедление» делает и то и другое</translation>
-    </message>
-    <message>
-        <source>Total animation time in milliseconds</source>
-        <translation type="vanished">Общее время анимации в миллисекундах</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/SpringPreview.qml.cpp" line="86"/>

@@ -32,8 +32,6 @@
 #include <QRegularExpression>
 #include <QSet>
 
-#include <PhosphorAnimation/ProfilePaths.h>
-
 #include "settings/pages/animationpagescope.h"
 #include "settings/pages/animationspagecontroller.h"
 
@@ -56,6 +54,8 @@ class TestAnimationsQmlContracts : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+
+    // ─── QML → controller name reachability ───────────────────────────────
 
     void everyAnimationsPageCallFromQmlIsReachable()
     {
@@ -150,9 +150,12 @@ private Q_SLOTS:
         // stops at the first nested `} else {`, so a plain `if/else` inside the
         // arm hides everything after it — a direct controller write past that
         // point scans clean while `hasMatch()` still reports success.
+        // The handler's parameter name is CAPTURED and back-referenced rather
+        // than hardcoded, so renaming it (QML permits any name) does not redden
+        // the build for a refactor that changed nothing this slot cares about.
         static const QRegularExpression headRe(
-            QStringLiteral("onToggleClicked\\s*:\\s*function\\s*\\(\\s*checked\\s*\\)\\s*\\{\\s*"
-                           "if\\s*\\(\\s*checked\\s*\\)\\s*\\{"));
+            QStringLiteral("onToggleClicked\\s*:\\s*function\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)\\s*\\{\\s*"
+                           "if\\s*\\(\\s*\\1\\s*\\)\\s*\\{"));
         const QRegularExpressionMatch head = headRe.match(src);
         QVERIFY2(head.hasMatch(),
                  "could not locate the onToggleClicked `if (checked) {` arm in AnimationEventCard.qml");
@@ -172,10 +175,20 @@ private Q_SLOTS:
 
         // Strip comments: the arm's own comment explains the behaviour by naming
         // the calls it does NOT make, and matching those would fail the test for
-        // describing itself. Whole-line only, so a `//` inside a string literal
-        // cannot silently truncate the code being scanned.
-        static const QRegularExpression lineCommentRe(QStringLiteral("(?m)^\\s*//[^\\n]*$"));
-        QString code = QString(arm).remove(lineCommentRe);
+        // describing itself.
+        //
+        // Trailing comments are stripped too, not just whole lines — a
+        // `// latch only` after the statement is a comment, and reddening the
+        // build for one would make this slot a nuisance rather than a guard.
+        // That is only safe while the arm holds no string or template literal,
+        // where a `//` would be content rather than a comment, so that is
+        // asserted rather than assumed. Block comments are deliberately NOT
+        // stripped: one could hide a statement, and the equality below would
+        // then fail loudly, which is the right direction to be wrong in.
+        QVERIFY2(!arm.contains(QLatin1Char('"')) && !arm.contains(QLatin1Char('\'')) && !arm.contains(QLatin1Char('`')),
+                 "the ON arm now contains a string literal — the comment stripper below is only sound without one");
+        static const QRegularExpression commentRe(QStringLiteral("//[^\\n]*"));
+        QString code = QString(arm).remove(commentRe);
 
         // Assert what the arm IS, not which receivers it avoids. An
         // exclusion list has to enumerate every route to the controller, and

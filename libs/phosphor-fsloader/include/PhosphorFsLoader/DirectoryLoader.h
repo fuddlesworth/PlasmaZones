@@ -77,9 +77,12 @@ public:
     /**
      * @brief Register a directory for scanning + (optionally) watching.
      *
-     * Idempotent on the directory path — adding the same directory
-     * twice is a no-op on the second call. Returns the count of
-     * entries CURRENTLY registered after the scan (not the delta).
+     * Idempotent on the registered SET, not on the work: adding a directory
+     * already present does not duplicate it, but the call still runs a full
+     * rescan and dispatches a `commitBatch` plus `entriesChanged`. A caller
+     * that means "rescan now" should say `requestRescan()`; a caller that
+     * means "make sure this is registered" pays a scan either way. Returns the
+     * count of entries CURRENTLY registered after the scan (not the delta).
      *
      * `liveReload` is a one-way enable: once any call passes
      * `LiveReload::On`, the loader keeps watching for the rest of its
@@ -87,8 +90,8 @@ public:
      *
      * The default is `Off` because this is a library primitive — tests
      * and batch imports compose against it. Consumer wrappers above
-     * this (CurveLoader/ProfileLoader and the shader registries)
-     * inherit the default, but can override it via the explicit
+     * this (CurveLoader and ProfileLoader — the pack registries sit on
+     * `MetadataPackLoader`, not on this class) inherit the default, but can override it via the explicit
      * `LiveReload::On` argument production callers pass.
      */
     int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
