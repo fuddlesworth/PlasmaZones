@@ -21,7 +21,7 @@ Consumed by
 [`phosphor-rendering`](../phosphor-rendering/README.md) (writes the base
 UBO, calls `IUniformExtension::write()` for the remainder),
 [`phosphor-animation`](../phosphor-animation/README.md) (whose
-`AnimationShaderRegistry` reuses `MetadataPackRegistryBase`), and the
+`AnimationShaderRegistry` reuses the same strategy), and the
 Phosphor overlay (hosts `ShaderEffect` items in QML).
 
 ## Key types
@@ -94,14 +94,14 @@ private:
   `shaderInfo`, `shaderUrl`) read it without synchronisation.
   `searchPaths()` returns a by-value snapshot suitable for handing to
   worker threads (the shader-warming path).
-- **Inherits `MetadataPackRegistryBase`.** Search-path management is
+- **Composes a `PhosphorRegistry::MetadataPackLoader`.** Search-path management is
   in `phosphor-fsloader`, and `ShaderRegistry` adds only the
   shader-specific lookup surface.
 
 ## Dependencies
 
 - `QtCore`, `QtGui`
-- [`phosphor-fsloader`](../phosphor-fsloader/README.md) — `MetadataPackRegistryBase` + `MetadataPackScanStrategy`
+- [`phosphor-fsloader`](../phosphor-fsloader/README.md) — `MetadataPackScanStrategy`
 
 ## See also
 

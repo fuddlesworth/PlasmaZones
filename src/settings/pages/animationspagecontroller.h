@@ -451,8 +451,10 @@ public:
     /// and the page even offers to open it. The composition root connects
     /// `ProfileLoader::profilesChanged` here so a hand-edited file is picked up
     /// on the next read instead of serving the pre-edit value for the rest of
-    /// the session. Cheap and idempotent: worst case the next read re-parses a
-    /// few hundred bytes per level.
+    /// the session. Emits `overrideChanged(QString())` — the tree-wide reload
+    /// broadcast — so an OPEN page re-reads too, rather than only the next one.
+    /// Cheap and idempotent: worst case the next read re-parses a few hundred
+    /// bytes per level.
     void forgetCachedOverrideFiles();
 
 Q_SIGNALS:

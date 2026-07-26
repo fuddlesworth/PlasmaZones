@@ -37,7 +37,7 @@ namespace PhosphorRegistry {
 //
 //   - Owns a phosphor-fsloader MetadataPackScanStrategy<Entry> +
 //     WatchedDirectorySet (the same scan/watch substrate the legacy
-//     MetadataPackRegistryBase used), configured with a domain Parser
+//     the since-removed MetadataPackRegistryBase used), configured with a domain Parser
 //     that turns one pack's metadata.json into a shared_ptr<Factory>.
 //   - On every committed rescan, reconciles the Registry to match the
 //     freshly-scanned set: NEW packs are registerFactory'd, REMOVED
@@ -190,7 +190,7 @@ public:
         m_onCommitted = std::move(fn);
     }
 
-    // Add search directories. Mirrors MetadataPackRegistryBase: a single
+    // Add search directories. A single
     // batched register runs one synchronous scan; the reconcile +
     // per-entry Registry signals fire inline before this returns.
     void

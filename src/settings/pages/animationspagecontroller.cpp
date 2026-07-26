@@ -3,44 +3,31 @@
 
 #include "animationspagecontroller.h"
 
-#include "config/configdefaults.h"
-#include "core/types/animationshadersupportedpaths.h"
 #include "core/interfaces/isettings.h"
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
 #include "settings/utils/animationfileutils.h"
 #include "settings/stores/animationpresetlibrary.h"
 #include "animations_controller_detail.h"
-#include "settings/utils/dbusutils.h"
 #include "settings/services/motionsetdomain.h"
 #include "settings/stores/shadersetstore.h"
 
-#include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
-#include <PhosphorAnimation/Easing.h>
-#include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
-#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QFuture>
 #include <QFutureWatcher>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLoggingCategory>
 #include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
-#include <QUrl>
 #include <QtConcurrent/QtConcurrent>
-
-#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -58,9 +45,9 @@ namespace animations_controller_detail {
 
 /// `JsonNameKey`, `profileToVariantMap`, `readProfileJson`,
 /// `mergeMissingFields`, and `fillLibraryDefaults` live in
-/// `animations_controller_detail.h` so sibling TUs
-/// (animationspagecontroller_overrides.cpp, _shaders.cpp) share the exact
-/// same implementations without relying on unity-build TU merging.
+/// `animations_controller_detail.h` so the sibling TU that uses them
+/// (animationspagecontroller_overrides.cpp) shares the exact same
+/// implementations without relying on unity-build TU merging.
 ///
 /// `humanizeSegment` (segment title-casing for label display) also lives in
 /// `animations_controller_detail.h` so animationspagecontroller_paths.cpp
@@ -86,16 +73,6 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     , m_shaderRegistry(shaderRegistry)
     , m_settings(settings)
 {
-    // Forward the existing pendingChangesChanged() signal to the
-    // framework's dirtyChanged() so ApplicationController picks up
-    // animation-page edits as part of the global dirty flag.
-    //
-    // CLAUDE.md: "Only emit signals when value actually changes." A
-    // handful of internal call sites emit pendingChangesChanged
-    // unconditionally (revertPending / asyncRevertPending /
-    // setShaderOverride no-op branches). Gating the forwarder on the
-    // observed state-flip keeps the dirty Q_PROPERTY's NOTIFY contract
-    // honest — downstream listeners only re-evaluate on real changes.
     // Forward the snapshot helper as a callable so the sub-services can
     // capture pre-edit content without coupling to the controller's
     // m_pendingFileSnapshots layout. The bool return matters: a false means
@@ -232,6 +209,14 @@ void AnimationsPageController::setProfileStoreRefresher(std::function<void()> re
 void AnimationsPageController::forgetCachedOverrideFiles()
 {
     invalidateDiskProfileCache();
+    // …and tell the page. Dropping the memo alone only guarantees the NEXT read
+    // is honest; an open card does not re-read on its own, so a hand-edit to the
+    // profiles directory would still show the pre-edit value until something
+    // unrelated rebound it. The empty path is the tree-wide reload broadcast the
+    // cards already understand (AnimationEventCard's `_pathAffectsThisCard`
+    // returns true for it), which is right here: an external write can have
+    // touched any path.
+    Q_EMIT overrideChanged(QString());
 }
 
 void AnimationsPageController::refreshProfileStore()
@@ -322,7 +307,10 @@ bool AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePa
         return false;
     }
 
-    const bool wasPending = hasPendingChanges();
+    // Only sampled when we might emit: hasPendingChanges() returns two
+    // ShaderProfileTree values BY VALUE and compares them, and the Defer path
+    // (one call per file in a batch clear) never uses the result.
+    const bool wasPending = signalPolicy == SnapshotDropSignal::Emit && hasPendingChanges();
     m_pendingFileSnapshots.remove(filePath);
     // Sole owner of the signal for this transition: the sub-services used to
     // emit alongside their rollback call, which fired twice for one flip and

@@ -153,10 +153,10 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // value comes from a file a user can hand-edit. Checking the
         // rounded result instead only worked by accident, on the
         // platform where the UB conversion happens to pin to INT_MIN.
-        if (!std::isfinite(rawDouble) || rawDouble < 0.0 || rawDouble > qreal(std::numeric_limits<int>::max())) {
-            qCWarning(lcProfile).nospace() << "Profile::fromJson: rejecting minDistance " << rawDouble
-                                           << " (expected 0 <= minDistance <= " << std::numeric_limits<int>::max()
-                                           << ") — library default will apply";
+        if (!std::isfinite(rawDouble) || rawDouble < 0.0 || rawDouble > qreal(MaxMinDistancePx)) {
+            qCWarning(lcProfile).nospace()
+                << "Profile::fromJson: rejecting minDistance " << rawDouble
+                << " (expected 0 <= minDistance <= " << MaxMinDistancePx << " px) — library default will apply";
         } else {
             p.minDistance = qRound(rawDouble);
         }
@@ -167,7 +167,14 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // Same rationale as minDistance / staggerInterval.
         const qreal rawDouble =
             obj.value(QLatin1String(JsonFieldSequenceMode)).toDouble(static_cast<int>(DefaultSequenceMode));
-        const int raw = std::isfinite(rawDouble) ? qRound(rawDouble) : static_cast<int>(DefaultSequenceMode);
+        // Range-checked as well as finiteness-checked, like the minDistance and
+        // staggerInterval branches: `std::isfinite` alone still admits 1e300,
+        // and `qRound` on a value outside the int range is undefined behaviour.
+        // An out-of-range value falls through to the unknown-enumerator path
+        // below, which is where it belongs.
+        const bool roundable = std::isfinite(rawDouble) && rawDouble >= qreal(std::numeric_limits<int>::min())
+            && rawDouble <= qreal(std::numeric_limits<int>::max());
+        const int raw = roundable ? qRound(rawDouble) : static_cast<int>(DefaultSequenceMode);
         // Map valid enumerators; anything else falls back to the library
         // default. This is NOT forward-compat with future enumerators
         // written by a newer client — those would silently land on

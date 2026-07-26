@@ -77,7 +77,11 @@ namespace PhosphorFsLoader {
  *
  *      One known wrinkle: `metadata.json` files that fail validation
  *      (parse error, oversized, empty `id`, parser declined) are still
- *      added to the watch set so a fix-up edit re-fires the rescan.
+ *      added to the watch set so a fix-up edit re-fires the rescan. So
+ *      is the DIRECTORY of a pack that has no `metadata.json` yet, and
+ *      a directory's mtime moves whenever any child appears — so
+ *      dropping an unrelated file into a metadata-less pack dir also
+ *      shifts the fingerprint.
  *      That means an in-place edit of a still-broken file shifts the
  *      watch-set fingerprint and trips `OnCommit` even though no
  *      *visible* state changed. Consumers gating their public signal
@@ -407,8 +411,11 @@ public:
      * and `OnCommit` fires.
      *
      * @return Per-rescan watch paths: every iterated subdir's
-     *         `metadata.json`, plus everything `PerEntryWatchPaths`
-     *         and `PerDirectoryWatchPaths` returned. Lex-sorted and
+     *         `metadata.json`, the SUBDIRECTORY itself for any subdir
+     *         that has no `metadata.json` yet (the file cannot be
+     *         watched before it exists, so the directory stands in for
+     *         it), plus everything `PerEntryWatchPaths` and
+     *         `PerDirectoryWatchPaths` returned. Lex-sorted and
      *         deduplicated (the same canonical form already used
      *         internally for the signature pass) so callers can rely
      *         on stable ordering across rescans regardless of which

@@ -229,12 +229,12 @@ inline QJsonObject readProfileJson(const QString& path)
 /// Field-by-field equivalence with `Profile::fromJson` is the contract, and the
 /// per-field comments below say where each one drops a key versus substitutes
 /// the library default, because the two are not interchangeable under
-/// `mergeMissingFields`. Two deliberate divergences: `curve` is type-checked
-/// but not RESOLVED (see the comment at its branch), and every numeric field is
-/// range-checked BEFORE rounding, where fromJson's `minDistance` branch rounded
-/// first. That second one is defensive rather than behavioural — the library's
-/// unguarded `qRound` on an out-of-range double was undefined behaviour, and
-/// has since been given the same bound-first treatment.
+/// `mergeMissingFields`. One deliberate divergence: `curve` is type-checked but
+/// not RESOLVED (see the comment at its branch). Every numeric field is
+/// range-checked before rounding, which now matches fromJson exactly — the
+/// library's `minDistance` and `sequenceMode` branches used to round an
+/// unbounded double, which was undefined behaviour, and have since been given
+/// the same bound-first treatment.
 inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
 {
     using P = PhosphorAnimation::Profile;

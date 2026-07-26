@@ -180,6 +180,39 @@ private Q_SLOTS:
         QVERIFY(sink.registry.contains(QStringLiteral("good-key")));
     }
 
+    /// A file the scan REFUSED still gets a per-file watch, so repairing it in
+    /// place wakes the loader. This is the only route: a directory watch does
+    /// not fire on a content change to a file that already exists, so without
+    /// the refused-path watch the fixed entry stays invisible until something
+    /// unrelated triggers a rescan.
+    ///
+    /// Deleting `desiredFileWatches.append(refusedPaths)` makes this hang for
+    /// the full timeout and fail.
+    void testInPlaceRepairOfRefusedFileRefiresRescan()
+    {
+        const QString badPath = m_tmp->filePath(QStringLiteral("bad.json"));
+        QFile bad(badPath);
+        QVERIFY(bad.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        bad.write("{ not valid json ");
+        bad.close();
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setDebounceIntervalForTest(1);
+        QCOMPARE(loader.loadFromDirectory(m_tmp->path(), LiveReload::On), 0);
+
+        // Spy BEFORE the trigger, per this file's convention.
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+
+        // Rewrite the SAME path as valid JSON. No directory entry is created or
+        // removed, so only a per-file watch on the refused path can notice.
+        QVERIFY(writeJson(badPath, QStringLiteral("repaired"), QStringLiteral("v")));
+
+        QVERIFY2(spy.wait(4000), "repairing a refused file in place did not re-fire the rescan");
+        QTRY_COMPARE_WITH_TIMEOUT(loader.registeredCount(), 1, 2000);
+        QVERIFY(sink.registry.contains(QStringLiteral("repaired")));
+    }
+
     // ── Stale-entry purge (the blocker from the review) ─────────────────
 
     void testRescan_purgesDeletedEntries()

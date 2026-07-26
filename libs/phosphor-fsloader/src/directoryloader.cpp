@@ -95,8 +95,11 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
     // never violated either way.
     QHash<QString, Entry> fresh;
     QHash<QString, ParsedEntry> freshParsedByKey;
-    // Files this scan looked at and did not register — unparseable, empty key,
-    // intra-directory duplicate, or cross-directory shadowed. They own no entry,
+    // Files this scan looked at and did not register — oversized, unparseable,
+    // empty key, or an intra-directory duplicate. NOT the cross-directory
+    // shadowed ones: a shadowed file's content changes nothing observable while
+    // the override that shadows it exists, and its removal is a directory event
+    // the search-path watch already catches. They own no entry,
     // but they still get a per-file watch below: an in-place edit that FIXES a
     // broken file is the most common way an entry goes from invisible to
     // visible, and a directory watch does not fire on content changes to a file
