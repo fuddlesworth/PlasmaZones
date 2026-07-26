@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "configdefaults_screens.h"
+#include "configdefaults_scrolling.h"
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -21,7 +21,7 @@ namespace PlasmaZones {
  *   int cols = ConfigDefaults::gridColumns();  // Returns 5
  *   int rows = ConfigDefaults::maxRows();      // Returns 4
  */
-class ConfigDefaults : public ConfigDefaultsScreens
+class ConfigDefaults : public ConfigDefaultsScrolling
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -502,118 +502,6 @@ public:
     {
         return PhosphorTiles::AutotileDefaults::MaxMaxWindows;
     }
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Scrolling (Tiling.Scrolling)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// CenterFocusedColumn: 0 = never, 1 = always, 2 = on overflow.
-    static constexpr int scrollingCenterFocusedColumn()
-    {
-        return 0;
-    }
-    /// Closed-set validity check — the SAME enumerator list the schema's
-    /// validIntOr closed set uses, so the D-Bus registry guard and the
-    /// schema validator cannot drift (a range check would silently accept
-    /// any hole a future enum leaves).
-    static constexpr bool isValidScrollingCenterFocusedColumn(int v)
-    {
-        return v == 0 || v == 1 || v == 2;
-    }
-    static constexpr bool scrollingAlwaysCenterSingleColumn()
-    {
-        return false;
-    }
-    /// Width-kind wire values (0 = proportion, 1 = fixed px, 2 = client
-    /// decides). Named so the settings layer's kind-aware branches read
-    /// against the vocabulary instead of raw ints; the LGPL engine keeps
-    /// its own interpretation of the same values (IScrollSettings docs).
-    static constexpr int scrollingWidthKindProportion()
-    {
-        return 0;
-    }
-    static constexpr int scrollingWidthKindFixed()
-    {
-        return 1;
-    }
-    static constexpr int scrollingWidthKindClientDecides()
-    {
-        return 2;
-    }
-    /// Default column width kind: 0 = proportion, 1 = fixed px, 2 = client decides.
-    static constexpr int scrollingDefaultColumnWidthKind()
-    {
-        return scrollingWidthKindProportion();
-    }
-    /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
-    static constexpr bool isValidScrollingWidthKind(int v)
-    {
-        return v == scrollingWidthKindProportion() || v == scrollingWidthKindFixed()
-            || v == scrollingWidthKindClientDecides();
-    }
-    /// Value paired with the kind: a proportion in (0, 1] or a pixel width.
-    static constexpr qreal scrollingDefaultColumnWidthValue()
-    {
-        return 0.5;
-    }
-    static constexpr qreal scrollingDefaultColumnWidthValueMin()
-    {
-        return 0.05;
-    }
-    /// Proportion-kind ceiling (100% of the work area). The QML slider and
-    /// the schema's proportion-list canonicalizer bound against the same
-    /// value conceptually; this accessor is the C++ home for it.
-    static constexpr qreal scrollingDefaultColumnWidthProportionMax()
-    {
-        return 1.0;
-    }
-    /// Fixed-kind pixel floor. Enforced by the hand-written SETTER only —
-    /// the D-Bus registry routes through it, but store-level writers
-    /// (profile staging, config import, hand edits) see only the schema's
-    /// wider clampDouble. The QML SpinBox reads its bounds from here via
-    /// SettingsController::scrollingWidthConstants(). The engine's
-    /// qMax(1, …) keeps any bypass value renderable.
-    static constexpr qreal scrollingDefaultColumnWidthFixedMin()
-    {
-        return 100.0;
-    }
-    /// Fixed-kind pixel ceiling. Also the schema clampDouble's upper bound
-    /// (deliberately: the shared value key spans both kinds, so the schema
-    /// clamp uses the WIDER fixed range and the kind-aware setter owns the
-    /// real per-kind bounds).
-    static constexpr qreal scrollingDefaultColumnWidthFixedMax()
-    {
-        return 10000.0;
-    }
-    /// Pixel width seeded when the kind flips to Fixed while a proportion
-    /// is stored (the shared value key serves both kinds).
-    static constexpr qreal scrollingDefaultColumnWidthFixedPx()
-    {
-        return 800.0;
-    }
-    /// ColumnDisplay new columns open in: 0 = normal, 1 = tabbed.
-    static constexpr int scrollingDefaultColumnDisplay()
-    {
-        return 0;
-    }
-    /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
-    static constexpr bool isValidScrollingColumnDisplay(int v)
-    {
-        return v == 0 || v == 1;
-    }
-    /// Preset proportion lists, comma-joined decimals (the niri defaults).
-    /// KEEP IN SYNC with the engine's hard-coded fallback in
-    /// ScrollEngine (engine_core.cpp refreshConfigFromSettings) — same
-    /// {1/3, 1/2, 2/3} intent spelled twice because the LGPL engine cannot
-    /// include this GPL header.
-    static QString scrollingPresetColumnWidths()
-    {
-        return QStringLiteral("0.333,0.5,0.667");
-    }
-    static QString scrollingPresetWindowHeights()
-    {
-        return QStringLiteral("0.333,0.5,0.667");
-    }
-
     static bool animationsEnabled()
     {
         return true;
@@ -1061,111 +949,6 @@ public:
     static QString autotileRetileShortcut()
     {
         return QStringLiteral("Meta+Ctrl+R");
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Scrolling Shortcuts
-    //
-    // Anchored on Meta+Alt to stay clear of stock Plasma and the Meta+Shift /
-    // Meta+Ctrl families above. NOTE: the Meta+Alt family is SHARED with the
-    // layouts pair (Meta+Alt+[ ]), the cheatsheet (Meta+Alt+/), cycle-in-zone
-    // (Meta+Alt+, .), and the quick-layout digits (Meta+Alt+1-9) — KGlobalAccel
-    // routes one action per chord, so every default here must be unique across
-    // the WHOLE file (test_scrolling_settings pins this). Shift+symbol spellings
-    // are forbidden: see toggleCheatsheetShortcut() — KWin consumes Shift in
-    // the keysym translation on Wayland and the chord can never fire.
-    // Directional focus/move/swap reuse the existing generic navigation
-    // shortcuts; only the scroll-specific column vocabulary gets its own
-    // chords.
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    static QString scrollingFocusColumnFirstShortcut()
-    {
-        return QStringLiteral("Meta+Alt+Home");
-    }
-    static QString scrollingFocusColumnLastShortcut()
-    {
-        return QStringLiteral("Meta+Alt+End");
-    }
-    static QString scrollingMoveColumnToFirstShortcut()
-    {
-        return QStringLiteral("Meta+Alt+Shift+Home");
-    }
-    static QString scrollingMoveColumnToLastShortcut()
-    {
-        return QStringLiteral("Meta+Alt+Shift+End");
-    }
-    static QString scrollingConsumeWindowShortcut()
-    {
-        // Meta+Alt+, and Meta+Alt+. belong to cycle-in-zone; the semicolon
-        // pair is the nearest free punctuation.
-        return QStringLiteral("Meta+Alt+;");
-    }
-    static QString scrollingExpelWindowShortcut()
-    {
-        return QStringLiteral("Meta+Alt+'");
-    }
-    static QString scrollingConsumeOrExpelLeftShortcut()
-    {
-        // Meta+Alt+[ and Meta+Alt+] belong to the layouts pair.
-        return QStringLiteral("Meta+Alt+U");
-    }
-    static QString scrollingConsumeOrExpelRightShortcut()
-    {
-        return QStringLiteral("Meta+Alt+O");
-    }
-    static QString scrollingCenterColumnShortcut()
-    {
-        return QStringLiteral("Meta+Alt+C");
-    }
-    static QString scrollingToggleColumnTabbedShortcut()
-    {
-        return QStringLiteral("Meta+Alt+T");
-    }
-    static QString scrollingCycleColumnWidthShortcut()
-    {
-        return QStringLiteral("Meta+Alt+R");
-    }
-    static QString scrollingCycleColumnWidthBackShortcut()
-    {
-        // Deliberately unbound: the reverse cycle is a niche refinement and
-        // free chords near Meta+Alt+R are scarce.
-        return QString();
-    }
-    static QString scrollingIncreaseColumnWidthShortcut()
-    {
-        return QStringLiteral("Meta+Alt+=");
-    }
-    static QString scrollingDecreaseColumnWidthShortcut()
-    {
-        return QStringLiteral("Meta+Alt+-");
-    }
-    static QString scrollingMaximizeColumnShortcut()
-    {
-        return QStringLiteral("Meta+Alt+F");
-    }
-    static QString scrollingExpandColumnShortcut()
-    {
-        return QStringLiteral("Meta+Alt+E");
-    }
-    static QString scrollingCycleWindowHeightShortcut()
-    {
-        return QStringLiteral("Meta+Alt+Shift+R");
-    }
-    static QString scrollingIncreaseWindowHeightShortcut()
-    {
-        // NOT Meta+Alt+Shift+= — Shift+symbol chords never fire on Wayland
-        // (see toggleCheatsheetShortcut). PgUp/PgDown are named keys and
-        // pair naturally with the height axis.
-        return QStringLiteral("Meta+Alt+PgUp");
-    }
-    static QString scrollingDecreaseWindowHeightShortcut()
-    {
-        return QStringLiteral("Meta+Alt+PgDown");
-    }
-    static QString scrollingResetWindowHeightsShortcut()
-    {
-        return QStringLiteral("Meta+Alt+0");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

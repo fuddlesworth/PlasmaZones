@@ -403,7 +403,11 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // rejects an already-tracked window).
         if (m_managedScreens.contains(newScreenId) && m_effect->shouldHandleWindow(w) && !w->isMinimized()
             && w->isOnCurrentDesktop() && w->isOnCurrentActivity()) {
-            notifyWindowAdded(w);
+            // knownFreeFloating only when the border state does NOT already
+            // track the window as tiled: the handoffReceive that placed it has
+            // its frame sitting in the destination zone rect, and passing true
+            // would push that rect as the daemon's free/float-back geometry.
+            notifyWindowAdded(w, /*knownFreeFloating=*/!TilingStateHelpers::isTiledWindow(m_border, windowId));
             m_effect->updateAllDecorations();
         }
         return;
@@ -424,14 +428,19 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // geometry echo) has already emptied the source bucket, while a
     // parking hop's window is still tiled there, so the marker survives
     // for the genuine echo and the hop falls through to the same-screen
-    // return below.
+    // return below. The source screen comes from the marker, not from
+    // oldScreenId: the move's tile requests land before this echo and
+    // pre-seed m_notifiedWindowScreens with the DESTINATION, so oldScreenId
+    // here would name the destination bucket and the test would always say
+    // "still tiled".
     if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
         const QPointF cf = w->frameGeometry().center();
         const QString positional =
             m_effect->resolveEffectiveScreenId(QPoint(qRound(cf.x()), qRound(cf.y())), m_effect->windowOutput(w));
-        const bool stillTiledOnSource = m_scrollingScreens.contains(oldScreenId)
-            && m_border.tiledWindowsByScreen.value(oldScreenId).contains(windowId);
-        if (expIt.value() == positional && !stillTiledOnSource) {
+        const QString sourceScreenId = expIt.value().sourceScreenId;
+        const bool stillTiledOnSource = m_scrollingScreens.contains(sourceScreenId)
+            && m_border.tiledWindowsByScreen.value(sourceScreenId).contains(windowId);
+        if (expIt.value().targetScreenId == positional && !stillTiledOnSource) {
             m_expectedOutputMove.erase(expIt);
             if (m_managedScreens.contains(positional)) {
                 m_notifiedWindowScreens[windowId] = positional;
@@ -461,7 +470,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // Either way, drop the one-shot rather than let it swallow a later
         // genuine move's notification.
         if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
-            if (expIt.value() == newScreenId || scrollTrackedScreenFor(windowId).isEmpty()) {
+            if (expIt.value().targetScreenId == newScreenId || scrollTrackedScreenFor(windowId).isEmpty()) {
                 m_expectedOutputMove.erase(expIt);
             }
         }

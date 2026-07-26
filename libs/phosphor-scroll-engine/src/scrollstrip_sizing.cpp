@@ -312,11 +312,10 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
             changed = true;
             // Same invariant as every other width mutator in this file: a
             // width write invalidates a pending maximize-toggle restore for
-            // this column.
+            // this column. Unlike those mutators this one is keyed on the
+            // RESIZED column, which need not be the active one.
             if (m_preMaximizeColumnIdx == colIdx) {
-                if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
-                    m_preMaximizeColumnIdx = -1;
-                }
+                m_preMaximizeColumnIdx = -1;
             }
         }
     }

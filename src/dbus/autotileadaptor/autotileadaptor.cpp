@@ -177,7 +177,12 @@ PhosphorProtocol::AlgorithmInfoEntry AutotileAdaptor::algorithmInfo(const QStrin
 void AutotileAdaptor::clearEngine()
 {
     if (m_engine) {
-        disconnect(m_engine, nullptr, this, nullptr);
+        // Drop exactly the connection the constructor made. A blanket
+        // disconnect(m_engine, nullptr, this, nullptr) would also tear down
+        // connections some other wiring installed between this engine and
+        // this adaptor, which this method has no business owning.
+        disconnect(m_engine, &PhosphorEngine::PlacementEngineBase::algorithmChanged, this,
+                   &AutotileAdaptor::algorithmChanged);
         m_engine = nullptr;
     }
 }

@@ -572,11 +572,11 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
     for (const QString& screenId : std::as_const(releasedScreens)) {
         m_overflow.takeForScreen(screenId);
     }
-    if (!releasedWindows.isEmpty()) {
-        m_states.removeWindowsIf([&releasedWindows](const QString& windowId, const TilingStateKey&) {
-            return releasedWindows.contains(windowId);
-        });
-    }
+    // One key-matching sweep only: it is a superset of a released-window
+    // sweep for every window keyed to the removed screen, and a window
+    // whose reverse key points at a SURVIVING screen must keep its entry
+    // (dropping it while the surviving state still holds the window would
+    // manufacture an untracked ghost).
     m_states.removeWindowsIf([&](const QString&, const TilingStateKey& key) {
         return matches(key.screenId);
     });
@@ -593,7 +593,9 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
     // persisted per-screen settings survive, matching the toggle-off
     // contract. Per-id, because the resolver maps key on the EFFECTIVE
     // (possibly "/vs:N") id, not the physical one.
-    m_configResolver->forgetScreen(physicalScreenId);
+    // removeOverridesMatching alone: samePhysical(physicalScreenId,
+    // physicalScreenId) is true, so the predicate sweep already covers the
+    // bare physical id along with every virtual sub-screen.
     m_configResolver->removeOverridesMatching(matches);
     // Order maps for STATELESS sub-screens (seed pushed before any window
     // arrived) — the teardown body above only cleared the stateful ones.
@@ -606,6 +608,21 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
             ++it;
         }
     }
+    // The four per-screen retile/focus maps the sibling teardown in
+    // setAutotileScreens sweeps for removed screens — a replugged connector
+    // must not consume a stale focus entry or retry a dead retile.
+    m_pendingFocusByScreen.removeIf([&matches](const auto& entry) {
+        return matches(entry.key());
+    });
+    m_pendingRetileScreens.removeIf([&matches](const QString& screenId) {
+        return matches(screenId);
+    });
+    m_retileRetryScreens.removeIf([&matches](const QString& screenId) {
+        return matches(screenId);
+    });
+    m_retileRetryCount.removeIf([&matches](const auto& entry) {
+        return matches(entry.key());
+    });
     if (matches(m_activeScreen)) {
         // A dead screen id must not keep feeding hint-less shortcut paths.
         m_activeScreen.clear();

@@ -104,17 +104,17 @@ Item {
             buckets.push([]);
             weights.push(0);
         }
-        for (var g = 0; g < groups.length; g++) {
+        for (var g = 0; g < root.groups.length; g++) {
             var target = 0;
             for (var k = 1; k < n; k++) {
                 if (weights[k] < weights[target])
                     target = k;
             }
-            buckets[target].push(groups[g]);
+            buckets[target].push(root.groups[g]);
             // A group costs its rows plus a fixed heading + inter-group gap
             // allowance; row units are all the same height so counting rows
             // is an honest proxy for pixels.
-            weights[target] += groups[g].rows.length + 2;
+            weights[target] += root.groups[g].rows.length + 2;
         }
         return buckets;
     }

@@ -152,6 +152,13 @@ public Q_SLOTS:
      * @brief Get information about a specific algorithm
      * @param algorithmId Algorithm ID to query
      * @return PhosphorProtocol::AlgorithmInfoEntry struct with algorithm metadata
+     *
+     * An unknown id (and an unavailable registry) yields a DEFAULT-CONSTRUCTED
+     * entry, not an error reply — the wire type carries no not-found channel.
+     * A caller that must tell "no such algorithm" from a real entry checks the
+     * returned @c id: it echoes the queried id only on a successful lookup, so
+     * an empty id means the query missed. Confirm ids against
+     * availableAlgorithms() when that distinction matters.
      */
     PhosphorProtocol::AlgorithmInfoEntry algorithmInfo(const QString& algorithmId);
 

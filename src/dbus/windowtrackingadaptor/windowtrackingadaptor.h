@@ -746,6 +746,15 @@ public:
     /// are handled by the snap placement directive, not here.
     QString applyOpenRoutingForTiling(const QString& windowId, const QString& screenId);
 
+    /// The canonical form of @p windowId as the window registry sees it, for
+    /// sibling adaptors that key per-window state and must agree with this
+    /// adaptor on identity. Window ids reach the daemon in both a raw
+    /// compositor form and the registry's canonical form for the same window
+    /// (a class-mutating app renames mid-life), so any map keyed on the
+    /// caller-supplied id splits into two independent entries. Returns
+    /// @p windowId unchanged when no registry is wired.
+    QString canonicalWindowId(const QString& windowId) const;
+
     /// Engine-neutral RouteToScreen for a BARE route (no SnapToZone): if a matched
     /// rule pins @p windowId to a different monitor and the rule carries no
     /// SnapToZone (a route + snap is placed by the snap placement directive, which

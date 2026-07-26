@@ -1203,7 +1203,9 @@ private:
      *
      * Captures every window's placement into the unified record, drops the
      * overflow set (AFTER capture — the discriminator needs it), appends the
-     * released windows, clears the pending-order bookkeeping, and
+     * released windows, drops their min-size entries (they are screen-capped,
+     * so a stale entry would lay a returning window out against the cap of
+     * the screen it left), clears the pending-order bookkeeping, and
      * deleteLater()s the state. Callers own the divergent parts: removing
      * the state from m_states (they iterate it) and the per-path
      * override policy — toggle-off drops only the resolver's in-memory

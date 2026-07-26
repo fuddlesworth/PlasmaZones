@@ -40,6 +40,15 @@ namespace WindowTrackingInternal {
 /// window moving between two screens of the SAME mode): isWindowTracked
 /// answers true unconditionally there, so adoption is instead verified as
 /// "the tracked screen now matches the requested destination".
+///
+/// PRECONDITION for that pre-tracked test: an engine must record an accepted
+/// arrival under a screen id that screensMatch() equates with the ctx.toScreenId
+/// it was handed. screensMatch absorbs connector-name / EDID-id spelling and the
+/// "/vs:" virtual-screen suffix, but an engine that re-resolved the arrival onto
+/// a genuinely DIFFERENT screen id (say, redirecting to a fallback output) would
+/// read here as a refusal — this helper would then re-home a window the
+/// destination actually adopted. No engine does that today; one that starts to
+/// must report the id it stored, not silently redirect.
 inline bool guardedHandoff(::PhosphorEngine::IPlacementEngine* source, ::PhosphorEngine::IPlacementEngine* dest,
                            ::PhosphorEngine::IPlacementEngine::HandoffContext ctx, const QString& recoverScreenId,
                            int recoverDesktop = 0)

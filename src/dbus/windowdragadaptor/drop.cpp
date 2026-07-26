@@ -59,18 +59,10 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // logic is skipped entirely — the window's place in the stack IS the drop.
     // Deliberately autotile-only: the strip has no drag-insert preview
     // (ScrollEngine keeps the IPlacementEngine no-op defaults).
-    if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-        // Screen-matched (same comparison as dragMoved's preview upkeep): a
-        // fast drop can land on another screen before any dragMoved tick
-        // cancelled the departed preview — committing then would reorder
-        // the WRONG screen and swallow the real drop outcome.
-        if (m_autotileEngine->dragInsertPreviewScreenId() == resolveScreenAt(QPointF(cursorX, cursorY)).screenId) {
-            m_autotileEngine->commitDragInsertPreview(); // commit, not cancel — drop finalizes the reorder
-            hideOverlayAndSelector();
-            resetDragState();
-            return;
-        }
-        m_autotileEngine->cancelDragInsertPreview();
+    if (settleDragInsertPreviewAt(cursorX, cursorY)) {
+        hideOverlayAndSelector();
+        resetDragState();
+        return;
     }
 
     // Release screen: use cursor position passed from effect (at release time), not last dragMoved.
@@ -172,13 +164,21 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         const QString scrollScreen = m_scrollEngine ? m_scrollEngine->screenForTrackedWindow(windowId) : QString();
         PhosphorEngine::IPlacementEngine* sourceEngine = nullptr;
         QString sourceScreen;
-        if (!snapScreen.isEmpty() && snapScreen != releaseScreenId) {
+        // screensMatch, not raw !=: an engine may hold the connector-name form
+        // (or a "/vs:" virtual-screen variant) of the very screen the drop
+        // landed on, and a raw compare would read that as a cross-screen move
+        // and release the window's tracking on its own screen.
+        const auto isCrossScreen = [&releaseScreenId](const QString& engineScreen) {
+            return !engineScreen.isEmpty()
+                && !PhosphorScreens::ScreenIdentity::screensMatch(engineScreen, releaseScreenId);
+        };
+        if (isCrossScreen(snapScreen)) {
             sourceEngine = snapEngine;
             sourceScreen = snapScreen;
-        } else if (!autotileScreen.isEmpty() && autotileScreen != releaseScreenId) {
+        } else if (isCrossScreen(autotileScreen)) {
             sourceEngine = m_autotileEngine;
             sourceScreen = autotileScreen;
-        } else if (!scrollScreen.isEmpty() && scrollScreen != releaseScreenId) {
+        } else if (isCrossScreen(scrollScreen)) {
             sourceEngine = m_scrollEngine;
             sourceScreen = scrollScreen;
         }

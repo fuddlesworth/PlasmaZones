@@ -486,22 +486,37 @@ void Daemon::resnapIfManualMode()
     emitPendingSnapFloatRestoresForResnapBuffer();
 }
 
-void Daemon::emitPendingSnapFloatRestoresForResnapBuffer()
+void Daemon::emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntries)
 {
     if (m_pendingSnapFloatRestores.isEmpty()) {
         return;
     }
     QVector<ZoneAssignmentEntry> floatEntries;
+    QVector<ZoneAssignmentEntry> zoneEntries;
     for (const ZoneAssignmentEntry& e : std::as_const(m_pendingSnapFloatRestores)) {
         if (e.targetZoneId == RestoreSentinel) {
             floatEntries.append(e);
+        } else {
+            zoneEntries.append(e);
         }
     }
-    // Consume the whole buffer: the float entries are emitted below; the
-    // snap-ZONE entries are deliberately handed to the in-flight
-    // resnapToNewLayout (new-layout zones), not re-applied here against the
-    // old layout. Clearing prevents them leaking into the next windowsReleased.
-    m_pendingSnapFloatRestores.clear();
+    if (preserveZoneEntries) {
+        // Tail-drain mode (updateEngineScreens): the float half is emitted
+        // now — floats are excluded from every downstream resnap, so this
+        // batch's window set is disjoint from anything a consumer emits
+        // later — but the snap-ZONE half MUST survive for the mode-toggle
+        // and autotile-disable consumers, which feed it into
+        // preClaimedZoneIds / the batched restore. Clearing it here was a
+        // regression that left previously-floated-then-toggled windows
+        // stranded off their zones.
+        m_pendingSnapFloatRestores = zoneEntries;
+    } else {
+        // Full consume: the caller is (or stands in for) the final
+        // consumer on its path. Remaining zone entries are deliberately
+        // handed to an in-flight resnapToNewLayout when one exists, else
+        // dropped (a prune-origin batch's zones reference a dead screen).
+        m_pendingSnapFloatRestores.clear();
+    }
     if (floatEntries.isEmpty() || !m_snapEngine) {
         return;
     }

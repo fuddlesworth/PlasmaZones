@@ -161,12 +161,27 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         // stays empty so the settings UI can render a friendly title from
         // resolved screen / activity labels rather than baking the raw ids in.
         const QString logContext = contextRuleName(ctx.screenId, ctx.virtualDesktop, ctx.activity);
-        if (shouldSkipLayoutAssignment(layoutId, logContext)) {
-            continue;
-        }
         const bool hadOld = oldEntries.contains(it.key());
         const OldEntrySnapshot oldSnapshot = oldEntries.value(it.key());
-        const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldSnapshot.entry);
+        // An EMPTY incoming id is NOT "no assignment here". It is what a
+        // MODE-ONLY pin looks like on the wire: a Snapping assignment with no
+        // explicit layout has an empty activeLayoutId(), so both the projection
+        // readers (desktopAssignments / activityAssignments) and the KCM's own
+        // per-screen map hand the empty string straight back on an "apply all".
+        // Dropping the entry on that value would ERASE the pin, because step 2
+        // already removed the whole family from `kept`. Rebuild from the prior
+        // snapshot instead, carrying its mode and both layout fields through
+        // untouched. With no prior rule there is genuinely nothing to preserve,
+        // so an empty id is skipped exactly as before.
+        if (layoutId.isEmpty()) {
+            if (!hadOld) {
+                continue;
+            }
+        } else if (shouldSkipLayoutAssignment(layoutId, logContext)) {
+            continue;
+        }
+        const AssignmentEntry entry =
+            layoutId.isEmpty() ? oldSnapshot.entry : AssignmentEntry::fromLayoutId(layoutId, oldSnapshot.entry);
         // UPDATE preserves the stored priority; CREATE claims the next winning
         // seed value.
         const int priority = hadOld ? oldSnapshot.priority : seedPriority++;
@@ -306,12 +321,20 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
             continue;
         }
         const QString logContext = contextRuleName(key.screenId, key.virtualDesktop, key.activity);
-        if (shouldSkipLayoutAssignment(layoutId, logContext)) {
-            continue;
-        }
         const bool hadOld = oldEntries.contains(key);
         const OldEntrySnapshot oldSnapshot = oldEntries.value(key);
-        const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldSnapshot.entry);
+        // Empty id = mode-only pin round-tripping back in, not a deletion.
+        // Same hazard and same handling as applyBatchAssignments — see the
+        // full rationale there.
+        if (layoutId.isEmpty()) {
+            if (!hadOld) {
+                continue;
+            }
+        } else if (shouldSkipLayoutAssignment(layoutId, logContext)) {
+            continue;
+        }
+        const AssignmentEntry entry =
+            layoutId.isEmpty() ? oldSnapshot.entry : AssignmentEntry::fromLayoutId(layoutId, oldSnapshot.entry);
         const int priority = hadOld ? oldSnapshot.priority : seedPriority++;
         PWR::Rule rebuilt = PWR::ContextRuleBridge::makeAssignmentRule(
             QString(), key.screenId, key.virtualDesktop, key.activity, modeToWireString(entry.mode),

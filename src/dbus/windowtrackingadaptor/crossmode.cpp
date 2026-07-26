@@ -355,6 +355,18 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         receiveVerified(sourceEngine, targetEngine, targetScreenId, ctx);
     }
 
+    // Source reflow, same rule as handleCrossModeMove: an autotile source
+    // does not retile on handoffRelease, so the slot F vacated stays a hole
+    // unless something else retiles that screen. The partner's arrival
+    // normally does it, but not on the paths that leave the source without a
+    // partner — a receive refused at the destination's screen-set check
+    // returns before its own reflow, and the re-home then puts the partner
+    // back on the target. A snap source vacates a zone (nothing to reflow)
+    // and a scroll source's handoffRelease schedules its own retile.
+    if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
+        sourceEngine->retile(sourceScreen);
+    }
+
     // ── Arm the daemon-owned-move markers for the windows that were
     //    genuinely adopted. Placement geometry lands on the coalesced
     //    retile (queued), so post-receive arming is still ahead of the

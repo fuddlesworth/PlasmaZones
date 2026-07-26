@@ -328,11 +328,23 @@ void TilingAdaptor::removeUnclaimedOpen(const QString& windowId)
     }
 }
 
-bool TilingAdaptor::deferUntilPanelReady()
+bool TilingAdaptor::deferUntilPanelReady(qsizetype incomingCount)
 {
     // Fast path: panel geometry already known, or no PhosphorScreens::ScreenManager at all (tests
     // without a singleton fall through and proceed with whatever geometry exists).
     if (!m_screenManager || (m_screenManager && m_screenManager->isPanelGeometryReady())) {
+        return false;
+    }
+
+    // Overflow valve. panelGeometryReady is a one-shot that a wedged Plasma
+    // D-Bus query may never deliver, so an unbounded queue would grow for the
+    // session. Overflow processes immediately instead of dropping: computing
+    // zones against the unreserved screen rect costs at most one visible
+    // correction once the real geometry lands, whereas a dropped entry leaves
+    // the window untiled with nothing to retry it.
+    if (m_pendingOpens.size() + incomingCount > kMaxPendingOpens) {
+        qCWarning(lcDbusTiling) << "deferUntilPanelReady: pending-open queue at capacity" << kMaxPendingOpens
+                                << "- processing" << incomingCount << "window(s) against unreserved screen geometry";
         return false;
     }
 
@@ -391,7 +403,7 @@ void TilingAdaptor::windowOpened(const QString& windowId, const QString& screenI
     // the daemon would emit a visible correction a frame later. Flushing happens in
     // flushPendingWindowOpens() when panelGeometryReady fires.
     PhosphorProtocol::WindowOpenedEntry entry{windowId, screenId, minWidth, minHeight};
-    if (deferUntilPanelReady()) {
+    if (deferUntilPanelReady(1)) {
         qCInfo(lcDbusTiling) << "windowOpened: deferring" << windowId
                              << "until panel geometry ready (queue size=" << (m_pendingOpens.size() + 1) << ")";
         m_pendingOpens.append(entry);
@@ -411,7 +423,7 @@ void TilingAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
     // See windowOpened() above for the startup-race rationale. The batch path queues
     // all entries atomically so windows in the same batch retain their original order
     // when flushed.
-    if (deferUntilPanelReady()) {
+    if (deferUntilPanelReady(entries.size())) {
         qCInfo(lcDbusTiling) << "windowsOpenedBatch: deferring" << entries.size()
                              << "windows until panel geometry ready";
         m_pendingOpens.append(entries);
@@ -450,7 +462,14 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     // The dedup-gate entry dies with the window UNCONDITIONALLY — a close
     // arriving after clearEngine() (shutdown) must not leak it, or a stale
     // value could suppress the first genuine broadcast of a reused id.
+    // BOTH key forms go: engines relay float changes under the registry's
+    // canonical id while the effect closes the window under its raw id (they
+    // differ for a class-mutating app), so removing only the close id would
+    // strand the other entry for the process lifetime.
     m_lastFloatBroadcast.remove(windowId);
+    if (m_windowTrackingAdaptor) {
+        m_lastFloatBroadcast.remove(m_windowTrackingAdaptor->canonicalWindowId(windowId));
+    }
     removeUnclaimedOpen(windowId);
     if (!ensurePipeline("windowClosed")) {
         return;

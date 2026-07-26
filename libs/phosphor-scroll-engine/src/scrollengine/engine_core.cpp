@@ -113,6 +113,7 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // re-applies on re-entry); only pruneStatesForRemovedScreen purges
         // it.
         m_pendingInitialOrder.remove(screenId);
+        m_consumedInitialOrder.remove(screenId);
         clearTabStripsForScreen(screenId);
     }
     if (!releasedWindows.isEmpty()) {
@@ -131,7 +132,11 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
     // consumer comparing successive payloads must not see phantom changes.
     QStringList sorted(screens.cbegin(), screens.cend());
     sorted.sort();
-    Q_EMIT scrollingScreensChanged(sorted, false);
+    // Propagate the consumed context-switch flag (autotile parity): a
+    // desktop switch whose per-desktop assignments ALSO change the set must
+    // still report isDesktopSwitch=true, or the effect runs its destructive
+    // geometry/border restore for the departing screens.
+    Q_EMIT scrollingScreensChanged(sorted, wasDesktopSwitch);
     if (wasEnabled != isEnabled()) {
         Q_EMIT enabledChanged(isEnabled());
     }
@@ -153,6 +158,7 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // replay on re-entry, and the tab-strip overlay must be told to clear —
     // no relayout will ever run for a departed screen to do it.
     m_pendingInitialOrder.remove(screenId);
+    m_consumedInitialOrder.remove(screenId);
     clearTabStripsForScreen(screenId);
     state->deleteLater();
 }
@@ -290,6 +296,7 @@ QStringList ScrollEngine::managedWindowOrder(const QString& screenId) const
 
 void ScrollEngine::setInitialWindowOrder(const QString& screenId, const QStringList& windowIds)
 {
+    m_consumedInitialOrder.remove(screenId);
     if (windowIds.isEmpty()) {
         m_pendingInitialOrder.remove(screenId);
     } else {
@@ -300,6 +307,17 @@ void ScrollEngine::setInitialWindowOrder(const QString& screenId, const QStringL
 int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
     int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
+    // m_lastAppliedRect entries are retained through windowClosed and
+    // handoffRelease (poison-guard memory), so THIS sweep is their sole
+    // reclaimer — keyed on aliveness, independent of tracking (a window
+    // whose key was dropped long ago must still age out here).
+    for (auto it = m_lastAppliedRect.begin(); it != m_lastAppliedRect.end();) {
+        if (!aliveWindowIds.contains(it.key())) {
+            it = m_lastAppliedRect.erase(it);
+        } else {
+            ++it;
+        }
+    }
     QStringList dead;
     const auto& windowKeys = m_states.windowKeys();
     for (auto it = windowKeys.cbegin(); it != windowKeys.cend(); ++it) {
@@ -328,18 +346,32 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         m_lastAppliedRect.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
-        // Seed lists hold dead ids too (a captured order whose window died
-        // before arriving); left behind they would pin insert positions
-        // against ghosts forever.
+        ++pruned;
+    }
+    // Seed lists hold dead ids too (a captured order whose window died before
+    // arriving); left behind they would pin insert positions against ghosts
+    // forever. One sweep for the whole batch — per dead window it would
+    // re-walk every screen's list again.
+    if (!dead.isEmpty()) {
+        const QSet<QString> deadSet(dead.cbegin(), dead.cend());
         for (auto seedIt = m_pendingInitialOrder.begin(); seedIt != m_pendingInitialOrder.end();) {
-            seedIt->removeAll(windowId);
-            if (seedIt->isEmpty()) {
+            seedIt->removeIf([&deadSet](const QString& seeded) {
+                return deadSet.contains(seeded);
+            });
+            // Keep the consumed set a subset of the (now shorter) list so
+            // the all-consumed drop condition stays exact.
+            auto consumedIt = m_consumedInitialOrder.find(seedIt.key());
+            if (consumedIt != m_consumedInitialOrder.end()) {
+                consumedIt->subtract(deadSet);
+            }
+            if (seedIt->isEmpty()
+                || (consumedIt != m_consumedInitialOrder.end() && consumedIt->size() >= seedIt->size())) {
+                m_consumedInitialOrder.remove(seedIt.key());
                 seedIt = m_pendingInitialOrder.erase(seedIt);
             } else {
                 ++seedIt;
             }
         }
-        ++pruned;
     }
     for (const QString& screenId : affectedScreens) {
         scheduleRetileForScreen(screenId);
@@ -433,12 +465,18 @@ QSet<int> ScrollEngine::desktopsWithActiveState() const
 void ScrollEngine::consumePendingInitialOrder(const QString& screenId, const QString& windowId)
 {
     const auto it = m_pendingInitialOrder.find(screenId);
-    if (it == m_pendingInitialOrder.end()) {
+    if (it == m_pendingInitialOrder.end() || !it->contains(windowId)) {
         return;
     }
-    it->removeAll(windowId);
-    if (it->isEmpty()) {
+    // Mark, don't remove: the list's positions are what later arrivals use
+    // to count their earlier-arrived neighbours, so shrinking it on each
+    // consume would collapse every later insert to column 0 (order
+    // reversal). Both entries drop once the whole seed is consumed.
+    QSet<QString>& consumed = m_consumedInitialOrder[screenId];
+    consumed.insert(windowId);
+    if (consumed.size() >= it->size()) {
         m_pendingInitialOrder.erase(it);
+        m_consumedInitialOrder.remove(screenId);
     }
 }
 
@@ -476,6 +514,7 @@ void ScrollEngine::sweepStatelessScreenBookkeeping(const QSet<QString>& screenId
         }
         if (!hasState) {
             m_pendingInitialOrder.remove(screenId);
+            m_consumedInitialOrder.remove(screenId);
             clearTabStripsForScreen(screenId);
         }
     }
@@ -532,16 +571,24 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     const auto matches = [&physicalScreenId](const QString& screenId) {
         return !screenId.isEmpty() && PhosphorIdentity::VirtualScreenId::samePhysical(screenId, physicalScreenId);
     };
+    QStringList releasedWindows;
+    QSet<QString> releasedScreens;
     m_states.removeStatesIf(
         [&matches](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return matches(key.screenId);
         },
-        [this](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+        [this, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
             // Removed screen: per-screen bookkeeping goes with the state —
             // stale seeds must not replay if the connector id ever returns,
             // and the tab-strip latch/overrides must not linger.
             dropWindowBookkeeping(state);
+            // The windows are alive (only their output is gone); release
+            // them like the screens-set sweep does so the daemon's restore
+            // consumers hear about them (autotile parity).
+            releasedWindows.append(state->managedWindows());
+            releasedScreens.insert(state->screenId());
             m_pendingInitialOrder.remove(state->screenId());
+            m_consumedInitialOrder.remove(state->screenId());
             // Through clearTabStripsForScreen so a still-listening overlay
             // gets the "[]" broadcast (mirrors releaseScreenState).
             clearTabStripsForScreen(state->screenId());
@@ -559,6 +606,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     // defeat its own contract.
     for (auto it = m_pendingInitialOrder.begin(); it != m_pendingInitialOrder.end();) {
         if (matches(it.key())) {
+            m_consumedInitialOrder.remove(it.key());
             it = m_pendingInitialOrder.erase(it);
         } else {
             ++it;
@@ -572,6 +620,9 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         }
     }
     m_context.removeScreensIf(matches);
+    if (!releasedWindows.isEmpty()) {
+        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
+    }
 }
 
 // ── Persistence + settings ──────────────────────────────────────────────────
@@ -594,6 +645,11 @@ void ScrollEngine::refreshConfigFromSettings()
 {
     auto* settings = qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings());
     if (!settings) {
+        // Every cached tuning value silently keeps its previous (or default)
+        // reading, so a mis-wired settings object looks like settings that
+        // simply never take effect.
+        qCWarning(lcScrollEngine) << "refreshConfigFromSettings: engine settings object is not an IScrollSettings — "
+                                     "keeping the cached configuration";
         return;
     }
     const auto parsePresets = [](const QStringList& raw, const QList<qreal>& fallback) {
@@ -625,8 +681,10 @@ void ScrollEngine::refreshConfigFromSettings()
     } else {
         // KEEP IN SYNC: the 0.05 proportion floor mirrors
         // ConfigDefaults::scrollingDefaultColumnWidthValueMin and the
-        // rules-side kMinColumnWidthRatio (both app-side; this LGPL lib
-        // cannot include them).
+        // rules-side kMinColumnWidthRatio. Neither is reachable from here:
+        // ConfigDefaults is app-side and kMinColumnWidthRatio is a private
+        // header of PhosphorRules, which this library does not link (the
+        // dependency runs the other way), so the bound is hand-mirrored.
         m_defaultColumnWidth = ColumnWidth::makeProportion(qBound<qreal>(0.05, widthValue, 1.0));
     }
     const int display = settings->scrollingDefaultColumnDisplay();

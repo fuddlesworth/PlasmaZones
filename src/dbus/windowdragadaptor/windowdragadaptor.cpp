@@ -236,6 +236,23 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
     }
 }
 
+bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
+{
+    if (!m_autotileEngine || !m_autotileEngine->hasDragInsertPreview()) {
+        return false;
+    }
+    // Screen-matched: a fast drop can land on another screen before any
+    // dragMoved tick cancelled the departed preview, and committing then would
+    // reorder the WRONG screen and swallow the real drop outcome.
+    if (!PhosphorScreens::ScreenIdentity::screensMatch(m_autotileEngine->dragInsertPreviewScreenId(),
+                                                       resolveScreenAt(QPointF(cursorX, cursorY)).screenId)) {
+        m_autotileEngine->cancelDragInsertPreview();
+        return false;
+    }
+    m_autotileEngine->commitDragInsertPreview(); // commit, not cancel — the drop finalizes the reorder
+    return true;
+}
+
 void WindowDragAdaptor::cancelSnap()
 {
     // Layout picker takes precedence: Escape on a visible picker should

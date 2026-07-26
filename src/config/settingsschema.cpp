@@ -3,9 +3,8 @@
 
 #include "settingsschema.h"
 
-#include <PhosphorScrollEngine/ScrollTypes.h>
-
 #include "settingsschemachoices.h"
+#include "settingsschema_p.h"
 
 #include "configdefaults.h"
 #include "configmigration.h"
@@ -52,20 +51,17 @@ PhosphorConfig::Schema buildSettingsSchema()
 
 // ─── Validator helpers ──────────────────────────────────────────────────────
 // Common coercion patterns factored to keep group schemas readable. Return
-// the same function-object type as KeyDef::validator.
+// the same function-object type as KeyDef::validator. The ones the scrolling
+// TU shares live in settingsschema_p.h; the rest are local to this file.
+
+using SchemaValidators::clampDouble;
+using SchemaValidators::validIntOr;
 
 namespace {
 auto clampInt(int minVal, int maxVal)
 {
     return [minVal, maxVal](const QVariant& v) -> QVariant {
         return qBound(minVal, v.toInt(), maxVal);
-    };
-}
-
-auto clampDouble(double minVal, double maxVal)
-{
-    return [minVal, maxVal](const QVariant& v) -> QVariant {
-        return qBound(minVal, v.toDouble(), maxVal);
     };
 }
 
@@ -77,19 +73,6 @@ auto validColorOr(QColor fallback)
     return [fallback](const QVariant& v) -> QVariant {
         const QColor c = v.value<QColor>();
         return c.isValid() ? QVariant::fromValue(c) : QVariant::fromValue(fallback);
-    };
-}
-
-/// Snap-to-default enum validator: accept a value only if it appears in the
-/// explicit valid set, otherwise return @p fallback. Used for enums where
-/// qBound would silently reinterpret out-of-range values as the nearest
-/// neighbour — that's the exact bug the effect-side cache loader avoids,
-/// and both readers must agree (see testAutotile*_unknownValueClampsToFloat).
-auto validIntOr(std::initializer_list<int> valid, int fallback)
-{
-    return [valid = QVector<int>(valid), fallback](const QVariant& v) -> QVariant {
-        const int raw = v.toInt();
-        return valid.contains(raw) ? raw : fallback;
     };
 }
 
@@ -141,41 +124,6 @@ QVariant canonicalCommaList(const QVariant& v)
     parts.removeAll(QString());
     parts.removeDuplicates();
     return QVariant(parts.join(QLatin1Char(',')));
-}
-
-/// Canonicalize a comma-joined proportion list: parse each entry as a
-/// decimal, keep only values in (0, 1], de-dupe, and re-serialize. When
-/// NOTHING survives (all-garbage hand edit, or a cleared field), snap to
-/// @p fallback — the key's default — matching the validIntOr/validStringOr
-/// convention. Persisting the empty string instead would leave the page
-/// showing an empty field while the engine silently cycles its built-ins:
-/// the accepted-but-dead divergence this validator exists to prevent.
-QVariant canonicalProportionList(const QVariant& v, const QString& fallback)
-{
-    // Same size-cap rationale as canonicalTriggerList: a hand-edited file
-    // must not smuggle an unbounded list past the setter path (each entry
-    // is walked on every width/height preset cycle).
-    constexpr int kMaxPresetEntries = 16;
-    const QStringList parts = v.toString().split(QLatin1Char(','));
-    QStringList kept;
-    for (const QString& raw : parts) {
-        if (kept.size() >= kMaxPresetEntries) {
-            break;
-        }
-        bool ok = false;
-        const double val = raw.trimmed().toDouble(&ok);
-        if (!ok || val <= 0.0 || val > 1.0) {
-            continue;
-        }
-        const QString canonical = QString::number(val);
-        if (!kept.contains(canonical)) {
-            kept.append(canonical);
-        }
-    }
-    if (kept.isEmpty()) {
-        return QVariant(fallback);
-    }
-    return QVariant(kept.join(QLatin1Char(',')));
 }
 
 /// Canonicalize a trigger list: cap size, coerce each entry to a
@@ -567,28 +515,10 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::retileKey(), CD::autotileRetileShortcut(), QMetaType::QString},
     };
 
-    schema.groups[CD::shortcutsScrollingGroup()] = {
-        {CD::focusColumnFirstKey(), CD::scrollingFocusColumnFirstShortcut(), QMetaType::QString},
-        {CD::focusColumnLastKey(), CD::scrollingFocusColumnLastShortcut(), QMetaType::QString},
-        {CD::moveColumnToFirstKey(), CD::scrollingMoveColumnToFirstShortcut(), QMetaType::QString},
-        {CD::moveColumnToLastKey(), CD::scrollingMoveColumnToLastShortcut(), QMetaType::QString},
-        {CD::consumeWindowKey(), CD::scrollingConsumeWindowShortcut(), QMetaType::QString},
-        {CD::expelWindowKey(), CD::scrollingExpelWindowShortcut(), QMetaType::QString},
-        {CD::consumeOrExpelLeftKey(), CD::scrollingConsumeOrExpelLeftShortcut(), QMetaType::QString},
-        {CD::consumeOrExpelRightKey(), CD::scrollingConsumeOrExpelRightShortcut(), QMetaType::QString},
-        {CD::centerColumnKey(), CD::scrollingCenterColumnShortcut(), QMetaType::QString},
-        {CD::toggleColumnTabbedKey(), CD::scrollingToggleColumnTabbedShortcut(), QMetaType::QString},
-        {CD::cycleColumnWidthKey(), CD::scrollingCycleColumnWidthShortcut(), QMetaType::QString},
-        {CD::cycleColumnWidthBackKey(), CD::scrollingCycleColumnWidthBackShortcut(), QMetaType::QString},
-        {CD::increaseColumnWidthKey(), CD::scrollingIncreaseColumnWidthShortcut(), QMetaType::QString},
-        {CD::decreaseColumnWidthKey(), CD::scrollingDecreaseColumnWidthShortcut(), QMetaType::QString},
-        {CD::maximizeColumnKey(), CD::scrollingMaximizeColumnShortcut(), QMetaType::QString},
-        {CD::expandColumnKey(), CD::scrollingExpandColumnShortcut(), QMetaType::QString},
-        {CD::cycleWindowHeightKey(), CD::scrollingCycleWindowHeightShortcut(), QMetaType::QString},
-        {CD::increaseWindowHeightKey(), CD::scrollingIncreaseWindowHeightShortcut(), QMetaType::QString},
-        {CD::decreaseWindowHeightKey(), CD::scrollingDecreaseWindowHeightShortcut(), QMetaType::QString},
-        {CD::resetWindowHeightsKey(), CD::scrollingResetWindowHeightsShortcut(), QMetaType::QString},
-    };
+    // Shortcuts.Scrolling is declared by the scrolling TU (split out for
+    // file-size) but still assembled from here, so the whole Shortcuts.*
+    // family has one entry point.
+    appendScrollingShortcutsSchema(schema);
 }
 
 // ─── Editor ─────────────────────────────────────────────────────────────────
@@ -1018,81 +948,6 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
     // inner/outer gaps live in the top-level Gaps group (appendGapsSchema).
     schema.groups[CD::tilingGapsGroup()] = {
         {CD::smartGapsKey(), CD::autotileSmartGaps(), QMetaType::Bool},
-    };
-}
-
-// ─── Scrolling (Tiling.Scrolling) ───────────────────────────────────────────
-// The niri-style scrolling engine's knobs. The strip reuses the shared Gaps
-// group and Tiling.Behavior focus settings; only scroll-specific values live
-// here. The preset lists are comma-joined decimal proportions.
-
-void appendScrollingSchema(PhosphorConfig::Schema& schema)
-{
-    using CD = ConfigDefaults;
-
-    schema.groups[CD::tilingScrollingGroup()] = {
-        // validIntOr (not clampInt) for every enum here: clamping snaps an
-        // out-of-range stored value to the MAX enumerator, which both
-        // contradicts this file's documented reader-agreement convention and
-        // disagrees with the engine's own snap-to-default guard.
-        {CD::centerFocusedColumnKey(),
-         CD::scrollingCenterFocusedColumn(),
-         QMetaType::Int,
-         {},
-         validIntOr({static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never),
-                     static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always),
-                     static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::OnOverflow)},
-                    CD::scrollingCenterFocusedColumn()),
-         intChoices({{static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never), "never"_L1},
-                     {static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always), "always"_L1},
-                     {static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::OnOverflow), "onOverflow"_L1}})},
-        {CD::alwaysCenterSingleColumnKey(), CD::scrollingAlwaysCenterSingleColumn(), QMetaType::Bool},
-        // NOTE: the width-kind CONFIG space {0 proportion, 1 fixed,
-        // 2 clientDecides} deliberately does NOT map onto
-        // ColumnWidth::Kind (whose 2 is Preset) — never static_cast between
-        // them; the engine translates with explicit ifs.
-        {CD::defaultColumnWidthKindKey(),
-         CD::scrollingDefaultColumnWidthKind(),
-         QMetaType::Int,
-         {},
-         validIntOr(
-             {CD::scrollingWidthKindProportion(), CD::scrollingWidthKindFixed(), CD::scrollingWidthKindClientDecides()},
-             CD::scrollingDefaultColumnWidthKind()),
-         intChoices({{CD::scrollingWidthKindProportion(), "proportion"_L1},
-                     {CD::scrollingWidthKindFixed(), "fixed"_L1},
-                     {CD::scrollingWidthKindClientDecides(), "clientDecides"_L1}})},
-        {CD::defaultColumnWidthValueKey(),
-         CD::scrollingDefaultColumnWidthValue(),
-         QMetaType::Double,
-         {},
-         clampDouble(CD::scrollingDefaultColumnWidthValueMin(), CD::scrollingDefaultColumnWidthFixedMax())},
-        {CD::defaultColumnDisplayKey(),
-         CD::scrollingDefaultColumnDisplay(),
-         QMetaType::Int,
-         {},
-         validIntOr({static_cast<int>(PhosphorScrollEngine::ColumnDisplay::Normal),
-                     static_cast<int>(PhosphorScrollEngine::ColumnDisplay::Tabbed)},
-                    CD::scrollingDefaultColumnDisplay()),
-         intChoices({{static_cast<int>(PhosphorScrollEngine::ColumnDisplay::Normal), "normal"_L1},
-                     {static_cast<int>(PhosphorScrollEngine::ColumnDisplay::Tabbed), "tabbed"_L1}})},
-        // Numeric canonicalizer, not the plain comma-list: entries must be
-        // proportions in (0, 1] or the engine silently drops the whole list
-        // and falls back to its built-ins while the page keeps displaying
-        // the accepted-but-dead value.
-        {CD::presetColumnWidthsKey(),
-         CD::scrollingPresetColumnWidths(),
-         QMetaType::QString,
-         {},
-         [](const QVariant& v) {
-             return canonicalProportionList(v, CD::scrollingPresetColumnWidths());
-         }},
-        {CD::presetWindowHeightsKey(),
-         CD::scrollingPresetWindowHeights(),
-         QMetaType::QString,
-         {},
-         [](const QVariant& v) {
-             return canonicalProportionList(v, CD::scrollingPresetWindowHeights());
-         }},
     };
 }
 

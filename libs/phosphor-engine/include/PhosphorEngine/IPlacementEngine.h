@@ -305,6 +305,7 @@ public:
     {
         Q_UNUSED(windowId)
     }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Drag insert preview (override if engine supports drag-to-insert)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -329,6 +330,18 @@ public:
     {
         return {};
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPTIONAL: Per-window tracking state
+    //
+    // What the daemon asks an engine about ONE window: does it track it, does
+    // it manage/tile it, which screen does it think the window is on, what min
+    // size does it model — plus the two per-window updates that follow from
+    // those answers (a late min-size discovery, an interactive resize). The
+    // drag-preview verbs above are a separate group; these have nothing to do
+    // with a drag.
+    // ═══════════════════════════════════════════════════════════════════════════
+
     virtual bool isWindowTracked(const QString& windowId) const
     {
         Q_UNUSED(windowId)

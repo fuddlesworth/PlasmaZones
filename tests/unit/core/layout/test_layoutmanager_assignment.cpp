@@ -19,6 +19,7 @@
 #include <memory>
 #include <vector>
 
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -575,6 +576,155 @@ private Q_SLOTS:
         // Layer 1: only the disabled rule exists → default tier (autotile).
         QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 0), QStringLiteral("autotile:bsp"));
+    }
+
+    // A mode-only pin has an EMPTY activeLayoutId, and the batch setters
+    // receive exactly that empty string on an "apply all" pass. Before the
+    // fix, shouldSkipLayoutAssignment's empty-id arm made the driver `continue`
+    // — but step 2 has already dropped the whole rule family, so the skip was
+    // a DELETE: every mode-only Snapping pin silently evaporated the first
+    // time the KCM saved. Pin that an empty id with a prior rule rebuilds from
+    // the snapshot, and that an empty id with NO prior rule is still a no-op.
+    void testBatch_emptyLayoutId_preservesModeOnlyPin()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        mgr->setDefaultAutotileAlgorithmProvider([] {
+            return QStringLiteral("bsp");
+        });
+        mgr->setSnappingPreferredProvider([] {
+            return false;
+        });
+
+        // A mode-only Snapping pin on DP-1: mode set, no layout fields.
+        PhosphorZones::AssignmentEntry modeOnly;
+        modeOnly.mode = PhosphorZones::AssignmentEntry::Snapping;
+        mgr->setAssignmentEntryDirect(QStringLiteral("DP-1"), 0, QString(), modeOnly);
+        QVERIFY(modeOnly.activeLayoutId().isEmpty());
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Snapping);
+
+        // The "apply all" the KCM sends: DP-1 carries the pin's empty id,
+        // DP-2 is a context that was never pinned at all.
+        QHash<QString, QString> apply;
+        apply.insert(QStringLiteral("DP-1"), QString());
+        apply.insert(QStringLiteral("DP-2"), QString());
+        mgr->setAllScreenAssignments(apply);
+
+        // DP-1's pin survived: still explicit, still Snapping, still empty-id.
+        // A regression reports Autotile here (the default tier's mode).
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 0), QString());
+
+        // DP-2 had no prior rule, so the empty id created nothing.
+        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-2"), 0, QString()));
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-2"), 0), PhosphorZones::AssignmentEntry::Autotile);
+    }
+
+    // The same preservation on the per-desktop batch, driven through the
+    // projection reader the KCM actually round-trips (desktopAssignments →
+    // setAllDesktopAssignments), so the empty string is produced by the code
+    // under test rather than hand-written by the test.
+    void testBatch_desktopRoundTrip_preservesModeOnlyPin()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        // An autotile-flavoured default tier, so a lost pin reads back as
+        // Autotile rather than coinciding with Snapping by default.
+        mgr->setDefaultAutotileAlgorithmProvider([] {
+            return QStringLiteral("bsp");
+        });
+        mgr->setSnappingPreferredProvider([] {
+            return false;
+        });
+
+        PhosphorZones::AssignmentEntry modeOnly;
+        modeOnly.mode = PhosphorZones::AssignmentEntry::Snapping;
+        mgr->setAssignmentEntryDirect(QStringLiteral("DP-1"), 4, QString(), modeOnly);
+
+        const auto projection = mgr->desktopAssignments();
+        QCOMPARE(projection.size(), 1);
+        QCOMPARE(projection.value(qMakePair(QStringLiteral("DP-1"), 4)), QString());
+
+        mgr->setAllDesktopAssignments(projection);
+
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 4, QString()));
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 4), PhosphorZones::AssignmentEntry::Snapping);
+        // Still exactly one rule — the rebuild replaced it, it did not duplicate.
+        QCOMPARE(mgr->desktopAssignments().size(), 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P6: The "scrolling:" sentinel
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // Scrolling has no layout entity, so its whole id is the bare sentinel.
+    // Unlike "autotile:", the sentinel carries NO payload, and the classifier
+    // is an exact compare rather than a prefix test. Pin both halves: the
+    // sentinel routes as Scrolling end to end, and a prefix-shaped impostor
+    // ("scrolling:junk") does NOT.
+
+    void testScrollingSentinel_assignsScrollingModeWithEmptyLayout()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QString(PhosphorLayout::LayoutId::ScrollingId));
+
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 0), QStringLiteral("scrolling:"));
+
+        // No layout entity: both layout fields stay empty, and the cascade
+        // resolves no Layout* for the screen.
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Scrolling);
+        QVERIFY(entry.snappingLayout.isEmpty());
+        QVERIFY(entry.tilingAlgorithm.isEmpty());
+    }
+
+    void testScrollingSentinel_prefixImpostorIsNotScrolling()
+    {
+        // "scrolling:junk" must NOT classify as Scrolling. A startsWith test
+        // would accept it and silently drop the "junk" in every consumer, so
+        // the classifier is an exact compare and the impostor falls through as
+        // an ordinary (non-autotile, non-scrolling) layout id — which the
+        // Snapping arm then owns.
+        QVERIFY(!PhosphorLayout::LayoutId::isScrolling(QStringLiteral("scrolling:junk")));
+
+        const auto entry = PhosphorZones::AssignmentEntry::fromLayoutId(QStringLiteral("scrolling:junk"));
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QStringLiteral("scrolling:junk"));
+        QVERIFY(entry.tilingAlgorithm.isEmpty());
+
+        // The bare sentinel, by contrast, is accepted.
+        QVERIFY(PhosphorLayout::LayoutId::isScrolling(QStringLiteral("scrolling:")));
+    }
+
+    void testAssignmentEntry_fromLayoutId_scrollingRoundTrips()
+    {
+        // The mode cascade — AssignmentEntry::fromLayoutId is the ONE place a
+        // wire id becomes a mode. Round-trip the sentinel through it and back
+        // out via activeLayoutId().
+        const auto fresh = PhosphorZones::AssignmentEntry::fromLayoutId(QStringLiteral("scrolling:"));
+        QCOMPARE(fresh.mode, PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(fresh.activeLayoutId(), QStringLiteral("scrolling:"));
+
+        // Lossless toggle: flipping an existing entry to Scrolling keeps BOTH
+        // sibling layout fields, so toggling back cannot degrade the
+        // assignment into Snapping-pointing-at-a-bogus-id.
+        PhosphorZones::AssignmentEntry existing;
+        existing.mode = PhosphorZones::AssignmentEntry::Autotile;
+        existing.snappingLayout = QStringLiteral("{some-uuid}");
+        existing.tilingAlgorithm = QStringLiteral("dwindle");
+
+        const auto scrolled = PhosphorZones::AssignmentEntry::fromLayoutId(QStringLiteral("scrolling:"), existing);
+        QCOMPARE(scrolled.mode, PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(scrolled.snappingLayout, QStringLiteral("{some-uuid}"));
+        QCOMPARE(scrolled.tilingAlgorithm, QStringLiteral("dwindle"));
+        QCOMPARE(scrolled.activeLayoutId(), QStringLiteral("scrolling:"));
+
+        // And back out to Snapping — the preserved uuid is what returns.
+        const auto backToSnap = PhosphorZones::AssignmentEntry::fromLayoutId(scrolled.snappingLayout, scrolled);
+        QCOMPARE(backToSnap.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(backToSnap.activeLayoutId(), QStringLiteral("{some-uuid}"));
+        QCOMPARE(backToSnap.tilingAlgorithm, QStringLiteral("dwindle"));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

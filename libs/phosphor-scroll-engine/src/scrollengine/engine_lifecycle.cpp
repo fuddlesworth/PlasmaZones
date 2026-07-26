@@ -26,6 +26,12 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     const bool ruleFloated = m_floatPredicate && m_floatPredicate(windowId);
     if (oversized || ruleFloated) {
         state->addFloating(windowId);
+        // Engine-decided float, so it carries the mode marker like every
+        // other float this engine makes: isModeSpecificFloated has to answer
+        // true or the daemon captures the scroll-mode float into the snap
+        // slot at the next mode transition (presaveSnapFloats skips exactly
+        // the marked windows).
+        m_scrollFloatedWindows.insert(windowId);
         // A floated arrival consumes its seed entry too, or the screen's
         // list never empties and the stale entry survives every later mode
         // transition.
@@ -43,6 +49,9 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             const PhosphorEngine::EngineSlot slot = record->slotFor(engineId());
             if (slot.state == PhosphorEngine::WindowPlacement::stateFloating()) {
                 state->addFloating(windowId);
+                // The record's SCROLL slot says floating, so this float is
+                // this engine's own — marked like the rule-float exit above.
+                m_scrollFloatedWindows.insert(windowId);
                 consumePendingInitialOrder(screenId, windowId); // same rationale as the rule-float exit
                 Q_EMIT windowFloatingChanged(windowId, true, screenId);
                 return;
@@ -95,10 +104,13 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // seed would re-position an unrelated later open that happens to share
     // an id with the captured list.
     bool inserted = false;
-    const auto pendingIt = m_pendingInitialOrder.find(screenId);
-    if (pendingIt != m_pendingInitialOrder.end()) {
+    const auto pendingIt = m_pendingInitialOrder.constFind(screenId);
+    if (pendingIt != m_pendingInitialOrder.constEnd()) {
         const int orderIdx = pendingIt->indexOf(windowId);
-        if (orderIdx >= 0) {
+        // A consumed id must not re-enter the seed branch: a later unrelated
+        // open reusing the id would otherwise be re-positioned by the stale
+        // entry (the list keeps consumed ids to preserve positions).
+        if (orderIdx >= 0 && !m_consumedInitialOrder.value(screenId).contains(windowId)) {
             int columnIdx = 0;
             const QStringList present = state->strip().windowsInOrder();
             for (const QString& earlier : pendingIt->mid(0, orderIdx)) {
@@ -110,10 +122,9 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             if (inserted) {
                 state->strip().setWindowMinimumSize(windowId, minWidth, minHeight);
             }
-            pendingIt->removeAll(windowId);
-            if (pendingIt->isEmpty()) {
-                m_pendingInitialOrder.erase(pendingIt);
-            }
+            // Through the shared consume helper — it drops the screen's entry
+            // once the list empties. pendingIt is dangling from here.
+            consumePendingInitialOrder(screenId, windowId);
         }
     }
     if (!inserted && restoreColumn >= 0) {
@@ -255,7 +266,13 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
         state->removeFloating(windowId);
     }
     m_states.removeWindow(windowId);
-    m_lastAppliedRect.remove(windowId);
+    // m_lastAppliedRect is deliberately RETAINED through the close: the
+    // daemon's close capture consults lastManagedRect DURING windowClosed
+    // (the engines hear the close before WindowTracking does), and the
+    // live frame is still the strip rect at that moment — without the
+    // memory, the column rect becomes the reopen float-back geometry (the
+    // float-back tile-rect poison, autotile's twin retains for the same
+    // reason). pruneStaleWindows reclaims the entry independently.
     m_floatRestore.remove(windowId);
     m_scrollFloatedWindows.remove(windowId);
 
@@ -407,6 +424,9 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     if (!state->removeFloating(windowId)) {
         return false;
     }
+    // Captured before the re-insert so the guard at the tail reads the
+    // context the window actually belongs to.
+    const PhosphorEngine::PlacementStateKey key = m_states.keyForWindow(windowId);
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
     // Restore the remembered column slot (minimize/unminimize and float
     // round-trips keep their place); fall back to next-to-focus.
@@ -445,7 +465,13 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     Q_EMIT windowFloatingChanged(windowId, false, screenId);
     // Batch callers (snapAllWindows) relayout once for the whole batch.
     if (applyAfter) {
-        applyLayout(screenId, false);
+        // Background-context guard, same terms as floatWindowInternal:
+        // applyLayout resolves the screen's CURRENT context, so an unfloat on
+        // another desktop's state would relayout the wrong strip. The
+        // placement announcement still fires — the managed set did change.
+        if (key == currentKeyForScreen(screenId)) {
+            applyLayout(screenId, false);
+        }
         Q_EMIT placementChanged(screenId);
     }
     return inserted;
@@ -520,7 +546,9 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     state->strip().takeWindow(windowId, params);
     state->removeFloating(windowId);
     m_states.removeWindow(windowId);
-    m_lastAppliedRect.remove(windowId);
+    // m_lastAppliedRect deliberately retained (same rationale as
+    // windowClosed: a close/capture racing the handoff still needs the
+    // poison-guard memory; pruneStaleWindows reclaims it).
     m_floatRestore.remove(windowId);
     // The mode-transition float marker must not outlive this engine's
     // tracking: the receiving engine owns the float bit from here, and a
@@ -569,6 +597,11 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     }
     if (ctx.wasFloating) {
         state->addFloating(windowId);
+        // The float is scroll-managed from here (autotile's receive marks the
+        // same way, through the daemon's passive float sync): without the
+        // marker a later mode transition treats it as a snap float and
+        // poisons the snap slot with the arrival frame.
+        m_scrollFloatedWindows.insert(windowId);
         m_states.setKeyForWindow(windowId, key);
         Q_EMIT windowFloatingChanged(windowId, true, ctx.toScreenId);
         // The screen's placement changed too (managed set grew), even

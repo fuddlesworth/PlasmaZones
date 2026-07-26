@@ -124,6 +124,21 @@ KWin::LogicalOutput* PlasmaZonesEffect::windowOutput(KWin::EffectWindow* w) cons
     return output ? output : w->screen();
 }
 
+KWin::LogicalOutput* PlasmaZonesEffect::outputForScreenId(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return nullptr;
+    }
+    // Virtual screens subdivide one output, so match on the physical part.
+    const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+    for (const auto& output : KWin::effects->screens()) {
+        if (outputScreenId(output) == physId) {
+            return output;
+        }
+    }
+    return nullptr;
+}
+
 const QSet<QString>& PlasmaZonesEffect::connectedPhysicalIds() const
 {
     if (!m_idCaches.connectedPhysicalIdsValid) {
@@ -523,6 +538,24 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // that cascade — a stale cached set would keep answering the dead
     // screen for every scroll-tiled window's close/minimize/drag routing.
     clearScreenIdCache();
+
+    // Rebuild the connected set eagerly, MINUS the dying output. The lazy
+    // rebuild in connectedPhysicalIds() reads KWin::effects->screens(), which
+    // still lists this output while screenRemoved is being delivered, so the
+    // first caller anywhere in the rest of the cascade would re-insert the
+    // connector that is going away. The next add/remove/reconfigure
+    // invalidates this again.
+    m_idCaches.connectedPhysicalIds.clear();
+    for (const auto* other : KWin::effects->screens()) {
+        if (other == output) {
+            continue;
+        }
+        const QString physId = outputScreenId(other);
+        if (!physId.isEmpty()) {
+            m_idCaches.connectedPhysicalIds.insert(physId);
+        }
+    }
+    m_idCaches.connectedPhysicalIdsValid = true;
 
     // Drop this output's per-screen desktop dedup entry, symmetric with the
     // daemon's VirtualDesktopManager::removeScreenDesktop (#648): otherwise

@@ -14,6 +14,10 @@
 # coincidental, not contractual. A future refactor that drops Qt6::DBus from
 # plasmazones_core's interface link would silently break every test that
 # relied on the transitive pull.
+#
+# Same caveat for QTEST_MAIN: with no Qt6::Gui here it expands to whichever
+# application class the transitively-linked Qt modules select, so a test that
+# genuinely needs QGuiApplication should link Qt6::Gui explicitly.
 macro(p_add_test _name _src)
     add_executable(${_name} ${_src})
     target_link_libraries(${_name} PRIVATE Qt6::Test Qt6::Core plasmazones_core)
@@ -623,7 +627,11 @@ p_add_test(test_navigation_controller autotile/navigation/test_navigation_contro
 p_add_test(test_snap_cross_surface snap/test_snap_cross_surface.cpp)
 p_add_test(test_span_targets snap/test_span_targets.cpp)
 # Constructs a real SnapEngine, so the dependency is contractual, not the
-# coincidental transitive pull through plasmazones_core.
+# coincidental transitive pull through plasmazones_core. Scope: this explicit
+# link is spelled out on the handful of targets that name an engine type
+# directly (test_screen_mode_router and test_drag_policy cite this rationale).
+# Other engine-touching targets still ride the transitive pull and have not
+# been swept.
 target_link_libraries(test_span_targets PRIVATE PhosphorSnapEngine::PhosphorSnapEngine)
 p_add_test(test_snap_state_class_mutation snap/test_snap_state_class_mutation.cpp)
 
@@ -840,6 +848,12 @@ target_include_directories(test_wta_convenience PRIVATE ${CMAKE_SOURCE_DIR}/libs
 target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_convenience COMMAND test_wta_convenience)
 
+add_executable(test_wta_routing dbus/test_wta_routing.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wta_routing PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_routing PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_routing COMMAND test_wta_routing)
+
 add_executable(test_wta_capture_guards dbus/test_wta_capture_guards.cpp
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
@@ -993,12 +1007,12 @@ add_executable(test_algorithm_blank_scaffold
 target_link_libraries(test_algorithm_blank_scaffold PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 add_test(NAME test_algorithm_blank_scaffold COMMAND test_algorithm_blank_scaffold)
 
-# clampName is header-only in src/core/constants.h, so there is no source to
-# compile in beyond the test itself. plasmazones_core supplies LayoutAdaptor
-# (src/dbus/layoutadaptor.cpp), whose duplicateLayout clamp the test drives, and
-# carries the include chain constants.h pulls (PhosphorEngine, PhosphorLayoutApi,
-# PhosphorZones). PhosphorZones is named for the LayoutRegistry and Layout
-# symbols the duplicate cases construct — duplicateNameSuffix() alone would need
+# clampName is header-only in src/core/types/constants.h, so there is no source
+# to compile in beyond the test itself. plasmazones_core supplies LayoutAdaptor
+# (src/dbus/layoutadaptor/layoutadaptor.cpp), whose duplicateLayout clamp the
+# test drives, and carries the include chain constants.h pulls (PhosphorEngine,
+# PhosphorLayoutApi, PhosphorZones). PhosphorZones is named for the
+# LayoutRegistry and Layout symbols the duplicate cases construct — duplicateNameSuffix() alone would need
 # no link, being inline in the header. Qt6::DBus is LayoutAdaptor's own base
 # class (QDBusAbstractAdaptor); the test calls the slot directly, never a bus.
 add_executable(test_layoutadaptor_nameclamp
@@ -1227,6 +1241,8 @@ add_test(NAME test_profilestore COMMAND test_profilestore)
 add_executable(test_rule_model
     settings/rules/test_rule_model.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
+    # Label tables + summaries, split from rulemodel.cpp for file-size.
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
     # rulemodel's action summary now shares its boolean polarity phrasing with
     # the editor via RuleAuthoring::boolActionStateLabel.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
@@ -1244,6 +1260,8 @@ add_test(NAME test_rule_model COMMAND test_rule_model)
 add_executable(test_rule_controller
     settings/rules/test_rule_controller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
+    # Label tables + summaries, split from rulemodel.cpp for file-size.
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
     # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
     # author surfaces, validation). The controller's class definition spans
@@ -1274,6 +1292,8 @@ add_test(NAME test_rule_controller COMMAND test_rule_controller)
 add_executable(test_rule_controller_overview
     settings/rules/test_rule_controller_overview.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
+    # Label tables + summaries, split from rulemodel.cpp for file-size.
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_views.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp

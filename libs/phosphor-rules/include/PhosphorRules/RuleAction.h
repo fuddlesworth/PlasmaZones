@@ -539,7 +539,8 @@ inline constexpr QLatin1StringView OpenColumnPlacement{"openColumnPlacement"};
 // ── Action param keys — canonical wire strings ──
 //
 // Param-key vocabulary shared across every wire-shape reader (the registry
-// validators in ruleaction.cpp, the config-layer v3→v4 migration that ports
+// validators in ruleaction_builtins_engine.cpp /
+// ruleaction_builtins_appearance.cpp, the config-layer v3→v4 migration that ports
 // legacy AnimationAppRule entries, the rule-editor UI, and the KWin-effect-
 // side resolvers in `kwin-effect/plasmazoneseffect/shader_resolve.cpp`).
 // A future rename (e.g. `effectId` → `effect_id`) updates one entry here and
@@ -585,12 +586,14 @@ inline constexpr QLatin1StringView Chain{"chain"};
 /// only reach 9); the cap exists purely to reject a grossly malformed hand-edited
 /// payload AND to keep the load-time validator's integrality check from narrowing
 /// an out-of-range double to int (which is UB). Shared by the descriptor validator
-/// (ruleaction.cpp) and the v3→v4 migration so the two stay in lockstep.
+/// (ruleaction_builtins_engine.cpp) and the v3→v4 migration so the two stay in
+/// lockstep.
 inline constexpr int MaxZoneOrdinal = 64;
 
 /// Upper bounds for the per-window border appearance overrides
 /// (`SetBorderWidth` / `SetBorderRadius`), in logical px. Shared so the
-/// load-time descriptor validators (ruleaction.cpp) and the KWin-effect
+/// load-time descriptor validators (ruleaction_builtins_appearance.cpp for the
+/// per-window pair, ruleaction_builtins_engine.cpp for the overlay pair) and the KWin-effect
 /// consumer re-validation (shader_resolve.cpp) stay in lockstep — a
 /// programmatically-built or hand-edited payload out of this range is
 /// rejected at both boundaries rather than drawn.
@@ -612,7 +615,7 @@ inline constexpr double MaxColumnWidthRatio = 1.0;
 /// out far below this in practice; the cap exists only to reject a grossly
 /// malformed hand-edited payload and to keep the validator's integrality check
 /// from narrowing an out-of-range double to int (UB). The descriptor validator
-/// (ruleaction.cpp) enforces the bound once, at load; downstream consumers only
+/// (ruleaction_builtins_engine.cpp) enforces the bound once, at load; downstream consumers only
 /// re-check the 1-based lower bound, trusting the load-time upper-bound clamp.
 inline constexpr int MaxVirtualDesktopOrdinal = 1024;
 

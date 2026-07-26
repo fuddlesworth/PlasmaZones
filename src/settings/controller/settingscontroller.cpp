@@ -99,8 +99,8 @@ QVariantMap SettingsController::scrollingWidthConstants() const
         {QStringLiteral("proportionMax"), ConfigDefaults::scrollingDefaultColumnWidthProportionMax()},
         {QStringLiteral("fixedMin"), ConfigDefaults::scrollingDefaultColumnWidthFixedMin()},
         {QStringLiteral("fixedMax"), ConfigDefaults::scrollingDefaultColumnWidthFixedMax()},
-        {QStringLiteral("proportionStep"), 0.05},
-        {QStringLiteral("fixedStep"), 10},
+        {QStringLiteral("proportionStep"), ConfigDefaults::scrollingDefaultColumnWidthProportionStep()},
+        {QStringLiteral("fixedStep"), ConfigDefaults::scrollingDefaultColumnWidthFixedStep()},
     };
 }
 

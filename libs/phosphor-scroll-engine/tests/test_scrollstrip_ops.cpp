@@ -65,6 +65,8 @@ private Q_SLOTS:
     void degenerateWorkAreaNeverAsserts();
     void monsterFixedSiblingLeavesAutoTilesVisible();
     void moveActiveColumnToTracksPreMaximizeSlot();
+    void moveActiveColumnToShiftsPreMaximizeSlotBothWays();
+    void columnInsertShiftsPreMaximizeSlot();
     void centerActiveColumnCentersAndReports();
     void minWidthClampsResolvedColumn();
     void focusAdjacentSkipsFullyMinimizedColumn();
@@ -341,8 +343,9 @@ void TestScrollStripOps::tabbedColumnBehavesLikeNormalStructurally()
     QVERIFY(strip.moveActiveColumn(-1, params));
     QCOMPARE(strip.activeColumnIndex(), 0);
     QCOMPARE(strip.columns().at(0).display, ColumnDisplay::Tabbed);
-    // ...resizes...
+    // ...resizes (kHalf resolves to 595 on the 1200px area, +10% = +120)...
     QVERIFY(strip.adjustActiveColumnWidth(10.0, params));
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("c")).width(), 715);
     // ...and expels, with the expelled window's new column back to normal.
     QVERIFY(strip.expelWindowFromColumn(params));
     QCOMPARE(strip.columns().at(1).tiles.size(), 1);
@@ -434,9 +437,18 @@ void TestScrollStripOps::degenerateWorkAreaNeverAsserts()
     // work area flows through relayout and both size adjusters during
     // screen teardown. The guard that matters is resolveColumnWidthPx's
     // workW<=0 early return, whose FIXED branch would otherwise feed
-    // qBound(1, px, 0) — an inverted range that aborts a debug daemon —
-    // so the fixture MUST hold a Fixed column (a proportion-only strip
-    // never reaches the qBound and passes even with the guard deleted).
+    // qBound(1, px, 0) — an inverted range — so the fixture MUST hold a
+    // Fixed column (a proportion-only strip never reaches the qBound at
+    // all).
+    //
+    // HONEST SCOPE, so this test is not read as more coverage than it is:
+    // an inverted qBound only ABORTS through Q_ASSERT(!(max < min)), which
+    // is compiled out of a release build — there qBound(1, px, 0) quietly
+    // yields 1. So deleting resolveColumnWidthPx's guard (or
+    // adjustActiveColumnWidth's, which then returns false anyway) is caught
+    // in a DEBUG build only. The height arm is the one release-detectable
+    // kill: without adjustActiveWindowHeight's workH<=0 guard the adjuster
+    // resolves 0px, targets 1px, and reports a change instead of refusing.
     ScrollLayoutParams dead;
     dead.workArea = QRect();
     dead.gap = 10;
@@ -445,9 +457,11 @@ void TestScrollStripOps::degenerateWorkAreaNeverAsserts()
         strip.insertWindow(QStringLiteral("fx"), ColumnWidth::makeFixed(600), ColumnDisplay::Normal, defaultParams()));
     QVERIFY(strip.insertWindow(QStringLiteral("pr"), kHalf, ColumnDisplay::Normal, defaultParams()));
     const ResolvedStrip resolved = strip.relayout(dead);
-    // A zero-width work area drops every column from the resolve (colW
-    // resolves to 1px, then the empty-viewport cull removes it) — pin the
-    // ACTUAL contract rather than a rect loop that never runs.
+    // A zero-width work area drops every column from the resolve:
+    // resolveColumnWidthPx answers 1px, columnWidthPx then clamps that to
+    // qMin(1, workArea.width()) = 0, and relayout skips any column that
+    // resolves to zero width. Pin the ACTUAL contract rather than a rect
+    // loop that never runs.
     QVERIFY(resolved.columns.isEmpty());
     // Width adjuster refuses on the degenerate area. The HEIGHT adjuster
     // needs a STACKED column or its lone-tile guard returns first and
@@ -500,7 +514,8 @@ void TestScrollStripOps::moveActiveColumnToTracksPreMaximizeSlot()
     QVERIFY(!strip.moveActiveColumnTo(2, params)); // no-op target refused
     QVERIFY(!strip.moveActiveColumnTo(5, params)); // out of range refused
 
-    // Maximize b (index 1), then move the ACTIVE (maximized) column left:
+    // Maximize c (the reorder above left the strip as b | c | a, so index 1
+    // is c), then move the ACTIVE (maximized) column left:
     // toggling back must restore the pre-maximize width, so the restore
     // slot has to follow the move. The pre-maximize width is a DISTINCTIVE
     // Fixed 377 — kHalf equals ScrollLayoutParams::defaultColumnWidth, so
@@ -512,6 +527,84 @@ void TestScrollStripOps::moveActiveColumnToTracksPreMaximizeSlot()
     QVERIFY(strip.moveActiveColumnTo(0, params));
     QVERIFY(strip.toggleMaximizeActiveColumn(params));
     QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeFixed(377));
+}
+
+void TestScrollStripOps::moveActiveColumnToShiftsPreMaximizeSlotBothWays()
+{
+    // The two INDEX-SHIFT arms of moveActiveColumnTo's pre-maximize fixup,
+    // which the test above cannot reach: there the maximized column IS the
+    // one being moved, here it is a BYSTANDER the move steps over. Each
+    // stored width is distinctive (kHalf equals the default, so the "no
+    // stored intent" fallback would restore an identical value and a
+    // dropped arm would pass undetected).
+    const auto params = defaultParams();
+    const auto fourColumns = [&params]() {
+        ScrollStrip s;
+        for (const QString& id : {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d")}) {
+            if (!s.insertWindow(id, kHalf, ColumnDisplay::Normal, params)) {
+                qFatal("fourColumns fixture failed to build");
+            }
+        }
+        return s;
+    };
+
+    // Rightward: a (index 0) moves to index 3, stepping over the maximized
+    // c (index 2), which slides one slot LEFT to index 1.
+    {
+        ScrollStrip strip = fourColumns();
+        QVERIFY(strip.focusColumn(2, params)); // c
+        QVERIFY(strip.setActiveColumnWidth(ColumnWidth::makeFixed(377)));
+        QVERIFY(strip.toggleMaximizeActiveColumn(params));
+        QVERIFY(strip.focusColumn(0, params)); // a
+        QVERIFY(strip.moveActiveColumnTo(3, params));
+        QCOMPARE(strip.windowsInOrder(),
+                 (QStringList{QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d"), QStringLiteral("a")}));
+        QCOMPARE(strip.activeColumnIndex(), 3);
+        // c's restore slot followed it: toggling back returns ITS width.
+        QVERIFY(strip.focusColumn(1, params));
+        QVERIFY(strip.toggleMaximizeActiveColumn(params));
+        QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeFixed(377));
+    }
+
+    // Leftward: d (index 3) moves to index 0, stepping over the maximized
+    // b (index 1), which slides one slot RIGHT to index 2.
+    {
+        ScrollStrip strip = fourColumns();
+        QVERIFY(strip.focusColumn(1, params)); // b
+        QVERIFY(strip.setActiveColumnWidth(ColumnWidth::makeFixed(288)));
+        QVERIFY(strip.toggleMaximizeActiveColumn(params));
+        QVERIFY(strip.focusColumn(3, params)); // d
+        QVERIFY(strip.moveActiveColumnTo(0, params));
+        QCOMPARE(strip.windowsInOrder(),
+                 (QStringList{QStringLiteral("d"), QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
+        QCOMPARE(strip.activeColumnIndex(), 0);
+        QVERIFY(strip.focusColumn(2, params));
+        QVERIFY(strip.toggleMaximizeActiveColumn(params));
+        QCOMPARE(strip.columns().at(2).width, ColumnWidth::makeFixed(288));
+    }
+}
+
+void TestScrollStripOps::columnInsertShiftsPreMaximizeSlot()
+{
+    // A new column opening to the LEFT of a maximized one shifts its index;
+    // without insertWindow's pre-maximize bump the stored slot names the
+    // wrong column and the un-maximize toggle dead-ends on the default-width
+    // fallback (hence the distinctive 456).
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.setActiveColumnWidth(ColumnWidth::makeFixed(456))); // b is active
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+
+    // Focus a, so the new column lands between a and the maximized b.
+    QVERIFY(strip.focusColumn(0, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("x"), kHalf, ColumnDisplay::Normal, params));
+    QCOMPARE(strip.windowsInOrder(), (QStringList{QStringLiteral("a"), QStringLiteral("x"), QStringLiteral("b")}));
+
+    QVERIFY(strip.focusColumn(2, params)); // b, now one slot right
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QCOMPARE(strip.columns().at(2).width, ColumnWidth::makeFixed(456));
 }
 
 void TestScrollStripOps::centerActiveColumnCentersAndReports()
@@ -568,10 +661,17 @@ void TestScrollStripOps::consumeOpenDisplayOverrideSemantics()
     QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("plain"), kHalf, std::nullopt, params));
     QCOMPARE(strip.columns().at(0).display, ColumnDisplay::Tabbed); // kept
     QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeFixed(420)); // width intent untouched
+    // The arrival JOINED the host column rather than opening its own — the
+    // display/width assertions above would read the same on a strip that
+    // silently grew a second column.
+    QCOMPARE(strip.columnCount(), 1);
+    QCOMPARE(strip.columns().at(0).tiles.size(), 2);
 
     QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("untab"), kHalf, ColumnDisplay::Normal, params));
     QCOMPARE(strip.columns().at(0).display, ColumnDisplay::Normal); // engaged override applies
     QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeFixed(420));
+    QCOMPARE(strip.columnCount(), 1);
+    QCOMPARE(strip.columns().at(0).tiles.size(), 3);
 }
 
 void TestScrollStripOps::updateViewForFocusKeepsRightEdgeDeadSpace()
@@ -663,8 +763,13 @@ void TestScrollStripOps::renormalizationRespectsAutoFloors()
     QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
 
     // Pin two tiles to Fixed heights that alone overflow the column, with a
-    // third Auto tile keeping its 1px floor: the renormalization must scale
-    // the Fixed pair into (availH - autoCount) so the stack still fits.
+    // third Auto tile keeping its 1px floor, and assert the stack still
+    // fits. Honest scope note, same shape as monsterFixedSibling above: the
+    // Fixed/Preset renormalization into (availH - autoCount) and the
+    // post-clamp slack rebalance enforce this JOINTLY, and at this fixture
+    // (no per-tile minHeights, so every tile has slack down to 1px) the
+    // rebalance alone can absorb the overflow. This pins the fits-the-column
+    // invariant, not the renormalization step in isolation.
     QVERIFY(strip.reconcileWindowSize(QStringLiteral("a"), QSize(600, 700), /*widthChanged=*/false));
     QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(600, 700), /*widthChanged=*/false));
 

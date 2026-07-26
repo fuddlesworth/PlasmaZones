@@ -34,18 +34,31 @@
 
 #include <QTest>
 #include <QCoreApplication>
+#include <QDir>
 #include <QObject>
+#include <QUuid>
+#include <memory>
 
 #include <PhosphorContext/IContextResolver.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleStore.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include "config/configdefaults.h"
+#include "config/configkeys.h"
 #include "helpers/AutotileTestHelpers.h"
+#include "helpers/IsolatedConfigGuard.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 
 #include "helpers/StubSettings.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 
@@ -157,6 +170,27 @@ void seedTrackedWindow(AutotileEngine& engine, const QString& windowId, const QS
     engine.windowOpened(windowId, screenId);
     QCoreApplication::processEvents();
 }
+
+/// Isolated rules file + a LayoutRegistry borrowing that store — the minimum
+/// needed for the context cascade resolveReorderMode consults. Mirrors
+/// RuleCascadeFixture::makeRegistryFixture; kept local so this suite does not
+/// depend on the core test tree's fixture header.
+struct RuleFixture
+{
+    RuleFixture()
+        : guard(std::make_unique<IsolatedConfigGuard>())
+        , store(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath()))
+        , registry(std::make_unique<PhosphorZones::LayoutRegistry>(store.get(), ConfigKeys::layoutsSubdir()))
+    {
+        const QString layoutDir = guard->dataPath() + QLatin1Char('/') + ConfigKeys::layoutsSubdir();
+        QDir().mkpath(layoutDir);
+        registry->setLayoutDirectory(layoutDir);
+    }
+
+    std::unique_ptr<IsolatedConfigGuard> guard;
+    std::unique_ptr<PhosphorRules::RuleStore> store;
+    std::unique_ptr<PhosphorZones::LayoutRegistry> registry;
+};
 
 /// Real ScrollEngine with null deps (the headless pattern the router test
 /// uses); claims @p screenId when @p screenIsScrolling.
@@ -313,6 +347,81 @@ private Q_SLOTS:
         QVERIFY(p.streamDragMoved);
         QVERIFY(p.showOverlay);
         QVERIFY(p.validationError().isEmpty());
+    }
+
+    // Scroll branch, EMPTY windowId (the compositor reports a drag it cannot
+    // name — e.g. a window that vanished between the grab and the call): the
+    // screen still belongs to the strip so the bypass stands, but there is no
+    // window to look up, so no pre-float may be requested. Without the
+    // !windowId.isEmpty() guard the lookup would run against an empty id.
+    void scrollingScreen_emptyWindowIdDoesNotPreFloat()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+        scroll->windowOpened(QStringLiteral("win-1"), QStringLiteral("HP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QString(), QStringLiteral("HP-1"), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QVERIFY(p.captureGeometry);
+        QVERIFY(!p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // resolveReorderMode: the value beginDrag feeds computeDragPolicy as
+    // `reorderMode`. Precedence is context rule → global setting, and an
+    // empty screen id has no context to resolve a rule against.
+    // ─────────────────────────────────────────────────────────────────────
+    void reorderMode_followsGlobalSettingWithoutRule()
+    {
+        PolicyStubSettings settings;
+        RuleFixture f;
+
+        settings.m_dragBehavior = AutotileDragBehavior::Reorder;
+        QVERIFY(WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QStringLiteral("DP-1")));
+        settings.m_dragBehavior = AutotileDragBehavior::Float;
+        QVERIFY(!WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QStringLiteral("DP-1")));
+
+        // No registry at all (pre-wiring) is the same fallback.
+        settings.m_dragBehavior = AutotileDragBehavior::Reorder;
+        QVERIFY(WindowDragAdaptor::resolveReorderMode(nullptr, &settings, QStringLiteral("DP-1")));
+        // No settings either → not reorder, rather than a null dereference.
+        QVERIFY(!WindowDragAdaptor::resolveReorderMode(nullptr, nullptr, QStringLiteral("DP-1")));
+    }
+
+    void reorderMode_contextRuleBeatsSetting()
+    {
+        PolicyStubSettings settings;
+        settings.m_dragBehavior = AutotileDragBehavior::Float; // the rule must override this
+        RuleFixture f;
+
+        PhosphorRules::RuleAction behavior;
+        behavior.type = QString(PhosphorRules::ActionType::SetDragBehavior);
+        behavior.params.insert(QString(PhosphorRules::ActionParam::Value),
+                               QString(PhosphorRules::DragBehaviorToken::Reorder));
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("reorder on DP-1");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::ScreenId,
+                                                              PhosphorRules::Operator::Equals, QStringLiteral("DP-1"));
+        rule.actions = {behavior};
+        QVERIFY(f.store->setAllRules({rule}));
+
+        QVERIFY2(WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QStringLiteral("DP-1")),
+                 "a matched SetDragBehavior rule must beat the global setting");
+        // The rule is screen-pinned, so an unmatched screen keeps the setting…
+        QVERIFY(!WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QStringLiteral("DP-2")));
+        // …and an empty screen id has no context to match against.
+        QVERIFY(!WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QString()));
     }
 
     // Empty screen id falls through to the snap check even while the

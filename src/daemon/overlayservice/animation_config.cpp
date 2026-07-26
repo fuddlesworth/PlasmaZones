@@ -295,7 +295,7 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
 {
     namespace PAL = PhosphorAnimationLayer;
 
-    // Two existing surface types do NOT have a per-role config registered
+    // Three existing surface types do NOT have a per-role config registered
     // and therefore fall back to the empty default (no shader effect, the
     // library-default 150 ms OutCubic motion):
     //   - ZoneOverlay (zone overlay rendering): routes through the

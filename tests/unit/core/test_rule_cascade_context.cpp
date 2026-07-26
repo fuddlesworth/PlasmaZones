@@ -285,6 +285,93 @@ private Q_SLOTS:
         QVERIFY(f.registry->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 0, QString()));
     }
 
+    // ─── exactContextEntry discriminates EXPLICIT from RESOLVED ──────────────
+    // exactContextEntry is the settings UI's explicit-vs-resolved discriminator:
+    // it reports only what THIS exact (screen, desktop, activity) tuple has a
+    // rule for, and never what the tuple merely inherits. The Monitors page
+    // relies on the distinction — re-pinning a cascade default as if it were
+    // explicit would freeze an inherited value into a rule the user never
+    // authored. The cascade resolver (assignmentEntryForScreen) is the foil in
+    // each case below: it answers, and exactContextEntry must not.
+    void testExactContextEntry_explicitOnly_notCascadeOrDefault()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // A global snap default, so every unpinned context still RESOLVES to
+        // something — otherwise the negative assertions would pass vacuously.
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+
+        // One explicit context rule on the MONITOR axis: (DP-1, no desktop, no
+        // activity), so its match is a bare ScreenId leaf that every desktop on
+        // DP-1 inherits.
+        const PWR::Rule assign =
+            CRB::makeAssignmentRule(QStringLiteral("layout DP-1"), QStringLiteral("DP-1"), 0, QString(),
+                                    QStringLiteral("snapping"), QStringLiteral("{explicit-layout}"), QString(), 301);
+        QVERIFY(f.store->setAllRules({assign}));
+
+        // (1) The exact tuple → the stored entry comes back.
+        const PhosphorZones::AssignmentEntry exact =
+            f.registry->exactContextEntry(QStringLiteral("DP-1"), 0, QString());
+        QCOMPARE(exact.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(exact.snappingLayout, QStringLiteral("{explicit-layout}"));
+        QVERIFY(f.registry->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
+
+        // (2) A tuple that only INHERITS the value through the cascade. Desktop
+        // 5 on the same screen resolves to the monitor rule's layout, but
+        // nothing is stored AT (DP-1, 5, "") — the canonical desktop-axis shape
+        // that tuple names is a different match than the bare ScreenId leaf —
+        // so exactContextEntry must report an empty entry.
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 5, QString()).snappingLayout,
+                 QStringLiteral("{explicit-layout}"));
+        const PhosphorZones::AssignmentEntry inherited =
+            f.registry->exactContextEntry(QStringLiteral("DP-1"), 5, QString());
+        QVERIFY(!inherited.isValid());
+        QVERIFY(inherited.snappingLayout.isEmpty());
+        QVERIFY(inherited.tilingAlgorithm.isEmpty());
+        QVERIFY(!f.registry->hasExplicitAssignment(QStringLiteral("DP-1"), 5, QString()));
+
+        // (3) A tuple that resolves only through the global DEFAULT tier — a
+        // different screen entirely. The resolver answers with the provider's
+        // id; exactContextEntry stays empty.
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-2"), 0, QString()).snappingLayout,
+                 QStringLiteral("{provider-snap-default}"));
+        const PhosphorZones::AssignmentEntry defaulted =
+            f.registry->exactContextEntry(QStringLiteral("DP-2"), 0, QString());
+        QVERIFY(!defaulted.isValid());
+        QVERIFY(defaulted.snappingLayout.isEmpty());
+        QVERIFY(!f.registry->hasExplicitAssignment(QStringLiteral("DP-2"), 0, QString()));
+    }
+
+    // exactContextEntry is deliberately BLIND to the rule's enabled flag: it
+    // reports stored intent, not the effective cascade result, because the
+    // settings UI must keep rendering a pin the user switched off. The cascade
+    // resolver is the opposite — the evaluator skips disabled rules — so the
+    // two must DISAGREE for a disabled pin. That disagreement is the contract.
+    void testExactContextEntry_disabledRuleStillReportsStoredEntry()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+
+        PWR::Rule assign =
+            CRB::makeAssignmentRule(QStringLiteral("layout DP-1"), QStringLiteral("DP-1"), 0, QString(),
+                                    QStringLiteral("snapping"), QStringLiteral("{explicit-layout}"), QString(), 301);
+        assign.enabled = false;
+        QVERIFY(f.store->setAllRules({assign}));
+
+        // Stored intent survives the disable.
+        const PhosphorZones::AssignmentEntry exact =
+            f.registry->exactContextEntry(QStringLiteral("DP-1"), 0, QString());
+        QCOMPARE(exact.snappingLayout, QStringLiteral("{explicit-layout}"));
+
+        // The cascade does not: the disabled rule is skipped and the global
+        // default tier answers instead.
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout,
+                 QStringLiteral("{provider-snap-default}"));
+    }
+
     // ─── Context autotile-parameter resolution (max / split / master) ────────
     // resolveContextTilingParams is a per-slot read: independent
     // SetMaxWindows / SetSplitRatio / SetMasterCount rules compose, and an

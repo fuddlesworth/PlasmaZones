@@ -526,7 +526,13 @@ void Daemon::syncModeFromAssignments()
             // should trigger resnap via the global active layout signal. KCM saves
             // use populateResnapBufferForAllScreens() + resnapToNewLayout()
             // (per-screen, independent of global active layout) instead.
-            if (!PhosphorLayout::LayoutId::isAutotile(focusedAssignmentId)) {
+            // Scrolling short-circuits the same way autotile does: the
+            // "scrolling:" sentinel is not a manual layout, so
+            // layoutForScreen() would hand back the context's fallback snap
+            // layout and this would install it as the GLOBAL active layout —
+            // clobbering it for every screen on a desktop switch.
+            if (!PhosphorLayout::LayoutId::isAutotile(focusedAssignmentId)
+                && !PhosphorLayout::LayoutId::isScrolling(focusedAssignmentId)) {
                 PhosphorZones::Layout* desktopLayout =
                     m_layoutManager->layoutForScreen(focusedScreenId, desktop, activity);
                 if (desktopLayout && desktopLayout != m_layoutManager->activeLayout()) {
@@ -661,6 +667,17 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                 // DOWNGRADED mode's list and misses).
                 if (currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Scrolling) {
                     showScrollingModeOsd(screenId);
+                    continue;
+                }
+                // Downgraded. Re-probe the SCROLLING disable lists directly
+                // (the resolver probe above asked the downgraded mode) so a
+                // context that turned scrolling off gets the same "why"
+                // card the mode toggle shows, not a misleading "no layout
+                // assigned".
+                const DisabledReason scrollingWhy = contextDisabledReason(
+                    m_settings.get(), PhosphorZones::AssignmentEntry::Scrolling, screenId, desktop, activity);
+                if (scrollingWhy != DisabledReason::NotDisabled) {
+                    showContextDisabledOsd(screenId, desktop, activity, scrollingWhy);
                 } else {
                     showNotAssignedOsd(screenId);
                 }

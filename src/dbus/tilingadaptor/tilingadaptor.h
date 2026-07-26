@@ -319,8 +319,17 @@ private:
      * Returns true if panel geometry is not yet ready (the caller should queue the
      * entry and return). Lazily connects flushPendingWindowOpens() on first deferral.
      * Exposed as a helper so windowOpened() and windowsOpenedBatch() share the gate.
+     *
+     * @param incomingCount Entries the caller is about to queue — returns false
+     *        (process now, unreserved geometry) rather than growing the queue
+     *        past @c kMaxPendingOpens. See the overflow rationale in the body.
      */
-    bool deferUntilPanelReady();
+    bool deferUntilPanelReady(qsizetype incomingCount);
+
+    /// Ceiling on the panel-geometry deferral queue. Sized well above any
+    /// plausible startup window count so the valve only trips when
+    /// panelGeometryReady never arrives.
+    static constexpr qsizetype kMaxPendingOpens = 512;
 
     /// Merge every pipeline engine's active screen set for the D-Bus
     /// screen-set surface (property read + change signal payload).

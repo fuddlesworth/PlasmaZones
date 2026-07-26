@@ -119,7 +119,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="algorithmInfo">
-            <annotation name="org.gtk.GDBus.DocString" value="Get information about a specific algorithm."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get information about a specific algorithm. An unknown ID returns a default-constructed struct rather than an error; the returned id echoes the queried ID only on a successful lookup, so an empty id means the query missed."/>
             <arg name="algorithmId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Algorithm ID to query."/>
             </arg>

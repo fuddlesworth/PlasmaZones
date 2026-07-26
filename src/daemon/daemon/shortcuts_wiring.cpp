@@ -8,7 +8,6 @@
 #include "daemon/daemon.h"
 
 #include "config/settings.h"
-#include "core/interfaces/isettings.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include "daemon/controllers/shortcutmanager.h"
@@ -17,12 +16,9 @@
 #include "daemon/overlayservice.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
-#include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorContext/ContextResolver.h>
-#include <PhosphorEngine/PlacementEngineBase.h>
-#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <QProcess>
 

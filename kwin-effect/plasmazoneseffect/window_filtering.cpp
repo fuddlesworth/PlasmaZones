@@ -8,6 +8,7 @@
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleEvaluator.h>
 
+#include <core/output.h>
 #include <effect/effecthandler.h>
 #include <window.h>
 #include <workspace.h>
@@ -165,6 +166,16 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
     // rule matches strip-managed windows.
     if (query.mode == QLatin1String("tiling") && m_tilingHandler->isScrollingScreen(screenId)) {
         query.mode = QStringLiteral("scrolling");
+    }
+    // Re-stamp the screen orientation from the resolved screen id. The free
+    // helper can only resolve an output from the frame centre, which answers
+    // for the wrong monitor (or not at all) for a scroll strip's windows
+    // parked off-screen beside their column. The id is authoritative for
+    // those: it comes from the engine's own per-window screen override.
+    if (const KWin::LogicalOutput* output = outputForScreenId(screenId)) {
+        if (const QRect g = output->geometry(); g.isValid()) {
+            query.screenOrientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+        }
     }
     applyOwnLayerFlags(query, windowId);
     return query;

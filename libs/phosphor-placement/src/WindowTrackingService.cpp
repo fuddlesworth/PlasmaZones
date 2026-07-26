@@ -663,8 +663,6 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
     }
     qCInfo(lcPlacement) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
 
-    markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
-
     // Last-used-zone coupling: unsnapForFloat already cleared this store's own
     // per-key last-used if it named the floated zone. The global holder still carries
     // the representative restored from disk, so clear it too if it named the zone.
@@ -672,7 +670,11 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
     lastUsedCleared |= clearGlobalLastUsedIfRemoved(zoneIds, snapState);
 
     Q_EMIT windowZoneChanged(windowId, QString());
-    markDirty(DirtyZoneAssignments | (lastUsedCleared ? DirtyLastUsedZone : DirtyNone));
+    // One mark for every store this path touched: markDirty also kicks the
+    // adaptor's debounced save through stateChanged, so splitting it just
+    // restarts the same timer twice.
+    markDirty(DirtyPreFloatZones | DirtyPreFloatScreens | DirtyZoneAssignments
+              | (lastUsedCleared ? DirtyLastUsedZone : DirtyNone));
 
     consumePendingAssignment(windowId);
 }

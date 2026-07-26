@@ -99,17 +99,22 @@ SettingsFlickable {
         var snapping = "";
         var tiling = "";
         // Lossless mode toggling: every staged entry carries the SIBLING
-        // mode's resolved pick too. The daemon rebuilds the whole context
-        // rule from the entry, so staging an empty sibling field would drop
-        // a stored layout/algorithm for good — pin to Scrolling and back
-        // and the zone layout would be gone. An explicit "Default" pick
-        // (cleared flag) deliberately carries empty so the sibling keeps
-        // following the global default.
-        // Resolved-but-not-explicit values are NOT carried: staging them
-        // would freeze a cascade default into an explicit assignment from a
-        // pure mode switch (the daemon marks explicitness per slot).
-        var siblingSnapping = stateView.localLayoutCleared ? "" : (stateView.localLayoutId || (state.layoutIdExplicit ? state.layoutId : "") || "");
-        var siblingAlgo = stateView.localAlgorithmCleared ? "" : (stateView.localAlgorithmId || (state.algorithmIdExplicit ? state.algorithmId : "") || "");
+        // mode's pick too. The daemon rebuilds the whole context rule from
+        // the entry, so staging an empty sibling field would drop a stored
+        // layout/algorithm for good — pin to Scrolling and back and the zone
+        // layout would be gone. An explicit "Default" pick (cleared flag)
+        // deliberately carries empty so the sibling keeps following the
+        // global default.
+        // Only a TOUCHED slot carries its local value. An untouched slot
+        // falls back to the daemon's assignment and carries it only when the
+        // daemon marked it explicit, so a pure mode switch never freezes a
+        // cascade default into an explicit assignment. The local ids cannot
+        // stand in for that test: they are pre-filled from the RESOLVED
+        // state, so they always look like a pick. A daemon too old to report
+        // the marker leaves it undefined, and there the existing assignment
+        // is preserved rather than silently dropped.
+        var siblingSnapping = stateView.localLayoutCleared ? "" : (stateView.localLayoutTouched ? stateView.localLayoutId : ((state.layoutIdExplicit === undefined || state.layoutIdExplicit) ? (state.layoutId || "") : ""));
+        var siblingAlgo = stateView.localAlgorithmCleared ? "" : (stateView.localAlgorithmTouched ? stateView.localAlgorithmId : ((state.algorithmIdExplicit === undefined || state.algorithmIdExplicit) ? (state.algorithmId || "") : ""));
         var siblingTiling = siblingAlgo ? "autotile:" + siblingAlgo : "";
         if (stateView.isScrolling) {
             // Scrolling has neither a zone layout nor a tiling algorithm of
@@ -119,26 +124,20 @@ SettingsFlickable {
             return;
         }
         if (stateView.localMode === 1) {
-            if (stateView.localAlgorithmCleared) {
-                // The user explicitly picked "Default": stage an assignment
-                // clear so an earlier explicit pick in this session and any
-                // daemon-side explicit assignment are reverted on Apply,
-                // instead of pinning the currently-resolved algorithm via
-                // the fallback below.
-                settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
-                return;
-            }
-            // Stage the user's pick, else the currently-resolved algorithm.
-            var algoId = stateView.localAlgorithmId || state.algorithmId;
+            // An explicit "Default" pick clears the algorithm slot. Otherwise
+            // stage the user's pick, else the currently-resolved algorithm.
+            var algoId = stateView.localAlgorithmCleared ? "" : (stateView.localAlgorithmId || state.algorithmId || "");
             if (!algoId) {
-                // Nothing resolved to pin (fresh config, or the context
-                // suppresses the default): stage a MODE-ONLY entry, exactly
-                // like the Snapping and Scrolling branches. The wire is
-                // mode=1 with an EMPTY algorithm id (the adaptor only
-                // validates non-empty ids), so the switch commits, the
-                // algorithm keeps FOLLOWING the global default (never
-                // frozen to today's value), and the combo honestly keeps
-                // showing "Default".
+                // Nothing to pin — either the user picked "Default", or
+                // nothing resolved (fresh config, or the context suppresses
+                // the default). Stage a MODE-ONLY entry, exactly like the
+                // Snapping and Scrolling branches. The wire is mode=1 with
+                // an EMPTY algorithm id (the adaptor only validates
+                // non-empty ids), so the switch commits, the slot is cleared
+                // without touching the mode pin or the sibling, the
+                // algorithm keeps FOLLOWING the global default (never frozen
+                // to today's value), and the combo honestly keeps showing
+                // "Default".
                 settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, siblingSnapping, "");
                 return;
             }
@@ -146,26 +145,20 @@ SettingsFlickable {
             tiling = "autotile:" + algoId;
             snapping = siblingSnapping;
         } else {
-            if (stateView.localLayoutCleared) {
-                // The user explicitly picked "Default": stage an assignment
-                // clear so an earlier explicit pick in this session and any
-                // daemon-side explicit assignment are reverted on Apply,
-                // instead of pinning the currently-resolved layout via the
-                // fallback below.
-                settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
-                return;
-            }
-            // The || fallback serves the mode-toggle path, which stages the
+            // An explicit "Default" pick clears the layout slot. The ||
+            // fallback serves the mode-toggle path, which stages the
             // currently-resolved layout when the user has not picked one.
-            var layoutId = stateView.localLayoutId || state.layoutId;
+            var layoutId = stateView.localLayoutCleared ? "" : (stateView.localLayoutId || state.layoutId || "");
             if (!layoutId) {
-                // Nothing resolved to pin (the context suppresses the
-                // default layout, so state.layoutId is empty). The MODE
-                // change must still commit — leaving from Scrolling used to
-                // fall into an unstage here and silently drop the switch
-                // while the button group showed Snapping. Stage a mode-only
-                // entry; the daemon accepts a bare mode exactly as it does
-                // for Scrolling above.
+                // Nothing to pin — either the user picked "Default", or
+                // nothing resolved (the context suppresses the default
+                // layout, so state.layoutId is empty). The MODE change must
+                // still commit — leaving from Scrolling used to fall into an
+                // unstage here and silently drop the switch while the button
+                // group showed Snapping. Stage a mode-only entry; it clears
+                // the layout slot while keeping the mode pin and the
+                // sibling, and the daemon accepts a bare mode exactly as it
+                // does for Scrolling above.
                 settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, "", siblingTiling);
                 return;
             }
@@ -250,6 +243,7 @@ SettingsFlickable {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
             text: i18n("View and change the active mode and layout for each monitor.")
+            // Kirigami.InlineMessage defaults to visible: false.
             visible: true
         }
 
@@ -293,6 +287,15 @@ SettingsFlickable {
             // combo reports it as an empty value, indistinguishable from the
             // not-yet-touched state without this flag.
             property bool localAlgorithmCleared: false
+            // True once this session has actually assigned the slot — a
+            // selector pick, a toggle into the slot's mode, or a restored
+            // staged entry. localLayoutId / localAlgorithmId are pre-filled
+            // from the RESOLVED state, so they can never answer "did the
+            // user set this?" on their own; the sibling carry in
+            // _stageCurrentState needs that answer to avoid freezing a
+            // cascade default into an explicit assignment.
+            property bool localLayoutTouched: false
+            property bool localAlgorithmTouched: false
             property bool isTiling: localMode === 1
             // The scrolling engine is mode 2. It picks neither a layout nor an
             // algorithm, so the preview, the selectors and the staged entry all
@@ -316,6 +319,8 @@ SettingsFlickable {
                 // staged or daemon values.
                 localLayoutCleared = false;
                 localAlgorithmCleared = false;
+                localLayoutTouched = false;
+                localAlgorithmTouched = false;
                 var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
                 if (staged.fullCleared) {
                     // A staged full clear means "Default" is pending for this
@@ -327,10 +332,18 @@ SettingsFlickable {
                     localLayoutCleared = true;
                     localAlgorithmCleared = true;
                 } else if (Object.keys(staged).length > 0) {
-                    // Restore from staged state
+                    // A staged entry carries the WHOLE context rule, so every
+                    // slot in it is authoritative: a missing id is a pending
+                    // slot clear, not an absent opinion. Re-reading the
+                    // daemon's resolved value for such a slot would hide the
+                    // clear and re-carry the value on the next stage.
                     localMode = staged.mode !== undefined ? staged.mode : (screenState.mode || 0);
-                    localLayoutId = staged.layoutId !== undefined ? staged.layoutId : (screenState.layoutId || "");
-                    localAlgorithmId = staged.algorithmId !== undefined ? staged.algorithmId : (screenState.algorithmId || "");
+                    localLayoutId = staged.layoutId !== undefined ? staged.layoutId : "";
+                    localAlgorithmId = staged.algorithmId !== undefined ? staged.algorithmId : "";
+                    localLayoutCleared = staged.layoutId === undefined;
+                    localAlgorithmCleared = staged.algorithmId === undefined;
+                    localLayoutTouched = staged.layoutId !== undefined;
+                    localAlgorithmTouched = staged.algorithmId !== undefined;
                 } else {
                     // No staged changes — use daemon state
                     localMode = screenState.mode || 0;
@@ -418,10 +431,13 @@ SettingsFlickable {
                     // value. The SIBLING mode's cleared flag survives — a
                     // pending "Default" on the mode being left is a
                     // deliberate pick the toggle must not silently re-pin.
-                    if (idx === 0)
+                    if (idx === 0) {
                         stateView.localLayoutCleared = false;
-                    else if (idx === 1)
+                        stateView.localLayoutTouched = true;
+                    } else if (idx === 1) {
                         stateView.localAlgorithmCleared = false;
+                        stateView.localAlgorithmTouched = true;
+                    }
                     root._stageCurrentState();
                 }
             }
@@ -441,6 +457,7 @@ SettingsFlickable {
                     var id = entry ? (entry.value || "") : "";
                     stateView.localLayoutId = id;
                     stateView.localLayoutCleared = (id === "");
+                    stateView.localLayoutTouched = true;
                     root._stageCurrentState();
                 }
             }
@@ -463,6 +480,7 @@ SettingsFlickable {
                     else
                         stateView.localAlgorithmId = id;
                     stateView.localAlgorithmCleared = (id === "");
+                    stateView.localAlgorithmTouched = true;
                     root._stageCurrentState();
                 }
             }

@@ -408,17 +408,16 @@ void Daemon::updateEngineScreens()
 
     qCDebug(lcDaemon) << "Updated autotile screens=" << autotileScreens << "scrolling screens=" << scrollingScreens;
 
-    // Drain the restore batch THIS pass produced, at the tail, for every
+    // Drain the FLOAT half of the restore batch at the tail, for every
     // caller — the leak class was "some caller has no downstream consumer,
     // and the stale batch teleports windows when the NEXT consumer runs".
-    // Emitting here is safe relative to the consuming callers'
-    // resnapToNewLayout ordering: the float half covers windows OUTSIDE
-    // zones, disjoint from the zone windows a resnap repositions, and the
-    // helper deliberately drops the zone half when no resnap is in flight.
-    // Consumers that run later still call the helper themselves; it is a
-    // no-op on the emptied buffer (their real purpose remains the
-    // prune-origin releases that append OUTSIDE this recompute).
-    emitPendingSnapFloatRestoresForResnapBuffer();
+    // Floats are excluded from every downstream resnap, so this batch is
+    // window-disjoint from whatever a consumer emits later. The snap-ZONE
+    // half is PRESERVED: the mode-toggle and autotile-disable consumers
+    // run after this recompute and feed it into preClaimedZoneIds and the
+    // batched restore — consuming it here strands previously-floated
+    // windows off their zones (found the hard way).
+    emitPendingSnapFloatRestoresForResnapBuffer(/*preserveZoneEntries=*/true);
 }
 
 QSet<QString> Daemon::diffActiveAssignments()
@@ -990,6 +989,24 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
                                   << "wasAutotileFloated:" << wasAutotileFloated;
             }
         }
+    }
+    // Prune-origin releases (screenRemoved, desktop/activity prunes) run
+    // OUTSIDE updateEngineScreens, so its tail drain never sees the batch
+    // this handler just appended; nothing else on those paths consumes it
+    // either, and a stale batch would be wiped by the next recompute's
+    // clear (losing the restore) or replayed by a later unrelated
+    // consumer. Mid-recompute (latch held) the tail drain owns it.
+    //
+    // This is the FULL drain (preserveZoneEntries defaults to false), and
+    // the snap-ZONE half is best-effort by design, not by oversight: no
+    // prune-origin path has a zone re-claim consumer (screenRemoved's zones
+    // reference an output that no longer exists, and desktop/activity
+    // prunes have no resnap of their own), so the zone entries are handed
+    // to an in-flight resnapToNewLayout if one happens to be running and
+    // dropped otherwise. Preserving them instead would leave a batch keyed
+    // to a dead context for an unrelated later consumer to replay.
+    if (!m_updateEngineScreensInProgress) {
+        emitPendingSnapFloatRestoresForResnapBuffer();
     }
 }
 

@@ -72,17 +72,17 @@ Item {
             Row {
                 id: tabRow
 
-                // Centered while it fits; once the row is wider than the
-                // pill, pin it to the left padding — centering would clip
-                // BOTH ends. In a pill narrower than the padding budget the
-                // padding COLLAPSES before the content does (the inner
-                // Math.max floor at 0), so a cramped column still shows a
-                // partial leading chip instead of an empty pill. Chips
-                // render in stacking order, so an active tab late in the
-                // order CAN be clipped (see the file doc's overflow
-                // paragraph).
+                // Centered while it fits, with whatever padding is left over
+                // splitting evenly — a cramped column simply centers in a
+                // thinner margin instead of shifting the row off-center.
+                // Once the row is wider than the pill it starts at the left
+                // edge: centering would clip BOTH ends, and this way a
+                // cramped column still shows a partial leading chip instead
+                // of an empty pill. Chips render in stacking order, so an
+                // active tab late in the order CAN be clipped (see the file
+                // doc's overflow paragraph).
                 anchors.verticalCenter: parent.verticalCenter
-                x: (pill.width - width) / 2 >= Kirigami.Units.largeSpacing ? (pill.width - width) / 2 : Math.min(Kirigami.Units.largeSpacing, Math.max(0, pill.width - width))
+                x: pill.width >= width ? (pill.width - width) / 2 : 0
                 spacing: Kirigami.Units.smallSpacing
 
                 Repeater {

@@ -373,6 +373,12 @@ QString LayoutAdaptor::getScreenStates()
         // cascade/default. The Monitors page gates its lossless mode-toggle
         // sibling carry on these, so a pure mode switch can never freeze a
         // cascade default into an explicit assignment.
+        //
+        // exactContextEntry scans the assignment list, so this loop is O(screens
+        // × assignments). Left as is on purpose: getScreenStates is a
+        // settings-UI / shortcut-rate call over a handful of screens, and an
+        // index would add a cache to keep in sync with every assignment write
+        // for no measurable gain.
         const PhosphorZones::AssignmentEntry exactEntry =
             m_layoutManager->exactContextEntry(screenId, desktop, activity);
         obj[QLatin1String("layoutIdExplicit")] = !exactEntry.snappingLayout.isEmpty();
@@ -772,10 +778,7 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
         qCWarning(lcDbusLayout) << "setAssignmentEntry: empty screen ID for" << screenId;
         return;
     }
-    // 0 = base (all-desktops) context; negatives are never a valid desktop
-    // number. setAllCombinedAssignments applies the same boundary rule.
-    if (virtualDesktop < 0) {
-        qCWarning(lcDbusLayout) << "setAssignmentEntry: negative virtualDesktop" << virtualDesktop << "for" << screenId;
+    if (!validDesktopArg(virtualDesktop, "setAssignmentEntry")) {
         return;
     }
 

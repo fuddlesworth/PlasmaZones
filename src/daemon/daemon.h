@@ -562,12 +562,17 @@ private:
      * snap-FLOATED before passing through autotile would therefore lose its
      * float-back position on a picker/KCM flip. Floating windows are excluded
      * from the resnap buffer, so these float restores are a disjoint set the
-     * buffer path cannot cover; emit them as a separate batch. The snap-ZONE
-     * restores in the buffer reference the OLD layout and are intentionally
-     * left to resnapToNewLayout (which re-snaps to the NEW layout's zones).
-     * Consumes (clears) m_pendingSnapFloatRestores.
+     * buffer path cannot cover; emit them as a separate batch.
+     *
+     * Two consume modes: with @p preserveZoneEntries (the
+     * updateEngineScreens tail drain) only the float half is consumed and
+     * the snap-ZONE entries stay in m_pendingSnapFloatRestores for the
+     * mode-toggle / autotile-disable consumers that run after the
+     * recompute. Without it (resnap-buffer consumers, prune-origin drains)
+     * the whole buffer is consumed — remaining zone entries are handed to
+     * an in-flight resnapToNewLayout when one exists, else dropped.
      */
-    void emitPendingSnapFloatRestoresForResnapBuffer();
+    void emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntries = false);
 
     /**
      * @brief Update layout filter on overlay service and unified layout controller

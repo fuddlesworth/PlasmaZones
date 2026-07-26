@@ -3,6 +3,18 @@
 
 #pragma once
 
+// SANCTIONED FILE-SIZE EXCEPTION. This header is far past the 1150-line
+// ceiling and stays that way deliberately: it is one class declaration whose
+// bulk is the Q_PROPERTY / getter / setter / signal quadruple that every
+// setting must carry. moc requires the whole Q_OBJECT class in one
+// translation unit's header, so the only way to "split" it is to fragment one
+// class across several headers, which buys nothing and costs every reader the
+// hunt for where a property lives. The DEFINITIONS are already split by domain
+// under src/config/settings/ (scrolling.cpp, and siblings), which is where the
+// real per-concern boundary is. Do not add a second exception here without the
+// same reasoning: growth of the accessor surface is expected, new
+// non-accessor logic in this header is not.
+
 #include "core/types/constants.h"
 #include "core/interfaces/interfaces.h"
 #include "configbackends.h"

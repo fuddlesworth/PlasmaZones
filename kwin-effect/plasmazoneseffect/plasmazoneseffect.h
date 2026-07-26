@@ -654,6 +654,11 @@ private:
     /// (Discussion #724). Shared by getWindowScreenId and the activation-time
     /// desktop report in notifyWindowActivated.
     KWin::LogicalOutput* windowOutput(KWin::EffectWindow* w) const;
+    /// Resolve a (physical or virtual) screen id back to the KWin output that
+    /// carries it. Nullptr when no connected output matches — a disconnected
+    /// or not-yet-resolved id. The counterpart to outputScreenId, for the
+    /// paths that hold an id and need the output's geometry.
+    KWin::LogicalOutput* outputForScreenId(const QString& screenId) const;
     TilingHandler* tilingHandler() const
     {
         return m_tilingHandler.get();

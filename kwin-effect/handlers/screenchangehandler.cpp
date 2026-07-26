@@ -202,7 +202,11 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
         if (self->m_reapplyPending) {
             self->m_reapplyPending = false;
             QTimer::singleShot(0, self, [self]() {
-                if (self) {
+                // m_stopped as well as the QPointer: stop() can run between
+                // this continuation being posted and dispatched, and the
+                // fetch would then issue a D-Bus call during teardown (same
+                // guard the queued client-area report carries).
+                if (self && !self->m_stopped) {
                     self->fetchAndApplyWindowGeometries();
                 }
             });

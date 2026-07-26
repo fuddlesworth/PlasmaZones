@@ -110,6 +110,8 @@ set(plasmazones_core_SRCS
     config/perscreenresolver.cpp
     config/settingsschema.h
     config/settingsschema.cpp
+    config/settingsschema_p.h
+    config/settingsschema_scrolling.cpp
     config/settingsschemachoices.h
     config/settingsvaluelabels.cpp
     config/settingsvaluelabels.h
@@ -635,7 +637,6 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/plasmazones.service
     DESTINATION ${KDE_INSTALL_SYSTEMDUSERUNITDIR}
 )
-
 
 # Daemon desktop file: use full Exec path so KWin's fetchRestrictedDBusInterfacesFromPid
 # can match the process (it compares executable path to desktop Exec).

@@ -172,10 +172,17 @@ bool WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, 
     // doc: every emission channel must keep m_broadcastFloating equal to what
     // subscribers last heard, or the gate turns from a dedup into a
     // suppressor of genuine changes. setWindowFloating delegates here too.
-    if (m_broadcastFloating.value(windowId, false) == floating) {
+    //
+    // The gate is keyed on the CANONICAL id: callers reach here with both raw
+    // effect ids and canonical engine-relay ids for the same window, and a
+    // raw-keyed gate would keep two independent last-broadcast states that
+    // each fail to dedup the other's emissions. The signal still carries the
+    // caller's id form, which is what subscribers match their own state on.
+    const QString gateKey = m_service->canonicalizeForLookup(windowId);
+    if (m_broadcastFloating.value(gateKey, false) == floating) {
         return false;
     }
-    m_broadcastFloating[windowId] = floating;
+    m_broadcastFloating[gateKey] = floating;
     Q_EMIT windowFloatingChanged(windowId, floating, screenId);
     return true;
 }

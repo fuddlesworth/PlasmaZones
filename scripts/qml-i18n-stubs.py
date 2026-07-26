@@ -41,7 +41,11 @@ import os
 import re
 import sys
 
-CALL_RE = re.compile(r"\bi18n(cp|np|c)?\s*\(")
+# Order matters: "cp" must precede "c" or the alternation stops at "c" and
+# never sees the trailing p; the literal prefix already consumed the n, so
+# the plural form is the bare "p" branch (a previous "np" spelling was
+# unreachable and silently dropped every i18np() call).
+CALL_RE = re.compile(r"\bi18n(cp|c|p)?\s*\(")
 
 # A JS string literal, single or double quoted, with backslash escapes.
 STRING_RE = re.compile(r"""\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')\s*""")

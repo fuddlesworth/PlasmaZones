@@ -3,15 +3,26 @@
 
 # phosphor-compositor
 
-> Compositor-plugin SDK for Phosphor. Provides the interface contract,
-> D-Bus client, and shared utilities a compositor plugin needs to give its
-> users zone-based window management.
+> Compositor-plugin SDK for the Phosphor **placement** surface. Provides the
+> bridge interface, the typed D-Bus client for the tiling-side daemon
+> interfaces, and the state helpers a plugin needs so its users get
+> zone-based window management.
 
 ## Responsibility
 
 Phosphor splits into a **daemon** (owns placement logic, zones, layouts,
 settings) and a **compositor plugin** (observes windows, applies geometry,
-renders overlays). This library is the plugin side of that split.
+renders overlays). This library is the plugin side of that split, for
+placement only.
+
+Scope is what a plugin needs to place windows: `DaemonClient` speaks the
+`WindowTracking`, `WindowDrag`, `Tiling`, `LayoutRegistry`, `Screen`,
+`Settings`, and `CompositorBridge` interfaces, and the helpers cover
+title-bar ownership, float and zone caches, trigger parsing, and
+scaling-safe rounding. Everything visual a plugin draws is its own: the
+overlay, decoration, and animation rendering in `kwin-effect/` is built on
+`phosphor-rendering` / `phosphor-shaders` / `phosphor-animation`, and none
+of it is wrapped here.
 
 A compositor plugin links `PhosphorCompositor`, implements
 `ICompositorBridge` (the interface mapping native window handles to the
@@ -31,6 +42,8 @@ applies *how*.
 | `ILifecycleHandler` | Callback interface for window open/close/activate/float-change |
 | `BorderState` + `TilingStateHelpers` | Per-screen border-state value type plus pure helper functions |
 | `FloatingCache` | Compositor-side mirror of daemon float state |
+| `ZoneCache` | Compositor-side mirror of window-to-zone assignments |
+| `DecorationManager` | Single owner of server-side title-bar state (acquire/release, prior-state restore) |
 | `SnapAssistFilter` | Snap-assist candidate building via bridge |
 | `TriggerParser` | Modifier/button activation matching from config |
 | `DebouncedScreenAction` | Debounce utility for screen-change coalescing |

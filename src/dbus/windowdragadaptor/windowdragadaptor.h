@@ -428,11 +428,26 @@ public:
                       const PhosphorEngine::IPlacementEngine* scrollEngine, const QString& windowId,
                       const QString& screenId, const PhosphorContext::IContextResolver* resolver, bool reorderMode);
 
+    /**
+     * @brief Whether reorder (drag-to-swap) mode is effective for @p screenId
+     *
+     * A matched context SetDragBehavior rule wins over the global
+     * `autotileDragBehavior` setting. Static for the same reason
+     * computeDragPolicy is — the decision needs the layout registry, which
+     * computeDragPolicy cannot reach, and a test must be able to pin the
+     * precedence without standing up a whole adaptor.
+     *
+     * @param layoutManager Rule/assignment cascade source; nullptr falls back
+     *        to the global setting
+     * @param settings Global-setting source; nullptr means "not reorder"
+     * @param screenId Screen the drag starts on; empty falls back to the
+     *        global setting (no context to resolve a rule against)
+     */
+    static bool resolveReorderMode(const PhosphorZones::LayoutRegistry* layoutManager, const ISettings* settings,
+                                   const QString& screenId);
+
 private:
-    /// Whether reorder (drag-to-swap) mode is effective for @p screenId: a matched
-    /// context SetDragBehavior rule wins, otherwise the global
-    /// `autotileDragBehavior` setting. Resolves through m_layoutManager (which the
-    /// static computeDragPolicy can't reach), so callers pass the result in.
+    /// resolveReorderMode bound to this adaptor's registry and settings.
     bool effectiveReorderMode(const QString& screenId) const;
 
     // Helper: Find screen containing a point (returns primary screen if not found)
@@ -590,6 +605,14 @@ private:
 
     // DRY helper: cancel any active autotile drag-insert preview.
     void cancelDragInsertIfActive();
+
+    /// Drop-path settle for a live autotile drag-insert preview. Commits it
+    /// and returns true when the preview belongs to the screen under
+    /// (@p cursorX, @p cursorY); otherwise cancels it (or does nothing when no
+    /// preview is live) and returns false. Shared by the two drop entry points
+    /// (drop.cpp's dragStopped and drag_protocol.cpp's autotile bypass), which
+    /// differ only in how they finalize after a commit.
+    bool settleDragInsertPreviewAt(int cursorX, int cursorY);
 
     // Last emitted zone geometry (emit only when changed)
     QRect m_lastEmittedZoneGeometry;

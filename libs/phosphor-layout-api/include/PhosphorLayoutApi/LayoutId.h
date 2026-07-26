@@ -45,10 +45,12 @@ inline bool isScrolling(const QString& id)
 }
 
 /// Extract the algorithm id portion from an autotile preview id.
-/// (The misuse warning below is a bare qWarning by design: this header-only
-/// library carries no logging category of its own, and pulling one in would
-/// be its first .cpp. The message is a programmer-error flag, not runtime
-/// noise worth filtering.)
+/// (The misuse warning below is a bare qWarning by design: PhosphorLayoutApi
+/// declares no logging category of its own — it is a contract library, and the
+/// few .cpp files it does build carry only interface glue, no logging. The
+/// message is a programmer-error flag, not runtime noise worth filtering. These
+/// helpers are `inline` and header-resident so a consumer can classify an id
+/// without linking anything.)
 /// Callers are expected to check @c isAutotile first — passing a non-autotile
 /// id here is a contract violation. We warn and return an empty string so
 /// the misuse is loud rather than silent, but remain graceful in release

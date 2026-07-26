@@ -95,8 +95,10 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("DP-1");
 
+        // No setAlgorithm: the zones are forced below and recalculateLayout
+        // bails on the missing screen geometry, so no algorithm ever runs.
+        // Naming one here would only imply coverage this file does not have.
         engine.setAutotileScreens({screenName});
-        engine.setAlgorithm(QLatin1String("master-stack"));
 
         engine.windowOpened(QStringLiteral("win-1"), screenName);
         engine.windowOpened(QStringLiteral("win-2"), screenName);
@@ -136,8 +138,9 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("HDMI-2");
+        // The monocle flag is derived from identical zone geometry, not from
+        // the selected algorithm, so no setAlgorithm here either.
         engine.setAutotileScreens({screenName});
-        engine.setAlgorithm(QLatin1String("monocle"));
 
         engine.windowOpened(QStringLiteral("win-a"), screenName);
         engine.windowOpened(QStringLiteral("win-b"), screenName);
@@ -173,7 +176,6 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("DP-3");
         engine.setAutotileScreens({screenName});
-        engine.setAlgorithm(QLatin1String("master-stack"));
 
         // Open all three UNCAPPED first, then cap at 2: the overflow entry
         // rides the batch only for NEWLY overflowed windows, so capping

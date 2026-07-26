@@ -278,7 +278,6 @@ endif()
 # ---------------------------------------------------------------------------
 include(cmake/PhosphorTranslations.cmake)
 
-
 # Generate version header with compile-time version info
 configure_file(
     "${CMAKE_SOURCE_DIR}/src/core/version.h.in"

@@ -185,6 +185,13 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     if (dropScreenId.isEmpty()) {
                         break;
                     }
+                    // Keep the tiling handler's notified-screen record on the
+                    // screen the window was actually dropped on. Neither float
+                    // path above touches it, so after a cross-screen float drag
+                    // it still names the source and the next outputChanged
+                    // would diff against a screen the window already left.
+                    // No-op for a window the handler does not track.
+                    m_tilingHandler->updateNotifiedScreen(windowId, dropScreenId);
                     // Now floating — flips the Mode / IsSnapped / IsFloating rule
                     // fields; re-resolve now instead of waiting for the broadcast.
                     invalidateRuleCacheForStateChange(windowId);

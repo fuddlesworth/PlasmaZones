@@ -108,7 +108,11 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     // identical-model outputs (discussion #724), and this must agree with
     // the caller-resolved query.screenId. Left empty (inert) when no output
     // contains the centre; a square screen counts as landscape, matching
-    // the daemon-side orientation provider.
+    // the daemon-side orientation provider. This is the FALLBACK for a query
+    // built without a screen id: the effect's ruleQuery() funnel re-stamps
+    // this field from query.screenId, which is the only correct answer for a
+    // scroll strip's off-screen parked windows (their centre lies outside
+    // every output, or inside the neighbour's).
     const QPointF centreF = w->frameGeometry().center();
     if (const auto* output = KWin::effects->screenAt(QPoint(qRound(centreF.x()), qRound(centreF.y())))) {
         const QRect g = output->geometry();

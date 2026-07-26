@@ -424,6 +424,26 @@ void AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, Phos
     }
     releasedWindows.append(tiled);
     releasedWindows.append(floated);
+    // The min-size cache leaves with the tracking, exactly as it does in
+    // handoffRelease and windowFocused's off-autotile arm: entries are
+    // SCREEN-CAPPED by storeWindowMinSize, so a released window that returns
+    // (re-enable, replug, another output) would otherwise be laid out against
+    // a cap computed for the screen it just left. The effect re-reports a
+    // live min size with every re-announce, so nothing is lost.
+    //
+    // The other two per-window caches deliberately stay: m_lastAppliedTileRect
+    // is the float-back poison guard for windows that are still OPEN here (see
+    // its member doc), and m_autotileFloatedWindows must survive until the
+    // daemon's windowsReleased handler has read isModeSpecificFloated — that
+    // handler is the marker's consumer and clears it per window.
+    // Over this state's own two lists, not the caller's accumulator — that
+    // one spans every state torn down in the same sweep.
+    for (const QString& windowId : tiled) {
+        m_windowMinSizes.remove(windowId);
+    }
+    for (const QString& windowId : floated) {
+        m_windowMinSizes.remove(windowId);
+    }
     m_pendingInitialOrders.remove(screenId);
     m_pendingOrderGeneration.remove(screenId);
     m_strictInitialOrderScreens.remove(screenId);

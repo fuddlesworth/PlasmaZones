@@ -507,12 +507,13 @@ void TestRuleController::authoringMetadata()
     bool sawFloat = false;
     // Every action carries a picker category; collect the order per wire so the
     // grouping can be spot-checked. Context-domain categories come first
-    // (Gaps=0, Engine=1, Snapping=2, Tiling=3, Scrolling=4, Overlay=5), then the
-    // window-domain categories (Animation=6, Appearance=7, Window=8 — the
-    // per-app scrolling Open* actions live in a Window/Scrolling submenu so
-    // the picker's context/window divider stays honest). The old flat
-    // "Layout & engine" category was split into Engine / Snapping / Tiling /
-    // Scrolling.
+    // (Gaps=0, Engine=1, Snapping=2, Tiling/Algorithm and Tiling/Behavior both
+    // =3, Scrolling=4, Overlay=5), then the window-domain categories
+    // (Animation=6, Appearance=7, Window=8, Window/Scrolling=9 — the per-app
+    // scrolling Open* actions live in that submenu so the picker's
+    // context/window divider stays honest). An unregistered or uncategorized
+    // action falls to Other=99. The old flat "Layout & engine" category was
+    // split into Engine / Snapping / Tiling / Scrolling.
     QHash<QString, int> actionCategoryOrder;
     for (const QVariant& v : actions) {
         const QVariantMap a = v.toMap();

@@ -36,6 +36,11 @@ private Q_SLOTS:
     void minSizeSurvivesFloatRoundTrip();
     void handoffReleaseClearsFloatMarker();
     void applyPathEmitsOnChangeOnly();
+    void orderedOpenFollowsAndConsumesSeed();
+    void orderedOpenForwardArrivalsKeepSeedOrder();
+    void floatedOpenConsumesSeed();
+    void migrateOutAnnouncesDroppedFloat();
+    void contextSwitchFlagRidesChangedScreenSets();
 
 private:
     // NOTE: windowOpened's cross-screen snap-restore defer gate
@@ -348,11 +353,15 @@ void TestScrollEngineSmoke::stackedTileFloatRoundTripRestoresSlot()
 
 void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
 {
-    // Pins that the QUEUED retile actually runs under the GUILESS event
-    // loop (uncoverable under the old APPLESS main, where processEvents
-    // was a no-op). Coalescing itself is NOT observable through the
-    // change-gated tab-strip signal — an un-coalesced double run would
-    // emit identically — so this test deliberately does not claim it.
+    // Pins that a scheduled retile is genuinely DEFERRED to the event loop
+    // and then runs under the GUILESS main (uncoverable under the old
+    // APPLESS main, where processEvents was a no-op). Driven through
+    // windowMinSizeUpdated, the real asynchronous trigger: it is the only
+    // production caller whose whole effect IS the scheduled retile, so a
+    // mutation to a direct applyLayout call fails the "nothing yet" arm
+    // below. Coalescing itself is NOT observable — a second, un-coalesced
+    // run would resolve the same rects and the emit-on-change gate would
+    // swallow it — so this test deliberately does not claim it.
     QObject owner;
     ScrollEngine* engine = makeEngine(&owner);
     engine->setScreenGeometryProviders(
@@ -363,14 +372,17 @@ void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
             return QRect(0, 0, 1200, 800);
         });
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
-    QCoreApplication::processEvents();
+    QCoreApplication::processEvents(); // drain the open's own apply
 
-    QSignalSpy stripSpy(engine, &ScrollEngine::tabStripsChanged);
-    engine->scheduleRetileForScreen(QStringLiteral("S1"));
-    engine->toggleColumnTabbed(QStringLiteral("S1")); // changes the payload the queued run broadcasts
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    // A 900px minimum outgrows the default half-width column (600px on this
+    // work area), so the retile MUST move the rect and emit.
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 900, 0);
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(900, 0));
+    QCOMPARE(tiledSpy.count(), 0); // nothing applied yet: the retile is queued
     QCoreApplication::processEvents();
-    QCOMPARE(stripSpy.count(), 1);
+    QCOMPARE(tiledSpy.count(), 1);
+    QVERIFY(tiledSpy.last().at(0).toString().contains(QStringLiteral("\"width\":900")));
 }
 
 void TestScrollEngineSmoke::removedScreenReleasesWindows()
@@ -518,6 +530,168 @@ void TestScrollEngineSmoke::applyPathEmitsOnChangeOnly()
     engine->retile(QStringLiteral("S1"));
     QCoreApplication::processEvents();
     QCOMPARE(stripSpy.count(), afterEmpty);
+}
+
+void TestScrollEngineSmoke::orderedOpenFollowsAndConsumesSeed()
+{
+    // The mode-transition seed path: with a captured order in hand, arrivals
+    // land at a seeded strip position instead of next-to-focus, and each id
+    // is consumed so a later open of the SAME id is placed normally.
+    //
+    // Reverse arrivals pin that the SEED BRANCH is taken at all (a
+    // next-to-focus append would give c, b, a); the forward-arrival test
+    // below pins the earlier-id column accounting.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setInitialWindowOrder(QStringLiteral("S1"),
+                                  {QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")});
+
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             (QStringList{QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
+
+    // Seed exhausted: a re-open of a consumed id opens next to the focused
+    // column (a is gone, so focus sits on c, the last column) rather than
+    // being re-positioned by a stale entry.
+    engine->windowClosed(QStringLiteral("app|a"));
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             (QStringList{QStringLiteral("app|b"), QStringLiteral("app|c"), QStringLiteral("app|a")}));
+}
+
+void TestScrollEngineSmoke::orderedOpenForwardArrivalsKeepSeedOrder()
+{
+    // Forward arrivals are the accounting-sensitive sequence: each arrival
+    // must COUNT its already-arrived seeded neighbours to land after them.
+    // A consume that shrank the seed list would zero every index and build
+    // the strip reversed (c, b, a) — the regression this pins.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setInitialWindowOrder(QStringLiteral("S1"),
+                                  {QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")});
+
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             (QStringList{QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
+
+    // Out-of-order tail: seed {d,e} arriving e-then-d around the existing
+    // strip still respects relative seed positions for the seeded pair.
+    engine->setInitialWindowOrder(QStringLiteral("S1"), {QStringLiteral("app|d"), QStringLiteral("app|e")});
+    engine->windowOpened(QStringLiteral("app|e"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|d"), QStringLiteral("S1"), 0, 0);
+    const QStringList order = engine->managedWindowOrder(QStringLiteral("S1"));
+    QVERIFY(order.indexOf(QStringLiteral("app|d")) < order.indexOf(QStringLiteral("app|e")));
+}
+
+void TestScrollEngineSmoke::floatedOpenConsumesSeed()
+{
+    // consumePendingInitialOrder on the FLOATED-arrival path: a rule-floated
+    // window never reaches the strip, so only the explicit consume call
+    // clears its seed entry. Leaving it behind would re-position the window
+    // whenever it later opens tiled — which is exactly what the re-open at
+    // the end would expose (a surviving seed puts it at column 0).
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setFloatPredicate([](const QString& windowId) {
+        return windowId == QStringLiteral("app|f");
+    });
+    engine->setInitialWindowOrder(QStringLiteral("S1"), {QStringLiteral("app|f")});
+
+    engine->windowOpened(QStringLiteral("app|t"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|f"), QStringLiteral("S1"), 0, 0);
+    QVERIFY(engine->isWindowFloatingInScroll(QStringLiteral("app|f")));
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), (QStringList{QStringLiteral("app|t")}));
+
+    engine->windowClosed(QStringLiteral("app|f"));
+    engine->setFloatPredicate({});
+    engine->windowOpened(QStringLiteral("app|f"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             (QStringList{QStringLiteral("app|t"), QStringLiteral("app|f")}));
+}
+
+void TestScrollEngineSmoke::migrateOutAnnouncesDroppedFloat()
+{
+    // Both migrate-out paths drop the float bit, and both must SAY so:
+    // windowFloatingChanged is the only thing signal-driven subscribers (the
+    // effect's FloatingCache) have, and a silent drop leaves them believing
+    // the window still floats while it is tiled on the new screen — which
+    // they later resolve as a float-back.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+    // windowOpened's context migration.
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->setWindowFloat(QStringLiteral("app|a"), true, QStringLiteral("S1"));
+    QCOMPARE(floatSpy.count(), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S2"), 0, 0);
+    QCOMPARE(floatSpy.count(), 2);
+    QCOMPARE(floatSpy.last().at(0).toString(), QStringLiteral("app|a"));
+    QCOMPARE(floatSpy.last().at(1).toBool(), false);
+    QCOMPARE(floatSpy.last().at(2).toString(), QStringLiteral("S1")); // the screen it LEFT
+    QVERIFY(!engine->isWindowFloatingInScroll(QStringLiteral("app|a")));
+    QVERIFY(engine->isWindowTiled(QStringLiteral("app|a")));
+    QCOMPARE(engine->screenForTrackedWindow(QStringLiteral("app|a")), QStringLiteral("S2"));
+
+    // handoffReceive's defence-in-depth migration of a window still held by
+    // another scroll context.
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
+    const int beforeHandoff = floatSpy.count();
+    PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+    ctx.windowId = QStringLiteral("app|b");
+    ctx.toScreenId = QStringLiteral("S2");
+    ctx.fromEngineId = QStringLiteral("snap");
+    engine->handoffReceive(ctx);
+    QCOMPARE(floatSpy.count(), beforeHandoff + 1);
+    QCOMPARE(floatSpy.last().at(0).toString(), QStringLiteral("app|b"));
+    QCOMPARE(floatSpy.last().at(1).toBool(), false);
+    QCOMPARE(floatSpy.last().at(2).toString(), QStringLiteral("S1"));
+    QVERIFY(engine->isWindowTiled(QStringLiteral("app|b")));
+    QCOMPARE(engine->screenForTrackedWindow(QStringLiteral("app|b")), QStringLiteral("S2"));
+}
+
+void TestScrollEngineSmoke::contextSwitchFlagRidesChangedScreenSets()
+{
+    // The CHANGED-set arm of the same contract screensSetLifecycle pins for
+    // the identical-set arm: a desktop/activity switch whose per-desktop
+    // assignments also change the screen set must still report
+    // isDesktopSwitch=true (the effect skips its destructive geometry/border
+    // restore for the departing screens on a switch), and the flag is
+    // consumed there too.
+    QObject owner;
+    auto* engine = new ScrollEngine(nullptr, nullptr, &owner);
+    QSignalSpy screensSpy(engine, &ScrollEngine::scrollingScreensChanged);
+
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCOMPARE(screensSpy.count(), 1);
+    QCOMPARE(screensSpy.last().at(1).toBool(), false); // no switch armed
+
+    engine->setCurrentDesktop(1);
+    engine->setCurrentDesktop(2); // armSwitch needs an established context first
+    engine->setActiveScreens({QStringLiteral("S1"), QStringLiteral("S2")});
+    QCOMPARE(screensSpy.count(), 2);
+    QCOMPARE(screensSpy.last().at(1).toBool(), true);
+
+    // Consumed: the next changed set is a plain screen-assignment change.
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCOMPARE(screensSpy.count(), 3);
+    QCOMPARE(screensSpy.last().at(1).toBool(), false);
+
+    // An ACTIVITY switch arms the same flag (first non-empty push only
+    // establishes the context, so it takes two), and here the set is
+    // identical — the re-emit arm carries it and then goes quiet.
+    engine->setCurrentActivity(QStringLiteral("actA"));
+    engine->setCurrentActivity(QStringLiteral("actB"));
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCOMPARE(screensSpy.count(), 4);
+    QCOMPARE(screensSpy.last().at(1).toBool(), true);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCOMPARE(screensSpy.count(), 4);
 }
 
 // GUILESS (not APPLESS): a QCoreApplication provides the event

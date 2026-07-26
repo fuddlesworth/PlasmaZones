@@ -54,6 +54,9 @@ message(STATUS "[2/5] Removing all known PlasmaZones files and directories...")
 # Known files (manifest is primary; this covers installs without manifest)
 # D-Bus XML files are installed individually; manifest lists them
 # Daemon uses systemd user service, not XDG autostart
+# BUILD_PHOSPHOR_SHELL=ON artifacts (the phosphor-shell binary and its two
+# icons) are listed unconditionally: each entry is guarded by EXISTS below,
+# so a file that was never installed is simply skipped.
 set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazonesd"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-editor"
@@ -61,6 +64,7 @@ set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-settings"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-shader-validate"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/phosphorctl"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/phosphor-shell"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/kglobalaccel/plasmazonesd.desktop"
     "$ENV{DESTDIR}@PZ_UNINSTALL_QT_PLUGINS@/wayland-shell-integration/phosphorwayland-qpa.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.daemon.desktop"
@@ -89,9 +93,11 @@ set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/plasmazones.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/plasmazones-editor.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/plasmazones-settings.svg"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/phosphor-shell.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor-light/scalable/apps/plasmazones.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor-light/scalable/apps/plasmazones-editor.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor-light/scalable/apps/plasmazones-settings.svg"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor-light/scalable/apps/phosphor-shell.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kwin/effects/plugins/kwin_effect_plasmazones.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/plasma/kcms/systemsettings/kcm_plasmazones_about.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/kcm_plasmazones_about.desktop"
@@ -115,7 +121,6 @@ endforeach()
 # org/phosphor and the QPA plugin live elsewhere (KNOWN_FILES / manifest).
 set(PZ_SHARED_LIB_NAMES
     "libPhosphorAnimation"
-    "libPhosphorAnimationQmlShared"
     "libPhosphorAudio"
     "libPhosphorCompositor"
     "libPhosphorConfig"

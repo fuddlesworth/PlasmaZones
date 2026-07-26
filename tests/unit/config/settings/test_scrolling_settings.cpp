@@ -198,8 +198,22 @@ private Q_SLOTS:
         QVERIFY(widths && widths->validator);
         QCOMPARE(widths->validator(QStringLiteral("0.25, abc, 5, 0.5, 0.5, -1")).toString(),
                  QStringLiteral("0.25,0.5"));
-        // The shipped default survives its own validator.
-        QVERIFY(!widths->validator(widths->defaultValue).toString().isEmpty());
+        // The shipped default survives its own validator UNCHANGED — a
+        // non-empty result is not enough: a validator that silently dropped
+        // or reordered entries would still pass an isEmpty check while the
+        // stored list stopped matching the shipped one.
+        QCOMPARE(widths->validator(widths->defaultValue).toString(), ConfigDefaults::scrollingPresetColumnWidths());
+        // Entries below the scalar width key's floor are dropped, not kept:
+        // the setter would clamp them away downstream, so accepting them here
+        // stores a preset the engine will never open a column at.
+        QCOMPARE(widths->validator(QStringLiteral("0.01, 0.5")).toString(), QStringLiteral("0.5"));
+        // A list of ONLY sub-floor entries snaps to the default, like any
+        // other nothing-survives input.
+        QCOMPARE(widths->validator(QStringLiteral("0.01, 0.02")).toString(),
+                 ConfigDefaults::scrollingPresetColumnWidths());
+        // The floor is inclusive — the minimum itself is a legal preset.
+        QCOMPARE(widths->validator(QString::number(ConfigDefaults::scrollingDefaultColumnWidthValueMin())).toString(),
+                 QString::number(ConfigDefaults::scrollingDefaultColumnWidthValueMin()));
 
         const auto* heights = findKey(schema, group, ConfigDefaults::presetWindowHeightsKey());
         QVERIFY(heights && heights->validator);
@@ -209,14 +223,16 @@ private Q_SLOTS:
         QCOMPARE(heights->validator(QStringLiteral("")).toString(), ConfigDefaults::scrollingPresetWindowHeights());
         QCOMPARE(heights->validator(QStringLiteral("junk, -3, 2.0")).toString(),
                  ConfigDefaults::scrollingPresetWindowHeights());
-        QVERIFY(!heights->validator(heights->defaultValue).toString().isEmpty());
+        QCOMPARE(heights->validator(heights->defaultValue).toString(), ConfigDefaults::scrollingPresetWindowHeights());
         // The WIDTHS key snaps to ITS default too (a widths-only regression
         // must not hide behind the heights-only assertion above).
         QCOMPARE(widths->validator(QStringLiteral("")).toString(), ConfigDefaults::scrollingPresetColumnWidths());
         // Size cap: a hand-edited file must not smuggle an unbounded list
-        // past the setter path — 20 entries canonicalize to at most 16.
+        // past the setter path — 26 entries canonicalize to at most 16. Every
+        // entry starts at the floor (0.05) so the cap, not the floor, is what
+        // does the trimming.
         QStringList many;
-        for (int i = 1; i <= 20; ++i) {
+        for (int i = 5; i <= 30; ++i) {
             many.append(QString::number(i / 100.0));
         }
         const QStringList capped = widths->validator(many.join(QLatin1Char(','))).toString().split(QLatin1Char(','));
@@ -233,6 +249,39 @@ private Q_SLOTS:
         QVERIFY(value && value->validator);
         QCOMPARE(value->validator(0.001).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthValueMin());
         QCOMPARE(value->validator(99999.0).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthFixedMax());
+    }
+
+    /// The kind-aware clamp in the SETTER, which the schema's wider
+    /// clampDouble cannot express: under Fixed the value is bounded by the
+    /// pixel range, under Proportion by [ValueMin, ProportionMax]. Without
+    /// this the two halves of the shared value key are pinned only at their
+    /// union, so a proportion-magnitude write under Fixed (or a pixel-
+    /// magnitude one under Proportion) would sail through.
+    void widthValueClampsPerKind()
+    {
+        TestHelpers::IsolatedConfigGuard guard;
+        Settings settings;
+
+        settings.setScrollingDefaultColumnWidthKind(ConfigDefaults::scrollingWidthKindFixed());
+        // A proportion-magnitude write under Fixed hits the pixel floor.
+        settings.setScrollingDefaultColumnWidthValue(0.5);
+        QCOMPARE(settings.scrollingDefaultColumnWidthValue(), ConfigDefaults::scrollingDefaultColumnWidthFixedMin());
+        settings.setScrollingDefaultColumnWidthValue(99999.0);
+        QCOMPARE(settings.scrollingDefaultColumnWidthValue(), ConfigDefaults::scrollingDefaultColumnWidthFixedMax());
+        // In-range pixels pass through untouched.
+        settings.setScrollingDefaultColumnWidthValue(640.0);
+        QCOMPARE(settings.scrollingDefaultColumnWidthValue(), 640.0);
+
+        settings.setScrollingDefaultColumnWidthKind(ConfigDefaults::scrollingWidthKindProportion());
+        // A pixel-magnitude write under Proportion hits the 100% ceiling —
+        // NOT the fixed ceiling the schema clamp would have allowed.
+        settings.setScrollingDefaultColumnWidthValue(5.0);
+        QCOMPARE(settings.scrollingDefaultColumnWidthValue(),
+                 ConfigDefaults::scrollingDefaultColumnWidthProportionMax());
+        settings.setScrollingDefaultColumnWidthValue(0.001);
+        QCOMPARE(settings.scrollingDefaultColumnWidthValue(), ConfigDefaults::scrollingDefaultColumnWidthValueMin());
+        settings.setScrollingDefaultColumnWidthValue(0.35);
+        QCOMPARE(settings.scrollingDefaultColumnWidthValue(), 0.35);
     }
 
     /// Full kind-transition table for the shared width value key. The kind

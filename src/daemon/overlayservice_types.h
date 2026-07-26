@@ -85,12 +85,6 @@ struct PerScreenOverlayState
     QRect zoneSelectorGeometry;
 };
 
-/// Shared property-push parameters for layout-OSD content. Used by both
-/// OverlayService::showLayoutOsdImpl (PhosphorZones::Layout* path) and the
-/// showLayoutOsd(QString,...) overload (autotile / pre-built-zones
-/// path). The struct lets the two callers diverge only on the values
-/// they compute, not on the property-write sequence
-/// (OverlayService::pushLayoutOsdContent).
 /// Per-screen layout-family filter used for the zone selector. `manual`
 /// enables PhosphorZones layout entries; `autotile` enables algorithm
 /// previews. Both default-true is "show everything"; the resolver narrows
@@ -101,6 +95,12 @@ struct LayoutIncludeFlags
     bool autotile = true;
 };
 
+/// Shared property-push parameters for layout-OSD content. Used by both
+/// OverlayService::showLayoutOsdImpl (PhosphorZones::Layout* path) and the
+/// showLayoutOsd(QString,...) overload (autotile / pre-built-zones
+/// path). The struct lets the two callers diverge only on the values
+/// they compute, not on the property-write sequence
+/// (OverlayService::pushLayoutOsdContent).
 struct LayoutOsdContentParams
 {
     QString id; ///< layoutId - UUID for manual layouts, "autotile:..." for algorithms

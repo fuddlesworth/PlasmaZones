@@ -98,10 +98,12 @@ public:
     /// down (and releases the windows of) removed ones. Mirrors
     /// AutotileEngine::setAutotileScreens, including the identical-set
     /// re-emit contract on desktop switches (the context-switch flag is
-    /// consumed on both branches, so a non-switch re-push never claims
-    /// isDesktopSwitch). One deliberate divergence: the identical-set
-    /// branch RETILES every screen even without a switch — the daemon's
-    /// per-pass override push depends on it (scrolling.cpp, LOAD-BEARING).
+    /// consumed on both branches and PROPAGATED on both: the identical-set
+    /// re-emit fires only on a real switch, and the changed-set emit
+    /// carries the flag through). One deliberate divergence: the
+    /// identical-set branch RETILES every screen even without a switch —
+    /// the daemon's per-pass override push depends on it (scrolling.cpp,
+    /// LOAD-BEARING).
     void setActiveScreens(const QSet<QString>& screens) override;
     QString activeScreen() const override
     {
@@ -357,11 +359,11 @@ private:
     void clearTabStripsForScreen(const QString& screenId);
     /// Shared per-window side-map sweep for every state-destruction path.
     void dropWindowBookkeeping(const ScrollState* state);
-    /// Consume @p windowId from a screen's mode-transition seed and drop the
-    /// entry once empty — MUST run on every windowOpened outcome (tiled,
-    /// consumed, floated), or the header's "consumed as windows arrive"
-    /// contract breaks and a stale seed survives to re-position an
-    /// unrelated later open.
+    /// Consume @p windowId from a screen's mode-transition seed (marking it
+    /// in m_consumedInitialOrder; the list itself keeps its positions) and
+    /// drop both entries once every listed id is consumed — MUST run on
+    /// every windowOpened outcome (tiled, consumed, floated), or a stale
+    /// seed survives to re-position an unrelated later open.
     void consumePendingInitialOrder(const QString& screenId, const QString& windowId);
     /// Drop per-screen bookkeeping (seed, tab-strip latch) for each screen
     /// in @p screenIds that no longer has ANY context state. Overrides
@@ -453,9 +455,16 @@ private:
     QHash<QString, FloatRestore> m_floatRestore;
     /// Windows floated BY scroll mode (mode-transition marker, ephemeral).
     QSet<QString> m_scrollFloatedWindows;
-    /// Restore-order seed for deterministic mode transitions (consumed as
-    /// windows arrive, mirroring autotile's pending-order model).
+    /// Restore-order seed for deterministic mode transitions. The captured
+    /// list stays INTACT while it lives (later arrivals count their
+    /// earlier-arrived neighbours by original position); consumption is
+    /// tracked in m_consumedInitialOrder, and both entries drop once every
+    /// listed id is consumed.
     QHash<QString, QStringList> m_pendingInitialOrder;
+    /// Ids already consumed from a screen's seed (subset of the seed list).
+    /// Kept beside, not inside, the list so consuming an id cannot shift the
+    /// recorded positions of the ids still pending.
+    QHash<QString, QSet<QString>> m_consumedInitialOrder;
     /// Screens with a retile queued this event-loop pass (coalescing).
     QSet<QString> m_pendingRetiles;
     /// Whether the last tabStripsChanged emission for a screen was

@@ -109,20 +109,26 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
     return policy;
 }
 
-bool WindowDragAdaptor::effectiveReorderMode(const QString& screenId) const
+bool WindowDragAdaptor::resolveReorderMode(const PhosphorZones::LayoutRegistry* layoutManager,
+                                           const ISettings* settings, const QString& screenId)
 {
     // A matched context SetDragBehavior rule wins over the global setting for this
     // screen; resolved through the layout registry (which the static
     // computeDragPolicy can't reach, so it takes the result as a param).
-    if (m_layoutManager && !screenId.isEmpty()) {
-        const int vd = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+    if (layoutManager && !screenId.isEmpty()) {
+        const int vd = layoutManager->currentVirtualDesktopForScreen(screenId);
         const PhosphorZones::ContextTilingParams params =
-            m_layoutManager->resolveContextTilingParams(screenId, vd, m_layoutManager->currentActivity());
+            layoutManager->resolveContextTilingParams(screenId, vd, layoutManager->currentActivity());
         if (params.dragBehavior) {
             return static_cast<AutotileDragBehavior>(*params.dragBehavior) == AutotileDragBehavior::Reorder;
         }
     }
-    return m_settings && m_settings->autotileDragBehavior() == AutotileDragBehavior::Reorder;
+    return settings && settings->autotileDragBehavior() == AutotileDragBehavior::Reorder;
+}
+
+bool WindowDragAdaptor::effectiveReorderMode(const QString& screenId) const
+{
+    return resolveReorderMode(m_layoutManager, m_settings, screenId);
 }
 
 PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int frameY,
@@ -434,19 +440,12 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         // Autotile drag-insert: if a preview is live ON THE RELEASE SCREEN,
         // commit it so the window takes its picked slot in the stack on the
         // next retile. The autotile engine owns final geometry; no float
-        // outcome needed. Deliberately autotile-only (see the drop.cpp
-        // twin). Screen-matched: a fast drop can land elsewhere before any
-        // dragMoved tick cancelled the departed preview — committing then
-        // would reorder the wrong screen and return NoOp instead of the
-        // real outcome.
-        if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-            if (m_autotileEngine->dragInsertPreviewScreenId() == resolveScreenAt(QPointF(cursorX, cursorY)).screenId) {
-                m_autotileEngine->commitDragInsertPreview();
-                outcome.action = PhosphorProtocol::DragOutcome::NoOp;
-                m_draggedWindowId.clear();
-                return outcome;
-            }
-            m_autotileEngine->cancelDragInsertPreview();
+        // outcome needed. Deliberately autotile-only (see the drop.cpp twin,
+        // which shares the screen gate through this helper).
+        if (settleDragInsertPreviewAt(cursorX, cursorY)) {
+            outcome.action = PhosphorProtocol::DragOutcome::NoOp;
+            m_draggedWindowId.clear();
+            return outcome;
         }
         // Release screen is resolved plugin-side from the cursor position,
         // but we pass the cursor through so the daemon can log it. The

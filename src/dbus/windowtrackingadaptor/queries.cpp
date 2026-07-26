@@ -170,4 +170,9 @@ QRect WindowTrackingAdaptor::zoneGeometryRect(const QString& zoneId, const QStri
     return geo;
 }
 
+QString WindowTrackingAdaptor::canonicalWindowId(const QString& windowId) const
+{
+    return m_service ? m_service->canonicalizeForLookup(windowId) : windowId;
+}
+
 } // namespace PlasmaZones

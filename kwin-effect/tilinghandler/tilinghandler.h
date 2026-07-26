@@ -280,9 +280,16 @@ public:
     /// Record a daemon-initiated cross-output move so the next outputChanged
     /// for @p windowId to @p targetScreenId updates bookkeeping only. See
     /// m_expectedOutputMove.
+    ///
+    /// The window's notified screen is snapshotted as the move's SOURCE: the
+    /// daemon's tile requests for this move arrive before the compositor's
+    /// geometry echo and pre-seed m_notifiedWindowScreens with the
+    /// destination, so the source is unrecoverable by the time the echo is
+    /// routed.
     void markExpectedOutputMove(const QString& windowId, const QString& targetScreenId)
     {
-        m_expectedOutputMove.insert(windowId, targetScreenId);
+        m_expectedOutputMove.insert(windowId,
+                                    ExpectedOutputMove{targetScreenId, m_notifiedWindowScreens.value(windowId)});
     }
 
 public Q_SLOTS:
@@ -476,7 +483,15 @@ private:
     /// windowClosed/windowOpened. A stale entry (no outputChanged ever arrives,
     /// or a different destination) is cleared on the next outputChanged for the
     /// window and on close.
-    QHash<QString, QString> m_expectedOutputMove;
+    struct ExpectedOutputMove
+    {
+        QString targetScreenId;
+        /// Notified screen at arm time. Read live membership against this id to
+        /// tell a genuine handoff (source bucket already emptied) from a strip
+        /// parking hop (still tiled on the source) — see markExpectedOutputMove.
+        QString sourceScreenId;
+    };
+    QHash<QString, ExpectedOutputMove> m_expectedOutputMove;
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
     /// Pre-autotile geometry preserved when a window is moved to another
     /// desktop. Keyed by windowId; value holds (sourceScreenId, frameRect)

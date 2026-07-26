@@ -384,14 +384,17 @@ void WindowTrackingService::onLayoutChanged()
 
     // Remove stale assignments: check each window against its screen's effective layout
     // (not just the global active), so per-screen assignments aren't incorrectly purged.
-    // Skip windows on autotile screens — their zone assignments must survive the
-    // autotile period so resnapCurrentAssignments() can restore them when tiling is toggled off.
+    // Skip windows on screens a NON-SNAPPING engine owns (autotile or scrolling) —
+    // neither engine uses zones, and the zone assignments must survive their whole
+    // period so resnapCurrentAssignments() can restore them when the screen goes
+    // back to snapping.
     // Skip windows on OTHER virtual desktops — their zone assignments belong to that
     // desktop's layout and must not be purged when the current desktop's layout changes.
     const QString currentActivity = m_layoutManager->currentActivity();
 
-    // Cache autotile status per screen to avoid redundant lookups (O(screens) instead of O(windows))
-    QHash<QString, bool> screenIsAutotile;
+    // Cache the non-snapping status per screen to avoid redundant lookups
+    // (O(screens) instead of O(windows))
+    QHash<QString, bool> screenIsNonSnapping;
 
     QStringList toRemove;
     // Multi-zone windows where SOME zones survived the layout change: we
@@ -438,12 +441,19 @@ void WindowTrackingService::onLayoutChanged()
                 return;
             }
 
-            // If this screen's assignment is autotile, preserve zone assignments for resnap
-            auto cached = screenIsAutotile.constFind(windowScreen);
-            if (cached == screenIsAutotile.constEnd()) {
-                QString assignmentId =
+            // If a non-snapping engine owns this screen, preserve the zone
+            // assignments for resnap. Scrolling counts alongside autotile: it has
+            // no layout entity either (its id is the bare "scrolling:" sentinel),
+            // so resolveLayoutForScreen below would resolve some unrelated
+            // cascade layout and prune every assignment the screen is holding for
+            // its eventual return to snapping.
+            auto cached = screenIsNonSnapping.constFind(windowScreen);
+            if (cached == screenIsNonSnapping.constEnd()) {
+                const QString assignmentId =
                     m_layoutManager->assignmentIdForScreen(windowScreen, currentDesktop, currentActivity);
-                cached = screenIsAutotile.insert(windowScreen, PhosphorLayout::LayoutId::isAutotile(assignmentId));
+                cached = screenIsNonSnapping.insert(windowScreen,
+                                                    PhosphorLayout::LayoutId::isAutotile(assignmentId)
+                                                        || PhosphorLayout::LayoutId::isScrolling(assignmentId));
             }
             if (*cached) {
                 return;

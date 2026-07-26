@@ -218,8 +218,13 @@ static PhosphorZones::Layout* findLayout(const QVector<PhosphorZones::Layout*>& 
 // Helper: emit layoutAssigned for a single screenId/layoutId pair
 void LayoutRegistry::emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId)
 {
-    PhosphorZones::Layout* layout =
-        PhosphorLayout::LayoutId::isAutotile(layoutId) ? nullptr : layoutById(QUuid::fromString(layoutId));
+    // Only Snapping ids name a Layout*. The two engine-owned id shapes carry no
+    // layout entity, so both emit a null pointer. Scrolling is spelled out
+    // rather than left to fall through the UUID parse (which would also yield
+    // null, by accident) so the third mode is visible at the emit site.
+    const bool hasNoLayoutEntity =
+        PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId);
+    PhosphorZones::Layout* layout = hasNoLayoutEntity ? nullptr : layoutById(QUuid::fromString(layoutId));
     Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
 }
 
@@ -353,6 +358,18 @@ void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones:
         // applyQuickLayout via LayoutAdaptor) pass an already idForName-resolved
         // screenId, matching the per-output map's key.
         const int desktop = currentVirtualDesktopForScreen(screenId);
+        // Scrolling gate. A manual Layout* means nothing on a scrolling screen,
+        // and assignLayout below would classify its UUID as Snapping and flip
+        // the screen off the scrolling engine — a layout cycle or a quick-slot
+        // press must never change which engine owns a screen. Both callers
+        // already resolve the mode before they get here, so this is the
+        // invariant made LOCAL rather than a live path. Mirrors the way
+        // layoutForShortcut refuses an autotile slot for the same reason.
+        if (modeForScreen(screenId, desktop, m_currentActivity) == AssignmentEntry::Scrolling) {
+            qCInfo(lcZonesLib) << "applyLayoutToScreen: screen" << screenId
+                               << "is in scrolling mode — manual layouts do not apply";
+            return;
+        }
         // Write per-desktop assignment with empty activity so it applies
         // regardless of which activity is active. Activity-specific
         // overrides are a separate KCM-only feature. Clear any stale

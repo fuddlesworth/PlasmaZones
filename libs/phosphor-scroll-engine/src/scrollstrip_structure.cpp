@@ -309,6 +309,16 @@ bool ScrollStrip::setWindowMinimized(const QString& windowId, bool minimized, co
     // strip-level model for embedders that deliver a real minimize signal;
     // the relayout/focus/anchor machinery it drives is pinned by the
     // library's own tests.
+    //
+    // Constraint for those embedders: a minimized tile is dropped from
+    // relayout()'s output entirely, so the engine emits no rect for it and
+    // ScrollEngine::m_lastAppliedRect (the lastManagedRect float-back poison
+    // guard) keeps answering with the tile's PRE-minimize rect for as long as
+    // it stays minimized. That retention is wanted — a minimized window's
+    // frame is still the tile rect, which is exactly what the guard must
+    // recognise — but it also means the engine's emit-on-change gate sees no
+    // movement when a restore resolves back to that same rect, and issues no
+    // geometry for it.
     const int colIdx = columnOfWindow(windowId);
     if (colIdx < 0) {
         return false;
