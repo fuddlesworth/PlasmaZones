@@ -931,11 +931,6 @@ Item {
         // Independent of timing override — users can drop a shader on
         // an event without touching its timing. The visibility gate
         // `root._shaderLegSupported` is declared on the card root so
-        // it's reachable from every nested binding below; declaring
-        // it here would scope it to this ColumnLayout and the outer
-        // `root.<id>` references would silently resolve to undefined
-        // (defaulting `visible:` to true and showing the picker on
-        // every event regardless of daemon support).
         // ── Shared timing + shader editor body ────────────────────
         // All the inline timing controls (curve thumbnail,
         // Customize… button, timing-mode combo, duration slider)

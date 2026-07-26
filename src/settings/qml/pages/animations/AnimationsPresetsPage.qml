@@ -210,7 +210,7 @@ SettingsFlickable {
 
                 Label {
                     visible: root._easingUserPresets.length === 0
-                    text: i18n("No custom easing presets yet. Use \"Save as Preset…\" in the curve editor to create one.")
+                    text: i18n("No custom easing presets yet. Use \"Save as preset…\" in the curve editor to create one.")
                     color: Kirigami.Theme.disabledTextColor
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
@@ -351,7 +351,7 @@ SettingsFlickable {
 
                 Label {
                     visible: root._springUserPresets.length === 0
-                    text: i18n("No custom spring presets yet. Use \"Save as Preset…\" in the curve editor to create one.")
+                    text: i18n("No custom spring presets yet. Use \"Save as preset…\" in the curve editor to create one.")
                     color: Kirigami.Theme.disabledTextColor
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true

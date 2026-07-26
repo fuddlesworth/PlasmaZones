@@ -1051,10 +1051,10 @@ target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Co
 target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
 
-# Animations-controller sources shared by the five test executables below
-# (page controller / profile-store sync / motion sets / presets / shader
-# overrides). One list so a new controller source file can't silently miss one
-# of the five.
+# Animations-controller sources shared by the six test executables below
+# (page controller / QML contracts / profile-store sync / motion sets / presets
+# / shader overrides). One list so a new controller source file can't silently
+# miss one of the six.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_shaders.cpp
@@ -1093,6 +1093,29 @@ target_link_libraries(test_animations_page_controller
         plasmazones_core
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
+
+# Companion test executable: the contracts between the animations QML and its
+# controller, pinned by parsing the QML source. Separate from the sibling
+# because these are the only animations slots that need P_SOURCE_DIR to read
+# the source tree.
+add_executable(test_animations_qml_contracts
+    settings/pages/test_animations_qml_contracts.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationpagescope.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_compile_definitions(test_animations_qml_contracts
+    PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\""
+)
+target_link_libraries(test_animations_qml_contracts
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_qml_contracts COMMAND test_animations_qml_contracts)
 
 # Companion test executable: how inheritance resolution stays honest against
 # the debounced-watcher-fed PhosphorProfileRegistry. Split out of

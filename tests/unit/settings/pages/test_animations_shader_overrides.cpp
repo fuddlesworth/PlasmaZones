@@ -562,7 +562,12 @@ private Q_SLOTS:
             QRegularExpression(QStringLiteral("clearShaderOverrideDescendants: refusing while async discard")));
         QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("popup")), -1);
         QCOMPARE(toastSpy.count(), 1);
-        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+        // Not the "Cannot reset" wording: this entry point's only caller is the
+        // event card's "Clear shadowing children" button, which the user did
+        // not experience as a reset. `clearAllOverrides`, which IS reset-only,
+        // keeps that wording (see test_animations_motion_sets.cpp).
+        QCOMPARE(toastSpy.first().first().toString(),
+                 PhosphorI18n::tr("Cannot change this while a discard is in progress."));
 
         QVERIFY(done.wait(5000));
     }

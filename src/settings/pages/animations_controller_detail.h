@@ -261,14 +261,20 @@ inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
     };
 
     if (obj.contains(QLatin1String(P::JsonFieldCurve))) {
-        // Type-checked but NOT resolved. Resolving a curve spec needs a
+        // Type-checked but NOT resolved. Resolving a spec needs a
         // `CurveRegistry`, and the process-wide accessor for one
-        // (`PhosphorCurve::defaultRegistry`) lives in the QML module rather
-        // than the core animation library, so this translation unit cannot
-        // reach it; validating against a built-ins-only registry instead would
-        // silently drop legitimate user-authored curves. An unresolvable spec
+        // (`PhosphorCurve::defaultRegistry`) lives in the QML module. The
+        // settings binary does link that module, so reaching it is possible
+        // here — it is avoided because the unit-test targets that compile this
+        // header do NOT link it, and because a pure normalisation function
+        // should not read process-global state. Validating against a
+        // built-ins-only registry instead would silently drop legitimate
+        // user-authored curves, which is worse than not validating. An unresolvable spec
         // reaching QML renders as an unrecognised curve, which is visible and
-        // harmless. A non-string one would reach QML as a map or an int where
+        // harmless — though not level-local: the kept spec also merges into
+        // every DESCENDANT card's resolved profile, so a bogus one in global.json
+        // shows a curve across the tree that the daemon (which drops it) will
+        // never play. A non-string value would reach QML as a map or an int where
         // every consumer expects a wire string, so that IS rejected here —
         // fromJson rejects it too, via `toString()` yielding empty.
         const QJsonValue v = obj.value(QLatin1String(P::JsonFieldCurve));

@@ -14,16 +14,17 @@
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
 
+#include <PhosphorFsLoader/DirectoryLoader.h>
+
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <memory>
 #include <optional>
 #include <utility>
 
@@ -257,7 +258,7 @@ private Q_SLOTS:
         // Nothing parses, so nothing registers either way — that is precisely
         // why a registration count could not see this.
         QCOMPARE(strategy.size(), 0);
-        QVERIFY2(adapter.lastWatches.size() <= kCap,
+        QVERIFY2(adapter.lastWatches.size() == kCap,
                  qPrintable(QStringLiteral("cap let %1 broken subdirs arm a watch with a cap of %2")
                                 .arg(adapter.lastWatches.size())
                                 .arg(kCap)));
@@ -507,16 +508,19 @@ private Q_SLOTS:
     /// empty watch list, and no commit on either scan here. This is the
     /// "no-content baseline" contract. `changed` is
     /// `isFirstScan ? !fresh.isEmpty() : signature != m_lastSignature`, so an
-    /// empty result set cannot commit on the FIRST scan, and cannot commit on
-    /// a later scan either when the previous scan was ALSO empty (identical
-    /// signature). It does commit on a later scan when the previous scan was
-    /// not empty, which is the purge case pinned by
+    /// empty result set cannot commit on the FIRST scan, and cannot commit on a
+    /// later scan whose signature is IDENTICAL to the previous one. Note those
+    /// are not the same condition: the signature also mixes the watch-set
+    /// fingerprint, and a rejected subdir still arms a metadata.json watch, so
+    /// editing one broken pack shifts the signature and commits with an empty
+    /// result on both sides. It also commits when the previous scan was not
+    /// empty, which is the purge case pinned by
     /// `testEmptyScanAfterNonEmptyCommitsThePurge` below.
     void testEmptyDirectoriesInScanOrder()
     {
-        // First scan: no directories registered → empty packs, no
-        // commit (the no-content baseline shouldn't fire OnCommit when
-        // there's nothing to report).
+        // First scan: a registered directory that holds no pack subdirs → empty
+        // packs, no commit (the no-content baseline shouldn't fire OnCommit
+        // when there's nothing to report).
         int commits = 0;
 
         // `setDirectories({})` is used rather than calling performScan with

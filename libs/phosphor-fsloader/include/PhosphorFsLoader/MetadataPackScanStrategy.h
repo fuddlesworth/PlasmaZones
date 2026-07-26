@@ -128,15 +128,16 @@ namespace PhosphorFsLoader {
  *   - `OnCommit` — invoked synchronously inside `performScan` after the
  *     fresh map has replaced the prior one, AND ONLY WHEN the SHA-1
  *     signature differs. The consumer wires its content-changed signal
- *     in here. NOT invoked when the scan is empty AND the previous
- *     scan was also empty (the no-content baseline doesn't fire on
- *     repeated empty scans).
+ *     in here. NOT invoked when the signature is unchanged, which covers
+ *     the no-content baseline: repeated empty scans over the same watch set
+ *     do not fire. An empty scan whose WATCH set changed still fires — see
+ *     the known wrinkle above.
  *
  * ## API choice — why a class template over a virtual interface
  *
- * Both real consumers (`ShaderInfo` in `phosphor-shaders`, `AnimationShaderEffect`
- * in `phosphor-animation-shaders`) parse into concrete struct types they
- * already own. A virtual `IMetadataPackPayload` interface would force
+ * The real consumers (`ShaderPack`, `AnimationPack` and `SurfacePack`, each
+ * hosted by its registry through `PhosphorRegistry::MetadataPackLoader`) parse
+ * into concrete struct types they already own. A virtual `IMetadataPackPayload` interface would force
  * each registry to box its parse output (heap allocation per pack) and
  * hide its public payload type behind a base — making `packs()` /
  * `pack(id)` lookup callers downcast on every access. A class template
@@ -148,7 +149,7 @@ namespace PhosphorFsLoader {
  * The policy callables themselves are stored as `std::function` (one
  * level of type-erasure indirection per call). Inlining-via-callable-
  * type-template-params would shave that, but at this workload (one
- * `stat` syscall + JSON parse per entry per rescan) the indirection
+ * `stat` syscall + JSON parse per entry per rescan) that indirection
  * cost is unmeasurable — keeping the policy types out of the template
  * signature is the better readability tradeoff. The price is one set of
  * compiler instantiations per consumer payload — negligible given there
@@ -339,11 +340,11 @@ public:
      * Setting this directly on the strategy does **not** trigger a
      * rescan — the new value takes effect on the next scan, whenever
      * that fires. Production consumers reach the strategy through
-     * `MetadataPackRegistryBase::setUserPath`, which orchestrates a
-     * synchronous `rescanNow()` after forwarding the value, so existing
-     * pack classifications refresh immediately. Direct strategy access
-     * (e.g. tests using `static_cast<ScanStrategy*>(strategy())`)
-     * bypasses that orchestration; pair the call with an explicit
+     * `PhosphorRegistry::MetadataPackLoader::setUserPath`, which forwards the
+     * value and then runs a synchronous `rescanNow()`, so existing pack
+     * classifications refresh immediately. Direct strategy access (e.g. tests
+     * using `static_cast<ScanStrategy*>(strategy())`) bypasses that
+     * orchestration; pair the call with an explicit
      * `WatchedDirectorySet::rescanNow()` if immediate reclassification
      * is required.
      */
