@@ -624,6 +624,10 @@ private Q_SLOTS:
                                        << QVariant(int(P::DefaultDuration)) << true;
         QTest::newRow("duration valid") << kDur << QByteArrayLiteral(R"({"duration":900})") << QVariant(123)
                                         << QVariant(900) << true;
+        // The accepted side of duration's shared bound, for the same reason as
+        // the minDistance cap row below.
+        QTest::newRow("duration at the domain cap") << kDur << QByteArrayLiteral(R"({"duration":3600000})")
+                                                    << QVariant(123) << QVariant(int(P::MaxDurationMs)) << true;
 
         // ── minDistance: same split. The 1e300 row pins the bound-before-round
         // guard — `qRound` on an unbounded finite double is undefined
@@ -642,6 +646,11 @@ private Q_SLOTS:
                                             << QVariant(int(P::DefaultMinDistance)) << true;
         QTest::newRow("minDistance valid")
             << kMin << QByteArrayLiteral(R"({"minDistance":5})") << QVariant(7) << QVariant(5) << true;
+        // The ACCEPTED side of the shared bound. Without it, flipping either
+        // implementation's `<=` to `<` rejects exactly MaxMinDistancePx on one
+        // side only, and every other row still passes.
+        QTest::newRow("minDistance at the domain cap") << kMin << QByteArrayLiteral(R"({"minDistance":100000})")
+                                                       << QVariant(7) << QVariant(int(P::MaxMinDistancePx)) << true;
 
         // ── staggerInterval ─────────────────────────────────────────────────
         QTest::newRow("stagger negative")
@@ -907,17 +916,31 @@ private Q_SLOTS:
     {
         AnimationsPageController c;
 
+        // Collected, not asserted one at a time. A taxonomy change can flip
+        // several paths at once, and a bare QVERIFY aborts the whole slot on
+        // the first, so the rest surface one rebuild apart. Same
+        // collect-then-assert-once shape the other broad checks in this file
+        // use.
+        QStringList wrong;
+        const auto expect = [&c, &wrong](const QString& path, bool supported) {
+            if (c.supportsShaderLeg(path) == supported)
+                return;
+            wrong.append(QStringLiteral("%1 (expected %2)")
+                             .arg(path.isEmpty() ? QStringLiteral("<empty>") : path,
+                                  supported ? QStringLiteral("supported") : QStringLiteral("unsupported")));
+        };
+
         // Genuine OSDs (consumed leaves).
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("osd.show")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("osd.hide")));
+        expect(QStringLiteral("osd.show"), true);
+        expect(QStringLiteral("osd.hide"), true);
 
         // Popup family — leg-leaf paths (consumed leaves).
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.layoutPicker.show")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.layoutPicker.hide")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.zoneSelector.show")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.zoneSelector.hide")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.show")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.hide")));
+        expect(QStringLiteral("popup.layoutPicker.show"), true);
+        expect(QStringLiteral("popup.layoutPicker.hide"), true);
+        expect(QStringLiteral("popup.zoneSelector.show"), true);
+        expect(QStringLiteral("popup.zoneSelector.hide"), true);
+        expect(QStringLiteral("popup.snapAssist.show"), true);
+        expect(QStringLiteral("popup.snapAssist.hide"), true);
 
         // Window family — consumed leaves driven by the KWin effect under
         // kwin-effect/plasmazoneseffect/. The lifecycle legs go through
@@ -927,77 +950,81 @@ private Q_SLOTS:
         // minimizedChanged), while the snap geometry legs resolve through
         // applyWindowGeometry in drag_snap.cpp. Both run the resolved shader
         // on the OffscreenEffect's redirected texture quad.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.open")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.close")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.minimize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.maximize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.move")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.snapIn")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.snapOut")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.layoutSwitch")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.focus")));
+        expect(QStringLiteral("window.appearance.open"), true);
+        expect(QStringLiteral("window.appearance.close"), true);
+        expect(QStringLiteral("window.appearance.minimize"), true);
+        expect(QStringLiteral("window.movement.maximize"), true);
+        expect(QStringLiteral("window.movement.move"), true);
+        expect(QStringLiteral("window.movement.snapIn"), true);
+        expect(QStringLiteral("window.movement.snapOut"), true);
+        expect(QStringLiteral("window.movement.layoutSwitch"), true);
+        expect(QStringLiteral("window.appearance.focus"), true);
         // The resize legs were dropped from the taxonomy: the interactive
         // edge-drag has no discrete before/after for a shader to play, and
         // snapResize never had a callsite. Stale config overrides on these
         // paths must prune, so they stay unsupported.
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.snapResize")));
+        expect(QStringLiteral("window.movement.resize"), false);
+        expect(QStringLiteral("window.movement.snapResize"), false);
         // Desktop family — the two-texture switch and the show-desktop peek
         // are consumed leaves too (the KWin effect's DesktopTransitionManager
         // resolves them in the desktopChanged / showingDesktopChanged handlers,
         // not per-window tryBeginShaderForEvent legs).
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.switch")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.peek")));
+        expect(QStringLiteral("desktop.switch"), true);
+        expect(QStringLiteral("desktop.peek"), true);
         // The "All Desktop Events" parent row is the desktop family root, and
         // an ancestor of the consumed switch and peek leaves. It is
         // shader-pickable too (its picker binds to this), and a pack set there
         // cascades to both legs — so it is supported for the same reason the
         // popup/osd parents below are, not merely as an ancestor of a consumed
         // leaf.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop")));
+        expect(QStringLiteral("desktop"), true);
 
         // Ancestors of consumed leaves — supported because the
         // resolver walks them on the way to the leaf, so a
         // shader override here cascades to every descendant. Without
         // this, the user would have to set the same shader on every
         // popup leaf individually instead of once at the parent.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("global")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("osd")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.layoutPicker")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.zoneSelector")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist")));
+        expect(QStringLiteral("global"), true);
+        expect(QStringLiteral("osd"), true);
+        expect(QStringLiteral("popup"), true);
+        expect(QStringLiteral("popup.layoutPicker"), true);
+        expect(QStringLiteral("popup.zoneSelector"), true);
+        expect(QStringLiteral("popup.snapAssist"), true);
         // `panel` is no longer a popup ancestor — popups moved to their
         // own root, leaving `panel` with only slideIn/slideOut/fadeIn/
         // fadeOut which the daemon's overlay service never consumes.
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel")));
+        expect(QStringLiteral("panel"), false);
         // `window` itself is now a consumable ancestor — setting a
         // shader at the family root cascades to every leaf above.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window")));
+        expect(QStringLiteral("window"), true);
         // The intermediate cascade parents the parent-card UX relies on.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance")));
+        expect(QStringLiteral("window.movement"), true);
+        expect(QStringLiteral("window.appearance"), true);
 
         // Paths the resolver never walks through — any assignment would
         // be runtime-dead and silently shadow what the user thought
         // they set on a sibling. Must stay unsupported.
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("editor")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("editor.snapIn")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget.fadeIn")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("workspace")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("workspace.switchIn")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("cursor")));
+        expect(QStringLiteral("editor"), false);
+        expect(QStringLiteral("editor.snapIn"), false);
+        expect(QStringLiteral("widget"), false);
+        expect(QStringLiteral("widget.fadeIn"), false);
+        expect(QStringLiteral("workspace"), false);
+        expect(QStringLiteral("workspace.switchIn"), false);
+        expect(QStringLiteral("cursor"), false);
         // Sibling paths under `panel` and `osd` that aren't ancestors
         // of any consumed leaf.
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.slideIn")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.slideOut")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd.pop")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd.dim")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("popup.layoutPicker.popIn")));
+        expect(QStringLiteral("panel.slideIn"), false);
+        expect(QStringLiteral("panel.slideOut"), false);
+        expect(QStringLiteral("osd.pop"), false);
+        expect(QStringLiteral("osd.dim"), false);
+        expect(QStringLiteral("popup.layoutPicker.popIn"), false);
         // Empty path / nonsense path.
-        QVERIFY(!c.supportsShaderLeg(QString()));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("../etc/passwd")));
+        expect(QString(), false);
+        expect(QStringLiteral("../etc/passwd"), false);
+
+        QVERIFY2(wrong.isEmpty(),
+                 qPrintable(QStringLiteral("supportsShaderLeg disagrees with the consumed-leg call sites for: %1")
+                                .arg(wrong.join(QStringLiteral(", ")))));
     }
 
     // ─── Stock-animation suppression mirror ───────────────────────────────

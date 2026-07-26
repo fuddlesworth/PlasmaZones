@@ -104,7 +104,7 @@ Menu {
     }
     // Memoise the screen list result. The getter still re-runs on
     // `settingsController.screensChanged`, but doesn't re-run on
-    // each popup() / every `_screenItemsModel.length` read.
+    // each popup() / every `_cachedScreens.length` read.
     // Cache the screens snapshot when there's more than one — the
     // multi-screen menu items only appear in that case. The binding
     // tracks settingsController.screens directly so a screensChanged
@@ -121,7 +121,6 @@ Menu {
         const s = settingsController ? (settingsController.screens || []) : [];
         return s.length > 1 ? s : [];
     }
-    readonly property var _screenItemsModel: _cachedScreens
 
     // Aspect-ratio submenu (added/removed imperatively by showForLayout).
     // Declared as a property VALUE rather than a child object — a Menu
@@ -232,7 +231,7 @@ Menu {
     Instantiator {
         id: screenItemInstantiator
 
-        model: layoutContextMenu._screenItemsModel
+        model: layoutContextMenu._cachedScreens
         onObjectAdded: function (index, object) {
             // Insert relative to the Edit marker — a future
             // MenuItem inserted before Edit would otherwise shift
@@ -282,7 +281,7 @@ Menu {
     MenuSeparator {
         id: screenSeparator
 
-        visible: layoutContextMenu._screenItemsModel.length > 0
+        visible: layoutContextMenu._cachedScreens.length > 0
     }
 
     MenuItem {

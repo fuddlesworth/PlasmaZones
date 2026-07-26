@@ -295,6 +295,7 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
     // against a live multi-root caller that can actually exercise it —
     // not carried here as untested, known-inverted dead code.
     QSet<QString> discoveredIds; // ids seen this cycle (for removal detection)
+    QSet<QString> consideredDirs; // plugin dirs seen this cycle (for warn-latch pruning)
     QStringList watchedFiles; // returned to the watcher for per-file re-arm
 
     // Subdirs CONSIDERED this cycle, summed across every root. Counts the same
@@ -332,6 +333,7 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             }
             ++subdirsConsidered;
             const QString pluginDir = rootDir.absoluteFilePath(subdir);
+            consideredDirs.insert(pluginDir);
             const QString manifestPath = QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json"));
             if (!QFileInfo::exists(manifestPath)) {
                 continue;
@@ -382,6 +384,14 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
         // inotify pressure the cap exists to bound.
         return watchedFiles;
     }
+
+    // Prune the warn-once latches to the directories that still exist. A
+    // successful load clears them, but a directory that is broken and then
+    // deleted (or renamed on each dev iteration) would otherwise leave its
+    // path in the set for the process lifetime. Only safe on a complete
+    // enumeration, which is why it sits below the cap-tripped early return.
+    m_warnedPluginDirs.intersect(consideredDirs);
+    m_warnedMultiSoDirs.intersect(consideredDirs);
 
     // Anything in m_plugins not in discoveredIds was removed from
     // disk — unregister it from the registry. The QLibrary stays

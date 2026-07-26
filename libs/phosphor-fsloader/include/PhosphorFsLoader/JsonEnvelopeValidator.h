@@ -129,9 +129,10 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
         return std::nullopt;
     }
 
-    // Strip the bookkeeping field so the sink's schema-specific
-    // `fromJson` doesn't need to know about it (e.g. ProfileLoader's
-    // `Profile::fromJson` would otherwise leak `name` into `presetName`).
+    // Strip the bookkeeping field before handing the root on. It is this
+    // layer's routing key, not schema data, and a sink's `fromJson` should
+    // never have to know it was ever there — nor re-serialize it as an
+    // unrecognised field it decided to preserve.
     root.remove(QLatin1String("name"));
 
     return JsonEnvelope{name, std::move(root)};

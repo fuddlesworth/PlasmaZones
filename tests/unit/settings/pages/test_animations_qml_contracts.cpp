@@ -89,7 +89,11 @@ private Q_SLOTS:
             QDirIterator dirIt(rootDir, QStringList{QStringLiteral("*.qml")}, QDir::Files,
                                QDirIterator::Subdirectories);
             while (dirIt.hasNext()) {
-                const QString src = readFile(dirIt.next());
+                // Line comments stripped first: this tree's comments name
+                // controller methods freely, and a comment mentioning a method
+                // that was since removed would fail the slot for prose.
+                static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
+                const QString src = readFile(dirIt.next()).remove(lineCommentRe);
                 used.unite(namesUsedOn(src, QStringLiteral("animationsPage")));
                 auto aliasIt = aliasRe.globalMatch(src);
                 while (aliasIt.hasNext()) {
@@ -104,6 +108,10 @@ private Q_SLOTS:
         // means the scrape broke, not that the call sites went away.
         QVERIFY2(used.size() >= 15,
                  qPrintable(QStringLiteral("scraped only %1 animationsPage names from the QML tree").arg(used.size())));
+        // At-least-one, not the observed count: this is a non-vacuity floor for
+        // the alias leg, not a pin on how many aliases the tree happens to
+        // have. Refactoring the one that exists away is a legitimate change and
+        // must not redden the build, but losing the leg entirely must.
         QVERIFY2(aliasesResolved >= 1, "no same-file alias was resolved — the alias leg is checking nothing");
 
         AnimationsPageController c;
@@ -233,14 +241,32 @@ private Q_SLOTS:
         QVERIFY2(!offArm.isEmpty(), "unbalanced braces while scanning the onToggleClicked OFF arm");
         const QString offCode = QString(offArm).remove(commentRe);
 
-        QVERIFY2(offCode.contains(QStringLiteral("_editingTiming = false")),
-                 "the OFF arm no longer closes the timing editor at all");
+        // Same string-literal guard as the ON arm, and for the same reason:
+        // `console.log("root._editingTiming = false")` would be counted as a
+        // statement by the reset count below and fail correct code.
+        //
+        // Checked AFTER stripping, unlike the ON arm's: this arm's prose
+        // legitimately contains apostrophes. The residual risk is a `//` inside
+        // a string literal, which would take the stripper past the closing
+        // quote — narrower than the case being guarded, and it fails loudly
+        // rather than silently passing.
+        QVERIFY2(!offCode.contains(QLatin1Char('"')) && !offCode.contains(QLatin1Char('`')),
+                 "the OFF arm now contains a string literal — the reset count below is only sound without one");
+
+        // Whitespace-tolerant, like the two regexes below. A hardcoded-space
+        // substring test would reject `_editingTiming=false;` and report that
+        // the arm no longer closes the editor, which would be a lie.
+        static const QRegularExpression anyResetRe(QStringLiteral("_editingTiming\\s*=\\s*false"));
+        const QString offFlat = QString(offCode).replace(wsRe, QStringLiteral(" "));
+        QVERIFY2(offFlat.contains(anyResetRe), "the OFF arm no longer closes the timing editor at all");
         // Brace optional: `if (…) { root._editingTiming = false; }` is the same
         // thing, and failing it would accuse the code of not gating when it does.
+        // Only a DIRECT reset is recognised. A helper that clears the flag
+        // indirectly is out of scope for a textual scrape and would read as
+        // "no reset at all".
         static const QRegularExpression gatedResetRe(
             QStringLiteral("if\\s*\\(\\s*root\\._clearOverrideOnAll\\(\\s*\\)\\s*\\)\\s*\\{?\\s*"
                            "root\\._editingTiming\\s*=\\s*false\\s*;"));
-        const QString offFlat = QString(offCode).replace(wsRe, QStringLiteral(" "));
         QVERIFY2(gatedResetRe.match(offFlat).hasMatch(),
                  "the OFF arm closes the timing editor WITHOUT gating on _clearOverrideOnAll's result — a refused "
                  "clear would turn the toggle off while the controller toasts that it could not");
@@ -249,7 +275,6 @@ private Q_SLOTS:
         // UNGATED one elsewhere in the arm satisfies the match above while
         // reintroducing the whole defect, and the brace-optional form widened
         // that hole. Counting is what closes it.
-        static const QRegularExpression anyResetRe(QStringLiteral("_editingTiming\\s*=\\s*false"));
         QCOMPARE(offFlat.count(anyResetRe), 1);
     }
 

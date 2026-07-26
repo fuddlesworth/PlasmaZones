@@ -70,10 +70,10 @@ struct FakePayload
         return false;
     }
     QJsonObject obj;
-    obj.insert(QStringLiteral("id"), id);
-    obj.insert(QStringLiteral("score"), score);
+    obj.insert(QLatin1String("id"), id);
+    obj.insert(QLatin1String("score"), score);
     if (!fragName.isEmpty()) {
-        obj.insert(QStringLiteral("fragmentShader"), fragName);
+        obj.insert(QLatin1String("fragmentShader"), fragName);
         // Materialise the referenced file too so per-entry watch
         // extraction can see something on disk.
         if (!writeFile(subdirPath + QLatin1Char('/') + fragName, QByteArrayLiteral("// frag\n"))) {
@@ -88,11 +88,11 @@ auto makeDefaultParser()
 {
     return [](const QString& subdirPath, const QJsonObject& root, bool isUser) -> std::optional<FakePayload> {
         FakePayload p;
-        p.id = root.value(QStringLiteral("id")).toString();
-        p.score = root.value(QStringLiteral("score")).toInt(0);
+        p.id = root.value(QLatin1String("id")).toString();
+        p.score = root.value(QLatin1String("score")).toInt(0);
         p.isUser = isUser;
         p.sourceDir = subdirPath;
-        const QString frag = root.value(QStringLiteral("fragmentShader")).toString();
+        const QString frag = root.value(QLatin1String("fragmentShader")).toString();
         if (!frag.isEmpty()) {
             p.fragmentShaderPath = subdirPath + QLatin1Char('/') + frag;
         }
@@ -214,6 +214,9 @@ private Q_SLOTS:
         WatchedDirectorySet set(strategy);
         set.registerDirectories({sysDir, userDir}, LiveReload::Off);
 
+        // One commit for the whole registration, cap-trip included: a
+        // truncated scan still commits its batch exactly once.
+        QCOMPARE(commits, 1);
         QCOMPARE(strategy.size(), 3);
         // User entry must survive the cap-trip.
         QVERIFY(strategy.contains(QStringLiteral("user-pkg")));
@@ -258,6 +261,10 @@ private Q_SLOTS:
         // Nothing parses, so nothing registers either way — that is precisely
         // why a registration count could not see this.
         QCOMPARE(strategy.size(), 0);
+        // Exact equality works as a proxy for "subdirs considered" because each
+        // broken subdir here HAS a metadata.json, so it contributes exactly one
+        // watch path. A subdir with no metadata.json contributes the directory
+        // instead (see testSubdirWithoutMetadataIsWatched), still one entry.
         QVERIFY2(adapter.lastWatches.size() == kCap,
                  qPrintable(QStringLiteral("cap let %1 broken subdirs arm a watch with a cap of %2")
                                 .arg(adapter.lastWatches.size())
@@ -416,10 +423,10 @@ private Q_SLOTS:
         // Same construction, and the same reason, as
         // `test_directoryloader.cpp::testOversizedFileIsSkipped`.
         QJsonObject bigObj;
-        bigObj.insert(QStringLiteral("id"), QStringLiteral("big-pkg"));
-        bigObj.insert(QStringLiteral("score"), 0);
+        bigObj.insert(QLatin1String("id"), QStringLiteral("big-pkg"));
+        bigObj.insert(QLatin1String("score"), 0);
         const qint64 cap = DirectoryLoader::kMaxFileBytes;
-        bigObj.insert(QStringLiteral("pad"), QString(static_cast<int>(cap), QLatin1Char('x')));
+        bigObj.insert(QLatin1String("pad"), QString(static_cast<int>(cap), QLatin1Char('x')));
         const QByteArray oversize = QJsonDocument(bigObj).toJson(QJsonDocument::Compact);
         QVERIFY(oversize.size() > cap);
         QVERIFY(writeFile(pkgDir + QStringLiteral("/metadata.json"), oversize));
@@ -440,9 +447,6 @@ private Q_SLOTS:
         QVERIFY(!strategy.contains(QStringLiteral("big-pkg")));
     }
 
-    /// Between scans, removing one pack's `metadata.json` purges that
-    /// id from the next scan's accessor and the change-only emit
-    /// callback fires (the signature now differs).
     /// A subdirectory with no `metadata.json` yet is watched via the DIRECTORY,
     /// because `QFileSystemWatcher` cannot watch a file that does not exist. Only
     /// the registered search paths get directory watches, so without this a
@@ -473,6 +477,9 @@ private Q_SLOTS:
                  "a subdir with no metadata.json is not watched, so its metadata landing fires nothing");
     }
 
+    /// Between scans, removing one pack's `metadata.json` purges that
+    /// id from the next scan's accessor and the change-only emit
+    /// callback fires (the signature now differs).
     void testStaleEntryPurgeOnRescan()
     {
         const QString dir = m_tmp->filePath(QStringLiteral("d"));
@@ -519,12 +526,12 @@ private Q_SLOTS:
 
         MetadataPackScanStrategy<FakePayload> strategy(
             [](const QString& subdirPath, const QJsonObject& root, bool isUser) -> std::optional<FakePayload> {
-                if (root.value(QStringLiteral("score")).toInt() == 99) {
+                if (root.value(QLatin1String("score")).toInt() == 99) {
                     return std::nullopt; // simulate an inline-validation rejection
                 }
                 FakePayload p;
-                p.id = root.value(QStringLiteral("id")).toString();
-                p.score = root.value(QStringLiteral("score")).toInt();
+                p.id = root.value(QLatin1String("id")).toString();
+                p.score = root.value(QLatin1String("score")).toInt();
                 p.isUser = isUser;
                 p.sourceDir = subdirPath;
                 return p;
@@ -634,9 +641,9 @@ private Q_SLOTS:
         // FakePayload field to record the parsed value) but the
         // contributor below does NOT fingerprint.
         QJsonObject obj;
-        obj.insert(QStringLiteral("id"), QStringLiteral("pkg-a"));
-        obj.insert(QStringLiteral("score"), 0);
-        obj.insert(QStringLiteral("displayName"), QStringLiteral("First"));
+        obj.insert(QLatin1String("id"), QStringLiteral("pkg-a"));
+        obj.insert(QLatin1String("score"), 0);
+        obj.insert(QLatin1String("displayName"), QStringLiteral("First"));
         QVERIFY(
             writeFile(pkgDir + QStringLiteral("/metadata.json"), QJsonDocument(obj).toJson(QJsonDocument::Compact)));
 
@@ -644,13 +651,13 @@ private Q_SLOTS:
         MetadataPackScanStrategy<FakePayload> strategy(
             [](const QString& /*subdirPath*/, const QJsonObject& root, bool isUser) -> std::optional<FakePayload> {
                 FakePayload p;
-                p.id = root.value(QStringLiteral("id")).toString();
-                p.score = root.value(QStringLiteral("score")).toInt(0);
+                p.id = root.value(QLatin1String("id")).toString();
+                p.score = root.value(QLatin1String("score")).toInt(0);
                 p.isUser = isUser;
                 // Stash displayName in sourceDir so the test can verify
                 // the parsed value updated even when the signature
                 // contributor doesn't fingerprint it.
-                p.sourceDir = root.value(QStringLiteral("displayName")).toString();
+                p.sourceDir = root.value(QLatin1String("displayName")).toString();
                 return p;
             },
             [&]() {

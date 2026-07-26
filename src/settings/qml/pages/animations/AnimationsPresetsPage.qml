@@ -62,6 +62,16 @@ SettingsFlickable {
     /// preset DOES carry one, applying it writes that duration too — otherwise
     /// the duration a user saved with the curve was recorded and then silently
     /// ignored on every use, which is worse than not recording it.
+    // The single predicate for "this preset carries a usable duration",
+    // returning the value the write would use or -1. Both the row label and
+    // applyAsDefault() go through it, so a row can never show a duration that
+    // is then not written, or hide one that is. Entries come straight out of a
+    // JSON file the user can hand-edit, so the type check is not optional:
+    // `"500"` would otherwise pass `> 0` on its way to an int Q_PROPERTY.
+    function _usableDuration(d) {
+        return (typeof d === "number" && isFinite(d) && d > 0) ? Math.round(d) : -1;
+    }
+
     function applyAsDefault(curveStr, duration) {
         // Global path is settings-driven (kSettingsDrivenProfilePaths in
         // src/daemon/daemon.cpp). Writing through the existing
@@ -69,11 +79,9 @@ SettingsFlickable {
         // publishActiveAnimationProfile pick it up via the same wire
         // every other Global edit uses.
         root.appSettings.animationEasingCurve = curveStr;
-        // Type-checked, not just truthy: the entry comes straight out of a JSON
-        // file in a directory the user can hand-edit, so `"500"` would otherwise
-        // pass `> 0` and be assigned to an int Q_PROPERTY.
-        if (typeof duration === "number" && isFinite(duration) && duration > 0)
-            root.appSettings.animationDuration = duration;
+        const ms = root._usableDuration(duration);
+        if (ms > 0)
+            root.appSettings.animationDuration = ms;
     }
 
     contentHeight: content.implicitHeight
@@ -178,7 +186,7 @@ SettingsFlickable {
                             // Names the duration when the preset carries one:
                             // "Use as Default" writes it, so it has to be
                             // visible before the click.
-                            text: (typeof modelData.duration === "number" && modelData.duration > 0) ? i18nc("curve wire format, then the preset's duration", "%1 · %2 ms", modelData.curve || "", modelData.duration) : (modelData.curve || "")
+                            text: root._usableDuration(modelData.duration) > 0 ? i18nc("curve wire format, then the preset's duration", "%1 · %2 ms", modelData.curve || "", root._usableDuration(modelData.duration)) : (modelData.curve || "")
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
                         }
@@ -331,7 +339,11 @@ SettingsFlickable {
                         Button {
                             Accessible.name: i18n("Use %1 as default", modelData.name)
                             text: i18n("Use as Default")
-                            onClicked: root.applyAsDefault(modelData.curve, modelData.duration)
+                            // Curve only, like the built-in spring rows above.
+                            // A spring settles on its own physics, so the row
+                            // shows no duration — and must not write one a
+                            // hand-edited file happens to carry.
+                            onClicked: root.applyAsDefault(modelData.curve)
                         }
 
                         Button {

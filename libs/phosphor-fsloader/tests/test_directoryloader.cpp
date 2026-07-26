@@ -201,7 +201,11 @@ private Q_SLOTS:
         loader.setDebounceIntervalForTest(1);
         QCOMPARE(loader.loadFromDirectory(m_tmp->path(), LiveReload::On), 0);
 
-        // Spy BEFORE the trigger, per this file's convention.
+        // Spy BEFORE the trigger. Several slots below attach theirs after, and
+        // are safe because no event loop spins in between so the queued
+        // directoryChanged cannot be delivered early. Here the debounce is 1 ms
+        // and the trigger is a real file write, so the margin is not worth
+        // relying on.
         QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
 
         // Rewrite the SAME path as valid JSON. No directory entry is created or
@@ -335,7 +339,12 @@ private Q_SLOTS:
     {
         RecordingSink sink;
         DirectoryLoader loader(sink);
-        loader.setDebounceIntervalForTest(1);
+        // 50 ms rather than the 1 ms the other live-reload slots use: this one
+        // asserts that three writes COALESCE, so the window has to comfortably
+        // outlast the gap between the watcher's reads of them. At 1 ms the
+        // timer can fire between the first event and the other two and split
+        // the burst into two commits.
+        loader.setDebounceIntervalForTest(50);
         loader.loadFromDirectory(m_tmp->path(), LiveReload::On);
         const int baseline = sink.commitCount;
 
@@ -347,7 +356,7 @@ private Q_SLOTS:
         }
 
         QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
-        QVERIFY(spy.wait(500));
+        QVERIFY(spy.wait(2000));
 
         QCOMPARE(sink.commitCount, baseline + 1);
         QCOMPARE(loader.registeredCount(), 3);
@@ -589,7 +598,7 @@ private Q_SLOTS:
     /// Regression guard for the GUI-thread DoS — a directory sprayed
     /// with too many JSON files must stop short at the configured cap
     /// rather than parsing them all. Uses the test-only
-    /// `setMaxEntriesForTest` to trip the guard at a 3-digit file count
+    /// `setMaxEntriesForTest` to trip the guard at a handful of files
     /// instead of the 10'000 production default (which would balloon
     /// the CI filesystem footprint for no test value).
     void testEntryCountCapShortCircuitsScan()

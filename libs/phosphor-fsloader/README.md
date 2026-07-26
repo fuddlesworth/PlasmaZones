@@ -93,6 +93,7 @@ A metadata-pack registry (used by shader / animation-shader registries):
 // static_asserts on it. The registry is OWNED by the consumer and BORROWED by
 // the loader, so declare it first.
 class MyPackRegistry : public QObject {
+    Q_OBJECT
 public:
     MyPackRegistry()
         : m_loader(std::make_unique<PhosphorRegistry::MetadataPackLoader<MyPack>>(
@@ -109,6 +110,9 @@ public:
     void addSearchPath(const QString& dir) { m_loader->addSearchPath(dir); }
     void setUserPath(const QString& dir) { m_loader->setUserPath(dir); }
     // … expose payload-typed lookups over m_registry
+
+Q_SIGNALS:
+    void packsChanged();
 
 private:
     PhosphorRegistry::Registry<MyPack> m_registry;

@@ -109,7 +109,16 @@ public:
     QJsonObject toJson() const;
 
     /// Parse from JSON. Missing keys produce unset fields. Curve resolved
-    /// via @p registry. Out-of-range values are rejected (logged, left unset).
+    /// via @p registry. Out-of-range `duration` / `minDistance` /
+    /// `staggerInterval` are rejected: logged and left unset, so the field
+    /// inherits from a parent profile or falls back to the library default.
+    ///
+    /// `sequenceMode` is the one exception. A value that is out of range or
+    /// not a known enumerator is logged and replaced with
+    /// `DefaultSequenceMode` ENGAGED, which blocks inheritance rather than
+    /// allowing it. Leaving it unset would let a parent's Cascade through on
+    /// a leaf whose own file says otherwise, which reads as the override
+    /// having silently done nothing.
     static Profile fromJson(const QJsonObject& obj, const CurveRegistry& registry);
 
     bool operator==(const Profile& other) const;

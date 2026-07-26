@@ -13,9 +13,7 @@
 #include "settings/stores/shadersetstore.h"
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
-#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QDir>
@@ -121,6 +119,10 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                                       this);
 
     m_lastHadPendingChanges = hasPendingChanges();
+    // CLAUDE.md: only emit a signal when the value actually changed. The
+    // sub-services and the mutators raise pendingChangesChanged unconditionally
+    // (a no-op revert, a refused write), so gate the outward dirtyChanged on an
+    // observed state flip rather than forwarding every raise.
     connect(this, &AnimationsPageController::pendingChangesChanged, this, [this]() {
         const bool current = hasPendingChanges();
         if (current == m_lastHadPendingChanges)
@@ -131,10 +133,6 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
 
     connect(m_presets, &AnimationPresetLibrary::userPresetsChanged, this,
             &AnimationsPageController::userPresetsChanged);
-    // CLAUDE.md: only emit a signal when the value actually changed. The
-    // sub-services and the mutators raise pendingChangesChanged unconditionally
-    // (a no-op revert, a refused write), so gate the outward dirtyChanged on an
-    // observed state flip rather than forwarding every raise.
     connect(m_presets, &AnimationPresetLibrary::toastRequested, this, &AnimationsPageController::toastRequested);
     connect(m_presets, &AnimationPresetLibrary::pendingChangesChanged, this,
             &AnimationsPageController::pendingChangesChanged);
@@ -323,9 +321,11 @@ bool AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePa
         return false;
     }
 
-    // Only sampled when we might emit: hasPendingChanges() returns two
-    // ShaderProfileTree values BY VALUE and compares them, and the Defer path
-    // (one call per file in a batch clear) never uses the result.
+    // Sampled before the removal so the emit below can compare against it.
+    // It is always true on the Emit path — `m_pendingFileSnapshots` still holds
+    // this file, so hasPendingChanges() takes its non-empty early-out — but it
+    // is written as a sample rather than a hardcoded true so the comparison
+    // below survives any future change to what makes the page dirty.
     const bool wasPending = signalPolicy == SnapshotDropSignal::Emit && hasPendingChanges();
     m_pendingFileSnapshots.remove(filePath);
     // Sole owner of the signal for this transition: the sub-services used to
@@ -835,11 +835,5 @@ bool AnimationsPageController::removeUserPreset(const QString& name)
 // `setsBridge()` — QML talks to it directly. The in-flight-discard gate the
 // old forwarders enforced now travels with the store as its mutationGuard
 // (wired in the constructor).
-
-// ─── Shader effects ────────────────────────────────────────────────────
-// The effectToMap / parameterInfoToMap / shaderProfileToMap helpers used
-// by both animationspagecontroller.cpp and animationspagecontroller_shaders.cpp
-// live in animations_controller_detail.h as inline functions so the two
-// TUs don't depend on unity-build merging for cross-TU linkage.
 
 } // namespace PlasmaZones

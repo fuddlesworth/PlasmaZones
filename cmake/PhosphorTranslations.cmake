@@ -55,7 +55,7 @@ set(_all_i18n_sources ${PLASMAZONES_I18N_SOURCES})
 
 # Collect per-language .ts files (plasmazones_de.ts, plasmazones_fr.ts, etc.)
 # Flat layout: translations/plasmazones_<lang>.ts → plasmazones_<lang>.qm
-file(GLOB TRANSLATION_TS_FILES "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
+file(GLOB TRANSLATION_TS_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
 # Exclude the English source template from compilation (it has no translations)
 list(FILTER TRANSLATION_TS_FILES EXCLUDE REGEX "plasmazones_en\\.ts$")
 
@@ -65,7 +65,7 @@ list(FILTER TRANSLATION_TS_FILES EXCLUDE REGEX "plasmazones_en\\.ts$")
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Qt6LinguistTools_FOUND AND Python3_Interpreter_FOUND)
     # All .ts files to update (en template + per-language)
-    file(GLOB _all_ts_files "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
+    file(GLOB _all_ts_files CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
 
     # The stub list is only known after the script runs, so lupdate is pointed
     # at the whole stub tree via the @list file the script writes.

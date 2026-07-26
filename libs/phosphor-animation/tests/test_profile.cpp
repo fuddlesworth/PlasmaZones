@@ -353,11 +353,6 @@ private Q_SLOTS:
         QCOMPARE(p.effectiveMinDistance(), Profile::DefaultMinDistance);
     }
 
-    /// Same shape for sequenceMode, which is finiteness-checked AND now
-    /// range-checked. An out-of-range value falls through to the
-    /// unknown-enumerator path, so it lands on the library default ENGAGED
-    /// (unlike minDistance, which is left unset) — that asymmetry is
-    /// `Profile::fromJson`'s, and `sanitizedProfileMap` mirrors it.
     /// The ACCEPTED side of the same boundary. Without it, flipping the
     /// validator's `>` to `>=` would reject exactly MaxMinDistancePx and every
     /// test would still pass.
@@ -370,16 +365,25 @@ private Q_SLOTS:
         QCOMPARE(*p.minDistance, Profile::MaxMinDistancePx);
     }
 
+    /// Same shape for sequenceMode, which is finiteness-checked AND
+    /// range-checked. Unlike minDistance it lands on the library default
+    /// ENGAGED rather than being left unset, so it blocks inheritance instead
+    /// of allowing it. That asymmetry is `Profile::fromJson`'s, and
+    /// `sanitizedProfileMap` mirrors it.
     void testFromJsonSubstitutesDefaultForOutOfRangeSequenceMode()
     {
         QJsonObject obj;
         obj.insert(QLatin1String("sequenceMode"), 1e300);
-        // The warning is the load-bearing assertion. Without the range guard the
-        // value reaches `qRound` as undefined behaviour, and on a Release build
-        // (where Qt's own Q_ASSERT is compiled out) the result happens to be
-        // INT_MIN — which lands on this same branch and produces the same
-        // sequenceMode. Only the diagnostic distinguishes guarded from not.
-        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("unknown sequenceMode -?[0-9]+")));
+        // The DIAGNOSTIC is the load-bearing assertion, and it has to be the
+        // out-of-range one specifically. Deleting the range guard sends 1e300
+        // into `qRound` as undefined behaviour; in a Release build (where Qt's
+        // own Q_ASSERT is compiled out) that yields INT_MIN, which reaches the
+        // unknown-enumerator branch and produces this same sequenceMode. So
+        // matching on "unknown sequenceMode" would pass either way. Only
+        // "rejecting sequenceMode" is a string the unguarded path can never
+        // produce.
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("rejecting sequenceMode .*out of int range")));
         const Profile p = Profile::fromJson(obj, CurveRegistry{});
         QVERIFY(p.sequenceMode.has_value());
         QCOMPARE(*p.sequenceMode, Profile::DefaultSequenceMode);

@@ -20,7 +20,8 @@
  *
  * Split out of `test_animations_page_controller.cpp`, which owns path
  * discovery, override CRUD, the dirty-state announcements, the traversal
- * gate, the QML reachability contract, and the suppression mirror.
+ * gate, and the suppression mirror. The QML↔controller contracts live in
+ * `test_animations_qml_contracts.cpp`.
  *
  * Every slot redirects override-file I/O into a tmpdir via
  * `setUserProfilesDirOverride()`, so the real user XDG dirs are never touched.
@@ -31,6 +32,7 @@
 #include <QTest>
 
 #include <QDir>
+#include <QFile>
 #include <QScopeGuard>
 
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -41,6 +43,30 @@
 #include "settings/pages/animationspagecontroller.h"
 
 using namespace PlasmaZones;
+
+namespace {
+
+/// Rewrite an override file's duration the way an EXTERNAL writer would: a
+/// hand-edit in the profiles directory, behind the controller's back and with
+/// none of its cache bookkeeping. Rewrites the file the controller itself
+/// wrote, so the envelope stays exactly whatever shape it produces.
+[[nodiscard]] bool rewriteDurationOnDisk(const QString& filePath, int from, int to)
+{
+    QFile f(filePath);
+    if (!f.open(QIODevice::ReadOnly))
+        return false;
+    QString text = QString::fromUtf8(f.readAll());
+    f.close();
+    const QString needle = QString::number(from);
+    if (!text.contains(needle))
+        return false;
+    text.replace(needle, QString::number(to));
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    return f.write(text.toUtf8()) > 0;
+}
+
+} // namespace
 
 class TestAnimationsProfileStoreSync : public QObject
 {
@@ -256,6 +282,85 @@ private Q_SLOTS:
         QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
         // Same number, now inherited rather than owned.
         QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 321);
+    }
+
+    /// The OTHER writer's entry point. `resolvedProfile` memoises what it read
+    /// off disk, and every mutation the controller performs drops that memo
+    /// itself — but the profiles directory is a filesystem boundary the user
+    /// can hand-edit, and the page even offers to open it. `main.cpp` wires
+    /// `ProfileLoader::profilesChanged` to `forgetCachedOverrideFiles` for
+    /// exactly that case. Both halves are pinned: the memo goes, and the
+    /// tree-wide reload broadcast fires with an EMPTY path so an already-open
+    /// card re-reads rather than only the next one to be built.
+    void forgetCachedOverrideFilesDropsTheMemoAndBroadcasts()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 500}}));
+        // Reading it is what populates the memo.
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 500);
+
+        QVERIFY(rewriteDurationOnDisk(tmp.path() + QStringLiteral("/editor.snapIn.json"), 500, 640));
+        // Still the memo — nothing has told the controller the file moved.
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 500);
+
+        QSignalSpy announced(&c, &AnimationsPageController::overrideChanged);
+        c.forgetCachedOverrideFiles();
+
+        QCOMPARE(announced.count(), 1);
+        QVERIFY2(announced.first().at(0).toString().isEmpty(),
+                 "the external-writer broadcast must carry an EMPTY path — consumers key their tree-wide reload on it");
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 640);
+    }
+
+    /// The loader's `rescanNow()` emits `profilesChanged` synchronously, so a
+    /// controller-driven refresh re-enters `forgetCachedOverrideFiles` on its
+    /// own stack. The broadcast is suppressed for that window, because the
+    /// caller is already about to send the precise per-path signals — without
+    /// the suppression every removal answers itself with a tree-wide reload.
+    ///
+    /// The memo drop is NOT suppressed, and that half matters just as much: it
+    /// is what stops a future "simplification" from moving the early return
+    /// above the invalidation and quietly serving stale values again.
+    void forgetCachedOverrideFilesStaysSilentDuringOurOwnRescan()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 123}}));
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 777}}));
+        // Memoise the parent so the invalidation below has something to drop.
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor")).value(QStringLiteral("duration")).toInt(), 123);
+
+        // Stands in for ProfileLoader::profilesChanged firing out of
+        // rescanNow(), with an external edit landing in the same window.
+        bool rewrote = false;
+        c.setProfileStoreRefresher([&]() {
+            if (!rewrote)
+                rewrote = rewriteDurationOnDisk(tmp.path() + QStringLiteral("/editor.json"), 123, 456);
+            c.forgetCachedOverrideFiles();
+        });
+
+        QSignalSpy announced(&c, &AnimationsPageController::overrideChanged);
+        QVERIFY(c.clearOverride(QStringLiteral("editor.snapIn")));
+        QVERIFY(rewrote);
+
+        QCOMPARE(announced.count(), 1);
+        QCOMPARE(announced.first().at(0).toString(), QStringLiteral("editor.snapIn"));
+        // Suppressed, but not skipped: the out-of-band write is visible.
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor")).value(QStringLiteral("duration")).toInt(), 456);
+
+        // The depth guard unwound, so an ordinary external notification
+        // broadcasts again.
+        QSignalSpy later(&c, &AnimationsPageController::overrideChanged);
+        c.forgetCachedOverrideFiles();
+        QCOMPARE(later.count(), 1);
+        QVERIFY(later.first().at(0).toString().isEmpty());
     }
 };
 

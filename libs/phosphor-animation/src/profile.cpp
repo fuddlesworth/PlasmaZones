@@ -170,35 +170,52 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // Range-checked as well as finiteness-checked, like the minDistance and
         // staggerInterval branches: `std::isfinite` alone still admits 1e300,
         // and `qRound` on a value outside the int range is undefined behaviour.
-        // An out-of-range value falls through to the unknown-enumerator path
-        // below, which is where it belongs.
-        const bool roundable = std::isfinite(rawDouble) && rawDouble >= qreal(std::numeric_limits<int>::min())
-            && rawDouble <= qreal(std::numeric_limits<int>::max());
-        // Sentinel, not DefaultSequenceMode: substituting the default here would
-        // land on a VALID enumerator and take the accepting branch below, so an
-        // out-of-range value would be swallowed with no diagnostic — the exact
-        // schema-drift blindness the warning further down exists to prevent.
-        // INT_MIN can never be a real enumerator, so it routes to that warning.
-        const int raw = roundable ? qRound(rawDouble) : std::numeric_limits<int>::min();
-        // Map valid enumerators; anything else falls back to the library
-        // default. This is NOT forward-compat with future enumerators
-        // written by a newer client — those would silently land on
-        // AllAtOnce, not on a behaviorally-similar mode. If new modes
-        // are added, bump the schema and route through migration code.
-        if (raw == static_cast<int>(SequenceMode::AllAtOnce) || raw == static_cast<int>(SequenceMode::Cascade)) {
-            p.sequenceMode = static_cast<SequenceMode>(raw);
-        } else {
-            // Log so schema drift doesn't silently paper over as "AllAtOnce"
-            // — a newer client writing an unknown enumerator is something a
-            // future-maintainer wants to see in logs, not discover via a
-            // mysterious animation-behaviour regression. Rate-limited to
-            // one message per distinct value per process (see
-            // shouldWarnUnknownSequenceMode).
-            if (shouldWarnUnknownSequenceMode(raw)) {
-                qCWarning(lcProfile) << "Profile::fromJson: unknown sequenceMode" << raw
-                                     << "— substituting DefaultSequenceMode (schema drift?)";
-            }
+        //
+        // The band is half a unit inside the int range on both ends, because
+        // Qt's `qRound(double)` is `int(d + 0.5)` for non-negative d and
+        // `int(d - 0.5)` otherwise. Testing against INT_MAX itself would admit
+        // 2147483647.0, whose `d + 0.5` is out of int range and so is UB in the
+        // conversion — the same off-by-a-rounding-step the minDistance branch
+        // was already fixed for.
+        const bool roundable = std::isfinite(rawDouble) && rawDouble > qreal(std::numeric_limits<int>::min()) + 0.5
+            && rawDouble < qreal(std::numeric_limits<int>::max()) - 0.5;
+        if (!roundable) {
+            // Its own diagnostic, distinct from the unknown-enumerator one
+            // below, and shaped like the duration / minDistance / stagger
+            // rejections. Routing this case through the unknown-enumerator
+            // warning instead would report a rounded value that was never
+            // written, and would collapse every out-of-range input onto one
+            // rate-limiter key so only the first ever warned.
+            qCWarning(lcProfile).nospace() << "Profile::fromJson: rejecting sequenceMode " << rawDouble
+                                           << " (out of int range) — substituting DefaultSequenceMode";
+            // Substituted ENGAGED rather than left unset, unlike the three
+            // scalar validators: see the note on this field in the header.
             p.sequenceMode = DefaultSequenceMode;
+        } else {
+            const int raw = qRound(rawDouble);
+            // Map valid enumerators; anything else falls back to the library
+            // default. This is NOT forward-compat with future enumerators
+            // written by a newer client — those land on AllAtOnce rather than
+            // on a behaviorally-similar mode, which is why the warning below
+            // is not optional. If new modes are added, bump the schema and
+            // route through migration code.
+            if (raw == static_cast<int>(SequenceMode::AllAtOnce) || raw == static_cast<int>(SequenceMode::Cascade)) {
+                p.sequenceMode = static_cast<SequenceMode>(raw);
+            } else {
+                // Log so schema drift doesn't paper over as "AllAtOnce" — a
+                // newer client writing an unknown enumerator is something a
+                // future-maintainer wants to see in logs, not discover via a
+                // mysterious animation-behaviour regression. Rate-limited to
+                // one message per distinct value per process (see
+                // shouldWarnUnknownSequenceMode). The set is bounded by the
+                // number of DISTINCT in-range unknown enumerators a corpus
+                // contains, which in practice is a handful.
+                if (shouldWarnUnknownSequenceMode(raw)) {
+                    qCWarning(lcProfile) << "Profile::fromJson: unknown sequenceMode" << raw
+                                         << "— substituting DefaultSequenceMode (schema drift?)";
+                }
+                p.sequenceMode = DefaultSequenceMode;
+            }
         }
     }
     if (obj.contains(QLatin1String(JsonFieldStaggerInterval))) {
