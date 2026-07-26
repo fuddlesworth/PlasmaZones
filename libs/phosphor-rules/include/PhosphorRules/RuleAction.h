@@ -526,6 +526,8 @@ inline constexpr QLatin1StringView SetScrollDefaultColumnDisplay{"setScrollDefau
 // changing the engine's defaults.
 /// Width the opening window's column takes, as a fraction of the work area.
 /// Numeric `ActionParam::Value` (stored fraction, edited as a percent).
+// NOTE: ignored when OpenColumnPlacement resolves to "consume" on a
+// non-empty strip — the arrival joins the host column and keeps its width.
 inline constexpr QLatin1StringView OpenColumnWidth{"openColumnWidth"};
 /// Whether the opening window's column starts tabbed. Boolean `ActionParam::Value`.
 inline constexpr QLatin1StringView OpenTabbed{"openTabbed"};

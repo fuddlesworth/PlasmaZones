@@ -253,7 +253,11 @@ void DaemonClient::onDaemonReadySignal()
 
 void DaemonClient::onServiceRegistered()
 {
-    // Daemon process appeared — wait for daemonReady signal before registering
+    // Daemon process appeared — wait for daemonReady signal before
+    // registering. The disconnect-then-reconnect pair below keeps the
+    // subscription SINGULAR across repeated service (re)registrations:
+    // QDBusConnection::connect stacks duplicate match rules, and a daemon
+    // that restarts N times would otherwise deliver daemonReady N times.
     QDBusConnection::sessionBus().disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                              PhosphorProtocol::Service::Interface::LayoutRegistry,
                                              QStringLiteral("daemonReady"), this, SLOT(onDaemonReadySignal()));
@@ -277,6 +281,15 @@ void DaemonClient::onServiceUnregistered()
 
 void DaemonClient::connectDaemonSignals()
 {
+    // Idempotence guard: registerBridge can succeed more than once without
+    // an intervening onServiceUnregistered, and QDBusConnection::connect
+    // stacks duplicate match rules — every handler would then fire twice
+    // per signal.
+    if (m_daemonSignalsConnected) {
+        return;
+    }
+    m_daemonSignalsConnected = true;
+
     auto bus = QDBusConnection::sessionBus();
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
@@ -343,6 +356,8 @@ void DaemonClient::connectDaemonSignals()
 
 void DaemonClient::disconnectDaemonSignals()
 {
+    m_daemonSignalsConnected = false;
+
     auto bus = QDBusConnection::sessionBus();
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("applyGeometryRequested"), this,

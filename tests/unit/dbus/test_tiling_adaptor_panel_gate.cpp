@@ -13,6 +13,7 @@
 
 #include <QTest>
 #include <QCoreApplication>
+#include <QSignalSpy>
 #include <QObject>
 
 #include <PhosphorProtocol/WindowMarshalling.h>
@@ -96,6 +97,28 @@ private Q_SLOTS:
         QVERIFY(engine.isWindowTracked(QStringLiteral("app|two")));
         const QStringList order = engine.managedWindowOrder(QStringLiteral("HDMI-1"));
         QCOMPARE(order, (QStringList{QStringLiteral("app|one"), QStringLiteral("app|two")}));
+    }
+
+    void testAnnounceCoalescingAndPayload()
+    {
+        // The coalesced announce folds repeat calls into ONE emission whose
+        // isDesktopSwitch flag ORs across the batch, and the payload is the
+        // documented SORTED union (wire consumers compare successive
+        // payloads).
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("HDMI-2"), QStringLiteral("HDMI-1")});
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+
+        QSignalSpy spy(&adaptor, &TilingAdaptor::managedScreensChanged);
+        adaptor.notifyEngineScreensChanged(false);
+        adaptor.notifyEngineScreensChanged(true);
+        adaptor.notifyEngineScreensChanged(false);
+        QCoreApplication::processEvents();
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toStringList(), (QStringList{QStringLiteral("HDMI-1"), QStringLiteral("HDMI-2")}));
+        QCOMPARE(spy.first().at(1).toBool(), true);
     }
 
     void testUnclaimedOpens_retryWithoutClaimDrops()

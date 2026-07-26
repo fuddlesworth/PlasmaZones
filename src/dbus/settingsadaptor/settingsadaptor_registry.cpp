@@ -283,6 +283,15 @@ void SettingsAdaptor::initializeRegistry()
                               disabledActivities, setDisabledActivities)
     REGISTER_PER_MODE_DISABLE("autotileDisabledActivities", PhosphorZones::AssignmentEntry::Autotile,
                               disabledActivities, setDisabledActivities)
+    // Scrolling tier: the daemon consults handleForMode(..., Scrolling)
+    // (updateEngineScreens' derive phase and the scroll shortcut gate), so
+    // the wire must be able to populate these lists like the other modes'.
+    REGISTER_PER_MODE_DISABLE("scrollingDisabledMonitors", PhosphorZones::AssignmentEntry::Scrolling, disabledMonitors,
+                              setDisabledMonitors)
+    REGISTER_PER_MODE_DISABLE("scrollingDisabledDesktops", PhosphorZones::AssignmentEntry::Scrolling, disabledDesktops,
+                              setDisabledDesktops)
+    REGISTER_PER_MODE_DISABLE("scrollingDisabledActivities", PhosphorZones::AssignmentEntry::Scrolling,
+                              disabledActivities, setDisabledActivities)
 #undef REGISTER_PER_MODE_DISABLE
 
     // Appearance settings

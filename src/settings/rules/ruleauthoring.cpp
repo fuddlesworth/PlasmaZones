@@ -162,12 +162,12 @@ QString fieldDescription(Field f)
     case Field::CaptionNormal:
         return PhosphorI18n::tr("The window's title without the application-name suffix the window manager adds.");
     case Field::IsFloating:
-        return PhosphorI18n::tr("Whether the window has been floated out of tiling (snap or autotile).");
+        return PhosphorI18n::tr("Whether the window has been floated out of tiling (snapping or tiling mode).");
     case Field::IsSnapped:
         return PhosphorI18n::tr(
             "Whether the window is snapped into a zone (manual-zone mode, where tiled windows are not snapped).");
     case Field::IsTiled:
-        return PhosphorI18n::tr("Whether the window is managed by the autotile engine.");
+        return PhosphorI18n::tr("Whether the window is managed by the tiling engine.");
     case Field::Zone:
         return PhosphorI18n::tr("The zone the window is snapped into (manual-zone mode only).");
     case Field::ScreenId:

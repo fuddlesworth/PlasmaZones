@@ -338,6 +338,10 @@ private:
     QVector<PhosphorEngine::IPlacementEngine*> m_lifecycleEngines;
     /// Last floating state broadcast per window (the dedup gate's memory).
     QHash<QString, bool> m_lastFloatBroadcast;
+    /// Announce generation: bumped by clearEngine so a queued coalesced
+    /// announce from the previous session drops instead of pairing with a
+    /// restart's fresh announce (a double emit for one logical change).
+    quint64 m_announceGeneration = 0;
     /// Coalescing state for notifyEngineScreensChanged (see its doc).
     bool m_screensAnnouncePending = false;
     bool m_pendingIsDesktopSwitch = false;

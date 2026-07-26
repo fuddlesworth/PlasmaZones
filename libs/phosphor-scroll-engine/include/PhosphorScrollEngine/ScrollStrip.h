@@ -80,17 +80,24 @@ public:
     /// Insert @p windowId as a new tile at the bottom of the active column
     /// (rule-driven "open consumed into the focused column"). Falls back to
     /// insertWindow when the strip is empty.
+    /// @p width is honoured ONLY on the empty-strip fallback (which routes
+    /// through insertWindow); joining an existing column keeps the host
+    /// column's width intent — an override would resize every sibling.
+    /// @p display DOES apply (column-level presentation).
     bool insertWindowIntoActiveColumn(const QString& windowId, const ColumnWidth& width, ColumnDisplay display,
                                       const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0);
     /// Insert a restored single-tile column at @p columnIndex (clamped) —
     /// the persistence/restore path. Does not change focus.
+    /// NOTE: carries no min-size parameters; callers that know the
+    /// window's minimum must follow up with setWindowMinimumSize (the
+    /// open/restore/crossing sites all do).
     bool insertWindowAt(int columnIndex, const QString& windowId, const ColumnWidth& width, ColumnDisplay display);
     /// Re-insert @p windowId as a TILE of the existing column at
     /// @p columnIndex (float/minimize round-trip of a stacked tile), at
     /// @p tileIndex clamped into the stack. Fails when the column index is
     /// out of range — callers fall back to a fresh column.
-    bool insertWindowIntoColumnAt(int columnIndex, int tileIndex, const QString& windowId, int minWidth = 0,
-                                  int minHeight = 0);
+    bool insertWindowIntoColumnAt(int columnIndex, int tileIndex, const QString& windowId,
+                                  const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0);
     /// Remove @p windowId; a column left empty closes up. Keeps the view
     /// anchored so surviving neighbours don't jump, and selects a sensible
     /// new focus when the active tile/column vanished. Returns false when

@@ -15,7 +15,7 @@
 // Inherits PhosphorLayout::ILayoutSourceRegistry so concrete registries
 // (LayoutManager) carry the unified `contentsChanged` signal that
 // ZonesLayoutSource subscribes to - matching the pattern every other
-// provider library (phosphor-tiles, future phosphor-scrolling, …)
+// provider library (phosphor-tiles, phosphor-scroll-engine, …)
 // follows. Inheriting QObject via the unified base rather than
 // directly keeps ILayoutManager's non-virtual multi-inheritance safe:
 // every path through ILayoutManager reaches QObject exactly once, so
@@ -107,8 +107,11 @@ public:
     /// (desktop, activity) context.
     virtual Layout* resolveLayoutForScreen(const QString& screenId) const = 0;
 
-    /// Raw assignment id (manual-layout UUID or @c "autotile:<algorithmId>")
-    /// for @p screenId, with cascade + level-1 provider fallback.
+    /// Raw assignment id (manual-layout UUID, @c "autotile:<algorithmId>",
+    /// or the bare @c "scrolling:" sentinel) for @p screenId, with cascade +
+    /// level-1 provider fallback. An explicit mode-only Snapping pin settles
+    /// as an EMPTY id (no layout identity exists for it) — see the concrete
+    /// class doc.
     virtual QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                           const QString& activity = QString()) const = 0;
 

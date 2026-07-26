@@ -71,6 +71,16 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     }
     if (openParams.consume && *openParams.consume && !state->strip().isEmpty()) {
         if (state->strip().insertWindowIntoActiveColumn(windowId, width, display, params, minWidth, minHeight)) {
+            // Consume this id from the mode-transition seed too — leaving
+            // it would let a stale entry re-position an unrelated later
+            // open (the block below documents exactly that hazard).
+            const auto pendingConsume = m_pendingInitialOrder.find(screenId);
+            if (pendingConsume != m_pendingInitialOrder.end()) {
+                pendingConsume->removeAll(windowId);
+                if (pendingConsume->isEmpty()) {
+                    m_pendingInitialOrder.erase(pendingConsume);
+                }
+            }
             return;
         }
     }
@@ -115,6 +125,14 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     }
     if (!inserted) {
         qCWarning(lcScrollEngine) << "insertOpenedWindow: duplicate window" << windowId;
+        // Do not leave a reverse-map key for a window no structure holds —
+        // that is the exact inconsistency floatWindowInternal warns about.
+        // (Keyed-but-present is fine: the insert also fails when the strip
+        // already contains the window, and unkeying a live tile would just
+        // create the mirror inconsistency.)
+        if (!state->strip().containsWindow(windowId) && !state->isFloating(windowId)) {
+            m_states.removeWindow(windowId);
+        }
     }
 }
 
@@ -132,11 +150,18 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         return; // re-announce of a window we already track here
     }
     if (oldState) {
-        // The window moved context (screen or desktop) — migrate.
+        // The window moved context (screen or desktop) — migrate. The old
+        // context's per-window bookkeeping goes with it: a stale
+        // FloatRestore could re-slot an unfloat on the NEW screen against
+        // the OLD strip's geometry, and lastAppliedRect would keep
+        // answering for a context that no longer holds the window.
         const ScrollLayoutParams oldParams = layoutParamsForScreen(oldKey.screenId);
         oldState->strip().takeWindow(windowId, oldParams);
         oldState->removeFloating(windowId);
+        m_lastAppliedRect.remove(windowId);
+        m_floatRestore.remove(windowId);
         scheduleRetileForScreen(oldKey.screenId);
+        Q_EMIT placementChanged(oldKey.screenId);
     }
 
     ScrollState* state = stateForKey(key, true);
@@ -250,8 +275,19 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     const QRect lastApplied = m_lastAppliedRect.value(windowId);
     const bool widthChanged = !lastApplied.isValid() || lastApplied.width() != newFrame.width();
     const bool heightChanged = !lastApplied.isValid() || lastApplied.height() != newFrame.height();
+    Q_UNUSED(screenId) // key.screenId is authoritative; a mismatched caller value would retile the wrong strip
     if (state->strip().reconcileWindowSize(windowId, newFrame.size(), widthChanged, heightChanged)) {
-        scheduleRetileForScreen(screenId.isEmpty() ? key.screenId : screenId);
+        scheduleRetileForScreen(key.screenId);
+        return;
+    }
+    // The strip REFUSED the size (lone-tile height, no-op ack): the window
+    // is now displaced from the engine's rect, but m_lastAppliedRect still
+    // holds it, so the emit-on-change gate would treat the corrective
+    // relayout as "nothing moved" and never re-issue the rect. Drop the
+    // memory and retile so the authoritative geometry is re-applied.
+    if (lastApplied.isValid() && lastApplied != newFrame) {
+        m_lastAppliedRect.remove(windowId);
+        scheduleRetileForScreen(key.screenId);
     }
 }
 
@@ -275,10 +311,22 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     }
     FloatRestore restore;
     restore.column = columnIdx;
-    restore.width = state->strip().columns().at(columnIdx).width;
-    restore.display = state->strip().columns().at(columnIdx).display;
-    if (state->strip().columns().at(columnIdx).tiles.size() > 1) {
-        restore.tileIndex = state->strip().columns().at(columnIdx).indexOfWindow(windowId);
+    const Column& sourceColumn = state->strip().columns().at(columnIdx);
+    restore.width = sourceColumn.width;
+    restore.display = sourceColumn.display;
+    const QSize minSize = state->strip().windowMinimumSize(windowId);
+    restore.minWidth = minSize.width();
+    restore.minHeight = minSize.height();
+    if (sourceColumn.tiles.size() > 1) {
+        restore.tileIndex = sourceColumn.indexOfWindow(windowId);
+        // Anchor on a surviving sibling so the stack can be re-located even
+        // after column indices shift (prefer the neighbour above, else below).
+        for (int i = restore.tileIndex - 1; i >= 0 && restore.stackAnchor.isEmpty(); --i) {
+            restore.stackAnchor = sourceColumn.tiles.at(i).windowId;
+        }
+        for (int i = restore.tileIndex + 1; i < sourceColumn.tiles.size() && restore.stackAnchor.isEmpty(); ++i) {
+            restore.stackAnchor = sourceColumn.tiles.at(i).windowId;
+        }
     }
     state->strip().takeWindow(windowId, params);
     state->addFloating(windowId);
@@ -307,11 +355,17 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     const FloatRestore restore = m_floatRestore.take(windowId);
     bool inserted = false;
     if (hadSlot && restore.tileIndex >= 0) {
-        // The window left a SHARED column: return to the surviving stack
-        // (the column outlived the float since the other tiles stayed).
-        // The column index can have shifted; a miss falls through to a
-        // fresh column at the remembered index.
-        inserted = state->strip().insertWindowIntoColumnAt(restore.column, restore.tileIndex, windowId);
+        // The window left a SHARED column: return to the surviving stack.
+        // The stack is re-located through the surviving-sibling anchor —
+        // the remembered index goes stale when columns close during the
+        // float and would splice into a stranger's stack. Anchor gone →
+        // fall through to a fresh column.
+        const int anchoredColumn =
+            restore.stackAnchor.isEmpty() ? -1 : state->strip().columnOfWindow(restore.stackAnchor);
+        if (anchoredColumn >= 0) {
+            inserted = state->strip().insertWindowIntoColumnAt(anchoredColumn, restore.tileIndex, windowId, params,
+                                                               restore.minWidth, restore.minHeight);
+        }
     }
     if (!inserted && hadSlot) {
         inserted = state->strip().insertWindowAt(restore.column, windowId, restore.width, restore.display);
@@ -321,6 +375,11 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
                                                effectiveDefaultColumnDisplay(screenId), params);
     }
     if (inserted) {
+        // Re-apply the min size the floated tile carried (the fresh-column
+        // branches insert without it).
+        if (restore.minWidth > 0 || restore.minHeight > 0) {
+            state->strip().setWindowMinimumSize(windowId, restore.minWidth, restore.minHeight);
+        }
         state->strip().focusWindow(windowId, params);
     }
     m_scrollFloatedWindows.remove(windowId);
@@ -357,6 +416,9 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
         const ScrollLayoutParams params = layoutParamsForScreen(targetScreen);
         if (target->strip().insertWindow(windowId, effectiveDefaultColumnWidth(targetScreen),
                                          effectiveDefaultColumnDisplay(targetScreen), params)) {
+            // Third unfloat route: clear the mode-transition float marker
+            // like unfloatWindowInternal/handoffRelease do.
+            m_scrollFloatedWindows.remove(windowId);
             m_states.setKeyForWindow(windowId, currentKeyForScreen(targetScreen));
             Q_EMIT windowFloatingChanged(windowId, false, targetScreen);
             applyLayout(targetScreen, false);

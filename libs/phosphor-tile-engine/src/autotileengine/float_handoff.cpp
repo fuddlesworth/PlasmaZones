@@ -212,9 +212,11 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() == destKey
         && state->containsWindow(windowId)) {
         // Already adopted — nothing structural to do, but a re-handoff can
-        // carry a FRESHER min size; the seed is cheap and change-gated.
-        if (ctx.minSize.width() > 0 || ctx.minSize.height() > 0) {
-            storeWindowMinSize(windowId, ctx.minSize.width(), ctx.minSize.height());
+        // carry a FRESHER min size; on a genuine change the layout must
+        // re-validate (same contract as windowMinSizeUpdated).
+        if ((ctx.minSize.width() > 0 || ctx.minSize.height() > 0)
+            && storeWindowMinSize(windowId, ctx.minSize.width(), ctx.minSize.height())) {
+            scheduleRetileForScreen(ctx.toScreenId);
         }
         return;
     }
@@ -224,7 +226,17 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     // the entry — handoffRelease is the correct primitive for "drop
     // tracking without mutating geometry" within this engine too.
     if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() != destKey) {
+        // Internal re-home: the release wipes m_windowMinSizes on the
+        // assumption that ctx.minSize re-seeds it — untrue when the daemon
+        // built the context from an engine that does not model min sizes
+        // (snap's windowMinimumSize is the 0x0 default). Preserve our own
+        // live value for that case.
+        const QSize preservedMin = m_windowMinSizes.value(windowId, QSize(0, 0));
         handoffRelease(windowId);
+        if ((ctx.minSize.width() <= 0 && ctx.minSize.height() <= 0)
+            && (preservedMin.width() > 0 || preservedMin.height() > 0)) {
+            m_windowMinSizes.insert(windowId, preservedMin);
+        }
     }
 
     // Insert at the position dictated by the insertion-order setting (a
@@ -247,9 +259,13 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         // already released the window at every daemon call site, so keying
         // it here would strand it: present in neither engine yet reading as
         // tiled through the phantom key. Leave it unmanaged (free) instead —
-        // the same outcome as a window neither engine ever tracked.
+        // the same outcome as a window neither engine ever tracked. The
+        // float-sync announcement is deliberately withheld (the window is
+        // unmanaged, not floating), but the screen still reflows: a swap
+        // source that just lost its partner must not keep a hole.
         qCWarning(PhosphorTileEngine::lcTileEngine) << "handoffReceive: destination state refused" << windowId << "on"
                                                     << ctx.toScreenId << "- window left unmanaged";
+        retileAfterOperation(ctx.toScreenId, true);
         return;
     }
     // Autotile-engine policy on receive: a window arriving as "floating in

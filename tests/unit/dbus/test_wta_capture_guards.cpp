@@ -191,7 +191,7 @@ private Q_SLOTS:
         auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, &tileEngine);
+        wta->setEngines(snap, &tileEngine, nullptr);
 
         const QString windowId = QStringLiteral("ghostty|inst-tile");
         const QString screenId = QStringLiteral("DP-1");
@@ -225,7 +225,7 @@ private Q_SLOTS:
         QVERIFY(rec);
         QCOMPARE(rec->freeGeometryFor(screenId), movedFrame);
 
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap, nullptr, nullptr);
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
         delete snap;
@@ -256,7 +256,7 @@ private Q_SLOTS:
         auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap, nullptr, nullptr);
 
         const QString windowId = QStringLiteral("app|handoff");
         const QString appId = wta->service()->currentAppIdFor(windowId);
@@ -316,7 +316,7 @@ private Q_SLOTS:
         auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, &tileEngine);
+        wta->setEngines(snap, &tileEngine, nullptr);
 
         const QString windowId = QStringLiteral("app|closed-on-tile");
         const QString screenId = QStringLiteral("DP-1");
@@ -341,7 +341,7 @@ private Q_SLOTS:
         QVERIFY(rec);
         QCOMPARE(rec->freeGeometryFor(screenId), freeFrame);
 
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap, nullptr, nullptr);
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
         delete snap;

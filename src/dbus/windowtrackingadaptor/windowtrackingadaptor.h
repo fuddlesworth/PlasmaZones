@@ -180,12 +180,12 @@ public:
      * @param snapEngine PlacementEngineBase for snap mode (not owned, must outlive adaptor)
      * @param autotileEngine PlacementEngineBase for autotile mode (not owned, must outlive adaptor)
      * @param scrollEngine PlacementEngineBase for scrolling mode (not owned;
-     *        defaulted to null so the many two-engine test fixtures keep
-     *        exercising the historical pair unchanged)
+     *        explicit at every call site — no default, so a production
+     *        caller cannot silently drop the scroll engine)
      */
     void setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
                     PhosphorEngine::PlacementEngineBase* autotileEngine,
-                    PhosphorEngine::PlacementEngineBase* scrollEngine = nullptr);
+                    PhosphorEngine::PlacementEngineBase* scrollEngine);
 
     /**
      * @brief Set the frozen-snapshot resolver used by saveload's disable

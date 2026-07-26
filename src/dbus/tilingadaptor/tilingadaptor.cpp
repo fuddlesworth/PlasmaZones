@@ -15,6 +15,7 @@
 #include <QJsonObject>
 
 #include <algorithm>
+#include <utility>
 
 namespace PlasmaZones {
 
@@ -133,7 +134,10 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
     m_screensAnnouncePending = true;
     QMetaObject::invokeMethod(
         this,
-        [this]() {
+        [this, generation = m_announceGeneration]() {
+            if (generation != m_announceGeneration) {
+                return; // clearEngine voided this session's announce
+            }
             m_screensAnnouncePending = false;
             const bool desktopSwitch = m_pendingIsDesktopSwitch;
             m_pendingIsDesktopSwitch = false;
@@ -477,6 +481,7 @@ void TilingAdaptor::clearEngine()
     // restart (a stale dedup value could suppress the first genuine
     // broadcast of the new session).
     m_lifecycleEngines.clear();
+    ++m_announceGeneration;
     m_screensAnnouncePending = false;
     m_pendingIsDesktopSwitch = false;
     m_unclaimedOpens.clear();

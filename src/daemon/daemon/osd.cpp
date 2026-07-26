@@ -442,6 +442,11 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
                 // deliberately: picking a snap layout is the exit from
                 // scrolling mode (same policy as
                 // resolvePerScreenLayoutInclude in overlayservice.cpp).
+                // The Meta+Alt+[ / ] layout CYCLE inherits this and is
+                // therefore a one-way door out of scrolling (no cycle
+                // entry represents Scrolling; re-entry is via the Monitors
+                // page, a rule, or the mode-toggle shortcut) — an accepted
+                // trade-off, matching how autotile screens cycle too.
                 manualActive = true;
             }
         } else {

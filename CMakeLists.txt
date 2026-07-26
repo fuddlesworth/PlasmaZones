@@ -838,7 +838,23 @@ endif()
 
 endif() # examples/ present (Nix strips it; see the guard above)
 
-# Custom uninstall target that cleans up directories properly
+# Custom uninstall target that cleans up directories properly.
+# QT6_INSTALL_PLUGINS mirrors phosphor-wayland's QPA install-path
+# derivation (a subdirectory-scope variable there, so re-derived here for
+# the configure below).
+if(NOT DEFINED QT6_INSTALL_PLUGINS)
+    get_target_property(QT6_INSTALL_PLUGINS Qt6::Core QT_INSTALL_PLUGINS)
+    if(NOT QT6_INSTALL_PLUGINS)
+        set(QT6_INSTALL_PLUGINS "${KDE_INSTALL_FULL_LIBDIR}/qt6/plugins")
+    endif()
+endif()
+# The Qt property can be prefix-relative; the uninstall script needs an
+# absolute path (matching how install() resolves relative DESTINATIONs).
+if(IS_ABSOLUTE "${QT6_INSTALL_PLUGINS}")
+    set(PZ_UNINSTALL_QT_PLUGINS "${QT6_INSTALL_PLUGINS}")
+else()
+    set(PZ_UNINSTALL_QT_PLUGINS "${CMAKE_INSTALL_PREFIX}/${QT6_INSTALL_PLUGINS}")
+endif()
 configure_file(
     "${CMAKE_SOURCE_DIR}/cmake/uninstall.cmake.in"
     "${CMAKE_BINARY_DIR}/cmake_uninstall.cmake"

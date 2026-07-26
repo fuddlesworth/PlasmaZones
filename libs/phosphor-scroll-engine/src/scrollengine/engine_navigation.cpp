@@ -176,9 +176,18 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         partnerLanding = state->strip().columnOfWindow(windowId);
     }
 
-    // Min sizes are per-strip tile state; capture before takeWindow so the
-    // receiving strip keeps the clamp without a refuse/re-discover round-trip.
+    // Column intent and min sizes are per-strip tile state; capture BOTH
+    // before takeWindow so the crossing preserves the user's width/display
+    // choices and the client's clamp (the float round-trip does the same
+    // through FloatRestore).
     const QSize windowMinSize = state->strip().windowMinimumSize(windowId);
+    const int sourceColIdx = state->strip().columnOfWindow(windowId);
+    ColumnWidth windowWidth = effectiveDefaultColumnWidth(target);
+    ColumnDisplay windowDisplay = effectiveDefaultColumnDisplay(target);
+    if (sourceColIdx >= 0) {
+        windowWidth = state->strip().columns().at(sourceColIdx).width;
+        windowDisplay = state->strip().columns().at(sourceColIdx).display;
+    }
     state->strip().takeWindow(windowId, sourceParams);
     Q_EMIT windowOutputMoveExpected(windowId, target);
 
@@ -187,20 +196,25 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     // partner's slot.
     int columnIdx = (direction == QLatin1String("right")) ? 0 : targetState->strip().columnCount();
     QSize partnerMinSize;
+    ColumnWidth partnerWidth = effectiveDefaultColumnWidth(screenId);
+    ColumnDisplay partnerDisplay = effectiveDefaultColumnDisplay(screenId);
     if (!partner.isEmpty()) {
         columnIdx = qMax(0, targetState->strip().columnOfWindow(partner));
         partnerMinSize = targetState->strip().windowMinimumSize(partner);
+        const int partnerColIdx = targetState->strip().columnOfWindow(partner);
+        if (partnerColIdx >= 0) {
+            partnerWidth = targetState->strip().columns().at(partnerColIdx).width;
+            partnerDisplay = targetState->strip().columns().at(partnerColIdx).display;
+        }
         targetState->strip().takeWindow(partner, targetParams);
         Q_EMIT windowOutputMoveExpected(partner, screenId);
     }
-    targetState->strip().insertWindowAt(columnIdx, windowId, effectiveDefaultColumnWidth(target),
-                                        effectiveDefaultColumnDisplay(target));
+    targetState->strip().insertWindowAt(columnIdx, windowId, windowWidth, windowDisplay);
     targetState->strip().setWindowMinimumSize(windowId, windowMinSize.width(), windowMinSize.height());
     targetState->strip().focusWindow(windowId, targetParams);
     m_states.setKeyForWindow(windowId, targetKey);
     if (!partner.isEmpty()) {
-        state->strip().insertWindowAt(qMax(0, partnerLanding), partner, effectiveDefaultColumnWidth(screenId),
-                                      effectiveDefaultColumnDisplay(screenId));
+        state->strip().insertWindowAt(qMax(0, partnerLanding), partner, partnerWidth, partnerDisplay);
         state->strip().setWindowMinimumSize(partner, partnerMinSize.width(), partnerMinSize.height());
         m_states.setKeyForWindow(partner, sourceKey);
     }

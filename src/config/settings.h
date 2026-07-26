@@ -1042,7 +1042,7 @@ public:
     bool scrollingAlwaysCenterSingleColumn() const override;
     void setScrollingAlwaysCenterSingleColumn(bool center);
     int scrollingDefaultColumnWidthKind() const override;
-    void setScrollingDefaultColumnWidthKind(int kind);
+    void setScrollingDefaultColumnWidthKind(int value);
     qreal scrollingDefaultColumnWidthValue() const override;
     void setScrollingDefaultColumnWidthValue(qreal value);
     int scrollingDefaultColumnDisplay() const override;

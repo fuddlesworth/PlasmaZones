@@ -430,7 +430,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
 
     // Only prune states for the CURRENT desktop/activity. States belonging to
     // other desktops are preserved so desktop switching is a fast state swap
-    // (no window release/re-add). windowsReleasedFromTiling MUST NOT fire
+    // (no window release/re-add). windowsReleased MUST NOT fire
     // for desktop/activity transitions — only for true autotile disable.
     QStringList releasedWindows;
     // Only prune states that match the current desktop/activity AND whose screen
@@ -464,7 +464,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             m_userTunedMasterCount.remove(key);
         });
     // Clean up reverse-map entries for released windows BEFORE emitting the
-    // signal. Signal handlers (signals.cpp windowsReleasedFromTiling) check zone
+    // signal. Signal handlers (the daemon's handleEngineWindowsReleased) check zone
     // assignments and floating state — stale mappings would cause them to see
     // phantom candidates.
     for (const QString& windowId : std::as_const(releasedWindows)) {

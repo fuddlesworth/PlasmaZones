@@ -617,8 +617,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // pre-seed): the outputChanged handler early-returns while
             // inGeometryApply is set, so without this a cross-output tile
             // apply leaves the map naming the OLD screen and the next
-            // genuine user move diffs against stale state.
+            // genuine user move diffs against stale state. The handler's
+            // OWN notified-screen map must move too — for scroll-managed
+            // windows getWindowScreenId answers FROM this map, so a
+            // scroll→scroll handoff that skipped it would pin every
+            // id-keyed consumer (close records, minimize routing, rule
+            // Mode stamp, drag drop) to the old monitor forever.
             m_effect->m_trackedScreenPerWindow[snap.window] = snap.screenId;
+            m_notifiedWindowScreens[snap.windowId] = snap.screenId;
             saveAndRecordPreTileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
             KWin::Window* kwForLog = snap.window->window();
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry

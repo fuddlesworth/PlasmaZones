@@ -53,8 +53,10 @@ Item {
             x: columnX + (columnWidth - width) / 2
             y: columnY + Kirigami.Units.smallSpacing
             // Floor at a small useful width so a very narrow column still
-            // shows a (clipped) indicator instead of nothing.
-            width: Math.max(Kirigami.Units.gridUnit * 2, Math.min(tabRow.implicitWidth + Kirigami.Units.largeSpacing * 2, columnWidth - Kirigami.Units.largeSpacing * 2))
+            // shows an indicator, but never wider than the column itself —
+            // the root has no clip, and a centered over-wide pill would
+            // spill into the neighbouring columns.
+            width: Math.min(columnWidth, Math.max(Kirigami.Units.gridUnit * 2, Math.min(tabRow.implicitWidth + Kirigami.Units.largeSpacing * 2, columnWidth - Kirigami.Units.largeSpacing * 2)))
             height: tabRow.implicitHeight + Kirigami.Units.smallSpacing * 2
             radius: height / 2
             color: Qt.alpha(Kirigami.Theme.backgroundColor, 0.85)

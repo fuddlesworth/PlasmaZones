@@ -420,11 +420,11 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
     // point into the shared free geometry, so the guard lives here, not at each
     // caller. `isWindowSnapped` stays true for a floating-with-preserved-zone
     // window, so AND with `!isWindowFloating` — "snapped AND not floating" = actually
-    // occupying the zone. (The autotile-tiled case is NOT gated here: a window that
-    // is on an autotile screen but not yet tiled — a fresh spawn — legitimately has a
-    // free frame, and "autotile mode + not floating" cannot tell that apart from a
-    // tiled window. The effect's saveAndRecordPreTileGeometry guards the tiled
-    // case at capture time instead.)
+    // occupying the zone. (A MODE-based autotile gate cannot live here: a window on
+    // an autotile screen but not yet tiled — a fresh spawn — legitimately has a free
+    // frame, and "autotile mode + not floating" cannot tell that apart from a tiled
+    // window. The LIVE engine-tiled predicate a few lines below is what gates the
+    // actually-tiled case.)
     if (isWindowSnapped(windowId) && !isWindowFloating(windowId)) {
         qCDebug(lcPlacement) << "recordFreeGeometry: refusing snapped frame for" << windowId
                              << "— float-back stays frozen while it occupies a zone";
@@ -480,9 +480,12 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     if (isWindowEngineTiled(windowId)) {
         return;
     }
-    if (isWindowSnapped(windowId) && !isWindowFloating(windowId)) {
-        return;
-    }
+    // NO snapped-and-not-floating twin here, unlike recordFreeGeometry:
+    // this path is reached only when BOTH engines' capturePlacement already
+    // declined, and the snap-assignment read can be STALE — a zone
+    // assignment deliberately preserved across an autotile flip would make
+    // the guard refuse the one capture (screen adoption + sibling prune)
+    // nothing else performs.
     const QString appId = currentAppIdFor(windowId);
     if (appId.isEmpty()) {
         return;

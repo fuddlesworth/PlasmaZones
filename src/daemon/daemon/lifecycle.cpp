@@ -735,6 +735,11 @@ void Daemon::stop()
     // concreteAutotile narrowing a few lines below.
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         concreteSnap->setExcludeRuleSet(nullptr);
+        // The live-mode resolver captures `this` and consults the router,
+        // which is destroyed BEFORE the engines (declaration order) — the
+        // closure null-checks the router, but clearing it here keeps the
+        // teardown grep-discoverable like every other late-bound borrow.
+        concreteSnap->setLiveModeResolver({});
     }
 
     // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by

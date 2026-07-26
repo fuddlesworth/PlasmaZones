@@ -313,7 +313,11 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     }
     const PhosphorEngine::TilingStateKey key = keyIt.value();
     PhosphorTiles::TilingState* state = m_states.stateForKey(key);
-    if (!state) {
+    if (!state || !state->containsWindow(wid)) {
+        // Membership, not just a live key: windowOpened keys the window
+        // BEFORE onWindowAdded can refuse it, and a phantom-keyed window
+        // would capture a bogus "tiled at order -1" slot that then blocks
+        // the free-geometry write downstream (same guard as isWindowTiled).
         return std::nullopt;
     }
 

@@ -27,6 +27,7 @@
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <QScopeGuard>
 
 namespace PlasmaZones {
 
@@ -65,6 +66,28 @@ void Daemon::updateEngineScreens()
     if (!m_autotileEngine || !m_layoutManager || !m_screenManager) {
         return;
     }
+    // Re-entrancy latch: the engines' placementChanged fires SYNCHRONOUSLY
+    // from setActiveScreens/scheduleRetileForScreen inside this pass, and
+    // the tiled-count gates recompute through here — running the
+    // capture/seed/apply phases against partially-applied state. Defer the
+    // nested request to a queued re-run instead.
+    if (m_updateEngineScreensInProgress) {
+        if (!m_updateEngineScreensQueued) {
+            m_updateEngineScreensQueued = true;
+            QMetaObject::invokeMethod(
+                this,
+                [this]() {
+                    m_updateEngineScreensQueued = false;
+                    updateEngineScreens();
+                },
+                Qt::QueuedConnection);
+        }
+        return;
+    }
+    m_updateEngineScreensInProgress = true;
+    const auto latchReset = qScopeGuard([this]() {
+        m_updateEngineScreensInProgress = false;
+    });
     // Every entry path into this function is wired in init() or later
     // (settingsChanged, layoutAssigned, virtual-screen reconfigure), so
     // the resolver is always live by the time we run. The earlier guard
@@ -75,6 +98,13 @@ void Daemon::updateEngineScreens()
     }
 
     const QString activity = currentActivity();
+
+    // ONE restore batch per recompute: both engines' windowsReleased fire
+    // synchronously inside this pass (autotile's setActiveScreens below,
+    // then updateScrollingScreens'), and each release APPENDS to
+    // m_pendingSnapFloatRestores. Clearing at handler entry instead would
+    // wipe the first engine's entries when both release in one flip.
+    m_pendingSnapFloatRestores.clear();
 
     QSet<QString> autotileScreens;
     QSet<QString> scrollingScreens;
@@ -89,6 +119,16 @@ void Daemon::updateEngineScreens()
             if (!m_contextResolver->isDisabled(
                     m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Scrolling))) {
                 scrollingScreens.insert(screenId);
+                // Pre-save snap floats for a screen entering scrolling FROM
+                // SNAPPING, using the PRE-FLIP engine state as the
+                // discriminator (neither engine's live set holds it). This
+                // must run before any setActiveScreens: once the cascade
+                // answer is applied, snap's capturePlacement refuses the
+                // no-longer-Snapping screen and the presave writes nothing.
+                if (m_scrollEngine && !m_scrollEngine->isActiveOnScreen(screenId)
+                    && !m_autotileEngine->isActiveOnScreen(screenId)) {
+                    presaveSnapFloats(screenId);
+                }
             }
             continue;
         }
@@ -119,6 +159,14 @@ void Daemon::updateEngineScreens()
             }
         }
     }
+
+    // Snapshot the derived sets BEFORE any engine set is applied: the
+    // windowsReleased handler fires synchronously inside the applies below
+    // and must know where each released screen is HEADED (the other
+    // engine's live set still lags at that moment, and the raw cascade
+    // cannot see context-disable exclusions).
+    m_derivedAutotileScreens = autotileScreens;
+    m_derivedScrollingScreens = scrollingScreens;
 
     // Capture window order for screens LEAVING autotile before PhosphorTiles::TilingState is destroyed.
     // This preserves the tiling arrangement so re-entering autotile (e.g. cycling back)
@@ -626,7 +674,7 @@ void Daemon::presaveSnapFloats(const QString& screenId)
     // Reachable from `Settings::settingsChanged` (daemon.cpp ~830) before the
     // engines exist — any synchronous re-entry into settingsChanged during the
     // D-Bus retry loop in init() would hit this path with null engine pointers.
-    if (!m_windowTrackingAdaptor || !m_autotileEngine || !m_snapEngine) {
+    if (!m_windowTrackingAdaptor || !m_windowTrackingAdaptor->service() || !m_autotileEngine || !m_snapEngine) {
         return;
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
@@ -789,12 +837,12 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
         ? PhosphorZones::AssignmentEntry::Autotile
         : PhosphorZones::AssignmentEntry::Scrolling;
 
-    // Clear unconditionally: entries from a previous release
-    // batch are stale the moment a new one arrives, and leaving
-    // them behind because the adaptor happens to be null would
-    // leak them into the next toggle.
-    m_pendingSnapFloatRestores.clear();
-    if (m_windowTrackingAdaptor) {
+    // NOTE: the batch is cleared ONCE per recompute at the top of
+    // updateEngineScreens — both engines can release synchronously in the
+    // same pass and this handler runs once per engine, so clearing here
+    // would wipe the first engine's entries. Consumers still clear after
+    // use, which covers staleness across recomputes.
+    if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
         PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
         for (const QString& windowId : windowIds) {
             // Only process windows whose current WTS screen is one of the
@@ -818,12 +866,17 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
             // setActiveScreens calls run in one synchronous pass). Those
             // windows return to the scroll engine, not to snapping —
             // queuing snap-float/zone restores for them would corrupt the
-            // next genuine toggle's restore batch. Re-resolve the released
-            // screen's mode and skip windows headed into scrolling.
-            if (m_layoutManager && !windowScreen.isEmpty()
-                && m_layoutManager->modeForScreen(windowScreen, currentDesktopForScreen(windowScreen),
-                                                  currentActivity())
-                    == otherTilingMode) {
+            // next genuine toggle's restore batch. Gate on the OTHER
+            // engine's DERIVED live claim, not the raw cascade: a
+            // context-disabled scrolling target is excluded from the
+            // derived set even though the cascade says Scrolling, and its
+            // windows DO return to snapping and need the restore.
+            const bool headedToOtherEngine = !windowScreen.isEmpty()
+                && ((otherTilingMode == PhosphorZones::AssignmentEntry::Scrolling
+                     && m_derivedScrollingScreens.contains(windowScreen))
+                    || (otherTilingMode == PhosphorZones::AssignmentEntry::Autotile
+                        && m_derivedAutotileScreens.contains(windowScreen)));
+            if (headedToOtherEngine) {
                 releasingEngine->clearModeSpecificFloatMarker(windowId);
                 qCDebug(lcDaemon) << "windowsReleased: skipping" << windowId
                                   << "- screen entering the other tiling mode";

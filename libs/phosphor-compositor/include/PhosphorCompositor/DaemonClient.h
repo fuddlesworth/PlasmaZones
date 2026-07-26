@@ -30,6 +30,9 @@ public:
 
     bool isDaemonReady() const
     {
+        // "Ready" means REACHABLE: probeDaemonAvailable sets this without
+        // wiring the signal subscriptions (only a successful registerBridge
+        // does). Callers needing the signal stream must register.
         return m_daemonReady;
     }
 
@@ -129,6 +132,7 @@ private:
     ILifecycleHandler* m_lifecycleHandler = nullptr;
 
     bool m_daemonReady = false;
+    bool m_daemonSignalsConnected = false;
     bool m_registrationInFlight = false;
     QString m_sessionId;
 };

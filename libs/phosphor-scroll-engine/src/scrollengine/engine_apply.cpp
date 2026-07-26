@@ -31,7 +31,8 @@ constexpr int kParkMargin = 16;
 ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) const
 {
     ScrollLayoutParams params;
-    QRect area = m_screenManager ? m_screenManager->screenAvailableGeometry(screenId) : QRect();
+    QRect area = m_screenManager ? m_screenManager->screenAvailableGeometry(screenId)
+                                 : (m_availableGeometryProvider ? m_availableGeometryProvider(screenId) : QRect());
     int innerGap = 0;
     // The strip reads the shared Tiling.Gaps model through IScrollSettings'
     // forwarding accessors; outer gaps shrink the work area, the inner gap
@@ -93,7 +94,11 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     }
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
     if (!params.workArea.isValid()) {
-        qCWarning(lcScrollEngine) << "applyLayout: no valid work area for screen" << screenId;
+        // Screen went away or gaps swallowed it: the indicator must not
+        // stay painted, and a scheduled-retile storm must not spam a
+        // warning per tick (debug level; the first clear is the signal).
+        clearTabStripsForScreen(screenId);
+        qCDebug(lcScrollEngine) << "applyLayout: no valid work area for screen" << screenId;
         return;
     }
     // Re-apply the centering policy before resolving: a work-area change
@@ -114,7 +119,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // Parking bounds come from the FULL screen geometry, not the work area —
     // a rect just outside the work area could still sit on-screen over a
     // panel. Fall back to the work area when the screen rect is unknown.
-    QRect screenRect = m_screenManager ? m_screenManager->screenGeometry(screenId) : QRect();
+    QRect screenRect = m_screenManager ? m_screenManager->screenGeometry(screenId)
+                                       : (m_screenGeometryProvider ? m_screenGeometryProvider(screenId) : QRect());
     if (!screenRect.isValid()) {
         screenRect = params.workArea;
     }

@@ -150,7 +150,7 @@ private Q_SLOTS:
         m_snapEngine->setEngineSettings(m_settings);
         m_wta->service()->setSnapState(m_snapEngine->snapState());
         m_wta->service()->setSnapEngine(m_snapEngine);
-        m_wta->setEngines(m_snapEngine, nullptr);
+        m_wta->setEngines(m_snapEngine, nullptr, nullptr);
 
         m_snapAdaptor = new SnapAdaptor(m_snapEngine, m_wta, m_settings, m_parent);
 
@@ -396,7 +396,7 @@ private Q_SLOTS:
         auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap, nullptr, nullptr);
 
         auto* registry = new PhosphorEngine::WindowRegistry(&parent);
         wta->setWindowRegistry(registry);
@@ -463,7 +463,7 @@ private Q_SLOTS:
         auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap, nullptr, nullptr);
 
         auto* registry = new PhosphorEngine::WindowRegistry(&parent);
         wta->setWindowRegistry(registry);
@@ -814,7 +814,7 @@ private Q_SLOTS:
         snap->setEngineSettings(m_settings);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap, nullptr, nullptr);
 
         const QRect floatedGeo(120, 90, 760, 540); // inside screenRect
         const QString w1 = QStringLiteral("settings|orphan-float");
@@ -868,7 +868,7 @@ private Q_SLOTS:
         snap->setEngineSettings(m_settings);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap, nullptr, nullptr);
 
         const QString w1 = QStringLiteral("steam|abc123");
         const QRect goodFloat(918, 624, 1608, 957); // a genuine floated geometry

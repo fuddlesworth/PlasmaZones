@@ -392,11 +392,12 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
 
     if (oldScreenId.isEmpty() || oldScreenId == newScreenId) {
-        // Drain a matching one-shot even on the no-transfer path: for a
-        // SCROLL-managed window getWindowScreenId answers from the tracked
-        // screen, so old == new here by construction and a marker armed for
-        // its engine-driven handoff would otherwise sit in the map forever
-        // (and swallow a later genuine move's suppression).
+        // Belt-and-braces drain: with the tile-apply path now writing
+        // m_notifiedWindowScreens, a scroll handoff's outputChanged
+        // resolves old != new and consumes the marker in the main branch —
+        // this drain only catches a marker whose move never materialised
+        // (refused receive, window closed mid-move) so it cannot swallow a
+        // later genuine move's suppression.
         if (const auto expIt = m_expectedOutputMove.constFind(windowId);
             expIt != m_expectedOutputMove.constEnd() && expIt.value() == newScreenId) {
             m_expectedOutputMove.erase(expIt);

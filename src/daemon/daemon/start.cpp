@@ -1108,6 +1108,17 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     if (m_snapAdaptor) {
         m_snapAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
     }
+    // The scroll engine subscribes to no ScreenManager signal of its own
+    // (unlike autotile's virtualScreenRegionsChanged handler), so its
+    // affected strips must be retiled here or their columns keep stale
+    // widths/offsets until an unrelated retile.
+    if (m_scrollEngine) {
+        for (const QString& sid : affectedScreenIds) {
+            if (m_scrollEngine->isActiveOnScreen(sid)) {
+                m_scrollEngine->scheduleRetileForScreen(sid);
+            }
+        }
+    }
 }
 
 } // namespace PlasmaZones

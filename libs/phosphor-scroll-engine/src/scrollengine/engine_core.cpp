@@ -410,8 +410,9 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
             // and the tab-strip latch/overrides must not linger.
             dropWindowBookkeeping(state);
             m_pendingInitialOrder.remove(state->screenId());
-            m_screensWithTabStrips.remove(state->screenId());
-            m_lastTabStripPayload.remove(state->screenId());
+            // Through clearTabStripsForScreen so a still-listening overlay
+            // gets the "[]" broadcast (mirrors releaseScreenState).
+            clearTabStripsForScreen(state->screenId());
             m_perScreenOverrides.remove(state->screenId());
             state->deleteLater();
         });

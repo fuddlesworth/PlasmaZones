@@ -88,8 +88,16 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     // SnapEngine::resolveWindowRestore returns early (isEnabled() false) and will NEVER
     // claim the window, so deferring here would strand it unmanaged. In that state
     // autotile keeps the window and tiles it normally.
+    // Membership, not the raw reverse-map key: a REFUSED first open leaves
+    // a phantom key (windowOpened keys before onWindowAdded can refuse), and
+    // hasWindow alone would then skip the defer while autotile manages
+    // nothing — the exact race this guard exists to prevent.
+    const auto deferKeyIt = m_states.windowKeys().constFind(windowId);
+    const PhosphorTiles::TilingState* deferState =
+        deferKeyIt != m_states.windowKeys().constEnd() ? m_states.stateForKey(deferKeyIt.value()) : nullptr;
+    const bool trackedInState = deferState && deferState->containsWindow(windowId);
     if (!screenId.isEmpty() && m_windowTracker && m_layoutManager && m_layoutManager->snappingPreferred()
-        && !m_states.hasWindow(windowId)) {
+        && !trackedInState) {
         const QString appId = currentAppIdFor(windowId);
         if (!appId.isEmpty() && appId != windowId) {
             // Shared predicate with snap's reciprocal gate

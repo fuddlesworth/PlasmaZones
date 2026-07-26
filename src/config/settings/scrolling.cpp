@@ -51,15 +51,19 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
         m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
     const bool wasFixed = before == ConfigDefaults::scrollingWidthKindFixed();
     const bool isFixed = after == ConfigDefaults::scrollingWidthKindFixed();
+    const bool isProportion = after == ConfigDefaults::scrollingWidthKindProportion();
     if (isFixed && !wasFixed) {
-        // Entering Fixed: seed a sane pixel width.
+        // Entering Fixed from anywhere: seed a sane pixel width. (This also
+        // means pixels retained across a Fixed→ClientDecides hop would be
+        // re-seeded on the way back, so there is nothing to retain — see
+        // the Proportion arm.)
         setScrollingDefaultColumnWidthValue(ConfigDefaults::scrollingDefaultColumnWidthFixedPx());
-    } else if (wasFixed && after == ConfigDefaults::scrollingWidthKindProportion()) {
-        // Fixed → Proportion: pixels are meaningless, fall back to the
-        // proportion default. Fixed → ClientDecides deliberately KEEPS the
-        // stored pixels — ClientDecides ignores the value, and wiping it
-        // would lose the user's width across a Fixed→ClientDecides→Fixed
-        // round trip.
+    } else if (isProportion && stored > 1.0) {
+        // Entering Proportion with pixels stored — whether directly from
+        // Fixed or via a ClientDecides hop (ClientDecides ignores the value
+        // and deliberately leaves it untouched, so pixels can arrive here
+        // two transitions later). A pixel count fed to the engine's
+        // qBound(0.05, …, 1.0) would open every column at 100% width.
         setScrollingDefaultColumnWidthValue(ConfigDefaults::scrollingDefaultColumnWidthValue());
     }
     Q_EMIT scrollingDefaultColumnWidthKindChanged();

@@ -185,6 +185,12 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         return;
     }
 
+    if (screenId.isEmpty()) {
+        // Same bail as windowScreenChanged: an empty screen matches no
+        // engine's claim and would silently fall through to the snap arm.
+        qCWarning(lcDbusWindow) << "setWindowFloatingForScreen: empty screenId for" << windowId << "- ignored";
+        return;
+    }
     qCInfo(lcDbusWindow) << "setWindowFloatingForScreen: windowId=" << windowId << "floating=" << floating
                          << "screen=" << screenId;
 
@@ -226,8 +232,8 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     // destination engine, which doesn't track the window and early-returns,
     // while the source engine's float bit stays set with no broadcast, so
     // the window reads floating through its own context's mode lens forever.
-    // The two destinations need DIFFERENT handling:
-    //   - Autotile dest: adopt via the handoff (release source, receive with
+    // ADOPTING destinations (autotile AND scrolling) differ from a SNAP one:
+    //   - Adopting dest: adopt via the handoff (release source, receive with
     //     wasFloating=false tiles the arrival and announces it on the
     //     passive sync channel); the trailing relay dedups against that.
     //   - Snap dest: NO adoption. Snap's handoffReceive floats an arrival
@@ -270,6 +276,11 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         }
     }
 
+    if (!dest) {
+        // Post-clearEngine / unwired fixture: the write cannot be applied
+        // anywhere, and silence here would contradict the qCInfo above.
+        qCWarning(lcDbusWindow) << "setWindowFloatingForScreen: no engine available for" << windowId;
+    }
     if (dest) {
         // Thread the effect's authoritative live screen so the engine resolves
         // this float/unfloat against the window's REAL current monitor, not its

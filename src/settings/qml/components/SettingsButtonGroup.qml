@@ -71,6 +71,10 @@ Row {
             Accessible.name: optionDelegate.modelData
             Accessible.checked: optionDelegate.isActive
             Accessible.focusable: true
+            // AT activation path: without this an assistive client can focus
+            // the radio but not actuate it (only real clicks and the key
+            // handlers below reach activate()).
+            Accessible.onPressAction: optionDelegate.activate()
             // Keyboard path matching WizardTemplateCard: each option is a Tab
             // stop, Return/Enter/Space selects, and focus shows through the
             // highlight border. Activation reuses the click path's same-index

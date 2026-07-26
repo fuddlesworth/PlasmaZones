@@ -109,6 +109,9 @@
 #include "dbus/compositorbridgeadaptor.h"
 #include "dbus/controladaptor.h"
 #include "dbus/ruleadaptor.h"
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 namespace PlasmaZones {
 
@@ -687,6 +690,13 @@ void Daemon::initEnginesAndWiring()
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
+    // Live-mode resolver for snap's capture gate: the router's
+    // live-set-first answer lets a presave capture a screen the cascade
+    // already flipped to a tiling mode but no engine claims yet. Cleared
+    // in stop() before the router is destroyed.
+    snapEngine->setLiveModeResolver([this](const QString& screenId) {
+        return m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+    });
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
     // org.plasmazones.Tiling is the engine-NEUTRAL transport shared by the
@@ -715,6 +725,11 @@ void Daemon::initEnginesAndWiring()
             [adaptor = m_tilingAdaptor](const QStringList& windowIds, const QSet<QString>&) {
                 adaptor->relayWindowsReleased(windowIds);
             });
+    // LOAD-BEARING (with its scrolling twin below): these two connects are
+    // the ONLY drivers of the coalesced managedScreensChanged announce AND
+    // its parked-open retry — no unit test pins their existence (that
+    // needs a daemon fixture), so dropping either silently disables the
+    // whole mid-flip recovery path in production.
     connect(autotileEngine, &PhosphorTileEngine::AutotileEngine::autotileScreensChanged, m_tilingAdaptor,
             [adaptor = m_tilingAdaptor](const QStringList&, bool isDesktopSwitch) {
                 adaptor->notifyEngineScreensChanged(isDesktopSwitch);
@@ -731,11 +746,18 @@ void Daemon::initEnginesAndWiring()
             &TilingAdaptor::tilingChanged);
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, m_tilingAdaptor,
             &TilingAdaptor::relayWindowFloatingChanged);
-    // Navigation-OSD parity with autotile's float sync: the scroll engine
-    // manages its float state itself (no syncAutotileFloatState analogue),
-    // so only the user feedback is added here.
+    // Float parity with autotile's sync path: the scroll engine manages
+    // its float STATE itself, but only the daemon can restore the
+    // float-back geometry — floatWindowInternal merely pulls the window
+    // out of the strip and windowsTiled never carries release entries, so
+    // without this the window sits frozen at its old column rect after
+    // Meta+F. Same applyGeometryForFloat the autotile sync uses, plus the
+    // navigation OSD.
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, this,
-            [this](const QString&, bool floating, const QString& screenId) {
+            [this](const QString& windowId, bool floating, const QString& screenId) {
+                if (floating && m_windowTrackingAdaptor) {
+                    m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);
+                }
                 if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
                     const QString reason = floating ? QStringLiteral("floated") : QStringLiteral("tiled");
                     m_overlayService->showNavigationOsd(true, QStringLiteral("float"), reason, QString(), QString(),

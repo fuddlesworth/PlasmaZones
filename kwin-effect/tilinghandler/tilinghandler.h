@@ -200,12 +200,17 @@ public:
         return !m_scrollingScreens.isEmpty();
     }
 
-    /// Daemon-loss teardown: drop the dead session's scrolling snapshot
-    /// through the same chokepoint the live signal uses (generation bump +
-    /// change-gated rule-cache invalidate).
-    void clearScrollingScreens()
+    /// Daemon-loss teardown: drop the dead session's scrolling snapshot.
+    /// Deliberately NOT the live chokepoint — setScrollingScreens schedules
+    /// a border sweep, which on this path would re-create rule-matched
+    /// decorations one event-loop turn AFTER the handler's
+    /// clearAllDecorations, undoing the teardown. The generation bump still
+    /// voids in-flight property replies, and the caller runs its own
+    /// invalidateAllRuleCaches after every clear.
+    void clearScrollingScreensForTeardown()
     {
-        setScrollingScreens({});
+        ++m_scrollingScreensGeneration;
+        m_scrollingScreens.clear();
     }
 
     /// True when @p screenId runs the SCROLLING engine. A subset of the

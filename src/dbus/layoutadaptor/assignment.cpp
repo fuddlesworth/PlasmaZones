@@ -604,6 +604,13 @@ QVariantMap LayoutAdaptor::getAllCombinedAssignments()
     QVariantMap result;
     const auto assignments = m_layoutManager->combinedAssignments();
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
+        // Emit only FULL triples: the setter rejects desktop <= 0 / empty
+        // activity, so a base-context entry surfaced here would be silently
+        // dropped on a client's read-modify-write round trip. Base-context
+        // assignments travel through their own per-axis getters instead.
+        if (it.key().virtualDesktop <= 0 || it.key().activity.isEmpty()) {
+            continue;
+        }
         // Key format mirrors the setter: "screen|desktop|activity". '|' is
         // safe because screen ids may carry ':' (manufacturer:model:serial)
         // and activity ids are UUIDs.

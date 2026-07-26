@@ -45,22 +45,34 @@ namespace {
 /// specificity (a per-monitor ScreenId pin beats a per-mode Mode pin). Unlike
 /// `MatchExpression::referencesAnyField`, this deliberately does NOT count a leaf
 /// inside a `None{}` negation: a rule matching "every screen EXCEPT X" does not
-/// pin THIS screen, so it must not be ranked as a per-monitor override. Recurses
-/// through All/Any (a positive composite still constrains the field) but stops at
-/// None. Exotic non-`Equals` shapes fall through to the generic priority tier.
+/// pin THIS screen, so it must not be ranked as a per-monitor override. `All`
+/// recurses (a conjunction genuinely constrains the field); `Any` requires
+/// EVERY child to pin it — `Any{ScreenId==X, AppId==Y}` can match with the
+/// screen leaf FALSE, so one pinning child does not constrain the field. Stops
+/// at None. Exotic non-`Equals` shapes fall through to the generic priority tier.
 bool matchPinsFieldPositively(const PWR::MatchExpression& match, PWR::Field field)
 {
     switch (match.kind()) {
     case PWR::MatchExpression::Kind::Leaf:
         return match.predicate().field == field && match.predicate().op == PWR::Operator::Equals;
     case PWR::MatchExpression::Kind::All:
-    case PWR::MatchExpression::Kind::Any:
         for (const PWR::MatchExpression& child : match.children()) {
             if (matchPinsFieldPositively(child, field)) {
                 return true;
             }
         }
         return false;
+    case PWR::MatchExpression::Kind::Any: {
+        if (match.children().isEmpty()) {
+            return false;
+        }
+        for (const PWR::MatchExpression& child : match.children()) {
+            if (!matchPinsFieldPositively(child, field)) {
+                return false;
+            }
+        }
+        return true;
+    }
     case PWR::MatchExpression::Kind::None:
         return false; // a negation does not positively pin the field
     }

@@ -124,7 +124,7 @@ private Q_SLOTS:
         m_snapEngine->setEngineSettings(m_settings);
         m_wta->service()->setSnapState(m_snapEngine->snapState());
         m_wta->service()->setSnapEngine(m_snapEngine);
-        m_wta->setEngines(m_snapEngine, nullptr);
+        m_wta->setEngines(m_snapEngine, nullptr, nullptr);
 
         // Create a test layout so getFullState has data
         auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), m_layoutManager);
@@ -176,7 +176,23 @@ private Q_SLOTS:
             QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion + 1),
             {QStringLiteral("borderless"), QStringLiteral("animation")});
 
+        // The reply must be an ACCEPT carrying the daemon's own version —
+        // the reject paths also echo it, so acceptance is asserted too.
+        QVERIFY(result.sessionId != QStringLiteral("REJECTED"));
+        QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
         QCOMPARE(result.apiVersion, QString::number(PhosphorProtocol::Service::ApiVersion));
+    }
+
+    void testRegisterBridge_rejectsEmptyName()
+    {
+        // Input-validation boundary: an empty compositorName would commit a
+        // registration isBridgeRegistered() can never observe.
+        QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
+        PhosphorProtocol::BridgeRegistrationResult result =
+            m_bridgeAdaptor->registerBridge(QString(), QString::number(PhosphorProtocol::Service::ApiVersion), {});
+        QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
+        QVERIFY(m_bridgeAdaptor->bridgeName().isEmpty());
+        QCOMPARE(spy.count(), 0);
     }
 
     void testRegisterBridge_storesBridgeName()

@@ -547,8 +547,13 @@ private Q_SLOTS:
 
     void testAssignmentEntry_modeOnlySnapping_disabledRuleFallsThrough()
     {
-        // A DISABLED exact-context rule is not an explicit pin: the
-        // resolution must fall through to the default tier (autotile here).
+        // A DISABLED exact-context rule is not an explicit pin. This pins
+        // the FIRST guard layer: the evaluator skips disabled rules, so the
+        // resolution falls through to the default tier before the pin
+        // predicate is ever consulted. (hasExplicitSnappingModePin's own
+        // `exact->enabled` conjunct is a second, belt-and-braces layer —
+        // see its definition comment; it has no independently reachable
+        // observable here.)
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
         mgr->setDefaultAutotileAlgorithmProvider([] {
             return QStringLiteral("bsp");
@@ -563,11 +568,11 @@ private Q_SLOTS:
 
         auto* store = mgr->findChild<PhosphorRules::RuleStore*>();
         QVERIFY(store);
-        // The isolated store holds exactly the one rule the pin authored.
         const auto rules = store->ruleSet().rules();
         QCOMPARE(rules.size(), 1);
         QVERIFY(store->setRuleEnabled(rules.first().id, false));
 
+        // Layer 1: only the disabled rule exists → default tier (autotile).
         QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 0), QStringLiteral("autotile:bsp"));
     }

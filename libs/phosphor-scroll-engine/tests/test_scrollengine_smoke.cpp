@@ -27,8 +27,12 @@ private Q_SLOTS:
     void contextKeysSeparateDesktops();
     void floatRestoresDisplayIntent();
     void pruneDropsWindowBookkeeping();
+    void pruneRemovedScreenAndActivitiesSweep();
     void operationScreenFallbackIsDeterministic();
     void minSizeSeedsAndCarries();
+    void minSizeSurvivesFloatRoundTrip();
+    void handoffReleaseClearsFloatMarker();
+    void applyPathEmitsOnChangeOnly();
 
 private:
     static ScrollEngine* makeEngine(QObject* parent)
@@ -46,19 +50,29 @@ void TestScrollEngineSmoke::screensSetLifecycle()
     QVERIFY(!engine->isEnabled());
     QSignalSpy screensSpy(engine, &ScrollEngine::scrollingScreensChanged);
 
-    engine->setActiveScreens({QStringLiteral("S1")});
+    QSignalSpy enabledSpy(engine, &ScrollEngine::enabledChanged);
+    engine->setActiveScreens({QStringLiteral("S2"), QStringLiteral("S1")});
     QVERIFY(engine->isEnabled());
     QVERIFY(engine->isActiveOnScreen(QStringLiteral("S1")));
     QCOMPARE(screensSpy.count(), 1);
+    // The wire payload is SORTED (consumers compare successive payloads).
+    QCOMPARE(screensSpy.last().at(0).toStringList(), (QStringList{QStringLiteral("S1"), QStringLiteral("S2")}));
+    QCOMPARE(enabledSpy.count(), 1);
+    engine->setActiveScreens({QStringLiteral("S1")}); // genuine shrink → emit 2
 
     // Identical non-empty set re-emits with isDesktopSwitch=true (the
     // effect catch-scan wakeup contract).
     engine->setActiveScreens({QStringLiteral("S1")});
-    QCOMPARE(screensSpy.count(), 2);
+    QCOMPARE(screensSpy.count(), 3);
     QCOMPARE(screensSpy.last().at(1).toBool(), true);
 
     engine->setActiveScreens({});
     QVERIFY(!engine->isEnabled());
+    // Empty-identical: a second empty set has nothing to catch-scan for,
+    // so no re-emit.
+    const int afterEmpty = screensSpy.count();
+    engine->setActiveScreens({});
+    QCOMPARE(screensSpy.count(), afterEmpty);
 }
 
 void TestScrollEngineSmoke::openTrackAndOrder()
@@ -131,6 +145,20 @@ void TestScrollEngineSmoke::capturePlacementReportsSlot()
              QString(PhosphorEngine::WindowPlacement::stateFloating()));
 
     QVERIFY(!engine->capturePlacement(QStringLiteral("app|nope")).has_value());
+
+    // Stacked column: slot.order is the COLUMN index (a restore feeds it to
+    // insertWindowAt as a column position), NOT the window index — the two
+    // diverge once a column holds more than one tile. Unfloat b (the float
+    // arm above left it floating), then consume it into a's column: both
+    // windows now report column 0.
+    engine->setWindowFloat(QStringLiteral("app|b"), false, QStringLiteral("S1"));
+    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
+    engine->consumeOrExpelWindow(-1, QStringLiteral("S1"));
+    const auto stackedA = engine->capturePlacement(QStringLiteral("app|a"));
+    const auto stackedB = engine->capturePlacement(QStringLiteral("app|b"));
+    QVERIFY(stackedA.has_value() && stackedB.has_value());
+    QCOMPARE(stackedA->slotFor(QStringLiteral("scrolling")).order, 0);
+    QCOMPARE(stackedB->slotFor(QStringLiteral("scrolling")).order, 0);
 }
 
 void TestScrollEngineSmoke::handoffReleaseIsTrackingOnly()
@@ -219,6 +247,43 @@ void TestScrollEngineSmoke::pruneDropsWindowBookkeeping()
     QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|d2")));
 }
 
+void TestScrollEngineSmoke::pruneRemovedScreenAndActivitiesSweep()
+{
+    // The other two prune entry points, same bookkeeping contract as the
+    // desktop prune above. Removed-screen: the physical id AND its virtual
+    // sub-screens ("S1#0") are swept, but an id that merely shares the
+    // prefix ("S10") is not. Activities: only states whose key names an
+    // activity absent from the valid list go; activity-less states stay.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    // The default fixture only activates S1/S2; the sub-screen and the
+    // prefix-sharing sibling must be MANAGED or the sweep asserts below
+    // pass vacuously.
+    engine->setActiveScreens(
+        {QStringLiteral("S1"), QStringLiteral("S1#0"), QStringLiteral("S10"), QStringLiteral("S2")});
+    engine->windowOpened(QStringLiteral("app|p"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|v"), QStringLiteral("S1#0"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|s10"), QStringLiteral("S10"), 0, 0);
+    engine->setWindowFloat(QStringLiteral("app|p"), true, QStringLiteral("S1"));
+    QVERIFY(engine->isWindowTracked(QStringLiteral("app|v")));
+    QVERIFY(engine->isWindowTracked(QStringLiteral("app|s10")));
+
+    engine->pruneStatesForRemovedScreen(QStringLiteral("S1"));
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|p")));
+    QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|p")));
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|v")));
+    QVERIFY(engine->isWindowTracked(QStringLiteral("app|s10")));
+
+    engine->setCurrentActivity(QStringLiteral("actB"));
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S2"), 0, 0);
+    engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S2"));
+    engine->pruneStatesForActivities({QStringLiteral("actA")});
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|b")));
+    QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|b")));
+    // The activity-less S10 state predates the activity context and stays.
+    QVERIFY(engine->isWindowTracked(QStringLiteral("app|s10")));
+}
+
 void TestScrollEngineSmoke::operationScreenFallbackIsDeterministic()
 {
     // With no active screen, a screen-less operation must land on the
@@ -252,6 +317,90 @@ void TestScrollEngineSmoke::minSizeSeedsAndCarries()
     ctx.minSize = QSize(640, 360);
     engine->handoffReceive(ctx);
     QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|x")), QSize(640, 360));
+
+    // Partial min (height only) still seeds — the guard is an OR, and a
+    // client can legitimately constrain a single axis.
+    PhosphorEngine::IPlacementEngine::HandoffContext partial;
+    partial.windowId = QStringLiteral("app|y");
+    partial.toScreenId = QStringLiteral("S2");
+    partial.fromEngineId = QStringLiteral("autotile");
+    partial.minSize = QSize(0, 360);
+    engine->handoffReceive(partial);
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|y")), QSize(0, 360));
+}
+
+void TestScrollEngineSmoke::minSizeSurvivesFloatRoundTrip()
+{
+    // I25 regression: FloatRestore carries the min size, so a float→unfloat
+    // round trip keeps the relayout clamps without waiting for the
+    // compositor to re-report.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 500, 400);
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(500, 400));
+    engine->setWindowFloat(QStringLiteral("app|a"), true, QStringLiteral("S1"));
+    engine->setWindowFloat(QStringLiteral("app|a"), false, QStringLiteral("S1"));
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(500, 400));
+}
+
+void TestScrollEngineSmoke::handoffReleaseClearsFloatMarker()
+{
+    // The mode-transition float marker must not outlive this engine's
+    // tracking (the daemon's release handler reads it).
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->windowOpened(QStringLiteral("app|f"), QStringLiteral("S1"), 0, 0);
+    engine->setWindowFloat(QStringLiteral("app|f"), true, QStringLiteral("S1"));
+    QVERIFY(engine->isModeSpecificFloated(QStringLiteral("app|f")));
+    engine->handoffRelease(QStringLiteral("app|f"));
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|f")));
+    QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|f")));
+}
+
+void TestScrollEngineSmoke::applyPathEmitsOnChangeOnly()
+{
+    // The apply path, driven headless through the geometry-provider seam:
+    // windowsTiled fires when rects genuinely move and stays silent on a
+    // no-op re-apply; the tab-strip payload is change-gated with the empty
+    // latch broadcasting exactly one "[]".
+    QObject owner;
+    auto* engine = new ScrollEngine(nullptr, nullptr, &owner);
+    engine->setScreenGeometryProviders(
+        [](const QString&) {
+            return QRect(0, 0, 1200, 800);
+        },
+        [](const QString&) {
+            return QRect(0, 0, 1200, 800);
+        });
+    engine->setActiveScreens({QStringLiteral("S1")});
+
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    QSignalSpy stripSpy(engine, &ScrollEngine::tabStripsChanged);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QVERIFY(tiledSpy.count() >= 1);
+    const int afterOpen = tiledSpy.count();
+
+    // Same-state re-apply: nothing moved, nothing emitted.
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(tiledSpy.count(), afterOpen);
+
+    // Tabbed column: the strip payload appears once and does not re-emit
+    // byte-identically on a plain retile.
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY(stripSpy.count() >= 1);
+    const int afterTab = stripSpy.count();
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(stripSpy.count(), afterTab);
+
+    // Closing the last window latches ONE empty broadcast.
+    engine->windowClosed(QStringLiteral("app|a"));
+    QCoreApplication::processEvents();
+    QVERIFY(stripSpy.count() > afterTab);
+    QCOMPARE(stripSpy.last().at(1).toString(), QStringLiteral("[]"));
 }
 
 QTEST_APPLESS_MAIN(TestScrollEngineSmoke)

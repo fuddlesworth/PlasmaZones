@@ -162,13 +162,16 @@ void Daemon::initLayoutAndSettingsWiring()
             // TiledWindowCount predicate match there instead of staying
             // inert. Both tiling-family engines are consulted so a
             // TiledWindowCount rule works on scrolling screens too.
-            if (m_autotileEngine) {
+            // Pick by LIVE claim, not fixed order: a lingering state on an
+            // engine the screen has since left would shadow the owning
+            // engine's count with a stale one.
+            if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
                 if (const PhosphorEngine::IPlacementState* state =
                         std::as_const(*m_autotileEngine).stateForScreen(screenId)) {
                     return state->tiledWindowCount();
                 }
             }
-            if (m_scrollEngine) {
+            if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(screenId)) {
                 if (const PhosphorEngine::IPlacementState* state =
                         std::as_const(*m_scrollEngine).stateForScreen(screenId)) {
                     return state->tiledWindowCount();

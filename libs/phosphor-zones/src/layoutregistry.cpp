@@ -568,7 +568,11 @@ void LayoutRegistry::setActiveLayoutById(const QUuid& id)
 
 PhosphorZones::Layout* LayoutRegistry::layoutForShortcut(AssignmentEntry::Mode mode, int number) const
 {
-    const auto& slots = m_quickLayoutSlots[modeIndex(mode)];
+    const auto idx = slotIndexFor(mode);
+    if (!idx) {
+        return nullptr; // Scrolling carries no quick slots
+    }
+    const auto& slots = m_quickLayoutSlots[*idx];
     if (slots.contains(number)) {
         const QString& id = slots[number];
         if (PhosphorLayout::LayoutId::isAutotile(id))
@@ -608,7 +612,12 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
         return;
     }
 
-    auto& slots = m_quickLayoutSlots[modeIndex(mode)];
+    const auto idx = slotIndexFor(mode);
+    if (!idx) {
+        qCWarning(lcZonesLib) << "setQuickLayoutSlot: Scrolling carries no quick slots — ignored";
+        return;
+    }
+    auto& slots = m_quickLayoutSlots[*idx];
 
     if (layoutId.isEmpty()) {
         // Clear the slot
@@ -642,7 +651,12 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
 
 void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QHash<int, QString>& slots)
 {
-    auto& target = m_quickLayoutSlots[modeIndex(mode)];
+    const auto idx = slotIndexFor(mode);
+    if (!idx) {
+        qCWarning(lcZonesLib) << "setAllQuickLayoutSlots: Scrolling carries no quick slots — ignored";
+        return;
+    }
+    auto& target = m_quickLayoutSlots[*idx];
 
     // Clear all existing slots for this mode first
     target.clear();

@@ -127,7 +127,10 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
     // desktop's state. Every other case places immediately:
     //   - monitor crossing (current desktop): handoffReceive tiles / snaps it now;
     //   - cross-desktop onto a SNAP desktop: snap handoffReceive honours toDesktop
-    //     (assigns the zone on the target desktop + off-desktop geometry).
+    //     (assigns the zone on the target desktop + off-desktop geometry);
+    //   - cross-desktop onto a SCROLLING desktop: scroll handoffReceive honours
+    //     toDesktop too (places into that desktop's strip) — the reactive
+    //     deferral is autotile-only.
     const bool reactiveAutotileDesktopArrival = targetIsAutotile && targetDesktop > 0;
     if (!reactiveAutotileDesktopArrival) {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
@@ -262,10 +265,10 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     //    for each — but only when that window actually changes output, mirroring
     //    handleCrossModeMove's guard: arming a one-shot for an output change that
     //    never comes would swallow the window's next genuine outputChanged. ──
-    if (targetScreenId != sourceScreen) {
-        Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
-        Q_EMIT windowOutputMoveExpected(partner, sourceScreen);
-    }
+    // (The one-shot output-move markers are armed AFTER the receives below,
+    // and only for windows the destination genuinely adopted — arming for a
+    // refused receive would leave a marker that swallows that window's next
+    // genuine outputChanged, the exact hazard handleCrossModeMove documents.)
 
     // ── Relinquish both windows from their current engines (tracking-only).
     //    Min sizes are queried first: release drops each source's tracking,
@@ -301,6 +304,19 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         ctx.insertIndex = partnerLandingIndex;
         ctx.wasFloating = false;
         sourceEngine->handoffReceive(ctx);
+    }
+
+    // ── Arm the daemon-owned-move markers for the windows that were
+    //    genuinely adopted. Placement geometry lands on the coalesced
+    //    retile (queued), so post-receive arming is still ahead of the
+    //    compositor's outputChanged; a refused receive arms nothing. ──
+    if (targetScreenId != sourceScreen) {
+        if (targetEngine->isWindowTracked(windowId)) {
+            Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
+        }
+        if (sourceEngine->isWindowTracked(partner)) {
+            Q_EMIT windowOutputMoveExpected(partner, sourceScreen);
+        }
     }
 }
 

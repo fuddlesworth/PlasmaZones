@@ -3,31 +3,22 @@
 
 #include "plasmazoneseffect.h"
 
-#include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorProtocol/DragMarshalling.h>
-#include <PhosphorProtocol/Registration.h>
 
 #include <effect/effecthandler.h>
 
-#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
 #include <QLoggingCategory>
-#include <QPointer>
-#include <QTimer>
 
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
-#include "handlers/screenchangehandler.h"
-#include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
-#include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
 
@@ -236,10 +227,11 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // The scrolling set is a dead session's Mode discriminator: keeping
         // it would stamp Mode "scrolling" into rule verdicts resolved
         // during the daemon-down interval (invalidateAllRuleCaches below
-        // bakes the stale set in otherwise). Routed through the same
-        // chokepoint the live signal uses, so the generation bump also
-        // voids any in-flight property reply.
-        m_tilingHandler->clearScrollingScreens();
+        // bakes the stale set in otherwise). The TEARDOWN variant, not the
+        // live chokepoint: the live setter's scheduled border sweep would
+        // re-create rule-matched decorations right after
+        // clearAllDecorations below.
+        m_tilingHandler->clearScrollingScreensForTeardown();
         m_snapHandler->clearSnapTracking();
         // Drop the zone / floating caches that feed the IsSnapped / Zone /
         // IsFloating rule-match fields. Unlike the exclusion / animation rule

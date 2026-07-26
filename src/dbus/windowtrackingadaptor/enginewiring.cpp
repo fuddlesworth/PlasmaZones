@@ -296,7 +296,8 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         }
     }
 
-    // Cross-desktop directional move: both engines emit windowDesktopMoveRequested
+    // Cross-desktop directional move: every pipeline engine emits
+    // windowDesktopMoveRequested
     // when they re-key a window onto another virtual desktop; relay it to the
     // KWin effect (which performs the real windowToDesktops) over the
     // mode-agnostic WindowTracking interface.
@@ -309,11 +310,12 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::windowDesktopMoveRequested);
     }
 
-    // Daemon-initiated cross-output directional move: the autotile engine
-    // migrates its own tiling state and reflows both outputs, then asks the
+    // Daemon-initiated cross-output directional move: a tiling-family
+    // engine migrates its own state and reflows both outputs, then asks the
     // effect to treat the window's resulting outputChanged as expected (skip
-    // the reactive close/open re-issue). Snap mode never performs a daemon-side
-    // cross-output tiling migration, so only the autotile engine is wired.
+    // the reactive close/open re-issue). Snap mode never performs a
+    // daemon-side cross-output tiling migration; BOTH tiling engines are
+    // wired (the scroll connect follows below with the rest of its block).
     if (m_autotileEngine) {
         connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this,
                 &WindowTrackingAdaptor::windowOutputMoveExpected);
@@ -321,7 +323,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
 
     // Cross-MODE directional move: a source engine reached a boundary whose
     // target context is a different tiling mode and cannot place the window
-    // itself. Both engines defer here; handleCrossModeMove relinquishes from the
+    // itself. Every pipeline engine defers here; handleCrossModeMove relinquishes from the
     // source and hands the window to the target engine (autotile insert / snap
     // zone). DirectConnection so the handoff completes synchronously within the
     // navigation call (the engine returns true expecting the window has moved).
@@ -350,7 +352,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // ═══════════════════════════════════════════════════════════════════════════
     // Common float-restore geometry channel
     //
-    // Both engines emit the base-class geometryRestoreRequested when they
+    // Every pipeline engine emits the base-class geometryRestoreRequested when it
     // restore a floated window (consuming a floated WindowPlacement from the
     // unified store on reopen). Relay it to applyGeometryRequested
     // with an EMPTY zoneId: the effect places the window and treats it as

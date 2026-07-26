@@ -291,7 +291,7 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     }
     if (action.type == ActionType::DisableEngine) {
         // Name the engine being disabled — a rules list with "Disable
-        // Snapping on DP-1" and "Disable Autotile on DP-2" otherwise reads
+        // Snapping on DP-1" and "Disable: Tiling" on DP-2 otherwise reads
         // as two identical "Disabled" rows. Empty mode → fall back to
         // the generic "Disabled" label so a malformed rule still reads
         // sensibly.

@@ -40,7 +40,10 @@ else()
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Step 2: Remove all known PlasmaZones files (full /usr prefix coverage)
+# Step 2: Remove known PlasmaZones files. The install manifest (step 1) is
+# the AUTHORITATIVE uninstall; this list is a best-effort backstop for
+# manifest-less installs and does not cover every artifact (QML plugin dirs
+# under org/phosphor, the lowercase QPA plugin, header/CMake package files).
 # Covers: bin, lib, share/applications, share/autostart, share/dbus-1/interfaces,
 # share/icons, share/kglobalaccel, share/plasmazones, lib/.../qml, lib/.../plugins
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -58,6 +61,7 @@ set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-settings"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-shader-validate"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/kglobalaccel/plasmazonesd.desktop"
+    "$ENV{DESTDIR}@PZ_UNINSTALL_QT_PLUGINS@/wayland-shell-integration/libphosphorwayland-qpa.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.daemon.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.editor.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.settings.desktop"
@@ -100,8 +104,10 @@ foreach(f ${KNOWN_FILES})
     endif()
 endforeach()
 
-# Shared libraries: every libplasmazones_* (core, rendering, shaderpreview)
-# and every libPhosphor* engine/support lib, all soversion variants.
+# Shared libraries in LIBDIR: libplasmazones_* (core, rendering,
+# shaderpreview) and libPhosphor* engine/support libs, all soversion
+# variants. (QML plugin .so files under org/phosphor and the lowercase
+# libphosphorwayland-qpa.so live elsewhere — manifest-covered only.)
 file(GLOB CORE_LIBS
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/libplasmazones_*.so*"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/libPhosphor*.so*")
@@ -113,7 +119,9 @@ endforeach()
 # Known directories (entire trees)
 set(KNOWN_DIRS
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/plasmazones"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/phosphorwayland"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_QMLDIR@/org/kde/kcms/plasmazones"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_QMLDIR@/org/phosphor"
 )
 
 foreach(dir ${KNOWN_DIRS})

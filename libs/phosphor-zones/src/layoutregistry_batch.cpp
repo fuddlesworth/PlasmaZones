@@ -58,7 +58,7 @@ void LayoutRegistry::clearAutotileAssignments()
 
     // Drop autotile quick-layout slots — clearing autotile everywhere
     // includes the per-mode autotile bindings. Snapping slots are untouched.
-    auto& autotileSlots = m_quickLayoutSlots[modeIndex(AssignmentEntry::Autotile)];
+    auto& autotileSlots = m_quickLayoutSlots[*slotIndexFor(AssignmentEntry::Autotile)];
     if (!autotileSlots.isEmpty()) {
         autotileSlots.clear();
         changed = true;

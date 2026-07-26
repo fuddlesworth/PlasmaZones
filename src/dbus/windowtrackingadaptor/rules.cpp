@@ -168,20 +168,21 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId)
     }
     const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnWidth))) {
-        // Only forward a genuinely numeric positive fraction: a missing or
-        // malformed Value would toDouble() to 0.0 and be clamped into a 5%
-        // column instead of falling back to the configured default width.
-        const auto value = action->params.value(PhosphorRules::ActionParam::Value);
+        // Only forward a genuinely numeric fraction inside (0, 1]: a
+        // missing or malformed Value would toDouble() to 0.0 and be clamped
+        // into a 5% column, and an out-of-range hand-edit (say 50.0) must
+        // fall back to the configured default, not saturate the clamp.
+        const auto value = action->params.value(QString(PhosphorRules::ActionParam::Value));
         const double fraction = value.toDouble(0.0);
-        if (value.isDouble() && fraction > 0.0) {
+        if (value.isDouble() && fraction > 0.0 && fraction <= 1.0) {
             out.insert(ScrollOpenKeys::widthFraction(), fraction);
         }
     }
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenTabbed))) {
-        out.insert(ScrollOpenKeys::tabbed(), action->params.value(PhosphorRules::ActionParam::Value).toBool());
+        out.insert(ScrollOpenKeys::tabbed(), action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool());
     }
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnPlacement))) {
-        const QString token = action->params.value(PhosphorRules::ActionParam::Value).toString();
+        const QString token = action->params.value(QString(PhosphorRules::ActionParam::Value)).toString();
         out.insert(ScrollOpenKeys::consume(), token == QLatin1String(PhosphorRules::ColumnPlacementToken::Consume));
     }
     return out;
@@ -445,6 +446,16 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
         && targetMode != PhosphorZones::AssignmentEntry::Mode::Scrolling) {
         qCDebug(lcDbusWindow) << "applyOpenRoutingForTiling: RouteToScreen target" << target
                               << "is not in a tiling-family mode — not redirecting" << windowId;
+        return QString();
+    }
+    // Connectivity guard, mirroring the snap twin (applyOpenScreenRouting):
+    // the mode answers from the STORED assignment, so a disconnected
+    // monitor still passes it — and a routed open no engine can claim gets
+    // DROPPED instead of tiling on the spawn screen.
+    if (m_service && m_service->screenManager()
+        && !m_service->screenManager()->screenAvailableGeometry(target).isValid()) {
+        qCInfo(lcDbusWindow) << "applyOpenRoutingForTiling: RouteToScreen target" << target
+                             << "is not connected — window opens on its spawn screen";
         return QString();
     }
     qCInfo(lcDbusWindow) << "applyOpenRoutingForTiling: routing" << windowId << "to engine-managed screen" << target;

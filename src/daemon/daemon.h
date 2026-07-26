@@ -769,6 +769,7 @@ private:
     /// AFTER initializeAutotile() — sharing one list would drop these handles
     /// the moment after they were installed.
     QList<QMetaObject::Connection> m_autotileShortcutConnections;
+    QList<QMetaObject::Connection> m_scrollingShortcutConnections;
 
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;
@@ -830,6 +831,17 @@ private:
     /// own — just delegates to the layout manager and engine pointers it
     /// was constructed with.
     std::unique_ptr<ScreenModeRouter> m_screenModeRouter;
+    /// The engine screen sets DERIVED by the last updateEngineScreens
+    /// recompute (post context-disable exclusion), snapshotted before any
+    /// setActiveScreens applies. The shared windowsReleased handler gates
+    /// its "headed to the other engine" skip on these — the live sets lag
+    /// mid-pass and the raw cascade cannot see the exclusions.
+    QSet<QString> m_derivedAutotileScreens;
+    QSet<QString> m_derivedScrollingScreens;
+    /// Re-entrancy latch + coalesced re-run flag for updateEngineScreens
+    /// (see its head comment).
+    bool m_updateEngineScreensInProgress = false;
+    bool m_updateEngineScreensQueued = false;
     /// PhosphorContext::ContextResolver wiring.
     ///
     /// DECLARATION ORDER INVARIANT: the three adapter members must be
@@ -1027,11 +1039,12 @@ private:
     /// connectLayoutSignals().
     QVector<QMetaObject::Connection> m_perStartConnections;
 
-    // Last autotile window order per (screen, desktop, activity), captured when
-    // leaving autotile. Used to re-seed the autotile engine with the same order
-    // on re-entry, producing deterministic arrangements across mode toggles.
-    // Keyed by TilingStateKey (not plain screen name) so cross-desktop toggles
-    // don't overwrite each other's ordering.
+    // Last TILING-FAMILY window order per (screen, desktop, activity),
+    // captured when a screen leaves autotile OR scrolling and shared by
+    // both engines' seeding (captureScrollingOrders / updateScrollingScreens
+    // and the autotile capture/seed) — a same-pass flip replays one
+    // engine's order into the other. Keyed by TilingStateKey (not plain
+    // screen name) so cross-desktop toggles don't overwrite each other.
     QHash<TilingStateKey, QStringList> m_lastEngineOrders;
 
     // Last-applied active assignment id per effective screen (resolved for that
@@ -1048,8 +1061,10 @@ private:
     // assignment cascade.
     QHash<QString, int> m_lastTiledCountByScreen;
 
-    // Snap-float restore entries collected during windowsReleasedFromTiling.
-    // Consumed by the toggle handler to batch geometry restores into the resnap signal.
+    // Snap-float restore entries collected by handleEngineWindowsReleased
+    // (either tiling engine's windowsReleased). Cleared once per
+    // updateEngineScreens recompute; consumed by the toggle handler to
+    // batch geometry restores into the resnap signal.
     QVector<ZoneAssignmentEntry> m_pendingSnapFloatRestores;
 
     // State tracking for settingsChanged delta detection (replaces individual signal handlers)

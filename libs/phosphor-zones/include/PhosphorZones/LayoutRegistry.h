@@ -642,7 +642,9 @@ public:
     // Quick slots are keyed by tiling mode: Snapping slots hold manual-layout
     // UUIDs, Autotile slots hold autotile algorithm IDs. The two sets are
     // independent so the same Meta+Alt+N can map to a zone layout in snapping
-    // mode and an autotile algorithm in autotile mode.
+    // mode and an autotile algorithm in autotile mode. SCROLLING carries no
+    // slots at all — every entry point no-ops for it via slotIndexFor, so a
+    // Meta+Alt+N press on a scrolling screen does nothing.
 
     /// quicklayouts.json top-level keys: one nested slot object per tiling
     /// mode. This is the ONLY on-disk shape — there is no flat legacy variant.
@@ -661,10 +663,11 @@ public:
         // scrolling screen must be a no-op, not a silent application of
         // the SNAPPING slot (which would assign a zone layout and flip
         // the screen out of scrolling with no user intent).
-        if (mode == AssignmentEntry::Scrolling) {
+        const auto idx = slotIndexFor(mode);
+        if (!idx) {
             return {};
         }
-        return m_quickLayoutSlots[modeIndex(mode)];
+        return m_quickLayoutSlots[*idx];
     }
 
     // ─── Layout cycling ───────────────────────────────────────────────────
@@ -765,12 +768,16 @@ private:
     QString layoutSettingsFilePath() const;
     void readQuickLayouts();
     void writeQuickLayouts();
-    /// Map a tiling mode to its @ref m_quickLayoutSlots array index.
-    /// Only Snapping and Autotile carry quick slots; Scrolling never
-    /// reaches this (quickLayoutSlots returns empty for it first), and any
-    /// other value clamps to Snapping for the WRITE paths.
-    static constexpr int modeIndex(AssignmentEntry::Mode mode)
+    /// Map a tiling mode to its @ref m_quickLayoutSlots array index, or
+    /// nullopt for Scrolling — the ONE authority every quick-slot entry
+    /// point (read, apply, shortcut lookup, both writers) consults, so a
+    /// Scrolling caller can never read, apply, or overwrite the SNAPPING
+    /// array through the old clamp.
+    static constexpr std::optional<int> slotIndexFor(AssignmentEntry::Mode mode)
     {
+        if (mode == AssignmentEntry::Scrolling) {
+            return std::nullopt;
+        }
         return mode == AssignmentEntry::Autotile ? 1 : 0;
     }
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
@@ -838,8 +845,9 @@ private:
 
     /// True if a rule whose match is exactly the context shape
     /// (context-only All{ScreenId==,VirtualDesktop==,Activity==} for the
-    /// pinned dims) exists in the rule set and carries an engine-mode action.
-    /// A disabled rule still counts — see @ref findExactContextRule.
+    /// pinned dims) exists in the rule set — carrying ANY assignment-family
+    /// action (a layout-only rule counts; see the shape-fallback note on
+    /// @ref findExactContextRule). A disabled rule still counts.
     bool hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const;
 
     /// Find the exact-shape context rule for a (screen, desktop, activity)
@@ -852,7 +860,15 @@ private:
     /// The scan ignores the rule's @c enabled state (so an upsert updates a
     /// disabled rule in place rather than appending a duplicate) but rejects
     /// any match carrying a window-property leaf — only a pure context-only
-    /// match is an exact context rule.
+    /// match is an exact context rule. NOTE: the shape fallback also claims
+    /// a LAYOUT-ONLY rule (one with no SetEngineMode action); an explicit
+    /// KCM assignment for that tuple then rebuilds it as a full three-action
+    /// rule — deliberate, since an explicit per-context assignment owns its
+    /// tuple, but it does mean a hand-authored "set the layout without
+    /// forcing the mode" rule loses that property on the next KCM write.
+    const PhosphorRules::Rule* findExactContextRule(const QString& screenId, int virtualDesktop,
+                                                    const QString& activity) const;
+
     /// True when @p entry is a payload-less Snapping resolution anchored by
     /// an ENABLED exact-context rule carrying a SetEngineMode action — the
     /// Monitors page's mode-only pin. Shared by assignmentIdForScreen and
@@ -860,8 +876,6 @@ private:
     /// identically (see the definition for the full rationale).
     bool hasExplicitSnappingModePin(const QString& screenId, int virtualDesktop, const QString& activity,
                                     const AssignmentEntry& entry) const;
-    const PhosphorRules::Rule* findExactContextRule(const QString& screenId, int virtualDesktop,
-                                                    const QString& activity) const;
 
     /// Find the id of the exact-shape context rule for a (screen, desktop,
     /// activity) tuple, or a null QUuid if none exists.
@@ -932,11 +946,13 @@ private:
     AssignmentEntry resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,
                                                             const QString& activity) const;
 
-    /// True iff an enabled engine-mode assignment rule matches the (screen,
-    /// desktop, activity) context — i.e. the user authored an explicit
-    /// per-context assignment, even one that sets only the mode with
-    /// no layout. Such a rule overrides the global suppress setting (the
-    /// context is managed, never suppressed). Mirrors the connector /
+    /// True iff ANY enabled assignment-family rule matches the (screen,
+    /// desktop, activity) context — an engine-mode rule, a layout-only
+    /// rule, or an algorithm-only rule all count (the implementation asks
+    /// resolveAssignmentEntry, which resolves per slot). Any of them is an
+    /// explicit authored intent for the context, so any of them overrides
+    /// the global suppress setting (the context is managed, never
+    /// suppressed). Mirrors the connector /
     /// virtual-screen fallback chain of @ref assignmentIdForScreen so a rule
     /// keyed by the physical/connector id still matches a virtual-screen query.
     bool hasMatchingAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity) const;

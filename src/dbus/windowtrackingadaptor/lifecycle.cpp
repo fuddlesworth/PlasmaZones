@@ -39,6 +39,7 @@
 #include <QJsonObject>
 #include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <utility>
 
 namespace PlasmaZones {
 

@@ -613,10 +613,22 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
     // Resolve the window's own screen once: the mode gate below and the
     // captured per-output desktop (#648) both key on it.
     const QString effScreen = screenForTrackedWindow(windowId);
-    if (m_layoutManager) {
-        if (!effScreen.isEmpty()
-            && m_layoutManager->modeForScreen(effScreen, currentVirtualDesktopForScreen(effScreen), currentActivity())
-                != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+    if (!effScreen.isEmpty()) {
+        // Prefer the injected LIVE resolver (see setLiveModeResolver): a
+        // screen ENTERING a tiling mode has the cascade flipped before any
+        // engine claims it, and the pre-flip presave must still capture
+        // its live snap state — the raw cascade would refuse here and the
+        // float/zone restore on return to snapping would have nothing to
+        // read. Once the tiling engine claims the screen the resolver
+        // reports the tiling mode and the frozen-memory refusal applies.
+        if (m_liveModeResolver) {
+            if (m_liveModeResolver(effScreen) != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+                return std::nullopt;
+            }
+        } else if (m_layoutManager
+                   && m_layoutManager->modeForScreen(effScreen, currentVirtualDesktopForScreen(effScreen),
+                                                     currentActivity())
+                       != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             return std::nullopt;
         }
     }

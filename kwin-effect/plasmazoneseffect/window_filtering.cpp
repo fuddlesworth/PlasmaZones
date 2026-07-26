@@ -96,7 +96,9 @@ QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QR
         }
         return false;
     };
+    bool restoreBranchEntered = false;
     if (kw->isFullScreen()) {
+        restoreBranchEntered = true;
         // A window maximized and THEN made fullscreen has a fullscreenGeometryRestore()
         // equal to the maximized (full work-area) rect, so it would still float back
         // maximized-sized. When the pre-fullscreen state was itself maximized, prefer
@@ -113,10 +115,17 @@ QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QR
             return restore;
         }
     } else if (kw->maximizeMode() != KWin::MaximizeRestore) {
+        restoreBranchEntered = true;
         const QRectF restore(kw->geometryRestore());
         if (restore.width() > 0 && restore.height() > 0 && onAnyScreen(restore)) {
             return restore;
         }
+    }
+    // A maximized/fullscreen window whose restore rects were all rejected
+    // must NOT fall through to the live frame — that IS the full-monitor
+    // rect this function exists to keep out of the free-geometry store.
+    if (restoreBranchEntered) {
+        return QRectF();
     }
     if (!onAnyScreen(fallback)) {
         return QRectF();

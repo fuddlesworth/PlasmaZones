@@ -18,12 +18,15 @@
  */
 
 #include <QKeySequence>
+#include <QSignalSpy>
 #include <QTest>
 
 #include <PhosphorConfig/Schema.h>
 
 #include "config/configdefaults.h"
+#include "config/settings.h"
 #include "config/settingsschema.h"
+#include "helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
 
@@ -96,7 +99,9 @@ private Q_SLOTS:
         // whitespace and modifier-order variants. A combination offends
         // when Shift is held and the base key is a printable
         // non-alphanumeric (letters, digits, and navigation keys like
-        // Home/PgUp are fine). A symbol spelled as a NAMED key ("Plus")
+        // Home/PgUp are fine). Known over-reach: Shift+Space would be
+        // flagged although its keysym does not shift — acceptable, no
+        // default uses it and a false positive here fails loudly. A symbol spelled as a NAMED key ("Plus")
         // decodes to Key_unknown and is caught by allDefaultsParseCleanly
         // below, not by this guard.
         QStringList offenders;
@@ -213,7 +218,74 @@ private Q_SLOTS:
         QCOMPARE(value->validator(0.001).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthValueMin());
         QCOMPARE(value->validator(99999.0).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthValueMax());
     }
+
+    /// Full kind-transition table for the shared width value key. The kind
+    /// setter owns the coercion (see setScrollingDefaultColumnWidthKind):
+    /// entering Fixed re-seeds a pixel width, entering Proportion re-seeds
+    /// only when pixels are stored (directly from Fixed or via a
+    /// ClientDecides hop), ClientDecides leaves the value untouched, and a
+    /// same-kind write is a full no-op. Each effective flip must emit
+    /// settingsChanged exactly ONCE — a double emit runs the engine's
+    /// refresh+retile sweep twice per user action.
+    void widthKindTransitionsCoerceAndEmitOnce()
+    {
+        const int kindP = ConfigDefaults::scrollingWidthKindProportion();
+        const int kindF = ConfigDefaults::scrollingWidthKindFixed();
+        const int kindC = ConfigDefaults::scrollingWidthKindClientDecides();
+        const qreal seededPx = ConfigDefaults::scrollingDefaultColumnWidthFixedPx();
+        const qreal defaultProp = ConfigDefaults::scrollingDefaultColumnWidthValue();
+
+        struct Row
+        {
+            const char* name;
+            int fromKind;
+            bool pixelsStored; // seed 800px (via Fixed) instead of 0.5
+            int toKind;
+            qreal expectedValue;
+            int expectedEmits;
+        };
+        // Nine kind pairs; ClientDecides→Proportion appears twice because its
+        // outcome depends on WHAT the hop left stored (the value key is
+        // untouched by ClientDecides, so both a proportion and a pixel count
+        // can be sitting there).
+        const Row rows[] = {
+            {"P->P", kindP, false, kindP, 0.5, 0},
+            {"P->F", kindP, false, kindF, seededPx, 1},
+            {"P->C", kindP, false, kindC, 0.5, 1},
+            {"F->P", kindF, true, kindP, defaultProp, 1},
+            {"F->F", kindF, true, kindF, 800.0, 0},
+            {"F->C", kindF, true, kindC, 800.0, 1},
+            {"C->P proportion stored", kindC, false, kindP, 0.5, 1},
+            {"C->P pixels stored", kindC, true, kindP, defaultProp, 1},
+            {"C->F", kindC, false, kindF, seededPx, 1},
+            {"C->C", kindC, false, kindC, 0.5, 0},
+        };
+
+        for (const Row& row : rows) {
+            TestHelpers::IsolatedConfigGuard guard;
+            Settings settings;
+            // Seed: pixel rows are staged under Fixed (the value setter's
+            // clamp is kind-aware, so 800 only survives a Fixed write); a
+            // ClientDecides fromKind is then reached by a further hop that
+            // deliberately leaves the value alone.
+            settings.setScrollingDefaultColumnWidthKind(row.pixelsStored ? kindF : kindP);
+            settings.setScrollingDefaultColumnWidthValue(row.pixelsStored ? 800.0 : 0.5);
+            if (settings.scrollingDefaultColumnWidthKind() != row.fromKind) {
+                settings.setScrollingDefaultColumnWidthKind(row.fromKind);
+            }
+            QCOMPARE(settings.scrollingDefaultColumnWidthKind(), row.fromKind);
+
+            QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+            settings.setScrollingDefaultColumnWidthKind(row.toKind);
+            QVERIFY2(settings.scrollingDefaultColumnWidthKind() == row.toKind, row.name);
+            QVERIFY2(qFuzzyCompare(1.0 + settings.scrollingDefaultColumnWidthValue(), 1.0 + row.expectedValue),
+                     row.name);
+            QVERIFY2(changedSpy.count() == row.expectedEmits, row.name);
+        }
+    }
 };
 
-QTEST_GUILESS_MAIN(TestScrollingSettings)
+// QTEST_MAIN (not GUILESS): the transition-table test constructs Settings,
+// whose load path reads QGuiApplication::palette().
+QTEST_MAIN(TestScrollingSettings)
 #include "test_scrolling_settings.moc"

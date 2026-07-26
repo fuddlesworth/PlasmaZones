@@ -265,6 +265,17 @@ public:
     /// map win over the IScrollSettings gaps. Same lifetime contract as the
     /// other injected closures.
     using ContextGapProvider = std::function<QVariantMap(const QString& screenId)>;
+    /// Embedder/test seam: inject screen geometry when NO ScreenManager is
+    /// wired (headless hosts). @p availableGeometry supplies the work area,
+    /// @p screenGeometry the full rect used for off-canvas parking bounds.
+    /// Ignored while a ScreenManager is present.
+    void setScreenGeometryProviders(std::function<QRect(const QString&)> availableGeometry,
+                                    std::function<QRect(const QString&)> screenGeometry)
+    {
+        m_availableGeometryProvider = std::move(availableGeometry);
+        m_screenGeometryProvider = std::move(screenGeometry);
+    }
+
     void setContextGapProvider(ContextGapProvider provider)
     {
         m_contextGapProvider = std::move(provider);
@@ -346,6 +357,12 @@ private:
 
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
+    /// Embedder/test seam: geometry providers consulted when NO
+    /// ScreenManager is wired (headless hosts). First = available work
+    /// area, second = full screen rect (parking bounds). With a
+    /// ScreenManager present they are ignored.
+    std::function<QRect(const QString&)> m_availableGeometryProvider;
+    std::function<QRect(const QString&)> m_screenGeometryProvider;
     PhosphorEngine::WindowRegistry* m_windowRegistry = nullptr;
     PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
 
@@ -382,6 +399,16 @@ private:
         /// own column). A stacked tile's float round-trip re-enters its
         /// surviving stack instead of spawning a new column at the index.
         int tileIndex = -1;
+        /// A surviving SIBLING of the shared column, used to re-locate the
+        /// stack at restore time — the bare column index goes stale when
+        /// columns close while the window floats, and a stale index would
+        /// splice the window into a stranger's stack.
+        QString stackAnchor;
+        /// Client-reported minimum size at float time — the tile that held
+        /// it dies with takeWindow, and dropping it would strip the
+        /// relayout clamps until the compositor happens to re-report.
+        int minWidth = 0;
+        int minHeight = 0;
     };
     QHash<QString, FloatRestore> m_floatRestore;
     /// Windows floated BY scroll mode (mode-transition marker, ephemeral).

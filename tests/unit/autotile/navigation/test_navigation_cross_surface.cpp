@@ -22,6 +22,8 @@
 #include <PhosphorTiles/TilingState.h>
 
 #include <PhosphorIdentity/VirtualScreenId.h>
+
+#include "helpers/IsolatedConfigGuard.h"
 #include <PhosphorScreens/VirtualScreen.h>
 
 #include "FakeScreenProvider.h"
@@ -791,6 +793,10 @@ void TestNavigationCrossSurface::crossDesktop_moveToSnapTargetDesktop_emitsCross
     // must emit crossModeMoveRequested (the reciprocal of the snap→autotile
     // cross-desktop move). Needs a real LayoutRegistry so modeForScreen resolves;
     // the engine-helper tests pass a null registry, so they never hit this branch.
+    // Isolated config: setAssignmentEntryDirect PERSISTS a rule via
+    // RuleStore::save(), and without the guard the eDP-1/desktop-2 rule
+    // leaks into the shared build-tree config that every sibling test loads.
+    PlasmaZones::TestHelpers::IsolatedConfigGuard configGuard;
     std::unique_ptr<PhosphorZones::LayoutRegistry> registry(
         PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("autotile-cross-mode-desktop")));
     PhosphorZones::AssignmentEntry snapEntry;

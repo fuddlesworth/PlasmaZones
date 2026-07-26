@@ -21,6 +21,10 @@ inline PhosphorScrollEngine::ScrollLayoutParams defaultParams()
 
 inline const PhosphorScrollEngine::ColumnWidth kHalf = PhosphorScrollEngine::ColumnWidth::makeProportion(0.5);
 
+/// The tile's resolved rect, or a null QRect when the window is ABSENT
+/// from the resolve. Callers asserting on a rect property should pair it
+/// with `resolveContains` — a null rect makes negative assertions (e.g.
+/// `!isHidden`) pass vacuously for a dropped tile.
 inline QRect rectOf(const PhosphorScrollEngine::ResolvedStrip& resolved, const QString& windowId)
 {
     for (const PhosphorScrollEngine::ResolvedColumn& rc : resolved.columns) {
@@ -31,6 +35,19 @@ inline QRect rectOf(const PhosphorScrollEngine::ResolvedStrip& resolved, const Q
         }
     }
     return {};
+}
+
+/// True when @p windowId appears anywhere in the resolve.
+inline bool resolveContains(const PhosphorScrollEngine::ResolvedStrip& resolved, const QString& windowId)
+{
+    for (const PhosphorScrollEngine::ResolvedColumn& rc : resolved.columns) {
+        for (const PhosphorScrollEngine::ResolvedTile& rt : rc.tiles) {
+            if (rt.windowId == windowId) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 } // namespace ScrollTestUtils

@@ -139,12 +139,14 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
     return true;
 }
 
-bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const QString& windowId, int minWidth,
-                                           int minHeight)
+bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const QString& windowId,
+                                           const ScrollLayoutParams& params, int minWidth, int minHeight)
 {
     if (windowId.isEmpty() || containsWindow(windowId) || columnIndex < 0 || columnIndex >= m_columns.size()) {
         return false;
     }
+    const int prevIdx = m_activeColumnIdx;
+    const int oldViewX = viewXFor(params);
     Column& col = m_columns[columnIndex];
     Tile tile;
     tile.windowId = windowId;
@@ -152,11 +154,14 @@ bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const
     tile.minHeight = minHeight;
     const int at = qBound(0, tileIndex, col.tiles.size());
     col.tiles.insert(at, tile);
-    if (col.activeTileIdx >= at) {
-        ++col.activeTileIdx;
-    }
     col.activeTileIdx = at;
     m_activeColumnIdx = columnIndex;
+    // The anchor is active-relative: reassigning the active column without
+    // re-deriving it would reinterpret the stored anchor against a
+    // different column's stripX (a viewport jump on unfloat of a stacked
+    // tile — the caller's focusWindow no-ops because the state below is
+    // already what it would install).
+    reanchorAfterFocusChange(prevIdx, oldViewX, params);
     return true;
 }
 
@@ -254,7 +259,9 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     // DELIBERATE asymmetry with keepOrRecenterAnchor (minimize-collapse /
     // consume), which also clamps the RIGHT edge: on a removal the user
     // just lost a window, and keeping the survivors pixel-stationary beats
-    // reclaiming right-edge dead space — the next focus change reclaims it.
+    // reclaiming right-edge dead space. The next focus change reclaims it;
+    // the engine's applyLayout does NOT (updateViewForFocus leaves a
+    // fully-visible column's anchor alone precisely to preserve this).
     const int stripX = columnStripX(m_activeColumnIdx, params);
     int anchor = stripX - oldViewX;
     if (stripX - anchor < 0) {
@@ -327,6 +334,10 @@ bool ScrollStrip::setWindowMinimized(const QString& windowId, bool minimized, co
         }
     }
     if (!minimized) {
+        // The restored tile takes its COLUMN's active slot but the strip's
+        // active column is deliberately untouched: unminimizing a window
+        // in a background column must not steal focus from the column the
+        // user is working in (embedders call focusWindow for that).
         col.activeTileIdx = tileIdx;
     }
     // A column collapsing to / expanding from fully-minimized shifts strip

@@ -561,8 +561,11 @@ public:
     {
         return 0.05;
     }
-    /// Fixed-kind pixel floor, shared with the settings page's SpinBox so a
-    /// D-Bus write cannot persist a width the UI cannot display.
+    /// Fixed-kind pixel floor. Enforced by the hand-written SETTER only —
+    /// the D-Bus registry routes through it, but store-level writers
+    /// (profile staging, config import, hand edits) see only the schema's
+    /// wider clampDouble, and the QML SpinBox carries its own literal
+    /// bounds. The engine's qMax(1, …) keeps any bypass value renderable.
     static constexpr qreal scrollingDefaultColumnWidthFixedMin()
     {
         return 100.0;

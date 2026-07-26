@@ -174,6 +174,21 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewX, const Scro
 
 void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
 {
+    // Policy re-application only: when the active column is already fully
+    // visible under a non-centering policy, leave the anchor alone — this
+    // runs at the top of every applyLayout, and re-clamping there would
+    // silently undo an explicit centerActiveColumn at the strip's edges
+    // (whose centered anchor implies out-of-range viewX by design) and
+    // reclaim removeWindowInternal's deliberate right-edge dead space.
+    const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
+    if (!centerLone && params.centerFocusedColumn != CenterFocusedColumn::Always && m_activeColumnIdx >= 0) {
+        const int workW = params.workArea.width();
+        const int colW = columnWidthPx(m_columns.at(m_activeColumnIdx), params);
+        const int pos = columnStripX(m_activeColumnIdx, params) - viewXFor(params);
+        if (pos >= 0 && pos + colW <= workW) {
+            return;
+        }
+    }
     reanchorAfterFocusChange(m_activeColumnIdx, viewXFor(params), params);
 }
 
@@ -309,8 +324,11 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                     weightLeft -= w;
                 }
             }
-            // Min-height clamp after distribution (soft constraint; a window
-            // that cannot fit at all is the engine's cue to float it).
+            // Min-height clamp after distribution. Soft constraint: when
+            // even the floors overflow the column, the overflow stands and
+            // the trailing tiles lay out below the work area (no float-out
+            // policy exists for this case — the open-time oversized check
+            // is the only min-size-driven float).
             for (int vi = 0; vi < n; ++vi) {
                 const Tile& t = col.tiles.at(visible.at(vi));
                 if (t.minHeight > 0 && heights[vi] < t.minHeight) {

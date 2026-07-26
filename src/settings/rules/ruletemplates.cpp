@@ -121,7 +121,7 @@ QVariantList ruleTemplates()
     out.append(entry(QLatin1String("layoutOnMonitor"), PhosphorI18n::tr("Set a layout on a monitor"),
                      PhosphorI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
     out.append(entry(QLatin1String("algorithmOnMonitor"), PhosphorI18n::tr("Set a tiling algorithm on a monitor"),
-                     PhosphorI18n::tr("Pick an autotile algorithm to use on one monitor."),
+                     PhosphorI18n::tr("Pick a tiling algorithm to use on one monitor."),
                      QLatin1String("view-list-tree")));
     out.append(entry(QLatin1String("scrollingOnMonitor"), PhosphorI18n::tr("Use scrolling mode on a monitor"),
                      PhosphorI18n::tr("Switch one monitor to the scrolling placement mode."),

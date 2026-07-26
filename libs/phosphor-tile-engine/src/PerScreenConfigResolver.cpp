@@ -118,8 +118,15 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
         it = overrides.constFind(QString(PerScreenKeys::Algorithm));
         if (it != overrides.constEnd()) {
             const QString algoId = it->toString();
-            const QString previousAlgo =
-                previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString();
+            // rememberedAlgorithmId is the ONE authority for "what were this
+            // screen's states built under" (see updatePerScreenOverride's
+            // rule). Reading the previous MAP directly diverges after a
+            // toggle-off/on cycle: the map is empty but the remembered pin
+            // survives, and the map-fallback would misread a re-applied
+            // per-screen algorithm as a genuine switch, resetting the
+            // user's tuned split ratio while the wipe below correctly says
+            // "no change".
+            const QString previousAlgo = rememberedAlgorithmId(screenId, previous);
             if (algoId != previousAlgo && !overrides.contains(QString(PerScreenKeys::SplitRatio))) {
                 // Guard the registry locally: AutotileEngine's ctor deliberately
                 // does not assert its dependencies, so every method that

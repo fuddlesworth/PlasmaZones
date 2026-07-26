@@ -70,7 +70,10 @@ Item {
     /// shortcuts / currentMode / autotileAvailable changes.
     readonly property var groups: {
         var byCat = [];
-        var index = {};
+        // Object.create(null): a plain {} would let `in` walk the prototype
+        // chain, so a category named "constructor" would collide with a
+        // Function slot.
+        var index = Object.create(null);
         for (var i = 0; i < shortcuts.length; i++) {
             var row = shortcuts[i];
             if (!rowVisible(row))

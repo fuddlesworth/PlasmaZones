@@ -14,7 +14,7 @@ settings) and a **compositor plugin** (observes windows, applies geometry,
 renders overlays). This library is the plugin side of that split.
 
 A compositor plugin links `PhosphorCompositor`, implements
-`ICompositorBridge` (27 methods mapping native window handles to the
+`ICompositorBridge` (the interface mapping native window handles to the
 daemon's vocabulary), wires handler interfaces for callbacks, and lets
 `DaemonClient` manage all D-Bus communication. The plugin never touches
 placement logic directly. The daemon decides *where*, and the plugin

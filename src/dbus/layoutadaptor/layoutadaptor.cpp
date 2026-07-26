@@ -37,16 +37,27 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <QUuid>
 
+#include <optional>
+
 namespace PlasmaZones {
 
 namespace {
 
 // Map the D-Bus quick-slot mode wire value (0 = Snapping, 1 = Autotile) to
-// the registry's AssignmentEntry::Mode. Any other value clamps to Snapping.
-PhosphorZones::AssignmentEntry::Mode quickSlotMode(int mode)
+// the registry's AssignmentEntry::Mode, or nullopt for anything else —
+// notably Scrolling (2), which carries NO quick slots. Clamping instead of
+// rejecting would silently read or OVERWRITE the snapping slot map under a
+// scrolling request (input validation at the system boundary).
+std::optional<PhosphorZones::AssignmentEntry::Mode> quickSlotMode(int mode)
 {
-    return mode == PhosphorZones::AssignmentEntry::Autotile ? PhosphorZones::AssignmentEntry::Autotile
-                                                            : PhosphorZones::AssignmentEntry::Snapping;
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Snapping:
+        return PhosphorZones::AssignmentEntry::Snapping;
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return PhosphorZones::AssignmentEntry::Autotile;
+    default:
+        return std::nullopt;
+    }
 }
 
 // `getLayout` is contractually a *Layout*-schema endpoint: its sole consumer
@@ -543,8 +554,12 @@ void LayoutAdaptor::setActiveLayout(const QString& id)
 
 void LayoutAdaptor::applyQuickLayout(int mode, int number, const QString& screenId)
 {
-    m_layoutManager->applyQuickLayout(quickSlotMode(mode), number,
-                                      PhosphorScreens::ScreenIdentity::idForName(screenId));
+    const auto slotMode = quickSlotMode(mode);
+    if (!slotMode) {
+        qCWarning(lcDbusLayout) << "applyQuickLayout: mode" << mode << "carries no quick slots — ignored";
+        return;
+    }
+    m_layoutManager->applyQuickLayout(*slotMode, number, PhosphorScreens::ScreenIdentity::idForName(screenId));
 }
 
 QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
@@ -661,7 +676,12 @@ QString LayoutAdaptor::getQuickLayoutSlot(int mode, int slotNumber)
     }
 
     // Return raw assignment ID (UUID string or autotile ID)
-    auto slots = m_layoutManager->quickLayoutSlots(quickSlotMode(mode));
+    const auto slotMode = quickSlotMode(mode);
+    if (!slotMode) {
+        qCWarning(lcDbusLayout) << "getQuickLayoutSlot: mode" << mode << "carries no quick slots";
+        return QString();
+    }
+    auto slots = m_layoutManager->quickLayoutSlots(*slotMode);
     return slots.value(slotNumber);
 }
 
@@ -682,7 +702,12 @@ void LayoutAdaptor::setQuickLayoutSlot(int mode, int slotNumber, const QString& 
         }
     }
 
-    m_layoutManager->setQuickLayoutSlot(quickSlotMode(mode), slotNumber, layoutId);
+    const auto slotMode = quickSlotMode(mode);
+    if (!slotMode) {
+        qCWarning(lcDbusLayout) << "setQuickLayoutSlot: mode" << mode << "carries no quick slots — ignored";
+        return;
+    }
+    m_layoutManager->setQuickLayoutSlot(*slotMode, slotNumber, layoutId);
     qCInfo(lcDbusLayout) << "Set quick layout slot" << slotNumber << "mode" << mode << "to" << layoutId;
     Q_EMIT quickLayoutSlotsChanged();
 }
@@ -711,7 +736,12 @@ void LayoutAdaptor::setAllQuickLayoutSlots(int mode, const QVariantMap& slots)
         parsedSlots[slotNumber] = layoutId;
     }
 
-    m_layoutManager->setAllQuickLayoutSlots(quickSlotMode(mode), parsedSlots);
+    const auto slotMode = quickSlotMode(mode);
+    if (!slotMode) {
+        qCWarning(lcDbusLayout) << "setAllQuickLayoutSlots: mode" << mode << "carries no quick slots — ignored";
+        return;
+    }
+    m_layoutManager->setAllQuickLayoutSlots(*slotMode, parsedSlots);
     qCInfo(lcDbusLayout) << "Batch set" << parsedSlots.size() << "quick layout slots mode" << mode;
     Q_EMIT quickLayoutSlotsChanged();
 }
@@ -719,7 +749,12 @@ void LayoutAdaptor::setAllQuickLayoutSlots(int mode, const QVariantMap& slots)
 QVariantMap LayoutAdaptor::getAllQuickLayoutSlots(int mode)
 {
     QVariantMap result;
-    auto slots = m_layoutManager->quickLayoutSlots(quickSlotMode(mode));
+    const auto slotMode = quickSlotMode(mode);
+    if (!slotMode) {
+        qCWarning(lcDbusLayout) << "getAllQuickLayoutSlots: mode" << mode << "carries no quick slots";
+        return result;
+    }
+    auto slots = m_layoutManager->quickLayoutSlots(*slotMode);
     for (auto it = slots.begin(); it != slots.end(); ++it) {
         result[QString::number(it.key())] = it.value();
     }

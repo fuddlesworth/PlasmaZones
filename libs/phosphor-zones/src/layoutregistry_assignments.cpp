@@ -393,6 +393,12 @@ bool LayoutRegistry::hasExplicitSnappingModePin(const QString& sid, int virtualD
         return false;
     }
     const PWR::Rule* exact = findExactContextRule(sid, virtualDesktop, activity);
+    // `enabled` is belt-and-braces: the evaluator already skips disabled
+    // rules, so a resolution that reaches this predicate normally came from
+    // an enabled rule — but findExactContextRule deliberately IGNORES the
+    // flag (upsert semantics), so the conjunct keeps the pin from anchoring
+    // on a disabled exact rule should the two ever pair up via a broader
+    // enabled rule resolving the same tuple.
     return exact != nullptr && exact->enabled && hasEngineModeAction(*exact);
 }
 
@@ -508,11 +514,11 @@ bool LayoutRegistry::isContextActiveLayoutSuppressed(const QString& screenId, in
     if (!assignmentIdForScreen(screenId, virtualDesktop, activity).isEmpty()) {
         return false;
     }
-    // An enabled PINNED engine-mode assignment rule covers this context — a
-    // rule that overrides the global suppress setting. The context stays
-    // active even when the rule sets only the mode (no layout): the layout
-    // falls back to the default exactly as it did before suppression existed,
-    // and the overlay / zone selector show because the mode is on.
+    // An enabled assignment-family rule covers this context (mode, layout,
+    // OR algorithm slot — any authored intent overrides the global suppress
+    // setting). The context stays active even when the rule sets only one
+    // slot: the rest falls back to the default exactly as it did before
+    // suppression existed, and the overlay / zone selector show.
     if (hasMatchingAssignmentRule(screenId, virtualDesktop, activity)) {
         return false;
     }

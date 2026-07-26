@@ -436,6 +436,7 @@ Kirigami.Dialog {
                         // 0. The daemon default is Any, so the net behavior is
                         // the same either way.
                         SettingsButtonGroup {
+                            Accessible.name: i18n("Aspect ratio")
                             model: [i18n("Any"), "16:9", "21:9", "32:9", i18n("Portrait")]
                             currentIndex: Math.max(0, root.selectedAspectRatio)
                             onIndexChanged: index => {

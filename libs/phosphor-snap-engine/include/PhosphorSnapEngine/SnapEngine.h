@@ -5,6 +5,7 @@
 
 #include <phosphorsnapengine_export.h>
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorEngine/IVirtualDesktopManager.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
@@ -246,6 +247,20 @@ public:
      *        lifetime contract as setRestorePositionPredicate — clear with `{}`
      *        before destroying any state the closure captured.
      */
+    /// Live placement-mode resolver injected by the daemon (its
+    /// ScreenModeRouter): engine-live-set-first with cascade fallback and
+    /// the tiling-mode→Snapping downgrade for unclaimed screens. The
+    /// capture gate consults it so a screen ENTERING a tiling mode (the
+    /// cascade already flipped but no engine claims it yet) can still
+    /// presave its live snap state; the raw cascade would refuse it and
+    /// the presave would silently write nothing. Falls back to the
+    /// registry's cascade when unset. Clear with {} at teardown.
+    using LiveModeResolver = std::function<PhosphorZones::AssignmentEntry::Mode(const QString& screenId)>;
+    void setLiveModeResolver(LiveModeResolver resolver)
+    {
+        m_liveModeResolver = std::move(resolver);
+    }
+
     using FloatPredicate = std::function<bool(const QString& windowId)>;
 
     void setFloatPredicate(FloatPredicate predicate)
@@ -1074,6 +1089,7 @@ private:
 
     // Rule-driven open-floating gate. Empty until the daemon wires it; while
     // empty no window is rule-floated. See FloatPredicate doc above.
+    LiveModeResolver m_liveModeResolver;
     FloatPredicate m_floatPredicate{};
 
     // Rule-driven open-placement resolver (SnapToZone). Empty until the daemon

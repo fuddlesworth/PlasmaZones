@@ -111,6 +111,9 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
         return false;
     }
     const int workW = params.workArea.width();
+    if (workW <= 0) {
+        return false; // degenerate area: qBound(1, …, workW) would invert
+    }
     const int current = resolveColumnWidthPx(col->width, params);
     const int target = qBound(1, current + qRound(deltaPercent / 100.0 * workW), workW);
     if (target == current) {
@@ -233,6 +236,9 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
         return false;
     }
     const int workH = params.workArea.height();
+    if (workH <= 0) {
+        return false; // degenerate area: qBound(1, …, workH) would invert
+    }
     // Current pixel height: read it off a fresh relayout so the adjustment
     // starts from what is actually on screen (Auto heights included).
     int currentPx = workH;

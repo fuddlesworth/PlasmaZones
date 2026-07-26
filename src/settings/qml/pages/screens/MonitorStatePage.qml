@@ -19,9 +19,9 @@ SettingsFlickable {
     // The `layouts` property binding auto-generates a `layoutsChanged` signal,
     // which LayoutComboBox's Connections target listens for.
     readonly property QtObject _layoutBridge: QtObject {
+        readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
         readonly property var layouts: settingsController.layouts
         readonly property string defaultLayoutId: appSettings.defaultLayoutId
-        readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
         // LayoutComboBox's preview CategoryBadge reads `autoAssignAllLayouts` for
         // the global-auto-assign indicator; expose it so the Monitor State
         // dropdowns light it like the rest of the app.
@@ -116,26 +116,18 @@ SettingsFlickable {
                 settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
                 return;
             }
-            // The || chain serves the mode-toggle path: stage the user's
-            // pick, else the currently-resolved algorithm, else the GLOBAL
-            // default. The last link matters on a fresh config — a screen
-            // resolving to Snapping/Scrolling has an empty
-            // state.algorithmId, and unstaging here used to silently drop
-            // the Tiling switch while the button group kept showing Tiling
-            // (the exact dead-end pass 2 fixed for Snapping). A bare mode=1
-            // entry is not an option: an empty tiling id fails the
-            // cascade's activeLayoutId filter.
-            var algoId = stateView.localAlgorithmId || state.algorithmId || root._layoutBridge.defaultAutotileAlgorithm;
+            // Stage the user's pick, else the currently-resolved algorithm.
+            var algoId = stateView.localAlgorithmId || state.algorithmId;
             if (!algoId) {
-                // Genuinely nothing to pin (unreachable while the default
-                // algorithm accessor is non-empty). Unstage any stale
-                // staged entry for this context so Apply cannot commit it
-                // while the UI shows Default. A true unstage, not a staged
-                // clear — a staged clear is pushed on Apply and would wipe
-                // a pre-existing daemon-side assignment the user never
-                // touched.
-                if (Object.keys(settingsController.getStagedAssignment(_selectedScreen, desktop, activity)).length > 0)
-                    settingsController.removeStagedAssignment(_selectedScreen, desktop, activity);
+                // Nothing resolved to pin (fresh config, or the context
+                // suppresses the default): stage a MODE-ONLY entry, exactly
+                // like the Snapping and Scrolling branches. The cascade
+                // accepts it through the bare "autotile:" sentinel — the
+                // documented KCM wire format for "autotile, use the default
+                // algorithm" — so the switch commits, the algorithm keeps
+                // FOLLOWING the global default (never frozen to today's
+                // value), and the combo honestly keeps showing "Default".
+                settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, "", "");
                 return;
             }
 
@@ -396,7 +388,7 @@ SettingsFlickable {
             SettingsButtonGroup {
                 Layout.alignment: Qt.AlignHCenter
                 Accessible.name: i18n("Placement mode")
-                model: [i18n("Snapping"), i18n("Tiling"), i18nc("tiling mode name", "Scrolling")]
+                model: [i18nc("tiling mode name", "Snapping"), i18nc("tiling mode name", "Tiling"), i18nc("tiling mode name", "Scrolling")]
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {
                     stateView.localMode = idx;
