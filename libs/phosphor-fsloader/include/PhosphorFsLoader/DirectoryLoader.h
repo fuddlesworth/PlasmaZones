@@ -210,7 +210,7 @@ Q_SIGNALS:
     /// rescans without payload inspection — do not weaken this contract
     /// without updating the loader-sink consumers and the test suite.
     ///
-    /// The three sister registries (`ShaderRegistry`,
+    /// The four sister registries (`ShaderRegistry`, `SurfaceShaderRegistry`,
     /// `AnimationShaderRegistry`, `ScriptedAlgorithmLoader`) gate their
     /// public content-changed signals at the registry level via SHA-1
     /// signature or QHash diff because they own their parse output;

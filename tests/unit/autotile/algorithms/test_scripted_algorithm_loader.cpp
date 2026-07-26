@@ -249,9 +249,18 @@ private Q_SLOTS:
         QTemporaryDir xdgRoot;
         QVERIFY(xdgRoot.isValid());
 
+        const QString systemAlgoDir = xdgRoot.path() + QStringLiteral("/system/plasmazones/algorithms");
         const QString userAlgoDir = xdgRoot.path() + QStringLiteral("/user/plasmazones/algorithms");
+        QVERIFY(QDir().mkpath(systemAlgoDir));
         QVERIFY(QDir().mkpath(userAlgoDir));
         writeScript(userAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("Original")));
+        // XDG_DATA_DIRS pinned to an empty tmp tree, like every sibling slot.
+        // XdgEnvGuard saves and restores but does not clear, so leaving it
+        // ambient lets the scan pick up the machine's installed
+        // /usr/share/plasmazones/algorithms and register every bundled id into
+        // the process-shared test registry, past a cleanup() that only knows a
+        // hardcoded id list.
+        qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
 
         PhosphorTiles::ScriptedAlgorithmLoader loader(QStringLiteral("plasmazones/algorithms"),

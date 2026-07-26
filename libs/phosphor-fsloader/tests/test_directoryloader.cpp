@@ -14,6 +14,10 @@
 #include <QTest>
 #include <QTimer>
 
+#include <any>
+#include <memory>
+#include <string>
+
 using namespace PhosphorFsLoader;
 
 namespace {
@@ -725,9 +729,9 @@ private Q_SLOTS:
         // One of the system files uses a key the user dir will collide with.
         // Named `sys-000-collide.json` so it sorts INSIDE the surviving budget:
         // reverse iteration spends the cap as 3 user files + 2 system files, so
-        // anything sorting after `sys-001.json` is never parsed and the
-        // collision below would resolve by never happening rather than by
-        // user-wins.
+        // the cap trips ON `sys-001.json` and anything from there onward is
+        // never parsed. Without this name the collision below would resolve by
+        // never happening rather than by user-wins.
         QVERIFY(writeJson(systemDir.filePath(QStringLiteral("sys-000-collide.json")), QStringLiteral("collide"),
                           QStringLiteral("from-system")));
 
@@ -765,10 +769,10 @@ private Q_SLOTS:
         QCOMPARE(sink.registry.value(QStringLiteral("collide")), std::string("from-user"));
 
         // kTestCap files CONSIDERED (3 user + 2 system), which is what the cap
-        // counts, but only 4 distinct keys registered: the second system file
-        // is the shadowed `collide` duplicate and takes budget without adding a
-        // key. Asserting kTestCap here would be asserting that the collision
-        // above never happened.
+        // counts, but only 4 distinct keys registered: the FIRST system file
+        // reached is `sys-000-collide.json` ('-' sorts before '.'), the shadowed
+        // `collide` duplicate, which takes budget without adding a key.
+        // Asserting kTestCap here would be asserting the collision never happened.
         QCOMPARE(loader.registeredCount(), kTestCap - 1);
     }
 

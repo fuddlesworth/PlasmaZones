@@ -63,7 +63,7 @@ struct PluginLoader::LoadedPlugin
 
 // Bridge between WatchedDirectorySet's IScanStrategy interface and
 // PluginLoader's per-cycle scan logic. Mirrors how
-// ScriptedAlgorithmLoader nests a JsScanStrategy inside itself.
+// ScriptedAlgorithmLoader nests a LuauScanStrategy inside itself.
 class PluginLoader::ScanStrategyImpl : public PhosphorFsLoader::IScanStrategy
 {
 public:

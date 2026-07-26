@@ -6933,7 +6933,6 @@
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="407"/>
-        <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="408"/>
         <source>Cannot reset while a discard is in progress.</source>
         <translation>ჩამოყრა ვერ მოხერხდება, სანამ გაუქმება მიმდინარეობს.</translation>
     </message>
@@ -6944,6 +6943,7 @@
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="481"/>
+        <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="410"/>
         <source>Cannot change this while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11144,7 +11144,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="213"/>
-        <source>No custom easing presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</source>
+        <source>No custom easing presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
+        <oldsource>No custom easing presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</oldsource>
         <translation>მორგებული დარბილების შაბლონები ჯერ არ არის. ერთის შესაქმნელად მრუდის რედაქტორში გამოიყენეთ &quot;შენახვა შაბლონად…&quot;.</translation>
     </message>
     <message>
@@ -11155,7 +11156,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="354"/>
-        <source>No custom spring presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</source>
+        <source>No custom spring presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
+        <oldsource>No custom spring presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</oldsource>
         <translation>მორგებული ზამბარის შაბლონები ჯერ არ არის. ერთის შესაქმნელად მრუდის რედაქტორში გამოიყენეთ &quot;შენახვა შაბლონად…&quot;.</translation>
     </message>
     <message>

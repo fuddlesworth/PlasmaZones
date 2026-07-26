@@ -405,7 +405,9 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
         // "there was nothing to clear" — the clearAllOverrides convention.
         qCWarning(lcConfig) << "clearShaderOverrideDescendants: refusing while async discard is in flight; path="
                             << path;
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+        // Not "Cannot reset": the only caller is the card's "Clear shadowing
+        // children" button, which the user did not experience as a reset.
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
         return -1;
     }
     ShaderProfileTree tree = m_settings->shaderProfileTree();

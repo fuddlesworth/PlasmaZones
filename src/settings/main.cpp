@@ -223,9 +223,7 @@ int main(int argc, char* argv[])
         // somebody else wrote, and the page has to forget what it cached.
         if (auto* loader = animationBootstrap.profileLoader()) {
             QObject::connect(loader, &PhosphorAnimation::ProfileLoader::profilesChanged, animationsPage,
-                             [animationsPage]() {
-                                 animationsPage->forgetCachedOverrideFiles();
-                             });
+                             &PlasmaZones::AnimationsPageController::forgetCachedOverrideFiles);
         }
     }
 

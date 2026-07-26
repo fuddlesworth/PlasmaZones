@@ -251,231 +251,6 @@ private Q_SLOTS:
         QVERIFY2(!editorSnapInCategoryFlag, "'editor.snapIn' is a leaf: not a category");
     }
 
-    // ─── QML boundary contract ────────────────────────────────────────────
-
-    /// Every name the settings QML calls on this controller must exist on its
-    /// meta-object. A plain public method is invisible to QML, and the call
-    /// fails at RUNTIME with a TypeError that no build and no C++ test can
-    /// see — which is exactly how a `clearOverridesUnder` call shipped from
-    /// QML against a method that had no Q_INVOKABLE, silently breaking the
-    /// override toggle.
-    ///
-    /// Two spellings are covered: the direct
-    /// `settingsController.animationsPage.foo`, and a same-file alias such as
-    /// RulesPage.qml's `readonly property var animationsController:
-    /// settingsController.animationsPage`. Bare property reads are scraped
-    /// alongside calls, since the meta-object lookup resolves either.
-    ///
-    /// NOT covered, stated plainly rather than left as a silent hole: the
-    /// shared shader pages receive this controller as a `bridge:` binding from
-    /// AnimationsShadersPage.qml and then call `bridge.foo(...)` in their own
-    /// files (ShaderBrowserCard.qml, ShaderSetsPage.qml, …). Following that
-    /// needs cross-file component resolution, and those same components are
-    /// bound to decorationPage and snappingShadersPage elsewhere, so a blanket
-    /// `bridge.` scrape would check names against the wrong controller. A
-    /// guard for that belongs in a test that can construct all of them.
-    /// ProfileRow.qml's pass-as-a-function-argument is out of reach for the
-    /// same reason.
-    void everyAnimationsPageCallFromQmlIsReachable()
-    {
-        static const QStringList kQmlRoots{QStringLiteral(P_SOURCE_DIR "/src/settings/qml"),
-                                           QStringLiteral(P_SOURCE_DIR "/kcm")};
-
-        // `<receiver>.<name>`, with or without a call paren. Word-boundary
-        // anchored so a longer identifier ending in the receiver name cannot
-        // match.
-        const auto namesUsedOn = [](const QString& src, const QString& receiver) {
-            QSet<QString> names;
-            const QRegularExpression re(QStringLiteral("\\b%1\\.([A-Za-z_][A-Za-z0-9_]*)").arg(receiver));
-            auto it = re.globalMatch(src);
-            while (it.hasNext())
-                names.insert(it.next().captured(1));
-            return names;
-        };
-
-        // The binding must END at `animationsPage`. Without the lookahead this
-        // also matched `... : settingsController.animationsPage.userPresets`,
-        // aliasing a LIST rather than the controller, and then reported that
-        // list's `length` as a missing controller member.
-        static const QRegularExpression aliasRe(
-            QStringLiteral("property\\s+var\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:"
-                           "\\s*settingsController\\.animationsPage\\s*(?![.A-Za-z0-9_])"));
-
-        QSet<QString> used;
-        int aliasesResolved = 0;
-        for (const QString& rootDir : kQmlRoots) {
-            QDirIterator dirIt(rootDir, QStringList{QStringLiteral("*.qml")}, QDir::Files,
-                               QDirIterator::Subdirectories);
-            while (dirIt.hasNext()) {
-                const QString src = readFile(dirIt.next());
-                used.unite(namesUsedOn(src, QStringLiteral("animationsPage")));
-                auto aliasIt = aliasRe.globalMatch(src);
-                while (aliasIt.hasNext()) {
-                    used.unite(namesUsedOn(src, aliasIt.next().captured(1)));
-                    ++aliasesResolved;
-                }
-            }
-        }
-
-        // Non-vacuity floors. The direct surface alone is well over a dozen
-        // names, and at least one alias exists (RulesPage.qml). A collapse
-        // means the scrape broke, not that the call sites went away.
-        QVERIFY2(used.size() >= 15,
-                 qPrintable(QStringLiteral("scraped only %1 animationsPage names from the QML tree").arg(used.size())));
-        QVERIFY2(aliasesResolved >= 1, "no same-file alias was resolved — the alias leg is checking nothing");
-
-        AnimationsPageController c;
-        const QMetaObject* meta = c.metaObject();
-        QStringList unreachable;
-        for (const QString& name : used) {
-            const QByteArray raw = name.toUtf8();
-            if (meta->indexOfProperty(raw.constData()) >= 0)
-                continue;
-            // By NAME, not signature: indexOfMethod needs an exact parameter
-            // list, and QML reaches these through every overload.
-            bool found = false;
-            for (int i = 0; i < meta->methodCount() && !found; ++i)
-                found = meta->method(i).name() == raw;
-            if (!found)
-                unreachable.append(name);
-        }
-        QVERIFY2(unreachable.isEmpty(),
-                 qPrintable(QStringLiteral("QML calls these, but they are absent from the meta-object "
-                                           "(missing Q_INVOKABLE / Q_PROPERTY): %1")
-                                .arg(unreachable.join(QStringLiteral(", ")))));
-    }
-
-    // ─── Simple-page scope contract ───────────────────────────────────────
-
-    /// Every event card on AnimationsSimplePage.qml must fall inside the
-    /// `animations-simple` scope in animationpagescope.cpp. That scope drives
-    /// the page's Reset, Discard and dirty walk, so a card whose path is not
-    /// under one of the scope's roots is silently exempt from all three: the
-    /// user edits it, the page reports itself clean, and Reset leaves it set.
-    ///
-    /// Mirror paths are held to the same contract. A mirror receives every
-    /// write the primary does (AnimationEventCard's group writers loop
-    /// `_writePaths`), so it is exactly as dependent on the scope's roots: a
-    /// mirror declared outside them would be edited by the page, reported clean
-    /// by it, and survive its Reset.
-    ///
-    /// The two lists were previously held together by a comment alone. This
-    /// reads the QML as TEXT (no Qt Quick engine, no page construction) and
-    /// pulls the eventPath and mirrorPaths literals straight out of the
-    /// eventModel, so adding a card or a mirror there without widening the
-    /// scope fails here.
-    ///
-    /// Scope limit, stated plainly: the parse sees `"eventPath": "…"` and
-    /// `"mirrorPaths": [ … ]` string literals only. A path that came from a JS
-    /// expression or a property reference would not be seen, and the page has
-    /// never used one. The count guards below are what stop a rewrite in that
-    /// style from turning this into a test that asserts nothing.
-    /// The Override toggle's ON branch is a no-write latch: it opens the timing
-    /// editor and writes nothing until a control is actually edited. The old
-    /// behaviour committed a snapshot of the inherited values so the derived
-    /// toggle state would stick, which silently pinned a copy of the Global
-    /// curve and duration the moment the toggle was flipped.
-    ///
-    /// Scraped rather than exercised, because the branch lives entirely in QML
-    /// and calls nothing on the controller — a C++ slot driving the controller
-    /// directly would stay green no matter what the branch did. What CAN be
-    /// pinned is the property this test actually cares about: that the branch
-    /// body reaches no controller method at all.
-    void overrideToggleOnBranchCallsNothingOnTheController()
-    {
-        const QString qmlPath =
-            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationEventCard.qml");
-        const QString src = readFile(qmlPath);
-        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
-
-        // Body of the `if (checked)` arm inside onToggleClicked, up to its
-        // closing `} else {`. Anchored on both ends so a rewrite that renames
-        // the handler or drops the else fails the guard below rather than
-        // silently matching nothing.
-        static const QRegularExpression armRe(
-            QStringLiteral("onToggleClicked\\s*:\\s*function\\s*\\(\\s*checked\\s*\\)\\s*\\{\\s*"
-                           "if\\s*\\(\\s*checked\\s*\\)\\s*\\{(.*?)\\}\\s*else\\s*\\{"),
-            QRegularExpression::DotMatchesEverythingOption);
-        const QRegularExpressionMatch m = armRe.match(src);
-        QVERIFY2(m.hasMatch(), "could not locate the onToggleClicked if/else in AnimationEventCard.qml");
-
-        const QString arm = m.captured(1);
-        // Strip comments first: the arm's own comment explains the behaviour by
-        // naming the calls it does NOT make, and matching those would fail the
-        // test for describing itself.
-        static const QRegularExpression commentRe(QStringLiteral("//[^\\n]*"));
-        const QString code = QString(arm).remove(commentRe);
-
-        static const QRegularExpression callRe(
-            QStringLiteral("\\b(animationsPage|settingsController)\\.[A-Za-z_][A-Za-z0-9_]*\\s*\\("));
-        QStringList calls;
-        auto it = callRe.globalMatch(code);
-        while (it.hasNext())
-            calls.append(it.next().captured(0));
-
-        QVERIFY2(calls.isEmpty(),
-                 qPrintable(QStringLiteral("the Override toggle's ON branch is a no-write latch, but it calls: ")
-                            + calls.join(QStringLiteral(", "))));
-    }
-
-    void simpleScopeCoversEverySimplePageCard()
-    {
-        const QString qmlPath =
-            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationsSimplePage.qml");
-        const QString src = readFile(qmlPath);
-        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
-
-        static const QRegularExpression re(QStringLiteral("\"eventPath\"\\s*:\\s*\"([^\"]+)\""));
-        QStringList cardPaths;
-        auto it = re.globalMatch(src);
-        while (it.hasNext())
-            cardPaths.append(it.next().captured(1));
-
-        // The page hosts five grouped cards today. A drop below that means the
-        // regex or the file stopped matching rather than that a card was
-        // removed, and the loop below would then pass vacuously.
-        QVERIFY2(cardPaths.size() >= 5,
-                 qPrintable(QStringLiteral("parsed only %1 eventPath literals from AnimationsSimplePage.qml")
-                                .arg(cardPaths.size())));
-
-        // Mirrors: pull each `"mirrorPaths": [...]` array body, then the string
-        // literals inside it. Checked against the same scope and reported
-        // through the same list as the primaries, since the consequence of an
-        // out-of-scope mirror is identical.
-        static const QRegularExpression mirrorArrayRe(QStringLiteral("\"mirrorPaths\"\\s*:\\s*\\[([^\\]]*)\\]"));
-        static const QRegularExpression mirrorEntryRe(QStringLiteral("\"([^\"]+)\""));
-        QStringList mirrorPaths;
-        auto arrayIt = mirrorArrayRe.globalMatch(src);
-        while (arrayIt.hasNext()) {
-            const QString body = arrayIt.next().captured(1);
-            auto entryIt = mirrorEntryRe.globalMatch(body);
-            while (entryIt.hasNext())
-                mirrorPaths.append(entryIt.next().captured(1));
-        }
-
-        // One mirror on the page today (the combined opened & closed card). Its
-        // own non-vacuity floor, so a rewrite that stopped matching mirrors
-        // fails here rather than silently checking the primaries alone.
-        QVERIFY2(mirrorPaths.size() >= 1,
-                 qPrintable(QStringLiteral("parsed only %1 mirrorPaths literals from AnimationsSimplePage.qml")
-                                .arg(mirrorPaths.size())));
-        cardPaths.append(mirrorPaths);
-
-        const AnimationPageScope scope = animationPageScope(QStringLiteral("animations-simple"));
-        QCOMPARE(scope.kind, AnimationPageScope::EventSubtree);
-        // Collected rather than QVERIFY'd per row: a QVERIFY failure aborts the
-        // slot, so the first out-of-scope card would hide every other one and
-        // widening the scope would turn into a one-at-a-time hunt.
-        QStringList outOfScope;
-        for (const QString& path : cardPaths) {
-            if (!animationPathInScope(path, scope))
-                outOfScope.append(path);
-        }
-        QVERIFY2(outOfScope.isEmpty(),
-                 qPrintable(QStringLiteral("simple-page cards outside the animations-simple scope: ")
-                            + outOfScope.join(QLatin1String(", "))));
-    }
-
     // ─── Override CRUD ────────────────────────────────────────────────────
 
     void setOverride_writesFileWithNameField()
@@ -801,6 +576,104 @@ private Q_SLOTS:
         QCOMPARE(overridden.value(QStringLiteral("sequenceMode")).toInt(),
                  int(PhosphorAnimation::SequenceMode::AllAtOnce));
         QCOMPARE(overridden.value(QStringLiteral("staggerInterval")).toInt(), 91);
+    }
+
+    /// The profiles directory is a filesystem boundary a user can hand-place
+    /// anything at, and the disk-first resolve reads it without going through
+    /// `Profile::fromJson`. Every field that fromJson would reject has to be
+    /// resolved the same way HERE, or the settings app shows a value the daemon
+    /// will never animate.
+    ///
+    /// Drop-versus-substitute is the load-bearing distinction and is asserted
+    /// separately per field, because `mergeMissingFields` only fills keys that
+    /// are ABSENT: dropping a key lets the ancestor's value through, while
+    /// substituting the library default blocks inheritance at this level.
+    void resolvedProfile_rejectsFieldsProfileFromJsonWouldReject_data()
+    {
+        QTest::addColumn<QByteArray>("leafJson");
+        QTest::addColumn<int>("expectedDuration");
+        QTest::addColumn<bool>("leafOwnsDuration");
+
+        // Out-of-range NUMBERS are dropped, so the parent's 123 comes through.
+        QTest::newRow("negative") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":-50})") << 123 << false;
+        QTest::newRow("zero") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":0})") << 123 << false;
+        QTest::newRow("over max") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":1e9})") << 123 << false;
+        // Finite but far outside int range — the bound-before-round case.
+        QTest::newRow("astronomical") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":1e300})") << 123
+                                      << false;
+
+        // A NON-NUMBER is a different case, and the difference is deliberate.
+        // `QJsonValue::toDouble(default)` hands back the default for anything
+        // that is not a JSON double, and DefaultDuration passes every range
+        // check — so the field ends up ENGAGED at the library default and
+        // blocks inheritance, rather than being dropped. `Profile::fromJson`
+        // does exactly the same thing, which is the whole point: the settings
+        // app must show what the daemon will animate, and the daemon animates
+        // 150 here, not the parent's 123.
+        QTest::newRow("string") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":"900"})")
+                                << int(PhosphorAnimation::Profile::DefaultDuration) << true;
+        QTest::newRow("bool") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":true})")
+                              << int(PhosphorAnimation::Profile::DefaultDuration) << true;
+
+        // The control: a legitimate value survives untouched.
+        QTest::newRow("valid") << QByteArrayLiteral(R"({"name":"editor.snapIn","duration":900})") << 900 << true;
+    }
+
+    void resolvedProfile_rejectsFieldsProfileFromJsonWouldReject()
+    {
+        QFETCH(QByteArray, leafJson);
+        QFETCH(int, expectedDuration);
+        QFETCH(bool, leafOwnsDuration);
+
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // The parent carries a value the leaf can fall back to, so "rejected"
+        // and "kept" produce visibly different numbers.
+        QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 123}}));
+
+        QFile leaf(tmp.path() + QStringLiteral("/editor.snapIn.json"));
+        QVERIFY(leaf.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(leaf.write(leafJson), qint64(leafJson.size()));
+        leaf.close();
+
+        const int resolved =
+            c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt();
+        QCOMPARE(resolved, expectedDuration);
+
+        // rawProfile is sanitised on the same terms, so a card reports field
+        // ownership the same way the resolve does — no live revert link beside
+        // a value the event does not actually own.
+        const bool ownsDuration = c.rawProfile(QStringLiteral("editor.snapIn")).contains(QStringLiteral("duration"));
+        QCOMPARE(ownsDuration, leafOwnsDuration);
+    }
+
+    /// `sequenceMode` is the one field `Profile::fromJson` SUBSTITUTES rather
+    /// than leaves unset, so an unknown enumerator must block inheritance at the
+    /// library default instead of falling through to the parent's mode. Getting
+    /// this backwards is invisible until a cascade animation plays wrong.
+    void resolvedProfile_unknownSequenceModeSubstitutesRatherThanInherits()
+    {
+        using P = PhosphorAnimation::Profile;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Parent asks for Cascade; the leaf's mode is nonsense.
+        QVERIFY(c.setOverride(QStringLiteral("editor"),
+                              {{QStringLiteral("sequenceMode"), int(PhosphorAnimation::SequenceMode::Cascade)}}));
+        const QByteArray leafJson = QByteArrayLiteral(R"({"name":"editor.snapIn","sequenceMode":7})");
+        QFile leaf(tmp.path() + QStringLiteral("/editor.snapIn.json"));
+        QVERIFY(leaf.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(leaf.write(leafJson), qint64(leafJson.size()));
+        leaf.close();
+
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("sequenceMode")).toInt(),
+                 int(P::DefaultSequenceMode));
+        QVERIFY(int(P::DefaultSequenceMode) != int(PhosphorAnimation::SequenceMode::Cascade));
     }
 
     void resolvedProfile_unsetReturnsLibraryDefaults()

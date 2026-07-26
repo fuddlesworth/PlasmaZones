@@ -46,7 +46,7 @@ static constexpr int kMaxScripts = 10'000;
 
 /// Scan strategy backing the loader's `WatchedDirectorySet`. Forwards
 /// the base's registered directory list verbatim. The list is kept up
-/// to date by `scanAndRegister`, which calls `registerDirectories` with
+/// to date by `scanAndRegister`, which calls `setDirectories` with
 /// the freshly-resolved XDG paths on every invocation — so watcher-
 /// triggered rescans (file edits, parent-watch promotion) reuse the
 /// snapshot from the last `scanAndRegister` and avoid redundantly
