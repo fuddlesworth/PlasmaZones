@@ -15,15 +15,17 @@ namespace PlasmaZones {
 /// Leaf event paths the daemon's overlay service AND the KWin effect
 /// actually resolve a shader effect for, by one of three mechanisms:
 /// a @c resolveShaderEffect(tree, ...) call inside one of
-/// @c OverlayService::buildOsdConfig / @c buildLayoutPickerConfig /
+/// the @c build*Config factories in @c src/daemon/overlayservice/animation_config.cpp
+/// (@c buildOsdConfig / @c buildLayoutPickerConfig /
 /// @c buildZoneSelectorConfig / @c buildSnapAssistConfig /
 /// @c buildCheatsheetConfig; a
 /// @c tryBeginShaderForEvent(...) call under
-/// @c kwin-effect/plasmazoneseffect/ (window_lifecycle for the
-/// open/close/move/maximize/focus legs, daemon_apply for minimize); or a
+/// @c kwin-effect/plasmazoneseffect/ (window_lifecycle for the open, close and
+/// focus legs, window_connections for move and maximize, daemon_apply for
+/// minimize); or a
 /// @c resolveShaderWithDefault(tree, ...) call, which drives both the
 /// screen-level desktop legs from
-/// @c kwin-effect/plasmazoneseffect/lifecycle.cpp and the snap geometry
+/// @c kwin-effect/plasmazoneseffect/lifecycle_wiring.cpp and the snap geometry
 /// legs through @c applyWindowGeometry in
 /// @c kwin-effect/plasmazoneseffect/drag_snap.cpp. When a future
 /// surface adds a shader leg, append its leg paths here in lockstep.
@@ -79,12 +81,12 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::WindowLayoutSwitch,
         // Full-screen virtual-desktop switch — consumed by the kwin-effect's
         // DesktopTransitionManager (resolveShaderWithDefault(tree,
-        // DesktopSwitch) in the desktopChanged handler, lifecycle.cpp), NOT a
+        // DesktopSwitch) in the desktopChanged handler, lifecycle_wiring.cpp), NOT a
         // per-window tryBeginShaderForEvent leg. Its shaders are the two-texture
         // desktop class (appliesTo ["desktop"]).
         PP::DesktopSwitch,
         // Show-desktop peek — same manager, resolved in the
-        // showingDesktopChanged handler (lifecycle.cpp). One node drives both
+        // showingDesktopChanged handler (lifecycle_wiring.cpp). One node drives both
         // legs: the hide leg blends the windows scene into the bare desktop,
         // and the show-back leg replays that same blend with time reversed
         // (its bare-desktop endpoint comes from the hide leg's cache).

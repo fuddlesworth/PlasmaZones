@@ -138,7 +138,6 @@ public:
     // static is the standard source); it labels the scan/parse diagnostics.
     MetadataPackLoader(Registry<Factory>* registry, Parser parser, const QLoggingCategory& logCat)
         : m_registry(registry)
-        , m_sigContrib() // set via setSignatureContrib before first scan
         , m_strategy(makeStrategy(std::move(parser)))
         , m_watcher(std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, nullptr))
     {

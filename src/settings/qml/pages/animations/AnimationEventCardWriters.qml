@@ -105,11 +105,15 @@ QtObject {
     // timing refresh is what re-derives the card's Override toggle, which
     // reports either axis.
     /// Set the shader override on every write path that can host a shader leg.
-    /// Reached from the param sliders, so this runs at drag rate.
+    /// Reached from the param sliders, so this runs at drag rate — the
+    /// controller applies the whole group to one tree read and one write.
+    ///
+    /// False when the controller returned -1: an async discard owns the tree
+    /// and it toasted the reason.
     function _setShaderOverrideOnAll(effectId, params) {
         card._committingShader = true;
         try {
-            settingsController.animationsPage.setShaderOverrideOnPaths(card._writePaths, effectId, params);
+            return settingsController.animationsPage.setShaderOverrideOnPaths(card._writePaths, effectId, params) >= 0;
         } finally {
             card._committingShader = false;
             card.refreshShaderFromTree();
@@ -121,10 +125,12 @@ QtObject {
     /// inheritance. Distinct from writing the engaged-empty sentinel, which is
     /// an explicit "None" that BLOCKS inheritance — that is the picker's job,
     /// not the toggle's.
+    /// False when the controller returned -1 (an async discard owns the tree,
+    /// and it toasted the reason).
     function _clearShaderOverrideOnAll() {
         card._committingShader = true;
         try {
-            settingsController.animationsPage.clearShaderOverrideOnPaths(card._writePaths);
+            return settingsController.animationsPage.clearShaderOverrideOnPaths(card._writePaths) >= 0;
         } finally {
             card._committingShader = false;
             card.refreshShaderFromTree();

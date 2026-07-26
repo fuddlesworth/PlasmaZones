@@ -4,6 +4,7 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
+#include <PhosphorFsLoader/PackPathGuard.h>
 #include <PhosphorFsLoader/SchemaValidator.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
@@ -203,21 +204,34 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         }
     }
 
-    // Resolve directory-relative paths via QDir::filePath, which returns
-    // absolute inputs unchanged — keeps schema tolerance symmetric with
-    // PhosphorShaders::ShaderRegistry's parser. Naive string concat
-    // would mangle absolute paths from a metadata.json into invalid
-    // double-rooted forms.
+    // Resolve directory-relative paths, REFUSING anything that lands outside
+    // the effect's own directory. These name files that are compiled and run
+    // on the GPU, so `QDir::filePath` alone is not enough: it returns an
+    // absolute argument unchanged and never normalises `..`, so a pack
+    // declaring `"fragmentShader": "/etc/shadow"` or `"../../../x.frag"` would
+    // resolve straight out of the pack. Same guard the texture list below has
+    // always had, and the same one PhosphorShaders::ShaderRegistry applies to
+    // its own declared paths. A rejected field is CLEARED rather than left
+    // half-resolved, so the validity checks downstream see a coherent state.
     const QDir dir(effectDir);
-    if (!e.fragmentShaderPath.isEmpty()) {
-        e.fragmentShaderPath = dir.filePath(e.fragmentShaderPath);
-    }
-    if (!e.vertexShaderPath.isEmpty()) {
-        e.vertexShaderPath = dir.filePath(e.vertexShaderPath);
-    }
-    if (!e.previewPath.isEmpty()) {
-        e.previewPath = dir.filePath(e.previewPath);
-    }
+    const auto resolveDeclared = [&effectDir, &e](QString& field, const char* what) {
+        if (field.isEmpty()) {
+            return;
+        }
+        const auto resolved =
+            PhosphorFsLoader::resolveWithinDirectory(field, effectDir, PhosphorFsLoader::AbsolutePathPolicy::Reject);
+        if (!resolved) {
+            qCWarning(lcRegistry).noquote()
+                << "Animation effect" << e.id << what << "path" << field << "resolves outside its source dir"
+                << effectDir << "— rejected (path traversal guard)";
+            field.clear();
+            return;
+        }
+        field = *resolved;
+    };
+    resolveDeclared(e.fragmentShaderPath, "fragmentShader");
+    resolveDeclared(e.vertexShaderPath, "vertexShader");
+    resolveDeclared(e.previewPath, "preview");
 
     // Resolve user-texture paths to absolute form once at scan time —
     // mirrors fragmentShaderPath handling. This avoids per-leg
@@ -283,11 +297,19 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
             QStringList resolved;
             QStringList missing;
             for (const QString& bufPath : e.bufferShaderPaths) {
-                const QString abs = dir.filePath(bufPath);
-                if (QFile::exists(abs)) {
-                    resolved.append(abs);
+                const auto within = PhosphorFsLoader::resolveWithinDirectory(
+                    bufPath, effectDir, PhosphorFsLoader::AbsolutePathPolicy::Reject);
+                if (!within) {
+                    qCWarning(lcRegistry).noquote()
+                        << "Animation effect" << e.id << "buffer shader path" << bufPath
+                        << "resolves outside its source dir" << effectDir << "— rejected (path traversal guard)";
+                    missing.append(bufPath);
+                    continue;
+                }
+                if (QFile::exists(*within)) {
+                    resolved.append(*within);
                 } else {
-                    missing.append(abs);
+                    missing.append(*within);
                 }
             }
             if (missing.isEmpty()) {

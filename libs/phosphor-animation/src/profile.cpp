@@ -10,6 +10,8 @@
 #include <QLoggingCategory>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QByteArray>
+#include <QPair>
 #include <QSet>
 
 #include <cmath>
@@ -21,12 +23,6 @@ namespace PhosphorAnimation {
 namespace {
 Q_LOGGING_CATEGORY(lcProfile, "phosphoranimation.profile")
 
-// Rate-limit the "unknown sequenceMode" warning to one message per distinct
-// raw value per process. Profiles are re-deserialised on every config
-// reload; without this guard a malformed settings file (or a newer client
-// writing an unknown enumerator) produces N warnings per reload, spamming
-// long-lived daemons. We still want the warning on first sight so schema
-// drift is visible.
 // Same rate-limiting shape and rationale as shouldWarnUnknownSequenceMode, for
 // the type-rejection path. Keyed on (field, JSON type) so a file carrying two
 // differently-malformed fields still reports both, while a reload loop over one
@@ -44,6 +40,28 @@ bool shouldWarnMalformedField(const char* key, QJsonValue::Type type)
     return true;
 }
 
+// Rate limiter for the unresolvable-curve diagnostic. Keyed on the spec string
+// rather than a field/type pair, because the interesting axis here is WHICH
+// curve name failed. Bounded by the number of distinct bad specs a corpus
+// contains, which in practice is one or two typos.
+bool shouldWarnMalformedCurveSpec(const QString& spec)
+{
+    static QMutex mutex;
+    static QSet<QString> seen;
+    QMutexLocker lock(&mutex);
+    if (seen.contains(spec)) {
+        return false;
+    }
+    seen.insert(spec);
+    return true;
+}
+
+// Rate-limit the "unknown sequenceMode" warning to one message per distinct
+// raw value per process. Profiles are re-deserialised on every config
+// reload; without this guard a malformed settings file (or a newer client
+// writing an unknown enumerator) produces N warnings per reload, spamming
+// long-lived daemons. We still want the warning on first sight so schema
+// drift is visible.
 bool shouldWarnUnknownSequenceMode(int raw)
 {
     static QMutex mutex;
@@ -151,7 +169,13 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
             // will still substitute the library default) and warn loudly
             // with the original spec so the author can find the typo.
             p.curve = registry.tryCreate(spec);
-            if (!p.curve) {
+            if (!p.curve && shouldWarnMalformedCurveSpec(spec)) {
+                // Rate-limited like the numeric-field diagnostics, and for a
+                // sharper reason: a Global profile naming a user curve that is
+                // not registered YET is a documented normal state during
+                // startup (the curve loader runs before the profile loader),
+                // and a permanently typo'd name would otherwise warn once per
+                // parse — i.e. tens of times a second across a settings drag.
                 qCWarning(lcProfile).nospace() << "Profile::fromJson: curve spec '" << spec
                                                << "' did not resolve — keeping profile without a curve "
                                                   "(library default will apply at animation time)";
@@ -203,7 +227,12 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // value comes from a file a user can hand-edit. Checking the
         // rounded result instead only worked by accident, on the
         // platform where the UB conversion happens to pin to INT_MIN.
-        if (!std::isfinite(rawDouble) || rawDouble < 0.0 || rawDouble > qreal(MaxMinDistancePx)) {
+        if (!minDistanceValue) {
+            // Already reported by numericField as non-numeric. Falling into the
+            // range branch would emit a SECOND, unrate-limited line naming
+            // `nan` — a value the file never contained — on the same ~30 Hz
+            // republish path the rate limiter exists to protect.
+        } else if (!std::isfinite(rawDouble) || rawDouble < 0.0 || rawDouble > qreal(MaxMinDistancePx)) {
             qCWarning(lcProfile).nospace()
                 << "Profile::fromJson: rejecting minDistance " << rawDouble
                 << " (expected 0 <= minDistance <= " << MaxMinDistancePx << " px) — library default will apply";
@@ -285,7 +314,11 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // back to the toInt(default) path. Same shape as minDistance.
         const std::optional<qreal> staggerValue = numericField(JsonFieldStaggerInterval);
         const qreal rawDouble = staggerValue.value_or(std::numeric_limits<qreal>::quiet_NaN());
-        if (!std::isfinite(rawDouble) || rawDouble < 0.0 || rawDouble > static_cast<qreal>(MaxStaggerIntervalMs)) {
+        if (!staggerValue) {
+            // Same as minDistance above: already reported, and the range branch
+            // would name a `nan` the file never contained.
+        } else if (!std::isfinite(rawDouble) || rawDouble < 0.0
+                   || rawDouble > static_cast<qreal>(MaxStaggerIntervalMs)) {
             // Negative stagger would make every cascade element fire
             // immediately (its scheduled-start would already be in the
             // past), erasing the cascade visual. An hour-plus stagger
@@ -314,8 +347,10 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         if (v.isString()) {
             p.presetName = v.toString();
         } else {
-            qCWarning(lcProfile).nospace()
-                << "Profile::fromJson: ignoring non-string presetName (type=" << v.type() << ")";
+            if (shouldWarnMalformedField(JsonFieldPresetName, v.type())) {
+                qCWarning(lcProfile).nospace()
+                    << "Profile::fromJson: ignoring non-string presetName (type=" << v.type() << ")";
+            }
         }
     }
 

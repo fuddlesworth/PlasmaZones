@@ -130,8 +130,12 @@ public:
     /// the loaded state back before it returns: the debounce would
     /// otherwise answer that read with the pre-write state.
     ///
-    /// GUI-thread only, like every other non-test mutating call on this
-    /// class — debug-asserted in `WatchedDirectorySet`, not in release.
+    /// GUI-thread only, like every other non-test mutating call on this class,
+    /// and refused off-thread in EVERY build: `WatchedDirectorySet::rescanNow`
+    /// asserts in debug and, in release, warns and returns without rescanning
+    /// rather than corrupting its entry map from a worker thread. A refused
+    /// call is therefore a silent no-op to this method's caller, which returns
+    /// void — so an off-thread caller sees nothing happen, by design.
     /// `entriesChanged` is emitted on the caller's stack, so the sink's
     /// commit step and every DIRECTLY connected consumer slot run before
     /// this returns (a queued connection still runs later).

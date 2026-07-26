@@ -245,6 +245,125 @@ private Q_SLOTS:
         QCOMPARE(speed.uniformName(), QStringLiteral("customParams6_y")); // customParams[5].y
         QCOMPARE(tint.uniformName(), QStringLiteral("customColor3")); // customColors[2]
     }
+    // ─── Pack-path containment ────────────────────────────────────────────
+    //
+    // A pack's `metadata.json` NAMES files that get compiled and run on the
+    // GPU or sampled as a texture, and `QDir::filePath` (what the parser used
+    // to use) returns an ABSOLUTE argument unchanged and never normalises
+    // `..`. These slots pin the containment guard on every declared-path site.
+    // Driven through `parsePackMetadata`, the public seam the offline
+    // validator also uses, so they exercise the same parser the live registry
+    // does.
+
+    /// Write a pack whose metadata.json is @p meta, and return its parse.
+    static ShaderRegistry::ShaderInfo parsePack(const QTemporaryDir& tmp, const QByteArray& meta)
+    {
+        QFile f(tmp.filePath(QStringLiteral("metadata.json")));
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            return {};
+        }
+        f.write(meta);
+        f.close();
+        return ShaderRegistry::parsePackMetadata(tmp.path());
+    }
+
+    void packMetadataRefusesAnAbsoluteFragmentShaderPath()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const ShaderRegistry::ShaderInfo info =
+            parsePack(tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"/etc/passwd"})"));
+        QVERIFY2(info.sourcePath.isEmpty(), "an absolute declared fragmentShader escaped the pack directory");
+    }
+
+    void packMetadataRefusesAParentTraversalFragmentShaderPath()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const ShaderRegistry::ShaderInfo info =
+            parsePack(tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"../../../evil.frag"})"));
+        QVERIFY2(info.sourcePath.isEmpty(), "a `..` traversal in fragmentShader escaped the pack directory");
+        // A traversal that only LOOKS contained must be refused too: the check
+        // has to be on the resolved path, not on a leading-`..` test.
+        const ShaderRegistry::ShaderInfo sneaky =
+            parsePack(tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"shaders/../../evil.frag"})"));
+        QVERIFY(sneaky.sourcePath.isEmpty());
+    }
+
+    /// The row that stops an over-tightening "fix". Containment must be checked
+    /// on the resolved path, NOT by refusing path separators — a pack keeping
+    /// its shaders in a subdirectory is entirely legal.
+    void packMetadataAcceptsASubdirectoryInsideThePack()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("shaders")));
+        QFile frag(tmp.filePath(QStringLiteral("shaders/effect.frag")));
+        QVERIFY(frag.open(QIODevice::WriteOnly));
+        frag.write(QByteArrayLiteral("// frag\n"));
+        frag.close();
+
+        const ShaderRegistry::ShaderInfo info =
+            parsePack(tmp, QByteArrayLiteral(R"({"id":"ok","fragmentShader":"shaders/effect.frag"})"));
+        QVERIFY2(!info.sourcePath.isEmpty(), "a legitimate in-pack subdirectory was refused");
+        QVERIFY(info.sourcePath.endsWith(QStringLiteral("shaders/effect.frag")));
+    }
+
+    /// A symlink INSIDE the pack pointing outside it. This is what a lexical
+    /// (`QDir::cleanPath`) check misses and a canonical one catches.
+    void packMetadataRefusesAnInPackSymlinkPointingOutside()
+    {
+        QTemporaryDir outside;
+        QTemporaryDir tmp;
+        QVERIFY(outside.isValid() && tmp.isValid());
+        const QString target = outside.filePath(QStringLiteral("evil.frag"));
+        QFile t(target);
+        QVERIFY(t.open(QIODevice::WriteOnly));
+        t.write(QByteArrayLiteral("// evil\n"));
+        t.close();
+        QVERIFY(QFile::link(target, tmp.filePath(QStringLiteral("effect.frag"))));
+
+        const ShaderRegistry::ShaderInfo info =
+            parsePack(tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"effect.frag"})"));
+        QVERIFY2(info.sourcePath.isEmpty(), "an in-pack symlink pointing outside the pack was followed");
+    }
+
+    void packMetadataRefusesAnEscapingVertexShaderPath()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"effect.frag","vertexShader":"/etc/passwd"})"));
+        QVERIFY(info.vertexShaderPath.isEmpty());
+    }
+
+    /// A refused buffer entry drops the WHOLE list and disables multipass,
+    /// rather than compacting: the entries are positionally aligned with the
+    /// per-buffer wrap/filter overrides, so removing one would shift the rest
+    /// onto the wrong buffer.
+    void packMetadataDropsTheWholeBufferListWhenOneEntryEscapes()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const ShaderRegistry::ShaderInfo info =
+            parsePack(tmp,
+                      QByteArrayLiteral(R"({"id":"esc","fragmentShader":"effect.frag","multipass":true,)"
+                                        R"("bufferShaders":["a.frag","/etc/passwd","c.frag"]})"));
+        QVERIFY2(info.bufferShaderPaths.isEmpty(), "an escaping buffer entry was compacted out, shifting the rest");
+        QVERIFY2(!info.isMultipass, "multipass survived a refused buffer list");
+    }
+
+    /// And a pack that declared a buffer list must NOT silently fall back to
+    /// the implicit `buffer.frag` when that list is refused — it would then run
+    /// a different shader than it asked for.
+    void packMetadataDoesNotSubstituteTheDefaultBufferAfterARefusal()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"effect.frag","bufferShaders":["/etc/passwd"]})"));
+        QVERIFY(info.bufferShaderPaths.isEmpty());
+    }
 };
 
 QTEST_MAIN(TestShaderParamPreamble)

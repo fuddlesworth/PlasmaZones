@@ -6946,14 +6946,16 @@
         <translation>Некоторые переопределения анимаций сбросить не удалось.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="135"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="137"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="256"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="298"/>
         <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="490"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="410"/>
         <source>Cannot change this while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="199"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="215"/>
         <source>Some animation overrides could not be reverted.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10666,12 +10668,12 @@
         <translation>Дорожка предпросмотра анимации</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="290"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="299"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation>Пружина · ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="292"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="301"/>
         <source>%1 · %2 ms</source>
         <translation>%1 · %2 мс</translation>
     </message>

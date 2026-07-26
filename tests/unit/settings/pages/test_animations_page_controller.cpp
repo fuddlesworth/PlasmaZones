@@ -611,13 +611,17 @@ private Q_SLOTS:
             << kDur << QByteArrayLiteral(R"({"duration":1e300})") << QVariant(123) << QVariant(123) << false;
 
         // A NON-NUMBER is dropped too, and both sides type-check to make that
-        // so. `QJsonValue::toDouble(default)` hands back the default for
-        // anything that is not a JSON number, and every library default passes
-        // the range checks — so without an `isDouble()` guard the field would
-        // land ENGAGED at that default and BLOCK inheritance, which is a
-        // malformed value quietly pinning a node. `Profile::fromJson` guards
-        // the same way, so the settings app still shows what the daemon will
-        // animate: the parent's value.
+        // so.
+        //
+        // These two duration rows do NOT pin the type check, though — they ride
+        // the range check. A JSON string or bool coerces to 0, and 0 fails
+        // duration's `> 0` bound, so they resolve to the parent with or without
+        // the `isDouble()` guard. The rows that actually pin it in THIS
+        // translation unit are `minDistance string` and `stagger string`, whose
+        // bounds admit 0. The library-side guard has its own coverage in
+        // libs/phosphor-animation/tests/test_profile.cpp
+        // (testFromJsonLeavesNonNumericFieldsUnset). Keep these two rows: the
+        // behaviour they assert is still correct, only the rationale was wrong.
         QTest::newRow("duration string") << kDur << QByteArrayLiteral(R"({"duration":"900"})") << QVariant(123)
                                          << QVariant(123) << false;
         QTest::newRow("duration bool") << kDur << QByteArrayLiteral(R"({"duration":true})") << QVariant(123)

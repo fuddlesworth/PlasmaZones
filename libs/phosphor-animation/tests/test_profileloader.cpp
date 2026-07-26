@@ -11,6 +11,7 @@
 #include <QDir>
 #include <QFile>
 #include <QLoggingCategory>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -313,6 +314,12 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
+        // `reentered` is declared BEFORE `loader` on purpose. The lambda below
+        // captures it by reference and stays connected until the scope guard
+        // fires; ~ProfileLoader ends in clearOwner, which emits profileChanged
+        // synchronously while the destructor body runs, so a lambda outliving
+        // `reentered` would read a dead stack slot. Reverse-declaration-order
+        // destruction is what keeps that impossible.
         bool reentered = false;
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
@@ -330,20 +337,23 @@ private Q_SLOTS:
                 loader.rescanNow();
             });
 
+        // Torn down UNCONDITIONALLY, on every exit from this slot.
+        // ~ProfileLoader ends in clearOwner, which emits profileChanged
+        // synchronously while the destructor body runs; a connection still live
+        // there would re-enter a half-destroyed loader and re-register the very
+        // entries clearOwner just removed. A plain `disconnect()` after the
+        // assertions is not enough, and neither is one placed before them —
+        // every QVERIFY in this slot returns early, including the fixture write
+        // below, so only a scope guard covers all of them.
+        const auto disconnector = qScopeGuard([&conn]() {
+            QObject::disconnect(conn);
+        });
+
         QVERIFY(writeFile(dir.filePath(QStringLiteral("nested.json")), QStringLiteral(R"({
             "name": "nested",
             "duration": 321
         })")));
         loader.rescanNow();
-
-        // Torn down the moment the subject call returns, and BEFORE the
-        // assertions. ~ProfileLoader ends in clearOwner, which emits
-        // profileChanged synchronously while the destructor body runs; a
-        // connection still live there would re-enter a half-destroyed loader
-        // and re-register the very entries clearOwner just removed. An
-        // assertion failure below returns early, so leaving the connection up
-        // would make that reachable on exactly the failure path.
-        QObject::disconnect(conn);
 
         QVERIFY2(reentered, "the nested path never ran, so this test proves nothing");
         // Exactly two: the nested commit's entriesChanged reads the flag while

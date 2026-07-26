@@ -264,12 +264,12 @@ public:
     // group write. Those are view state about which signals the card should
     // ignore while its own write is in flight, and they mean nothing here.
     //
-    // None of these caps `paths.size()`, and none needs to. Every entry is
-    // gated by `isValidEventPath` before it can reach the disk (the write
-    // family through `profileFilePath`, the shader family through
-    // `eventPathSupportsShaderLeg`), so the list is bounded by the built-in
-    // taxonomy rather than by the caller — an in-process QML caller cannot
-    // grow it past `ProfilePaths::allBuiltInPaths()` no matter what it passes.
+    // None of these caps `paths.size()`, and none needs to: every one of them
+    // skips an entry that is not a built-in event path, so the WORK is bounded
+    // by `ProfilePaths::allBuiltInPaths()` rather than by the caller's list. An
+    // unrecognised entry costs one `isValidEventPath` set lookup and nothing
+    // else — in particular it never reaches the disk and never rebuilds the
+    // shader tree.
 
     /// Merge @p fields into the stored override at every path in @p paths and
     /// write each result back.
@@ -324,14 +324,20 @@ public:
     /// SKIPPED rather than attempted: `setShaderOverride` would reject them
     /// anyway, and skipping keeps the warning out of the log for a call that
     /// was never going to land.
-    /// @return the number of paths written.
+    /// The whole group is applied to ONE tree read and written back ONCE, so a
+    /// card cannot observe a half-written group, and a drag over a shader
+    /// parameter costs one settings write per tick rather than one per path.
+    /// @return the number of paths written, or -1 if the call was refused
+    /// because an async discard owns the tree (it toasts).
     Q_INVOKABLE int setShaderOverrideOnPaths(const QStringList& paths, const QString& effectId,
                                              const QVariantMap& parameters);
 
     /// Clear the shader override on every path in @p paths, returning the event
     /// to inheritance. Distinct from writing the engaged-empty sentinel, which
     /// is an explicit "None" that BLOCKS inheritance.
-    /// @return the number of paths whose override was removed.
+    /// One tree read and one write for the whole group, like its setter twin.
+    /// @return the number of paths whose override was removed, or -1 if the
+    /// call was refused because an async discard owns the tree (it toasts).
     Q_INVOKABLE int clearShaderOverrideOnPaths(const QStringList& paths);
 
     /// Clear the shader overrides BELOW every path in @p paths.

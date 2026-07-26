@@ -340,7 +340,7 @@ Menu {
     // `_aspectRatioMenuKind` — relying solely on `!isAutotile`
     // would show two empty separators during the brief window
     // between layout assignment and showForLayout()'s
-    // insertMenu/removeMenu reconciliation when the menu rebuilds
+    // insertMenu/takeMenu reconciliation when the menu rebuilds
     // (e.g. a layout swap in-place).
     MenuSeparator {
         id: aspectRatioMarker
