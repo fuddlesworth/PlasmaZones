@@ -125,7 +125,7 @@ ColumnLayout {
     /// rows' `expandable` gate: no picked shader, or a picked shader
     /// with neither text nor params, keeps the row-click inert and
     /// the chevron hidden.
-    readonly property bool shaderSectionExpandable: shaderEffectId.length > 0 && (shaderDescription.length > 0 || shaderParamSchema.length > 0)
+    readonly property bool shaderSectionExpandable: shaderEffectId.length > 0 && (shaderDescription.length > 0 || (shaderParamSchema || []).length > 0)
     /// Registry entry for the currently-picked shader, resolved from the
     /// consumer-fed picker model. Null when nothing is picked or the id
     /// has no match (a pack uninstalled while its override survives).
@@ -649,7 +649,7 @@ ColumnLayout {
                 readonly property var _paramSchema: root.shaderParamSchema
 
                 Layout.fillWidth: true
-                visible: root.shaderEffectId.length > 0 && _paramSchema.length > 0
+                visible: root.shaderEffectId.length > 0 && (_paramSchema || []).length > 0
                 parameters: _paramSchema
                 currentValues: root.shaderParams
                 effectId: root.shaderEffectId
@@ -740,6 +740,10 @@ ColumnLayout {
             currentId: root.shaderEffectId
             noneId: ""
             includeNoneEntry: true
+            // Context marker left as @action:button deliberately. It is arguably the
+            // wrong register for a placeholder, but the marker is translator-facing
+            // only, and changing it invalidates the approved translation of this
+            // string in six languages for no user-visible gain.
             placeholderText: i18nc("@action:button", "Select a pack…")
             Accessible.description: i18n("Set the shader pack this event uses")
             onSelected: function (id) {

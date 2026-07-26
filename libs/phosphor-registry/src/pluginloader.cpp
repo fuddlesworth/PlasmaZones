@@ -17,8 +17,10 @@
 namespace PhosphorRegistry {
 
 // Hard cap on plugin subdirectories CONSIDERED per scan cycle, summed across
-// every plugin root. Same magnitude and same counted quantity as
-// DirectoryLoader::kMaxEntries and MetadataPackScanStrategy::kDefaultMaxEntries.
+// every plugin root. Same counted quantity as DirectoryLoader::kMaxEntries and
+// MetadataPackScanStrategy::kDefaultMaxEntries, one order of magnitude below
+// them: a plugin costs a dlopen rather than a JSON parse, and no plausible
+// install has a four-digit plugin count.
 static constexpr int kMaxPluginSubdirsPerCycle = 1000;
 
 // Live state for one loaded plugin. The QLibrary holds the .so
@@ -371,6 +373,13 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
         // the removal sweep below is skipped: running it would unload every
         // already-loaded plugin whose directory happened to sort past the cap.
         // Loaded plugins simply stay loaded until a cycle completes in full.
+        //
+        // The returned watch list IS truncated, though, and the watcher treats
+        // it as the complete desired set — so a plugin kept loaded here loses
+        // its manifest file-watch until a full cycle re-arms it. Preferred over
+        // the alternative: seeding the list from `m_plugins` would re-arm
+        // watches for a cap the operator has already blown past, which is the
+        // inotify pressure the cap exists to bound.
         return watchedFiles;
     }
 

@@ -428,6 +428,19 @@ public:
     /// purely file-backed, which is already self-consistent.
     void setProfileStoreRefresher(std::function<void()> refresher);
 
+    /// Forget the cached contents of every user override file.
+    ///
+    /// `resolvedProfile` reads those files off disk and memoises the result
+    /// (see `cachedDiskProfile`), and every mutation this controller performs
+    /// drops the cache itself. This is the entry point for the OTHER writer:
+    /// the profiles directory is a filesystem boundary a user can edit by hand,
+    /// and the page even offers to open it. The composition root connects
+    /// `ProfileLoader::profilesChanged` here so a hand-edited file is picked up
+    /// on the next read instead of serving the pre-edit value for the rest of
+    /// the session. Cheap and idempotent: worst case the next read re-parses a
+    /// few hundred bytes per level.
+    void forgetCachedOverrideFiles();
+
 Q_SIGNALS:
     /// Emitted on any successful set/clearOverride. @p path is the
     /// affected event path.
@@ -617,17 +630,21 @@ private:
     /// the caller (fall through to the registry), so they share a cache slot.
     QVariantMap cachedDiskProfile(const QString& path) const;
 
-    /// Drop the `cachedDiskProfile` entries. Called from every path that
-    /// writes, deletes, or re-reads override files: `setOverride`,
-    /// `removeOverrideFile`, `clearOverridesForPaths`, `refreshProfileStore`,
-    /// and the profiles-directory override hook. Clearing wholesale rather than
-    /// per path is deliberate — the map holds at most one small entry per event
-    /// path, and a partial invalidation is one missed call site away from
-    /// serving a stale inherited value, which is the exact class of bug this
-    /// controller's disk-first read exists to fix.
+    /// Drop every `cachedDiskProfile` entry. Called from each path that writes,
+    /// deletes, or re-reads override files: `setOverride`, `removeOverrideFile`
+    /// (and so, transitively, every batch clear), `refreshProfileStore` (and so
+    /// every revert), the profiles-directory test override, and the public
+    /// `forgetCachedOverrideFiles` for external edits. Clearing wholesale
+    /// rather than per path is deliberate: the map holds at most one small
+    /// entry per event path, and a partial invalidation is one missed call site
+    /// away from serving a stale inherited value, which is the exact class of
+    /// bug this controller's disk-first read exists to fix.
     void invalidateDiskProfileCache() const;
 
     /// Event path -> sanitised override-file contents. See `cachedDiskProfile`.
+    /// Mutated only from the GUI thread, like `m_pendingFileSnapshots`. It is
+    /// `mutable` and written from a `const` accessor, so that contract is worth
+    /// stating: the async discard worker must never reach it.
     mutable QHash<QString, QVariantMap> m_diskProfileCache;
 
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;

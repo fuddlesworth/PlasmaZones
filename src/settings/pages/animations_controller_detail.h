@@ -31,6 +31,8 @@
 #include <QVariantMap>
 
 #include <cmath>
+#include <limits>
+#include <optional>
 
 namespace PlasmaZones {
 namespace animations_controller_detail {
@@ -209,69 +211,125 @@ inline QJsonObject readProfileJson(const QString& path)
     return obj;
 }
 
-/// Drop the numeric fields of a user-authored profile object that
-/// `Profile::fromJson` would have rejected, leaving them absent so
-/// `fillLibraryDefaults` supplies the library value instead.
+/// Normalise a user-authored profile object the way `Profile::fromJson` would,
+/// so the disk-first inheritance walk resolves to what the daemon will animate.
 ///
 /// Needed because inheritance resolution reads override files straight off disk
-/// rather than through the registry. The registry path runs every file through
-/// `Profile::fromJson`, which drops a non-finite / non-positive /
-/// over-`MaxDurationMs` duration, a negative `minDistance`, an out-of-range
-/// `staggerInterval` and an unknown `sequenceMode`. Reading the raw JSON skips
-/// all of that, so a hand-placed `{"duration": "fast"}` or `{"duration": -50}`
-/// in the user profiles directory would reach QML verbatim, render as NaN or a
-/// negative slider value, and then be propagated to every mirror path on the
-/// next edit. `fillLibraryDefaults` cannot help on its own — it only fills keys
-/// that are ABSENT, so a present-but-garbage value has to be removed first.
+/// rather than through the registry, and the registry path runs every file
+/// through `Profile::fromJson`. Reading the raw JSON skips all of that, so a
+/// hand-placed `{"duration": "fast"}` or `{"duration": -50}` in the user
+/// profiles directory would reach QML verbatim, render as NaN or a negative
+/// slider value, and then be propagated to every mirror path on the next edit.
+/// `fillLibraryDefaults` cannot help on its own — it only fills keys that are
+/// ABSENT, so a present-but-invalid value has to be resolved here.
 ///
-/// `curve` is deliberately NOT validated here. Resolving a curve spec needs a
-/// `CurveRegistry`, and the process-wide accessor for one
-/// (`PhosphorCurve::defaultRegistry`) lives in the QML module rather than the
-/// core animation library, so this translation unit cannot reach it. Validating
-/// against a built-ins-only registry instead would be worse than not
-/// validating: it would silently drop legitimate user-authored curves. An
-/// unresolvable spec reaching QML renders as an unrecognised curve, which is
-/// visible and harmless, unlike a NaN duration.
+/// Field-by-field equivalence with `Profile::fromJson` is the contract, and the
+/// per-field comments below say where each one drops a key versus substitutes
+/// the library default, because the two are not interchangeable under
+/// `mergeMissingFields`. The single deliberate divergence is that `curve` is
+/// type-checked but not RESOLVED; see the comment at its branch.
 inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
 {
     using P = PhosphorAnimation::Profile;
+    using PhosphorAnimation::SequenceMode;
     if (obj.isEmpty()) {
         return {};
     }
-    QVariantMap map = obj.toVariantMap();
 
-    // Each accepts only what `Profile::fromJson` accepts. Reading through
-    // toDouble (not toInt) mirrors it too: `QJsonValue::toInt` returns its
-    // default verbatim for a JSON double, so a file written by a non-C++
-    // serializer that emitted `5.0` would look invalid here and be dropped.
-    const auto dropUnless = [&map](QLatin1String key, auto&& accept) {
-        const auto it = map.constFind(key);
-        if (it == map.constEnd()) {
-            return;
-        }
-        bool numeric = false;
-        const double raw = it.value().toDouble(&numeric);
-        if (!numeric || !std::isfinite(raw) || !accept(raw)) {
-            map.remove(key);
+    // Built field by field from the JSON object rather than by pruning
+    // `obj.toVariantMap()`, so the type rules are `QJsonValue`'s — the same
+    // ones fromJson sees. Pruning a QVariantMap would not be equivalent:
+    // `QVariant::toDouble` converts a JSON bool or a numeric string to a
+    // number, where `QJsonValue::toDouble(default)` hands back the default for
+    // any non-double. `{"duration": "900"}` would then show 900 in the UI while
+    // the daemon animated at the library default.
+    //
+    // Dropping a key and substituting the library default are also NOT
+    // interchangeable, because `mergeMissingFields` only fills keys that are
+    // absent: a dropped key lets an ancestor's value through, a substituted one
+    // blocks inheritance at this level. fromJson does each in specific cases,
+    // so this mirrors which it does where rather than dropping uniformly.
+    QVariantMap out;
+
+    // Round only after bounding, so the float-to-int conversion is always in
+    // range. `std::isfinite` alone is not enough — 1e300 is finite and
+    // `qRound` on it is undefined behaviour.
+    const auto boundedRound = [](double v, double lo, double hi, std::optional<int>& into) {
+        if (std::isfinite(v) && v >= lo && v <= hi) {
+            into = qRound(v);
         }
     };
 
-    dropUnless(QLatin1String(P::JsonFieldDuration), [](double v) {
-        return v > 0.0 && v <= P::MaxDurationMs;
-    });
-    dropUnless(QLatin1String(P::JsonFieldMinDistance), [](double v) {
-        return qRound(v) >= 0;
-    });
-    dropUnless(QLatin1String(P::JsonFieldStaggerInterval), [](double v) {
-        return v >= 0.0 && v <= static_cast<double>(P::MaxStaggerIntervalMs);
-    });
-    dropUnless(QLatin1String(P::JsonFieldSequenceMode), [](double v) {
-        const int mode = qRound(v);
-        return mode == static_cast<int>(PhosphorAnimation::SequenceMode::AllAtOnce)
-            || mode == static_cast<int>(PhosphorAnimation::SequenceMode::Cascade);
-    });
+    if (obj.contains(QLatin1String(P::JsonFieldCurve))) {
+        // Type-checked but NOT resolved. Resolving a curve spec needs a
+        // `CurveRegistry`, and the process-wide accessor for one
+        // (`PhosphorCurve::defaultRegistry`) lives in the QML module rather
+        // than the core animation library, so this translation unit cannot
+        // reach it; validating against a built-ins-only registry instead would
+        // silently drop legitimate user-authored curves. An unresolvable spec
+        // reaching QML renders as an unrecognised curve, which is visible and
+        // harmless. A non-string one would reach QML as a map or an int where
+        // every consumer expects a wire string, so that IS rejected here —
+        // fromJson rejects it too, via `toString()` yielding empty.
+        const QJsonValue v = obj.value(QLatin1String(P::JsonFieldCurve));
+        if (v.isString() && !v.toString().isEmpty()) {
+            out.insert(QLatin1String(P::JsonFieldCurve), v.toString());
+        }
+    }
 
-    return map;
+    if (obj.contains(QLatin1String(P::JsonFieldDuration))) {
+        // Rejected → left ABSENT, matching fromJson leaving `p.duration` unset
+        // so `effectiveDuration()` substitutes the library default.
+        const double raw = obj.value(QLatin1String(P::JsonFieldDuration)).toDouble(P::DefaultDuration);
+        if (std::isfinite(raw) && raw > 0.0 && raw <= P::MaxDurationMs) {
+            out.insert(QLatin1String(P::JsonFieldDuration), raw);
+        }
+    }
+
+    if (obj.contains(QLatin1String(P::JsonFieldMinDistance))) {
+        // fromJson leaves this unset when negative, so absent is right here too.
+        std::optional<int> rounded;
+        boundedRound(obj.value(QLatin1String(P::JsonFieldMinDistance)).toDouble(P::DefaultMinDistance), 0.0,
+                     double(std::numeric_limits<int>::max()), rounded);
+        if (rounded.has_value()) {
+            out.insert(QLatin1String(P::JsonFieldMinDistance), *rounded);
+        }
+    }
+
+    if (obj.contains(QLatin1String(P::JsonFieldSequenceMode))) {
+        // The one field fromJson SUBSTITUTES rather than leaves unset: an
+        // unknown enumerator becomes DefaultSequenceMode, engaged. Mirrored, so
+        // an ancestor's mode cannot leak through where the daemon would use the
+        // default.
+        std::optional<int> rounded;
+        boundedRound(obj.value(QLatin1String(P::JsonFieldSequenceMode)).toDouble(int(P::DefaultSequenceMode)),
+                     double(std::numeric_limits<int>::min()), double(std::numeric_limits<int>::max()), rounded);
+        const bool known =
+            rounded.has_value() && (*rounded == int(SequenceMode::AllAtOnce) || *rounded == int(SequenceMode::Cascade));
+        out.insert(QLatin1String(P::JsonFieldSequenceMode), known ? *rounded : int(P::DefaultSequenceMode));
+    }
+
+    if (obj.contains(QLatin1String(P::JsonFieldStaggerInterval))) {
+        std::optional<int> rounded;
+        boundedRound(obj.value(QLatin1String(P::JsonFieldStaggerInterval)).toDouble(P::DefaultStaggerInterval), 0.0,
+                     double(P::MaxStaggerIntervalMs), rounded);
+        if (rounded.has_value()) {
+            out.insert(QLatin1String(P::JsonFieldStaggerInterval), *rounded);
+        }
+    }
+
+    if (obj.contains(QLatin1String(P::JsonFieldPresetName))) {
+        // `isString()`, for fromJson's reason: `toString()` on a non-string
+        // yields an empty QString, and engaged-empty means "explicit empty
+        // override" rather than "inherit", so a `"presetName": 42` would
+        // otherwise block inheritance with a value nobody wrote.
+        const QJsonValue v = obj.value(QLatin1String(P::JsonFieldPresetName));
+        if (v.isString()) {
+            out.insert(QLatin1String(P::JsonFieldPresetName), v.toString());
+        }
+    }
+
+    return out;
 }
 
 /// Merge fields from @p source into @p target without overwriting keys
