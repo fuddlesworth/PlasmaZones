@@ -1009,7 +1009,7 @@
         <translation>ალგორითმის ფაილის ჩაწერა ვერ მოხერხდა. გადაამოწმეთ დისკის ადგილი და უფლებები.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="109"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="107"/>
         <source>Cannot modify sets while a discard is in progress.</source>
         <translation>სიმრავლეების შეცვლა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
     </message>
@@ -6217,13 +6217,13 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="786"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="100"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="108"/>
         <source>Easing Presets</source>
         <translation>დაჩქარების შაბლონები</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="788"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="249"/>
         <source>Spring Presets</source>
         <translation>ზამბარის შაბლონები</translation>
     </message>
@@ -6932,17 +6932,17 @@
         <translation>შაბლონის &quot;%1&quot; წაშლა ვერ მოხერხდა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="412"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="416"/>
         <source>Cannot reset while a discard is in progress.</source>
         <translation>ჩამოყრა ვერ მოხერხდება, სანამ გაუქმება მიმდინარეობს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="466"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="470"/>
         <source>Some animation overrides could not be reset.</source>
         <translation>ანიმაციის ზოგიერთი გადაფარვის ჩამოყრა ვერ მოხერხდა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="486"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="490"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="410"/>
         <source>Cannot change this while a discard is in progress.</source>
         <translation type="unfinished"></translation>
@@ -7889,8 +7889,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="106"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="360"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="389"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="359"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="388"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="199"/>
         <source>Duplicate</source>
         <translation>დუბლირება</translation>
@@ -10421,7 +10421,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="435"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="408"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="413"/>
         <location filename=".qml-stubs/src/settings/qml/pages/wizard/WizardFooter.qml.cpp" line="85"/>
         <source>Cancel</source>
         <translation>გაუქმება</translation>
@@ -10654,12 +10654,12 @@
         <translation>ანიმაციის გადახედვის ტრეკი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="304"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="305"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation>ზამბარა · ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="306"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="307"/>
         <source>%1 · %2 ms</source>
         <translation>%1 · %2 ms</translation>
     </message>
@@ -10721,8 +10721,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="257"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="277"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="326"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="285"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="334"/>
         <source>ω=%1 · ζ=%2</source>
         <translation>ω=%1 · ζ=%2</translation>
     </message>
@@ -11082,77 +11082,77 @@
         <translation>ყველა გადადება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="124"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="168"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="132"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="176"/>
         <source>Curve preview for %1</source>
         <translation>%1-ის მრუდის გადახედვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="140"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="187"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="283"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="148"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="195"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="291"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="340"/>
         <source>Use %1 as default</source>
         <translation>%1-ის საწყისად გამოყენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="141"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="188"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="284"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="333"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="149"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="196"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="292"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="341"/>
         <source>Use as Default</source>
         <translation>საწყისად გამოყენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="173"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="321"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="181"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="329"/>
         <source>★ %1</source>
         <translation>★ %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="181"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="189"/>
         <source>%1 · %2 ms</source>
         <comment>curve wire format, then the preset&apos;s duration</comment>
         <translation type="unfinished">%1 · %2 ms</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="193"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="350"/>
         <source>Delete preset %1</source>
         <translation>შაბლონის %1 წაშლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="196"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="341"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="204"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="353"/>
         <source>Delete preset</source>
         <translation>შაბლონის წაშლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="205"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="350"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="213"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="362"/>
         <source>Delete preset?</source>
         <translation>წავშალო შაბლონი?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="206"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="214"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="363"/>
         <source>&quot;%1&quot; will be permanently removed.</source>
         <translation>&quot;%1&quot; სამუდამოდ წაიშლება.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="227"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="235"/>
         <source>No custom easing presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
         <oldsource>No custom easing presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</oldsource>
         <translation>მორგებული დარბილების შაბლონები ჯერ არ არის. ერთის შესაქმნელად მრუდის რედაქტორში გამოიყენეთ &quot;შენახვა შაბლონად…&quot;.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="267"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="275"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="324"/>
         <source>Spring preview for %1</source>
         <translation>%1-ის ზამბარის გადახედვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="368"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="380"/>
         <source>No custom spring presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
         <oldsource>No custom spring presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</oldsource>
         <translation>მორგებული ზამბარის შაბლონები ჯერ არ არის. ერთის შესაქმნელად მრუდის რედაქტორში გამოიყენეთ &quot;შენახვა შაბლონად…&quot;.</translation>
@@ -11386,7 +11386,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="309"/>
-        <source>Higher values make the spring respond faster</source>
+        <source>Higher values make the spring respond faster.</source>
+        <oldsource>Higher values make the spring respond faster</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -12051,67 +12052,67 @@
         <translation>→ %1 (%2)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="138"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="137"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="69"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="414"/>
         <source>Aspect Ratio</source>
         <translation>გვერდების თანაფარდობა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="227"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="226"/>
         <source>Edit</source>
         <translation>ჩასწორება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="257"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="256"/>
         <source>Edit on %1</source>
         <translation>ჩასწორება %1-ზე</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="289"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="288"/>
         <source>Open in Text Editor</source>
         <translation>გახსნა ტექსტურ რედაქტორში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="302"/>
         <source>Set as Default</source>
         <translation>ნაგულისხმევად დაყენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="323"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="322"/>
         <source>Show in Zone Selector</source>
         <translation>ჩვენება ზონის ამომრჩევში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="323"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="322"/>
         <source>Hide from Zone Selector</source>
         <translation>დამალვა ზონის ამომრჩევიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="331"/>
         <source>Auto-assign forced on (global setting)</source>
         <translation>ავტომატური მინიჭება იძულებით ჩართულია (გლობალური პარამეტრი)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="331"/>
         <source>Disable Auto-assign</source>
         <translation>ავტომატური მინიჭების გამორთვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="331"/>
         <source>Enable Auto-assign</source>
         <translation>ავტომატური მინიჭების ჩართვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="367"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="396"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="366"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="395"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="217"/>
         <source>Export</source>
         <translation>გატანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="378"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="407"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="377"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="406"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="674"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="226"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="378"/>
@@ -13148,7 +13149,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/AddRuleWizard.qml.cpp" line="294"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="504"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="509"/>
         <source>Add rule</source>
         <translation>წესის დამატება</translation>
     </message>
@@ -13520,118 +13521,118 @@
         <translation>რაზე უნდა იყოს ეს წესი?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="321"/>
         <source>Failed to save rules.</source>
         <translation>წესების შენახვა ჩავარდა.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="362"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="367"/>
         <source>The PlasmaZones daemon is not running. Rules cannot be loaded or saved until it starts.</source>
         <translation>PlasmaZones-ის დემონი გაშვებული არაა. წესების ჩატვირთვა ან შენახვა ვერ მოხერხდება, სანამ ის არ გაეშვება.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="369"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="374"/>
         <source>The rules changed on disk while you were editing. Saving now will overwrite those changes. Review your edits before saving, or discard them to reload.</source>
         <translation>წესები დისკზე შეიცვალა, სანამ ასწორებდით. ახლა შენახვა გადაწერს იმ ცვლილებებს. გადახედეთ თქვენს ცვლილებებს შენახვამდე ან უარყავით ხელახლა ჩასატვირთად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="380"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="385"/>
         <source>Save anyway</source>
         <translation>მაინც შენახვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="390"/>
         <source>Discard and reload</source>
         <translation>უარყოფა და ხელახლა ჩატვირთვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="402"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="407"/>
         <source>Overwrite daemon-side changes?</source>
         <translation>გადაიწეროს დემონის მხრიდან ცვლილებები?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="403"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="408"/>
         <source>Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.</source>
         <translation>შენახვა ჩაანაცვლებს წესების ნაკრებს, რომელიც დემონს ამჟამად დისკზე აქვს, თქვენი მოსამზადებელი ცვლილებებით. ნებისმიერი წესი, რომელიც იქ შეიცვალა, სანამ ასწორებდით, დაიკარგება.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="413"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="418"/>
         <source>Overwrite</source>
         <translation>გადაწერა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="457"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="462"/>
         <source>Search rules…</source>
         <translation>წესების ძიება…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="458"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="463"/>
         <source>Search rules</source>
         <translation>წესების ძიება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="474"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="479"/>
         <source>Filter Rules</source>
         <comment>@title:menu</comment>
         <translation>წესების გაფილტვრა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="478"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="483"/>
         <source>System</source>
         <comment>@option:check filter rules by source</comment>
         <translation>სისტემა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="482"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="487"/>
         <source>User-created</source>
         <comment>@option:check filter rules by source</comment>
         <translation>მომხმარებლის შექმნილი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="494"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="499"/>
         <source>Active</source>
         <comment>@option:check filter rules by status</comment>
         <translation>აქტიური</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="498"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="503"/>
         <source>Disabled</source>
         <comment>@option:check filter rules by status</comment>
         <translation>გამორთული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="506"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="511"/>
         <source>Add a new rule</source>
         <translation>ახალი წესის დამატება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="524"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="529"/>
         <source>No rules yet</source>
         <translation>ჯერ წესები არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="524"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="529"/>
         <source>No rules match the current filter</source>
         <translation>მიმდინარე ფილტრს არცერთი წესი არ ემთხვევა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="525"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="530"/>
         <source>Add a rule to assign layouts to monitors, float application windows, or override animations.</source>
         <translation>დაამატეთ წესი მონიტორებზე განლაგებების მისანიჭებლად, აპლიკაციის ფანჯრების მოსატივტივებლად ან ანიმაციების გადასაფარად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="525"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="530"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="579"/>
         <source>Try a different filter or search term.</source>
         <translation>სცადეთ სხვა ფილტრი ან საძიებო სიტყვა.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="536"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="541"/>
         <source>All rules</source>
         <translation>ყველა წესი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="539"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="544"/>
         <source>%1 · drag to set precedence</source>
         <comment>Suffix in the rule list header showing the count and a reorder hint</comment>
         <translation>%1 · გადათრიეთ პრიორიტეტის დასაყენებლად</translation>

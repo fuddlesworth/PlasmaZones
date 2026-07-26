@@ -94,7 +94,7 @@ QtObject {
         // reconstructed to recover.
         card._committing = true;
         try {
-            card._setOverrideMergedLoop(profile, curveFromCommit);
+            writers._setOverrideMergedLoop(profile, curveFromCommit);
         } finally {
             // Both the flag AND the refresh are in the finally. Every
             // overrideChanged the loop emitted was deliberately swallowed on
@@ -114,7 +114,11 @@ QtObject {
     function _setOverrideMergedLoop(profile, curveFromCommit) {
         const paths = card._writePaths;
         for (var i = 0; i < paths.length; ++i) {
-            var raw = card._pathProfiles[paths[i]] || ({});
+            // Same fallback as _clearFieldOnAll: a path absent from the
+            // cache is re-read rather than treated as empty, because merging
+            // onto {} would truncate that path's other motion-set fields —
+            // the exact loss this merged writer exists to prevent.
+            var raw = card._pathProfiles[paths[i]] || settingsController.animationsPage.rawProfile(paths[i]) || ({});
             var perPath = Object.assign({}, raw);
             Object.assign(perPath, profile);
             if (curveFromCommit !== undefined)
@@ -324,10 +328,10 @@ QtObject {
             card._divergentPathCount = 0;
             return;
         }
-        const primary = card._storedStateKey(card.eventPath);
+        const primary = writers._storedStateKey(card.eventPath);
         var diverged = 0;
         for (var i = 0; i < mirrors.length; ++i) {
-            if (card._storedStateKey(mirrors[i]) !== primary)
+            if (writers._storedStateKey(mirrors[i]) !== primary)
                 ++diverged;
         }
         card._mirrorsDiverged = diverged > 0;

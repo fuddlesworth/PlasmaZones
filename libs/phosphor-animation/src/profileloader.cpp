@@ -77,9 +77,10 @@ public:
     {
         // Common envelope checks (read, parse, root-is-object,
         // non-empty `name`, name-matches-filename) live in the shared
-        // helper. The helper strips `name` from the returned root, so
-        // it can't leak into Profile::presetName — the two concepts
-        // are distinct (registry path vs. user-assigned preset label).
+        // helper, which also strips `name` from the returned root: it is
+        // that layer's routing key, not part of this schema. The registry
+        // path and `Profile::presetName` are distinct concepts and stay
+        // distinct — `Profile::fromJson` reads only `presetName`.
         auto envelope = PhosphorFsLoader::validateJsonEnvelope(filePath, lcProfileLoader());
         if (!envelope) {
             return std::nullopt;

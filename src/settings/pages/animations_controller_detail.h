@@ -7,9 +7,9 @@
 // files (animationspagecontroller.cpp and its _overrides / _shaders / _paths
 // siblings). Covers the shader-effect / parameter / shader-profile conversions
 // those TUs hand to QML, the override-file read and normalisation
-// (readProfileJson, sanitizedProfileMap, mergeMissingFields,
-// fillLibraryDefaults), and the two path helpers (humanizeSegment,
-// collectShaderOverrideDescendants). Inline definitions here ensure every TU
+// (JsonNameKey, readProfileJson, sanitizedProfileMap, profileToVariantMap,
+// mergeMissingFields, fillLibraryDefaults), and the two path helpers
+// (humanizeSegment, collectShaderOverrideDescendants). Inline definitions here ensure every TU
 // gets its own copy without relying on unity-build TU merging for cross-TU
 // linkage.
 
@@ -33,6 +33,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -261,8 +262,17 @@ inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
     // Round only after bounding, so the float-to-int conversion is always in
     // range. `std::isfinite` alone is not enough — 1e300 is finite and
     // `qRound` on it is undefined behaviour.
+    //
+    // The caller's [lo, hi] is intersected with a band half a unit inside the
+    // int range, because `qRound(d)` is `int(d + 0.5)` for non-negative d and
+    // `int(d - 0.5)` otherwise: a caller passing the full int range as its
+    // domain (sequenceMode does) would otherwise still hand `qRound` a value
+    // whose conversion is out of range. Matches the same guard in
+    // `Profile::fromJson`.
     const auto boundedRound = [](double v, double lo, double hi, std::optional<int>& into) {
-        if (std::isfinite(v) && v >= lo && v <= hi) {
+        const double safeLo = std::max(lo, double(std::numeric_limits<int>::min()) + 1.0);
+        const double safeHi = std::min(hi, double(std::numeric_limits<int>::max()) - 1.0);
+        if (std::isfinite(v) && v >= safeLo && v <= safeHi) {
             into = qRound(v);
         }
     };

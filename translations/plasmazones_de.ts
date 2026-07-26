@@ -5871,13 +5871,13 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="786"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="100"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="108"/>
         <source>Easing Presets</source>
         <translation>Easing-Vorlagen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="788"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="249"/>
         <source>Spring Presets</source>
         <translation>Feder-Vorlagen</translation>
     </message>
@@ -6273,7 +6273,7 @@
         <translation>Die Algorithmusdatei konnte nicht geschrieben werden. Prüfen Sie den Speicherplatz und die Berechtigungen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="109"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="107"/>
         <source>Cannot modify sets while a discard is in progress.</source>
         <translation>Sätze können nicht geändert werden, während ein Verwerfen läuft.</translation>
     </message>
@@ -6932,17 +6932,17 @@
         <translation>Die Voreinstellung &quot;%1&quot; konnte nicht gelöscht werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="412"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="416"/>
         <source>Cannot reset while a discard is in progress.</source>
         <translation>Zurücksetzen ist nicht möglich, während ein Verwerfen läuft.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="466"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="470"/>
         <source>Some animation overrides could not be reset.</source>
         <translation>Einige Animations-Überschreibungen konnten nicht zurückgesetzt werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="486"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="490"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="410"/>
         <source>Cannot change this while a discard is in progress.</source>
         <translation type="unfinished"></translation>
@@ -7889,8 +7889,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="106"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="360"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="389"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="359"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="388"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="199"/>
         <source>Duplicate</source>
         <translation>Duplizieren</translation>
@@ -10421,7 +10421,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="435"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="408"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="413"/>
         <location filename=".qml-stubs/src/settings/qml/pages/wizard/WizardFooter.qml.cpp" line="85"/>
         <source>Cancel</source>
         <translation>Abbrechen</translation>
@@ -10654,12 +10654,12 @@
         <translation>Animationsvorschauspur</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="304"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="305"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation>Feder · ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="306"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="307"/>
         <source>%1 · %2 ms</source>
         <translation>%1 · %2 ms</translation>
     </message>
@@ -10721,8 +10721,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="257"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="277"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="326"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="285"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="334"/>
         <source>ω=%1 · ζ=%2</source>
         <translation>ω=%1 · ζ=%2</translation>
     </message>
@@ -11082,77 +11082,77 @@
         <translation>Alle Overlays</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="124"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="168"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="132"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="176"/>
         <source>Curve preview for %1</source>
         <translation>Kurvenvorschau für %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="140"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="187"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="283"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="148"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="195"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="291"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="340"/>
         <source>Use %1 as default</source>
         <translation>%1 als Standard verwenden</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="141"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="188"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="284"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="333"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="149"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="196"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="292"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="341"/>
         <source>Use as Default</source>
         <translation>Als Standard verwenden</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="173"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="321"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="181"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="329"/>
         <source>★ %1</source>
         <translation>★ %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="181"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="189"/>
         <source>%1 · %2 ms</source>
         <comment>curve wire format, then the preset&apos;s duration</comment>
         <translation type="unfinished">%1 · %2 ms</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="193"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="350"/>
         <source>Delete preset %1</source>
         <translation>Voreinstellung %1 löschen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="196"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="341"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="204"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="353"/>
         <source>Delete preset</source>
         <translation>Voreinstellung löschen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="205"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="350"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="213"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="362"/>
         <source>Delete preset?</source>
         <translation>Voreinstellung löschen?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="206"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="214"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="363"/>
         <source>&quot;%1&quot; will be permanently removed.</source>
         <translation>„%1“ wird dauerhaft entfernt.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="227"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="235"/>
         <source>No custom easing presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
         <oldsource>No custom easing presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</oldsource>
         <translation>Es sind noch keine eigenen Easing-Voreinstellungen vorhanden. Verwenden Sie „Als Voreinstellung speichern …“ im Kurveneditor, um eine zu erstellen.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="267"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="275"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="324"/>
         <source>Spring preview for %1</source>
         <translation>Federvorschau für %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="368"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="380"/>
         <source>No custom spring presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
         <oldsource>No custom spring presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</oldsource>
         <translation>Es sind noch keine eigenen Federvoreinstellungen vorhanden. Verwenden Sie „Als Voreinstellung speichern …“ im Kurveneditor, um eine zu erstellen.</translation>
@@ -11386,7 +11386,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="309"/>
-        <source>Higher values make the spring respond faster</source>
+        <source>Higher values make the spring respond faster.</source>
+        <oldsource>Higher values make the spring respond faster</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -12051,67 +12052,67 @@
         <translation>→ %1 (%2)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="138"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="137"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="69"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="414"/>
         <source>Aspect Ratio</source>
         <translation>Seitenverhältnis</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="227"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="226"/>
         <source>Edit</source>
         <translation>Bearbeiten</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="257"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="256"/>
         <source>Edit on %1</source>
         <translation>Auf %1 bearbeiten</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="289"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="288"/>
         <source>Open in Text Editor</source>
         <translation>In Texteditor öffnen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="302"/>
         <source>Set as Default</source>
         <translation>Als Standard festlegen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="323"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="322"/>
         <source>Show in Zone Selector</source>
         <translation>In Zonenauswahl anzeigen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="323"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="322"/>
         <source>Hide from Zone Selector</source>
         <translation>Aus Zonenauswahl ausblenden</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="331"/>
         <source>Auto-assign forced on (global setting)</source>
         <translation>Automatische Zuweisung erzwungen aktiviert (globale Einstellung)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="331"/>
         <source>Disable Auto-assign</source>
         <translation>Automatische Zuweisung deaktivieren</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="331"/>
         <source>Enable Auto-assign</source>
         <translation>Automatische Zuweisung aktivieren</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="367"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="396"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="366"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="395"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="217"/>
         <source>Export</source>
         <translation>Exportieren</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="378"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="407"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="377"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="406"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="674"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="226"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="378"/>
@@ -13148,7 +13149,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/AddRuleWizard.qml.cpp" line="294"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="504"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="509"/>
         <source>Add rule</source>
         <translation>Regel hinzufügen</translation>
     </message>
@@ -13520,118 +13521,118 @@
         <translation>Worum soll es bei dieser Regel gehen?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="321"/>
         <source>Failed to save rules.</source>
         <translation>Speichern der Regeln fehlgeschlagen.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="362"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="367"/>
         <source>The PlasmaZones daemon is not running. Rules cannot be loaded or saved until it starts.</source>
         <translation>Der PlasmaZones-Hintergrunddienst läuft nicht. Regeln können erst geladen oder gespeichert werden, wenn er gestartet ist.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="369"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="374"/>
         <source>The rules changed on disk while you were editing. Saving now will overwrite those changes. Review your edits before saving, or discard them to reload.</source>
         <translation>Die Regeln haben sich auf dem Datenträger geändert, während Sie bearbeitet haben. Ein jetziges Speichern überschreibt diese Änderungen. Prüfen Sie Ihre Bearbeitungen vor dem Speichern, oder verwerfen Sie sie, um neu zu laden.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="380"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="385"/>
         <source>Save anyway</source>
         <translation>Trotzdem speichern</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="390"/>
         <source>Discard and reload</source>
         <translation>Verwerfen und neu laden</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="402"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="407"/>
         <source>Overwrite daemon-side changes?</source>
         <translation>Änderungen auf Seiten des Hintergrunddienstes überschreiben?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="403"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="408"/>
         <source>Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.</source>
         <translation>Das Speichern ersetzt den Regelsatz, den der Hintergrunddienst derzeit auf dem Datenträger hat, durch Ihre bereitgestellten Bearbeitungen. Regeln, die sich dort während Ihrer Bearbeitung geändert haben, gehen verloren.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="413"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="418"/>
         <source>Overwrite</source>
         <translation>Überschreiben</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="457"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="462"/>
         <source>Search rules…</source>
         <translation>Regeln suchen…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="458"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="463"/>
         <source>Search rules</source>
         <translation>Regeln suchen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="474"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="479"/>
         <source>Filter Rules</source>
         <comment>@title:menu</comment>
         <translation>Regeln filtern</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="478"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="483"/>
         <source>System</source>
         <comment>@option:check filter rules by source</comment>
         <translation>System</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="482"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="487"/>
         <source>User-created</source>
         <comment>@option:check filter rules by source</comment>
         <translation>Benutzererstellt</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="494"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="499"/>
         <source>Active</source>
         <comment>@option:check filter rules by status</comment>
         <translation>Aktiv</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="498"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="503"/>
         <source>Disabled</source>
         <comment>@option:check filter rules by status</comment>
         <translation>Deaktiviert</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="506"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="511"/>
         <source>Add a new rule</source>
         <translation>Eine neue Regel hinzufügen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="524"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="529"/>
         <source>No rules yet</source>
         <translation>Noch keine Regeln</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="524"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="529"/>
         <source>No rules match the current filter</source>
         <translation>Keine Regeln entsprechen dem aktuellen Filter</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="525"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="530"/>
         <source>Add a rule to assign layouts to monitors, float application windows, or override animations.</source>
         <translation>Fügen Sie eine Regel hinzu, um Layouts Bildschirmen zuzuweisen, Anwendungsfenster schweben zu lassen oder Animationen zu überschreiben.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="525"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="530"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="579"/>
         <source>Try a different filter or search term.</source>
         <translation>Probieren Sie einen anderen Filter oder Suchbegriff.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="536"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="541"/>
         <source>All rules</source>
         <translation>Alle Regeln</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="539"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="544"/>
         <source>%1 · drag to set precedence</source>
         <comment>Suffix in the rule list header showing the count and a reorder hint</comment>
         <translation>%1 · ziehen, um die Rangfolge festzulegen</translation>

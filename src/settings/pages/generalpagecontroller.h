@@ -20,7 +20,9 @@ class ISettings;
 /// required" InlineMessage visible across page navigation (the picker's
 /// options come from SettingsController::valueOptions and the schema), plus
 /// the animation-duration / min-distance / stagger-interval slider bounds
-/// that the animation curve editors consume.
+/// that the animation curve editors consume, plus the window-filtering bounds
+/// (snap-side, animation-side and decoration-side) that the shared
+/// WindowFilterCard reads.
 ///
 /// Import/export of the full config stays on SettingsController — those are
 /// top-level app actions that touch every page, not a "General" concern.

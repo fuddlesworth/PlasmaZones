@@ -81,8 +81,12 @@ QString AnimationsPageController::userMotionSetsDir() const
     // Not perfectly parallel to production, but every test depends on
     // the "profile files at tmp root" convention so restructuring would
     // be a multi-test churn for no behavioural benefit.
-    if (!m_userProfilesDirOverride.isEmpty())
-        return m_userProfilesDirOverride + QStringLiteral("/motionsets");
+    // The suffix is derived from the production accessor rather than spelled
+    // again, so the two cannot drift.
+    if (!m_userProfilesDirOverride.isEmpty()) {
+        const QString subdir = ConfigDefaults::userMotionSetsSubdir();
+        return m_userProfilesDirOverride + subdir.mid(subdir.lastIndexOf(QLatin1Char('/')));
+    }
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return base + ConfigDefaults::userMotionSetsSubdir();
 }

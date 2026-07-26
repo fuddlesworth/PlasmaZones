@@ -458,6 +458,15 @@ public:
     /// `refreshProfileStore()` is on the stack, because the loader's rescan
     /// re-enters here synchronously and the caller is already about to emit the
     /// precise per-path signals. External writers are the case this exists for.
+    ///
+    /// One consequence of that suppression is worth knowing. `rescanNow()`
+    /// cancels the loader's pending debounce, so an external edit landing
+    /// inside the debounce window of one of our own writes is folded into the
+    /// same rescan and loses its broadcast. It never loses its invalidation
+    /// (the memo drop below happens before the early return), so no stale value
+    /// is ever served. An already-open card at an unrelated path just stays
+    /// visually stale until something else rebinds it.
+    ///
     /// Cheap and idempotent: worst case the next read re-parses a few hundred
     /// bytes per level.
     void forgetCachedOverrideFiles();
@@ -671,8 +680,10 @@ private:
     /// stack, and `forgetCachedOverrideFiles` is wired to it — so without this
     /// the controller would answer its own rescan with a tree-wide reload
     /// broadcast, on top of the precise per-path signals the caller is already
-    /// about to send. A depth counter rather than a bool because the revert
-    /// paths can nest a refresh inside a batch.
+    /// about to send. A counter rather than a bool: no call site nests a
+    /// refresh inside another today (all five are single top-level calls), but
+    /// a counter cannot be left stuck by a nesting one added later, and it
+    /// costs nothing over a bool.
     int m_selfDrivenRescanDepth = 0;
 
     /// Event path -> sanitised override-file contents. See `cachedDiskProfile`.

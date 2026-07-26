@@ -498,7 +498,7 @@ QtObject {
                 // hand-written i18n() literals, which a rule's free-form event
                 // field cannot. Better than the dotted path, and the alternative
                 // is a translated label table this PR does not introduce.
-                eventLabel: row.action.event ? settingsController.animationsPage.eventLabel(row.action.event) : ""
+                eventLabel: row.action.event ? row.appSettings.animationsController.eventLabel(row.action.event) : ""
                 timingMode: curveSlot._isSpring ? CurvePresets.timingModeSpring : CurvePresets.timingModeEasing
                 easingCurve: curveSlot._easingCurve
                 springOmega: curveSlot._springOmega
@@ -506,7 +506,7 @@ QtObject {
                 // Drives the in-dialog preview tempo and the duration stamped
                 // into a saved preset. A rule action carries no duration of its
                 // own, so the global default is the honest answer here.
-                duration: settingsController.settings.animationDuration
+                duration: row.appSettings.animationDuration
                 onCurveApplied: function (curve) {
                     row.actionEdited(row._withParam(curveSlot._param.key, curve));
                 }

@@ -149,8 +149,15 @@ private Q_SLOTS:
         QCOMPARE(entries.first().systemSourcePath, systemDir.filePath(QStringLiteral("x.json")));
     }
 
-    /// `name` field becomes the registry path; it must NOT leak into
-    /// the Profile's presetName (two distinct concepts).
+    /// The `name` field becomes the registry path and `presetName` is a
+    /// user-assigned label. Two distinct concepts, and neither may stand in
+    /// for the other.
+    ///
+    /// The second file is the load-bearing half: it carries a `name` and NO
+    /// `presetName`, so a parser that ever started treating the routing key as
+    /// a preset label would engage the optional here and fail the assertion.
+    /// The first file only pins that an explicit label survives the envelope
+    /// strip.
     void testNameDoesNotLeakIntoPresetName()
     {
         QTemporaryDir dir;
@@ -160,12 +167,21 @@ private Q_SLOTS:
             "presetName": "My Overlay Preset",
             "duration": 150
         })")));
+        QVERIFY(writeFile(dir.filePath(QStringLiteral("overlay.slide.json")), QStringLiteral(R"({
+            "name": "overlay.slide",
+            "duration": 150
+        })")));
 
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
         auto resolved = m_profileRegistry.resolve(QStringLiteral("overlay.fade"));
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->presetName.value_or(QString()), QStringLiteral("My Overlay Preset"));
+
+        auto unlabelled = m_profileRegistry.resolve(QStringLiteral("overlay.slide"));
+        QVERIFY(unlabelled.has_value());
+        QVERIFY2(!unlabelled->presetName.has_value(),
+                 "a profile with no presetName came back labelled — the registry path leaked into it");
     }
 
     /// `profilesChanged` fires on a rescan that sees content change on

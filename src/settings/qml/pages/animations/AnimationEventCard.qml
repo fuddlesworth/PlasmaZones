@@ -150,7 +150,8 @@ Item {
     /// to commit a snapshot of the inherited values just to stay visually on
     /// (overrideEnabled is derived from stored state), which silently pinned
     /// a copy of the Global curve and duration the moment it was flipped.
-    /// Cleared by the toggle's OFF path; not persisted.
+    /// Cleared by the toggle's OFF path, and by `refreshFromTree` when an
+    /// EXTERNAL clear drops the stored state out from under it. Not persisted.
     property bool _editingTiming: false
     /// The primary path's stored profile, from the cache refreshFromTree
     /// seeds (so no extra file open). Drives the per-field status captions.
@@ -390,6 +391,9 @@ Item {
         return writers._refreshMirrorDivergence.apply(writers, arguments);
     }
 
+    // Never read by name — the forwarders above go through the `writers` id.
+    // The property exists to give the object an owner so it lives as long as
+    // the card. Deleting it as "unused" takes every group writer with it.
     readonly property AnimationEventCardWriters _writers: AnimationEventCardWriters {
         id: writers
 
@@ -502,6 +506,15 @@ Item {
         var hasShaderParams = Boolean(rawShader && rawShader.parameters && Object.keys(rawShader.parameters).length > 0);
         var hasShader = hasShaderEffect || hasShaderParams;
         root.overrideEnabled = Boolean(hasRaw) || hasShader;
+        // A clear that did not come through the toggle's OFF arm — a page
+        // Discard, a profile switch, another surface writing this path — drops
+        // overrideEnabled without touching the latch, leaving the toggle
+        // reading ON and the timing section open over a card that stores
+        // nothing. Own writes are excluded: a per-field revert that happens to
+        // clear the last field must not close the editor under the user
+        // mid-edit.
+        if (!root.overrideEnabled && !root._committing && !root._committingShader)
+            root._editingTiming = false;
         // Effective values feed the controls. With no direct override the
         // controls preview the resolved profile from the parent chain.
         // Overrides are per field, so a direct override decides only the

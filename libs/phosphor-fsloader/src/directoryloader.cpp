@@ -313,6 +313,11 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
         desiredFileWatches.append(entry.sourcePath);
     }
     desiredFileWatches.append(refusedPaths);
+    // Sorted before returning, like MetadataPackScanStrategy does. The base
+    // dedupes and the interface promises no ordering, so this buys nothing at
+    // runtime — it makes the returned list deterministic across QHash
+    // iteration orders, which is what test assertions compare against.
+    std::sort(desiredFileWatches.begin(), desiredFileWatches.end());
     return desiredFileWatches;
 }
 

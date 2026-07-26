@@ -104,6 +104,13 @@ public:
     void setCurve(std::shared_ptr<const PhosphorAnimation::Curve> curve);
     std::shared_ptr<const PhosphorAnimation::Curve> curve() const;
 
+    // Deliberately tighter than the library's domain bounds
+    // (`Profile::MaxDurationMs` = 3600000, `Profile::MaxMinDistancePx` =
+    // 100000). These clamp a profile that arrived over D-Bus, on the
+    // compositor's paint path, where a legal-but-absurd value costs frames
+    // rather than a rejected file. A minDistance past either bound means the
+    // same thing ("never animate"), but a duration between 10 s and the
+    // library ceiling is legal upstream and IS clamped here.
     static constexpr qreal kMaxDurationMs = 10000.0;
     static constexpr int kMaxMinDistancePx = 10000;
 

@@ -71,7 +71,7 @@ public:
     Q_ENUM(SequenceMode)
 
     PhosphorProfile() = default;
-    /// Implicit-conversion ctor from core-library value.
+    /// Explicit converting ctor from a core-library value.
     explicit PhosphorProfile(const Profile& value)
         : m_value(value)
     {
@@ -81,7 +81,8 @@ public:
     /// was deliberately removed: a mutable handle from QML let scripts
     /// bypass the setter clamps below by writing directly into the
     /// engaged-optional fields. Core-library mutators construct a fresh
-    /// Profile and assign through the implicit-conversion ctor instead.
+    /// Profile and assign through the converting ctor instead, which is
+    /// explicit, so the conversion has to be written out.
     const Profile& value() const
     {
         return m_value;
@@ -137,7 +138,18 @@ public:
     }
     void setSequenceMode(SequenceMode mode)
     {
-        m_value.sequenceMode = static_cast<PhosphorAnimation::SequenceMode>(static_cast<int>(mode));
+        // Validated like its scalar siblings. A QML script can assign any int
+        // to a Q_ENUM property, and an unknown enumerator stored here would be
+        // returned verbatim by `effectiveSequenceMode()` and serialized by
+        // `toJson()`, so the wrapper would emit a blob its own `fromJson`
+        // rejects on the next read.
+        const int raw = static_cast<int>(mode);
+        if (raw != static_cast<int>(PhosphorAnimation::SequenceMode::AllAtOnce)
+            && raw != static_cast<int>(PhosphorAnimation::SequenceMode::Cascade)) {
+            m_value.sequenceMode.reset();
+            return;
+        }
+        m_value.sequenceMode = static_cast<PhosphorAnimation::SequenceMode>(raw);
     }
 
     int staggerInterval() const

@@ -95,6 +95,11 @@ SettingsFlickable {
         // `availableShaderEffects()` for the animationEvent / shaderEffect
         // picker editors in ActionRow.
         readonly property var animationsController: settingsController.animationsPage
+        // The global default animation duration, read by the curve-editor
+        // dialog in ActionParamEditors to set its preview tempo. Threaded
+        // through here rather than read off the context directly so every
+        // editor body keeps to the injected surface.
+        readonly property int animationDuration: settingsController.settings.animationDuration
         // `SnappingShadersPageController` — exposes `availableShaderEffects()`
         // (the overlay/snapping shader catalog) for the overlayShader picker
         // editor (OverrideOverlayShader) and its read-only name resolution.
