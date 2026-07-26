@@ -53,9 +53,12 @@ public:
 
     void setMaxEntries(int cap)
     {
-        // Clamped like MetadataPackScanStrategy::setMaxEntries: a negative cap
-        // would trip on the first file of every scan, which mass-unregisters
-        // every previously tracked key.
+        // Asserted and clamped exactly like MetadataPackScanStrategy::setMaxEntries.
+        // The clamp is not what makes a negative cap safe — `filesConsidered >=
+        // m_maxEntries` is int-to-int here, so -1 and the clamped 0 both trip on
+        // the first file and mass-unregister every tracked key. The assert is
+        // what catches it, in the build where a caller can still act on it.
+        Q_ASSERT_X(cap >= 0, "DirectoryLoader::JsonScanStrategy::setMaxEntries", "cap must be non-negative");
         m_maxEntries = std::max(0, cap);
     }
 

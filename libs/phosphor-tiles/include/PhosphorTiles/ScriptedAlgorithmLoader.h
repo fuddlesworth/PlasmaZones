@@ -109,7 +109,18 @@ private:
     class LuauScanStrategy;
     QStringList performScan(const QStringList& directoriesInScanOrder);
 
-    void loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir);
+    /// Identity of a script file that registered successfully on some scan.
+    /// `size` + `mtimeMs` are the same (size, mtime) pair the change signature
+    /// uses, so "unchanged on disk" means exactly the same thing in both places.
+    struct ScriptStamp
+    {
+        QString id; ///< Registry id the file registered under
+        qint64 size = -1;
+        qint64 mtimeMs = -1;
+    };
+
+    void loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir,
+                           const QHash<QString, ScriptStamp>& prevStamps);
     QStringList algorithmDirectories() const;
     QStringList validatedLuauFiles(const QString& dirPath, int maxFiles) const;
 
@@ -148,6 +159,15 @@ private:
     /// a broken script still triggers a rescan; these files own no
     /// registry entry, so they never appear in m_scriptIdToPath.
     QSet<QString> m_refusedFilePaths;
+    /// Canonical file path -> identity of the algorithm that path registered,
+    /// for every file that actually took a registry entry on the last scan.
+    /// A file whose stamp still matches disk and whose id still holds a live
+    /// scripted registry entry is left alone: without this, every inotify wake
+    /// rebuilt a sandboxed Luau VM and re-parsed the source for every script in
+    /// the corpus, on the GUI thread, even when the signature diff went on to
+    /// prove nothing had changed. Refused files (invalid, duplicate id,
+    /// built-in collision) own no registry entry and so are never stamped.
+    QHash<QString, ScriptStamp> m_scriptStamps;
     /// Signature of the last registered script set — sorted (id, path,
     /// size, mtime) digest. Used by scanAndRegister() to suppress
     /// redundant algorithmsChanged() emissions on filesystem pokes that

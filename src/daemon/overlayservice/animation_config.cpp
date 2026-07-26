@@ -89,7 +89,7 @@ namespace PAS = PhosphorAnimationShaders;
 /// tree once settings exist, applying any user overrides on top.
 ///
 /// **Source-of-truth note.** The settings UI gates its shader picker on
-/// `src/core/animationshadersupportedpaths.h::shaderSupportedEventPaths`,
+/// `src/core/types/animationshadersupportedpaths.h::shaderSupportedEventPaths`,
 /// which enumerates exactly the paths consumed by `resolveShaderEffect`
 /// in the build*Config functions below. When a new shader-leg surface
 /// lands here, append its leg paths to that list in lockstep so the

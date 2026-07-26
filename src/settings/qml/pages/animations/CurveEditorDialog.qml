@@ -11,8 +11,8 @@ import org.kde.kirigami as Kirigami
  * @brief Popup dialog for full curve editing (drag-handle bezier or spring sliders).
  *
  * Spring axis uses (omega, zeta) per `PhosphorAnimation::Spring`. The
- * `Save as Preset…` footer is wired in Phase 5; until then it stays hidden
- * to keep the dialog functional without the preset CRUD controller.
+ * `Save as preset…` footer saves the working curve, plus the duration the
+ * host passes in, through `AnimationsPageController::addUserPreset`.
  */
 Kirigami.Dialog {
     id: root
@@ -23,6 +23,11 @@ Kirigami.Dialog {
     // (omega, zeta) — rad/s and damping ratio, per Spring.h
     property real springOmega: CurvePresets.defaultSpringOmega
     property real springZeta: CurvePresets.defaultSpringZeta
+    /// Duration in milliseconds of the event being edited, stamped into a saved
+    /// preset alongside the curve. Bound by the host so a preset saved from an
+    /// event with its own duration override records that duration, not the
+    /// global default the event does not use.
+    property int duration: CurvePresets.defaultDurationMs
     // Working state — seeded onOpened, cleared onClosed. Apply only
     // commits when `_dirty` flipped (i.e. the working state diverged
     // from the seed values). Without that check, a parent re-binding
@@ -138,7 +143,14 @@ Kirigami.Dialog {
                 // combo would otherwise appear interactive while being a
                 // no-op. Disable when the style picker is on Linear so the
                 // dead control is visually grey rather than misleading.
-                enabled: dialogCurvePreset.currentIndex !== 0
+                //
+                // `> 0`, not `!== 0`: findIndices returns styleIndex -1 for a
+                // curve it does not recognise, which is what a hand-dragged
+                // bezier produces. At -1 the onActivated handler below
+                // early-returns on every selection, so the combo has to read as
+                // dead there too — `!== 0` left it enabled and silently inert,
+                // the exact failure this line exists to prevent.
+                enabled: dialogCurvePreset.currentIndex > 0
                 Accessible.name: i18n("Easing direction")
                 model: CurvePresets.easingDirections.map(d => {
                     return d.label;
@@ -287,7 +299,7 @@ Kirigami.Dialog {
         SettingsRow {
             visible: root.timingMode === CurvePresets.timingModeSpring
             title: i18n("Speed (ω)")
-            description: i18n("Higher = faster spring response")
+            description: i18n("Higher values make the spring respond faster")
 
             SettingsSlider {
                 accessibleName: i18n("Speed")
@@ -312,7 +324,7 @@ Kirigami.Dialog {
         SettingsRow {
             visible: root.timingMode === CurvePresets.timingModeSpring
             title: i18n("Damping ratio (ζ)")
-            description: i18n("< 1 bouncy, = 1 critical, > 1 overdamped")
+            description: i18n("Below 1 bounces, 1 settles without bouncing, above 1 is slow and heavy")
 
             SettingsSlider {
                 accessibleName: i18n("Damping ratio")
@@ -367,7 +379,7 @@ Kirigami.Dialog {
                     // "spring:omega,zeta") plus duration. The controller
                     // stamps `name` automatically.
                     var profile = {
-                        "duration": settingsController.settings.animationDuration
+                        "duration": root.duration
                     };
                     if (root.timingMode === CurvePresets.timingModeEasing)
                         profile.curve = root._workingCurve;
@@ -383,7 +395,13 @@ Kirigami.Dialog {
                     if (settingsController.animationsPage.addUserPreset(trimmed, profile))
                         root._savingPreset = false;
                 }
-                Keys.onEscapePressed: root._savingPreset = false
+                Keys.onEscapePressed: function (event) {
+                    // Accept it: unaccepted, Escape propagates on to the
+                    // Kirigami.Dialog and closes the whole editor when the user
+                    // only meant to abandon the preset name.
+                    root._savingPreset = false;
+                    event.accepted = true;
+                }
             }
 
             ToolButton {

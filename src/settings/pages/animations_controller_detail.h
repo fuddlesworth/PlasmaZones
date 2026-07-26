@@ -30,6 +30,8 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <cmath>
+
 namespace PlasmaZones {
 namespace animations_controller_detail {
 
@@ -205,6 +207,71 @@ inline QJsonObject readProfileJson(const QString& path)
     QJsonObject obj = doc.object();
     obj.remove(JsonNameKey);
     return obj;
+}
+
+/// Drop the numeric fields of a user-authored profile object that
+/// `Profile::fromJson` would have rejected, leaving them absent so
+/// `fillLibraryDefaults` supplies the library value instead.
+///
+/// Needed because inheritance resolution reads override files straight off disk
+/// rather than through the registry. The registry path runs every file through
+/// `Profile::fromJson`, which drops a non-finite / non-positive /
+/// over-`MaxDurationMs` duration, a negative `minDistance`, an out-of-range
+/// `staggerInterval` and an unknown `sequenceMode`. Reading the raw JSON skips
+/// all of that, so a hand-placed `{"duration": "fast"}` or `{"duration": -50}`
+/// in the user profiles directory would reach QML verbatim, render as NaN or a
+/// negative slider value, and then be propagated to every mirror path on the
+/// next edit. `fillLibraryDefaults` cannot help on its own — it only fills keys
+/// that are ABSENT, so a present-but-garbage value has to be removed first.
+///
+/// `curve` is deliberately NOT validated here. Resolving a curve spec needs a
+/// `CurveRegistry`, and the process-wide accessor for one
+/// (`PhosphorCurve::defaultRegistry`) lives in the QML module rather than the
+/// core animation library, so this translation unit cannot reach it. Validating
+/// against a built-ins-only registry instead would be worse than not
+/// validating: it would silently drop legitimate user-authored curves. An
+/// unresolvable spec reaching QML renders as an unrecognised curve, which is
+/// visible and harmless, unlike a NaN duration.
+inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
+{
+    using P = PhosphorAnimation::Profile;
+    if (obj.isEmpty()) {
+        return {};
+    }
+    QVariantMap map = obj.toVariantMap();
+
+    // Each accepts only what `Profile::fromJson` accepts. Reading through
+    // toDouble (not toInt) mirrors it too: `QJsonValue::toInt` returns its
+    // default verbatim for a JSON double, so a file written by a non-C++
+    // serializer that emitted `5.0` would look invalid here and be dropped.
+    const auto dropUnless = [&map](QLatin1String key, auto&& accept) {
+        const auto it = map.constFind(key);
+        if (it == map.constEnd()) {
+            return;
+        }
+        bool numeric = false;
+        const double raw = it.value().toDouble(&numeric);
+        if (!numeric || !std::isfinite(raw) || !accept(raw)) {
+            map.remove(key);
+        }
+    };
+
+    dropUnless(QLatin1String(P::JsonFieldDuration), [](double v) {
+        return v > 0.0 && v <= P::MaxDurationMs;
+    });
+    dropUnless(QLatin1String(P::JsonFieldMinDistance), [](double v) {
+        return qRound(v) >= 0;
+    });
+    dropUnless(QLatin1String(P::JsonFieldStaggerInterval), [](double v) {
+        return v >= 0.0 && v <= static_cast<double>(P::MaxStaggerIntervalMs);
+    });
+    dropUnless(QLatin1String(P::JsonFieldSequenceMode), [](double v) {
+        const int mode = qRound(v);
+        return mode == static_cast<int>(PhosphorAnimation::SequenceMode::AllAtOnce)
+            || mode == static_cast<int>(PhosphorAnimation::SequenceMode::Cascade);
+    });
+
+    return map;
 }
 
 /// Merge fields from @p source into @p target without overwriting keys

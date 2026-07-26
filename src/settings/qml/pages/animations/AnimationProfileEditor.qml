@@ -134,8 +134,13 @@ ColumnLayout {
         if (shaderEffectId.length === 0)
             return null;
 
-        for (var i = 0; i < availableShaders.length; ++i) {
-            var e = availableShaders[i];
+        // Same untyped-`availableShaders` hazard `_anyPackAvailable` guards
+        // below: dereferencing `.length` on an undefined model throws, and the
+        // throw takes shaderName, shaderDescription and shaderSectionExpandable
+        // down with this binding.
+        const list = availableShaders || [];
+        for (var i = 0; i < list.length; ++i) {
+            var e = list[i];
             if (e && e.id === shaderEffectId)
                 return e;
         }
@@ -432,7 +437,10 @@ ColumnLayout {
                 from: settingsController.generalPage.animationDurationMin
                 to: settingsController.generalPage.animationDurationMax
                 stepSize: 10
-                valueSuffix: i18nc("milliseconds, appended to a slider value", " ms")
+                // The separating space is deliberately OUTSIDE the translatable
+                // string: a leading space is invisible in every CAT tool, so a
+                // translator trimming it would silently render "150ms".
+                valueSuffix: " " + i18nc("milliseconds, unit appended to a slider value", "ms")
                 accessibleName: i18n("Animation duration")
                 labelWidth: Kirigami.Units.gridUnit * 4
                 value: root.duration
@@ -758,6 +766,7 @@ ColumnLayout {
         easingCurve: root.easingCurve
         springOmega: root.springOmega
         springZeta: root.springZeta
+        duration: root.duration
         onCurveApplied: function (curve) {
             root.easingCurve = curve;
             root.timingMode = CurvePresets.timingModeEasing;
