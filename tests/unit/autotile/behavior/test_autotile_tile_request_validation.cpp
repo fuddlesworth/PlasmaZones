@@ -196,14 +196,22 @@ private Q_SLOTS:
         const PhosphorProtocol::TileRequestList entries = parseWindowsTiledJson(tiledSpy.last().first().toString());
         QVERIFY2(!entries.isEmpty(), "applyTiling emitted no entries");
 
+        // Exact batch shape: all three windows present, exactly ONE
+        // floating entry, and it is the freshly-capped win-3 (the overflow
+        // manager reports only NEWLY overflowed windows).
+        QCOMPARE(entries.size(), 3);
+        int floatingCount = 0;
         bool sawFloating = false;
         for (const PhosphorProtocol::TileRequestEntry& entry : entries) {
             QVERIFY2(entry.validationError().isEmpty(), qPrintable(entry.validationError()));
             QCOMPARE(entry.screenId, screenName);
             if (entry.floating) {
+                ++floatingCount;
                 sawFloating = true;
+                QCOMPARE(entry.windowId, QStringLiteral("win-3"));
             }
         }
+        QCOMPARE(floatingCount, 1);
         // Three windows under a maxWindows=2 cap MUST surface an overflow
         // entry: without this pin the overflow branch could stop emitting
         // floating entries entirely and the per-entry validation above

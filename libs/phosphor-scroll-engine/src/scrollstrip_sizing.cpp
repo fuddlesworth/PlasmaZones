@@ -69,7 +69,9 @@ bool ScrollStrip::setActiveColumnWidth(const ColumnWidth& width)
         return false;
     }
     col->width = width;
-    m_preMaximizeColumnIdx = -1;
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = -1;
+    }
     return true;
 }
 
@@ -100,7 +102,9 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
         return false;
     }
     col->width = result;
-    m_preMaximizeColumnIdx = -1;
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = -1;
+    }
     return true;
 }
 
@@ -120,7 +124,9 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
         return false;
     }
     col->width = ColumnWidth::makeFixed(target);
-    m_preMaximizeColumnIdx = -1;
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = -1;
+    }
     return true;
 }
 
@@ -169,7 +175,9 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
     }
     const int current = resolveColumnWidthPx(col->width, params);
     col->width = ColumnWidth::makeFixed(qMin(workW, current + leftover));
-    m_preMaximizeColumnIdx = -1;
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = -1;
+    }
     return true;
 }
 
@@ -306,7 +314,9 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
             // width write invalidates a pending maximize-toggle restore for
             // this column.
             if (m_preMaximizeColumnIdx == colIdx) {
-                m_preMaximizeColumnIdx = -1;
+                if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+                    m_preMaximizeColumnIdx = -1;
+                }
             }
         }
     }

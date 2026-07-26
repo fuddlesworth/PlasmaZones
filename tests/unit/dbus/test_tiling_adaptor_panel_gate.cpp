@@ -141,14 +141,16 @@ private Q_SLOTS:
         adaptor.notifyEngineScreensChanged(false);
         adaptor.windowOpened(QStringLiteral("app|swept"), QStringLiteral("HDMI-9"), 0, 0);
         QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 1);
-        adaptor.clearEngine();
-        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 0);
         // The announce queued BEFORE clearEngine must NOT fire after it:
         // the generation void (and the empty-union bail behind it) exists
         // so a daemon-restart teardown never broadcasts an empty screen
         // set the effect would treat as a genuine disable and answer with
-        // its destructive per-window teardown.
+        // its destructive per-window teardown. Spy attached BEFORE the
+        // clear so even a synchronous flush inside clearEngine would be
+        // caught.
         QSignalSpy postClearSpy(&adaptor, &TilingAdaptor::managedScreensChanged);
+        adaptor.clearEngine();
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 0);
         QCoreApplication::processEvents();
         QCOMPARE(postClearSpy.count(), 0);
     }

@@ -15,6 +15,10 @@
  *
  *   (snap_enabled, screen_is_autotile, screen_is_scrolling,
  *    window_tracked_by_scroll, context_disabled, reorder_mode)
+ *
+ * reorder_mode is the RESOLVED bool computeDragPolicy takes; the per-screen
+ * rule override that produces it (effectiveReorderMode) is a separate
+ * function outside this file's scope.
  *     → PhosphorProtocol::DragPolicy.bypassReason + flags
  *
  * Precedence (first match wins, strongest disable first):
@@ -286,6 +290,46 @@ private Q_SLOTS:
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
         QVERIFY(!p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // The FALSE arm of the scroll branch's isActiveOnScreen guard: a
+    // non-null scroll engine that does NOT claim the screen must leave the
+    // canonical snap pipeline untouched — deleting the guard conjunct
+    // would bypass snapping for every session with a scroll engine.
+    void scrollEngineNotClaiming_keepsSnapPath()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/false, QStringLiteral("HP-1"));
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::None);
+        QVERIFY(p.streamDragMoved);
+        QVERIFY(p.showOverlay);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // Empty screen id falls through to the snap check even while the
+    // scroll engine claims a REAL screen.
+    void scrollEngineClaiming_emptyScreenIdFallsThrough()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QString(), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::None);
         QVERIFY(p.validationError().isEmpty());
     }
 

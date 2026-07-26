@@ -56,15 +56,29 @@ bool ScrollEngine::isEnabled() const noexcept
 
 void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
 {
+    // Consume the context-switch flag on EVERY entry (both branches), the
+    // same discipline as setAutotileScreens: a stale flag would make the
+    // NEXT identical-set push claim a desktop switch. The flag matters
+    // because TilingAdaptor OR-coalesces isDesktopSwitch across engines in
+    // one pass — a false `true` from scroll's no-op re-push would make the
+    // effect skip AUTOTILE's geometry/border restore for a screen leaving
+    // that engine in the same recompute.
+    const bool wasDesktopSwitch = m_isDesktopContextSwitch;
+    m_isDesktopContextSwitch = false;
     if (screens == m_scrollingScreens) {
-        // Identical-set re-emit contract (mirrors setAutotileScreens): a
-        // desktop/activity switch that lands on the same set still wakes the
-        // compositor effect's catch-scan; an empty identical set has nothing
-        // to catch.
+        // Identical-set re-emit contract: a desktop/activity switch that
+        // lands on the same set still wakes the compositor effect's
+        // catch-scan; an empty identical set has nothing to catch, and a
+        // NON-switch re-push (updateEngineScreens re-derive) must not
+        // masquerade as one. The retile loop is unconditional — the
+        // daemon's per-pass override push depends on it (scrolling.cpp's
+        // LOAD-BEARING gate).
         if (!screens.isEmpty()) {
-            QStringList sortedSame(screens.cbegin(), screens.cend());
-            sortedSame.sort();
-            Q_EMIT scrollingScreensChanged(sortedSame, true);
+            if (wasDesktopSwitch) {
+                QStringList sortedSame(screens.cbegin(), screens.cend());
+                sortedSame.sort();
+                Q_EMIT scrollingScreensChanged(sortedSame, true);
+            }
             for (const QString& screenId : screens) {
                 scheduleRetileForScreen(screenId);
             }
@@ -102,8 +116,9 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         clearTabStripsForScreen(screenId);
     }
     if (!releasedWindows.isEmpty()) {
-        m_states.removeWindowsIf([&releasedWindows](const QString& windowId, const PhosphorEngine::PlacementStateKey&) {
-            return releasedWindows.contains(windowId);
+        const QSet<QString> releasedSet(releasedWindows.cbegin(), releasedWindows.cend());
+        m_states.removeWindowsIf([&releasedSet](const QString& windowId, const PhosphorEngine::PlacementStateKey&) {
+            return releasedSet.contains(windowId);
         });
         Q_EMIT windowsReleased(releasedWindows, releasedScreens);
     }
@@ -313,6 +328,17 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         m_lastAppliedRect.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
+        // Seed lists hold dead ids too (a captured order whose window died
+        // before arriving); left behind they would pin insert positions
+        // against ghosts forever.
+        for (auto seedIt = m_pendingInitialOrder.begin(); seedIt != m_pendingInitialOrder.end();) {
+            seedIt->removeAll(windowId);
+            if (seedIt->isEmpty()) {
+                seedIt = m_pendingInitialOrder.erase(seedIt);
+            } else {
+                ++seedIt;
+            }
+        }
         ++pruned;
     }
     for (const QString& screenId : affectedScreens) {
@@ -325,12 +351,12 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 
 void ScrollEngine::setCurrentDesktop(int desktop)
 {
-    m_context.setCurrentDesktop(desktop);
+    m_isDesktopContextSwitch |= m_context.setCurrentDesktop(desktop).armSwitch;
 }
 
 void ScrollEngine::setCurrentDesktopForScreen(const QString& screenId, int desktop)
 {
-    m_context.setCurrentDesktopForScreen(screenId, desktop);
+    m_isDesktopContextSwitch |= m_context.setCurrentDesktopForScreen(screenId, desktop).armSwitch;
 }
 
 void ScrollEngine::clearCurrentDesktopForScreen(const QString& screenId)
@@ -391,7 +417,7 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
 
 void ScrollEngine::setCurrentActivity(const QString& activity)
 {
-    m_context.setCurrentActivity(activity);
+    m_isDesktopContextSwitch |= m_context.setCurrentActivity(activity).armSwitch;
 }
 
 QSet<int> ScrollEngine::desktopsWithActiveState() const
@@ -402,6 +428,18 @@ QSet<int> ScrollEngine::desktopsWithActiveState() const
         desktops.insert(it.key().desktop);
     }
     return desktops;
+}
+
+void ScrollEngine::consumePendingInitialOrder(const QString& screenId, const QString& windowId)
+{
+    const auto it = m_pendingInitialOrder.find(screenId);
+    if (it == m_pendingInitialOrder.end()) {
+        return;
+    }
+    it->removeAll(windowId);
+    if (it->isEmpty()) {
+        m_pendingInitialOrder.erase(it);
+    }
 }
 
 void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
@@ -513,6 +551,26 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     m_states.removeWindowsIf([&matches](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId);
     });
+    // Standalone sweep for STATELESS sub-screens too: a virtual sub-screen
+    // of the removed monitor can carry a seed or a rule override without
+    // ever having built a state (the daemon applies overrides before
+    // setActiveScreens), and the per-state callback above never sees it.
+    // This prune is the documented purger of overrides, so the gap would
+    // defeat its own contract.
+    for (auto it = m_pendingInitialOrder.begin(); it != m_pendingInitialOrder.end();) {
+        if (matches(it.key())) {
+            it = m_pendingInitialOrder.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
+        if (matches(it.key())) {
+            it = m_perScreenOverrides.erase(it);
+        } else {
+            ++it;
+        }
+    }
     m_context.removeScreensIf(matches);
 }
 

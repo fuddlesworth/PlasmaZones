@@ -158,7 +158,9 @@ Q_SIGNALS:
 
     // Scrolling-mode column vocabulary. Directional focus/move/swap reuse
     // the generic navigation signals above; these are the scroll-specific
-    // verbs. Delta-carrying signals: -1 = left/back, +1 = right/forward.
+    // verbs. Direction deltas (consumeOrExpel, cyclePresets) carry -1 =
+    // left/back, +1 = right/forward; the two ADJUST signals instead carry a
+    // signed PERCENT of the work area (±10 per keypress).
     void scrollFocusColumnEndRequested(bool last);
     void scrollMoveColumnToEndRequested(bool last);
     void scrollConsumeWindowRequested();

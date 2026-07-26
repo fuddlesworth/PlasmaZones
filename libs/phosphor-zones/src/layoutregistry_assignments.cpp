@@ -277,16 +277,20 @@ void LayoutRegistry::assignLayout(const QString& screenId, int virtualDesktop, c
 void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
                                       const QString& layoutId)
 {
-    if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-        // Store autotile assignment — set mode to Autotile, preserve the
-        // existing snappingLayout. One exact-shape lookup (see assignLayout)
-        // — only the rule pinning exactly this tuple seeds the entry.
-        AssignmentEntry entry;
-        if (const PWR::Rule* existing = findExactContextRule(screenId, virtualDesktop, activity)) {
-            entry = entryFromRuleMatchActions(*existing);
+    // The tiling-family sentinels ("autotile:…" and the bare "scrolling:")
+    // carry no Layout* to resolve, so both route through the entry-upsert
+    // path. Classification goes through AssignmentEntry::fromLayoutId —
+    // the ONE mode cascade — seeded from the exact-shape rule so the
+    // sibling mode's stored fields survive (the lossless-toggle contract).
+    // A hand-rolled isAutotile-only branch here once made a D-Bus
+    // assign("scrolling:") fall into the null-Layout arm of assignLayout,
+    // which CLEARS the assignment.
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)) {
+        AssignmentEntry existing;
+        if (const PWR::Rule* rule = findExactContextRule(screenId, virtualDesktop, activity)) {
+            existing = entryFromRuleMatchActions(*rule);
         }
-        entry.mode = AssignmentEntry::Autotile;
-        entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, existing);
         upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
         Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
     } else {

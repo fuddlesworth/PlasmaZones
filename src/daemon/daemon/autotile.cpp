@@ -407,6 +407,18 @@ void Daemon::updateEngineScreens()
     }
 
     qCDebug(lcDaemon) << "Updated autotile screens=" << autotileScreens << "scrolling screens=" << scrollingScreens;
+
+    // Drain the restore batch THIS pass produced, at the tail, for every
+    // caller — the leak class was "some caller has no downstream consumer,
+    // and the stale batch teleports windows when the NEXT consumer runs".
+    // Emitting here is safe relative to the consuming callers'
+    // resnapToNewLayout ordering: the float half covers windows OUTSIDE
+    // zones, disjoint from the zone windows a resnap repositions, and the
+    // helper deliberately drops the zone half when no resnap is in flight.
+    // Consumers that run later still call the helper themselves; it is a
+    // no-op on the emptied buffer (their real purpose remains the
+    // prune-origin releases that append OUTSIDE this recompute).
+    emitPendingSnapFloatRestoresForResnapBuffer();
 }
 
 QSet<QString> Daemon::diffActiveAssignments()

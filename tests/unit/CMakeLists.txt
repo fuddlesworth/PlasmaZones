@@ -309,6 +309,12 @@ p_add_test(test_geometry_utils_serialization core/geometry/test_geometry_utils_s
 p_add_test(test_spatial_adjacency core/zones/test_spatial_adjacency.cpp)
 p_add_test(test_virtualscreen_swapper core/screens/test_virtualscreen_swapper.cpp)
 p_add_test(test_screen_mode_router core/screens/test_screen_mode_router.cpp)
+# Constructs real Snap/Autotile/Scroll engines: the dependencies are
+# contractual, not the coincidental transitive pull through
+# plasmazones_core (same rationale as test_span_targets).
+target_link_libraries(test_screen_mode_router PRIVATE PhosphorSnapEngine::PhosphorSnapEngine
+                                                      PhosphorTileEngine::PhosphorTileEngine
+                                                      PhosphorScrollEngine::PhosphorScrollEngine)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - Settings Tests (core, validation, per-screen)
@@ -910,7 +916,11 @@ add_test(NAME test_tiling_adaptor_panel_gate COMMAND test_tiling_adaptor_panel_g
 # can't drift relative to the compositor plugin's deleted local caches.
 # Regression guard for #310.
 add_executable(test_drag_policy dbus/test_drag_policy.cpp)
-target_link_libraries(test_drag_policy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Constructs real Autotile/Scroll engines — contractual links (see the
+# test_span_targets rationale).
+target_link_libraries(test_drag_policy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                               PhosphorTileEngine::PhosphorTileEngine
+                                               PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_drag_policy COMMAND test_drag_policy)
 
 # Truth-table guard for resolveActivationActive() - pins the per-tick

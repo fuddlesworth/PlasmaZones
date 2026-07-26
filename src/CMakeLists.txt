@@ -482,6 +482,7 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/shortcutmanager_catalog.cpp
     daemon/controllers/shortcutmanager_ids.h
     daemon/daemon/start.cpp
+    daemon/daemon/shortcuts_wiring.cpp
     daemon/daemon/autotile_init.cpp
     daemon/daemon/scrolling_init.cpp
     daemon/daemon/scrolling.cpp

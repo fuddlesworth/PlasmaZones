@@ -263,6 +263,19 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
         }
     }
 
+    // A shouldSnap result can carry an empty zoneId; committing it would
+    // record a snap to no zone (the drop path refuses the same shape).
+    // Refused BEFORE any out-param write or side effect: the callers reply
+    // over D-Bus with whatever landed in the out-params, so writing the
+    // geometry (or marking auto-snapped) first would ship shouldSnap=true
+    // for a snap that never committed — the applySnapResult doc's
+    // "leaves the out-params at 0 / false" contract.
+    const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
+    if (zoneIds.first().isEmpty()) {
+        qCWarning(lcDbusWindow) << "shouldSnap resolved an empty zone id for" << windowId << "- skipping";
+        return false;
+    }
+
     snapX = result.geometry.x();
     snapY = result.geometry.y();
     snapWidth = result.geometry.width();
@@ -275,13 +288,6 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     // windowFloatingClearedForSnap which the adaptor relays as
     // windowFloatingChanged), assigns to zone(s), emits state change.
     m_adaptor->service()->markAsAutoSnapped(windowId);
-    const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
-    // A shouldSnap result can carry an empty zoneId; committing it would
-    // record a snap to no zone (the drop path refuses the same shape).
-    if (zoneIds.first().isEmpty()) {
-        qCWarning(lcDbusWindow) << "shouldSnap resolved an empty zone id for" << windowId << "- skipping";
-        return false;
-    }
     if (zoneIds.size() > 1) {
         m_engine->commitMultiZoneSnap(windowId, zoneIds, result.screenId, SnapIntent::AutoRestored,
                                       result.virtualDesktop);

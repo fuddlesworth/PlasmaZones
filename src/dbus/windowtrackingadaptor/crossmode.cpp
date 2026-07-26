@@ -118,6 +118,7 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
     //     toDesktop too (places into that desktop's strip) — the reactive
     //     deferral is autotile-only.
     const bool reactiveAutotileDesktopArrival = targetIsAutotile && targetDesktop > 0;
+    bool placedOnTarget = false;
     if (!reactiveAutotileDesktopArrival) {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
@@ -145,11 +146,13 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         // intended: the arrival IS tiled, and the relay's last-broadcast
         // gate dedups when the bit already agrees.
         //
-        // Guarded (the swap path's pass-4 fix, mirrored): handoffReceive can
-        // silently refuse, and the source has already released inside the
-        // helper — on refusal the helper re-homes into the source so the
-        // window is not stranded tracked-by-no-engine.
-        const bool adopted = WindowTrackingInternal::guardedHandoff(sourceEngine, targetEngine, ctx, sourceScreen);
+        // Guarded: handoffReceive can silently refuse, and the source has
+        // already released inside the helper — on refusal the helper
+        // re-homes into the source so the window is not stranded
+        // tracked-by-no-engine. recoverDesktop stays 0 (current): the
+        // desktop-move request below is adoption-gated, so on a refusal
+        // the real window never left the source desktop.
+        placedOnTarget = WindowTrackingInternal::guardedHandoff(sourceEngine, targetEngine, ctx, sourceScreen);
         // A MONITOR crossing physically relocates the window to a different
         // output. Mark the imminent output change as daemon-owned so the
         // effect's reactive outputChanged handler does not re-issue
@@ -159,22 +162,28 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         // happens — it would swallow the next genuine outputChanged. The
         // effect applies geometry through deferred commits, so the marker
         // signal lands before the output change is processed.
-        if (adopted && !sourceScreen.isEmpty() && targetScreenId != sourceScreen) {
+        if (placedOnTarget && !sourceScreen.isEmpty() && targetScreenId != sourceScreen) {
             Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
         }
     } else {
         // Reactive autotile desktop arrival: no receive here (the effect
-        // catch-scan tiles it on the target desktop), so just release.
+        // catch-scan tiles it on the target desktop), so just release. The
+        // desktop move below must still fire — the catch-scan only runs
+        // once the window actually lands on the target desktop.
         sourceEngine->handoffRelease(windowId);
+        placedOnTarget = true;
     }
     if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
         sourceEngine->retile(sourceScreen);
     }
 
     // Physical relocation for a cross-desktop crossing: ask the compositor to
-    // move the real window to the target desktop. A monitor crossing needs none —
-    // the target engine's placement geometry already relocated the window.
-    if (targetDesktop > 0) {
+    // move the real window to the target desktop. A monitor crossing needs
+    // none — the target engine's placement geometry already relocated the
+    // window. Adoption-gated: after a refused handoff the state was
+    // re-homed onto the SOURCE context, and physically relocating the real
+    // window anyway would part it from its state.
+    if (placedOnTarget && targetDesktop > 0) {
         Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
     }
 }
@@ -288,9 +297,40 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     sourceEngine->handoffRelease(windowId);
     targetEngine->handoffRelease(partner);
 
-    // ── Place the focused window on the target, in the partner's slot. ──
-    // (Both placements below: an autotile receiver's handoffReceive also
-    // announces the arrival's tiled state on the passive float-sync channel —
+    // ── Place both windows, VERIFYING each receive. The paired-release
+    //    order above is load-bearing (each arrival lands in the other's
+    //    vacated slot), so this cannot route through guardedHandoff's
+    //    release-then-receive shape — instead each receive is followed by
+    //    the same adoption check and, on refusal, a re-home into the
+    //    engine that just released the window (its own slot is free again
+    //    because the OTHER window is not there yet / was also refused).
+    //    An unverified refusal would strand the window tracked by no
+    //    engine — the exact hazard guardedHandoff exists for. ──
+    const auto receiveVerified = [](PhosphorEngine::IPlacementEngine* dest,
+                                    PhosphorEngine::IPlacementEngine* fallbackEngine, const QString& fallbackScreen,
+                                    PhosphorEngine::IPlacementEngine::HandoffContext ctx) {
+        dest->handoffReceive(ctx);
+        if (dest->isWindowTracked(ctx.windowId)) {
+            return true;
+        }
+        qCWarning(lcDbusWindow) << "cross-mode swap:" << dest->engineId() << "refused" << ctx.windowId;
+        PhosphorEngine::IPlacementEngine::HandoffContext back = ctx;
+        back.toScreenId = fallbackScreen;
+        back.insertIndex = -1;
+        back.sourceZoneIds.clear();
+        back.fromEngineId = dest->engineId();
+        fallbackEngine->handoffReceive(back);
+        if (fallbackEngine->isWindowTracked(ctx.windowId)) {
+            qCInfo(lcDbusWindow) << "cross-mode swap: re-homed" << ctx.windowId << "into" << fallbackEngine->engineId()
+                                 << "on" << fallbackScreen;
+        } else {
+            qCWarning(lcDbusWindow) << "cross-mode swap: re-home REFUSED too -" << ctx.windowId
+                                    << "is tracked by no engine";
+        }
+        return false;
+    };
+    // (Both placements: an autotile receiver's handoffReceive also announces
+    // the arrival's tiled state on the passive float-sync channel —
     // intended; the relay's last-broadcast gate dedups an agreeing bit.)
     {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
@@ -301,9 +341,8 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         ctx.minSize = focusedMinSize;
         ctx.insertIndex = focusedLandingIndex;
         ctx.wasFloating = false;
-        targetEngine->handoffReceive(ctx);
+        receiveVerified(targetEngine, sourceEngine, sourceScreen, ctx);
     }
-    // ── Place the partner on the source, in the focused window's vacated slot. ──
     {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = partner;
@@ -313,7 +352,7 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         ctx.minSize = partnerMinSize;
         ctx.insertIndex = partnerLandingIndex;
         ctx.wasFloating = false;
-        sourceEngine->handoffReceive(ctx);
+        receiveVerified(sourceEngine, targetEngine, targetScreenId, ctx);
     }
 
     // ── Arm the daemon-owned-move markers for the windows that were

@@ -91,6 +91,16 @@ struct PerScreenOverlayState
 /// path). The struct lets the two callers diverge only on the values
 /// they compute, not on the property-write sequence
 /// (OverlayService::pushLayoutOsdContent).
+/// Per-screen layout-family filter used for the zone selector. `manual`
+/// enables PhosphorZones layout entries; `autotile` enables algorithm
+/// previews. Both default-true is "show everything"; the resolver narrows
+/// to a single family when the screen has an explicit assignment.
+struct LayoutIncludeFlags
+{
+    bool manual = true;
+    bool autotile = true;
+};
+
 struct LayoutOsdContentParams
 {
     QString id; ///< layoutId - UUID for manual layouts, "autotile:..." for algorithms

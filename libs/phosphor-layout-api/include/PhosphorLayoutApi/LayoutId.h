@@ -45,6 +45,10 @@ inline bool isScrolling(const QString& id)
 }
 
 /// Extract the algorithm id portion from an autotile preview id.
+/// (The misuse warning below is a bare qWarning by design: this header-only
+/// library carries no logging category of its own, and pulling one in would
+/// be its first .cpp. The message is a programmer-error flag, not runtime
+/// noise worth filtering.)
 /// Callers are expected to check @c isAutotile first — passing a non-autotile
 /// id here is a contract violation. We warn and return an empty string so
 /// the misuse is loud rather than silent, but remain graceful in release

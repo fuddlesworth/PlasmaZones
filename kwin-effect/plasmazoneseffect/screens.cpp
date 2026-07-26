@@ -129,7 +129,10 @@ const QSet<QString>& PlasmaZonesEffect::connectedPhysicalIds() const
     if (!m_idCaches.connectedPhysicalIdsValid) {
         m_idCaches.connectedPhysicalIds.clear();
         for (const auto* output : KWin::effects->screens()) {
-            m_idCaches.connectedPhysicalIds.insert(outputScreenId(output));
+            const QString physId = outputScreenId(output);
+            if (!physId.isEmpty()) {
+                m_idCaches.connectedPhysicalIds.insert(physId);
+            }
         }
         m_idCaches.connectedPhysicalIdsValid = true;
     }
@@ -492,6 +495,11 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
+    // Hotplug is the earliest signal in the cascade (before any per-window
+    // outputChanged): the connected-physical-id set must invalidate HERE or
+    // scrollTrackedScreenFor's liveness gate answers from the pre-plug set
+    // for the whole cascade.
+    clearScreenIdCache();
     // Construct a bound clock for this output. Idempotent: if the same
     // output arrives twice (rare, but possible on some compositors'
     // hotplug sequences) we keep the existing clock rather than
@@ -509,6 +517,12 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
+    // Unplug twin of the onScreenAdded invalidation: KWin fires
+    // screenRemoved BEFORE the per-window outputChanged cascade, and the
+    // connected-output gate in scrollTrackedScreenFor exists for exactly
+    // that cascade — a stale cached set would keep answering the dead
+    // screen for every scroll-tiled window's close/minimize/drag routing.
+    clearScreenIdCache();
 
     // Drop this output's per-screen desktop dedup entry, symmetric with the
     // daemon's VirtualDesktopManager::removeScreenDesktop (#648): otherwise

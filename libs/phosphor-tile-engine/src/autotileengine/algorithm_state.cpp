@@ -547,16 +547,36 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
         return !screenId.isEmpty() && PhosphorIdentity::VirtualScreenId::samePhysical(screenId, physicalScreenId);
     };
     int pruned = 0;
+    QStringList releasedWindows;
+    QSet<QString> releasedScreens;
     m_states.removeStatesIf(
         [&](const TilingStateKey& key, PhosphorTiles::TilingState*) {
             return matches(key.screenId);
         },
         [&](const TilingStateKey& key, PhosphorTiles::TilingState* state) {
+            // Through the FULL teardown body, not a bare deleteLater: the
+            // capture snapshots each window's autotile slot into the
+            // unified record (the unplug used to get this via the
+            // screens-set sweep), and the per-screen order maps are cleared
+            // so a replug within PendingOrderTimeoutMs cannot seed
+            // pre-unplug ghost ids. drainOverflow=false — several contexts
+            // can share a screenId, so overflow drains once per screen
+            // below, after all captures (same shape as the orphaned-VS
+            // loop).
+            releaseScreenStateForTeardown(key.screenId, state, releasedWindows, /*drainOverflow=*/false);
+            releasedScreens.insert(key.screenId);
             m_userTunedSplitRatio.remove(key);
             m_userTunedMasterCount.remove(key);
-            state->deleteLater();
             ++pruned;
         });
+    for (const QString& screenId : std::as_const(releasedScreens)) {
+        m_overflow.takeForScreen(screenId);
+    }
+    if (!releasedWindows.isEmpty()) {
+        m_states.removeWindowsIf([&releasedWindows](const QString& windowId, const TilingStateKey&) {
+            return releasedWindows.contains(windowId);
+        });
+    }
     m_states.removeWindowsIf([&](const QString&, const TilingStateKey& key) {
         return matches(key.screenId);
     });
@@ -566,12 +586,34 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
     std::erase_if(m_scriptStateStash, [&](const auto& entry) {
         return matches(entry.first.screenId);
     });
-    // In-memory resolver overrides for the dead output; the persisted
-    // per-screen settings survive, matching the toggle-off contract.
-    if (m_configResolver) {
-        m_configResolver->removeOverridesForScreen(physicalScreenId);
+    // Whole-screen reap: FORGET the resolver state for the physical id and
+    // every virtual sub-screen (overrides AND remembered algorithm ids —
+    // remembering for a screen with zero remaining states is dead
+    // bookkeeping, the same treatment as the orphaned-VS teardown). The
+    // persisted per-screen settings survive, matching the toggle-off
+    // contract. Per-id, because the resolver maps key on the EFFECTIVE
+    // (possibly "/vs:N") id, not the physical one.
+    m_configResolver->forgetScreen(physicalScreenId);
+    m_configResolver->removeOverridesMatching(matches);
+    // Order maps for STATELESS sub-screens (seed pushed before any window
+    // arrived) — the teardown body above only cleared the stateful ones.
+    for (auto it = m_pendingInitialOrders.begin(); it != m_pendingInitialOrders.end();) {
+        if (matches(it.key())) {
+            m_pendingOrderGeneration.remove(it.key());
+            m_strictInitialOrderScreens.remove(it.key());
+            it = m_pendingInitialOrders.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (matches(m_activeScreen)) {
+        // A dead screen id must not keep feeding hint-less shortcut paths.
+        m_activeScreen.clear();
     }
     m_context.removeScreensIf(matches);
+    if (!releasedWindows.isEmpty()) {
+        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
+    }
     if (pruned > 0) {
         qCInfo(PhosphorTileEngine::lcTileEngine)
             << "Pruned" << pruned << "TilingStates for removed screen" << physicalScreenId;

@@ -21,6 +21,20 @@
 
 namespace PlasmaZones {
 
+namespace {
+/// D-Bus boundary guard shared by every per-desktop slot in this file:
+/// 0 = the base (all-desktops) context, negatives are never a valid desktop
+/// number. The batch setters carry their own equivalent checks.
+bool validDesktopArg(int virtualDesktop, const char* method)
+{
+    if (virtualDesktop < 0) {
+        qCWarning(lcDbusLayout) << method << "- negative virtualDesktop" << virtualDesktop;
+        return false;
+    }
+    return true;
+}
+} // namespace
+
 QJsonObject LayoutAdaptor::buildActivityInfoJson(const QString& activityId) const
 {
     QJsonObject info;
@@ -225,6 +239,9 @@ QString LayoutAdaptor::getAllScreenAssignments()
 // Per-Virtual-Desktop Assignments
 QString LayoutAdaptor::getLayoutForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validDesktopArg(virtualDesktop, "getLayoutForScreenDesktop")) {
+        return QString();
+    }
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, virtualDesktop, QString());
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
@@ -239,6 +256,9 @@ QString LayoutAdaptor::getLayoutForScreenDesktop(const QString& screenId, int vi
 
 void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int virtualDesktop, const QString& layoutId)
 {
+    if (!validDesktopArg(virtualDesktop, "assignLayoutToScreenDesktop")) {
+        return;
+    }
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("assign layout to desktop"))) {
         return;
     }
@@ -263,6 +283,9 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
 
 void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validDesktopArg(virtualDesktop, "clearAssignmentForScreenDesktop")) {
+        return;
+    }
     const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, virtualDesktop, QString());
     m_changedScreenIds.insert(resolvedId);
@@ -271,24 +294,36 @@ void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int
 
 bool LayoutAdaptor::hasExplicitAssignmentForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validDesktopArg(virtualDesktop, "hasExplicitAssignmentForScreenDesktop")) {
+        return false;
+    }
     return m_layoutManager->hasExplicitAssignment(PhosphorScreens::ScreenIdentity::idForName(screenId), virtualDesktop,
                                                   QString());
 }
 
 int LayoutAdaptor::getModeForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validDesktopArg(virtualDesktop, "getModeForScreenDesktop")) {
+        return static_cast<int>(PhosphorZones::AssignmentEntry::Snapping);
+    }
     return static_cast<int>(m_layoutManager->modeForScreen(PhosphorScreens::ScreenIdentity::idForName(screenId),
                                                            virtualDesktop, QString()));
 }
 
 QString LayoutAdaptor::getSnappingLayoutForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validDesktopArg(virtualDesktop, "getSnappingLayoutForScreenDesktop")) {
+        return QString();
+    }
     return m_layoutManager->snappingLayoutForScreen(PhosphorScreens::ScreenIdentity::idForName(screenId),
                                                     virtualDesktop, QString());
 }
 
 QString LayoutAdaptor::getTilingAlgorithmForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validDesktopArg(virtualDesktop, "getTilingAlgorithmForScreenDesktop")) {
+        return QString();
+    }
     return m_layoutManager->tilingAlgorithmForScreen(PhosphorScreens::ScreenIdentity::idForName(screenId),
                                                      virtualDesktop, QString());
 }
@@ -332,6 +367,16 @@ QString LayoutAdaptor::getScreenStates()
             obj[QLatin1String("layoutId")] = QString();
             obj[QLatin1String("layoutName")] = QString();
         }
+
+        // Per-slot explicit markers: whether THIS exact context tuple pins
+        // the field, as opposed to the resolved value arriving through the
+        // cascade/default. The Monitors page gates its lossless mode-toggle
+        // sibling carry on these, so a pure mode switch can never freeze a
+        // cascade default into an explicit assignment.
+        const PhosphorZones::AssignmentEntry exactEntry =
+            m_layoutManager->exactContextEntry(screenId, desktop, activity);
+        obj[QLatin1String("layoutIdExplicit")] = !exactEntry.snappingLayout.isEmpty();
+        obj[QLatin1String("algorithmIdExplicit")] = !exactEntry.tilingAlgorithm.isEmpty();
 
         // Tiling algorithm — use resolved algorithm (includes fallback)
         const QString algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
@@ -662,6 +707,9 @@ void LayoutAdaptor::setAllCombinedAssignments(const QVariantMap& assignments)
 QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                          const QString& activityId)
 {
+    if (!validDesktopArg(virtualDesktop, "getLayoutForScreenDesktopActivity")) {
+        return QString();
+    }
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, virtualDesktop, activityId);
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
@@ -677,6 +725,9 @@ QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenId
 void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                         const QString& activityId, const QString& layoutId)
 {
+    if (!validDesktopArg(virtualDesktop, "assignLayoutToScreenDesktopActivity")) {
+        return;
+    }
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("assign layout"))) {
         return;
     }
@@ -703,6 +754,9 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
 void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                             const QString& activityId)
 {
+    if (!validDesktopArg(virtualDesktop, "clearAssignmentForScreenDesktopActivity")) {
+        return;
+    }
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, virtualDesktop, activityId);
     m_changedScreenIds.insert(resolvedId);

@@ -388,19 +388,21 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     const QString newScreenId = m_effect->getWindowScreenId(w);
 
     if (!m_notifiedWindows.contains(windowId)) {
-        // Window not tracked — but if it moved TO an autotile screen, add it
+        // A cross-mode SWAP arms windowOutputMoveExpected for the snap
+        // partner migrating onto this source screen. That partner is
+        // untracked effect-side, so its outputChanged lands here — its
+        // arrival IS the marker's expected echo, so consume the one-shot
+        // UNCONDITIONALLY (an ineligible arrival — minimized, off-desktop,
+        // unmanaged screen — still IS the echo; leaving the marker armed
+        // would swallow the window's next genuine outputChanged).
+        m_expectedOutputMove.remove(windowId);
+        // Window not tracked — but if it moved TO an autotile screen, add
+        // it. The daemon already placed it via handoffReceive; the
+        // notifyWindowAdded below establishes the effect-side tracking the
+        // daemon does not touch, and is a no-op daemon-side (insertWindow
+        // rejects an already-tracked window).
         if (m_managedScreens.contains(newScreenId) && m_effect->shouldHandleWindow(w) && !w->isMinimized()
             && w->isOnCurrentDesktop() && w->isOnCurrentActivity()) {
-            // A cross-mode SWAP arms windowOutputMoveExpected for the snap partner
-            // migrating onto this (autotile) source screen. That partner is untracked
-            // effect-side, so its outputChanged lands here rather than the tracked
-            // branch below — its arrival IS the marker's expected echo, so consume
-            // the one-shot (mirroring the tracked-branch erase) instead of stranding
-            // it. The daemon already placed the window via handoffReceive; the
-            // notifyWindowAdded below establishes the effect-side tracking the daemon
-            // does not touch, and is a no-op daemon-side (insertWindow rejects an
-            // already-tracked window).
-            m_expectedOutputMove.remove(windowId);
             notifyWindowAdded(w);
             m_effect->updateAllDecorations();
         }
@@ -413,17 +415,23 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // scrolling screen, getWindowScreenId answers from the very map
     // oldScreenId was read from (the engine-authoritative override), so the
     // old-vs-new diff below is an identity for scroll windows and can never
-    // route a scroll handoff — the marker is the only reliable signal. The
-    // positional check keeps parking hops honest: a strip parking a column
-    // onto a neighbour output fires outputChanged too, and its positional
-    // screen does NOT match the marker's destination, so the marker
-    // survives for the real handoff echo and the hop falls through to the
-    // same-screen return below.
+    // route a scroll handoff — the marker is the only reliable signal.
+    // Positional match alone is NOT sufficient: on a two-output layout a
+    // strip parking a column onto the neighbour lands its centre exactly
+    // where an armed handoff points. The second conjunct — the window must
+    // no longer be scroll-TILED on the source — separates the two: a real
+    // handoff's release-driven tile update (FIFO-ordered ahead of the
+    // geometry echo) has already emptied the source bucket, while a
+    // parking hop's window is still tiled there, so the marker survives
+    // for the genuine echo and the hop falls through to the same-screen
+    // return below.
     if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
         const QPointF cf = w->frameGeometry().center();
         const QString positional =
             m_effect->resolveEffectiveScreenId(QPoint(qRound(cf.x()), qRound(cf.y())), m_effect->windowOutput(w));
-        if (expIt.value() == positional) {
+        const bool stillTiledOnSource = m_scrollingScreens.contains(oldScreenId)
+            && m_border.tiledWindowsByScreen.value(oldScreenId).contains(windowId);
+        if (expIt.value() == positional && !stillTiledOnSource) {
             m_expectedOutputMove.erase(expIt);
             if (m_managedScreens.contains(positional)) {
                 m_notifiedWindowScreens[windowId] = positional;
@@ -443,14 +451,19 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     }
 
     if (oldScreenId.isEmpty() || oldScreenId == newScreenId) {
-        // Belt-and-braces drain for a marker whose move never materialised
-        // (refused receive, window closed mid-move): once the tracked
-        // record already equals the marked destination there is no echo
-        // left to consume, so drop the one-shot rather than let it swallow
-        // a later genuine move's notification.
-        if (const auto expIt = m_expectedOutputMove.constFind(windowId);
-            expIt != m_expectedOutputMove.constEnd() && expIt.value() == newScreenId) {
-            m_expectedOutputMove.erase(expIt);
+        // Belt-and-braces drains for a marker whose move never
+        // materialised (refused receive, window closed mid-move):
+        //  - record already equals the marked destination → no echo left;
+        //  - window is not a parked strip tile → a same-screen settle
+        //    means the marked move to a THIRD screen never happened (a
+        //    scroll window is exempt: its parking hops legitimately pass
+        //    through here while the marker waits for the real echo).
+        // Either way, drop the one-shot rather than let it swallow a later
+        // genuine move's notification.
+        if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
+            if (expIt.value() == newScreenId || scrollTrackedScreenFor(windowId).isEmpty()) {
+                m_expectedOutputMove.erase(expIt);
+            }
         }
         return; // Same screen or unknown — no transfer needed
     }
@@ -470,30 +483,13 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         return;
     }
 
-    // Daemon-owned cross-output move: the daemon already migrated its tiling state
-    // onto newScreenId and reflowed both outputs; KWin's outputChanged is the
-    // expected echo. Re-issuing windowClosed/windowOpened now would re-resolve the
-    // close to the destination (the daemon's map already points there) and tear
-    // down the placement, so the source reflow never lands — update our bookkeeping
-    // and move the decoration claim, then stop. Consume the marker one-shot; honour
-    // it only when the destination matches (a mismatch means a later genuine move
-    // superseded it → fall through to the normal transfer).
-    if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
-        const QString expectedScreen = expIt.value();
-        m_expectedOutputMove.erase(expIt);
-        if (expectedScreen == newScreenId) {
-            if (newIsAutotile) {
-                m_notifiedWindowScreens[windowId] = newScreenId;
-            } else {
-                // Cross-MODE move: window left autotile for a SNAP screen. Drop
-                // effect-side autotile tracking (daemon already relinquished via
-                // handoffRelease) — else it lingers phantom.
-                cleanupAutotileTracking(windowId, oldScreenId);
-            }
-            m_effect->updateAllDecorations();
-            return;
-        }
-    }
+    // A marker surviving to this point is SUPERSEDED: the marker-first
+    // block above already consumed every daemon-owned echo (for non-scroll
+    // windows newScreenId is byte-identical to its positional resolve, so
+    // a matching destination cannot reach here), which leaves only a
+    // marker for a move that a later genuine user move overtook. Drop it
+    // and run the normal transfer.
+    m_expectedOutputMove.remove(windowId);
 
     qCInfo(lcEffect) << "Window moved between monitors:" << windowId << oldScreenId << "->" << newScreenId;
 

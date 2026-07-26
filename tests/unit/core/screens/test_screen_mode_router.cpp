@@ -26,6 +26,8 @@
 
 #include <memory>
 
+#include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
@@ -33,8 +35,6 @@
 #include "helpers/AutotileTestHelpers.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
-#include <PhosphorScrollEngine/ScrollEngine.h>
-#include <PhosphorSnapEngine/SnapEngine.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -129,9 +129,16 @@ private Q_SLOTS:
 
     void modeFor_emptyScreenId_returnsSnapping()
     {
-        // Defensive: an empty screen id should never trigger autotile mode.
-        // The engine's set does not contain the empty string by default.
+        // Defensive contract, pinned for real: even when BOTH engines'
+        // live sets somehow contain the empty string (a corrupt seed), the
+        // router still answers Snapping for an empty id — the guard, not
+        // the default.
         QCOMPARE(m_router->modeFor(QString()), PhosphorZones::AssignmentEntry::Snapping);
+        m_autotileEngine->setAutotileScreens({QString(), QStringLiteral("DP-1")});
+        m_scrollEngine->setActiveScreens({QString()});
+        QCOMPARE(m_router->modeFor(QString()), PhosphorZones::AssignmentEntry::Snapping);
+        m_autotileEngine->setAutotileScreens({});
+        m_scrollEngine->setActiveScreens({});
     }
 
     // ─── engineFor ────────────────────────────────────────────────────────
@@ -252,6 +259,7 @@ private Q_SLOTS:
         const auto result = m_router->partitionByMode(input);
         QCOMPARE(result.snap, input);
         QVERIFY(result.autotile.isEmpty());
+        QVERIFY(result.scrolling.isEmpty());
     }
 
     void partitionByMode_allAutotile_allSnapIsEmpty()
@@ -260,6 +268,7 @@ private Q_SLOTS:
         const QStringList input = {QStringLiteral("DP-1"), QStringLiteral("DP-2")};
         const auto result = m_router->partitionByMode(input);
         QVERIFY(result.snap.isEmpty());
+        QVERIFY(result.scrolling.isEmpty());
         QCOMPARE(result.autotile, input);
     }
 

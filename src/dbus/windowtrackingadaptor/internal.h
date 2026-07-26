@@ -31,29 +31,49 @@ namespace WindowTrackingInternal {
 /// no state, duplicate, insert failure), and by then the source has already
 /// released — an unguarded release→receive strands the window tracked by NO
 /// engine. On refusal this re-homes the window into the source engine on
-/// @p recoverScreenId (when both are available) so it stays managed.
+/// @p recoverScreenId / @p recoverDesktop (when available) so it stays
+/// managed; pass the window's SOURCE desktop for a cross-desktop crossing or
+/// the recovery lands on the source screen's current desktop instead.
 /// Returns true when the destination adopted the window.
+///
+/// Pre-tracked destination (source == dest is the common shape: a floating
+/// window moving between two screens of the SAME mode): isWindowTracked
+/// answers true unconditionally there, so adoption is instead verified as
+/// "the tracked screen now matches the requested destination".
 inline bool guardedHandoff(::PhosphorEngine::IPlacementEngine* source, ::PhosphorEngine::IPlacementEngine* dest,
-                           ::PhosphorEngine::IPlacementEngine::HandoffContext ctx, const QString& recoverScreenId)
+                           ::PhosphorEngine::IPlacementEngine::HandoffContext ctx, const QString& recoverScreenId,
+                           int recoverDesktop = 0)
 {
+    const bool destPreTracked = dest->isWindowTracked(ctx.windowId);
     if (source && source != dest) {
         source->handoffRelease(ctx.windowId);
     }
     dest->handoffReceive(ctx);
-    if (dest->isWindowTracked(ctx.windowId)) {
+    const bool adopted = destPreTracked
+        ? ::PhosphorScreens::ScreenIdentity::screensMatch(dest->screenForTrackedWindow(ctx.windowId), ctx.toScreenId)
+        : dest->isWindowTracked(ctx.windowId);
+    if (adopted) {
         return true;
     }
     qCWarning(lcDbusWindow) << "guardedHandoff:" << dest->engineId() << "refused" << ctx.windowId;
     if (source && source != dest && !recoverScreenId.isEmpty()) {
         ::PhosphorEngine::IPlacementEngine::HandoffContext back = ctx;
         back.toScreenId = recoverScreenId;
-        back.toDesktop = 0;
+        back.toDesktop = recoverDesktop;
         back.fromEngineId = dest->engineId();
         source->handoffReceive(back);
         if (source->isWindowTracked(ctx.windowId)) {
             qCInfo(lcDbusWindow) << "guardedHandoff: re-homed" << ctx.windowId << "into" << source->engineId() << "on"
                                  << recoverScreenId;
+        } else {
+            // Double refusal: the window is now tracked by NO engine. Loud,
+            // so the log distinguishes recovered from stranded.
+            qCWarning(lcDbusWindow) << "guardedHandoff: re-home REFUSED too -" << ctx.windowId
+                                    << "is tracked by no engine";
         }
+    } else if (!destPreTracked) {
+        qCWarning(lcDbusWindow) << "guardedHandoff: no recovery available -" << ctx.windowId
+                                << "is tracked by no engine";
     }
     return false;
 }

@@ -2,6 +2,12 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 # PhosphorScrollEngine unit tests. Headless — pure strip-model logic, no QPA.
+#
+# No D-Bus isolation launcher on ANY of these targets, deliberately:
+# nothing in phosphor-scroll-engine or phosphor-engine touches the session
+# bus (the dbus-run-session TEST_LAUNCHER is scoped to tests/unit, whose
+# fixtures do). If a QDBus dependency ever reaches these targets, add the
+# launcher.
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
@@ -21,14 +27,10 @@ endfunction()
 
 pse_add_test(test_scrollstrip_core test_scrollstrip_core.cpp)
 pse_add_test(test_scrollstrip_ops test_scrollstrip_ops.cpp)
+pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
+
 # Shared fixture header, listed so IDE/target file listings see it (both
 # strip tests include it; it carries no Q_OBJECT, so automoc scans it and
 # produces nothing).
-#
-# No D-Bus isolation launcher here, deliberately: nothing in
-# phosphor-scroll-engine or phosphor-engine touches the session bus (the
-# dbus-run-session TEST_LAUNCHER is scoped to tests/unit, whose fixtures
-# do). If a QDBus dependency ever reaches these targets, add the launcher.
 target_sources(test_scrollstrip_core PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollstrip_ops PRIVATE scrollstriptestutils.h)
-pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)

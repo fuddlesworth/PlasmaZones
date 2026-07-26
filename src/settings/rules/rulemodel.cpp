@@ -290,9 +290,9 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         return PhosphorI18n::tr("Tiling: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
     }
     if (action.type == ActionType::DisableEngine) {
-        // Name the engine being disabled — a rules list with "Disable
-        // Snapping on DP-1" and "Disable: Tiling" on DP-2 otherwise reads
-        // as two identical "Disabled" rows. Empty mode → fall back to
+        // Name the engine being disabled — a rules list with
+        // "Disable: Snapping" on DP-1 and "Disable: Tiling" on DP-2
+        // otherwise reads as two identical "Disabled" rows. Empty mode → fall back to
         // the generic "Disabled" label so a malformed rule still reads
         // sensibly.
         const QString mode = action.params.value(PhosphorRules::ActionParam::Mode).toString();

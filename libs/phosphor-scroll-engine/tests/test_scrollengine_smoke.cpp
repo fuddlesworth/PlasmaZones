@@ -29,7 +29,7 @@ private Q_SLOTS:
     void pruneDropsWindowBookkeeping();
     void pruneRemovedScreenAndActivitiesSweep();
     void stackedTileFloatRoundTripRestoresSlot();
-    void scheduledRetilesCoalesce();
+    void scheduledRetileRunsUnderEventLoop();
     void removedScreenReleasesWindows();
     void operationScreenFallbackIsDeterministic();
     void minSizeSeedsAndCarries();
@@ -70,11 +70,24 @@ void TestScrollEngineSmoke::screensSetLifecycle()
     QCOMPARE(enabledSpy.count(), 1);
     engine->setActiveScreens({QStringLiteral("S1")}); // genuine shrink → emit 2
 
-    // Identical non-empty set re-emits with isDesktopSwitch=true (the
-    // effect catch-scan wakeup contract).
+    // Identical non-empty set WITHOUT a preceding desktop/activity switch:
+    // NO re-emit. A no-op re-push (updateEngineScreens re-derive) must not
+    // claim isDesktopSwitch — TilingAdaptor OR-coalesces the flag across
+    // engines, and a false true makes the effect skip the OTHER engine's
+    // geometry/border restore in the same pass.
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCOMPARE(screensSpy.count(), 2);
+
+    // After a REAL desktop switch the identical set re-emits once with
+    // isDesktopSwitch=true (the effect catch-scan wakeup contract), and
+    // the flag is CONSUMED: a further identical push stays silent.
+    engine->setCurrentDesktop(1);
+    engine->setCurrentDesktop(2); // armSwitch needs an established context first
     engine->setActiveScreens({QStringLiteral("S1")});
     QCOMPARE(screensSpy.count(), 3);
     QCOMPARE(screensSpy.last().at(1).toBool(), true);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCOMPARE(screensSpy.count(), 3);
 
     engine->setActiveScreens({});
     QVERIFY(!engine->isEnabled());
@@ -333,12 +346,13 @@ void TestScrollEngineSmoke::stackedTileFloatRoundTripRestoresSlot()
     QCOMPARE(state->strip().columns().at(bCol).tiles.size(), 1);
 }
 
-void TestScrollEngineSmoke::scheduledRetilesCoalesce()
+void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
 {
-    // Two schedules for one screen in one event-loop turn must produce
-    // exactly ONE applyLayout (observed through the tab-strip broadcast) —
-    // uncoverable under the old APPLESS main, where the queued retile
-    // never ran at all.
+    // Pins that the QUEUED retile actually runs under the GUILESS event
+    // loop (uncoverable under the old APPLESS main, where processEvents
+    // was a no-op). Coalescing itself is NOT observable through the
+    // change-gated tab-strip signal — an un-coalesced double run would
+    // emit identically — so this test deliberately does not claim it.
     QObject owner;
     ScrollEngine* engine = makeEngine(&owner);
     engine->setScreenGeometryProviders(
@@ -350,20 +364,11 @@ void TestScrollEngineSmoke::scheduledRetilesCoalesce()
         });
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
-    engine->toggleColumnTabbed(QStringLiteral("S1")); // tabbed → non-empty payloads
     QCoreApplication::processEvents();
 
     QSignalSpy stripSpy(engine, &ScrollEngine::tabStripsChanged);
     engine->scheduleRetileForScreen(QStringLiteral("S1"));
-    engine->scheduleRetileForScreen(QStringLiteral("S1"));
-    QCoreApplication::processEvents();
-    // Identical payload → the emit-on-change gate keeps the count at 0;
-    // the point is that the double schedule did not double-run (a second
-    // run would be invisible anyway under the gate, so drive the check
-    // through a payload change: untab between the two schedules).
-    QCOMPARE(stripSpy.count(), 0);
-    engine->scheduleRetileForScreen(QStringLiteral("S1"));
-    engine->toggleColumnTabbed(QStringLiteral("S1")); // schedules again + changes payload
+    engine->toggleColumnTabbed(QStringLiteral("S1")); // changes the payload the queued run broadcasts
     QCoreApplication::processEvents();
     QCOMPARE(stripSpy.count(), 1);
 }

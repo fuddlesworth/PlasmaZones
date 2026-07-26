@@ -74,9 +74,9 @@ Item {
         // chain, so a category named "constructor" would collide with a
         // Function slot.
         var index = Object.create(null);
-        for (var i = 0; i < shortcuts.length; i++) {
-            var row = shortcuts[i];
-            if (!rowVisible(row))
+        for (var i = 0; i < root.shortcuts.length; i++) {
+            var row = root.shortcuts[i];
+            if (!root.rowVisible(row))
                 continue;
 
             if (!(row.category in index)) {

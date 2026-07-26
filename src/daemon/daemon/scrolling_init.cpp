@@ -41,8 +41,9 @@ PhosphorScrollEngine::ScrollEngine* scrollTargetFor(PhosphorScreens::ScreenManag
     }
     auto* scroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(engineBase);
     if (scroll && outScreenId) {
-        // No engine-state mutation here — the active-screen hint is pushed
-        // by the caller AFTER the context-disable gate passes, so a refused
+        // The out-param feeds the caller's context-disable gate; writing it
+        // is not an engine-state mutation — the active-screen hint is
+        // pushed by the caller only AFTER that gate passes, so a refused
         // shortcut leaves the engine untouched.
         *outScreenId = screenId;
     }

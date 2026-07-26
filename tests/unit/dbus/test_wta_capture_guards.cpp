@@ -290,6 +290,7 @@ private Q_SLOTS:
 
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
+        wta->setEngines(nullptr, nullptr, nullptr); // symmetric with the siblings; the QPointer self-null is incidental
         delete snap;
     }
 

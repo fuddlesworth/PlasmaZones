@@ -528,6 +528,14 @@ public:
     /// diverges from @ref assignmentEntryForScreen / the resolvers, which
     /// skip disabled rules and fall through to the gated default for a
     /// context whose only rule is disabled.
+    /// The EXPLICIT assignment entry pinned by this exact context tuple's
+    /// rule, or a default entry when none exists. Unlike the cascade
+    /// resolvers this never falls back to wider scopes or defaults — it is
+    /// the UI's explicit-vs-resolved discriminator (the Monitors page must
+    /// not re-pin a cascade default as explicit when carrying sibling-mode
+    /// fields through a mode toggle).
+    AssignmentEntry exactContextEntry(const QString& screenId, int virtualDesktop, const QString& activity) const;
+
     Q_INVOKABLE bool hasExplicitAssignment(const QString& screenId, int virtualDesktop = 0,
                                            const QString& activity = QString()) const;
 

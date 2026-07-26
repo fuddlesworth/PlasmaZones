@@ -40,10 +40,12 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
     if (after == before) {
         return;
     }
-    // Coercion is driven by the KIND transition, never by sniffing the
-    // value's magnitude — the Fixed floor is 1px and a proportion tops out
-    // at 1.0, so magnitude cannot distinguish Fixed(1) from a 100%
-    // proportion. Setter-side only: a hand-edited config with an
+    // The Fixed arm is driven purely by the KIND transition. The
+    // Proportion arm additionally requires a pixel-magnitude value
+    // (stored > 1.0) — that is a preservation test, not a kind sniff: a
+    // legitimate proportion parked through a ClientDecides hop must
+    // survive, while any setter-written Fixed value is >= the 100px floor
+    // and therefore unambiguous. Setter-side only: a hand-edited config with an
     // inconsistent pair (kind=Fixed, value=0.5) is left as-is until the
     // next write and the engine renders a degenerate-but-clamped column
     // (its own load applies qMax(1, …)) — the page rewrites the pair on
@@ -93,7 +95,7 @@ void Settings::setScrollingDefaultColumnWidthValue(qreal value)
 {
     const bool isFixed = scrollingDefaultColumnWidthKind() == ConfigDefaults::scrollingWidthKindFixed();
     value = isFixed ? qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthFixedMin(), value,
-                                    ConfigDefaults::scrollingDefaultColumnWidthValueMax())
+                                    ConfigDefaults::scrollingDefaultColumnWidthFixedMax())
                     : qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value,
                                     ConfigDefaults::scrollingDefaultColumnWidthProportionMax());
     const qreal before =

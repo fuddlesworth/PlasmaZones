@@ -450,10 +450,15 @@ void Daemon::resnapIfManualMode()
     // screen cycling to the same layout), setActiveLayout is a no-op and no signal fires.
     // Explicitly populating here mirrors the KCM's assignmentChangesApplied path.
     if (m_windowTrackingAdaptor) {
-        QSet<QString> autotileScreens;
+        // Exclude EVERY engine-managed screen, not just autotile: the
+        // resnap's only mode gate is this exclude set, and resnapping a
+        // scroll-owned screen would reposition strip windows to stale zone
+        // rects (the KCM twin in init_engines.cpp builds the same union).
+        QSet<QString> engineManagedScreens;
         if (m_screenModeRouter && m_screenManager) {
             const auto parts = m_screenModeRouter->partitionByMode(m_screenManager->effectiveScreenIds());
-            autotileScreens = QSet<QString>(parts.autotile.begin(), parts.autotile.end());
+            engineManagedScreens = QSet<QString>(parts.autotile.begin(), parts.autotile.end());
+            engineManagedScreens.unite(QSet<QString>(parts.scrolling.begin(), parts.scrolling.end()));
         }
         // Restrict the resnap to the current virtual desktop. Cycle/picker /
         // zone-selector all change a single (screen, desktop, activity)
@@ -465,7 +470,8 @@ void Daemon::resnapIfManualMode()
         // osd.cpp) for the null-safe VDM read — the same pattern used
         // by every daemon-side site that needs the current desktop
         // (autotile.cpp, signals.cpp, osd.cpp, start.cpp).
-        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, {}, currentDesktop());
+        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens, {},
+                                                                              currentDesktop());
     }
     // Co-locate the suppress pre-arm with the resnap call so a null
     // m_snapAdaptor doesn't leave the counter armed for the next

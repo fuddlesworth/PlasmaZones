@@ -419,7 +419,7 @@ public:
      *                 that decides immediateFloatOnStart)
      * @param screenId Virtual-screen-aware screen ID at drag start
      * @param resolver Frozen-snapshot context resolver — supplies the
-     *        (desktop, activity, Snapping-mode) tuple used for the
+     *        (desktop, activity, live-mode) tuple used for the
      *        context-disabled check. nullptr disables the disable gate
      *        (matches the historical `settings == nullptr` fallback).
      */

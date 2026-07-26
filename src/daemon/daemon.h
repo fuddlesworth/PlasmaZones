@@ -960,18 +960,20 @@ private:
     /** @brief Prune context maps for removed activities */
     void pruneContextMapsForActivities(const QSet<QString>& validActivities);
     /** @brief Prune m_lastEngineOrders for old virtual screen IDs that no longer exist */
-    void pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenId);
+    void pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId);
     /**
-     * @brief Drop a closed window from every saved autotile order.
+     * @brief Drop a closed window from every saved TILING-FAMILY order
+     * (autotile stack orders and scrolling column orders share
+     * m_lastEngineOrders).
      *
      * Without this, a window that closes while the screen is in manual mode
-     * stays in m_lastEngineOrders. On the next manual→autotile toggle,
-     * seedAutotileOrderForScreen feeds the stale id back through
-     * setInitialWindowOrder; setActiveScreens replays it into the TilingState
-     * and recalculateLayout tiles a phantom window. Match by instance id —
-     * saved entries are canonical "appId|instanceId" composites.
+     * stays in m_lastEngineOrders. On the next manual→tiling toggle, the
+     * order seeding feeds the stale id back through setInitialWindowOrder;
+     * setActiveScreens replays it into the engine state and the retile
+     * places a phantom window. Match by instance id — saved entries are
+     * canonical "appId|instanceId" composites.
      */
-    void pruneAutotileOrdersForWindow(const QString& instanceId);
+    void pruneEngineOrdersForWindow(const QString& instanceId);
 
     /// Arm OSD suppression for @p count upcoming resnap feedback signals. ADDS
     /// to the running count (never clobbers) so overlapping async resnap streams

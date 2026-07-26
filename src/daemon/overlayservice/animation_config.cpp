@@ -305,6 +305,10 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     //   - ShaderPreview (editor preview window): shown via direct
     //     window->show() in showShaderPreview because the editor controls
     //     visibility imperatively and re-creates on every open.
+    //   - ScrollTabs (tabbed-column indicators): the animation-profile
+    //     taxonomy defines no popup.scrollTabs domain, so the library
+    //     default is the intended motion for both legs; registering a
+    //     config would need new profile paths first (see the role doc).
     m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(profileRegistry, buildDefaultConfig());
     if (m_animShaderRegistry) {
         m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);

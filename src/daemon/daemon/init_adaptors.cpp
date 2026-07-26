@@ -184,7 +184,7 @@ void Daemon::initCoreAdaptors()
     // then tile N+1 windows for N actual windows).
     connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowDisappeared, this,
             [this](const QString& instanceId) {
-                pruneAutotileOrdersForWindow(instanceId);
+                pruneEngineOrdersForWindow(instanceId);
             });
 
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).

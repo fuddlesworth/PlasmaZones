@@ -168,13 +168,16 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId)
     }
     const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnWidth))) {
-        // Only forward a genuinely numeric fraction inside (0, 1]: a
-        // missing or malformed Value would toDouble() to 0.0 and be clamped
-        // into a 5% column, and an out-of-range hand-edit (say 50.0) must
-        // fall back to the configured default, not saturate the clamp.
+        // Only forward a genuinely numeric fraction inside the SHARED
+        // column-width bounds (PhosphorRules::Min/MaxColumnWidthRatio, the
+        // same pair the descriptor validator and the context resolver
+        // clamp against): a missing or malformed Value would toDouble() to
+        // 0.0, and an out-of-range hand-edit (say 50.0) must fall back to
+        // the configured default, not saturate a clamp.
         const auto value = action->params.value(QString(PhosphorRules::ActionParam::Value));
         const double fraction = value.toDouble(0.0);
-        if (value.isDouble() && fraction > 0.0 && fraction <= 1.0) {
+        if (value.isDouble() && fraction >= PhosphorRules::MinColumnWidthRatio
+            && fraction <= PhosphorRules::MaxColumnWidthRatio) {
             out.insert(ScrollOpenKeys::widthFraction(), fraction);
         }
     }

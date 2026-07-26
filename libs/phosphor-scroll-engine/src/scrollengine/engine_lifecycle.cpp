@@ -26,6 +26,10 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     const bool ruleFloated = m_floatPredicate && m_floatPredicate(windowId);
     if (oversized || ruleFloated) {
         state->addFloating(windowId);
+        // A floated arrival consumes its seed entry too, or the screen's
+        // list never empties and the stale entry survives every later mode
+        // transition.
+        consumePendingInitialOrder(screenId, windowId);
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         return;
     }
@@ -39,6 +43,7 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             const PhosphorEngine::EngineSlot slot = record->slotFor(engineId());
             if (slot.state == PhosphorEngine::WindowPlacement::stateFloating()) {
                 state->addFloating(windowId);
+                consumePendingInitialOrder(screenId, windowId); // same rationale as the rule-float exit
                 Q_EMIT windowFloatingChanged(windowId, true, screenId);
                 return;
             }
@@ -77,13 +82,7 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             // Consume this id from the mode-transition seed too — leaving
             // it would let a stale entry re-position an unrelated later
             // open (the block below documents exactly that hazard).
-            const auto pendingConsume = m_pendingInitialOrder.find(screenId);
-            if (pendingConsume != m_pendingInitialOrder.end()) {
-                pendingConsume->removeAll(windowId);
-                if (pendingConsume->isEmpty()) {
-                    m_pendingInitialOrder.erase(pendingConsume);
-                }
-            }
+            consumePendingInitialOrder(screenId, windowId);
             return;
         }
     }
@@ -162,7 +161,11 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // cross-screen and NOT double-claimed into the strip here. Gated on
     // !oldState: a window this engine already tracks anywhere is scroll's
     // own (in-session migration), never a session restore.
-    if (!oldState && m_snappingModeResolver && m_windowTracker) {
+    // Membership, not the raw reverse-map key (autotile's gate term for
+    // term): a refused earlier open can leave a phantom key, and gating on
+    // it would skip the defer while this engine manages nothing.
+    const bool trackedHere = oldState && oldState->containsWindow(windowId);
+    if (!trackedHere && m_snappingModeResolver && m_windowTracker) {
         const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
         if (!appId.isEmpty() && appId != windowId) {
             const auto snapCrossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
@@ -185,6 +188,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // the OLD strip's geometry, and lastAppliedRect would keep
         // answering for a context that no longer holds the window.
         const ScrollLayoutParams oldParams = layoutParamsForScreen(oldKey.screenId);
+        const bool wasFloating = oldState->isFloating(windowId);
         oldState->strip().takeWindow(windowId, oldParams);
         oldState->removeFloating(windowId);
         m_lastAppliedRect.remove(windowId);
@@ -193,6 +197,14 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // re-enters (usually tiled) on the new screen, and a stale marker
         // would re-float it at the next mode transition.
         m_scrollFloatedWindows.remove(windowId);
+        if (wasFloating) {
+            // Announce the dropped float bit: signal-driven subscribers
+            // (the effect's FloatingCache) would otherwise keep believing
+            // the window floats while insertOpenedWindow tiles it below,
+            // and resolve the divergence as a float-back. A float RECORD
+            // re-float re-announces true immediately afterwards.
+            Q_EMIT windowFloatingChanged(windowId, false, oldKey.screenId);
+        }
         scheduleRetileForScreen(oldKey.screenId);
         Q_EMIT placementChanged(oldKey.screenId);
     }
@@ -205,12 +217,24 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // paths emit windowFloatingChanged, and a synchronous query-back from a
     // subscriber must already see the window as this engine's.
     m_states.setKeyForWindow(windowId, key);
+    // Capture the pre-insert focus: with focus-new-windows OFF the
+    // compositor keeps focus on the previous window, so the strip must not
+    // adopt the arrival as its active column either — a diverged strip
+    // makes every later focus-direction verb navigate from the wrong
+    // origin, and a consume-open into a tabbed column would park the
+    // window the user is actually looking at.
+    const QString priorActive = state->strip().activeWindowId();
     insertOpenedWindow(state, windowId, screenId, minWidth, minHeight);
     m_activeScreen = screenId;
 
     bool focusNew = true;
     if (auto* settings = qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings())) {
         focusNew = settings->scrollingFocusNewWindows();
+    }
+    if (!focusNew && !priorActive.isEmpty() && state->strip().activeWindowId() == windowId
+        && state->strip().containsWindow(priorActive)) {
+        const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+        state->strip().focusWindow(priorActive, params);
     }
     applyLayout(screenId, focusNew && state->strip().activeWindowId() == windowId);
     Q_EMIT placementChanged(screenId);
@@ -523,11 +547,19 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     PhosphorEngine::PlacementStateKey staleKey;
     if (ScrollState* staleState = stateForWindow(windowId, &staleKey); staleState && staleKey != key) {
         const ScrollLayoutParams staleParams = layoutParamsForScreen(staleKey.screenId);
+        const bool staleWasFloating = staleState->isFloating(windowId);
         staleState->strip().takeWindow(windowId, staleParams);
         staleState->removeFloating(windowId);
         m_lastAppliedRect.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
+        if (staleWasFloating) {
+            // Same announcement as windowOpened's migration: a silently
+            // dropped float bit leaves signal-driven subscribers believing
+            // the window floats while the receive tiles it (the
+            // wasFloating branch below re-announces true when it applies).
+            Q_EMIT windowFloatingChanged(windowId, false, staleKey.screenId);
+        }
         scheduleRetileForScreen(staleKey.screenId);
         Q_EMIT placementChanged(staleKey.screenId);
     }

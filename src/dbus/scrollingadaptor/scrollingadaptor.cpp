@@ -56,7 +56,7 @@ void ScrollingAdaptor::clearEngine()
     // session's first genuine broadcast.
     m_lastBroadcastScreens.clear();
     if (m_engine) {
-        disconnect(m_engine, nullptr, this, nullptr);
+        disconnect(m_engine, &PhosphorScrollEngine::ScrollEngine::scrollingScreensChanged, this, nullptr);
         m_engine = nullptr;
     }
 }

@@ -600,10 +600,11 @@ inline constexpr double MaxBorderRadius = 20.0;
 /// Bounds for a `SetScrollDefaultColumnWidth` / `OpenColumnWidth` fraction of
 /// the work-area width. Shared for the same lockstep reason as the border
 /// bounds above: the load-time descriptor validator (via the private percent
-/// pair in ruleaction_builtins_p.h) and the zones-layer context resolver
-/// (layoutregistry_contextresolve.cpp) both clamp against these — a private
-/// copy in either would drift by hand-mirroring. A column may legitimately
-/// take the whole work area, so the upper bound is 1.0.
+/// pair in ruleaction_builtins_p.h), the zones-layer context resolver
+/// (layoutregistry_contextresolve.cpp), and the per-window open-params
+/// consumer (windowtrackingadaptor/rules.cpp) all validate against these — a
+/// private copy in any of them would drift by hand-mirroring. A column may
+/// legitimately take the whole work area, so the upper bound is 1.0.
 inline constexpr double MinColumnWidthRatio = 0.05;
 inline constexpr double MaxColumnWidthRatio = 1.0;
 

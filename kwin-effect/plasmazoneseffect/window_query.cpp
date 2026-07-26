@@ -103,9 +103,14 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     query.screenId = screenId;
     // Orientation of the window's screen ("portrait" when taller than wide), so a
     // window rule can match ScreenOrientation the same way a context rule does.
-    // Left empty (inert) when the output or its geometry is unavailable; a square
-    // screen counts as landscape, matching the daemon-side orientation provider.
-    if (const auto* output = w->screen()) {
+    // Position-resolved output (screenAt on the frame centre), NOT
+    // w->screen(): KWin can assign a window the wrong one of two
+    // identical-model outputs (discussion #724), and this must agree with
+    // the caller-resolved query.screenId. Left empty (inert) when no output
+    // contains the centre; a square screen counts as landscape, matching
+    // the daemon-side orientation provider.
+    const QPointF centreF = w->frameGeometry().center();
+    if (const auto* output = KWin::effects->screenAt(QPoint(qRound(centreF.x()), qRound(centreF.y())))) {
         const QRect g = output->geometry();
         if (g.isValid()) {
             query.screenOrientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");

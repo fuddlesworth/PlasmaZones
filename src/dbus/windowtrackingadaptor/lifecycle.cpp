@@ -474,8 +474,12 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
 
     // Drop frame-geometry shadow entry for this window.
     m_frameGeometry.remove(windowId);
-    // Drop the last-broadcast floating state for this window.
+    // Drop the last-broadcast floating state for this window — BOTH key
+    // forms: the engine relays feed this map canonical ids, and for a
+    // class-mutating app the raw close id differs. Must run before the
+    // registry's canonical release below drops the translation.
     m_broadcastFloating.remove(windowId);
+    m_broadcastFloating.remove(m_service->canonicalizeForLookup(windowId));
 
     m_service->windowClosed(windowId, kind);
 

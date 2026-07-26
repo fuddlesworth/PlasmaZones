@@ -67,7 +67,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Center a lone column")
                     searchAnchor: "alwaysCenterSingleColumn"
-                    description: i18n("When the strip holds a single column, center it no matter what the setting above says")
+                    description: i18n("When the strip holds a single column, center it regardless of how Center the focused column is set")
 
                     SettingsSwitch {
                         checked: appSettings.scrollingAlwaysCenterSingleColumn
@@ -125,7 +125,7 @@ SettingsFlickable {
                         accessibleName: i18n("Proportion of the screen")
                         from: root._scrollWidthConsts.proportionMin
                         to: root._scrollWidthConsts.proportionMax
-                        stepSize: 0.05
+                        stepSize: root._scrollWidthConsts.proportionStep
                         value: appSettings.scrollingDefaultColumnWidthValue
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
@@ -148,7 +148,7 @@ SettingsFlickable {
                         accessibleName: i18n("Fixed column width")
                         from: root._scrollWidthConsts.fixedMin
                         to: root._scrollWidthConsts.fixedMax
-                        stepSize: 10
+                        stepSize: root._scrollWidthConsts.fixedStep
                         onValueModified: value => appSettings.scrollingDefaultColumnWidthValue = value
                         // Fed through a guarded Binding rather than a plain
                         // `value:` one: SettingsSpinBox echoes each edit back

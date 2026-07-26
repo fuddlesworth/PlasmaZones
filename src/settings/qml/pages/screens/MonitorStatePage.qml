@@ -105,8 +105,11 @@ SettingsFlickable {
         // and the zone layout would be gone. An explicit "Default" pick
         // (cleared flag) deliberately carries empty so the sibling keeps
         // following the global default.
-        var siblingSnapping = stateView.localLayoutCleared ? "" : (stateView.localLayoutId || state.layoutId || "");
-        var siblingAlgo = stateView.localAlgorithmCleared ? "" : (stateView.localAlgorithmId || state.algorithmId || "");
+        // Resolved-but-not-explicit values are NOT carried: staging them
+        // would freeze a cascade default into an explicit assignment from a
+        // pure mode switch (the daemon marks explicitness per slot).
+        var siblingSnapping = stateView.localLayoutCleared ? "" : (stateView.localLayoutId || (state.layoutIdExplicit ? state.layoutId : "") || "");
+        var siblingAlgo = stateView.localAlgorithmCleared ? "" : (stateView.localAlgorithmId || (state.algorithmIdExplicit ? state.algorithmId : "") || "");
         var siblingTiling = siblingAlgo ? "autotile:" + siblingAlgo : "";
         if (stateView.isScrolling) {
             // Scrolling has neither a zone layout nor a tiling algorithm of
@@ -130,12 +133,12 @@ SettingsFlickable {
             if (!algoId) {
                 // Nothing resolved to pin (fresh config, or the context
                 // suppresses the default): stage a MODE-ONLY entry, exactly
-                // like the Snapping and Scrolling branches. The cascade
-                // accepts it through the bare "autotile:" sentinel — the
-                // documented KCM wire format for "autotile, use the default
-                // algorithm" — so the switch commits, the algorithm keeps
-                // FOLLOWING the global default (never frozen to today's
-                // value), and the combo honestly keeps showing "Default".
+                // like the Snapping and Scrolling branches. The wire is
+                // mode=1 with an EMPTY algorithm id (the adaptor only
+                // validates non-empty ids), so the switch commits, the
+                // algorithm keeps FOLLOWING the global default (never
+                // frozen to today's value), and the combo honestly keeps
+                // showing "Default".
                 settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, siblingSnapping, "");
                 return;
             }
@@ -409,13 +412,16 @@ SettingsFlickable {
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {
                     stateView.localMode = idx;
-                    // A mode toggle is an explicit re-pin: the user is asking
-                    // for this mode on this screen, so any earlier "Default"
-                    // pick no longer applies. Clear both flags so
-                    // _stageCurrentState stages the currently-resolved value
-                    // instead of silently dropping the mode change.
-                    stateView.localLayoutCleared = false;
-                    stateView.localAlgorithmCleared = false;
+                    // A mode toggle is an explicit re-pin FOR THE ENTERED
+                    // MODE only: its earlier "Default" pick no longer
+                    // applies, so clear that flag and stage the resolved
+                    // value. The SIBLING mode's cleared flag survives — a
+                    // pending "Default" on the mode being left is a
+                    // deliberate pick the toggle must not silently re-pin.
+                    if (idx === 0)
+                        stateView.localLayoutCleared = false;
+                    else if (idx === 1)
+                        stateView.localAlgorithmCleared = false;
                     root._stageCurrentState();
                 }
             }
@@ -424,6 +430,7 @@ SettingsFlickable {
             LayoutComboBox {
                 Layout.alignment: Qt.AlignHCenter
                 visible: stateView.isSnapping
+                Accessible.name: i18n("Snapping layout")
                 appSettings: root._layoutBridge
                 currentLayoutId: stateView.localLayoutId
                 layoutFilter: 0
@@ -442,6 +449,7 @@ SettingsFlickable {
             LayoutComboBox {
                 Layout.alignment: Qt.AlignHCenter
                 visible: stateView.isTiling
+                Accessible.name: i18n("Tiling algorithm")
                 appSettings: root._layoutBridge
                 currentLayoutId: stateView.localAlgorithmId ? "autotile:" + stateView.localAlgorithmId : ""
                 layoutFilter: 1

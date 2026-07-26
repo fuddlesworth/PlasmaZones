@@ -72,9 +72,6 @@ void Daemon::connectLayoutSignals()
 
     // Derive initial per-screen autotile state from assignments
     updateEngineScreens();
-    // Startup derive has no resnap consumer; drain any restore batch so it
-    // cannot leak into the first user-triggered consumer.
-    emitPendingSnapFloatRestoresForResnapBuffer();
 
     // Set initial layout filter
     updateLayoutFilter();

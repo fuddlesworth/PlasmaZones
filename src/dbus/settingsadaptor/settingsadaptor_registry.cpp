@@ -759,8 +759,7 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_setters[QStringLiteral("scrollingCenterFocusedColumn")] = [concrete](const QVariant& v) {
             const int mode = v.toInt();
-            if (mode < ConfigDefaults::scrollingCenterFocusedColumnMin()
-                || mode > ConfigDefaults::scrollingCenterFocusedColumnMax()) {
+            if (!ConfigDefaults::isValidScrollingCenterFocusedColumn(mode)) {
                 return false;
             }
             concrete->setScrollingCenterFocusedColumn(mode);
@@ -775,8 +774,7 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_setters[QStringLiteral("scrollingDefaultColumnWidthKind")] = [concrete](const QVariant& v) {
             const int kind = v.toInt();
-            if (kind < ConfigDefaults::scrollingDefaultColumnWidthKindMin()
-                || kind > ConfigDefaults::scrollingDefaultColumnWidthKindMax()) {
+            if (!ConfigDefaults::isValidScrollingWidthKind(kind)) {
                 return false;
             }
             concrete->setScrollingDefaultColumnWidthKind(kind);
@@ -791,8 +789,7 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_setters[QStringLiteral("scrollingDefaultColumnDisplay")] = [concrete](const QVariant& v) {
             const int display = v.toInt();
-            if (display < ConfigDefaults::scrollingDefaultColumnDisplayMin()
-                || display > ConfigDefaults::scrollingDefaultColumnDisplayMax()) {
+            if (!ConfigDefaults::isValidScrollingColumnDisplay(display)) {
                 return false;
             }
             concrete->setScrollingDefaultColumnDisplay(display);

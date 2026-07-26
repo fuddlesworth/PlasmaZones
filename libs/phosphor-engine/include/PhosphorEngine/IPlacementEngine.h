@@ -282,9 +282,20 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // OPTIONAL: Mode-specific float tracking (override if engine has mode-aware float)
+    // OPTIONAL: Mode-specific float MARKER (runtime discriminator, NOT persistence)
+    //
+    // Distinguishes a USER float in this engine's mode from an incidental float
+    // (e.g. autotile overflow). It is live runtime state the capture funnel reads
+    // to decide whether a float should persist into the record — there is no
+    // parallel "saved floats" store; the WindowPlacement record is the single
+    // source of truth for cross-mode float state. All three verbs live here,
+    // in one section (mark / query / clear).
     // ═══════════════════════════════════════════════════════════════════════════
 
+    virtual void markModeSpecificFloated(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
     virtual bool isModeSpecificFloated(const QString& windowId) const
     {
         Q_UNUSED(windowId)
@@ -649,21 +660,6 @@ public:
     virtual void scheduleRetileForScreen(const QString& screenId)
     {
         Q_UNUSED(screenId)
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // OPTIONAL: Mode-specific float MARKER (runtime discriminator, NOT persistence)
-    //
-    // Distinguishes a USER float in this engine's mode from an incidental float
-    // (e.g. autotile overflow). It is live runtime state the capture funnel reads
-    // to decide whether a float should persist into the record — there is no
-    // parallel "saved floats" store; the WindowPlacement record is the single
-    // source of truth for cross-mode float state.
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    virtual void markModeSpecificFloated(const QString& windowId)
-    {
-        Q_UNUSED(windowId)
     }
 
     // Per-window restore persistence is unified: engines implement

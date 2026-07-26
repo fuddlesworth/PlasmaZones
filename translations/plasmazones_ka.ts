@@ -352,11 +352,11 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="283"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="279"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="334"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="65"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="75"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="68"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="83"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="195"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="250"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="408"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="411"/>
         <source>Scrolling</source>
         <comment>tiling mode name</comment>
         <translation>გადახვევა</translation>
@@ -762,7 +762,7 @@
         <translation>განლაგება მინიჭებული არაა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="800"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="809"/>
         <source>Dismiss Shortcut Cheatsheet</source>
         <translation>მალსახმობების ცნობარის დახურვა</translation>
     </message>
@@ -1343,8 +1343,8 @@
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="81"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="278"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="331"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="56"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="61"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="59"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="64"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="248"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="639"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="306"/>
@@ -1365,8 +1365,8 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="189"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="96"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="35"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="93"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="38"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="101"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="220"/>
         <source>Other</source>
         <translation>სხვა</translation>
@@ -1507,17 +1507,9 @@
         <translation>ფანჯრის სათაური იმ აპლიკაციის სახელის სუფიქსის გარეშე, რომელსაც ფანჯრების მმართველი ამატებს.</translation>
     </message>
     <message>
-        <source>Whether the window has been floated out of tiling (snap or autotile).</source>
-        <translation type="vanished">ამოტივტივდა თუ არა ფანჯარა ფილებად დაწყობიდან (მიმაგრება ან ავტოფილი).</translation>
-    </message>
-    <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="167"/>
         <source>Whether the window is snapped into a zone (manual-zone mode, where tiled windows are not snapped).</source>
         <translation>მიმაგრებულია თუ არა ფანჯარა ზონაში (ხელით-ზონის რეჟიმი, სადაც ფილებად დაწყობილი ფანჯრები არაა მიმაგრებული).</translation>
-    </message>
-    <message>
-        <source>Whether the window is managed by the autotile engine.</source>
-        <translation type="vanished">იმართება თუ არა ფანჯარა ავტოფილის ძრავით.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="172"/>
@@ -1540,16 +1532,12 @@
         <translation>KDE-ის აქტივობა, რომელზეც ფანჯარაა.</translation>
     </message>
     <message>
-        <source>The engine mode the window is placed by (snapping or tiling).</source>
-        <translation type="vanished">ძრავის რეჟიმი, რომლითაც ფანჯარა განთავსდა (მიმაგრება ან ფილებად დაწყობა).</translation>
-    </message>
-    <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="182"/>
         <source>How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as windows open and close, for example a centered single-window layout that gives way once a second window opens.</source>
         <translation>რამდენი ფანჯარაა ფილებად დაწყობილი ამ მონიტორსა და სამუშაო მაგიდაზე. საშუალებას აძლევს წესს, გადართოს ფილებად დაწყობის ალგორითმი ფანჯრების გახსნისა და დახურვისას, მაგალითად ცენტრირებული ერთფანჯრიანი განლაგება, რომელიც ადგილს უთმობს, როგორც კი მეორე ფანჯარა გაიხსნება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="44"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="47"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="473"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="56"/>
         <source>Gaps</source>
@@ -1557,12 +1545,12 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="200"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="82"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="90"/>
         <source>Overlay</source>
         <translation>გადადება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="85"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="93"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="58"/>
         <source>Animation</source>
         <translation>ანიმაცია</translation>
@@ -1570,7 +1558,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="114"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="209"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="88"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="96"/>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="791"/>
         <source>Appearance</source>
         <translation>გარეგნობა</translation>
@@ -1578,132 +1566,134 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="224"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="263"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="74"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="91"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="82"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="99"/>
         <source>Window</source>
         <translation>ფანჯარა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="107"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="115"/>
         <source>Engine mode</source>
         <translation>ძრავის რეჟიმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="110"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="118"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="281"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="433"/>
         <source>Snapping layout</source>
         <translation>მიმაგრების განლაგება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="113"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="121"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="645"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="452"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/AlgorithmPreviewCard.qml.cpp" line="152"/>
         <source>Tiling algorithm</source>
         <translation>ფილების ალგორითმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="156"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="164"/>
         <source>Engine to disable</source>
         <translation>გასათიში ძრავი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="159"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="167"/>
         <source>Opacity (%)</source>
         <translation>გაუმჭვირვალობა (%)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="162"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="170"/>
         <source>Zones</source>
         <translation>ზონები</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="169"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="177"/>
         <source>Restore position on login (off = don&apos;t restore)</source>
         <translation>შესვლისას პოზიციის აღდგენა (გამორთ. = არ აღდგება)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="185"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="193"/>
         <source>Hide title bars (off = force visible)</source>
         <translation>სათაურის ზოლების დამალვა (გამორთ. = ნაძალადევად ხილვადი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="188"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="196"/>
         <source>Show border (off = hide)</source>
         <translation>საზღვრის ჩვენება (გამორთ. = დამალვა)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="191"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="272"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="199"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="280"/>
         <source>Border width (px)</source>
         <translation>საზღვრის სიგანე (px)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="194"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="275"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="202"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="283"/>
         <source>Corner radius (px)</source>
         <translation>კუთხის რადიუსი (px)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="200"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="263"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="208"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="271"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="353"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="116"/>
         <source>Border color</source>
         <translation>საზღვრის ფერი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="213"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="221"/>
         <source>Inner gap (px)</source>
         <translation>შიდა დაშორება (px)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="216"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="224"/>
         <source>Outer gap (px)</source>
         <translation>გარე დაშორება (px)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="219"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="227"/>
         <source>Use per-side outer gaps (off = one uniform gap)</source>
         <translation>თითოეული გვერდის გარე დაშორებების გამოყენება (გამორთ. = ერთი ერთგვაროვანი დაშორება)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="226"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="234"/>
         <source>Lock the layout (off = don&apos;t lock)</source>
         <translation>განლაგების დაბლოკვა (გამორთ. = არ დაიბლოკება)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="233"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="241"/>
         <source>Assign a default layout (off = leave unassigned)</source>
         <translation>ნაგულისხმევი განლაგების მინიჭება (გამორთ. = მიუნიჭებელი დარჩება)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="236"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="244"/>
         <source>Top gap (px)</source>
         <translation>ზედა დაშორება (px)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="239"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="247"/>
         <source>Bottom gap (px)</source>
         <translation>ქვედა დაშორება (px)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="242"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="250"/>
         <source>Left gap (px)</source>
         <translation>მარცხენა დაშორება (px)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="245"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="253"/>
         <source>Right gap (px)</source>
         <translation>მარჯვენა დაშორება (px)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="250"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="258"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="399"/>
         <source>Overlay shader</source>
         <translation>გადადების შეიდერი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="253"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="261"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="405"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/OsdCard.qml.cpp" line="104"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/OsdCard.qml.cpp" line="108"/>
@@ -1711,7 +1701,7 @@
         <translation>გადადების სტილი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="281"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="289"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="928"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="546"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="34"/>
@@ -1721,7 +1711,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="340"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="254"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="284"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="292"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="930"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="501"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="40"/>
@@ -1729,27 +1719,27 @@
         <translation>სამუშაო მაგიდა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="287"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="295"/>
         <source>Event</source>
         <translation>მოვლენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="293"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="301"/>
         <source>Shader effect</source>
         <translation>შეიდერის ეფექტი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="296"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="304"/>
         <source>Duration (ms)</source>
         <translation>ხანგრძლივობა (ms)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="299"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="307"/>
         <source>Curve</source>
         <translation>მრუდი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="314"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="322"/>
         <source>Zone numbers like “1, 2”, or a range like “1-3”. Multiple zones snap the window to their combined area.</source>
         <translation>ზონის ნომრები, მაგალითად „1, 2“, ან დიაპაზონი, მაგალითად „1-3“. რამდენიმე ზონა ფანჯარას მათ გაერთიანებულ არეს მიამაგრებს.</translation>
     </message>
@@ -1758,7 +1748,7 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="197"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="277"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="325"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="53"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="56"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="244"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="628"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="139"/>
@@ -1779,10 +1769,6 @@
         <translation>ავტოფილირება</translation>
     </message>
     <message>
-        <source>Scrolling</source>
-        <translation type="vanished">გადახვევა</translation>
-    </message>
-    <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="339"/>
         <source>Zone rectangles</source>
         <translation>ზონის მართკუთხედები</translation>
@@ -1793,7 +1779,7 @@
         <translation>განლაგების გადახედვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="391"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="399"/>
         <source>Set engine mode</source>
         <translation>ძრავის რეჟიმის დაყენება</translation>
     </message>
@@ -1833,67 +1819,67 @@
         <translation>მონიტორზე ამჟამად აქტიური განლაგება. საშუალებას აძლევს წესს, შეცვალოს დაშორებები, გადადება ან დაბლოკვის მდგომარეობა იმ ეკრანისთვის, რომელიც მოცემულ განლაგებას აჩვენებს. მას არ შეუძლია შეცვალოს, რომელი განლაგებაა მინიჭებული (ეს ციკლური იქნებოდა).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="79"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="87"/>
         <source>Engine</source>
         <translation>ძრავი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="119"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="127"/>
         <source>Max tiled windows</source>
         <translation>ფილებად დაწყობილი ფანჯრების მაქსიმუმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="122"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="130"/>
         <source>Split ratio (%)</source>
         <translation>გაყოფის თანაფარდობა (%)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="128"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="136"/>
         <source>Insert position</source>
         <translation>ჩასმის პოზიცია</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="141"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="149"/>
         <source>Column width (%)</source>
         <translation>სვეტის სიგანე (%)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="144"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="152"/>
         <source>Centering</source>
         <translation>ცენტრირება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="150"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="158"/>
         <source>Open in a tabbed column (off = a normal column)</source>
         <translation>ჩანართებიან სვეტში გახსნა (გამორთული = ჩვეულებრივი სვეტი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="172"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="180"/>
         <source>Restore to zone on login (off = don&apos;t restore)</source>
         <translation>შესვლისას ზონაში აღდგენა (გამორთ. = არ აღდგება)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="175"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="183"/>
         <source>Restore size on unsnap (off = keep zone size)</source>
         <translation>მოხსნისას ზომის აღდგენა (გამორთ. = ზონის ზომა შენარჩუნდება)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="178"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="186"/>
         <source>Layer</source>
         <translation>შრე</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="203"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="211"/>
         <source>Show opacity and tint (off = hide)</source>
         <translation>გაუმჭვირვალობისა და ტონის ჩვენება (გამორთ. = დამალვა)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="206"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="214"/>
         <source>Tint strength (%)</source>
         <translation>ტონის სიძლიერე (%)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="209"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="217"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="416"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="463"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="468"/>
@@ -1901,239 +1887,239 @@
         <translation>ტონის ფერი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="260"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="268"/>
         <source>Inactive zone color</source>
         <translation>არააქტიური ზონის ფერი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="266"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="274"/>
         <source>Active opacity (%)</source>
         <translation>აქტიური გაუმჭვირვალობა (%)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="269"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="277"/>
         <source>Inactive opacity (%)</source>
         <translation>არააქტიური გაუმჭვირვალობა (%)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="278"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="286"/>
         <source>Show zone numbers (off = hide)</source>
         <translation>ზონის ნომრების ჩვენება (გამორთ. = დამალვა)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="290"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="298"/>
         <source>Decoration packs</source>
         <translation>გაფორმების პაკეტები</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="394"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="402"/>
         <source>Set snapping layout</source>
         <translation>მიმაგრების განლაგების დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="397"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="405"/>
         <source>Set tiling algorithm</source>
         <translation>ფილების ალგორითმის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="400"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="408"/>
         <source>Set max tiled windows</source>
         <translation>ფილებად დაწყობილი ფანჯრების მაქსიმუმის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="403"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="411"/>
         <source>Set split ratio</source>
         <translation>გაყოფის თანაფარდობის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="406"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="414"/>
         <source>Set master count</source>
         <translation>მთავარის რაოდენობის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="409"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="417"/>
         <source>Set insert position</source>
         <translation>ჩასმის პოზიციის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="412"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="420"/>
         <source>Set overflow behavior</source>
         <translation>გადავსების ქცევის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="415"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="423"/>
         <source>Set drag behavior</source>
         <translation>გადათრევის ქცევის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="418"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="426"/>
         <source>Set algorithm parameter</source>
         <translation>ალგორითმის პარამეტრის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="421"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="429"/>
         <source>Set default column width</source>
         <translation>ნაგულისხმევი სვეტის სიგანის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="424"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="432"/>
         <source>Set focused column centering</source>
         <translation>ფოკუსირებული სვეტის ცენტრირების დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="427"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="435"/>
         <source>Set default column display</source>
         <translation>ნაგულისხმევი სვეტის ჩვენების დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="430"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="438"/>
         <source>Open at column width</source>
         <translation>გახსნა სვეტის სიგანით</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="433"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="616"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="441"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="624"/>
         <source>Open in a tabbed column</source>
         <translation>ჩანართებიან სვეტში გახსნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="436"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="444"/>
         <source>Open into column</source>
         <translation>სვეტში გახსნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="439"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="447"/>
         <source>Disable engine</source>
         <translation>ძრავის გათიშვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="442"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="596"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="450"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="604"/>
         <source>Lock layout</source>
         <translation>განლაგების დაბლოკვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="445"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="453"/>
         <source>Default layout assignment</source>
         <translation>ნაგულისხმევი განლაგების მინიჭება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="448"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="456"/>
         <source>Exclude window</source>
         <translation>ფანჯრის გამორიცხვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="451"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="459"/>
         <source>Float window</source>
         <translation>ფანჯრის მოტივტივება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="454"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="462"/>
         <source>Snap to zone(s)</source>
         <translation>ზონა(ებ)თან მიმაგრება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="457"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="584"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="465"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="592"/>
         <source>Restore position on login</source>
         <translation>შესვლისას პოზიციის აღდგენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="460"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="587"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="468"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="595"/>
         <source>Restore to zone on login</source>
         <translation>შესვლისას ზონაში აღდგენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="466"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="474"/>
         <source>Set window layer</source>
         <translation>ფანჯრის შრის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="469"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="477"/>
         <source>Override animation shader</source>
         <translation>ანიმაციის შეიდერის გადაფარვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="472"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="480"/>
         <source>Override decoration packs</source>
         <translation>გაფორმების პაკეტების გადაფარვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="475"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="483"/>
         <source>Override animation duration</source>
         <translation>ანიმაციის ხანგრძლივობის გადაფარვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="478"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="486"/>
         <source>Override animation curve</source>
         <translation>ანიმაციის მრუდის გადაფარვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="481"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="489"/>
         <source>Set opacity</source>
         <translation>გაუმჭვირვალობის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="484"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="492"/>
         <source>Set overlay shader</source>
         <translation>გადადების შეიდერის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="487"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="495"/>
         <source>Set overlay style</source>
         <translation>გადადების სტილის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="490"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="498"/>
         <source>Set overlay highlight color</source>
         <translation>გადადების გამოკვეთის ფერის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="493"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="501"/>
         <source>Set overlay inactive color</source>
         <translation>გადადების არააქტიური ფერის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="496"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="504"/>
         <source>Set overlay border color</source>
         <translation>გადადების საზღვრის ფერის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="499"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="507"/>
         <source>Set overlay active opacity</source>
         <translation>გადადების აქტიური გაუმჭვირვალობის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="502"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="510"/>
         <source>Set overlay inactive opacity</source>
         <translation>გადადების არააქტიური გაუმჭვირვალობის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="505"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="513"/>
         <source>Set overlay border width</source>
         <translation>გადადების საზღვრის სიგანის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="508"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="516"/>
         <source>Set overlay corner radius</source>
         <translation>გადადების კუთხის რადიუსის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="511"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="611"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="519"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="619"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="431"/>
         <source>Show zone numbers</source>
         <translation>ზონის ნომრების ჩვენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="514"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="522"/>
         <source>Exclude from animations</source>
         <translation>ანიმაციებიდან გამორიცხვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="522"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="593"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="530"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="601"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="419"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="499"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="505"/>
@@ -2141,96 +2127,96 @@
         <translation>სათაურის ზოლების დამალვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="525"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="602"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="533"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="610"/>
         <source>Show border</source>
         <translation>საზღვრის ჩვენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="528"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="536"/>
         <source>Set border width</source>
         <translation>საზღვრის სიგანის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="531"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="539"/>
         <source>Set corner radius</source>
         <translation>კუთხის რადიუსის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="534"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="542"/>
         <source>Set focused border color</source>
         <translation>ფოკუსირებული საზღვრის ფერის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="537"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="545"/>
         <source>Set unfocused border color</source>
         <translation>არაფოკუსირებული საზღვრის ფერის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="540"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="605"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="548"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="613"/>
         <source>Show opacity and tint</source>
         <translation>გაუმჭვირვალობისა და ტონის ჩვენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="543"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="551"/>
         <source>Set tint strength</source>
         <translation>ტონის სიძლიერის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="546"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="554"/>
         <source>Set tint color</source>
         <translation>ტონის ფერის დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="549"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="557"/>
         <source>Set inner gap</source>
         <translation>შიდა დაშორების დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="552"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="560"/>
         <source>Set outer gap</source>
         <translation>გარე დაშორების დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="555"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="563"/>
         <source>Use per-side outer gaps</source>
         <translation>თითოეული გვერდის გარე დაშორებების გამოყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="558"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="566"/>
         <source>Set top gap</source>
         <translation>ზედა დაშორების დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="561"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="569"/>
         <source>Set bottom gap</source>
         <translation>ქვედა დაშორების დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="564"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="572"/>
         <source>Set left gap</source>
         <translation>მარცხენა დაშორების დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="567"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="575"/>
         <source>Set right gap</source>
         <translation>მარჯვენა დაშორების დაყენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="570"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="578"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="336"/>
         <source>Open on monitor</source>
         <translation>მონიტორზე გახსნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="573"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="581"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="341"/>
         <source>Open on desktop</source>
         <translation>სამუშაო მაგიდაზე გახსნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="616"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="624"/>
         <source>Open in a normal column</source>
         <translation>ჩვეულებრივ სვეტში გახსნა</translation>
     </message>
@@ -2811,22 +2797,22 @@
         <translation>სხვა ფანჯრების ქვემოთ</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="587"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="595"/>
         <source>Don&apos;t restore to zone on login</source>
         <translation>შესვლისას ზონაში აღდგენის გარეშე</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="590"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="598"/>
         <source>Keep zone size on unsnap</source>
         <translation>მოხსნისას ზონის ზომის შენარჩუნება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="605"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="613"/>
         <source>Hide opacity and tint</source>
         <translation>გაუმჭვირვალობისა და ტონის დამალვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="611"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="619"/>
         <source>Hide zone numbers</source>
         <translation>ზონის ნომრების დამალვა</translation>
     </message>
@@ -3034,32 +3020,32 @@
         <translation>გადადების შეიდერი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="584"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="592"/>
         <source>Don&apos;t restore position on login</source>
         <translation>შესვლისას მდებარეობის არ აღდგენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="593"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="601"/>
         <source>Show title bars</source>
         <translation>სათაურის ზოლების ჩვენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="596"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="604"/>
         <source>Don&apos;t lock layout</source>
         <translation>განლაგების არ დაბლოკვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="599"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="607"/>
         <source>Assign default layout</source>
         <translation>ნაგულისხმევი განლაგების მინიჭება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="599"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="607"/>
         <source>Don&apos;t assign default layout</source>
         <translation>ნაგულისხმევი განლაგების არ მინიჭება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="602"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="610"/>
         <source>Hide border</source>
         <translation>საზღვრის დამალვა</translation>
     </message>
@@ -3102,14 +3088,14 @@
         <translation>გარე დაშორება: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="608"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="616"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="482"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="108"/>
         <source>Per-side outer gaps</source>
         <translation>თითოეული გვერდის გარე დაშორება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="608"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="616"/>
         <source>Uniform outer gap</source>
         <translation>ერთგვაროვანი გარე დაშორება</translation>
     </message>
@@ -3614,10 +3600,6 @@
         <translation>ფილების ალგორითმის დაყენება მონიტორზე</translation>
     </message>
     <message>
-        <source>Pick an autotile algorithm to use on one monitor.</source>
-        <translation type="vanished">აირჩიეთ ავტოფილების ალგორითმი ერთ მონიტორზე გამოსაყენებლად.</translation>
-    </message>
-    <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="124"/>
         <source>Pick a tiling algorithm to use on one monitor.</source>
         <translation>აირჩიეთ ფილების ალგორითმი ერთ მონიტორზე გამოსაყენებლად.</translation>
@@ -3705,10 +3687,6 @@
         <location filename="../src/settings/rules/ruletemplates.cpp" line="151"/>
         <source>Keep one application&apos;s windows out of window placement entirely.</source>
         <translation>ერთი აპლიკაციის ფანჯრების სრულად გამორიცხვა ფანჯრების განთავსებიდან.</translation>
-    </message>
-    <message>
-        <source>Keep one application&apos;s windows out of the snap and autotile engines entirely.</source>
-        <translation type="vanished">ერთი აპლიკაციის ფანჯრების სრულად ამოღება მიმაგრებისა და ავტოფილების ძრავებიდან.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="153"/>
@@ -4567,7 +4545,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="102"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="147"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="155"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="319"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="103"/>
         <source>Display</source>
@@ -4651,7 +4629,7 @@
         <translation>სქემა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="257"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="265"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="348"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="78"/>
         <source>Highlight color</source>
@@ -6012,8 +5990,8 @@
         <translation>სამუშაო მაგიდა გადართულია</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="463"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="590"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="471"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="598"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="526"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="696"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="71"/>
@@ -6156,8 +6134,8 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="270"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="56"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="116"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="59"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="124"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="545"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="155"/>
         <source>Algorithm</source>
@@ -6246,7 +6224,7 @@
         <translation>ნაზრდი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="125"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="133"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="559"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="415"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="303"/>
@@ -6312,7 +6290,7 @@
         <translation>დაუფილებელი ფანჯრების წინა მდებარეობაზე აღდგენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="134"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="142"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="614"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="108"/>
@@ -6326,7 +6304,7 @@
         <translation>გადალაგება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="131"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="139"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="616"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="726"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="126"/>
@@ -6865,14 +6843,14 @@
         <translation>მიმაგრებით ზომის შეცვლა (გადათრევის გადახედვა)</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller.cpp" line="732"/>
+        <location filename="../src/settings/controller/settingscontroller.cpp" line="734"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="276"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="315"/>
         <source>Zone %1</source>
         <translation>ზონა %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller.cpp" line="734"/>
+        <location filename="../src/settings/controller/settingscontroller.cpp" line="736"/>
         <source>%1 — %2</source>
         <translation>%1 — %2</translation>
     </message>
@@ -6955,7 +6933,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="108"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="153"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="161"/>
         <source>Placement</source>
         <translation>განთავსება</translation>
     </message>
@@ -7026,7 +7004,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="205"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="61"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="64"/>
         <source>Behavior</source>
         <translation>ქცევა</translation>
     </message>
@@ -12507,10 +12485,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="33"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="347"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="373"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="430"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="448"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="350"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="376"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="437"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="456"/>
         <source>Default</source>
         <translation>ნაგულისხმევი</translation>
     </message>
@@ -13790,7 +13768,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="668"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="401"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="404"/>
         <source>Placement mode</source>
         <translation>განთავსების რეჟიმი</translation>
     </message>
@@ -14166,48 +14144,48 @@
         <translation>ამ მონიტორის ჩამოყრა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="252"/>
         <source>View and change the active mode and layout for each monitor.</source>
         <translation>იხილეთ და შეცვალეთ თითოეული მონიტორის აქტიური რეჟიმი და განლაგება.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="267"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="270"/>
         <source>Unable to retrieve monitor state. Make sure the daemon is running.</source>
         <translation>მონიტორის მდგომარეობის მიღება ვერ ხერხდება. დარწმუნდით, რომ დემონი გაშვებულია.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="356"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="359"/>
         <source>Snapping layout preview: %1</source>
         <translation>მიმაგრების განლაგების გადახედვა: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="356"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="359"/>
         <source>Snapping layout preview</source>
         <translation>მიმაგრების განლაგების გადახედვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="384"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="387"/>
         <source>Tiling algorithm preview: %1</source>
         <translation>ფილების ალგორითმის გადახედვა: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="384"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="387"/>
         <source>Tiling algorithm preview</source>
         <translation>ფილების ალგორითმის გადახედვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="394"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="397"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.</source>
         <translation>გადახვევის რეჟიმი ფანჯრებს ალაგებს ზომაცვლად სვეტებად უსასრულო ლენტაზე. ის ზონის განლაგებას არ იყენებს.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="408"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="411"/>
         <source>Snapping</source>
         <comment>tiling mode name</comment>
         <translation>მიმაგრება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="408"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="411"/>
         <source>Tiling</source>
         <comment>tiling mode name</comment>
         <translation>ფილებად დაწყობა</translation>
@@ -16518,9 +16496,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="70"/>
-        <source>When the strip holds a single column, center it no matter what the setting above says</source>
-        <oldsource>When the strip holds a single column, center it whatever the setting above says</oldsource>
-        <translation>როცა ლენტაზე მხოლოდ ერთი სვეტია, ის ცენტრში მოექცევა ზემოთ მითითებული პარამეტრის მიუხედავად</translation>
+        <source>When the strip holds a single column, center it regardless of how Center the focused column is set</source>
+        <translation>როცა ლენტა მხოლოდ ერთ სვეტს შეიცავს, მოაქციეთ ის ცენტრში იმის მიუხედავად, როგორ არის დაყენებული „ფოკუსირებული სვეტის ცენტრში მოქცევა“</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="98"/>
@@ -16585,7 +16562,7 @@
         <translation>ფანჯრის სიმაღლის შაბლონები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/ScrollTabStripContent.qml.cpp" line="108"/>
+        <location filename=".qml-stubs/src/ui/ScrollTabStripContent.qml.cpp" line="112"/>
         <source>Untitled window</source>
         <translation>უსახელო ფანჯარა</translation>
     </message>

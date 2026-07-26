@@ -267,21 +267,18 @@ void Daemon::connectDesktopActivity()
                 // [SEQ B] Pin screens where all autotiled windows are sticky BEFORE
                 // changing the desktop context, so currentKeyForScreen() still
                 // resolves existing TilingStates ("virtualdesktopsonlyonprimary").
-                if (m_autotileEngine && m_windowTrackingAdaptor) {
-                    auto* service = m_windowTrackingAdaptor->service();
-                    m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
-                        return service->isWindowSticky(windowId);
-                    });
-                }
-                // Scrolling twin: an all-sticky strip must survive the
-                // desktop switch under the same pin, or the screen resolves
-                // a fresh (screen, desktop) key and comes up empty while
-                // the sticky windows are still on it.
-                if (m_scrollEngine && m_windowTrackingAdaptor) {
-                    auto* service = m_windowTrackingAdaptor->service();
-                    m_scrollEngine->updateStickyScreenPins([service](const QString& windowId) {
-                        return service->isWindowSticky(windowId);
-                    });
+                if (m_windowTrackingAdaptor) {
+                    if (auto* service = m_windowTrackingAdaptor->service()) {
+                        const auto sticky = [service](const QString& windowId) {
+                            return service->isWindowSticky(windowId);
+                        };
+                        if (m_autotileEngine) {
+                            m_autotileEngine->updateStickyScreenPins(sticky);
+                        }
+                        if (m_scrollEngine) {
+                            m_scrollEngine->updateStickyScreenPins(sticky);
+                        }
+                    }
                 }
                 // [SEQ C] Set THIS screen's engine desktop context (pure per-screen
                 // swap, no state migration) BEFORE updateEngineScreens() so the
@@ -305,12 +302,6 @@ void Daemon::connectDesktopActivity()
                 // [SEQ E] Per-desktop assignments may differ — recompute autotile
                 // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateEngineScreens();
-                // Drain the restore batch this recompute may have produced
-                // (screens can flip engines here). No resnap consumer runs on
-                // this path, and a stale batch left in the member would be
-                // emitted verbatim by the NEXT consumer (layout picker / KCM
-                // apply) — teleporting windows on an unrelated action.
-                emitPendingSnapFloatRestoresForResnapBuffer();
                 syncModeFromAssignments();
                 if (m_overlayService->isVisible()) {
                     m_overlayService->updateGeometries();
@@ -453,17 +444,20 @@ void Daemon::connectDesktopActivity()
                         m_autotileEngine->cancelDragInsertPreview();
                     }
                     // Pin sticky screens before changing activity context
-                    if (m_autotileEngine && m_windowTrackingAdaptor) {
-                        auto* service = m_windowTrackingAdaptor->service();
-                        m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
-                            return service->isWindowSticky(windowId);
-                        });
-                    }
-                    if (m_scrollEngine && m_windowTrackingAdaptor) {
-                        auto* service = m_windowTrackingAdaptor->service();
-                        m_scrollEngine->updateStickyScreenPins([service](const QString& windowId) {
-                            return service->isWindowSticky(windowId);
-                        });
+                    // (null-guarded service, matching every other daemon
+                    // ->service() consumer).
+                    if (m_windowTrackingAdaptor) {
+                        if (auto* service = m_windowTrackingAdaptor->service()) {
+                            const auto sticky = [service](const QString& windowId) {
+                                return service->isWindowSticky(windowId);
+                            };
+                            if (m_autotileEngine) {
+                                m_autotileEngine->updateStickyScreenPins(sticky);
+                            }
+                            if (m_scrollEngine) {
+                                m_scrollEngine->updateStickyScreenPins(sticky);
+                            }
+                        }
                     }
                     // Set engine's activity context BEFORE updateEngineScreens()
                     if (m_autotileEngine) {
@@ -477,12 +471,6 @@ void Daemon::connectDesktopActivity()
                     }
                     // Per-activity assignments may differ — recompute autotile screens
                     updateEngineScreens();
-                    // Drain the restore batch this recompute may have produced
-                    // (screens can flip engines here). No resnap consumer runs on
-                    // this path, and a stale batch left in the member would be
-                    // emitted verbatim by the NEXT consumer (layout picker / KCM
-                    // apply) — teleporting windows on an unrelated action.
-                    emitPendingSnapFloatRestoresForResnapBuffer();
                     // Sync mode, layout filter, and controller state from per-activity assignments.
                     syncModeFromAssignments();
                     if (m_overlayService->isVisible()) {
@@ -497,375 +485,6 @@ void Daemon::connectDesktopActivity()
                     diffActiveAssignments();
                 });
     }
-}
-
-void Daemon::connectShortcutSignals()
-{
-    // NOTE: registerShortcuts() is called by Daemon::start() before this method.
-    // Do NOT call it again here — it would hit registerShortcuts()'s own
-    // already-registered / in-flight guards and do nothing useful.
-
-    // Connect shortcut signals
-    // Screen detection: On X11, QCursor::pos() works; on Wayland, background daemons
-    // get stale cursor data. resolveShortcutScreenId() handles both by falling back to
-    // the screen reported by the KWin effect's windowActivated D-Bus call.
-    connect(m_shortcutManager.get(), &ShortcutManager::openSettingsRequested, this, []() {
-        // Launch in its own systemd scope so stopping the daemon service
-        // doesn't kill the settings app (they'd share a cgroup otherwise).
-        if (!QProcess::startDetached(
-                QStringLiteral("systemd-run"),
-                {QStringLiteral("--user"), QStringLiteral("--scope"), QStringLiteral("plasmazones-settings")})) {
-            // Fallback if systemd-run is unavailable
-            if (!QProcess::startDetached(QStringLiteral("plasmazones-settings"), {})) {
-                qCWarning(lcDaemon) << "Failed to launch plasmazones-settings";
-            }
-        }
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
-        // Screen-targeted (edits a screen's layout) — resolve cursor-first.
-        // See layoutPickerRequested below for the rationale.
-        QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty() && m_unifiedLayoutController) {
-            screenId = m_unifiedLayoutController->currentScreenName();
-        }
-        if (!screenId.isEmpty()) {
-            // Pass the effective screen ID directly — the editor handles both
-            // physical and virtual screen IDs (VS-aware since v2.9).
-            m_layoutAdaptor->openEditorForScreen(screenId);
-        } else {
-            m_layoutAdaptor->openEditor();
-        }
-    });
-    // Quick layout shortcuts (Meta+Alt+1-9). Quick slots are per mode: in
-    // snapping mode the slot holds a zone-layout UUID, in autotile mode an
-    // autotile algorithm ID. Resolve the cursor screen's current mode, look up
-    // that mode's slot, and apply the explicitly-bound layout — NOT the Nth
-    // layout in priority order.
-    connect(m_shortcutManager.get(), &ShortcutManager::quickLayoutRequested, this, [this](int number) {
-        if (!m_unifiedLayoutController || !m_layoutManager) {
-            return;
-        }
-        // Screen-targeted (applies a layout to a screen) — resolve
-        // cursor-first. See layoutPickerRequested below for the rationale.
-        const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty()) {
-            qCDebug(lcDaemon) << "QuickLayout shortcut: no screen info";
-            return;
-        }
-        const PhosphorZones::AssignmentEntry::Mode mode = currentModeFor(screenId);
-        const QString slotId = m_layoutManager->quickLayoutSlots(mode).value(number);
-        if (slotId.isEmpty()) {
-            // Explicitly-unbound slot for this mode — a deliberate no-op,
-            // never a fallback to priority order.
-            qCDebug(lcDaemon) << "QuickLayout shortcut: slot" << number << "unset for mode" << mode;
-            return;
-        }
-        m_unifiedLayoutController->setCurrentScreenName(screenId);
-        if (isScreenLockedForLayoutChange(screenId)) {
-            return;
-        }
-        // Filter the controller's layout list to the SAME mode we resolved the
-        // slot from, so the bound slot ID (manual UUID in snapping, autotile
-        // algorithm in autotile) is always in scope for applyLayoutById. Deriving
-        // the filter from `mode` here — rather than re-resolving the screen's mode
-        // via updateLayoutFilterForScreen, which reads the assignment cascade —
-        // keeps the slot lookup and the filter on one source of truth
-        // (currentModeFor). The two can otherwise disagree when the live engine is
-        // autotile-active via a per-screen override the cascade doesn't carry,
-        // which would leave applyLayoutById unable to find the autotile slot.
-        // applyLayoutById routes through applyEntry, which handles both manual
-        // assignment and autotile algorithm switching.
-        const bool autotile = (mode == PhosphorZones::AssignmentEntry::Autotile);
-        m_unifiedLayoutController->setLayoutFilter(!autotile, autotile);
-        if (!m_unifiedLayoutController->applyLayoutById(slotId)) {
-            return;
-        }
-        resnapIfManualMode();
-    });
-
-    // Cycle layout shortcuts (Meta+Alt+[ / Meta+Alt+])
-    connect(m_shortcutManager.get(), &ShortcutManager::previousLayoutRequested, this, [this]() {
-        if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
-            return;
-        }
-        // Screen-targeted (cycles a screen's layout) — resolve cursor-first.
-        // See layoutPickerRequested below for the rationale.
-        const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty()) {
-            qCDebug(lcDaemon) << "PreviousLayout shortcut: no screen info";
-            return;
-        }
-        // Restart once a screen resolves — handleCycleLayout's own locked
-        // path still shows a locked-preview OSD, which counts as the
-        // dispatch this window throttles (unlike handleSpan's guards,
-        // which reject with no user-visible effect).
-        m_cycleLayoutDebounce.restart();
-        handleCycleLayout(screenId, false);
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
-        if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
-            return;
-        }
-        // Screen-targeted (cycles a screen's layout) — resolve cursor-first.
-        // See layoutPickerRequested below for the rationale.
-        const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty()) {
-            qCDebug(lcDaemon) << "NextLayout shortcut: no screen info";
-            return;
-        }
-        // Restart once a screen resolves — handleCycleLayout's own locked
-        // path still shows a locked-preview OSD, which counts as the
-        // dispatch this window throttles (unlike handleSpan's guards,
-        // which reject with no user-visible effect).
-        m_cycleLayoutDebounce.restart();
-        handleCycleLayout(screenId, true);
-    });
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Keyboard Navigation Shortcuts
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // Navigation shortcuts — single code path per operation (handleXxx)
-    connect(m_shortcutManager.get(), &ShortcutManager::moveWindowRequested, this, [this](NavigationDirection d) {
-        handleMove(d);
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::spanWindowRequested, this, [this](NavigationDirection d) {
-        handleSpan(d);
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::focusZoneRequested, this, [this](NavigationDirection d) {
-        handleFocus(d);
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::pushToEmptyZoneRequested, this, [this]() {
-        handlePush();
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::restoreWindowSizeRequested, this, [this]() {
-        handleRestore();
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::toggleWindowFloatRequested, this, [this]() {
-        handleFloat();
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::swapWindowRequested, this, [this](NavigationDirection d) {
-        handleSwap(d);
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool cw) {
-        handleRotate(cw);
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::swapVirtualScreenRequested, this, [this](NavigationDirection d) {
-        handleSwapVirtualScreen(d);
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::rotateVirtualScreensRequested, this, [this](bool cw) {
-        handleRotateVirtualScreens(cw);
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int n) {
-        handleSnap(n);
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool fwd) {
-        handleCycle(fwd);
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() {
-        handleResnap();
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::snapAllWindowsRequested, this, [this]() {
-        handleSnapAll();
-    });
-
-    // PhosphorZones::Layout picker shortcut (interactive layout browser + resnap)
-    // Capture screen name at open time so it's still valid after the picker closes.
-    //
-    // Escape handling: KWin's wlr-layer-shell does not deliver keyboard
-    // events to the picker's QQuickWindow on this Qt/KDE combination
-    // (verified via Keys.onPressed diagnostic — fires zero times for the
-    // duration of the picker). The QML Shortcut path is therefore unable
-    // to react to Escape. We register Escape via KGlobalAccel using the
-    // SAME id as the drag-cancel shortcut (`kCancelOverlayId`) so that:
-    //   1. KGlobalAccel doesn't see two distinct actions competing for
-    //      Escape — it only routes to one action per key, and the second
-    //      ad-hoc registration would otherwise be silently no-op'd.
-    //   2. cancelSnap() — the kCancelOverlayId callback — already
-    //      dismisses whichever overlay is visible; the picker-takes-
-    //      precedence ordering lives there.
-    connect(m_shortcutManager.get(), &ShortcutManager::layoutPickerRequested, this, [this]() {
-        if (!m_unifiedLayoutController) {
-            return;
-        }
-        // The layout picker is screen-targeted — it picks the layout for a
-        // screen — not window-targeted. Resolve cursor-first: the user's
-        // intent is "the screen I am looking at". resolveShortcutScreenId
-        // (focused-window-first) misroutes the picker to the wrong virtual
-        // screen when the cursor rests on a different VS than the focused
-        // window (e.g. just dropped a window on vs:1 while the focused
-        // window is still on vs:0).
-        const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty()) {
-            qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
-            return;
-        }
-        // At most one Escape-consuming modal at a time — the cheatsheet's
-        // dedicated Escape grab would key-conflict with the picker's shared
-        // cancel-overlay grab (KGlobalAccel routes one action per key).
-        // Dismissing first releases the cheatsheet grab synchronously.
-        m_overlayService->hideCheatsheet();
-        m_unifiedLayoutController->setCurrentScreenName(screenId);
-        updateLayoutFilterForScreen(screenId);
-        m_overlayService->showLayoutPicker(screenId);
-        // Bind the picker's KGlobalAccel grabs only if the picker actually
-        // became visible. showLayoutPicker() bails without setting
-        // m_layoutPickerVisible when the screen, shell, or layout list is
-        // missing, and the only releaser of the nav grabs is
-        // layoutPickerDismissed, which never fires for an invisible picker —
-        // so binding on a failed show would leak the Escape + arrow/Return/Enter
-        // grabs system-wide (swallowed even over fullscreen games) until the
-        // next successful open+dismiss or a compositor reconnect. Re-press of an
-        // already-visible picker is fine: isLayoutPickerVisible() is true and
-        // registration is idempotent.
-        if (m_windowDragAdaptor && m_overlayService->isLayoutPickerVisible()) {
-            m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
-            // Picker navigation accels — registered while picker is
-            // shown, dropped on dismiss. The unified PassiveOverlayShell
-            // is kbd-None so the QML Shortcuts in LayoutPickerContent
-            // can't fire; routing via KGlobalAccel is the replacement.
-            // Lambdas capture the long-lived OverlayService — outlives
-            // the registration window.
-            auto* svc = m_overlayService.get();
-            m_windowDragAdaptor->ensureLayoutPickerNavShortcutsRegistered(
-                [svc](int dx, int dy) {
-                    svc->pickerMoveSelection(dx, dy);
-                },
-                [svc] {
-                    svc->pickerConfirmSelection();
-                });
-        }
-    });
-    // Snap-assist Escape: the unified PassiveOverlayShell is kbd-None
-    // (the legacy SnapAssistOverlay's kbd-Exclusive QML Shortcut for
-    // Escape no longer exists), so we register the global Escape
-    // accelerator on every snap-assist show — cancelSnap() routes
-    // Escape to hideSnapAssist() via the existing
-    // isSnapAssistVisible() branch in WindowDragAdaptor::cancelSnap.
-    // The matching unregister fires on snapAssistDismissed via
-    // WindowDragAdaptor::onSnapAssistDismissed.
-    connect(m_overlayService.get(), &IOverlayService::snapAssistShown, this,
-            [this](const QString&, const PhosphorProtocol::EmptyZoneList&,
-                   const PhosphorProtocol::SnapAssistCandidateList&) {
-                // Same one-Escape-consumer contract as the picker path: the
-                // cheatsheet's dedicated grab must be gone before the shared
-                // cancel-overlay grab registers, or Escape stays routed to a
-                // dismissed sheet.
-                m_overlayService->hideCheatsheet();
-                if (m_windowDragAdaptor) {
-                    m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
-                }
-            });
-
-    // Shortcut cheatsheet: toggle on the cursor screen; Escape grab is
-    // bound inside toggleCheatsheet (only on a successful show) and
-    // released on ANY dismissal path via cheatsheetDismissed.
-    connect(m_shortcutManager.get(), &ShortcutManager::toggleCheatsheetRequested, this, [this]() {
-        toggleCheatsheet();
-    });
-    connect(m_overlayService.get(), &OverlayService::cheatsheetDismissed, this, [this]() {
-        onCheatsheetDismissed();
-    });
-    // Live refilter while the sheet is open: catalog changes (rebinds,
-    // external System Settings edits), per-screen mode switches, and the
-    // global autotile feature gate all re-push into the visible slot.
-    // Each refresh re-resolves the mode for the sheet's BOUND screen, so
-    // over-triggering is safe and cheap (no-op when hidden).
-    connect(m_shortcutManager.get(), &ShortcutManager::cheatsheetModelChanged, this, [this]() {
-        refreshCheatsheetIfVisible();
-    });
-    // The controller-driven mode-refresh connects (layoutApplied /
-    // autotileApplied → refreshCheatsheetIfVisible) live in
-    // connectLayoutSignals(): this function runs BEFORE
-    // initializeUnifiedController() creates the controller, so a connect
-    // guarded on m_unifiedLayoutController here would never fire.
-    if (m_settings) {
-        // Tracked handle: m_settings is deliberately excluded from stop()'s
-        // per-sender sweep (its ctor/init connections must survive), so this
-        // per-start connection is severed individually.
-        m_perStartConnections.append(connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
-            refreshCheatsheetIfVisible();
-        }));
-    }
-    connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
-        // Release the shared Escape grab only when no other consumer (snap
-        // assist) still needs it — releaseCancelOverlayShortcutIfIdle() is the
-        // canonical cross-consumer guard (the picker is already hidden by the
-        // time this fires). The 6 picker-nav grabs are picker-only, so always
-        // drop them.
-        if (m_windowDragAdaptor) {
-            m_windowDragAdaptor->releaseCancelOverlayShortcutIfIdle();
-            m_windowDragAdaptor->releaseLayoutPickerNavShortcuts();
-        }
-    });
-    connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
-        if (!m_unifiedLayoutController) {
-            return;
-        }
-        // Check if screen is locked for its current mode. Route through
-        // the resolver's `handleFor(screenId)` — it composes the live
-        // (mode, desktop, activity) tuple via the bound IModeProvider /
-        // IWorkspaceState adapters, so this site stops re-stitching the
-        // 3-step cascade the resolver was introduced to collapse.
-        QString screenId = m_unifiedLayoutController->currentScreenName();
-        if (!screenId.isEmpty() && m_contextResolver) {
-            if (m_contextResolver->isLocked(m_contextResolver->handleFor(screenId))) {
-                showLockedPreviewOsd(screenId);
-                return;
-            }
-        }
-        // Screen name was already set when the picker opened.
-        if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
-            return;
-        }
-        resnapIfManualMode();
-    });
-
-    // Toggle layout lock shortcut — locks/unlocks current screen at screen-level for current mode
-    connect(m_shortcutManager.get(), &ShortcutManager::toggleLayoutLockRequested, this, [this]() {
-        // Screen-targeted (locks a screen's layout) — resolve cursor-first.
-        // See layoutPickerRequested above for the rationale.
-        const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty() || !m_settings || !m_contextResolver) {
-            return;
-        }
-        // Read the live mode through the resolver's frozen snapshot so this
-        // site stops re-stitching (modeForScreen + Utils::contextLockKey)
-        // — the resolver already composes the same Mode-typed lock key
-        // internally via DaemonSettingsGateAdapter. We only need the
-        // wire-encoded `key` here for the existing settings.setScreenLocked
-        // mutation path, so the cast-and-compose stays — but the mode it
-        // derives from is the resolver's authoritative value.
-        const auto handle = m_contextResolver->handleFor(screenId);
-        const int mode = static_cast<int>(handle.mode);
-        QString key = Utils::contextLockKey(mode, screenId);
-        // Lock at screen-level (desktop=0, activity="") so it applies to all desktops/activities
-        // and matches the KCM's screen-level lock button
-        bool wasLocked = m_settings->isScreenLocked(key);
-        // Block settingsChanged during mutation — the signal triggers a
-        // D-Bus relay, and external consumers (settings app) read from disk.
-        // If the signal fires before save(), they read stale data.
-        {
-            QSignalBlocker blocker(m_settings.get());
-            m_settings->setScreenLocked(key, !wasLocked);
-        }
-        m_settings->save();
-        // Now that the file is written, notify external consumers
-        if (m_settingsAdaptor) {
-            Q_EMIT m_settingsAdaptor->settingsChanged();
-        }
-
-        if (wasLocked) {
-            PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-            if (layout) {
-                showLayoutOsd(layout, screenId);
-            }
-        } else {
-            showLockedPreviewOsd(screenId);
-        }
-        qCInfo(lcDaemon) << "Toggle layout lock:" << (wasLocked ? "unlocked" : "locked") << "screen=" << screenId
-                         << "mode=" << mode;
-    });
 }
 
 void Daemon::pruneContextMapsForDesktop(int maxDesktop)
@@ -966,7 +585,7 @@ void Daemon::migrateStartupScreenAssignments()
     }
 }
 
-void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenId)
+void Daemon::pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId)
 {
     const QStringList currentVsIds =
         m_screenManager ? m_screenManager->virtualScreenIdsFor(physicalScreenId) : QStringList();
@@ -996,7 +615,7 @@ void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenI
     }
 }
 
-void Daemon::pruneAutotileOrdersForWindow(const QString& instanceId)
+void Daemon::pruneEngineOrdersForWindow(const QString& instanceId)
 {
     if (instanceId.isEmpty() || m_lastEngineOrders.isEmpty()) {
         return;
@@ -1075,7 +694,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     }
 
     // Prune stale autotile order entries for old virtual screen IDs.
-    pruneAutotileOrdersForRemovedScreens(physicalScreenId);
+    pruneEngineOrdersForRemovedScreens(physicalScreenId);
 
     // Re-derive the autotile screen set so the engine picks up new virtual
     // screen IDs (or drops removed ones) and creates/destroys TilingStates
@@ -1085,11 +704,6 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // happens until something else (e.g. an assignment change) fires
     // layoutAssigned → updateEngineScreens.
     updateEngineScreens();
-    // Drain the restore batch this recompute may have produced (VS ids
-    // disappearing release windows). resnapForVirtualScreenReconfigure
-    // below never consumes it, and a stale batch would be emitted verbatim
-    // by the next consumer, teleporting windows on an unrelated action.
-    emitPendingSnapFloatRestoresForResnapBuffer();
 
     // Resnap windows on this physical screen and any of its virtual children
     // to their stored zones. Uses calculateResnapFromCurrentAssignments which

@@ -144,12 +144,13 @@ void TestRuleController::dirtyTrackingAndRevert()
     // private bus — a fixture no other test in this file needs, for one
     // transition the daemon-side rule tests already cover from the other end.
     // Under ctest the TEST_LAUNCHER private bus declares NO service
-    // directories, so org.plasmazones.Rules can never be reachable here and
-    // the revert PROVABLY does not land — the failure arm below is an
-    // unconditional assertion, not an outcome-derived one. The success arm
-    // (revert clears dirty) is only exercisable by running this binary
-    // directly on a session bus with the daemon up; it is covered from the
-    // daemon side by the rule-store tests.
+    // directories, so org.plasmazones.Rules is never reachable and the
+    // failure arm below is the one that runs. The assertion IS
+    // outcome-derived (the branch keeps the success arm alive for a direct
+    // dev-box run against a live daemon), so a ctest environment that ever
+    // grew a service directory would silently swap which contract is
+    // asserted — accepted, since the launcher config is part of this
+    // repo's test contract.
     QSignalSpy loadedSpy(&controller, &RuleController::rulesLoaded);
     controller.revert();
     // Pump the event loop briefly so the QDBusPendingCall reply (an error
@@ -463,7 +464,7 @@ void TestRuleController::authoringMetadata()
 
     const auto opWires = [&](const QString& wire) {
         QSet<QString> s;
-        for (const QVariant& v : controller.operatorsForField(valueByWire.value(wire))) {
+        for (const QVariant& v : controller.operatorsForField(valueByWire.value(wire, -1))) {
             s.insert(v.toMap().value(QStringLiteral("wire")).toString());
         }
         return s;
@@ -529,7 +530,7 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setTilingAlgorithm"), -1), 3); // Tiling (context)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setAlgorithmParam"), -1), 3); // Tiling (context)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setCenterFocusedColumn"), -1), 4); // Scrolling (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed"), -1), 8); // Window/Scrolling (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed"), -1), 9); // Window/Scrolling (window)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("overrideOverlayShader"), -1), 5); // Overlay (context)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations"), -1), 6); // Animation (window)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity"), -1), 7); // Appearance (window)

@@ -210,6 +210,17 @@ private Q_SLOTS:
         QCOMPARE(heights->validator(QStringLiteral("junk, -3, 2.0")).toString(),
                  ConfigDefaults::scrollingPresetWindowHeights());
         QVERIFY(!heights->validator(heights->defaultValue).toString().isEmpty());
+        // The WIDTHS key snaps to ITS default too (a widths-only regression
+        // must not hide behind the heights-only assertion above).
+        QCOMPARE(widths->validator(QStringLiteral("")).toString(), ConfigDefaults::scrollingPresetColumnWidths());
+        // Size cap: a hand-edited file must not smuggle an unbounded list
+        // past the setter path — 20 entries canonicalize to at most 16.
+        QStringList many;
+        for (int i = 1; i <= 20; ++i) {
+            many.append(QString::number(i / 100.0));
+        }
+        const QStringList capped = widths->validator(many.join(QLatin1Char(','))).toString().split(QLatin1Char(','));
+        QCOMPARE(capped.size(), 16);
     }
 
     /// The width VALUE key clamps into the schema range (backstop; the
@@ -221,7 +232,7 @@ private Q_SLOTS:
             findKey(schema, ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
         QVERIFY(value && value->validator);
         QCOMPARE(value->validator(0.001).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthValueMin());
-        QCOMPARE(value->validator(99999.0).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthValueMax());
+        QCOMPARE(value->validator(99999.0).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthFixedMax());
     }
 
     /// Full kind-transition table for the shared width value key. The kind
@@ -299,7 +310,24 @@ private Q_SLOTS:
             QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
             QSignalSpy kindSpy(&settings, &Settings::scrollingDefaultColumnWidthKindChanged);
             QSignalSpy valueSpy(&settings, &Settings::scrollingDefaultColumnWidthValueChanged);
+            // Emit-ORDER pin: at kindChanged emission time the store must
+            // already read the NEW kind while the value still holds the
+            // SEED (the flip is announced BEFORE any coercion) — reverting
+            // the pass-5 hoist fails this on every coercing row.
+            const qreal seededValue = settings.scrollingDefaultColumnWidthValue();
+            bool orderOk = true;
+            const auto orderConn = QObject::connect(
+                &settings, &Settings::scrollingDefaultColumnWidthKindChanged,
+                [&settings, &orderOk, &row, seededValue]() {
+                    orderOk = orderOk && settings.scrollingDefaultColumnWidthKind() == row.toKind
+                        && qFuzzyCompare(1.0 + settings.scrollingDefaultColumnWidthValue(), 1.0 + seededValue);
+                });
             settings.setScrollingDefaultColumnWidthKind(row.toKind);
+            QObject::disconnect(orderConn);
+            if (!orderOk) {
+                failures.append(
+                    QStringLiteral("%1: kindChanged emitted after the value coercion").arg(QLatin1String(row.name)));
+            }
             const qreal actual = settings.scrollingDefaultColumnWidthValue();
             if (settings.scrollingDefaultColumnWidthKind() != row.toKind) {
                 failures.append(QStringLiteral("%1: kind not applied").arg(QLatin1String(row.name)));

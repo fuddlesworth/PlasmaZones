@@ -164,11 +164,14 @@ private Q_SLOTS:
 
         QSet<QString> notifiedWindows{a, b};
         QHash<QString, QString> notifiedWindowScreens{{a, QStringLiteral("s1")}, {b, QStringLiteral("s2")}};
-        QSet<QString> minimizeFloatedWindows;
-        QHash<QString, QRect> tileTargetZones;
-        QHash<QString, QRect> centeredWaylandZones;
-        QSet<QString> monocleMaximizedWindows;
+        // Every map seeded, so an erase-whole-bucket-on-miss regression is
+        // detectable in all seven, not just the two id maps.
+        QSet<QString> minimizeFloatedWindows{a};
+        QHash<QString, QRect> tileTargetZones{{a, QRect(0, 0, 10, 10)}};
+        QHash<QString, QRect> centeredWaylandZones{{b, QRect(1, 1, 5, 5)}};
+        QSet<QString> monocleMaximizedWindows{b};
         QHash<QString, QHash<QString, QRectF>> preTileGeometries;
+        preTileGeometries[QStringLiteral("s1")].insert(a, QRectF(0.1, 0.1, 0.4, 0.4));
         PhosphorCompositor::TilingStateHelpers::TilingWindowState state{
             notifiedWindows,      notifiedWindowScreens,   minimizeFloatedWindows, tileTargetZones,
             centeredWaylandZones, monocleMaximizedWindows, preTileGeometries};
@@ -179,6 +182,11 @@ private Q_SLOTS:
         QVERIFY(border.tiledWindowsByScreen.value(QStringLiteral("s2")).contains(b));
         QCOMPARE(notifiedWindows.size(), 2);
         QCOMPARE(notifiedWindowScreens.size(), 2);
+        QVERIFY(minimizeFloatedWindows.contains(a));
+        QVERIFY(tileTargetZones.contains(a));
+        QVERIFY(centeredWaylandZones.contains(b));
+        QVERIFY(monocleMaximizedWindows.contains(b));
+        QVERIFY(preTileGeometries.value(QStringLiteral("s1")).contains(a));
     }
 
     // Boundary: an EMPTY keepScreen (no screen id resolved at the call

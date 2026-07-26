@@ -558,16 +558,10 @@ private:
     ///   keeps the legacy square-canvas behaviour for screen-agnostic
     ///   consumers.
     QVariantList buildLayoutsList(const QString& screenId = QString(), QSize autotilePreviewCanvas = {}) const;
-    /// Per-screen layout-family filter used for the zone selector.
-    /// `manual` enables PhosphorZones layout entries; `autotile` enables
-    /// algorithm previews. Both default-true is "show everything"; the
-    /// resolver narrows to a single family when the screen has an
-    /// explicit assignment.
-    struct LayoutIncludeFlags
-    {
-        bool manual = true;
-        bool autotile = true;
-    };
+    /// Defined in overlayservice_types.h (hoisted with the other value
+    /// types); aliased so existing OverlayService::LayoutIncludeFlags
+    /// references keep working.
+    using LayoutIncludeFlags = PlasmaZones::LayoutIncludeFlags;
     /// Resolve the per-screen include filter. buildLayoutsList (the popup
     /// model) and visibleLayoutCount (used by isNearTriggerEdge to size
     /// the keep-visible bar) both go through here so the trigger geometry

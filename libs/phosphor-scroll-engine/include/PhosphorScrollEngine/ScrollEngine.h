@@ -97,7 +97,11 @@ public:
     /// Set which screens use scrolling. Retiles newly-added screens; tears
     /// down (and releases the windows of) removed ones. Mirrors
     /// AutotileEngine::setAutotileScreens, including the identical-set
-    /// re-emit contract on desktop switches.
+    /// re-emit contract on desktop switches (the context-switch flag is
+    /// consumed on both branches, so a non-switch re-push never claims
+    /// isDesktopSwitch). One deliberate divergence: the identical-set
+    /// branch RETILES every screen even without a switch — the daemon's
+    /// per-pass override push depends on it (scrolling.cpp, LOAD-BEARING).
     void setActiveScreens(const QSet<QString>& screens) override;
     QString activeScreen() const override
     {
@@ -353,6 +357,12 @@ private:
     void clearTabStripsForScreen(const QString& screenId);
     /// Shared per-window side-map sweep for every state-destruction path.
     void dropWindowBookkeeping(const ScrollState* state);
+    /// Consume @p windowId from a screen's mode-transition seed and drop the
+    /// entry once empty — MUST run on every windowOpened outcome (tiled,
+    /// consumed, floated), or the header's "consumed as windows arrive"
+    /// contract breaks and a stale seed survives to re-position an
+    /// unrelated later open.
+    void consumePendingInitialOrder(const QString& screenId, const QString& windowId);
     /// Drop per-screen bookkeeping (seed, tab-strip latch) for each screen
     /// in @p screenIds that no longer has ANY context state. Overrides
     /// survive by design; see the definition.
@@ -396,6 +406,11 @@ private:
     PhosphorEngine::ScreenContextTracker m_context;
     QSet<QString> m_scrollingScreens;
     QString m_activeScreen;
+    /// Armed by the context setters (desktop/activity switch), consumed by
+    /// setActiveScreens so the identical-set re-emit only claims
+    /// isDesktopSwitch=true for a REAL switch — same contract as
+    /// AutotileEngine::m_isDesktopContextSwitch.
+    bool m_isDesktopContextSwitch = false;
 
     /// Cached layout parameters rebuilt by refreshConfigFromSettings().
     QList<qreal> m_presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};

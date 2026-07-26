@@ -230,8 +230,13 @@ bool LayoutRegistry::shouldSkipLayoutAssignment(const QString& layoutId, const Q
     if (layoutId.isEmpty()) {
         return true;
     }
-    if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-        return false; // Autotile IDs are valid without PhosphorZones::Layout* lookup
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)) {
+        // Autotile ids and the bare scrolling sentinel are valid without a
+        // PhosphorZones::Layout* lookup. Skipping the sentinel here would be
+        // DATA LOSS in the batch path: applyBatchAssignments drops the
+        // addressed rule family before this validation re-adds entries, so
+        // a rejected Scrolling context would lose its assignment for good.
+        return false;
     }
     if (!layoutById(QUuid::fromString(layoutId))) {
         qCWarning(lcZonesLib) << "Skipping non-existent layout for" << context << ":" << layoutId;

@@ -502,6 +502,10 @@ void TilingAdaptor::clearEngine()
     m_pendingOpens.clear();
     m_lastFloatBroadcast.clear();
     m_lastEnabledBroadcast.reset();
+    // m_pendingOpensListenerInstalled deliberately survives: the underlying
+    // connection object does too (sender and receiver both outlive a
+    // session restart), so resetting the latch here would make the next
+    // install a DUPLICATE connection, double-flushing the pending queue.
 }
 
 } // namespace PlasmaZones

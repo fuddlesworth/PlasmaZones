@@ -164,6 +164,14 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // cross-screen move updates the daemon's float tracking.
                     if (!startedFloating) {
                         m_tilingHandler->handleDragToFloat(safeWindow, windowId);
+                    } else {
+                        // Already floating at drag start, but the SCROLL
+                        // tiled set can still hold the window (a daemon
+                        // float that raced the drag start): clear it, or
+                        // the tracked-screen override below pins the drop
+                        // to the source strip. Idempotent, geometry
+                        // untouched.
+                        m_tilingHandler->clearWindowTiledAllScreens(windowId);
                     }
                     // Window is now floating — drop it from snapping's set.
                     m_snapHandler->clearWindowSnapped(windowId);

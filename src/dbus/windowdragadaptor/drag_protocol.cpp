@@ -431,15 +431,22 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
     // the release screen so the plugin can pass it to
     // setWindowFloatingForScreen.
     if (bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen) {
-        // Autotile drag-insert: if a preview is live, commit it so the
-        // window takes its picked slot in the stack on the next retile.
-        // The autotile engine owns final geometry; no float outcome needed.
-        // Deliberately autotile-only (see the drop.cpp twin).
+        // Autotile drag-insert: if a preview is live ON THE RELEASE SCREEN,
+        // commit it so the window takes its picked slot in the stack on the
+        // next retile. The autotile engine owns final geometry; no float
+        // outcome needed. Deliberately autotile-only (see the drop.cpp
+        // twin). Screen-matched: a fast drop can land elsewhere before any
+        // dragMoved tick cancelled the departed preview — committing then
+        // would reorder the wrong screen and return NoOp instead of the
+        // real outcome.
         if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-            m_autotileEngine->commitDragInsertPreview();
-            outcome.action = PhosphorProtocol::DragOutcome::NoOp;
-            m_draggedWindowId.clear();
-            return outcome;
+            if (m_autotileEngine->dragInsertPreviewScreenId() == resolveScreenAt(QPointF(cursorX, cursorY)).screenId) {
+                m_autotileEngine->commitDragInsertPreview();
+                outcome.action = PhosphorProtocol::DragOutcome::NoOp;
+                m_draggedWindowId.clear();
+                return outcome;
+            }
+            m_autotileEngine->cancelDragInsertPreview();
         }
         // Release screen is resolved plugin-side from the cursor position,
         // but we pass the cursor through so the daemon can log it. The

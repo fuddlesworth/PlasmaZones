@@ -1065,7 +1065,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          CD::scrollingDefaultColumnWidthValue(),
          QMetaType::Double,
          {},
-         clampDouble(CD::scrollingDefaultColumnWidthValueMin(), CD::scrollingDefaultColumnWidthValueMax())},
+         clampDouble(CD::scrollingDefaultColumnWidthValueMin(), CD::scrollingDefaultColumnWidthFixedMax())},
         {CD::defaultColumnDisplayKey(),
          CD::scrollingDefaultColumnDisplay(),
          QMetaType::Int,

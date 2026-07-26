@@ -124,6 +124,13 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
                 if (deferKeyIt != m_states.windowKeys().constEnd()) {
                     m_states.removeWindow(windowId);
                 }
+                // The other per-window caches follow the key (same sweep as
+                // windowFocused's non-autotile arm): a refused earlier open
+                // already stored a min size here, and windowMinimumSize
+                // would keep answering an autotile-screen-capped value for
+                // a window snap now owns.
+                m_windowMinSizes.remove(windowId);
+                m_autotileFloatedWindows.remove(windowId);
                 return;
             }
         }

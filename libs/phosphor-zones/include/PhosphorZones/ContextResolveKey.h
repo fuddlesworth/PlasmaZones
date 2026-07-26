@@ -40,12 +40,13 @@ struct ContextResolveKey
     }
 };
 
-inline size_t qHash(const ContextResolveKey& key, size_t seed) noexcept
+inline size_t qHash(const ContextResolveKey& key, size_t seed = 0) noexcept
 {
-    // ::qHash routes to the global Qt qHash overloads — without the leading
-    // qualifier ADL would pick up qHash(LayoutAssignmentKey&) (declared in
-    // AssignmentEntry.h alongside this header's consumer) and fail to
-    // convert each field. Mirrors the same pattern LayoutAssignmentKey uses.
+    // ::qHash routes to the global Qt qHash overloads. The qualifier is
+    // required because of SELF-HIDING: unqualified lookup inside this very
+    // qHash overload finds the PhosphorZones::qHash being defined, stops
+    // there, and never reaches the global QString/int overloads. Mirrors
+    // the same pattern LayoutAssignmentKey uses.
     size_t h = seed;
     h = ::qHash(key.screenId, h);
     h = ::qHash(key.virtualDesktop, h);

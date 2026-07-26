@@ -34,6 +34,12 @@ ScreenModeRouter::ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager,
 
 PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const
 {
+    // An empty id can never name an engine-managed screen; answering
+    // Snapping directly makes the contract a guard rather than an accident
+    // of what the engine sets happen to (not) contain.
+    if (screenId.isEmpty()) {
+        return PhosphorZones::AssignmentEntry::Snapping;
+    }
     // Prefer the autotile engine's live set: it reflects the actual
     // runtime state including per-screen overrides that the layout
     // manager's cascade doesn't know about. Fall back to the layout

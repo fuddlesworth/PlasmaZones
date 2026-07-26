@@ -3,6 +3,7 @@
 
 #include "windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
@@ -59,10 +60,17 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Deliberately autotile-only: the strip has no drag-insert preview
     // (ScrollEngine keeps the IPlacementEngine no-op defaults).
     if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-        m_autotileEngine->commitDragInsertPreview(); // commit, not cancel — drop finalizes the reorder
-        hideOverlayAndSelector();
-        resetDragState();
-        return;
+        // Screen-matched (same comparison as dragMoved's preview upkeep): a
+        // fast drop can land on another screen before any dragMoved tick
+        // cancelled the departed preview — committing then would reorder
+        // the WRONG screen and swallow the real drop outcome.
+        if (m_autotileEngine->dragInsertPreviewScreenId() == resolveScreenAt(QPointF(cursorX, cursorY)).screenId) {
+            m_autotileEngine->commitDragInsertPreview(); // commit, not cancel — drop finalizes the reorder
+            hideOverlayAndSelector();
+            resetDragState();
+            return;
+        }
+        m_autotileEngine->cancelDragInsertPreview();
     }
 
     // Release screen: use cursor position passed from effect (at release time), not last dragMoved.
@@ -186,14 +194,17 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             const bool engineTypeChanged = destEngine && destEngine != sourceEngine;
 
             const QSize windowMinSize = sourceEngine->windowMinimumSize(windowId);
-            sourceEngine->handoffRelease(windowId);
-            qCInfo(lcDbusWindow) << "Cross-screen drag: released" << sourceEngine->engineId() << "state for" << windowId
-                                 << "from" << sourceScreen << "to" << releaseScreenId;
+            qCInfo(lcDbusWindow) << "Cross-screen drag: releasing" << sourceEngine->engineId() << "state for"
+                                 << windowId << "from" << sourceScreen << "to" << releaseScreenId;
 
             // Engine-type change: hand off to the destination so it can
             // adopt the window. The committing snap/tile path below may
             // still finalize the placement — handoffReceive only sets up
-            // tracking with the right floating disposition.
+            // tracking with the right floating disposition. Guarded: a
+            // refused receive on an engine-owned release screen has no
+            // later re-adopter (the commit branches are gated on
+            // useOverlayZone/capturedZoneId), so the helper's re-home into
+            // the source is the only thing keeping the window managed.
             if (engineTypeChanged) {
                 PhosphorEngine::IPlacementEngine::HandoffContext ctx;
                 ctx.windowId = windowId;
@@ -205,11 +216,13 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 ctx.wasFloating = m_windowTracking->service()->isWindowFloating(windowId);
                 if (capturedWasSnapped && !ctx.wasFloating && !capturedZoneId.isEmpty()) {
                     // sourceZoneIds is informational for receiving engines —
-                    // populated from the pre-drop captured zone since
-                    // handoffRelease has already cleared live tracking.
+                    // populated from the pre-drop captured zone (the
+                    // helper's release clears live tracking first).
                     ctx.sourceZoneIds = QStringList{capturedZoneId};
                 }
-                destEngine->handoffReceive(ctx);
+                WindowTrackingInternal::guardedHandoff(sourceEngine, destEngine, ctx, sourceScreen);
+            } else {
+                sourceEngine->handoffRelease(windowId);
             }
         }
     }

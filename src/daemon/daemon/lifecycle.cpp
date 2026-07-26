@@ -772,7 +772,7 @@ void Daemon::stop()
     m_autotileEngine.reset();
     m_scrollEngine.reset();
 
-    // Both engines borrowed m_crossSurfaceResolver (injected at construction).
+    // All three engines borrowed m_crossSurfaceResolver (injected at construction).
     // They are destroyed immediately above, so the borrow is already dead;
     // reset the resolver here too so the teardown order is explicit and
     // grep-discoverable — matching the exclude-rule / window-rule borrow

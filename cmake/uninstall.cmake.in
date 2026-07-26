@@ -60,6 +60,7 @@ set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-report"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-settings"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-shader-validate"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/phosphorctl"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/kglobalaccel/plasmazonesd.desktop"
     "$ENV{DESTDIR}@PZ_UNINSTALL_QT_PLUGINS@/wayland-shell-integration/phosphorwayland-qpa.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.daemon.desktop"
@@ -150,6 +151,26 @@ set(PZ_SHARED_LIB_NAMES
     "libPhosphorWayland"
     "libPhosphorWorkspaces"
     "libPhosphorZones"
+    # BUILD_PHOSPHOR_SHELL=ON artifacts. A name that was never installed
+    # globs to nothing, so listing them unconditionally is safe — the whole
+    # point of the by-name design.
+    "libPhosphorTheme"
+    "libPhosphorPopout"
+    "libPhosphorIpc"
+    "libPhosphorShell"
+    "libPhosphorServiceIconTheme"
+    "libPhosphorServiceSni"
+    "libPhosphorServiceUPower"
+    "libPhosphorServiceMpris"
+    "libPhosphorServicePipeWire"
+    "libPhosphorServiceNetwork"
+    "libPhosphorServiceBluetooth"
+    "libPhosphorServiceBrightness"
+    "libPhosphorServiceNotifications"
+    "libPhosphorServicePolkit"
+    "libPhosphorServiceClipboard"
+    "libPhosphorServiceLock"
+    "libPhosphorServiceSession"
 )
 file(GLOB CORE_LIBS "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/libplasmazones_*.so*")
 foreach(name ${PZ_SHARED_LIB_NAMES})
@@ -165,6 +186,7 @@ endforeach()
 set(KNOWN_DIRS
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/plasmazones"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/phosphorwayland"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/phosphor-shell"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_QMLDIR@/org/phosphor"
 )
 

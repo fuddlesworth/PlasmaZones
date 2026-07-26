@@ -45,7 +45,7 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
     scroll->setEngineSettings(settings);
 
     // --- CrossSurfaceResolver ---
-    // One resolver, shared by both engines, resolves neighbour outputs
+    // One resolver, shared by all three engines, resolves neighbour outputs
     // (geometrically) and neighbour desktops (grid arithmetic) when directional
     // navigation reaches a layout boundary.
     auto crossSurfaceResolver = std::make_unique<CrossSurfaceResolver>(screenManager, vdm);

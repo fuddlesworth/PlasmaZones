@@ -201,6 +201,9 @@ Window {
         property bool locked: false
         property bool disabled: false
         property string disabledReason: ""
+        // Overlay glyph for the disabled-style card; the daemon overwrites
+        // it per show (neutral icon for the Scrolling mode announcement).
+        property string disabledIcon: "dialog-cancel"
         property bool success: true
         property string action: ""
         property string reason: ""
@@ -326,6 +329,7 @@ Window {
                 locked: osdSlot.locked
                 disabled: osdSlot.disabled
                 disabledReason: osdSlot.disabledReason
+                disabledIcon: osdSlot.disabledIcon
             }
         }
 

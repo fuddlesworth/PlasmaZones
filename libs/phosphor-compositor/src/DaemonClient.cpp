@@ -86,6 +86,9 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
         int peerVersion = reply.argumentAt<1>();
 
         if (m_sessionId == QLatin1String("REJECTED")) {
+            // No session was established: a later reader must not see the
+            // wire sentinel as a live session id.
+            m_sessionId.clear();
             Q_EMIT bridgeRejected(QStringLiteral("Daemon rejected registration"));
             return;
         }
@@ -96,6 +99,7 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
         // lifecycle surface — the exact silent failure the version bump
         // exists to prevent.
         if (peerVersion < PhosphorProtocol::Service::MinPeerApiVersion) {
+            m_sessionId.clear(); // rejected: no live session id to expose
             Q_EMIT bridgeRejected(QStringLiteral("Daemon API version %1 is older than the minimum supported %2")
                                       .arg(peerVersion)
                                       .arg(PhosphorProtocol::Service::MinPeerApiVersion));

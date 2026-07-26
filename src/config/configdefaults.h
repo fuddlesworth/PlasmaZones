@@ -511,13 +511,13 @@ public:
     {
         return 0;
     }
-    static constexpr int scrollingCenterFocusedColumnMin()
+    /// Closed-set validity check — the SAME enumerator list the schema's
+    /// validIntOr closed set uses, so the D-Bus registry guard and the
+    /// schema validator cannot drift (a range check would silently accept
+    /// any hole a future enum leaves).
+    static constexpr bool isValidScrollingCenterFocusedColumn(int v)
     {
-        return 0;
-    }
-    static constexpr int scrollingCenterFocusedColumnMax()
-    {
-        return 2;
+        return v == 0 || v == 1 || v == 2;
     }
     static constexpr bool scrollingAlwaysCenterSingleColumn()
     {
@@ -544,13 +544,11 @@ public:
     {
         return scrollingWidthKindProportion();
     }
-    static constexpr int scrollingDefaultColumnWidthKindMin()
+    /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
+    static constexpr bool isValidScrollingWidthKind(int v)
     {
-        return scrollingWidthKindProportion();
-    }
-    static constexpr int scrollingDefaultColumnWidthKindMax()
-    {
-        return scrollingWidthKindClientDecides();
+        return v == scrollingWidthKindProportion() || v == scrollingWidthKindFixed()
+            || v == scrollingWidthKindClientDecides();
     }
     /// Value paired with the kind: a proportion in (0, 1] or a pixel width.
     static constexpr qreal scrollingDefaultColumnWidthValue()
@@ -578,7 +576,11 @@ public:
     {
         return 100.0;
     }
-    static constexpr qreal scrollingDefaultColumnWidthValueMax()
+    /// Fixed-kind pixel ceiling. Also the schema clampDouble's upper bound
+    /// (deliberately: the shared value key spans both kinds, so the schema
+    /// clamp uses the WIDER fixed range and the kind-aware setter owns the
+    /// real per-kind bounds).
+    static constexpr qreal scrollingDefaultColumnWidthFixedMax()
     {
         return 10000.0;
     }
@@ -593,13 +595,10 @@ public:
     {
         return 0;
     }
-    static constexpr int scrollingDefaultColumnDisplayMin()
+    /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
+    static constexpr bool isValidScrollingColumnDisplay(int v)
     {
-        return 0;
-    }
-    static constexpr int scrollingDefaultColumnDisplayMax()
-    {
-        return 1;
+        return v == 0 || v == 1;
     }
     /// Preset proportion lists, comma-joined decimals (the niri defaults).
     /// KEEP IN SYNC with the engine's hard-coded fallback in

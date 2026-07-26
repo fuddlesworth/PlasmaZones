@@ -17,6 +17,93 @@ namespace PhosphorTileEngine {
 
 namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
 
+namespace {
+// Cached QString forms of the QLatin1String key constants: the effective*()
+// lookups run per screen per retile, and building a fresh QString from the
+// latin-1 constant on every call was pure allocation churn (six per
+// effectiveOuterGaps alone).
+const QString& kAlgorithm()
+{
+    static const QString k = QString(PerScreenKeys::Algorithm);
+    return k;
+}
+const QString& kCustomParams()
+{
+    static const QString k = QString(PerScreenKeys::CustomParams);
+    return k;
+}
+const QString& kInnerGap()
+{
+    static const QString k = QString(PerScreenKeys::InnerGap);
+    return k;
+}
+const QString& kInsertPosition()
+{
+    static const QString k = QString(PerScreenKeys::InsertPosition);
+    return k;
+}
+const QString& kMasterCount()
+{
+    static const QString k = QString(PerScreenKeys::MasterCount);
+    return k;
+}
+const QString& kMaxWindows()
+{
+    static const QString k = QString(PerScreenKeys::MaxWindows);
+    return k;
+}
+const QString& kOuterGap()
+{
+    static const QString k = QString(PerScreenKeys::OuterGap);
+    return k;
+}
+const QString& kOuterGapBottom()
+{
+    static const QString k = QString(PerScreenKeys::OuterGapBottom);
+    return k;
+}
+const QString& kOuterGapLeft()
+{
+    static const QString k = QString(PerScreenKeys::OuterGapLeft);
+    return k;
+}
+const QString& kOuterGapRight()
+{
+    static const QString k = QString(PerScreenKeys::OuterGapRight);
+    return k;
+}
+const QString& kOuterGapTop()
+{
+    static const QString k = QString(PerScreenKeys::OuterGapTop);
+    return k;
+}
+const QString& kOverflowBehavior()
+{
+    static const QString k = QString(PerScreenKeys::OverflowBehavior);
+    return k;
+}
+const QString& kRespectMinimumSize()
+{
+    static const QString k = QString(PerScreenKeys::RespectMinimumSize);
+    return k;
+}
+const QString& kSmartGaps()
+{
+    static const QString k = QString(PerScreenKeys::SmartGaps);
+    return k;
+}
+const QString& kSplitRatio()
+{
+    static const QString k = QString(PerScreenKeys::SplitRatio);
+    return k;
+}
+const QString& kSplitRatioStep()
+{
+    static const QString k = QString(PerScreenKeys::SplitRatioStep);
+    return k;
+}
+} // namespace
+
 PerScreenConfigResolver::PerScreenConfigResolver(AutotileEngine* engine)
     : m_engine(engine)
 {
@@ -63,11 +150,11 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
         // and is now gone (a SetSplitRatio / SetMasterCount rule was removed while the
         // map stayed non-empty), the state would keep the stale rule value — so revert
         // it to the global config baseline, matching clearPerScreenConfig.
-        auto it = overrides.constFind(QString(PerScreenKeys::SplitRatio));
+        auto it = overrides.constFind(kSplitRatio());
         if (it != overrides.constEnd()) {
             state->setSplitRatio(qBound(PhosphorTiles::AutotileDefaults::MinSplitRatio, it->toDouble(),
                                         PhosphorTiles::AutotileDefaults::MaxSplitRatio));
-        } else if (previous.contains(QString(PerScreenKeys::SplitRatio))) {
+        } else if (previous.contains(kSplitRatio())) {
             // Removed (was an override, now gone) → revert to the config baseline. NOT
             // gated on the Algorithm key: concrete-algorithm screens ALWAYS carry the
             // injected Algorithm key, so an Algorithm-presence guard would leave the stale
@@ -82,11 +169,11 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
             m_engine->m_userTunedSplitRatio.remove(m_engine->currentKeyForScreen(screenId));
         }
 
-        it = overrides.constFind(QString(PerScreenKeys::MasterCount));
+        it = overrides.constFind(kMasterCount());
         if (it != overrides.constEnd()) {
             state->setMasterCount(qBound(PhosphorTiles::AutotileDefaults::MinMasterCount, it->toInt(),
                                          PhosphorTiles::AutotileDefaults::MaxMasterCount));
-        } else if (previous.contains(QString(PerScreenKeys::MasterCount))) {
+        } else if (previous.contains(kMasterCount())) {
             // Removed → revert to the global config baseline (no per-algorithm default).
             // Drop the tuned flag with the value it protected, current key only —
             // same rule as the SplitRatio arm above.
@@ -115,7 +202,7 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
         // screen pinned to a per-screen algorithm. (setAlgorithm's all-contexts drop
         // is coherent because m_config->splitRatio is by then the incoming
         // algorithm's restored value; here it is not.)
-        it = overrides.constFind(QString(PerScreenKeys::Algorithm));
+        it = overrides.constFind(kAlgorithm());
         if (it != overrides.constEnd()) {
             const QString algoId = it->toString();
             // rememberedAlgorithmId is the ONE authority for "what were this
@@ -127,7 +214,7 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
             // user's tuned split ratio while the wipe below correctly says
             // "no change".
             const QString previousAlgo = rememberedAlgorithmId(screenId, previous);
-            if (algoId != previousAlgo && !overrides.contains(QString(PerScreenKeys::SplitRatio))) {
+            if (algoId != previousAlgo && !overrides.contains(kSplitRatio())) {
                 // Guard the registry locally: AutotileEngine's ctor deliberately
                 // does not assert its dependencies, so every method that
                 // dereferences one guards it here (same rule as the wipe helper).
@@ -263,7 +350,7 @@ void PerScreenConfigResolver::updatePerScreenOverride(const QString& screenId, c
     // rather than rely on today's callers only ever passing SplitRatio and
     // MasterCount. No-ops for every other key, and for an Algorithm write that
     // does not move the effective id.
-    if (key == QString(PerScreenKeys::Algorithm)) {
+    if (key == kAlgorithm()) {
         wipeStateBagsOnEffectiveAlgorithmChange(screenId, oldEffective,
                                                 algorithmIdFromMap(*it, m_engine->m_algorithmId));
     }
@@ -275,14 +362,28 @@ void PerScreenConfigResolver::removeOverridesForScreen(const QString& screenId)
     // derived from below.
     const QVariantMap previous = m_perScreenOverrides.take(screenId);
     // Remember, do NOT wipe. Dropping the in-memory map is a teardown, not a
-    // configuration change: the sole caller (AutotileEngine::setAutotileScreens)
-    // prunes the current (desktop, activity) context only and leaves the screen's
-    // other contexts live. Wiping on the override -> global reading this produces
-    // would destroy exactly the bags that teardown just rescued, on screens whose
-    // effective algorithm never moved. The recorded id is what the next genuine
-    // change compares against, and it is also what tells a later global switch
-    // that this screen is pinned rather than following along.
+    // configuration change: the mode-toggle caller
+    // (AutotileEngine::setAutotileScreens) prunes the current (desktop,
+    // activity) context only and leaves the screen's other contexts live.
+    // Wiping on the override -> global reading this produces would destroy
+    // exactly the bags that teardown just rescued, on screens whose
+    // effective algorithm never moved. The recorded id is what the next
+    // genuine change compares against, and it is also what tells a later
+    // global switch that this screen is pinned rather than following along.
+    // Whole-screen reaps (orphaned VS, removed output) use forgetScreen /
+    // removeOverridesMatching instead — with zero remaining states there is
+    // nothing for a remembered id to guard.
     m_rememberedAlgorithmId[screenId] = algorithmIdFromMap(previous, m_engine->m_algorithmId);
+}
+
+void PerScreenConfigResolver::removeOverridesMatching(const std::function<bool(const QString&)>& pred)
+{
+    m_perScreenOverrides.removeIf([&pred](const auto& entry) {
+        return pred(entry.key());
+    });
+    m_rememberedAlgorithmId.removeIf([&pred](const auto& entry) {
+        return pred(entry.key());
+    });
 }
 
 void PerScreenConfigResolver::forgetRememberedAlgorithmsForUnknownScreens()
@@ -300,7 +401,7 @@ void PerScreenConfigResolver::forgetScreen(const QString& screenId)
 
 QString PerScreenConfigResolver::algorithmIdFromMap(const QVariantMap& map, const QString& fallback)
 {
-    const QString id = map.value(QString(PerScreenKeys::Algorithm)).toString();
+    const QString id = map.value(kAlgorithm()).toString();
     return id.isEmpty() ? fallback : id;
 }
 
@@ -473,7 +574,7 @@ int PerScreenConfigResolver::effectiveInnerGap(const QString& screenId) const
 {
     if (auto ctx = contextGapFromMap(contextGapMap(screenId), PerScreenKeys::InnerGap))
         return *ctx;
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::InnerGap)))
+    if (auto v = perScreenOverride(screenId, kInnerGap()))
         return clampGap(v->toInt());
     return m_engine->config()->innerGap;
 }
@@ -482,7 +583,7 @@ int PerScreenConfigResolver::outerGapBase(const QString& screenId, const QVarian
 {
     if (auto c = contextGapFromMap(ctx, PerScreenKeys::OuterGap))
         return *c;
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::OuterGap)))
+    if (auto v = perScreenOverride(screenId, kOuterGap()))
         return clampGap(v->toInt());
     return m_engine->config()->outerGap;
 }
@@ -499,10 +600,10 @@ int PerScreenConfigResolver::outerGapBase(const QString& screenId, const QVarian
         return *ctxGaps;
 
     // Per-screen per-side overrides next.
-    auto topOv = perScreenOverride(screenId, QString(PerScreenKeys::OuterGapTop));
-    auto bottomOv = perScreenOverride(screenId, QString(PerScreenKeys::OuterGapBottom));
-    auto leftOv = perScreenOverride(screenId, QString(PerScreenKeys::OuterGapLeft));
-    auto rightOv = perScreenOverride(screenId, QString(PerScreenKeys::OuterGapRight));
+    auto topOv = perScreenOverride(screenId, kOuterGapTop());
+    auto bottomOv = perScreenOverride(screenId, kOuterGapBottom());
+    auto leftOv = perScreenOverride(screenId, kOuterGapLeft());
+    auto rightOv = perScreenOverride(screenId, kOuterGapRight());
 
     // If any per-screen per-side override exists, build from those
     if (topOv || bottomOv || leftOv || rightOv) {
@@ -514,7 +615,7 @@ int PerScreenConfigResolver::outerGapBase(const QString& screenId, const QVarian
     }
 
     // Check per-screen uniform outer gap
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::OuterGap))) {
+    if (auto v = perScreenOverride(screenId, kOuterGap())) {
         return ::PhosphorLayout::EdgeGaps::uniform(clampGap(v->toInt()));
     }
 
@@ -528,14 +629,14 @@ int PerScreenConfigResolver::outerGapBase(const QString& screenId, const QVarian
 
 bool PerScreenConfigResolver::effectiveSmartGaps(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::SmartGaps)))
+    if (auto v = perScreenOverride(screenId, kSmartGaps()))
         return v->toBool();
     return m_engine->config()->smartGaps;
 }
 
 QVariantMap PerScreenConfigResolver::effectiveCustomParamsOverride(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::CustomParams))) {
+    if (auto v = perScreenOverride(screenId, kCustomParams())) {
         return v->toMap();
     }
     return {};
@@ -545,7 +646,7 @@ PhosphorTiles::AutotileOverflowBehavior
 PerScreenConfigResolver::effectiveOverflowBehavior(const QString& screenId) const
 {
     // Per-screen override (config store OR a folded-in context rule) → global config.
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::OverflowBehavior))) {
+    if (auto v = perScreenOverride(screenId, kOverflowBehavior())) {
         const int clamped = qBound(PhosphorTiles::AutotileDefaults::MinOverflowBehavior, v->toInt(),
                                    PhosphorTiles::AutotileDefaults::MaxOverflowBehavior);
         return static_cast<PhosphorTiles::AutotileOverflowBehavior>(clamped);
@@ -557,7 +658,7 @@ PhosphorTiles::AutotileInsertPosition PerScreenConfigResolver::effectiveInsertPo
 {
     // Per-screen override (config store OR a folded-in tiling rule) → global config.
     // The stored value is the enum's underlying int, clamped to the valid range.
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::InsertPosition))) {
+    if (auto v = perScreenOverride(screenId, kInsertPosition())) {
         const int clamped = qBound(PhosphorTiles::AutotileDefaults::MinInsertPosition, v->toInt(),
                                    PhosphorTiles::AutotileDefaults::MaxInsertPosition);
         return static_cast<PhosphorTiles::AutotileInsertPosition>(clamped);
@@ -567,7 +668,7 @@ PhosphorTiles::AutotileInsertPosition PerScreenConfigResolver::effectiveInsertPo
 
 bool PerScreenConfigResolver::effectiveRespectMinimumSize(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::RespectMinimumSize)))
+    if (auto v = perScreenOverride(screenId, kRespectMinimumSize()))
         return v->toBool();
     return m_engine->config()->respectMinimumSize;
 }
@@ -578,7 +679,7 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
     //    over global Unlimited mode so users can clamp individual screens
     //    (e.g. keep a secondary monitor at maxWindows=3 while the primary
     //    runs unlimited).
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::MaxWindows)))
+    if (auto v = perScreenOverride(screenId, kMaxWindows()))
         return qBound(PhosphorTiles::AutotileDefaults::MinMaxWindows, v->toInt(),
                       PhosphorTiles::AutotileDefaults::MaxMaxWindows);
 
@@ -623,7 +724,7 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
 
 qreal PerScreenConfigResolver::effectiveSplitRatioStep(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::SplitRatioStep)))
+    if (auto v = perScreenOverride(screenId, kSplitRatioStep()))
         return qBound(PhosphorTiles::AutotileDefaults::MinSplitRatioStep, v->toDouble(),
                       PhosphorTiles::AutotileDefaults::MaxSplitRatioStep);
     return m_engine->config()->splitRatioStep;

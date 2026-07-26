@@ -63,7 +63,7 @@ struct EngineSet
 };
 
 /**
- * @brief Create both placement engines and the mode router.
+ * @brief Create all three placement engines and the mode router.
  *
  * Concrete engine headers are included in the .cpp — the factory header
  * only forward-declares them. The caller (Daemon) must wire persistence

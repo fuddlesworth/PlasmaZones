@@ -25,8 +25,11 @@ using PhosphorRules::RuleAction;
 /// Group an action type into a picker category. Most categories derive
 /// straight from the descriptor's `category` field, so a new action in an
 /// existing category needs no change here. The exception is `layoutEngine`,
-/// which is split by action type into Engine, Snapping, and Tiling (the last
-/// with Algorithm and Behavior submenus via a `/` in the label); a new
+/// which is split by action type into Engine, Snapping, Tiling (the last
+/// with Algorithm and Behavior submenus via a `/` in the label), a
+/// top-level Scrolling (the context-domain scroll knobs), and a
+/// Window/Scrolling submenu (the per-window open actions, which
+/// deliberately cross into the window-domain order band); a new
 /// layoutEngine action lands in Engine unless added to the dispatch below.
 PickerCategory actionCategory(const QString& type)
 {
@@ -37,7 +40,7 @@ PickerCategory actionCategory(const QString& type)
     const QString& cat = desc->category;
     // Two groups: the context-domain categories (resolved per
     // screen/desktop/activity/mode) come first (orders 0-5), then the
-    // window-domain categories (orders 6-8). Order within a group is
+    // window-domain categories (orders 6-9). Order within a group is
     // curated, not alphabetical. Keep these orders in lockstep with each
     // category's action domains in RuleAction.cpp.
     if (cat == QLatin1String("gap")) {
@@ -71,9 +74,14 @@ PickerCategory actionCategory(const QString& type)
         // Window as a Scrolling submenu for discoverability.
         if (type == ActionType::OpenColumnWidth || type == ActionType::OpenTabbed
             || type == ActionType::OpenColumnPlacement) {
+            // Order 9, NOT 8: sharing Window's order would keep the two
+            // categories contiguous only while their displayOrder ranges
+            // happen to stay disjoint — a future windowManagement action
+            // with a high displayOrder would split the Window section in
+            // two. Every category carries a unique order for this reason.
             return {PhosphorI18n::tr("Window") + QStringLiteral("/")
                         + PhosphorI18n::tr("Scrolling", "tiling mode name"),
-                    8};
+                    9};
         }
         // Cross-cutting engine controls: SetEngineMode / DisableEngine / LockContext.
         return {PhosphorI18n::tr("Engine"), 1};

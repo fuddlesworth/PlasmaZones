@@ -432,7 +432,25 @@ void ScrollEngine::centerColumn(const QString& screenId)
 
 void ScrollEngine::toggleColumnTabbed(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().toggleActiveColumnTabbed(), "tabbed");
+    // Hand-expanded (not P_SCROLL_VERB): the op never reads layout params,
+    // and the macro's resolve pays a ScreenManager query plus a
+    // context-gap-provider invocation per call — same reasoning as
+    // snapAllWindows.
+    const QString screen = resolveOperationScreen(screenId);
+    ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("tabbed"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    const QString sourceWindow = state->strip().activeWindowId();
+    const bool changed = state->strip().toggleActiveColumnTabbed();
+    if (changed) {
+        applyLayout(screen, true);
+        Q_EMIT placementChanged(screen);
+    }
+    Q_EMIT navigationFeedback(changed, QStringLiteral("tabbed"), changed ? QString() : QStringLiteral("no_target"),
+                              sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
 }
 
 void ScrollEngine::cycleColumnPresetWidth(int delta, const QString& screenId)
@@ -467,7 +485,25 @@ void ScrollEngine::adjustWindowHeight(qreal deltaPercent, const QString& screenI
 
 void ScrollEngine::resetWindowHeights(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().resetActiveColumnHeights(), "resize");
+    // Hand-expanded (not P_SCROLL_VERB): the op never reads layout params,
+    // and the macro's resolve pays a ScreenManager query plus a
+    // context-gap-provider invocation per call — same reasoning as
+    // snapAllWindows.
+    const QString screen = resolveOperationScreen(screenId);
+    ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("resize"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    const QString sourceWindow = state->strip().activeWindowId();
+    const bool changed = state->strip().resetActiveColumnHeights();
+    if (changed) {
+        applyLayout(screen, true);
+        Q_EMIT placementChanged(screen);
+    }
+    Q_EMIT navigationFeedback(changed, QStringLiteral("resize"), changed ? QString() : QStringLiteral("no_target"),
+                              sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
 }
 
 #undef P_SCROLL_VERB

@@ -696,6 +696,15 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     return params;
 }
 
+AssignmentEntry LayoutRegistry::exactContextEntry(const QString& screenId, int virtualDesktop,
+                                                  const QString& activity) const
+{
+    if (const PhosphorRules::Rule* rule = findExactContextRule(screenId, virtualDesktop, activity)) {
+        return entryFromRuleMatchActions(*rule);
+    }
+    return {};
+}
+
 bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
     return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;

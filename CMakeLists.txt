@@ -378,7 +378,6 @@ add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutoti
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 add_subdirectory(libs/phosphor-scroll-engine) # niri-style scrolling placement engine (strip model + engine)
 
-
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 
 # Canonical list of engine library target names. Consumed by the

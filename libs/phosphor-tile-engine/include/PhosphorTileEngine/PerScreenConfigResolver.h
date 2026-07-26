@@ -126,6 +126,14 @@ public:
     void forgetScreen(const QString& screenId);
 
     /**
+     * @brief forgetScreen for every stored id matching @p pred — the
+     * whole-OUTPUT reap. The maps key on effective ("/vs:N") ids, so a
+     * removed physical monitor needs a predicate sweep to reach its
+     * virtual sub-screens' entries.
+     */
+    void removeOverridesMatching(const std::function<bool(const QString&)>& pred);
+
+    /**
      * @brief Apply a GLOBAL algorithm switch to every screen that follows it.
      *
      * Called by AutotileEngine::setAlgorithm with the outgoing and incoming

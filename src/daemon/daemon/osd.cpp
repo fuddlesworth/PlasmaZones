@@ -654,7 +654,16 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
             if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
                 // Scrolling screens announce the mode, never a fallback snap
                 // layout (the "scrolling:" sentinel is not a manual layout).
-                showScrollingModeOsd(screenId);
+                // LIVE-mode gated: a context-disabled Scrolling assignment is
+                // excluded from the engine set and the router downgrades the
+                // screen, so announcing "Scrolling" there would claim a mode
+                // that is inert (the disabled probe above checks the
+                // DOWNGRADED mode's list and misses).
+                if (currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Scrolling) {
+                    showScrollingModeOsd(screenId);
+                } else {
+                    showNotAssignedOsd(screenId);
+                }
                 continue;
             }
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {

@@ -20,7 +20,9 @@
 
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include "dbus/windowtrackingadaptor/internal.h"
 #include <PhosphorScreens/Manager.h>
 #include "FakeScreenProvider.h"
 #include "core/interfaces/interfaces.h"
@@ -230,7 +232,7 @@ private Q_SLOTS:
         desk.params.insert(QString(ActionParam::TargetDesktop), 2);
         rule.actions = {route, desk};
 
-        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
+        RuleStore store(ConfigDefaults::rulesFilePath(), nullptr); // stack object: no QObject parent
         QVERIFY(store.addRule(rule));
         m_wta->setRuleStore(&store);
 
@@ -276,7 +278,7 @@ private Q_SLOTS:
         route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
         rule.actions = {route};
 
-        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
+        RuleStore store(ConfigDefaults::rulesFilePath(), nullptr); // stack object: no QObject parent
         QVERIFY(store.addRule(rule));
         m_wta->setRuleStore(&store);
 
@@ -316,7 +318,7 @@ private Q_SLOTS:
         desk.params.insert(QString(ActionParam::TargetDesktop), 3);
         rule.actions = {route, desk};
 
-        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
+        RuleStore store(ConfigDefaults::rulesFilePath(), nullptr); // stack object: no QObject parent
         QVERIFY(store.addRule(rule));
         m_wta->setRuleStore(&store);
 
@@ -355,7 +357,7 @@ private Q_SLOTS:
         desk.params.insert(QString(ActionParam::TargetDesktop), 4);
         rule.actions = {desk};
 
-        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
+        RuleStore store(ConfigDefaults::rulesFilePath(), nullptr); // stack object: no QObject parent
         QVERIFY(store.addRule(rule));
         m_wta->setRuleStore(&store);
 
@@ -577,6 +579,45 @@ private Q_SLOTS:
     // =====================================================================
     // reapplyWindowAppearance — daemon-driven, engine-common chrome re-apply
     // =====================================================================
+
+    /// guardedHandoff refusal path: a destination whose screen is not in
+    /// its engine set refuses the receive, and the helper must re-home the
+    /// window into the source so it stays managed (the strand this helper
+    /// exists to prevent). Also pins the pre-tracked adoption test: when
+    /// source == dest (same-mode cross-screen move) isWindowTracked is
+    /// true regardless, so adoption is screen-match, not mere tracking.
+    void testGuardedHandoff_refusalRehomesIntoSource()
+    {
+        QObject owner;
+        auto* source = new PhosphorScrollEngine::ScrollEngine(nullptr, nullptr, &owner);
+        source->setActiveScreens({QStringLiteral("S1")});
+        source->windowOpened(QStringLiteral("app|gh"), QStringLiteral("S1"), 0, 0);
+        QVERIFY(source->isWindowTracked(QStringLiteral("app|gh")));
+
+        auto* dest = new PhosphorScrollEngine::ScrollEngine(nullptr, nullptr, &owner);
+        // dest claims NOTHING → handoffReceive refuses.
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = QStringLiteral("app|gh");
+        ctx.toScreenId = QStringLiteral("S2");
+        ctx.fromEngineId = source->engineId();
+        const bool adopted = WindowTrackingInternal::guardedHandoff(source, dest, ctx, QStringLiteral("S1"));
+        QVERIFY(!adopted);
+        QVERIFY(!dest->isWindowTracked(QStringLiteral("app|gh")));
+        // Re-homed: still managed by the source on the recovery screen.
+        QVERIFY(source->isWindowTracked(QStringLiteral("app|gh")));
+
+        // Pre-tracked destination (source == dest): a refused move to an
+        // unclaimed screen must report NOT adopted even though
+        // isWindowTracked stays true throughout.
+        PhosphorEngine::IPlacementEngine::HandoffContext sameCtx;
+        sameCtx.windowId = QStringLiteral("app|gh");
+        sameCtx.toScreenId = QStringLiteral("S9");
+        sameCtx.fromEngineId = source->engineId();
+        const bool sameAdopted = WindowTrackingInternal::guardedHandoff(source, source, sameCtx, QStringLiteral("S1"));
+        QVERIFY(!sameAdopted);
+        QVERIFY(source->isWindowTracked(QStringLiteral("app|gh")));
+        QCOMPARE(source->screenForTrackedWindow(QStringLiteral("app|gh")), QStringLiteral("S1"));
+    }
 
     void testReapplyWindowAppearance_reemitsSnappedSkipsFloating()
     {

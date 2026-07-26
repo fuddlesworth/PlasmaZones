@@ -65,7 +65,7 @@ Item {
             height: tabRow.implicitHeight + Kirigami.Units.smallSpacing * 2
             radius: height / 2
             color: Qt.alpha(Kirigami.Theme.backgroundColor, 0.85)
-            border.width: 1
+            border.width: 1 // deliberate 1px hairline; Kirigami.Units has no hairline token
             border.color: Qt.alpha(Kirigami.Theme.textColor, 0.2)
             clip: true
 
@@ -74,11 +74,15 @@ Item {
 
                 // Centered while it fits; once the row is wider than the
                 // pill, pin it to the left padding — centering would clip
-                // BOTH ends. Chips render in stacking order, so an active
-                // tab late in the order CAN be clipped (see the file doc's
-                // overflow paragraph).
+                // BOTH ends. In a pill narrower than the padding budget the
+                // padding COLLAPSES before the content does (the inner
+                // Math.max floor at 0), so a cramped column still shows a
+                // partial leading chip instead of an empty pill. Chips
+                // render in stacking order, so an active tab late in the
+                // order CAN be clipped (see the file doc's overflow
+                // paragraph).
                 anchors.verticalCenter: parent.verticalCenter
-                x: Math.max(Kirigami.Units.largeSpacing, (pill.width - width) / 2)
+                x: (pill.width - width) / 2 >= Kirigami.Units.largeSpacing ? (pill.width - width) / 2 : Math.min(Kirigami.Units.largeSpacing, Math.max(0, pill.width - width))
                 spacing: Kirigami.Units.smallSpacing
 
                 Repeater {

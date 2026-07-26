@@ -339,11 +339,20 @@ bool ScrollStrip::setWindowMinimized(const QString& windowId, bool minimized, co
         }
     }
     if (!minimized) {
-        // The restored tile takes its COLUMN's active slot but the strip's
-        // active column is deliberately untouched: unminimizing a window
-        // in a background column must not steal focus from the column the
-        // user is working in (embedders call focusWindow for that).
-        col.activeTileIdx = tileIdx;
+        // The restored tile takes its COLUMN's active slot back — EXCEPT in
+        // a TABBED column whose active tile is visible: there the active
+        // slot IS the shown window, and stealing it would swap out what the
+        // user is looking at with no activation emitted. In a Normal column
+        // every tile is visible, so re-taking the slot is the documented
+        // restore contract. The strip's active column is deliberately
+        // untouched either way — unminimizing into a background column must
+        // not steal focus from the column the user is working in (embedders
+        // call focusWindow).
+        const bool tabbedShowingVisible = col.display == ColumnDisplay::Tabbed && col.activeTileIdx >= 0
+            && col.activeTileIdx < col.tiles.size() && !col.tiles.at(col.activeTileIdx).minimized;
+        if (!tabbedShowingVisible) {
+            col.activeTileIdx = tileIdx;
+        }
     }
     // A column collapsing to / expanding from fully-minimized shifts strip
     // positions; keep the view where it was (clamped so the collapse can
@@ -582,8 +591,10 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
     }
     // Same refusal as consumeWindowIntoColumn: a fully-minimized column is
     // skipped by every focus verb, so consuming into one would make the
-    // window vanish from view.
-    if (m_columns.at(neighbourIdx).isFullyMinimized()) {
+    // window vanish from view. The MOVED tile must be visible too —
+    // appending a minimized tile to a visible column would leave the
+    // strip's active window pointing at something hidden.
+    if (m_columns.at(neighbourIdx).isFullyMinimized() || col->tiles.at(0).minimized) {
         return false;
     }
     const Tile taken = col->tiles.takeAt(0);
