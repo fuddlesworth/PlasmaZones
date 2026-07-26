@@ -213,11 +213,12 @@ Q_SIGNALS:
     /// rescans without payload inspection — do not weaken this contract
     /// without updating the loader-sink consumers and the test suite.
     ///
-    /// The four sister registries (`ShaderRegistry`, `SurfaceShaderRegistry`,
-    /// `AnimationShaderRegistry`, `ScriptedAlgorithmLoader`) gate their
-    /// public content-changed signals at the registry level via SHA-1
-    /// signature or QHash diff because they own their parse output;
-    /// `DirectoryLoader` gates one layer up.
+    /// The three `MetadataPackLoader`-hosted pack registries (`ShaderRegistry`,
+    /// `AnimationShaderRegistry`, `SurfaceShaderRegistry`) inherit change-only
+    /// emit from BELOW them — `MetadataPackScanStrategy`'s SHA-1 signature plus
+    /// `MetadataPackLoader`'s per-id fingerprint diff — and
+    /// `ScriptedAlgorithmLoader` hashes its own registered set. This class has
+    /// no view of parsed content, so its consumers gate one layer up.
     void entriesChanged();
 
 private:

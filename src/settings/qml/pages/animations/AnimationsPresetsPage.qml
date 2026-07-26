@@ -56,13 +56,20 @@ SettingsFlickable {
         return result;
     }
 
-    function applyAsDefault(curveStr) {
+    /// @p duration is optional: built-in presets carry none, and a spring
+    /// preset deliberately stores none (it derives its own settle time). When a
+    /// preset DOES carry one, applying it writes that duration too — otherwise
+    /// the duration a user saved with the curve was recorded and then silently
+    /// ignored on every use, which is worse than not recording it.
+    function applyAsDefault(curveStr, duration) {
         // Global path is settings-driven (kSettingsDrivenProfilePaths in
         // src/daemon/daemon.cpp). Writing through the existing
         // animationEasingCurve Q_PROPERTY lets the daemon's
         // publishActiveAnimationProfile pick it up via the same wire
         // every other Global edit uses.
         root.appSettings.animationEasingCurve = curveStr;
+        if (duration !== undefined && duration > 0)
+            root.appSettings.animationDuration = duration;
     }
 
     contentHeight: content.implicitHeight
@@ -128,7 +135,7 @@ SettingsFlickable {
                         Button {
                             Accessible.name: i18n("Use %1 as default", modelData.label)
                             text: i18n("Use as Default")
-                            onClicked: root.applyAsDefault(modelData.curve)
+                            onClicked: root.applyAsDefault(modelData.curve, modelData.duration)
                         }
                     }
                 }
@@ -172,7 +179,7 @@ SettingsFlickable {
                         Button {
                             Accessible.name: i18n("Use %1 as default", modelData.name)
                             text: i18n("Use as Default")
-                            onClicked: root.applyAsDefault(modelData.curve)
+                            onClicked: root.applyAsDefault(modelData.curve, modelData.duration)
                         }
 
                         Button {
@@ -317,7 +324,7 @@ SettingsFlickable {
                         Button {
                             Accessible.name: i18n("Use %1 as default", modelData.name)
                             text: i18n("Use as Default")
-                            onClicked: root.applyAsDefault(modelData.curve)
+                            onClicked: root.applyAsDefault(modelData.curve, modelData.duration)
                         }
 
                         Button {

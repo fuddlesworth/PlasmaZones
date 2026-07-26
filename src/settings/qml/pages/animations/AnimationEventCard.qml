@@ -45,11 +45,9 @@ import org.kde.kirigami as Kirigami
  * refresh or persisted as a user edit.
  */
 Item {
-    // Both the curve editor and the colour picker now live inside the
-    // shared `AnimationProfileEditor`. Removing them from this file
-    // keeps the dialog ownership in one place — when the editor is
-    // hidden (override toggle off + shader leg unsupported) so are
-    // its dialogs. The card no longer hosts any dialogs of its own.
+    // The curve editor and colour picker live in the shared
+    // `AnimationProfileEditor`, so when the editor is hidden so are its dialogs.
+    // This card hosts none of its own.
 
     id: root
 
@@ -67,12 +65,11 @@ Item {
     /// are write-only followers.
     ///
     /// Mirroring is intrinsic to the write, deliberately NOT implemented by
-    /// observing profile-change signals: the shader signal is a
-    /// path-agnostic broadcast, so an observer cannot tell a user edit on
-    /// this card from an unrelated card's edit, a Discard, or a profile
-    /// switch, and would clobber divergent mirror values (or re-dirty the
-    /// config immediately after a Discard). Writing through the same call
-    /// the user's action triggers has none of those failure modes.
+    /// observing profile-change signals: the shader signal is a path-agnostic
+    /// broadcast, so an observer cannot tell a user edit on this card from an
+    /// unrelated card's edit, a Discard, or a profile switch, and would clobber
+    /// divergent mirror values. Writing through the call the user's action
+    /// triggers has none of those failure modes.
     /// Deliberately `var` (a JS array), not `list<string>`: _writePaths does
     /// `[eventPath].concat(mirrorPaths)`, and Array.prototype.concat SPREADS
     /// only true JS arrays. A QML list proxy would be appended as one element,
@@ -253,12 +250,9 @@ Item {
     // persist a dead override that the daemon resolver would shadow
     // any user-intended setting with via deeper-leaf-wins overlay.
     // Source-of-truth list: `src/core/types/animationshadersupportedpaths.h`.
-    //
-    // Declared on the card ROOT rather than inside the editor, because the card
-    // is what reaches `settingsController` and hands the answer down as the
-    // editor's `shaderLegSupported` property. The editor takes it as an input so
-    // it stays reusable by hosts with no per-event path at all
-    // (GlobalTimingDefaultsCard).
+    // On the card ROOT, not in the editor: the card reaches settingsController
+    // and hands the answer down as `shaderLegSupported`, which keeps the editor
+    // reusable by hosts with no event path (GlobalTimingDefaultsCard).
     readonly property bool _shaderLegSupported: settingsController.animationsPage.supportsShaderLeg(root.eventPath)
     // Number of shader overrides on paths strictly DEEPER than this card's
     // eventPath. Only meaningful for parent-node cards: a stale leaf
@@ -489,11 +483,10 @@ Item {
     /// per cleared path, and an unguarded handler would recompute the
     /// divergence banner against a half-refreshed card, flickering it on
     /// mid-batch.
-    /// Returns false when the controller refused (an async discard is in
-    /// flight). The caller has to honour that: the controller raises the
-    /// refusal toast itself, so turning the toggle off anyway would leave the
-    /// user looking at an off switch beside a message saying it could not be
-    /// turned off.
+    /// False when the controller returned -1: an async discard is in flight, OR
+    /// some file could not be removed. Both raise a toast C++-side, so the
+    /// caller must honour it — a partial failure deliberately keeps the editor
+    /// open rather than reporting success it did not achieve.
     function _clearOverrideOnAll() {
         root._committing = true;
         try {
@@ -507,10 +500,10 @@ Item {
 
     /// Removes ONE timing field (`"curve"` or `"duration"`) from every write
     /// path's stored override, returning that field to inheritance while the
-    /// other field (and the motion-set fields) stay put. A path whose
-    /// override becomes empty has its file deleted outright — an empty
-    /// override file and no override resolve identically, but the toggle and
-    /// the pending-changes walk both key on file existence. Suppressed and
+    /// other field (and the motion-set fields) stay put. A path whose override
+    /// becomes empty has its file deleted outright: an empty override file and
+    /// no override resolve identically, but the toggle and the pending-changes
+    /// walk both key on file existence. Suppressed and
     /// group-written like every other mutation on this card.
     function _clearFieldOnAll(field) {
         root._committing = true;
@@ -533,22 +526,16 @@ Item {
         }
     }
 
-    // Returns the number cleared, or -1 if ANY path refused (the
-    // controller's "async discard in flight" sentinel). Summing a -1 into
-    // the count would make a refusal indistinguishable from a smaller
-    // successful clear.
+    // Returns the number cleared, or -1 if a path refused (the controller's
+    // "async discard in flight" sentinel). Summing a -1 in would make a refusal
+    // indistinguishable from a smaller successful clear.
     //
-    // Suppressed with _committingShader for the same reason as the two timing
-    // group writers: each successful clear writes the shader tree, which the
-    // controller relays as a path-agnostic shaderProfileChanged, and an
-    // unguarded handler would run refreshShaderFromTree mid-loop and recompute
-    // the shadowing-children count and the divergence banner against a
-    // half-cleared tree.
-    //
-    // Stops at the first refusal. The controller toasts per refused call, so
-    // carrying on would raise one identical toast per write path for a single
-    // user action, and a refusal is all-or-nothing anyway (the in-flight gate
-    // does not change between iterations).
+    // _committingShader for the same reason as the two timing group writers:
+    // each clear writes the shader tree, relayed as a path-agnostic
+    // shaderProfileChanged, and an unguarded handler would recompute the
+    // shadowing count and divergence banner against a half-cleared tree.
+    // Stops at the first refusal — the controller toasts per call, and the
+    // in-flight gate cannot change between iterations.
     function _clearShaderOverrideDescendantsOnAll() {
         root._committingShader = true;
         try {
@@ -859,18 +846,14 @@ Item {
         // advanced page) has to re-run this card's refresh or the banner goes
         // stale. Refreshing costs a re-read of the unchanged primary.
         // "global" is the tree ROOT, and ProfilePaths::parentPath maps every
-        // category root to it as a bare literal, not as a dotted prefix, so a
-        // startsWith(path + ".") test never matches it. Every OTHER ancestor is
-        // genuinely spelled as a dotted prefix of its descendants, so the loop
-        // below already covers them; the root is the only gap.
-        //
-        // The case this closes is a `global.json` OVERRIDE FILE, which is a
-        // valid built-in path: a Discard, a per-page Reset, or a scoped revert
-        // that restores or removes it emits overrideChanged("global"), and
-        // without this every descendant card kept showing the pre-revert value.
-        // Edits to the Global CARD are a different path entirely — that card
-        // writes ISettings, and the `Connections { target: settingsController.settings }`
-        // block above handles it.
+        // category root to it as a bare literal, so a startsWith(path + ".")
+        // test never matches it. Every other ancestor IS spelled as a dotted
+        // prefix, so the loop below covers them; the root is the only gap.
+        // The case this closes is a `global.json` override FILE (a motion-set
+        // import writes one, and a Discard / Reset / scoped revert emits
+        // overrideChanged("global") for it). Edits to the Global CARD are a
+        // different path — that writes ISettings, handled by the Connections
+        // block above.
         if (path === "global")
             return true;
 
@@ -1027,13 +1010,11 @@ Item {
                 if (root._anyWritePathSupportsShaderLeg())
                     root._clearShaderOverrideOnAll();
 
-                // Only close the timing editor if the clear was actually
-                // accepted. The controller refuses (and toasts) while an async
-                // discard is in flight, including when there was nothing to
-                // clear, so latching the editor shut regardless left the toggle
-                // visibly off next to a message saying it could not be changed.
-                // refreshFromTree has already run inside the call, so the
-                // toggle re-derives its own state from the tree either way.
+                // Gated: the controller refuses (and toasts) during an async
+                // discard, and on a partial failure — closing the editor anyway
+                // left the toggle visibly off beside a message saying it could
+                // not be changed. refreshFromTree has already run inside the
+                // call, so the toggle re-derives from the tree either way.
                 if (root._clearOverrideOnAll())
                     root._editingTiming = false;
             }

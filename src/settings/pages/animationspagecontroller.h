@@ -181,9 +181,11 @@ public:
     /// Normalised, NOT uniformly stripped: a field `Profile::fromJson` leaves
     /// unset is dropped here (so the ancestor's value shows through), and a
     /// field fromJson substitutes a default for is substituted here too (so it
-    /// keeps blocking inheritance, as the daemon's copy does). See
+    /// keeps blocking inheritance, as the daemon's copy does). One documented
+    /// exception: an unresolvable `curve` SPEC is kept rather than dropped,
+    /// because resolving it needs a registry this layer has no access to. See
     /// `animations_controller_detail::sanitizedProfileMap` for the per-field
-    /// table.
+    /// table and the reasoning.
     ///
     /// An empty map therefore means EITHER no override file exists OR no field
     /// in it survived. Callers that must tell those apart ask `hasOverride()`,

@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QObject>
 #include <QSet>
+#include <QStringList>
 #include <QString>
 
 #include <memory>
@@ -69,7 +70,9 @@ public:
      * Rescans every algorithm directory and diffs the result against the
      * previous scan: unchanged files keep their existing registry entry, new
      * and edited ones are (re)built, and entries whose file disappeared are
-     * unregistered. Nothing is cleared up front.
+     * unregistered. No registry entry is dropped up front — the loader's own
+     * tracking maps are rebuilt from scratch each scan and the stale sweep runs
+     * at the end.
      *
      * Directories are iterated USER-FIRST with first-registration-wins on
      * script ID, which is what produces `user > sys-highest > … > sys-lowest`.

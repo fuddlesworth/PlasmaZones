@@ -43,7 +43,9 @@ Kirigami.Dialog {
     signal curveApplied(string curve)
     signal springApplied(real omega, real zeta)
 
-    title: i18nc("@title:window", "Customize curve for %1", eventLabel)
+    // Label-free when the host has no event to name (a rule action with no
+    // event selected yet), rather than trailing a dangling preposition.
+    title: eventLabel.length > 0 ? i18nc("@title:window", "Customize curve for %1", eventLabel) : i18nc("@title:window", "Customize curve")
     preferredWidth: Math.min(Kirigami.Units.gridUnit * 40, parent ? parent.width * 0.85 : Kirigami.Units.gridUnit * 40)
     preferredHeight: Math.min(Kirigami.Units.gridUnit * 32, parent ? parent.height * 0.8 : Kirigami.Units.gridUnit * 32)
     standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel

@@ -36,7 +36,7 @@ namespace PhosphorFsLoader {
  *
  * Owns the cross-cutting scaffolding all three pack registries
  * (`PhosphorShaders::ShaderRegistry`, `PhosphorAnimationShaders::AnimationShaderRegistry`
- * and `PhosphorSurface::SurfaceShaderRegistry`) were duplicating verbatim:
+ * and `PhosphorSurfaceShaders::SurfaceShaderRegistry`) were duplicating verbatim:
  *
  *   1. Reverse-iterate `directoriesInScanOrder` (the canonical
  *      `[lowest-priority, ..., highest-priority]` shape from
@@ -147,7 +147,7 @@ namespace PhosphorFsLoader {
  * lets each registry keep its concrete payload type and share the
  * per-rescan map via direct strongly-typed accessors. The template is
  * also header-only, which keeps `phosphor-fsloader` itself free of
- * dependencies on either consumer's payload schema.
+ * dependencies on any consumer's payload schema.
  *
  * The policy callables themselves are stored as `std::function` (one
  * level of type-erasure indirection per call). Inlining-via-callable-
@@ -160,8 +160,9 @@ namespace PhosphorFsLoader {
  *
  * ## Lifetime
  *
- * The strategy is constructed by the consumer registry, held by
- * reference inside its `WatchedDirectorySet`, and destroyed when the
+ * The strategy is constructed and OWNED by the hosting
+ * `PhosphorRegistry::MetadataPackLoader` (via `unique_ptr`), and borrowed by
+ * reference by its `WatchedDirectorySet`, and destroyed when the
  * registry is. `Parser` / watch-extractor callables are stored by value
  * (typically `std::function`); they may capture state by pointer/reference
  * if the captured state outlives the registry.
@@ -553,7 +554,7 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
     /// cap counts these rather than the entries that survive to registration:
     /// a subdir whose metadata.json is missing, oversize, unopenable,
     /// unparseable, non-object, or id-colliding has still cost a stat (and
-    /// usually an open, a readAll and a JSON parse) on the GUI thread, which
+    /// for everything past the existence check an open, a readAll and a JSON parse) on the GUI thread, which
     /// is the work the cap exists to bound. Counting registrations instead
     /// let a spray of broken packs through the guard untouched — the exact
     /// attack it names. Mirrors `JsonScanStrategy`'s `filesConsidered`.
@@ -613,6 +614,17 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
 
             const QFileInfo metadataInfo(metadataPath);
             if (!metadataInfo.exists()) {
+                // Watch the SUBDIRECTORY instead. `QFileSystemWatcher` cannot
+                // watch a path that does not exist, so the metadata.json entry
+                // appended above arms nothing here — and only the registered
+                // SEARCH paths are directory-watched, not the pack dirs under
+                // them. Without this, `cp -r mypack <packs>/` races: the mkdir
+                // wakes the debounced rescan, the rescan finds an empty (or
+                // half-copied) subdir, and the metadata.json landing afterwards
+                // fires no event at all, so the pack stays invisible until
+                // something unrelated triggers a rescan. Watching the subdir
+                // makes the file's creation the wake-up.
+                desiredWatches.append(subdirPath);
                 qCDebug(log) << "MetadataPackScanStrategy: skipping subdir, no metadata.json:" << subdirPath;
                 continue;
             }

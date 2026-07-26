@@ -141,17 +141,24 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // silently fall back to the library default. Route through
         // toDouble() and round to int so `5.0` and `5` both produce 5.
         const qreal rawDouble = obj.value(QLatin1String(JsonFieldMinDistance)).toDouble(DefaultMinDistance);
-        const int raw = qRound(rawDouble);
         // Negative minDistance would make the distance-skip check
         // trivially true for every animation (no real distance is
         // less than a negative threshold), effectively disabling the
         // skip everywhere. Zero is the documented "no skip" value
         // and is accepted.
-        if (raw < 0) {
-            qCWarning(lcProfile).nospace()
-                << "Profile::fromJson: rejecting negative minDistance " << raw << " — library default will apply";
+        //
+        // Range-checked BEFORE the round, like the duration and
+        // staggerInterval branches: `qRound` on a non-finite or
+        // out-of-int-range double is undefined behaviour, and this
+        // value comes from a file a user can hand-edit. Checking the
+        // rounded result instead only worked by accident, on the
+        // platform where the UB conversion happens to pin to INT_MIN.
+        if (!std::isfinite(rawDouble) || rawDouble < 0.0 || rawDouble > qreal(std::numeric_limits<int>::max())) {
+            qCWarning(lcProfile).nospace() << "Profile::fromJson: rejecting minDistance " << rawDouble
+                                           << " (expected 0 <= minDistance <= " << std::numeric_limits<int>::max()
+                                           << ") — library default will apply";
         } else {
-            p.minDistance = raw;
+            p.minDistance = qRound(rawDouble);
         }
     }
     if (obj.contains(QLatin1String(JsonFieldSequenceMode))) {
