@@ -59,7 +59,7 @@ class MyPlugin : public PhosphorCompositor::IGeometryHandler,
 
         connect(&m_client, &PhosphorCompositor::DaemonClient::daemonReady,
                 this, [this]() {
-            m_client.registerBridge("river", PhosphorProtocol::Service::ApiVersion, {"borderless", "animation"});
+            m_client.registerBridge(QStringLiteral("river"), PhosphorProtocol::Service::ApiVersion, {"borderless", "animation"});
         });
     }
 

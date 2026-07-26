@@ -116,6 +116,14 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
                 qCInfo(PhosphorTileEngine::lcTileEngine)
                     << "windowOpened:" << windowId << "on autotile screen" << screenId
                     << "defers to snap — carries a cross-screen snap restore";
+                // A refused-first-open phantom key (the very case the
+                // membership gate exists for) must not survive the defer:
+                // isWindowTracked would keep answering true for a window
+                // snap is about to own, misrouting the daemon's float and
+                // cross-screen handoff dispatch.
+                if (deferKeyIt != m_states.windowKeys().constEnd()) {
+                    m_states.removeWindow(windowId);
+                }
                 return;
             }
         }

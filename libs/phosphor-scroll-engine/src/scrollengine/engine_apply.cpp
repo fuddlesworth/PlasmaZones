@@ -90,6 +90,11 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
 {
     ScrollState* state = stateForKey(currentKeyForScreen(screenId), false);
     if (!state) {
+        // No state for the CURRENT context (fresh desktop, or the state was
+        // just pruned) — the previous context's indicator must not stay
+        // painted; the overlay is driven solely by tabStripsChanged, so
+        // this bail is its only chance to clear.
+        clearTabStripsForScreen(screenId);
         return;
     }
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);

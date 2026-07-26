@@ -240,7 +240,10 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
         return false; // degenerate area: qBound(1, …, workH) would invert
     }
     // Current pixel height: read it off a fresh relayout so the adjustment
-    // starts from what is actually on screen (Auto heights included).
+    // starts from what is actually on screen. A targeted per-tile helper
+    // cannot replace this: an Auto height only gets a pixel value from the
+    // full column distribution (floors, budget rebalance), so the relayout
+    // IS the resolution. Shortcut-rate path, not per-frame.
     int currentPx = workH;
     const ResolvedStrip resolved = relayout(params);
     for (const ResolvedColumn& rc : resolved.columns) {
@@ -299,6 +302,12 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
         if (!(col.width == acked)) {
             col.width = acked;
             changed = true;
+            // Same invariant as every other width mutator in this file: a
+            // width write invalidates a pending maximize-toggle restore for
+            // this column.
+            if (m_preMaximizeColumnIdx == colIdx) {
+                m_preMaximizeColumnIdx = -1;
+            }
         }
     }
     // Only meaningful for multi-tile columns: a lone tile always fills the

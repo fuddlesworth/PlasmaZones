@@ -27,8 +27,9 @@ P_STORE_GET(int, scrollingDefaultColumnWidthKind, tilingScrollingGroup, defaultC
 // Hand-written kind setter: the shared value key serves two kinds under one
 // schema clamp, so a kind flip must coerce the stored value into the new
 // kind's range — otherwise Fixed→Proportion leaves 800 stored (engine clamps
-// to 100%) or Proportion→Fixed leaves 0.5 stored (a 1px column) while the
-// page displays something else entirely.
+// to 100%) or Proportion→Fixed leaves 0.5 stored (the engine's qMax(1, …)
+// backstop renders it one pixel wide) while the page displays something
+// else entirely.
 void Settings::setScrollingDefaultColumnWidthKind(int value)
 {
     const int before =
@@ -47,12 +48,18 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
     // next write and the engine renders a degenerate-but-clamped column
     // (its own load applies qMax(1, …)) — the page rewrites the pair on
     // first touch of either row.
+    // The kind flip is announced FIRST: a QML handler keyed on the kind
+    // NOTIFY must observe the new kind before (not after) the value
+    // coercion and the engine refresh it triggers.
+    Q_EMIT scrollingDefaultColumnWidthKindChanged();
     const qreal stored =
         m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
-    const bool wasFixed = before == ConfigDefaults::scrollingWidthKindFixed();
     const bool isFixed = after == ConfigDefaults::scrollingWidthKindFixed();
     const bool isProportion = after == ConfigDefaults::scrollingWidthKindProportion();
-    if (isFixed && !wasFixed) {
+    // No before/after kind comparison is needed inside the arms: the
+    // early-return above guarantees after != before, so entering Fixed
+    // implies the previous kind was not Fixed.
+    if (isFixed) {
         // Entering Fixed from anywhere: seed a sane pixel width. (This also
         // means pixels retained across a Fixed→ClientDecides hop would be
         // re-seeded on the way back, so there is nothing to retain — see
@@ -66,7 +73,6 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
         // qBound(0.05, …, 1.0) would open every column at 100% width.
         setScrollingDefaultColumnWidthValue(ConfigDefaults::scrollingDefaultColumnWidthValue());
     }
-    Q_EMIT scrollingDefaultColumnWidthKindChanged();
     // One aggregate emit per kind flip: when the value coercion above ran,
     // its nested setter already emitted settingsChanged — a second emit here
     // would run the engine's refresh+retile sweep twice for one user action.
@@ -80,14 +86,16 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
 P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, tilingScrollingGroup, defaultColumnWidthValueKey, double)
 
 // Hand-written value setter: kind-aware clamp (Proportion values live in
-// [0.05, 1.0]; Fixed in whole pixels with a 1px floor) — the schema clamp
-// alone spans both ranges.
+// [ValueMin, ProportionMax]; Fixed in pixels with a FixedMin floor, rounded
+// to whole pixels by the engine on load) — the schema clamp alone spans
+// both ranges.
 void Settings::setScrollingDefaultColumnWidthValue(qreal value)
 {
     const bool isFixed = scrollingDefaultColumnWidthKind() == ConfigDefaults::scrollingWidthKindFixed();
     value = isFixed ? qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthFixedMin(), value,
                                     ConfigDefaults::scrollingDefaultColumnWidthValueMax())
-                    : qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value, 1.0);
+                    : qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value,
+                                    ConfigDefaults::scrollingDefaultColumnWidthProportionMax());
     const qreal before =
         m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
     m_store->write(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey(), value);

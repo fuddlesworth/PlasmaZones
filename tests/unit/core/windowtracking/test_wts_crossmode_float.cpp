@@ -83,7 +83,7 @@ private Q_SLOTS:
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsCrossModeFloat(nullptr);
         m_zoneDetector = new StubZoneDetectorCrossModeFloat(nullptr);
-        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
         m_engine->setEngineSettings(m_settings);
         m_service->setSnapState(m_engine->snapState());

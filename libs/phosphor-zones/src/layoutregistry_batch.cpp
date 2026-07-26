@@ -58,6 +58,9 @@ void LayoutRegistry::clearAutotileAssignments()
 
     // Drop autotile quick-layout slots — clearing autotile everywhere
     // includes the per-mode autotile bindings. Snapping slots are untouched.
+    // The unchecked deref is safe by construction: Autotile is a
+    // compile-time argument with a slot array (only Scrolling yields
+    // nullopt).
     auto& autotileSlots = m_quickLayoutSlots[*slotIndexFor(AssignmentEntry::Autotile)];
     if (!autotileSlots.isEmpty()) {
         autotileSlots.clear();

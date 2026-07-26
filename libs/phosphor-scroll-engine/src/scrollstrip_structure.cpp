@@ -112,7 +112,8 @@ bool ScrollStrip::insertWindow(const QString& windowId, const ColumnWidth& width
     return true;
 }
 
-bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const ColumnWidth& width, ColumnDisplay display,
+bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const ColumnWidth& width,
+                                               std::optional<ColumnDisplay> displayOverride,
                                                const ScrollLayoutParams& params, int minWidth, int minHeight)
 {
     if (windowId.isEmpty() || containsWindow(windowId)) {
@@ -120,7 +121,8 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
     }
     Column* col = activeColumnMutable();
     if (!col) {
-        return insertWindow(windowId, width, display, params, minWidth, minHeight);
+        return insertWindow(windowId, width, displayOverride.value_or(ColumnDisplay::Normal), params, minWidth,
+                            minHeight);
     }
     Tile tile;
     tile.windowId = windowId;
@@ -130,10 +132,13 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
     col->activeTileIdx = col->tiles.size() - 1;
     // The arrival joins an EXISTING column: the column's width intent is
     // the host's and deliberately stays (an open-rule width override would
-    // resize every sibling in the stack), but a display override (tabbed)
-    // is column-level presentation the rule can legitimately set.
-    if (display != col->display) {
-        col->display = display;
+    // resize every sibling in the stack). Display is column-level
+    // presentation an EXPLICIT openTabbed rule can legitimately set; a
+    // disengaged override (plain consume-open) keeps the host's display —
+    // overwriting with the config default would silently un-tab a column
+    // the user toggled.
+    if (displayOverride && *displayOverride != col->display) {
+        col->display = *displayOverride;
     }
     Q_UNUSED(width)
     return true;
@@ -393,7 +398,6 @@ bool ScrollStrip::moveActiveColumn(int delta, const ScrollLayoutParams& params)
     if (m_activeColumnIdx < 0 || target < 0 || target >= m_columns.size()) {
         return false;
     }
-    const int prevIdx = m_activeColumnIdx;
     const int oldViewX = viewXFor(params);
     m_columns.swapItemsAt(m_activeColumnIdx, target);
     if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
@@ -402,7 +406,11 @@ bool ScrollStrip::moveActiveColumn(int delta, const ScrollLayoutParams& params)
         m_preMaximizeColumnIdx = m_activeColumnIdx;
     }
     m_activeColumnIdx = target;
-    reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    // prevIdx = -1: the move shifted indices, so the saved index names a
+    // DIFFERENT column now (the OnOverflow prevW hazard removeWindowInternal
+    // documents) — and a move does not change WHICH window is focused, so
+    // no entering-edge/overflow test should fire; keep the view stationary.
+    reanchorAfterFocusChange(-1, oldViewX, params);
     return true;
 }
 
@@ -411,7 +419,6 @@ bool ScrollStrip::moveActiveColumnTo(int target, const ScrollLayoutParams& param
     if (m_activeColumnIdx < 0 || target < 0 || target >= m_columns.size() || target == m_activeColumnIdx) {
         return false;
     }
-    const int prevIdx = m_activeColumnIdx;
     const int oldViewX = viewXFor(params);
     m_columns.move(m_activeColumnIdx, target);
     // Pre-maximize slot follows the same element move.
@@ -425,7 +432,8 @@ bool ScrollStrip::moveActiveColumnTo(int target, const ScrollLayoutParams& param
         }
     }
     m_activeColumnIdx = target;
-    reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    // prevIdx = -1: same rationale as moveActiveColumn.
+    reanchorAfterFocusChange(-1, oldViewX, params);
     return true;
 }
 
@@ -434,7 +442,6 @@ bool ScrollStrip::moveActiveColumnToFirst(const ScrollLayoutParams& params)
     if (m_activeColumnIdx <= 0) {
         return false;
     }
-    const int prevIdx = m_activeColumnIdx;
     const int oldViewX = viewXFor(params);
     m_columns.move(m_activeColumnIdx, 0);
     if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
@@ -443,7 +450,8 @@ bool ScrollStrip::moveActiveColumnToFirst(const ScrollLayoutParams& params)
         ++m_preMaximizeColumnIdx;
     }
     m_activeColumnIdx = 0;
-    reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    // prevIdx = -1: same rationale as moveActiveColumn.
+    reanchorAfterFocusChange(-1, oldViewX, params);
     return true;
 }
 
@@ -453,7 +461,6 @@ bool ScrollStrip::moveActiveColumnToLast(const ScrollLayoutParams& params)
     if (m_activeColumnIdx < 0 || m_activeColumnIdx >= last) {
         return false;
     }
-    const int prevIdx = m_activeColumnIdx;
     const int oldViewX = viewXFor(params);
     m_columns.move(m_activeColumnIdx, last);
     if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
@@ -462,7 +469,8 @@ bool ScrollStrip::moveActiveColumnToLast(const ScrollLayoutParams& params)
         --m_preMaximizeColumnIdx;
     }
     m_activeColumnIdx = last;
-    reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    // prevIdx = -1: same rationale as moveActiveColumn.
+    reanchorAfterFocusChange(-1, oldViewX, params);
     return true;
 }
 
@@ -570,6 +578,12 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
     // Alone in its column: consume into the neighbour on the delta side.
     const int neighbourIdx = m_activeColumnIdx + delta;
     if (neighbourIdx < 0 || neighbourIdx >= m_columns.size()) {
+        return false;
+    }
+    // Same refusal as consumeWindowIntoColumn: a fully-minimized column is
+    // skipped by every focus verb, so consuming into one would make the
+    // window vanish from view.
+    if (m_columns.at(neighbourIdx).isFullyMinimized()) {
         return false;
     }
     const Tile taken = col->tiles.takeAt(0);

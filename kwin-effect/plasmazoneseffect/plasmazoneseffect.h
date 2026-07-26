@@ -600,7 +600,11 @@ private:
      */
     bool isWindowMarkedSnapped(const QString& windowId) const;
 
-    void notifyWindowClosed(KWin::EffectWindow* w);
+    /// @p preTeardownScreenId: the window's screen resolved BEFORE
+    /// onWindowClosed wiped the scroll tracking override — re-deriving here
+    /// would fall back to position, and a parked scroll column's frame can
+    /// sit on a NEIGHBOUR output.
+    void notifyWindowClosed(KWin::EffectWindow* w, const QString& preTeardownScreenId);
     void notifyWindowActivated(KWin::EffectWindow* w);
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
 
@@ -730,7 +734,12 @@ public:
     void clearScreenIdCache()
     {
         m_idCaches.screenIdCache.clear();
+        m_idCaches.connectedPhysicalIdsValid = false;
     }
+
+    /// Connected physical screen ids, cached until the next screen
+    /// add/remove/reconfigure (same invalidation points as screenIdCache).
+    const QSet<QString>& connectedPhysicalIds() const;
 
     // Animation sequence mode: 0=all at once, 1=one by one in zone order (for batch snaps)
     int cachedAnimationSequenceMode() const

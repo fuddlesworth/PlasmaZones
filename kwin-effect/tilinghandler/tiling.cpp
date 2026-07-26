@@ -624,7 +624,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // id-keyed consumer (close records, minimize routing, rule
             // Mode stamp, drag drop) to the old monitor forever.
             m_effect->m_trackedScreenPerWindow[snap.window] = snap.screenId;
-            m_notifiedWindowScreens[snap.windowId] = snap.screenId;
+            // Gated on tracked membership: a batch can still carry a window
+            // whose open rolled back or was demoted by the desktop-switch
+            // pass — writing its screen here would desynchronise the pair
+            // (m_notifiedWindows says untracked, the screen map answers)
+            // and feed notifyWindowAdded a self-referential seed.
+            if (m_notifiedWindows.contains(snap.windowId)) {
+                m_notifiedWindowScreens[snap.windowId] = snap.screenId;
+            }
             saveAndRecordPreTileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
             KWin::Window* kwForLog = snap.window->window();
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry

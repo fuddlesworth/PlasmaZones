@@ -154,6 +154,17 @@ void Daemon::updateEngineScreens()
                 continue;
             }
             autotileScreens.insert(screenId);
+            // Pre-save snap floats for a screen entering autotile FROM
+            // SNAPPING — the exact twin of the scrolling branch above, and
+            // for the same reason: after the flip snap's capturePlacement
+            // refuses the no-longer-Snapping screen. Without this, only the
+            // mode-toggle shortcut and the global feature enable presaved,
+            // so a cascade-driven flip (KCM apply, rule, layout picker)
+            // silently dropped every window's snap-mode float bit.
+            if (!m_autotileEngine->isActiveOnScreen(screenId)
+                && !(m_scrollEngine && m_scrollEngine->isActiveOnScreen(screenId))) {
+                presaveSnapFloats(screenId);
+            }
             if (!algoId.isEmpty()) {
                 screenAlgorithms[screenId] = algoId;
             }
@@ -680,7 +691,11 @@ void Daemon::presaveSnapFloats(const QString& screenId)
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     const QStringList floatingIds = wts->floatingWindows();
     for (const QString& fid : floatingIds) {
-        if (m_autotileEngine->isModeSpecificFloated(fid)) {
+        // A window floated BY a tiling mode (either engine) is that mode's
+        // own float, not a snap float: capturing it here would poison the
+        // snap slot with a tiling-mode frame.
+        if (m_autotileEngine->isModeSpecificFloated(fid)
+            || (m_scrollEngine && m_scrollEngine->isModeSpecificFloated(fid))) {
             continue;
         }
         // When scoped to a screen, only snapshot windows on that screen.
@@ -871,11 +886,20 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
             // context-disabled scrolling target is excluded from the
             // derived set even though the cascade says Scrolling, and its
             // windows DO return to snapping and need the restore.
-            const bool headedToOtherEngine = !windowScreen.isEmpty()
-                && ((otherTilingMode == PhosphorZones::AssignmentEntry::Scrolling
-                     && m_derivedScrollingScreens.contains(windowScreen))
-                    || (otherTilingMode == PhosphorZones::AssignmentEntry::Autotile
-                        && m_derivedAutotileScreens.contains(windowScreen)));
+            // Outside the recompute (prunes fire this handler too) the
+            // derived snapshots are LAST-pass values, so prefer the live
+            // claim there; mid-pass (latch held) the derived sets are the
+            // fresh side and the live sets are the stale one.
+            const bool otherEngineClaims = m_updateEngineScreensInProgress
+                ? ((otherTilingMode == PhosphorZones::AssignmentEntry::Scrolling
+                    && m_derivedScrollingScreens.contains(windowScreen))
+                   || (otherTilingMode == PhosphorZones::AssignmentEntry::Autotile
+                       && m_derivedAutotileScreens.contains(windowScreen)))
+                : ((otherTilingMode == PhosphorZones::AssignmentEntry::Scrolling && m_scrollEngine
+                    && m_scrollEngine->isActiveOnScreen(windowScreen))
+                   || (otherTilingMode == PhosphorZones::AssignmentEntry::Autotile && m_autotileEngine
+                       && m_autotileEngine->isActiveOnScreen(windowScreen)));
+            const bool headedToOtherEngine = !windowScreen.isEmpty() && otherEngineClaims;
             if (headedToOtherEngine) {
                 releasingEngine->clearModeSpecificFloatMarker(windowId);
                 qCDebug(lcDaemon) << "windowsReleased: skipping" << windowId

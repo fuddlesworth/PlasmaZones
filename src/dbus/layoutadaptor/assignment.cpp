@@ -718,6 +718,12 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
         qCWarning(lcDbusLayout) << "setAssignmentEntry: empty screen ID for" << screenId;
         return;
     }
+    // 0 = base (all-desktops) context; negatives are never a valid desktop
+    // number. setAllCombinedAssignments applies the same boundary rule.
+    if (virtualDesktop < 0) {
+        qCWarning(lcDbusLayout) << "setAssignmentEntry: negative virtualDesktop" << virtualDesktop << "for" << screenId;
+        return;
+    }
 
     // Validate snapping layout UUID if non-empty
     if (!snappingLayout.isEmpty()) {

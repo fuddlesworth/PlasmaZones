@@ -37,7 +37,11 @@ inline bool isAutotile(const QString& id)
 
 inline bool isScrolling(const QString& id)
 {
-    return id.startsWith(ScrollingId);
+    // Exact compare, not startsWith: unlike AutotilePrefix, this sentinel
+    // carries no payload — "scrolling:foo" is NOT a valid id, and prefix
+    // matching would classify it as Scrolling while silently dropping the
+    // "foo" in every consumer.
+    return id == ScrollingId;
 }
 
 /// Extract the algorithm id portion from an autotile preview id.

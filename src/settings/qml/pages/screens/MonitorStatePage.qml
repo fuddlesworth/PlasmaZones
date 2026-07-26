@@ -14,7 +14,6 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
-    property var _layouts: settingsController.layouts
     // Bridge for LayoutComboBox — exposes only what it accesses.
     // The `layouts` property binding auto-generates a `layoutsChanged` signal,
     // which LayoutComboBox's Connections target listens for.
@@ -74,12 +73,12 @@ SettingsFlickable {
     }
 
     function _findLayout(layoutId) {
-        if (!layoutId || !_layouts)
+        if (!layoutId || !_layoutBridge.layouts)
             return null;
 
-        for (var i = 0; i < _layouts.length; i++) {
-            if (_layouts[i].id === layoutId)
-                return _layouts[i];
+        for (var i = 0; i < _layoutBridge.layouts.length; i++) {
+            if (_layoutBridge.layouts[i].id === layoutId)
+                return _layoutBridge.layouts[i];
         }
         return null;
     }
@@ -99,11 +98,21 @@ SettingsFlickable {
         var activity = state.activity || "";
         var snapping = "";
         var tiling = "";
+        // Lossless mode toggling: every staged entry carries the SIBLING
+        // mode's resolved pick too. The daemon rebuilds the whole context
+        // rule from the entry, so staging an empty sibling field would drop
+        // a stored layout/algorithm for good — pin to Scrolling and back
+        // and the zone layout would be gone. An explicit "Default" pick
+        // (cleared flag) deliberately carries empty so the sibling keeps
+        // following the global default.
+        var siblingSnapping = stateView.localLayoutCleared ? "" : (stateView.localLayoutId || state.layoutId || "");
+        var siblingAlgo = stateView.localAlgorithmCleared ? "" : (stateView.localAlgorithmId || state.algorithmId || "");
+        var siblingTiling = siblingAlgo ? "autotile:" + siblingAlgo : "";
         if (stateView.isScrolling) {
-            // Scrolling has neither a zone layout nor a tiling algorithm, so
-            // the entry carries the mode alone. Both layout fields stay empty
-            // and there is no "Default" pick to honour.
-            settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, "", "");
+            // Scrolling has neither a zone layout nor a tiling algorithm of
+            // its own: the entry carries the mode plus both preserved
+            // sibling fields.
+            settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, siblingSnapping, siblingTiling);
             return;
         }
         if (stateView.localMode === 1) {
@@ -127,11 +136,12 @@ SettingsFlickable {
                 // algorithm" — so the switch commits, the algorithm keeps
                 // FOLLOWING the global default (never frozen to today's
                 // value), and the combo honestly keeps showing "Default".
-                settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, "", "");
+                settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, siblingSnapping, "");
                 return;
             }
 
             tiling = "autotile:" + algoId;
+            snapping = siblingSnapping;
         } else {
             if (stateView.localLayoutCleared) {
                 // The user explicitly picked "Default": stage an assignment
@@ -153,11 +163,12 @@ SettingsFlickable {
                 // while the button group showed Snapping. Stage a mode-only
                 // entry; the daemon accepts a bare mode exactly as it does
                 // for Scrolling above.
-                settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, "", "");
+                settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, "", siblingTiling);
                 return;
             }
 
             snapping = layoutId;
+            tiling = siblingTiling;
         }
         settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, snapping, tiling);
     }
@@ -208,7 +219,7 @@ SettingsFlickable {
         }
 
         function onLayoutsChanged() {
-            // _layouts is bound to settingsController.layouts and refreshes on
+            // _layoutBridge.layouts is bound to settingsController.layouts and refreshes on
             // its own layoutsChanged; only the dependent view needs a nudge.
             root._refresh();
         }
@@ -388,6 +399,12 @@ SettingsFlickable {
             SettingsButtonGroup {
                 Layout.alignment: Qt.AlignHCenter
                 Accessible.name: i18n("Placement mode")
+                // Deliberately NOT gated on appSettings.autotileEnabled: an
+                // assignment is durable state, and hiding the Tiling button
+                // while a screen is already assigned Tiling would make that
+                // state unrepresentable here. With the feature disabled the
+                // router downgrades the screen to Snapping until it is
+                // re-enabled; the assignment itself is preserved.
                 model: [i18nc("tiling mode name", "Snapping"), i18nc("tiling mode name", "Tiling"), i18nc("tiling mode name", "Scrolling")]
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {
@@ -426,7 +443,7 @@ SettingsFlickable {
                 Layout.alignment: Qt.AlignHCenter
                 visible: stateView.isTiling
                 appSettings: root._layoutBridge
-                currentLayoutId: "autotile:" + stateView.localAlgorithmId
+                currentLayoutId: stateView.localAlgorithmId ? "autotile:" + stateView.localAlgorithmId : ""
                 layoutFilter: 1
                 noneText: i18n("Default")
                 showPreview: true

@@ -124,6 +124,18 @@ KWin::LogicalOutput* PlasmaZonesEffect::windowOutput(KWin::EffectWindow* w) cons
     return output ? output : w->screen();
 }
 
+const QSet<QString>& PlasmaZonesEffect::connectedPhysicalIds() const
+{
+    if (!m_idCaches.connectedPhysicalIdsValid) {
+        m_idCaches.connectedPhysicalIds.clear();
+        for (const auto* output : KWin::effects->screens()) {
+            m_idCaches.connectedPhysicalIds.insert(outputScreenId(output));
+        }
+        m_idCaches.connectedPhysicalIdsValid = true;
+    }
+    return m_idCaches.connectedPhysicalIds;
+}
+
 QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
 {
     if (!w) {
@@ -138,23 +150,14 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
     // engine-driven handoffs, which update the tracked screen first.
     // hasScrollingScreens short-circuit keeps the common no-scrolling
     // session on the pure positional path (no id-cache lookups per call).
-    // m_tilingHandler is constructed first and lives for the effect's
-    // lifetime (the VS re-resolve loop below derefs it unguarded for the
-    // same reason).
+    // Both invariant gates (tiled membership AND connected output) live in
+    // scrollTrackedScreenFor itself. m_tilingHandler is constructed first
+    // and lives for the effect's lifetime (the VS re-resolve loop below
+    // derefs it unguarded for the same reason).
     if (m_tilingHandler->hasScrollingScreens()) {
         const QString tracked = m_tilingHandler->scrollTrackedScreenFor(getWindowId(w));
         if (!tracked.isEmpty()) {
-            // The override only holds while the tracked screen's physical
-            // output still exists: on unplug/DPMS-off KWin reassigns the
-            // window and the daemon's scrollingScreensChanged lags — until
-            // it lands, every id-keyed consumer would otherwise keep
-            // resolving to the dead output.
-            const QString trackedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(tracked);
-            for (const auto* output : KWin::effects->screens()) {
-                if (outputScreenId(output) == trackedPhysical) {
-                    return tracked;
-                }
-            }
+            return tracked;
         }
     }
     const QPointF cf = w->frameGeometry().center();
@@ -384,17 +387,25 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 {
                     // Position-based resolution (getWindowScreenId), consistent
                     // with the daemon — do not trust window->screen() for
-                    // identical-model monitors. Scroll-managed windows are
-                    // safe here: getWindowScreenId answers from the engine's
-                    // tracked screen for them, so a parked frame's position
-                    // never writes a neighbour id into these maps.
+                    // identical-model monitors. For SCROLL-managed windows
+                    // this re-resolve is deliberately inert: getWindowScreenId
+                    // answers from the engine's tracked screen (a parked
+                    // frame's position is meaningless), so writing it back
+                    // re-keys nothing. That is acceptable, not a gap: the
+                    // daemon retiles every scrolling screen on a VS
+                    // reconfigure, and the tile-apply path rewrites both
+                    // maps with the new effective ids — the daemon, not this
+                    // loop, is the re-keying authority for strip windows.
+                    const QString windowId = self->getWindowId(window);
+                    if (!self->m_tilingHandler->scrollTrackedScreenFor(windowId).isEmpty()) {
+                        continue;
+                    }
                     const QString newScreenId = self->getWindowScreenId(window);
                     if (!newScreenId.isEmpty()) {
                         it.value() = newScreenId;
                         // Also update the autotile handler's notified screen map
                         // so slotWindowFrameGeometryChanged does not compare against
                         // the stale pre-config-change screen ID.
-                        const QString windowId = self->getWindowId(window);
                         self->m_tilingHandler->updateNotifiedScreen(windowId, newScreenId);
                     }
                 }
@@ -456,6 +467,7 @@ void PlasmaZonesEffect::onVirtualScreensChanged(const QString& physicalScreenId)
 {
     qCInfo(lcEffect) << "Virtual screens changed for" << physicalScreenId;
     m_idCaches.screenIdCache.clear();
+    m_idCaches.connectedPhysicalIdsValid = false;
     m_lastEffectiveScreenId.clear();
     // Temporarily disable VS-aware crossing detection while the async fetch is in-flight.
     // Without this, slotWindowFrameGeometryChanged uses stale boundary definitions from the

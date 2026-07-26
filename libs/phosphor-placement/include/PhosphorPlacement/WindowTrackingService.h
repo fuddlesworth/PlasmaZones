@@ -30,7 +30,6 @@
 #include <utility>
 
 namespace PhosphorZones {
-class IZoneDetector;
 class Layout;
 class LayoutRegistry;
 class Zone;
@@ -83,7 +82,6 @@ class PHOSPHORPLACEMENT_EXPORT WindowTrackingService : public QObject, public Ph
 
 public:
     explicit WindowTrackingService(PhosphorZones::LayoutRegistry* layoutManager,
-                                   PhosphorZones::IZoneDetector* zoneDetector,
                                    PhosphorScreens::ScreenManager* screenManager,
                                    PhosphorWorkspaces::VirtualDesktopManager* vdm,
                                    IGeometryResolver* geometryResolver = nullptr, PlacementConfig config = {},
@@ -1069,7 +1067,6 @@ private:
 
     // Dependencies
     PhosphorZones::LayoutRegistry* m_layoutManager;
-    PhosphorZones::IZoneDetector* m_zoneDetector;
     SnapStateResolver m_snapResolver;
     PhosphorEngine::WindowPlacementStore m_placementStore;
     IGeometryResolver* m_geometryResolver;

@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "windowtrackingadaptor.h"
+#include "internal.h"
 #include "core/resolve/daemongeometryresolver.h"
 #include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
@@ -362,12 +363,11 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         ctx.wasFloating = true;
         ctx.sourceGeometry = m_frameGeometry.value(windowId);
         ctx.minSize = source ? source->windowMinimumSize(windowId) : QSize();
-        if (source && source != dest) {
-            source->handoffRelease(windowId);
+        const bool adopted = WindowTrackingInternal::guardedHandoff(source, dest, ctx, trackedScreen);
+        if (adopted) {
+            qCInfo(lcDbusWindow) << "windowScreenChanged: floating window" << windowId << "moved from" << trackedScreen
+                                 << "to" << newScreenId << "- handoff complete";
         }
-        dest->handoffReceive(ctx);
-        qCInfo(lcDbusWindow) << "windowScreenChanged: floating window" << windowId << "moved from" << trackedScreen
-                             << "to" << newScreenId << "- handoff complete";
         return;
     }
 
@@ -797,6 +797,16 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
 void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
 {
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
+    // Canonical view of the same set, for maps keyed on CANONICAL ids (the
+    // engine relays feed relayWindowFloatingChanged canonical ids, so
+    // m_broadcastFloating must be swept in that key space — a raw sweep
+    // would erase a class-mutating app's dedup entry every pass and the
+    // next relay would re-broadcast an unchanged float state).
+    QSet<QString> canonicalAlive;
+    canonicalAlive.reserve(aliveWindowIds.size());
+    for (const QString& id : aliveWindowIds) {
+        canonicalAlive.insert(m_service->canonicalizeForLookup(id));
+    }
     int persistedPruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine || m_scrollEngine) {
         // The engines key every internal map (m_states reverse maps,
@@ -810,14 +820,9 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
         // composite differs from the canonical. A raw comparison would then
         // miss the live window in the alive set and FORCE-REMOVE it from the
         // layout. Canonicalize each alive id back to its registry identity
-        // ONCE, then prune every non-null engine with the same set
-        // (passthrough for ids the registry never saw — never worse than
-        // the raw set).
-        QSet<QString> canonicalAlive;
-        canonicalAlive.reserve(aliveWindowIds.size());
-        for (const QString& id : aliveWindowIds) {
-            canonicalAlive.insert(m_service->canonicalizeForLookup(id));
-        }
+        // ONCE (hoisted to the top of this method), then prune every
+        // non-null engine with the same set (passthrough for ids the
+        // registry never saw — never worse than the raw set).
         for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.data(), m_scrollEngine.data()}) {
             if (engine) {
                 persistedPruned += engine->pruneStaleWindows(canonicalAlive);
@@ -843,7 +848,7 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     // would otherwise leak if the window died without a windowClosed signal.
     // Not persisted, so it does not feed the save-scheduling decision below.
     for (auto it = m_broadcastFloating.begin(); it != m_broadcastFloating.end();) {
-        if (!alive.contains(it.key())) {
+        if (!alive.contains(it.key()) && !canonicalAlive.contains(it.key())) {
             it = m_broadcastFloating.erase(it);
         } else {
             ++it;

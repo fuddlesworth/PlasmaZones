@@ -31,6 +31,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "tileenginelogging.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -530,6 +531,50 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
     if (pruned > 0) {
         qCInfo(PhosphorTileEngine::lcTileEngine)
             << "Pruned" << pruned << "TilingStates for removed desktop" << removedDesktop;
+    }
+}
+
+void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
+{
+    if (physicalScreenId.isEmpty()) {
+        return;
+    }
+    // Match the physical id and every virtual sub-screen of it (samePhysical
+    // strips the "/vs:N" suffix). All desktops/activities: this is the
+    // whole-output reap that updateEngineScreens' current-context sweep
+    // cannot perform.
+    const auto matches = [&physicalScreenId](const QString& screenId) {
+        return !screenId.isEmpty() && PhosphorIdentity::VirtualScreenId::samePhysical(screenId, physicalScreenId);
+    };
+    int pruned = 0;
+    m_states.removeStatesIf(
+        [&](const TilingStateKey& key, PhosphorTiles::TilingState*) {
+            return matches(key.screenId);
+        },
+        [&](const TilingStateKey& key, PhosphorTiles::TilingState* state) {
+            m_userTunedSplitRatio.remove(key);
+            m_userTunedMasterCount.remove(key);
+            state->deleteLater();
+            ++pruned;
+        });
+    m_states.removeWindowsIf([&](const QString&, const TilingStateKey& key) {
+        return matches(key.screenId);
+    });
+    // Stashed bags go too: a stale stash must not replay someone else's
+    // layout if the connector id ever returns (same policy as the desktop
+    // prune above; a replug is a fresh start).
+    std::erase_if(m_scriptStateStash, [&](const auto& entry) {
+        return matches(entry.first.screenId);
+    });
+    // In-memory resolver overrides for the dead output; the persisted
+    // per-screen settings survive, matching the toggle-off contract.
+    if (m_configResolver) {
+        m_configResolver->removeOverridesForScreen(physicalScreenId);
+    }
+    m_context.removeScreensIf(matches);
+    if (pruned > 0) {
+        qCInfo(PhosphorTileEngine::lcTileEngine)
+            << "Pruned" << pruned << "TilingStates for removed screen" << physicalScreenId;
     }
 }
 

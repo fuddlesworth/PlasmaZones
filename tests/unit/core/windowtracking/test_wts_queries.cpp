@@ -158,7 +158,7 @@ private Q_SLOTS:
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsQueries(nullptr);
         m_zoneDetector = new StubZoneDetectorQueries(nullptr);
-        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
         m_engine->setEngineSettings(m_settings);
         m_service->setSnapState(m_engine->snapState());
@@ -403,8 +403,8 @@ private Q_SLOTS:
         constexpr int kInset = 4;
         StubBorderInsetResolver resolver(kInset);
         // unique_ptr so a failed assertion's early return can't leak the local.
-        const auto insetService = std::make_unique<PhosphorPlacement::WindowTrackingService>(
-            m_layoutManager, m_zoneDetector, nullptr, nullptr, &resolver);
+        const auto insetService =
+            std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, nullptr, nullptr, &resolver);
 
         const QRect baseline = m_service->zoneGeometry(m_zoneIds[0], QString());
         const QRect inset = insetService->zoneGeometry(m_zoneIds[0], QString());
@@ -417,8 +417,8 @@ private Q_SLOTS:
     {
         // Inset 0 mirrors snappingShowBorder == false: geometry is unchanged.
         StubBorderInsetResolver resolver(0);
-        const auto service = std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, m_zoneDetector,
-                                                                                        nullptr, nullptr, &resolver);
+        const auto service =
+            std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, nullptr, nullptr, &resolver);
 
         QCOMPARE(service->zoneGeometry(m_zoneIds[0], QString()), m_service->zoneGeometry(m_zoneIds[0], QString()));
     }
@@ -427,8 +427,8 @@ private Q_SLOTS:
     {
         constexpr int kInset = 4;
         StubBorderInsetResolver resolver(kInset);
-        const auto insetService = std::make_unique<PhosphorPlacement::WindowTrackingService>(
-            m_layoutManager, m_zoneDetector, nullptr, nullptr, &resolver);
+        const auto insetService =
+            std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, nullptr, nullptr, &resolver);
 
         const QStringList multiZones = {m_zoneIds[0], m_zoneIds[1]};
         const QRect baseline = m_service->multiZoneGeometry(multiZones, QString());
@@ -473,8 +473,8 @@ private:
     EngineWithService makeEngineWithResolver(PhosphorPlacement::IGeometryResolver* resolver)
     {
         EngineWithService out;
-        out.service = std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, m_zoneDetector,
-                                                                                 nullptr, nullptr, resolver);
+        out.service =
+            std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, nullptr, nullptr, resolver);
         out.engine = std::make_unique<SnapEngine>(m_layoutManager, out.service.get(), m_zoneDetector, nullptr, nullptr);
         out.engine->setEngineSettings(m_settings);
         out.service->setSnapState(out.engine->snapState());

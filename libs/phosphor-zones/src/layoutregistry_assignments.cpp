@@ -326,18 +326,24 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
     // a miss would let a connector/VS retry surface a different (snapping)
     // assignment the legacy walk never reached. So tryResolve returns:
     //   - nullopt   -> no cascade entry; the caller may retry.
-    //   - {nullptr} -> an entry exists but yields no snap Layout* (Autotile,
-    //                  or a snap entry with empty/unknown layout id) — the
-    //                  cascade is settled, fall through to defaultLayout().
+    //   - {nullptr} -> an entry exists but yields no snap Layout* (any
+    //                  non-Snapping mode, or a snap entry with empty/unknown
+    //                  layout id) — the cascade is settled, fall through to
+    //                  defaultLayout().
     //   - {layout}  -> resolved snap layout.
     auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<PhosphorZones::Layout*> {
         const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
         if (!entry) {
             return std::nullopt; // genuine miss — the caller may retry
         }
-        // An entry exists; the cascade is settled — never retry. An Autotile
-        // entry (or a snap entry with an empty layout id) has no snap Layout*.
-        if (entry->mode == AssignmentEntry::Autotile || entry->snappingLayout.isEmpty()) {
+        // An entry exists; the cascade is settled — never retry. Any
+        // NON-Snapping mode has no snap Layout*: an Autotile or Scrolling
+        // entry may still CARRY a non-empty snappingLayout (the lossless
+        // mode-toggle contract preserves the field), and resolving it here
+        // would hand ungated consumers (zone detection, window drag) zones
+        // from a layout the screen is not using. A snap entry with an empty
+        // layout id settles the same way.
+        if (entry->mode != AssignmentEntry::Snapping || entry->snappingLayout.isEmpty()) {
             return std::optional<PhosphorZones::Layout*>(nullptr);
         }
         return std::optional<PhosphorZones::Layout*>(layoutById(QUuid::fromString(entry->snappingLayout)));

@@ -430,18 +430,18 @@ void TestRuleController::authoringMetadata()
         fieldCategoryOrder.insert(f.value(QStringLiteral("wire")).toString(),
                                   f.value(QStringLiteral("categoryOrder")).toInt());
     }
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("appId")), 1); // Identity
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("windowType")), 6); // Type
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isTransient")), 6); // Type
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFullscreen")), 3); // State
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isMaximized")), 3); // State
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipTaskbar")), 4); // Taskbar & switcher
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipSwitcher")), 4); // Taskbar & switcher
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFloating")), 5); // Tiling
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("zone")), 5); // Tiling
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width")), 2); // Size
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height")), 2); // Size
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenId")), 0); // Context
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("appId"), -1), 1); // Identity
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("windowType"), -1), 6); // Type
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isTransient"), -1), 6); // Type
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFullscreen"), -1), 3); // State
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isMaximized"), -1), 3); // State
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipTaskbar"), -1), 4); // Taskbar & switcher
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipSwitcher"), -1), 4); // Taskbar & switcher
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFloating"), -1), 5); // Tiling
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("zone"), -1), 5); // Tiling
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width"), -1), 2); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height"), -1), 2); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenId"), -1), 0); // Context
 
     // The four match conditions (IsTransient/IsNotification/Width/Height) must be
     // authorable: present in the picker with the correct value kind, and with
@@ -523,17 +523,17 @@ void TestRuleController::authoringMetadata()
                                    a.value(QStringLiteral("categoryOrder")).toInt());
     }
     QVERIFY(sawFloat);
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap")), 0); // Gaps (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode")), 1); // Engine (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setSnappingLayout")), 2); // Snapping (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setTilingAlgorithm")), 3); // Tiling (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setAlgorithmParam")), 3); // Tiling (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setCenterFocusedColumn")), 4); // Scrolling (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed")), 8); // Window/Scrolling (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("overrideOverlayShader")), 5); // Overlay (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 6); // Animation (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity")), 7); // Appearance (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude")), 8); // Window (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap"), -1), 0); // Gaps (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode"), -1), 1); // Engine (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setSnappingLayout"), -1), 2); // Snapping (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setTilingAlgorithm"), -1), 3); // Tiling (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setAlgorithmParam"), -1), 3); // Tiling (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setCenterFocusedColumn"), -1), 4); // Scrolling (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed"), -1), 8); // Window/Scrolling (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("overrideOverlayShader"), -1), 5); // Overlay (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations"), -1), 6); // Animation (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity"), -1), 7); // Appearance (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude"), -1), 8); // Window (window)
 }
 
 void TestRuleController::matchIsContextOnlyClassifies()

@@ -28,6 +28,9 @@ private Q_SLOTS:
     void floatRestoresDisplayIntent();
     void pruneDropsWindowBookkeeping();
     void pruneRemovedScreenAndActivitiesSweep();
+    void stackedTileFloatRoundTripRestoresSlot();
+    void scheduledRetilesCoalesce();
+    void removedScreenReleasesWindows();
     void operationScreenFallbackIsDeterministic();
     void minSizeSeedsAndCarries();
     void minSizeSurvivesFloatRoundTrip();
@@ -35,6 +38,13 @@ private Q_SLOTS:
     void applyPathEmitsOnChangeOnly();
 
 private:
+    // NOTE: windowOpened's cross-screen snap-restore defer gate
+    // (setSnappingModeResolver + placementStore().peek) is deliberately
+    // untested here: makeEngine passes a null IWindowTrackingService, and
+    // faking the full tracking service just for the peek would drag half
+    // of phosphor-placement into this smoke suite. The gate's daemon-side
+    // wiring mirrors AutotileEngine's, whose twin is covered at the
+    // integration layer.
     static ScrollEngine* makeEngine(QObject* parent)
     {
         auto* engine = new ScrollEngine(nullptr, nullptr, parent);
@@ -251,18 +261,19 @@ void TestScrollEngineSmoke::pruneRemovedScreenAndActivitiesSweep()
 {
     // The other two prune entry points, same bookkeeping contract as the
     // desktop prune above. Removed-screen: the physical id AND its virtual
-    // sub-screens ("S1#0") are swept, but an id that merely shares the
-    // prefix ("S10") is not. Activities: only states whose key names an
-    // activity absent from the valid list go; activity-less states stay.
+    // sub-screens ("S1/vs:0", the PhosphorIdentity separator) are swept,
+    // but an id that merely shares the prefix ("S10") is not. Activities:
+    // only states whose key names an activity absent from the valid list
+    // go; activity-less states stay.
     QObject owner;
     ScrollEngine* engine = makeEngine(&owner);
     // The default fixture only activates S1/S2; the sub-screen and the
     // prefix-sharing sibling must be MANAGED or the sweep asserts below
     // pass vacuously.
     engine->setActiveScreens(
-        {QStringLiteral("S1"), QStringLiteral("S1#0"), QStringLiteral("S10"), QStringLiteral("S2")});
+        {QStringLiteral("S1"), QStringLiteral("S1/vs:0"), QStringLiteral("S10"), QStringLiteral("S2")});
     engine->windowOpened(QStringLiteral("app|p"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|v"), QStringLiteral("S1#0"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|v"), QStringLiteral("S1/vs:0"), 0, 0);
     engine->windowOpened(QStringLiteral("app|s10"), QStringLiteral("S10"), 0, 0);
     engine->setWindowFloat(QStringLiteral("app|p"), true, QStringLiteral("S1"));
     QVERIFY(engine->isWindowTracked(QStringLiteral("app|v")));
@@ -282,6 +293,101 @@ void TestScrollEngineSmoke::pruneRemovedScreenAndActivitiesSweep()
     QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|b")));
     // The activity-less S10 state predates the activity context and stays.
     QVERIFY(engine->isWindowTracked(QStringLiteral("app|s10")));
+}
+
+void TestScrollEngineSmoke::stackedTileFloatRoundTripRestoresSlot()
+{
+    // The stacked arm of the FloatRestore round trip: tileIndex +
+    // stackAnchor capture, and the anchor-resolved re-entry through
+    // insertWindowIntoColumnAt (every other float test uses a lone
+    // column, which takes the insertWindowAt branch instead).
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
+    engine->consumeOrExpelWindow(-1, QStringLiteral("S1")); // b joins a's column
+
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(QStringLiteral("S1")));
+    QCOMPARE(state->strip().columnCount(), 1);
+    QCOMPARE(state->strip().columns().at(0).tiles.at(1).windowId, QStringLiteral("app|b"));
+
+    engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
+    QCOMPARE(state->strip().columns().at(0).tiles.size(), 1);
+    engine->setWindowFloat(QStringLiteral("app|b"), false, QStringLiteral("S1"));
+    // b re-enters ITS slot in a's column, not a fresh column.
+    QCOMPARE(state->strip().columnCount(), 1);
+    QCOMPARE(state->strip().columns().at(0).tiles.size(), 2);
+    QCOMPARE(state->strip().columns().at(0).tiles.at(1).windowId, QStringLiteral("app|b"));
+
+    // Dead-anchor fallback: float b again, close the anchor sibling a —
+    // unfloat must open a FRESH column, never splice into a stranger.
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
+    engine->windowClosed(QStringLiteral("app|a"));
+    engine->setWindowFloat(QStringLiteral("app|b"), false, QStringLiteral("S1"));
+    const int bCol = state->strip().columnOfWindow(QStringLiteral("app|b"));
+    const int cCol = state->strip().columnOfWindow(QStringLiteral("app|c"));
+    QVERIFY(bCol >= 0);
+    QVERIFY(bCol != cCol);
+    QCOMPARE(state->strip().columns().at(bCol).tiles.size(), 1);
+}
+
+void TestScrollEngineSmoke::scheduledRetilesCoalesce()
+{
+    // Two schedules for one screen in one event-loop turn must produce
+    // exactly ONE applyLayout (observed through the tab-strip broadcast) —
+    // uncoverable under the old APPLESS main, where the queued retile
+    // never ran at all.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setScreenGeometryProviders(
+        [](const QString&) {
+            return QRect(0, 0, 1200, 800);
+        },
+        [](const QString&) {
+            return QRect(0, 0, 1200, 800);
+        });
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->toggleColumnTabbed(QStringLiteral("S1")); // tabbed → non-empty payloads
+    QCoreApplication::processEvents();
+
+    QSignalSpy stripSpy(engine, &ScrollEngine::tabStripsChanged);
+    engine->scheduleRetileForScreen(QStringLiteral("S1"));
+    engine->scheduleRetileForScreen(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    // Identical payload → the emit-on-change gate keeps the count at 0;
+    // the point is that the double schedule did not double-run (a second
+    // run would be invisible anyway under the gate, so drive the check
+    // through a payload change: untab between the two schedules).
+    QCOMPARE(stripSpy.count(), 0);
+    engine->scheduleRetileForScreen(QStringLiteral("S1"));
+    engine->toggleColumnTabbed(QStringLiteral("S1")); // schedules again + changes payload
+    QCoreApplication::processEvents();
+    QCOMPARE(stripSpy.count(), 1);
+}
+
+void TestScrollEngineSmoke::removedScreenReleasesWindows()
+{
+    // The daemon-facing hand-back contract: shrinking the screen set
+    // releases the leaving screen's windows in one windowsReleased with
+    // the screen named, and drops all engine bookkeeping for them.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S2"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S2"), 0, 0);
+    engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S2"));
+
+    QSignalSpy releasedSpy(engine, &ScrollEngine::windowsReleased);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCOMPARE(releasedSpy.count(), 1);
+    const QStringList released = releasedSpy.first().at(0).toStringList();
+    QVERIFY(released.contains(QStringLiteral("app|a")));
+    QVERIFY(released.contains(QStringLiteral("app|b")));
+    QVERIFY(releasedSpy.first().at(1).value<QSet<QString>>().contains(QStringLiteral("S2")));
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|a")));
+    QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|b")));
 }
 
 void TestScrollEngineSmoke::operationScreenFallbackIsDeterministic()
@@ -401,7 +507,17 @@ void TestScrollEngineSmoke::applyPathEmitsOnChangeOnly()
     QCoreApplication::processEvents();
     QVERIFY(stripSpy.count() > afterTab);
     QCOMPARE(stripSpy.last().at(1).toString(), QStringLiteral("[]"));
+    // "Exactly one": a further retile on the empty screen must not
+    // re-broadcast the latched empty payload.
+    const int afterEmpty = stripSpy.count();
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(stripSpy.count(), afterEmpty);
 }
 
-QTEST_APPLESS_MAIN(TestScrollEngineSmoke)
+// GUILESS (not APPLESS): a QCoreApplication provides the event
+// dispatcher the coalesced scheduleRetileForScreen and the prunes'
+// deleteLater need — under APPLESS every processEvents() in this file was
+// silently a no-op and the coalescing path had zero coverage.
+QTEST_GUILESS_MAIN(TestScrollEngineSmoke)
 #include "test_scrollengine_smoke.moc"

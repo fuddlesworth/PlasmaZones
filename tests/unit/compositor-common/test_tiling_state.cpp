@@ -151,6 +151,56 @@ private Q_SLOTS:
         QVERIFY(!border.tiledWindowsByScreen.contains(solo));
     }
 
+    // Boundary: cleaning up a window absent from every map must be a pure
+    // no-op — a regression that erased whole buckets on a miss would pass
+    // the positive-path test above unnoticed.
+    void testCleanupUnknownWindow_isNoOp()
+    {
+        const QString a = QStringLiteral("app|a");
+        const QString b = QStringLiteral("app|b");
+        PhosphorCompositor::BorderState border;
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, QStringLiteral("s1"), a);
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, QStringLiteral("s2"), b);
+
+        QSet<QString> notifiedWindows{a, b};
+        QHash<QString, QString> notifiedWindowScreens{{a, QStringLiteral("s1")}, {b, QStringLiteral("s2")}};
+        QSet<QString> minimizeFloatedWindows;
+        QHash<QString, QRect> tileTargetZones;
+        QHash<QString, QRect> centeredWaylandZones;
+        QSet<QString> monocleMaximizedWindows;
+        QHash<QString, QHash<QString, QRectF>> preTileGeometries;
+        PhosphorCompositor::TilingStateHelpers::TilingWindowState state{
+            notifiedWindows,      notifiedWindowScreens,   minimizeFloatedWindows, tileTargetZones,
+            centeredWaylandZones, monocleMaximizedWindows, preTileGeometries};
+
+        PhosphorCompositor::TilingStateHelpers::cleanupClosedWindowState(QStringLiteral("app|unknown"), border, state);
+
+        QVERIFY(border.tiledWindowsByScreen.value(QStringLiteral("s1")).contains(a));
+        QVERIFY(border.tiledWindowsByScreen.value(QStringLiteral("s2")).contains(b));
+        QCOMPARE(notifiedWindows.size(), 2);
+        QCOMPARE(notifiedWindowScreens.size(), 2);
+    }
+
+    // Boundary: an EMPTY keepScreen (no screen id resolved at the call
+    // site) strips the window from every bucket — pinned so the "invalid
+    // input at a system boundary" shape has a declared outcome instead of
+    // an accidental one.
+    void testRemoveFromOtherScreens_emptyKeepStripsEverywhere()
+    {
+        const QString windowId = QStringLiteral("app|1");
+        const QString other = QStringLiteral("other|1");
+        PhosphorCompositor::BorderState border;
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, QStringLiteral("s1"), windowId);
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, QStringLiteral("s2"), windowId);
+        PhosphorCompositor::TilingStateHelpers::addTiledOnScreen(border, QStringLiteral("s2"), other);
+
+        PhosphorCompositor::TilingStateHelpers::removeFromOtherScreens(border, windowId, QString());
+
+        QVERIFY(!PhosphorCompositor::TilingStateHelpers::isTiledWindow(border, windowId));
+        QVERIFY(border.tiledWindowsByScreen.value(QStringLiteral("s2")).contains(other));
+        QVERIFY(!border.tiledWindowsByScreen.contains(QStringLiteral("s1")));
+    }
+
     // =================================================================
     // WindowId: extractAppId leading separator edge case
     // =================================================================

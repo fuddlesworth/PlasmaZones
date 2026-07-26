@@ -276,6 +276,12 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     // windowFloatingChanged), assigns to zone(s), emits state change.
     m_adaptor->service()->markAsAutoSnapped(windowId);
     const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
+    // A shouldSnap result can carry an empty zoneId; committing it would
+    // record a snap to no zone (the drop path refuses the same shape).
+    if (zoneIds.first().isEmpty()) {
+        qCWarning(lcDbusWindow) << "shouldSnap resolved an empty zone id for" << windowId << "- skipping";
+        return false;
+    }
     if (zoneIds.size() > 1) {
         m_engine->commitMultiZoneSnap(windowId, zoneIds, result.screenId, SnapIntent::AutoRestored,
                                       result.virtualDesktop);

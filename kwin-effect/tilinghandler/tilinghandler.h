@@ -184,14 +184,12 @@ public:
     /// parked — its frame is its real position — and answering for it would
     /// pin every consumer (drag drop, rule Mode stamp, minimize routing) to
     /// the screen it floated away from.
-    QString scrollTrackedScreenFor(const QString& windowId) const
-    {
-        const QString tracked = m_notifiedWindowScreens.value(windowId);
-        if (tracked.isEmpty() || !m_scrollingScreens.contains(tracked)) {
-            return QString();
-        }
-        return TilingStateHelpers::isTiledWindow(m_border, windowId) ? tracked : QString();
-    }
+    /// Second half of the invariant, folded in (not left to call sites):
+    /// the answer only holds while the tracked screen's physical output is
+    /// still CONNECTED — on unplug/DPMS-off KWin reassigns the window and
+    /// the daemon's scrollingScreensChanged lags, and until it lands every
+    /// id-keyed consumer would keep resolving to the dead output.
+    QString scrollTrackedScreenFor(const QString& windowId) const;
 
     /// Cheap gate for callers that want to skip scroll-specific work in a
     /// session with no scrolling screens at all.
@@ -205,8 +203,14 @@ public:
     /// a border sweep, which on this path would re-create rule-matched
     /// decorations one event-loop turn AFTER the handler's
     /// clearAllDecorations, undoing the teardown. The generation bump still
-    /// voids in-flight property replies, and the caller runs its own
-    /// invalidateAllRuleCaches after every clear.
+    /// voids in-flight property replies.
+    ///
+    /// CALL-SITE CONTRACT: the ONE sanctioned caller is the effect's
+    /// serviceUnregistered teardown (lifecycle_wiring_daemon.cpp), which
+    /// runs invalidateAllRuleCaches immediately after — this clear changes
+    /// the Mode discriminator, and skipping the invalidate would leave rule
+    /// verdicts memoised against the dead session's stamp. A second caller
+    /// must carry the same pairing or use setScrollingScreens.
     void clearScrollingScreensForTeardown()
     {
         ++m_scrollingScreensGeneration;

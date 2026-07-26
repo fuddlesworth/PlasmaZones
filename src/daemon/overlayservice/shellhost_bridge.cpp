@@ -271,11 +271,11 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     // runs, so no slot-pointer nulling is needed here. We only have to
     // clear the daemon's PZ-content sentinels and disconnect the geom
     // watcher - those are the parallel-state bookkeeping the lib does
-    // not know about. m_scrollTabsHideGuard / m_scrollTabsHidePending are
-    // deliberately NOT erased here: the guard is a monotonic generation
-    // counter that must never restart (see its header doc), and a stale
-    // pending bit is benign — the next non-empty update treats it as
-    // "hide was in flight" and simply re-runs the show choreography.
+    // not know about. m_scrollTabsHideGuard is deliberately NOT erased:
+    // it is a monotonic generation counter that must never restart (see
+    // its header doc). The hide-pending bit has no such requirement — it
+    // is plain state for a shell that no longer exists, so drop it.
+    m_scrollTabsHidePending.remove(screenId);
     QObject::disconnect(it->overlayGeomConnection);
     it->overlayGeomConnection = {};
     it->overlayPhysScreen = nullptr;

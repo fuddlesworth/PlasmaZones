@@ -143,6 +143,14 @@ private Q_SLOTS:
         QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 1);
         adaptor.clearEngine();
         QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 0);
+        // The announce queued BEFORE clearEngine must NOT fire after it:
+        // the generation void (and the empty-union bail behind it) exists
+        // so a daemon-restart teardown never broadcasts an empty screen
+        // set the effect would treat as a genuine disable and answer with
+        // its destructive per-window teardown.
+        QSignalSpy postClearSpy(&adaptor, &TilingAdaptor::managedScreensChanged);
+        QCoreApplication::processEvents();
+        QCOMPARE(postClearSpy.count(), 0);
     }
 
     // -------------------------------------------------------------------------

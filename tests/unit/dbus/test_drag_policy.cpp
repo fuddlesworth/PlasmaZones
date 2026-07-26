@@ -10,14 +10,16 @@
  * m_cachedZoneSelectorEnabled caches that went stale after every settings
  * reload — see discussion #310) and into a daemon-side pure function.
  *
- * This test pins the function's behavior against every combination of the
- * three inputs that can change routing:
+ * This test pins the function's behavior against the inputs that can
+ * change routing:
  *
- *   (snap_enabled, screen_is_autotile, context_disabled)
+ *   (snap_enabled, screen_is_autotile, screen_is_scrolling,
+ *    window_tracked_by_scroll, context_disabled, reorder_mode)
  *     → PhosphorProtocol::DragPolicy.bypassReason + flags
  *
  * Precedence (first match wins, strongest disable first):
- *   context_disabled → autotile_screen → snapping_disabled → canonical_snap
+ *   context_disabled → autotile_screen → scrolling_screen →
+ *   snapping_disabled → canonical_snap
  *
  * The precedence order is load-bearing — the log forensics on #310 showed
  * drags flip-flopping for tens of seconds after a settings reload because
@@ -263,6 +265,49 @@ private Q_SLOTS:
         // Reorder mode does NOT clear the float for a scrolling screen — the
         // strip has no reorder preview.
         QVERIFY(p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // Scroll branch, UNTRACKED window: still bypasses the snap path (the
+    // screen belongs to the strip) but must not pre-float a window the
+    // engine does not manage.
+    void scrollingScreen_untrackedWindowDoesNotPreFloat()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        settings.m_dragBehavior = AutotileDragBehavior::Reorder;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-untracked"), QStringLiteral("HP-1"), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QVERIFY(!p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // The context-disable cascade beats the scroll branch just as it beats
+    // the autotile one (contextDisabled_overridesAutotile is the twin).
+    void contextDisabled_overridesScrolling()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        resolver.m_disabled = true;
+        settings.m_snapEnabled = true;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+        scroll->windowOpened(QStringLiteral("win-1"), QStringLiteral("HP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::ContextDisabled);
+        QVERIFY(!p.immediateFloatOnStart);
         QVERIFY(p.validationError().isEmpty());
     }
 

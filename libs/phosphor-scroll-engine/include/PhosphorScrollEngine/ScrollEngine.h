@@ -221,6 +221,13 @@ public:
     void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
     void clearCurrentDesktopForScreen(const QString& screenId) override;
     void setCurrentActivity(const QString& activity) override;
+    /// Pin screens whose managed windows are ALL sticky to their current
+    /// desktop before a desktop switch, and unpin (migrating the state to
+    /// the new desktop key) once a non-sticky window appears — the same
+    /// "virtualdesktopsonlyonprimary" contract as AutotileEngine: without
+    /// the pin a desktop switch resolves a fresh (screen, desktop) key and
+    /// the strip comes up empty while the sticky windows are still visible.
+    void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky) override;
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
     void pruneStatesForActivities(const QStringList& validActivities) override;
@@ -257,6 +264,21 @@ public:
     void setOpenParamsResolver(OpenParamsResolver resolver)
     {
         m_openParamsResolver = std::move(resolver);
+    }
+
+    /// Snapping-mode resolver for windowOpened's cross-screen snap-restore
+    /// defer gate (the reciprocal of SnapEngine::resolveWindowRestore's
+    /// recorded-screen gate; AutotileEngine::windowOpened carries the same
+    /// gate). Invoked as (screenId, virtualDesktop, activity) and must
+    /// answer whether that context resolves to Snapping mode AND snapping
+    /// is globally preferred — the daemon bakes both into the closure so
+    /// this library stays free of the zones-layer mode type. Unset → the
+    /// gate is off and every open is claimed (headless/test path). Same
+    /// clear-before-destroy contract as the other injected closures.
+    using SnappingModeResolver = std::function<bool(const QString& screenId, int desktop, const QString& activity)>;
+    void setSnappingModeResolver(SnappingModeResolver resolver)
+    {
+        m_snappingModeResolver = std::move(resolver);
     }
 
     /// Per-context (window-rule) gap overrides, resolved daemon-side so this
@@ -331,6 +353,10 @@ private:
     void clearTabStripsForScreen(const QString& screenId);
     /// Shared per-window side-map sweep for every state-destruction path.
     void dropWindowBookkeeping(const ScrollState* state);
+    /// Drop per-screen bookkeeping (seed, tab-strip latch) for each screen
+    /// in @p screenIds that no longer has ANY context state. Overrides
+    /// survive by design; see the definition.
+    void sweepStatelessScreenBookkeeping(const QSet<QString>& screenIds);
     // engine_apply.cpp
     ScrollLayoutParams layoutParamsForScreen(const QString& screenId) const;
     /// Relayout the strip and emit the geometry batch for @p screenId's
@@ -386,10 +412,9 @@ private:
     QHash<QString, QRect> m_lastAppliedRect;
     /// What a floated/minimized window's column held, so unfloat restores
     /// the slot AND the user's width/display intent (a Proportion/Preset
-    /// column must not come back as the default width). The min size is
-    /// deliberately NOT captured: it may change while floating, and the
-    /// compositor re-discovers and re-reports a live one on the next retile
-    /// (same staleness policy as autotile's unfloat).
+    /// column must not come back as the default width). The min size IS
+    /// captured (minWidth/minHeight below): dropping it would strip the
+    /// relayout clamps until the compositor re-reports.
     struct FloatRestore
     {
         int column = -1;
@@ -437,6 +462,7 @@ private:
     std::function<void()> m_persistLoadFn;
     FloatPredicate m_floatPredicate;
     OpenParamsResolver m_openParamsResolver;
+    SnappingModeResolver m_snappingModeResolver;
     ContextGapProvider m_contextGapProvider;
 };
 

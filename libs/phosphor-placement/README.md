@@ -45,7 +45,7 @@ class MyResolver : public PhosphorPlacement::IGeometryResolver {
 
 MyResolver resolver;
 PhosphorPlacement::WindowTrackingService wts(
-    layoutManager, zoneDetector, screenManager, vdm, &resolver);
+    layoutManager, screenManager, vdm, &resolver);
 wts.setSnapState(snapState);
 wts.setWindowRegistry(registry);
 ```

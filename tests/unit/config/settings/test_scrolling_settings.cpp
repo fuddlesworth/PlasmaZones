@@ -203,7 +203,12 @@ private Q_SLOTS:
 
         const auto* heights = findKey(schema, group, ConfigDefaults::presetWindowHeightsKey());
         QVERIFY(heights && heights->validator);
-        QCOMPARE(heights->validator(QStringLiteral("")).toString(), QString());
+        // Nothing survives (cleared field / all-garbage) → snap to the
+        // key's default, never persist an empty accepted-but-dead value
+        // while the engine silently cycles its built-ins.
+        QCOMPARE(heights->validator(QStringLiteral("")).toString(), ConfigDefaults::scrollingPresetWindowHeights());
+        QCOMPARE(heights->validator(QStringLiteral("junk, -3, 2.0")).toString(),
+                 ConfigDefaults::scrollingPresetWindowHeights());
         QVERIFY(!heights->validator(heights->defaultValue).toString().isEmpty());
     }
 
@@ -234,54 +239,97 @@ private Q_SLOTS:
         const int kindC = ConfigDefaults::scrollingWidthKindClientDecides();
         const qreal seededPx = ConfigDefaults::scrollingDefaultColumnWidthFixedPx();
         const qreal defaultProp = ConfigDefaults::scrollingDefaultColumnWidthValue();
+        // Seeds deliberately DIFFER from the ConfigDefaults values (0.35 vs
+        // the 0.5 default, 1200 vs the 800 re-seed): with default-equal
+        // seeds every "value untouched" row would also pass under a bogus
+        // unconditional re-seed to the default.
+        const qreal seedProp = 0.35;
+        const qreal seedPx = 1200.0;
 
         struct Row
         {
             const char* name;
-            int fromKind;
-            bool pixelsStored; // seed 800px (via Fixed) instead of 0.5
+            int seedKind; // the kind the seed VALUE is written under
+            qreal seedValue;
+            int fromKind; // reached from seedKind via an extra hop if needed
             int toKind;
             qreal expectedValue;
-            int expectedEmits;
+            int expectedChanged; // settingsChanged emits
+            int expectedKind; // scrollingDefaultColumnWidthKindChanged emits
+            int expectedValueSig; // scrollingDefaultColumnWidthValueChanged emits
         };
-        // Nine kind pairs; ClientDecides→Proportion appears twice because its
-        // outcome depends on WHAT the hop left stored (the value key is
-        // untouched by ClientDecides, so both a proportion and a pixel count
-        // can be sitting there).
+        // All nine kind pairs; C→P and C→F appear twice because their
+        // outcome depends on WHAT the ClientDecides hop left stored (it
+        // deliberately leaves the value key untouched, so both a proportion
+        // and a pixel count can be sitting there). "C->F 800px stored" is
+        // the one transition where the coercion branch runs but the nested
+        // value setter is a no-op — the OUTER aggregate emit is the sole
+        // settingsChanged source there, pinning the qFuzzyCompare gate.
         const Row rows[] = {
-            {"P->P", kindP, false, kindP, 0.5, 0},
-            {"P->F", kindP, false, kindF, seededPx, 1},
-            {"P->C", kindP, false, kindC, 0.5, 1},
-            {"F->P", kindF, true, kindP, defaultProp, 1},
-            {"F->F", kindF, true, kindF, 800.0, 0},
-            {"F->C", kindF, true, kindC, 800.0, 1},
-            {"C->P proportion stored", kindC, false, kindP, 0.5, 1},
-            {"C->P pixels stored", kindC, true, kindP, defaultProp, 1},
-            {"C->F", kindC, false, kindF, seededPx, 1},
-            {"C->C", kindC, false, kindC, 0.5, 0},
+            {"P->P", kindP, seedProp, kindP, kindP, seedProp, 0, 0, 0},
+            {"P->F", kindP, seedProp, kindP, kindF, seededPx, 1, 1, 1},
+            {"P->C", kindP, seedProp, kindP, kindC, seedProp, 1, 1, 0},
+            {"F->P", kindF, seedPx, kindF, kindP, defaultProp, 1, 1, 1},
+            {"F->F", kindF, seedPx, kindF, kindF, seedPx, 0, 0, 0},
+            {"F->C", kindF, seedPx, kindF, kindC, seedPx, 1, 1, 0},
+            {"C->P proportion stored", kindP, seedProp, kindC, kindP, seedProp, 1, 1, 0},
+            {"C->P pixels stored", kindF, seedPx, kindC, kindP, defaultProp, 1, 1, 1},
+            {"C->F proportion stored", kindP, seedProp, kindC, kindF, seededPx, 1, 1, 1},
+            {"C->F 800px stored", kindF, seededPx, kindC, kindF, seededPx, 1, 1, 0},
+            {"C->C", kindP, seedProp, kindC, kindC, seedProp, 0, 0, 0},
         };
 
+        // Failures accumulate instead of QVERIFY2-ing inside the loop: an
+        // in-loop abort would silently skip every later row (the known
+        // data-loop trap).
+        QStringList failures;
         for (const Row& row : rows) {
             TestHelpers::IsolatedConfigGuard guard;
             Settings settings;
-            // Seed: pixel rows are staged under Fixed (the value setter's
-            // clamp is kind-aware, so 800 only survives a Fixed write); a
-            // ClientDecides fromKind is then reached by a further hop that
-            // deliberately leaves the value alone.
-            settings.setScrollingDefaultColumnWidthKind(row.pixelsStored ? kindF : kindP);
-            settings.setScrollingDefaultColumnWidthValue(row.pixelsStored ? 800.0 : 0.5);
+            settings.setScrollingDefaultColumnWidthKind(row.seedKind);
+            settings.setScrollingDefaultColumnWidthValue(row.seedValue);
             if (settings.scrollingDefaultColumnWidthKind() != row.fromKind) {
                 settings.setScrollingDefaultColumnWidthKind(row.fromKind);
             }
-            QCOMPARE(settings.scrollingDefaultColumnWidthKind(), row.fromKind);
+            if (settings.scrollingDefaultColumnWidthKind() != row.fromKind) {
+                failures.append(QStringLiteral("%1: seed failed").arg(QLatin1String(row.name)));
+                continue;
+            }
 
             QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+            QSignalSpy kindSpy(&settings, &Settings::scrollingDefaultColumnWidthKindChanged);
+            QSignalSpy valueSpy(&settings, &Settings::scrollingDefaultColumnWidthValueChanged);
             settings.setScrollingDefaultColumnWidthKind(row.toKind);
-            QVERIFY2(settings.scrollingDefaultColumnWidthKind() == row.toKind, row.name);
-            QVERIFY2(qFuzzyCompare(1.0 + settings.scrollingDefaultColumnWidthValue(), 1.0 + row.expectedValue),
-                     row.name);
-            QVERIFY2(changedSpy.count() == row.expectedEmits, row.name);
+            const qreal actual = settings.scrollingDefaultColumnWidthValue();
+            if (settings.scrollingDefaultColumnWidthKind() != row.toKind) {
+                failures.append(QStringLiteral("%1: kind not applied").arg(QLatin1String(row.name)));
+            }
+            if (!qFuzzyCompare(1.0 + actual, 1.0 + row.expectedValue)) {
+                failures.append(QStringLiteral("%1: value %2, expected %3")
+                                    .arg(QLatin1String(row.name))
+                                    .arg(actual)
+                                    .arg(row.expectedValue));
+            }
+            if (changedSpy.count() != row.expectedChanged) {
+                failures.append(QStringLiteral("%1: settingsChanged %2, expected %3")
+                                    .arg(QLatin1String(row.name))
+                                    .arg(changedSpy.count())
+                                    .arg(row.expectedChanged));
+            }
+            if (kindSpy.count() != row.expectedKind) {
+                failures.append(QStringLiteral("%1: kindChanged %2, expected %3")
+                                    .arg(QLatin1String(row.name))
+                                    .arg(kindSpy.count())
+                                    .arg(row.expectedKind));
+            }
+            if (valueSpy.count() != row.expectedValueSig) {
+                failures.append(QStringLiteral("%1: valueChanged %2, expected %3")
+                                    .arg(QLatin1String(row.name))
+                                    .arg(valueSpy.count())
+                                    .arg(row.expectedValueSig));
+            }
         }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QLatin1String("; "))));
     }
 };
 

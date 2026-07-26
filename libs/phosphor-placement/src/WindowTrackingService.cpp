@@ -23,21 +23,18 @@
 namespace PhosphorPlacement {
 
 WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layoutManager,
-                                             PhosphorZones::IZoneDetector* zoneDetector,
                                              PhosphorScreens::ScreenManager* screenManager,
                                              PhosphorWorkspaces::VirtualDesktopManager* vdm,
                                              IGeometryResolver* geometryResolver, PlacementConfig config,
                                              QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
-    , m_zoneDetector(zoneDetector)
     , m_geometryResolver(geometryResolver)
     , m_config(config)
     , m_virtualDesktopManager(vdm)
     , m_screenManager(screenManager)
 {
     Q_ASSERT(layoutManager);
-    Q_ASSERT(zoneDetector);
 
     // Note: No save timer needed - persistence handled by WindowTrackingAdaptor via KConfig
     // Service just emits stateChanged() signal when state changes

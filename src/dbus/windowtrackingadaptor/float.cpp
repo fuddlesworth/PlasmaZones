@@ -10,6 +10,7 @@
 //   getFloatingWindows, applyGeometryForFloat, setWindowFloatingForScreen.
 
 #include "windowtrackingadaptor.h"
+#include "internal.h"
 #include "core/interfaces/interfaces.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
@@ -259,14 +260,20 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
             ctx.windowId = windowId;
             ctx.toScreenId = screenId;
             ctx.wasFloating = floating;
+            QString recoverScreen;
             if (sourceTracked) {
                 ctx.fromEngineId = source->engineId();
                 ctx.sourceGeometry = m_frameGeometry.value(windowId);
                 ctx.minSize = source->windowMinimumSize(windowId);
-                source->handoffRelease(windowId);
+                recoverScreen = source->screenForTrackedWindow(windowId);
             }
-            dest->handoffReceive(ctx);
-            if (!floating) {
+            // Guarded: a dest whose screen left its engine set between the
+            // isActiveOnScreen pick above and the receive would otherwise
+            // strand the window (released, refused) while subscribers are
+            // told it is not floating.
+            const bool adopted =
+                WindowTrackingInternal::guardedHandoff(sourceTracked ? source : nullptr, dest, ctx, recoverScreen);
+            if (!floating && adopted) {
                 relayWindowFloatingChanged(windowId, false, screenId);
             }
         } else if (sourceTracked) {

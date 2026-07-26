@@ -5,6 +5,7 @@
 
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorScreens/Manager.h>
@@ -90,6 +91,15 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
             });
         releasedScreens.insert(screenId);
         m_context.removeScreen(screenId);
+        // Even a STATELESS leaving screen (seed pushed before any window
+        // arrived) must drop its per-screen bookkeeping — the state-driven
+        // sweep in releaseScreenState never ran for it. The tab-strip clear
+        // is latched, so a second call is a no-op. m_perScreenOverrides
+        // deliberately survives a mode change (per-screen rule config
+        // re-applies on re-entry); only pruneStatesForRemovedScreen purges
+        // it.
+        m_pendingInitialOrder.remove(screenId);
+        clearTabStripsForScreen(screenId);
     }
     if (!releasedWindows.isEmpty()) {
         m_states.removeWindowsIf([&releasedWindows](const QString& windowId, const PhosphorEngine::PlacementStateKey&) {
@@ -328,6 +338,57 @@ void ScrollEngine::clearCurrentDesktopForScreen(const QString& screenId)
     m_context.clearCurrentDesktopForScreen(screenId);
 }
 
+void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
+{
+    for (const QString& screenId : std::as_const(m_scrollingScreens)) {
+        const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
+        ScrollState* state = m_states.stateForKey(key);
+        if (!state) {
+            continue;
+        }
+        const QStringList managed = state->managedWindows();
+        if (managed.isEmpty()) {
+            continue;
+        }
+        bool allSticky = true;
+        for (const QString& wid : managed) {
+            if (!isWindowSticky(wid)) {
+                allSticky = false;
+                break;
+            }
+        }
+        if (allSticky) {
+            if (!m_context.hasStickyPin(screenId)) {
+                m_context.setStickyPin(screenId, key.desktop);
+                qCInfo(lcScrollEngine) << "Pinning screen" << screenId << "to desktop" << key.desktop << "(all"
+                                       << managed.size() << "windows sticky)";
+            }
+        } else if (m_context.hasStickyPin(screenId)) {
+            const int pinnedDesktop = m_context.takeStickyPin(screenId);
+            qCInfo(lcScrollEngine) << "Unpinning screen" << screenId << "from desktop" << pinnedDesktop;
+            // Migrate the strip to the screen's CURRENT desktop key (the pin
+            // was just removed, so currentKeyForScreen resolves the true
+            // effective desktop). Same terms as AutotileEngine: the pinned
+            // state holds the actual windows, so a placeholder created at
+            // the target key by a transient lookup is discarded.
+            const PhosphorEngine::PlacementStateKey newKey = currentKeyForScreen(screenId);
+            if (pinnedDesktop != newKey.desktop) {
+                const PhosphorEngine::PlacementStateKey oldKey{screenId, pinnedDesktop, m_context.currentActivity()};
+                if (ScrollState* migrated = m_states.stateForKey(oldKey)) {
+                    if (ScrollState* existing = m_states.takeState(newKey)) {
+                        existing->deleteLater();
+                    }
+                    m_states.takeState(oldKey);
+                    m_states.insertState(newKey, migrated);
+                    m_states.rekeyWindows(oldKey, newKey);
+                    qCInfo(lcScrollEngine) << "Migrated screen" << screenId << "strip from desktop" << pinnedDesktop
+                                           << "to" << newKey.desktop;
+                }
+            }
+        }
+    }
+}
+
 void ScrollEngine::setCurrentActivity(const QString& activity)
 {
     m_context.setCurrentActivity(activity);
@@ -358,13 +419,39 @@ void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
     }
 }
 
+void ScrollEngine::sweepStatelessScreenBookkeeping(const QSet<QString>& screenIds)
+{
+    // Per-screen (not per-state) bookkeeping outlives an individual context
+    // prune only while ANOTHER context still exists for the screen. Once
+    // the last state is gone, a stale seed or tab-strip latch would replay
+    // against whatever state is built there next. m_perScreenOverrides
+    // deliberately survives (per-screen rule config re-applies on
+    // re-entry); only a physical removal purges it.
+    const auto& states = m_states.states();
+    for (const QString& screenId : screenIds) {
+        bool hasState = false;
+        for (auto it = states.cbegin(); it != states.cend(); ++it) {
+            if (it.key().screenId == screenId) {
+                hasState = true;
+                break;
+            }
+        }
+        if (!hasState) {
+            m_pendingInitialOrder.remove(screenId);
+            clearTabStripsForScreen(screenId);
+        }
+    }
+}
+
 void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
 {
+    QSet<QString> touchedScreens;
     m_states.removeStatesIf(
         [removedDesktop](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return key.desktop == removedDesktop;
         },
-        [this](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+        [this, &touchedScreens](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
+            touchedScreens.insert(key.screenId);
             dropWindowBookkeeping(state);
             state->deleteLater();
         });
@@ -372,6 +459,7 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
         return key.desktop == removedDesktop;
     });
     m_context.pruneDesktop(removedDesktop);
+    sweepStatelessScreenBookkeeping(touchedScreens);
 }
 
 void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
@@ -379,26 +467,32 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     const auto stale = [&validActivities](const QString& activity) {
         return !activity.isEmpty() && !validActivities.contains(activity);
     };
+    QSet<QString> touchedScreens;
     m_states.removeStatesIf(
         [&stale](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return stale(key.activity);
         },
-        [this](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+        [this, &touchedScreens](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
+            touchedScreens.insert(key.screenId);
             dropWindowBookkeeping(state);
             state->deleteLater();
         });
     m_states.removeWindowsIf([&stale](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);
     });
+    sweepStatelessScreenBookkeeping(touchedScreens);
 }
 
 void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
 {
+    if (physicalScreenId.isEmpty()) {
+        return;
+    }
+    // Match the physical id and every virtual sub-screen of it. samePhysical
+    // strips the "/vs:N" suffix, so "DP-1/vs:0" matches a removed "DP-1"
+    // while a prefix-sharing sibling ("DP-10") does not.
     const auto matches = [&physicalScreenId](const QString& screenId) {
-        // Match the physical id and every virtual sub-screen of it.
-        return screenId == physicalScreenId
-            || (screenId.size() > physicalScreenId.size() && screenId.startsWith(physicalScreenId)
-                && screenId.at(physicalScreenId.size()) == QLatin1Char('#'));
+        return !screenId.isEmpty() && PhosphorIdentity::VirtualScreenId::samePhysical(screenId, physicalScreenId);
     };
     m_states.removeStatesIf(
         [&matches](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
@@ -455,6 +549,7 @@ void ScrollEngine::refreshConfigFromSettings()
         }
         return out.isEmpty() ? fallback : out;
     };
+    // KEEP IN SYNC with ScrollLayoutParams' member defaults (ScrollTypes.h).
     const QList<qreal> defaults{1.0 / 3.0, 0.5, 2.0 / 3.0};
     m_presetColumnWidths = parsePresets(settings->scrollingPresetColumnWidths(), defaults);
     m_presetWindowHeights = parsePresets(settings->scrollingPresetWindowHeights(), defaults);

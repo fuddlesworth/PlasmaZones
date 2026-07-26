@@ -197,12 +197,13 @@ private Q_SLOTS:
         for (const QString& sid : screens) {
             const bool isSnap = m_router->isSnapMode(sid);
             const bool isAuto = m_router->isAutotileMode(sid);
-            const bool isScroll = m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Scrolling;
+            const bool isScroll = m_router->isScrollingMode(sid);
             const int claims = int(isSnap) + int(isAuto) + int(isScroll);
             QCOMPARE_EQ(claims, 1);
-            // The predicate pair must agree with modeFor's verdict.
+            // All THREE predicates must agree with modeFor's verdict.
             QCOMPARE(isSnap, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Snapping);
             QCOMPARE(isAuto, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Autotile);
+            QCOMPARE(isScroll, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Scrolling);
         }
     }
 
@@ -272,6 +273,7 @@ private Q_SLOTS:
         QCOMPARE(m_router->modeFor(QStringLiteral("DP-1")), PhosphorZones::AssignmentEntry::Scrolling);
         QCOMPARE(m_router->engineFor(QStringLiteral("DP-1")),
                  static_cast<PhosphorEngine::IPlacementEngine*>(m_scrollEngine));
+        QVERIFY(m_router->isScrollingMode(QStringLiteral("DP-1")));
         QVERIFY(!m_router->isSnapMode(QStringLiteral("DP-1")));
         QVERIFY(!m_router->isAutotileMode(QStringLiteral("DP-1")));
     }

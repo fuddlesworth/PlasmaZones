@@ -836,6 +836,12 @@ private:
     /// setActiveScreens applies. The shared windowsReleased handler gates
     /// its "headed to the other engine" skip on these — the live sets lag
     /// mid-pass and the raw cascade cannot see the exclusions.
+    ///
+    /// VALIDITY: windowsReleased also fires OUTSIDE updateEngineScreens
+    /// (desktop/activity/removed-screen prunes). The handler prefers the
+    /// live isActiveOnScreen answer when the recompute latch is NOT held —
+    /// these snapshots are only authoritative mid-pass, where the live sets
+    /// are the stale side.
     QSet<QString> m_derivedAutotileScreens;
     QSet<QString> m_derivedScrollingScreens;
     /// Re-entrancy latch + coalesced re-run flag for updateEngineScreens

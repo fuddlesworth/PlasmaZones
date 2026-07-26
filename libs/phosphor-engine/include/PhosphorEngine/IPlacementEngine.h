@@ -108,11 +108,15 @@ public:
     ///
     /// @param screenId The window's authoritative current screen, when the
     /// caller knows it (the D-Bus setWindowFloatingForScreen threads the
-    /// effect's live output here). Engines that resolve a screen for the float
-    /// or unfloat MUST prefer this over their own tracked association, which can
-    /// be stale after a floating window drifts across monitors — using the stale
-    /// screen makes the unfloat's cross-monitor guard non-deterministic. Empty
-    /// (the default) means "resolve it yourself" for internal callers.
+    /// effect's live output here). An engine WITHOUT live per-window screen
+    /// tracking MUST prefer this over its own tracked association, which
+    /// can be stale after a floating window drifts across monitors — using
+    /// the stale screen makes the unfloat's cross-monitor guard
+    /// non-deterministic (snap and scroll honour it for exactly that
+    /// reason). AutotileEngine deliberately resolves from its own tracking
+    /// instead: its focus-driven migration keeps the association current,
+    /// and the parameter can lag it mid-handoff. Empty (the default) means
+    /// "resolve it yourself" for internal callers.
     virtual void setWindowFloat(const QString& windowId, bool shouldFloat, const QString& screenId = QString()) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -598,10 +602,12 @@ public:
     }
     /// Prune per-(screen, desktop, activity) state for a PHYSICALLY REMOVED output
     /// (monitor hot-unplug), matching every virtual sub-screen of the removed
-    /// physical id. AutotileEngine self-prunes screens via its autotile-screens set,
-    /// so it leaves this a no-op; a per-screen engine WITHOUT such a set (SnapEngine,
-    /// whose stores are created lazily on placement) overrides it and is driven by
-    /// the daemon's screenRemoved signal, otherwise the removed monitor's stores leak.
+    /// physical id. All three engines override this and the daemon drives each
+    /// from its screenRemoved handling: snap's stores are created lazily on
+    /// placement with no screens set to reap them, and the two tiling engines'
+    /// screens-set sweeps only reap CURRENT-context states, so sibling-context
+    /// states (other desktops/activities) of the removed output would leak
+    /// without the explicit whole-output prune.
     virtual void pruneStatesForRemovedScreen(const QString& physicalScreenId)
     {
         Q_UNUSED(physicalScreenId)

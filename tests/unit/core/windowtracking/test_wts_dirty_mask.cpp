@@ -71,9 +71,8 @@ private Q_SLOTS:
         m_layoutManager->addLayout(m_layout);
         m_zone1Id = zone1->id().toString();
 
-        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr,
-                                                                 m_virtualDesktopManager, nullptr,
-                                                                 PhosphorPlacement::PlacementConfig{}, m_parent);
+        m_service = new PhosphorPlacement::WindowTrackingService(
+            m_layoutManager, nullptr, m_virtualDesktopManager, nullptr, PhosphorPlacement::PlacementConfig{}, m_parent);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_service->setSnapState(m_snapState);
         // Construction leaves mask = DirtyAll; clear so subsequent mutator
@@ -114,8 +113,7 @@ private Q_SLOTS:
         auto* freshVirtualDesktopManager = new PhosphorWorkspaces::VirtualDesktopManager(&freshParent);
         auto* freshZoneDetector = new StubZoneDetector(&freshParent);
 
-        PhosphorPlacement::WindowTrackingService fresh(freshLayoutManager, freshZoneDetector, nullptr,
-                                                       freshVirtualDesktopManager, nullptr,
+        PhosphorPlacement::WindowTrackingService fresh(freshLayoutManager, nullptr, freshVirtualDesktopManager, nullptr,
                                                        PhosphorPlacement::PlacementConfig{}, &freshParent);
         PhosphorSnapEngine::SnapState freshSnapState(QString(), nullptr);
         fresh.setSnapState(&freshSnapState);

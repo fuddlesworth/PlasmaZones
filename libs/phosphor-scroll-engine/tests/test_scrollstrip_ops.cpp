@@ -12,20 +12,10 @@ using namespace PhosphorScrollEngine;
 namespace {
 
 using ScrollTestUtils::defaultParams;
+using ScrollTestUtils::isHidden;
 using ScrollTestUtils::kHalf;
 using ScrollTestUtils::rectOf;
-
-bool isHidden(const ResolvedStrip& resolved, const QString& windowId)
-{
-    for (const ResolvedColumn& rc : resolved.columns) {
-        for (const ResolvedTile& rt : rc.tiles) {
-            if (rt.windowId == windowId) {
-                return rt.hidden;
-            }
-        }
-    }
-    return false;
-}
+using ScrollTestUtils::resolveContains;
 
 /// a | b | c as three single-tile columns, focus on c. Insert results are
 /// checked here (a QVERIFY in a non-test helper cannot abort the caller,
@@ -71,6 +61,14 @@ private Q_SLOTS:
     void centeringPolicySurvivesCollapseAndConsume();
     void takeWindowLeavesFocusPolicyAlone();
     void onOverflowIgnoresShiftedPrevIdxOnRemoval();
+    void reconcileLoneTileNeverRecordsHeightIntent();
+    void degenerateWorkAreaNeverAsserts();
+    void monsterFixedSiblingLeavesAutoTilesVisible();
+    void moveActiveColumnToTracksPreMaximizeSlot();
+    void centerActiveColumnCentersAndReports();
+    void minWidthClampsResolvedColumn();
+    void focusAdjacentSkipsFullyMinimizedColumn();
+    void updateViewForFocusKeepsRightEdgeDeadSpace();
 };
 
 void TestScrollStripOps::consumePullsNextColumnsWindow()
@@ -323,6 +321,7 @@ void TestScrollStripOps::tabbedColumnLayout()
     QVERIFY(strip.toggleActiveColumnTabbed());
     r = strip.relayout(params);
     QVERIFY(!r.columns.first().tabbed);
+    QVERIFY(resolveContains(r, QStringLiteral("a")));
     QVERIFY(!isHidden(r, QStringLiteral("a")));
 }
 
@@ -405,6 +404,154 @@ void TestScrollStripOps::reconcileGuardsAndEmptyAck()
     QVERIFY(!strip.reconcileWindowSize(QStringLiteral("nope"), QSize(100, 100)));
 }
 
+void TestScrollStripOps::reconcileLoneTileNeverRecordsHeightIntent()
+{
+    // The lone-tile guard is invisible in resolved rects (a lone tile
+    // fills its column regardless), so pin the recorded INTENT: a
+    // height-changing ack on a single-tile column must leave the tile
+    // Auto — recording Fixed would fight the work area on the next
+    // resolution change and survive a later stack join.
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("solo"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("solo"), QSize(600, 300), /*widthChanged=*/false,
+                                       /*heightChanged=*/true));
+    const Column& col = strip.columns().at(0);
+    QCOMPARE(col.tiles.at(0).height.kind, WindowHeight::Auto);
+    // The same ack on a two-tile column DOES record (control case, so a
+    // dropped `tiles.size() > 1` conjunct fails one of the two arms).
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("mate"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.focusWindow(QStringLiteral("solo"), params));
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("solo"), QSize(600, 300), /*widthChanged=*/false,
+                                      /*heightChanged=*/true));
+    QCOMPARE(strip.columns().at(0).tiles.at(0).height.kind, WindowHeight::Fixed);
+}
+
+void TestScrollStripOps::degenerateWorkAreaNeverAsserts()
+{
+    // CLAUDE.md edge case: invalid coordinates at the boundary. A null
+    // work area flows through relayout and both size adjusters during
+    // screen teardown; the production guards must keep every column at
+    // its 1px floor instead of tripping qBound's inverted-range assert.
+    ScrollLayoutParams dead;
+    dead.workArea = QRect();
+    dead.gap = 10;
+    ScrollStrip strip = threeColumns(defaultParams());
+    const ResolvedStrip resolved = strip.relayout(dead);
+    for (const ResolvedColumn& rc : resolved.columns) {
+        for (const ResolvedTile& rt : rc.tiles) {
+            QVERIFY(rt.rect.width() >= 0);
+        }
+    }
+    QVERIFY(!strip.adjustActiveColumnWidth(10.0, dead));
+    QVERIFY(!strip.adjustActiveWindowHeight(10.0, dead));
+}
+
+void TestScrollStripOps::monsterFixedSiblingLeavesAutoTilesVisible()
+{
+    // Budget invariant behind the fixedBudget reservation + rebalance
+    // pair: however outsized a Fixed sibling's intent, every Auto tile in
+    // the column still resolves to at least its 1px floor and the column
+    // total stays within the work area.
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("fixed"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("auto1"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("auto2"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.focusWindow(QStringLiteral("fixed"), params));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(100000)));
+    const ResolvedStrip resolved = strip.relayout(params);
+    int total = 0;
+    for (const QString& id : {QStringLiteral("fixed"), QStringLiteral("auto1"), QStringLiteral("auto2")}) {
+        QVERIFY(resolveContains(resolved, id));
+        QVERIFY(rectOf(resolved, id).height() >= 1);
+        total += rectOf(resolved, id).height();
+    }
+    QVERIFY(total <= params.workArea.height());
+}
+
+void TestScrollStripOps::moveActiveColumnToTracksPreMaximizeSlot()
+{
+    // moveActiveColumnTo is a distinct path from ToFirst/ToLast with its
+    // own pre-maximize index fixup in both directions.
+    const auto params = defaultParams();
+    ScrollStrip strip = threeColumns(params);
+    QVERIFY(strip.focusColumn(0, params));
+    QVERIFY(strip.moveActiveColumnTo(2, params));
+    QCOMPARE(strip.columns().at(2).tiles.at(0).windowId, QStringLiteral("a"));
+    QCOMPARE(strip.activeColumnIndex(), 2);
+    QVERIFY(!strip.moveActiveColumnTo(2, params)); // no-op target refused
+    QVERIFY(!strip.moveActiveColumnTo(5, params)); // out of range refused
+
+    // Maximize b (index 1), then move the ACTIVE (maximized) column left:
+    // toggling back must restore the pre-maximize width, so the restore
+    // slot has to follow the move.
+    QVERIFY(strip.focusColumn(1, params));
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QVERIFY(strip.moveActiveColumnTo(0, params));
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QCOMPARE(strip.columns().at(0).width, kHalf);
+}
+
+void TestScrollStripOps::centerActiveColumnCentersAndReports()
+{
+    const auto params = defaultParams();
+    ScrollStrip strip = threeColumns(params);
+    QVERIFY(strip.focusColumn(1, params));
+    QVERIFY(strip.centerActiveColumn(params));
+    const ResolvedStrip resolved = strip.relayout(params);
+    const QRect b = rectOf(resolved, QStringLiteral("b"));
+    QCOMPARE(b.x(), (params.workArea.width() - b.width()) / 2);
+}
+
+void TestScrollStripOps::minWidthClampsResolvedColumn()
+{
+    // The per-tile min-WIDTH clamp in columnWidthPx (min-height has its
+    // own budget test; width had nothing).
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("narrow"), ColumnWidth::makeProportion(0.1), ColumnDisplay::Normal,
+                               params, /*minWidth=*/400, /*minHeight=*/0));
+    QVERIFY(strip.insertWindow(QStringLiteral("other"), kHalf, ColumnDisplay::Normal, params));
+    const ResolvedStrip resolved = strip.relayout(params);
+    QVERIFY(resolveContains(resolved, QStringLiteral("narrow")));
+    QCOMPARE(rectOf(resolved, QStringLiteral("narrow")).width(), 400);
+    // setWindowMinimumSize raises it after the fact too.
+    QVERIFY(strip.setWindowMinimumSize(QStringLiteral("narrow"), 500, 0));
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("narrow")).width(), 500);
+}
+
+void TestScrollStripOps::focusAdjacentSkipsFullyMinimizedColumn()
+{
+    const auto params = defaultParams();
+    ScrollStrip strip = threeColumns(params);
+    QVERIFY(strip.focusColumn(0, params));
+    QVERIFY(strip.setWindowMinimized(QStringLiteral("b"), true, params));
+    // b's column is fully minimized: focusing right lands on c.
+    QVERIFY(strip.focusAdjacentColumn(1, params));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
+}
+
+void TestScrollStripOps::updateViewForFocusKeepsRightEdgeDeadSpace()
+{
+    // The updateViewForFocus early-return's second documented claim: it
+    // must not reclaim removeWindowInternal's deliberate right-edge dead
+    // space while the active column is fully visible. Deleting the
+    // early-return makes the re-clamp scroll the strip right and moves c.
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("d"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.focusColumn(2, params));
+    // Closing d leaves dead space right of c (survivors stay stationary).
+    QVERIFY(strip.removeWindow(QStringLiteral("d"), params));
+    const int cBefore = rectOf(strip.relayout(params), QStringLiteral("c")).x();
+    strip.updateViewForFocus(params);
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("c")).x(), cBefore);
+}
+
 void TestScrollStripOps::minimizePicksNearestVisibleSibling()
 {
     const auto params = defaultParams();
@@ -447,11 +594,12 @@ void TestScrollStripOps::minimizePicksNearestVisibleSibling()
     // tiles a..e, minimize b and d, focus c, minimize c — the dist-1 probes
     // (d below, b above) both miss and dist=2 lands downward on "e".
     ScrollStrip five;
-    for (const char* id : {"a", "b", "c", "d", "e"}) {
+    for (const QString& id :
+         {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d"), QStringLiteral("e")}) {
         if (five.isEmpty()) {
-            QVERIFY(five.insertWindow(QString::fromLatin1(id), kHalf, ColumnDisplay::Normal, params));
+            QVERIFY(five.insertWindow(id, kHalf, ColumnDisplay::Normal, params));
         } else {
-            QVERIFY(five.insertWindowIntoActiveColumn(QString::fromLatin1(id), kHalf, ColumnDisplay::Normal, params));
+            QVERIFY(five.insertWindowIntoActiveColumn(id, kHalf, ColumnDisplay::Normal, params));
         }
     }
     QVERIFY(five.setWindowMinimized(QStringLiteral("b"), true, params));
@@ -560,49 +708,75 @@ void TestScrollStripOps::centeringPolicySurvivesCollapseAndConsume()
 void TestScrollStripOps::takeWindowLeavesFocusPolicyAlone()
 {
     const auto params = defaultParams();
-    ScrollStrip strip = threeColumns(params);
-    QVERIFY(strip.focusColumn(0, params));
-
-    // Taking an unfocused window (transfer path) leaves focus on a.
-    QVERIFY(strip.takeWindow(QStringLiteral("b"), params));
-    QCOMPARE(strip.activeWindowId(), QStringLiteral("a"));
-    QCOMPARE(strip.columnCount(), 2);
-    QVERIFY(!strip.containsWindow(QStringLiteral("b")));
-    QVERIFY(!strip.takeWindow(QStringLiteral("b"), params));
+    {
+        ScrollStrip strip = threeColumns(params);
+        QVERIFY(strip.focusColumn(0, params));
+        // Taking an unfocused window (transfer path) leaves focus on a.
+        QVERIFY(strip.takeWindow(QStringLiteral("b"), params));
+        QCOMPARE(strip.activeWindowId(), QStringLiteral("a"));
+        QCOMPARE(strip.columnCount(), 2);
+        QVERIFY(!strip.containsWindow(QStringLiteral("b")));
+        QVERIFY(!strip.takeWindow(QStringLiteral("b"), params));
+    }
+    // Taking the FOCUSED window is the discriminating case: removeWindow's
+    // refocus policy would CENTER the successor under Always, takeWindow
+    // must not (the caller is mid-transfer and wants zero churn). Under a
+    // takeWindow → removeWindowInternal(refocus=true) mutation the
+    // successor lands centered and this fails.
+    auto centerParams = params;
+    centerParams.centerFocusedColumn = CenterFocusedColumn::Always;
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, centerParams));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, centerParams));
+    // c deliberately NARROWER than b: with equal widths the successor's
+    // keep-stationary x accidentally equals its centered x and the two
+    // outcomes are indistinguishable.
+    QVERIFY(strip.insertWindow(QStringLiteral("c"), ColumnWidth::makeProportion(0.25), ColumnDisplay::Normal,
+                               centerParams));
+    QVERIFY(strip.focusColumn(1, centerParams));
+    const ResolvedStrip before = strip.relayout(centerParams);
+    const int aBefore = rectOf(before, QStringLiteral("a")).x();
+    QVERIFY(strip.takeWindow(QStringLiteral("b"), centerParams));
+    const ResolvedStrip after = strip.relayout(centerParams);
+    QVERIFY(resolveContains(after, QStringLiteral("a")));
+    // Survivors stay pixel-stationary (a's rect unchanged); the refocus
+    // policy would have re-centered the new active column instead.
+    QCOMPARE(rectOf(after, QStringLiteral("a")).x(), aBefore);
+    const QRect activeRect = rectOf(after, strip.activeWindowId());
+    QVERIFY(activeRect.x() != (centerParams.workArea.width() - activeRect.width()) / 2);
 }
 
 void TestScrollStripOps::onOverflowIgnoresShiftedPrevIdxOnRemoval()
 {
-    // removeWindowInternal's prevIdx fixup pin: closing a column LEFT of
-    // the active one shifts indices, and an unadjusted prevIdx would make
-    // the OnOverflow entering-edge test read the RIGHT neighbour's width
-    // as prevW. With d wide enough that c+gap+d overflows, the stale index
-    // centers c; the adjusted index resolves to the active column itself,
-    // the OnOverflow test is skipped, and the view shifts by exactly the
-    // removed column's span.
+    // removeWindowInternal's prevIdx fixup pin, on a path where the
+    // refocus reanchor genuinely RUNS: closing a wide column left of the
+    // active one shifts the strip so far that the keep-stationary anchor
+    // goes negative and reanchorAfterFocusChange is consulted. The fixup
+    // makes prevIdx track the active column itself (so the OnOverflow
+    // entering-edge test is skipped and Never-policy pins the column to
+    // the left edge); an UNADJUSTED prevIdx names the RIGHT neighbour d,
+    // and with c+gap+d overflowing the work area the stale index would
+    // wrongly center c instead.
     auto params = defaultParams();
     params.centerFocusedColumn = CenterFocusedColumn::OnOverflow;
     ScrollStrip strip;
-    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(0.5), ColumnDisplay::Normal, params));
-    QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeProportion(0.25), ColumnDisplay::Normal, params));
-    QVERIFY(strip.insertWindow(QStringLiteral("c"), ColumnWidth::makeProportion(0.25), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(0.9), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeProportion(0.3), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("c"), ColumnWidth::makeProportion(0.3), ColumnDisplay::Normal, params));
     QVERIFY(strip.insertWindow(QStringLiteral("d"), ColumnWidth::makeProportion(0.8), ColumnDisplay::Normal, params));
-    // Arrive at c from b (b+gap+c fits, so this focus itself does not
-    // center — a centered starting anchor would make the stale-prevIdx
-    // outcome indistinguishable from the correct one).
+    // Arrive at c from b (b+gap+c fits, so the focus itself cannot center
+    // — a centered starting anchor would blur the two outcomes).
     QVERIFY(strip.focusColumn(1, params));
     QVERIFY(strip.focusColumn(2, params));
-
-    const ResolvedStrip before = strip.relayout(params);
-    const QRect cBefore = rectOf(before, QStringLiteral("c"));
-    const int removedSpan = rectOf(before, QStringLiteral("a")).width() + params.gap;
 
     QVERIFY(strip.removeWindow(QStringLiteral("a"), params));
     const ResolvedStrip after = strip.relayout(params);
     const QRect cAfter = rectOf(after, QStringLiteral("c"));
-    const int centeredX = (params.workArea.width() - cAfter.width()) / 2;
-    QCOMPARE(cAfter.x(), cBefore.x() - removedSpan);
-    QVERIFY(cAfter.x() != centeredX);
+    QVERIFY(resolveContains(after, QStringLiteral("c")));
+    // Never-policy left-edge pin; the stale-prevIdx failure mode is the
+    // OnOverflow centering at (workW - cWidth) / 2.
+    QCOMPARE(cAfter.x(), 0);
+    QVERIFY(cAfter.x() != (params.workArea.width() - cAfter.width()) / 2);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripOps)

@@ -288,7 +288,10 @@ void Daemon::showScrollingModeOsd(const QString& screenId)
     }
     const QString text = PhosphorI18n::tr("Scrolling", "tiling mode name");
     if (style == OsdStyle::Preview && m_overlayService) {
-        m_overlayService->showDisabledOsd(text, screenId);
+        // Neutral icon: this is a successful mode switch, not a refusal —
+        // the Text fallback below already uses the app icon for the same
+        // reason.
+        m_overlayService->showDisabledOsd(text, screenId, QStringLiteral("plasmazones"));
         qCInfo(lcDaemon) << "Showing scrolling-mode preview OSD: screen=" << screenId;
         return;
     }

@@ -41,6 +41,13 @@ DaemonClient::DaemonClient(QObject* parent)
 DaemonClient::~DaemonClient()
 {
     disconnectDaemonSignals();
+    // The ctor's daemonReady subscription is not part of the per-session
+    // connect/disconnect pair (it must survive re-registration), so drop it
+    // here explicitly — Qt would tear it down with the receiver anyway, but
+    // the symmetry keeps every bus connection visibly paired.
+    QDBusConnection::sessionBus().disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                             PhosphorProtocol::Service::Interface::LayoutRegistry,
+                                             QStringLiteral("daemonReady"), this, SLOT(onDaemonReadySignal()));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -80,6 +87,18 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
 
         if (m_sessionId == QLatin1String("REJECTED")) {
             Q_EMIT bridgeRejected(QStringLiteral("Daemon rejected registration"));
+            return;
+        }
+
+        // Reject an under-versioned DAEMON symmetrically: the daemon's gate
+        // covers an old client, but a client newer than the daemon would
+        // otherwise register and then hear nothing on the renamed v5
+        // lifecycle surface — the exact silent failure the version bump
+        // exists to prevent.
+        if (peerVersion < PhosphorProtocol::Service::MinPeerApiVersion) {
+            Q_EMIT bridgeRejected(QStringLiteral("Daemon API version %1 is older than the minimum supported %2")
+                                      .arg(peerVersion)
+                                      .arg(PhosphorProtocol::Service::MinPeerApiVersion));
             return;
         }
 

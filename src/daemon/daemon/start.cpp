@@ -167,18 +167,20 @@ void Daemon::connectScreenSignals()
                     m_layoutManager->clearCurrentVirtualDesktopForScreen(removedScreenId);
                 }
 
-                // The snap engine's per-(screen,desktop,activity) stores are created
-                // lazily on placement, not from an autotile-screens set, so the removed
-                // output's stores must be pruned explicitly here (autotile self-prunes
-                // via updateEngineScreens). Matches every virtual sub-screen of the
-                // removed physical id.
+                // All three engines need the explicit whole-output reap:
+                // snap's per-(screen,desktop,activity) stores are created
+                // lazily on placement, and the two tiling engines'
+                // updateEngineScreens sweep only reaps CURRENT-context
+                // states, so sibling-context states (other desktops or
+                // activities) of the removed output would leak and
+                // resurface ghost tiles on replug. Each engine matches
+                // every virtual sub-screen of the removed physical id.
                 if (m_snapEngine) {
                     m_snapEngine->pruneStatesForRemovedScreen(removedScreenId);
                 }
-                // The scroll engine's states self-prune for CURRENT-context
-                // screens via updateEngineScreens, but sibling-context
-                // states (other desktops/activities) for the removed output
-                // would leak without the explicit prune, same as snap.
+                if (m_autotileEngine) {
+                    m_autotileEngine->pruneStatesForRemovedScreen(removedScreenId);
+                }
                 if (m_scrollEngine) {
                     m_scrollEngine->pruneStatesForRemovedScreen(removedScreenId);
                 }
@@ -271,6 +273,16 @@ void Daemon::connectDesktopActivity()
                         return service->isWindowSticky(windowId);
                     });
                 }
+                // Scrolling twin: an all-sticky strip must survive the
+                // desktop switch under the same pin, or the screen resolves
+                // a fresh (screen, desktop) key and comes up empty while
+                // the sticky windows are still on it.
+                if (m_scrollEngine && m_windowTrackingAdaptor) {
+                    auto* service = m_windowTrackingAdaptor->service();
+                    m_scrollEngine->updateStickyScreenPins([service](const QString& windowId) {
+                        return service->isWindowSticky(windowId);
+                    });
+                }
                 // [SEQ C] Set THIS screen's engine desktop context (pure per-screen
                 // swap, no state migration) BEFORE updateEngineScreens() so the
                 // engine resolves TilingStates under the new (screen, desktop) key.
@@ -293,6 +305,12 @@ void Daemon::connectDesktopActivity()
                 // [SEQ E] Per-desktop assignments may differ — recompute autotile
                 // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateEngineScreens();
+                // Drain the restore batch this recompute may have produced
+                // (screens can flip engines here). No resnap consumer runs on
+                // this path, and a stale batch left in the member would be
+                // emitted verbatim by the NEXT consumer (layout picker / KCM
+                // apply) — teleporting windows on an unrelated action.
+                emitPendingSnapFloatRestoresForResnapBuffer();
                 syncModeFromAssignments();
                 if (m_overlayService->isVisible()) {
                     m_overlayService->updateGeometries();
@@ -441,6 +459,12 @@ void Daemon::connectDesktopActivity()
                             return service->isWindowSticky(windowId);
                         });
                     }
+                    if (m_scrollEngine && m_windowTrackingAdaptor) {
+                        auto* service = m_windowTrackingAdaptor->service();
+                        m_scrollEngine->updateStickyScreenPins([service](const QString& windowId) {
+                            return service->isWindowSticky(windowId);
+                        });
+                    }
                     // Set engine's activity context BEFORE updateEngineScreens()
                     if (m_autotileEngine) {
                         m_autotileEngine->setCurrentActivity(activityId);
@@ -453,6 +477,12 @@ void Daemon::connectDesktopActivity()
                     }
                     // Per-activity assignments may differ — recompute autotile screens
                     updateEngineScreens();
+                    // Drain the restore batch this recompute may have produced
+                    // (screens can flip engines here). No resnap consumer runs on
+                    // this path, and a stale batch left in the member would be
+                    // emitted verbatim by the NEXT consumer (layout picker / KCM
+                    // apply) — teleporting windows on an unrelated action.
+                    emitPendingSnapFloatRestoresForResnapBuffer();
                     // Sync mode, layout filter, and controller state from per-activity assignments.
                     syncModeFromAssignments();
                     if (m_overlayService->isVisible()) {
@@ -1055,6 +1085,11 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // happens until something else (e.g. an assignment change) fires
     // layoutAssigned → updateEngineScreens.
     updateEngineScreens();
+    // Drain the restore batch this recompute may have produced (VS ids
+    // disappearing release windows). resnapForVirtualScreenReconfigure
+    // below never consumes it, and a stale batch would be emitted verbatim
+    // by the next consumer, teleporting windows on an unrelated action.
+    emitPendingSnapFloatRestoresForResnapBuffer();
 
     // Resnap windows on this physical screen and any of its virtual children
     // to their stored zones. Uses calculateResnapFromCurrentAssignments which

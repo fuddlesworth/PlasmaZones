@@ -72,6 +72,7 @@ Item {
             onClicked: root.dismissRequested()
             Accessible.name: i18n("Dismiss snap assist overlay")
             Accessible.role: Accessible.Button
+            Accessible.onPressAction: root.dismissRequested()
         }
     }
 

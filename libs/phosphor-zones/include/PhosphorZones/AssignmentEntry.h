@@ -178,20 +178,13 @@ struct AssignmentEntry
         }
         return entry;
     }
-    /** @brief Create a fresh AssignmentEntry from a layoutId string */
+    /** @brief Create a fresh AssignmentEntry from a layoutId string.
+     *  Exactly the two-arg overload applied to a default-constructed entry —
+     *  one classification cascade, so a new mode cannot be added to one
+     *  overload and forgotten in the other. */
     static AssignmentEntry fromLayoutId(const QString& layoutId)
     {
-        AssignmentEntry entry;
-        if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-            entry.mode = Autotile;
-            entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
-        } else if (PhosphorLayout::LayoutId::isScrolling(layoutId)) {
-            entry.mode = Scrolling; // sentinel: no layout entity to carry
-        } else {
-            entry.mode = Snapping;
-            entry.snappingLayout = layoutId;
-        }
-        return entry;
+        return fromLayoutId(layoutId, AssignmentEntry{});
     }
 };
 

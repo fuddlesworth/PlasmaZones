@@ -11,6 +11,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include <optional>
+
 namespace PhosphorScrollEngine {
 
 /// The pure scrolling-strip model: an ordered list of columns on an
@@ -83,9 +85,13 @@ public:
     /// @p width is honoured ONLY on the empty-strip fallback (which routes
     /// through insertWindow); joining an existing column keeps the host
     /// column's width intent — an override would resize every sibling.
-    /// @p display DOES apply (column-level presentation).
-    bool insertWindowIntoActiveColumn(const QString& windowId, const ColumnWidth& width, ColumnDisplay display,
-                                      const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0);
+    /// @p displayOverride applies only when ENGAGED (an explicit openTabbed
+    /// rule): a plain consume-open must not overwrite the host column's
+    /// user-toggled display with the config default. The empty-strip
+    /// fallback opens with the override when engaged, else Normal.
+    bool insertWindowIntoActiveColumn(const QString& windowId, const ColumnWidth& width,
+                                      std::optional<ColumnDisplay> displayOverride, const ScrollLayoutParams& params,
+                                      int minWidth = 0, int minHeight = 0);
     /// Insert a restored single-tile column at @p columnIndex (clamped) —
     /// the persistence/restore path. Does not change focus.
     /// NOTE: carries no min-size parameters; callers that know the

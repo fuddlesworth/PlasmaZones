@@ -70,7 +70,10 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         display = *openParams.tabbed ? ColumnDisplay::Tabbed : ColumnDisplay::Normal;
     }
     if (openParams.consume && *openParams.consume && !state->strip().isEmpty()) {
-        if (state->strip().insertWindowIntoActiveColumn(windowId, width, display, params, minWidth, minHeight)) {
+        const std::optional<ColumnDisplay> displayOverride =
+            openParams.tabbed ? std::optional<ColumnDisplay>(display) : std::nullopt;
+        if (state->strip().insertWindowIntoActiveColumn(windowId, width, displayOverride, params, minWidth,
+                                                        minHeight)) {
             // Consume this id from the mode-transition seed too — leaving
             // it would let a stale entry re-position an unrelated later
             // open (the block below documents exactly that hazard).
@@ -149,6 +152,32 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     if (oldState && oldKey == key) {
         return; // re-announce of a window we already track here
     }
+
+    // Cross-screen snap-restore defer, the reciprocal of
+    // SnapEngine::resolveWindowRestore's recorded-screen gate and the twin
+    // of AutotileEngine::windowOpened's — all three run
+    // PhosphorEngine::pendingCrossScreenSnapRestore over the same record
+    // fields, so a session window snapped on a snapping-mode monitor that
+    // KWin drops on a scrolling screen at login is claimed by snap
+    // cross-screen and NOT double-claimed into the strip here. Gated on
+    // !oldState: a window this engine already tracks anywhere is scroll's
+    // own (in-session migration), never a session restore.
+    if (!oldState && m_snappingModeResolver && m_windowTracker) {
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        if (!appId.isEmpty() && appId != windowId) {
+            const auto snapCrossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
+                return PhosphorEngine::pendingCrossScreenSnapRestore(
+                    p, screenId, [this](const QString& rec, int desktop, const QString& activity) {
+                        return m_snappingModeResolver(rec, desktop, activity);
+                    });
+            };
+            if (m_windowTracker->placementStore().peek(windowId, appId, snapCrossRestorePending).has_value()) {
+                qCInfo(lcScrollEngine) << "windowOpened:" << windowId << "on scrolling screen" << screenId
+                                       << "defers to snap — carries a cross-screen snap restore";
+                return;
+            }
+        }
+    }
     if (oldState) {
         // The window moved context (screen or desktop) — migrate. The old
         // context's per-window bookkeeping goes with it: a stale
@@ -160,6 +189,10 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         oldState->removeFloating(windowId);
         m_lastAppliedRect.remove(windowId);
         m_floatRestore.remove(windowId);
+        // The mode-float marker goes with the old context too: the window
+        // re-enters (usually tiled) on the new screen, and a stale marker
+        // would re-float it at the next mode transition.
+        m_scrollFloatedWindows.remove(windowId);
         scheduleRetileForScreen(oldKey.screenId);
         Q_EMIT placementChanged(oldKey.screenId);
     }
@@ -261,6 +294,9 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
                                    const QString& screenId)
 {
     Q_UNUSED(oldFrame)
+    // key.screenId is authoritative below; a mismatched caller value would
+    // retile the wrong strip.
+    Q_UNUSED(screenId)
     const QString windowId = canonicalizeForLookup(rawWindowId);
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
@@ -275,7 +311,6 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     const QRect lastApplied = m_lastAppliedRect.value(windowId);
     const bool widthChanged = !lastApplied.isValid() || lastApplied.width() != newFrame.width();
     const bool heightChanged = !lastApplied.isValid() || lastApplied.height() != newFrame.height();
-    Q_UNUSED(screenId) // key.screenId is authoritative; a mismatched caller value would retile the wrong strip
     if (state->strip().reconcileWindowSize(windowId, newFrame.size(), widthChanged, heightChanged)) {
         scheduleRetileForScreen(key.screenId);
         return;
@@ -436,6 +471,9 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
 
 void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& screenId)
 {
+    // setWindowFloat canonicalizes its own input; canonicalizeForLookup is
+    // idempotent, so passing the resolved id through is a single-pass
+    // pipeline, not a second translation.
     const QString windowId = canonicalizeForLookup(rawWindowId);
     ScrollState* state = stateForWindow(windowId);
     const bool floating = state && state->isFloating(windowId);
@@ -476,6 +514,22 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     PhosphorEngine::PlacementStateKey key = currentKeyForScreen(ctx.toScreenId);
     if (ctx.toDesktop > 0) {
         key.desktop = ctx.toDesktop;
+    }
+    // Defence-in-depth single-owner guard: the daemon releases the source
+    // first on every current path, but a window still tracked in ANOTHER
+    // scroll context here would end up held by two states with the reverse
+    // map pointing at only one. Migrate it out (same sweep as
+    // windowOpened's context migration) before inserting.
+    PhosphorEngine::PlacementStateKey staleKey;
+    if (ScrollState* staleState = stateForWindow(windowId, &staleKey); staleState && staleKey != key) {
+        const ScrollLayoutParams staleParams = layoutParamsForScreen(staleKey.screenId);
+        staleState->strip().takeWindow(windowId, staleParams);
+        staleState->removeFloating(windowId);
+        m_lastAppliedRect.remove(windowId);
+        m_floatRestore.remove(windowId);
+        m_scrollFloatedWindows.remove(windowId);
+        scheduleRetileForScreen(staleKey.screenId);
+        Q_EMIT placementChanged(staleKey.screenId);
     }
     ScrollState* state = stateForKey(key, true);
     if (!state || state->containsWindow(windowId)) {

@@ -23,6 +23,11 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 
+// NOTE: no `shaderAnchor` on this content root, unlike the PopupFrame
+// cards — a multi-pill strip has no single card rect to anchor a surface
+// shader to, and no applyDecoration call targets the ScrollTabs role. The
+// animator's bare-slot fallback (no capture, no sibling hiding) is the
+// intended presentation here; if a pack ever targets this role, revisit.
 Item {
     id: root
 
@@ -98,7 +103,9 @@ Item {
                             id: chipLabel
 
                             anchors.centerIn: parent
-                            text: chip.modelData.title
+                            // A window with neither a registry title nor an app id would
+                            // otherwise render a stray text-less blob.
+                            text: chip.modelData.title || i18n("Untitled window")
                             elide: Text.ElideRight
                             width: Math.min(implicitWidth, Kirigami.Units.gridUnit * 8)
                             color: chip.active ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor

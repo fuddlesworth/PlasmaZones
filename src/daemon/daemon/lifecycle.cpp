@@ -764,6 +764,7 @@ void Daemon::stop()
     // clear-before-destroy contract (ScrollEngine.h documents it).
     if (auto* concreteScroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
         concreteScroll->setContextGapProvider({});
+        concreteScroll->setSnappingModeResolver({});
     }
 
     // Destroy engines now (during stop(), before Qt child destruction order).

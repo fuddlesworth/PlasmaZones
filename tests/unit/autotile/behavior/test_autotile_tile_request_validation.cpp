@@ -175,13 +175,15 @@ private Q_SLOTS:
         engine.setAutotileScreens({screenName});
         engine.setAlgorithm(QLatin1String("master-stack"));
 
-        // Cap at 2 so a third window is forced into overflow.
-        engine.config()->maxWindows = 2;
-
+        // Open all three UNCAPPED first, then cap at 2: the overflow entry
+        // rides the batch only for NEWLY overflowed windows, so capping
+        // before the opens would spend the overflow on an emission the spy
+        // below never sees.
         engine.windowOpened(QStringLiteral("win-1"), screenName);
         engine.windowOpened(QStringLiteral("win-2"), screenName);
         engine.windowOpened(QStringLiteral("win-3"), screenName);
         QCoreApplication::processEvents();
+        engine.config()->maxWindows = 2;
 
         QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
 
@@ -202,11 +204,11 @@ private Q_SLOTS:
                 sawFloating = true;
             }
         }
-        // The third window's overflow fate depends on which-window-got-capped
-        // order, which is stable under the same algo but not worth pinning
-        // here. What matters is that IF any overflow entry was emitted, it
-        // validated cleanly — the assertion above already covered that.
-        Q_UNUSED(sawFloating);
+        // Three windows under a maxWindows=2 cap MUST surface an overflow
+        // entry: without this pin the overflow branch could stop emitting
+        // floating entries entirely and the per-entry validation above
+        // would pass vacuously on the two tiled ones.
+        QVERIFY2(sawFloating, "the overflow branch emitted no floating entry - the overflow path is untested");
     }
 };
 

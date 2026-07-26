@@ -243,102 +243,102 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="305"/>
         <source>Focus First Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на первый столбец</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="310"/>
         <source>Focus Last Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на последний столбец</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="315"/>
         <source>Move Column to Start</source>
-        <translation type="unfinished"></translation>
+        <translation>Переместить столбец в начало</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="320"/>
         <source>Move Column to End</source>
-        <translation type="unfinished"></translation>
+        <translation>Переместить столбец в конец</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="325"/>
         <source>Consume Window into Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Вобрать окно в столбец</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="330"/>
         <source>Expel Window from Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Вытолкнуть окно из столбца</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="335"/>
         <source>Consume or Expel Left</source>
-        <translation type="unfinished"></translation>
+        <translation>Вобрать или вытолкнуть влево</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="340"/>
         <source>Consume or Expel Right</source>
-        <translation type="unfinished"></translation>
+        <translation>Вобрать или вытолкнуть вправо</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="345"/>
         <source>Center Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Центрировать столбец</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="350"/>
         <source>Toggle Tabbed Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить столбец с вкладками</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="355"/>
         <source>Cycle Column Width Preset</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить предустановку ширины столбца</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="361"/>
         <source>Cycle Column Width Preset Back</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить предустановку ширины столбца назад</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="366"/>
         <source>Increase Column Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Увеличить ширину столбца</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="371"/>
         <source>Decrease Column Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Уменьшить ширину столбца</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="376"/>
         <source>Maximize Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Развернуть столбец</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="381"/>
         <source>Expand Column to Available Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Расширить столбец на доступную ширину</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="386"/>
         <source>Cycle Window Height Preset</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить предустановку высоты окна</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="391"/>
         <source>Increase Window Height</source>
-        <translation type="unfinished"></translation>
+        <translation>Увеличить высоту окна</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="396"/>
         <source>Decrease Window Height</source>
-        <translation type="unfinished"></translation>
+        <translation>Уменьшить высоту окна</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="401"/>
         <source>Reset Window Heights</source>
-        <translation type="unfinished"></translation>
+        <translation>Сбросить высоты окон</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="408"/>
@@ -347,6 +347,7 @@
         <translation>Открыть справку по комбинациям клавиш</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="85"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="289"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="283"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="279"/>
@@ -355,144 +356,144 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="75"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="195"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="250"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="408"/>
         <source>Scrolling</source>
         <comment>tiling mode name</comment>
         <translation>Прокрутка</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="93"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="94"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="179"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="98"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="99"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="184"/>
         <source>Snap to Zone</source>
         <translation>Прилепить к зоне</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="116"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="132"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="121"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="137"/>
         <source>Rotate Clockwise</source>
         <translation>Повернуть по часовой стрелке</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="118"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="134"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="123"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="139"/>
         <source>Rotate Counterclockwise</source>
         <translation>Повернуть против часовой стрелки</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="120"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="125"/>
         <source>Cycle Forward in Zone</source>
         <translation>Переключить вперёд в зоне</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="122"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="127"/>
         <source>Cycle Backward in Zone</source>
         <translation>Переключить назад в зоне</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="124"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="129"/>
         <source>Swap Screen Left</source>
         <translation>Поменять экран влево</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="126"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="131"/>
         <source>Swap Screen Right</source>
         <translation>Поменять экран вправо</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="128"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="133"/>
         <source>Swap Screen Up</source>
         <translation>Поменять экран вверх</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="130"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="135"/>
         <source>Swap Screen Down</source>
         <translation>Поменять экран вниз</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="147"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="152"/>
         <source>Consume Window</source>
-        <translation type="unfinished"></translation>
+        <translation>Вобрать окно</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="149"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="154"/>
         <source>Expel Window</source>
-        <translation type="unfinished"></translation>
+        <translation>Вытолкнуть окно</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="155"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="160"/>
         <source>Cycle Column Width</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="157"/>
-        <source>Cycle Column Width Back</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить ширину столбца</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="162"/>
-        <source>Expand Column</source>
-        <translation type="unfinished"></translation>
+        <source>Cycle Column Width Back</source>
+        <translation>Переключить ширину столбца назад</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="236"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="167"/>
+        <source>Expand Column</source>
+        <translation>Расширить столбец</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="241"/>
         <source>Arrows</source>
         <translation>Стрелки</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="246"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="251"/>
         <source>Apply Layout 1-9</source>
         <translation>Применить раскладку 1-9</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="247"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="252"/>
         <source>Snap to Zone 1-9</source>
         <translation>Прилепить к зоне 1-9</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="251"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="256"/>
         <source>Move Window</source>
         <translation>Переместить окно</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="256"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="261"/>
         <source>Focus Zone</source>
         <translation>Фокус на зону</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="261"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="266"/>
         <source>Swap Window</source>
         <translation>Поменять окно местами</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="266"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="271"/>
         <source>Span Window</source>
         <translation>Растянуть окно</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="272"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="277"/>
         <source>Swap Screens</source>
         <translation>Поменять экраны местами</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="278"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="283"/>
         <source>Consume / Expel Window</source>
-        <translation type="unfinished"></translation>
+        <translation>Вобрать / вытолкнуть окно</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="282"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="287"/>
         <source>Consume or Expel Left / Right</source>
-        <translation type="unfinished"></translation>
+        <translation>Вобрать или вытолкнуть влево / вправо</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="286"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="291"/>
         <source>Adjust Column Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменить ширину столбца</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="290"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="295"/>
         <source>Adjust Window Height</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменить высоту окна</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="787"/>
@@ -761,7 +762,7 @@
         <translation>Раскладка не назначена</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="797"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="800"/>
         <source>Dismiss Shortcut Cheatsheet</source>
         <translation>Закрыть справку по комбинациям клавиш</translation>
     </message>
@@ -912,7 +913,7 @@
         <translation>Имя целевого экрана</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="318"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="321"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="290"/>
         <source>Tiling: %1</source>
         <translation>Мозаичное размещение: %1</translation>
@@ -1365,7 +1366,7 @@
         <translation>Контекст</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="184"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="189"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="96"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="35"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="93"/>
@@ -1770,13 +1771,13 @@
         <translation>Прилипание</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="135"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="136"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="137"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="138"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="139"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="140"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="141"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="142"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="143"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="144"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="145"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="146"/>
         <source>Autotile</source>
         <translation>Автоматическое размещение</translation>
     </message>
@@ -1812,17 +1813,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="165"/>
         <source>Whether the window has been floated out of tiling (snapping or tiling mode).</source>
-        <translation type="unfinished"></translation>
+        <translation>Сделано ли окно плавающим и выведено ли из мозаичного размещения (режим прилипания или мозаичного размещения).</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="170"/>
         <source>Whether the window is managed by the tiling engine.</source>
-        <translation type="unfinished"></translation>
+        <translation>Управляется ли окно движком мозаичного размещения.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="180"/>
         <source>The engine mode the window is placed by (snapping, tiling or scrolling).</source>
-        <translation type="unfinished"></translation>
+        <translation>Режим движка, которым размещено окно (прилипание, мозаичное размещение или прокрутка).</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="187"/>
@@ -1857,17 +1858,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="141"/>
         <source>Column width (%)</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина столбца (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="144"/>
         <source>Centering</source>
-        <translation type="unfinished"></translation>
+        <translation>Центрирование</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="150"/>
         <source>Open in a tabbed column (off = a normal column)</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать в столбце с вкладками (выкл. = обычный столбец)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="172"/>
@@ -1975,33 +1976,33 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="421"/>
         <source>Set default column width</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать ширину столбца по умолчанию</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="424"/>
         <source>Set focused column centering</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать центрирование активного столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="427"/>
         <source>Set default column display</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать вид столбца по умолчанию</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="430"/>
         <source>Open at column width</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать с заданной шириной столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="433"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="616"/>
         <source>Open in a tabbed column</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать в столбце с вкладками</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="436"/>
         <source>Open into column</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать в столбец</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="439"/>
@@ -2234,7 +2235,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="616"/>
         <source>Open in a normal column</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать в обычном столбце</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="202"/>
@@ -2730,51 +2731,51 @@
         <location filename="../src/config/settingsvaluelabels.cpp" line="177"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="374"/>
         <source>Never</source>
-        <translation type="unfinished"></translation>
+        <translation>Никогда</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="178"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="377"/>
         <source>Always</source>
-        <translation type="unfinished"></translation>
+        <translation>Всегда</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="179"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="380"/>
         <source>On overflow</source>
-        <translation type="unfinished"></translation>
+        <translation>При переполнении</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="183"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="580"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="122"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="128"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="119"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="125"/>
         <source>Proportion of the screen</source>
-        <translation type="unfinished"></translation>
+        <translation>Доля экрана</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="184"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="143"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="140"/>
         <source>Fixed width</source>
-        <translation type="unfinished"></translation>
+        <translation>Фиксированная ширина</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="185"/>
         <source>Window decides</source>
-        <translation type="unfinished"></translation>
+        <translation>Решает окно</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="189"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="385"/>
         <source>Normal</source>
-        <translation type="unfinished"></translation>
+        <translation>Обычный</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="190"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="388"/>
         <source>Tabbed</source>
-        <translation type="unfinished"></translation>
+        <translation>С вкладками</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="363"/>
@@ -2790,12 +2791,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="393"/>
         <source>New column</source>
-        <translation type="unfinished"></translation>
+        <translation>Новый столбец</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="396"/>
         <source>Consume into focused column</source>
-        <translation type="unfinished"></translation>
+        <translation>Вобрать в активный столбец</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="401"/>
@@ -3186,27 +3187,27 @@
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="504"/>
         <source>Column width: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина столбца: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="507"/>
         <source>Open at width: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать с шириной: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="510"/>
         <source>Centering: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Центрирование: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="514"/>
         <source>New columns: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Новые столбцы: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="518"/>
         <source>Open: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="525"/>
@@ -3623,17 +3624,17 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="124"/>
         <source>Pick a tiling algorithm to use on one monitor.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выберите алгоритм мозаики для использования на одном экране.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="126"/>
         <source>Use scrolling mode on a monitor</source>
-        <translation type="unfinished"></translation>
+        <translation>Использовать режим прокрутки на экране</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="127"/>
         <source>Switch one monitor to the scrolling placement mode.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить один экран в режим размещения «Прокрутка».</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="129"/>
@@ -3707,7 +3708,7 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="151"/>
         <source>Keep one application&apos;s windows out of window placement entirely.</source>
-        <translation type="unfinished"></translation>
+        <translation>Полностью исключить окна одного приложения из размещения окон.</translation>
     </message>
     <message>
         <source>Keep one application&apos;s windows out of the snap and autotile engines entirely.</source>
@@ -3737,7 +3738,7 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="189"/>
         <source>Scrolling mode on monitor</source>
-        <translation type="unfinished"></translation>
+        <translation>Режим прокрутки на экране</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="200"/>
@@ -4874,7 +4875,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="75"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="36"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="142"/>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="185"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="186"/>
         <source>Keyboard Shortcuts</source>
         <translation>Комбинации клавиш</translation>
     </message>
@@ -4922,7 +4923,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="145"/>
         <source>scrolling</source>
-        <translation type="unfinished"></translation>
+        <translation>прокрутка</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="145"/>
@@ -4931,17 +4932,17 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="577"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
         <source>column</source>
-        <translation type="unfinished"></translation>
+        <translation>столбец</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="146"/>
         <source>strip</source>
-        <translation type="unfinished"></translation>
+        <translation>лента</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="149"/>
         <source>tab</source>
-        <translation type="unfinished"></translation>
+        <translation>вкладка</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="197"/>
@@ -5751,35 +5752,35 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="565"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="46"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="43"/>
         <source>Focus and view</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус и обзор</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="567"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="54"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="59"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="51"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="56"/>
         <source>Center the focused column</source>
-        <translation type="unfinished"></translation>
+        <translation>Центрировать активный столбец</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="571"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="71"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="77"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="68"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="74"/>
         <source>Center a lone column</source>
-        <translation type="unfinished"></translation>
+        <translation>Центрировать одиночный столбец</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="574"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="91"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="88"/>
         <source>New columns</source>
-        <translation type="unfinished"></translation>
+        <translation>Новые столбцы</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="576"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="99"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="96"/>
         <source>Default width</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина по умолчанию</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="577"/>
@@ -5787,64 +5788,64 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="591"/>
         <source>width</source>
-        <translation type="unfinished"></translation>
+        <translation>ширина</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="578"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
         <source>pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>пиксели</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="581"/>
         <source>percent</source>
-        <translation type="unfinished"></translation>
+        <translation>процент</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="585"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="172"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="177"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="169"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="174"/>
         <source>Open new columns as</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать новые столбцы как</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
         <source>tabbed</source>
-        <translation type="unfinished"></translation>
+        <translation>с вкладками</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
         <source>tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>вкладки</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="588"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="193"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="190"/>
         <source>Width and height presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Предустановки ширины и высоты</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="198"/>
         <source>Column widths</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина столбцов</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="591"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="594"/>
         <source>cycle</source>
-        <translation type="unfinished"></translation>
+        <translation>переключение</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="593"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="236"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="233"/>
         <source>Window heights</source>
-        <translation type="unfinished"></translation>
+        <translation>Высота окон</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="594"/>
         <source>height</source>
-        <translation type="unfinished"></translation>
+        <translation>высота</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="630"/>
@@ -6868,14 +6869,14 @@
         <translation>Изменение размера прилипанием (предпросмотр перетаскивания)</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller.cpp" line="719"/>
+        <location filename="../src/settings/controller/settingscontroller.cpp" line="732"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="276"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="315"/>
         <source>Zone %1</source>
         <translation>Зона %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller.cpp" line="721"/>
+        <location filename="../src/settings/controller/settingscontroller.cpp" line="734"/>
         <source>%1 — %2</source>
         <translation>%1 — %2</translation>
     </message>
@@ -6945,11 +6946,11 @@
         <translation>Обзор</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="82"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="83"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="84"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="85"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="86"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="87"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="88"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="89"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="90"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="91"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="98"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="307"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="388"/>
@@ -6963,11 +6964,6 @@
         <translation>Размещение</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="98"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="99"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="100"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="101"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="102"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="103"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="104"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="105"/>
@@ -6975,14 +6971,19 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="107"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="108"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="109"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="110"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="111"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="112"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="113"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="114"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="115"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="116"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="117"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="118"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="119"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="121"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="120"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="122"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="124"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="126"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
@@ -7005,24 +7006,24 @@
         <translation>О программе</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="123"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="125"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="127"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="129"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="131"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="133"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="128"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="130"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="132"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="134"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="136"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="138"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="173"/>
         <source>Virtual Screens</source>
         <translation>Виртуальные экраны</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="87"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="88"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="89"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="90"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="91"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="92"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="176"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="93"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="94"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="95"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="96"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="97"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="181"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="177"/>
         <source>Layouts</source>
         <translation>Раскладки</translation>
@@ -12516,10 +12517,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="33"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="336"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="362"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="413"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="431"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="347"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="430"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="448"/>
         <source>Default</source>
         <translation>По умолчанию</translation>
     </message>
@@ -13134,7 +13135,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="439"/>
         <source>Aspect ratio</source>
-        <translation type="unfinished"></translation>
+        <translation>Соотношение сторон</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="440"/>
@@ -13799,7 +13800,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="668"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="390"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="401"/>
         <source>Placement mode</source>
         <translation>Режим размещения</translation>
     </message>
@@ -14175,51 +14176,51 @@
         <translation>Сбросить этот экран</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="238"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="249"/>
         <source>View and change the active mode and layout for each monitor.</source>
         <translation>Просмотр и изменение активного режима и раскладки для каждого экрана.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="256"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="267"/>
         <source>Unable to retrieve monitor state. Make sure the daemon is running.</source>
         <translation>Не удалось получить состояние экрана. Убедитесь, что служба запущена.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="345"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="356"/>
         <source>Snapping layout preview: %1</source>
         <translation>Предпросмотр раскладки прилипания: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="345"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="356"/>
         <source>Snapping layout preview</source>
         <translation>Предпросмотр раскладки прилипания</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="384"/>
         <source>Tiling algorithm preview: %1</source>
         <translation>Предпросмотр алгоритма мозаичного размещения: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="384"/>
         <source>Tiling algorithm preview</source>
         <translation>Предпросмотр алгоритма мозаичного размещения</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="383"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="394"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.</source>
-        <translation type="unfinished"></translation>
+        <translation>Режим прокрутки располагает окна в столбцах с изменяемым размером на бесконечной ленте. Раскладка зон при этом не используется.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="408"/>
         <source>Snapping</source>
         <comment>tiling mode name</comment>
-        <translation type="unfinished">Прилипание</translation>
+        <translation>Прилипание</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="408"/>
         <source>Tiling</source>
         <comment>tiling mode name</comment>
-        <translation type="unfinished">Мозаичное размещение</translation>
+        <translation>Мозаичное размещение</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreenPreview.qml.cpp" line="53"/>
@@ -16099,39 +16100,39 @@
         <translation>Закрыть шпаргалку по сочетаниям клавиш</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="202"/>
         <source>No shortcuts apply in the current mode.</source>
         <translation>В текущем режиме нет действующих сочетаний клавиш.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="282"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="283"/>
         <source>%1, %2</source>
         <comment>shortcut row: action, keys</comment>
         <translation>%1, %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="282"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="283"/>
         <source>%1, unassigned</source>
         <comment>shortcut row: action unassigned</comment>
         <translation>%1, не назначено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="335"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="336"/>
         <source>Unassigned</source>
         <translation>Не назначено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="110"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="114"/>
         <source>Layout indicator</source>
         <translation>Индикатор раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="252"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="256"/>
         <source>%1 (Locked)</source>
         <translation>%1 (заблокировано)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="272"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="276"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="499"/>
         <source>Dismiss notification</source>
         <translation>Закрыть уведомление</translation>
@@ -16142,12 +16143,12 @@
         <translation>Закрыть выбор раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutPickerContent.qml.cpp" line="229"/>
+        <location filename=".qml-stubs/src/ui/LayoutPickerContent.qml.cpp" line="230"/>
         <source>Choose Layout</source>
         <translation>Выбор раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutPickerContent.qml.cpp" line="321"/>
+        <location filename=".qml-stubs/src/ui/LayoutPickerContent.qml.cpp" line="322"/>
         <source>Layout is locked. Unlock the current layout before switching to another one.</source>
         <comment>@info:whatsthis layout picker lock overlay</comment>
         <translation>Раскладка заблокирована. Разблокируйте текущую раскладку перед переключением на другую.</translation>
@@ -16497,12 +16498,12 @@
         <translation>Закрыть наложение помощника прилипания</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/SnapAssistContent.qml.cpp" line="243"/>
+        <location filename=".qml-stubs/src/ui/SnapAssistContent.qml.cpp" line="244"/>
         <source>Snap %1 to this zone</source>
         <translation>Прилепить %1 к этой зоне</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/SnapAssistContent.qml.cpp" line="243"/>
+        <location filename=".qml-stubs/src/ui/SnapAssistContent.qml.cpp" line="244"/>
         <source>Snap window to this zone</source>
         <translation>Прилепить окно к этой зоне</translation>
     </message>
@@ -16526,78 +16527,83 @@
         <translation>Нет доступных раскладок</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="56"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="53"/>
         <source>With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.</source>
         <oldsource>Never keeps the strip still until the focused column would leave the screen. Always parks the focused column in the middle. On overflow centers it only once the strip is wider than the screen.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Вариант «Никогда» оставляет ленту неподвижной, пока активный столбец не начнёт уходить за пределы экрана. Вариант «Всегда» закрепляет активный столбец посередине. Вариант «При переполнении» центрирует его только после того, как лента станет шире экрана.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="73"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="70"/>
         <source>When the strip holds a single column, center it no matter what the setting above says</source>
         <oldsource>When the strip holds a single column, center it whatever the setting above says</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Когда на ленте только один столбец, центрировать его независимо от параметра выше</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="98"/>
+        <source>How wide a column is when it first opens</source>
+        <translation>Какой ширины будет столбец при первом открытии</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="101"/>
-        <source>How wide a column is when it first opens</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="104"/>
         <source>Default column width</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина столбца по умолчанию</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="124"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="121"/>
         <source>How much of the usable screen width a new column takes</source>
-        <translation type="unfinished"></translation>
+        <translation>Какую долю полезной ширины экрана занимает новый столбец</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="145"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="142"/>
         <source>How many pixels wide a new column is</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина нового столбца в пикселях</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="151"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="148"/>
         <source>Fixed column width</source>
-        <translation type="unfinished"></translation>
+        <translation>Фиксированная ширина столбца</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="174"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="171"/>
         <source>Normal stacks the windows of a column above each other. Tabbed shows one window at a time behind a tab strip.</source>
-        <translation type="unfinished"></translation>
+        <translation>«Обычный» размещает окна столбца друг над другом. «С вкладками» показывает по одному окну за полосой вкладок.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="203"/>
-        <source>Comma separated fractions of the work area width, cycled by the preset shortcuts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="210"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="207"/>
         <source>0.333,0.5,0.667</source>
         <comment>@info:placeholder comma separated column width fractions</comment>
-        <translation type="unfinished"></translation>
+        <translation>0.333,0.5,0.667</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="238"/>
-        <source>Comma separated fractions of the work area height, cycled by the preset shortcuts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="245"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="242"/>
         <source>0.333,0.5,0.667</source>
         <comment>@info:placeholder comma separated window height fractions</comment>
-        <translation type="unfinished"></translation>
+        <translation>0.333,0.5,0.667</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="209"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="206"/>
         <source>Column width presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Предустановки ширины столбца</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="244"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="200"/>
+        <source>Comma-separated fractions of the work area width, cycled by the preset shortcuts</source>
+        <translation>Доли ширины рабочей области через запятую, переключаемые комбинациями клавиш предустановок</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="235"/>
+        <source>Comma-separated fractions of the work area height, cycled by the preset shortcuts</source>
+        <translation>Доли высоты рабочей области через запятую, переключаемые комбинациями клавиш предустановок</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="241"/>
         <source>Window height presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Предустановки высоты окна</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/ScrollTabStripContent.qml.cpp" line="108"/>
+        <source>Untitled window</source>
+        <translation>Окно без заголовка</translation>
     </message>
 </context>
 </TS>

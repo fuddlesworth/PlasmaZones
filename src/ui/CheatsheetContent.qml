@@ -139,7 +139,7 @@ Item {
             return Math.max(1, Math.min(maxColumns, Math.min(fit, root.groups.length)));
         }
         readonly property int contentWidth: columns * columnWidth + (columns - 1) * columnSpacing
-        readonly property int maxContentHeight: Math.round(root.height * 0.85) - paddingSide * 3 - titleLabel.height
+        readonly property int maxContentHeight: Math.max(0, Math.round(root.height * 0.85) - paddingSide * 3 - titleLabel.height)
     }
 
     // Backdrop — click outside to dismiss, same bare click-only backdrop
@@ -150,6 +150,7 @@ Item {
         onClicked: root._requestDismiss()
         Accessible.name: i18n("Dismiss shortcut cheatsheet")
         Accessible.role: Accessible.Button
+        Accessible.onPressAction: root._requestDismiss()
     }
 
     QFZCommon.PopupFrame {

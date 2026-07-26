@@ -225,18 +225,21 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     // prior handoff). Release the previous state first to avoid orphaning
     // the entry — handoffRelease is the correct primitive for "drop
     // tracking without mutating geometry" within this engine too.
+    QSize preservedMin(0, 0);
     if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() != destKey) {
         // Internal re-home: the release wipes m_windowMinSizes on the
         // assumption that ctx.minSize re-seeds it — untrue when the daemon
         // built the context from an engine that does not model min sizes
         // (snap's windowMinimumSize is the 0x0 default). Preserve our own
-        // live value for that case.
-        const QSize preservedMin = m_windowMinSizes.value(windowId, QSize(0, 0));
-        handoffRelease(windowId);
-        if ((ctx.minSize.width() <= 0 && ctx.minSize.height() <= 0)
-            && (preservedMin.width() > 0 || preservedMin.height() > 0)) {
-            m_windowMinSizes.insert(windowId, preservedMin);
+        // live value for that case; it is re-stored through
+        // storeWindowMinSize AFTER the destination key is set below, so it
+        // caps against the DESTINATION screen — a raw re-insert would
+        // replay a possibly other-screen-capped value, exactly what
+        // handoffRelease drops the entry to avoid.
+        if (ctx.minSize.width() <= 0 && ctx.minSize.height() <= 0) {
+            preservedMin = m_windowMinSizes.value(windowId, QSize(0, 0));
         }
+        handoffRelease(windowId);
     }
 
     // Insert at the position dictated by the insertion-order setting (a
@@ -265,6 +268,10 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         // source that just lost its partner must not keep a hole.
         qCWarning(PhosphorTileEngine::lcTileEngine) << "handoffReceive: destination state refused" << windowId << "on"
                                                     << ctx.toScreenId << "- window left unmanaged";
+        // Leave no trace: an unmanaged window keeps no min-size entry
+        // either (pruneStaleWindows would sweep it eventually, but the
+        // refusal branch's contract is immediate cleanliness).
+        m_windowMinSizes.remove(windowId);
         retileAfterOperation(ctx.toScreenId, true);
         return;
     }
@@ -290,6 +297,11 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     // clamps correctly instead of waiting a refuse/re-discover round-trip.
     if (ctx.minSize.width() > 0 || ctx.minSize.height() > 0) {
         storeWindowMinSize(windowId, ctx.minSize.width(), ctx.minSize.height());
+    } else if (preservedMin.width() > 0 || preservedMin.height() > 0) {
+        // Internal re-home with a min-size-less context: re-store OUR
+        // preserved value through the capping path so it clamps against
+        // the destination screen (see the preservation comment above).
+        storeWindowMinSize(windowId, preservedMin.width(), preservedMin.height());
     }
 
     // Announce the received float bit on the passive channel (the snap twin

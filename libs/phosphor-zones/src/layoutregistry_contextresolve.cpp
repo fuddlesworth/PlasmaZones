@@ -268,8 +268,8 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
         contextCacheKeyToken(mode, activeLayoutId, orientationToken), [&]() -> ContextGapOverride {
             ContextGapOverride gaps;
             // Thread the placement mode into the query so a per-mode `Mode
-            // Equals "snapping"/"tiling"` gap rule resolves for the asking
-            // engine and stays inert for the other.
+            // Equals "snapping"/"tiling"/"scrolling"` gap rule resolves for
+            // the asking engine and stays inert for the others.
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, mode);
             query.screenOrientation = orientationToken;
             query.activeLayout = activeLayoutId;
@@ -585,6 +585,11 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
 
     ContextTilingParams params;
+    // No defense-in-depth clamps here, unlike the scrolling resolver's
+    // width bound: the tile engine re-clamps every one of these on
+    // consumption (maxWindows/masterCount floors, split-ratio bounds), so a
+    // second clamp would only duplicate its policy. The scrolling width is
+    // clamped at THIS layer because the strip consumes it raw.
     if (const auto action = resolved.slot(QString(PWR::ActionSlot::MaxWindows))) {
         params.maxWindows = action->params.value(PWR::ActionParam::Value).toInt();
     }
@@ -661,11 +666,11 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
         // Defense in depth (the descriptor validator already rejects
         // out-of-range payloads at load): a hand-edited rules.json can only
         // fall through to a sane bound, matching resolveContextOverlay's
-        // documented policy. The 0.05 / 1.0 literals mirror the engine's own
-        // clamp AND phosphor-rules' private kMin/MaxColumnWidthRatio (its
-        // descriptor validator) — that header is not exported, so a bound
-        // change there must be mirrored here by hand.
-        params.defaultColumnWidth = qBound(0.05, action->params.value(PWR::ActionParam::Value).toDouble(), 1.0);
+        // documented policy. Bounds are the installed PhosphorRules
+        // constants, the same pair the descriptor validator clamps against.
+        params.defaultColumnWidth =
+            qBound(PWR::MinColumnWidthRatio, action->params.value(PWR::ActionParam::Value).toDouble(),
+                   PWR::MaxColumnWidthRatio);
     }
     if (const auto action = resolved.slot(QString(PWR::ActionSlot::CenterFocusedColumn))) {
         // Wire token → the centering int (never 0 / always 1 / on overflow 2), the

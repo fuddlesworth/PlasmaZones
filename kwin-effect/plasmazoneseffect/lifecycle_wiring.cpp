@@ -874,6 +874,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // virtual screen absolute geometry)
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, [this]() {
         m_idCaches.screenIdCache.clear();
+        m_idCaches.connectedPhysicalIdsValid = false;
         m_lastEffectiveScreenId.clear();
     });
 }

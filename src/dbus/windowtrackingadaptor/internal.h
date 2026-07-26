@@ -20,9 +20,43 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorRules/WindowQuery.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include "core/platform/logging.h"
 
 namespace PlasmaZones {
 namespace WindowTrackingInternal {
+
+/// Release @p windowId from @p source (when given and distinct from the
+/// destination) and receive it into @p dest, VERIFYING adoption.
+/// handoffReceive can silently refuse (screen no longer in the engine's set,
+/// no state, duplicate, insert failure), and by then the source has already
+/// released — an unguarded release→receive strands the window tracked by NO
+/// engine. On refusal this re-homes the window into the source engine on
+/// @p recoverScreenId (when both are available) so it stays managed.
+/// Returns true when the destination adopted the window.
+inline bool guardedHandoff(::PhosphorEngine::IPlacementEngine* source, ::PhosphorEngine::IPlacementEngine* dest,
+                           ::PhosphorEngine::IPlacementEngine::HandoffContext ctx, const QString& recoverScreenId)
+{
+    if (source && source != dest) {
+        source->handoffRelease(ctx.windowId);
+    }
+    dest->handoffReceive(ctx);
+    if (dest->isWindowTracked(ctx.windowId)) {
+        return true;
+    }
+    qCWarning(lcDbusWindow) << "guardedHandoff:" << dest->engineId() << "refused" << ctx.windowId;
+    if (source && source != dest && !recoverScreenId.isEmpty()) {
+        ::PhosphorEngine::IPlacementEngine::HandoffContext back = ctx;
+        back.toScreenId = recoverScreenId;
+        back.toDesktop = 0;
+        back.fromEngineId = dest->engineId();
+        source->handoffReceive(back);
+        if (source->isWindowTracked(ctx.windowId)) {
+            qCInfo(lcDbusWindow) << "guardedHandoff: re-homed" << ctx.windowId << "into" << source->engineId() << "on"
+                                 << recoverScreenId;
+        }
+    }
+    return false;
+}
 
 inline QJsonArray toJsonArray(const QStringList& list)
 {

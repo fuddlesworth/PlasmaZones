@@ -89,6 +89,19 @@
 
 namespace PlasmaZones {
 
+QVariantMap SettingsController::scrollingWidthConstants() const
+{
+    return {
+        {QStringLiteral("kindProportion"), ConfigDefaults::scrollingWidthKindProportion()},
+        {QStringLiteral("kindFixed"), ConfigDefaults::scrollingWidthKindFixed()},
+        {QStringLiteral("kindClientDecides"), ConfigDefaults::scrollingWidthKindClientDecides()},
+        {QStringLiteral("proportionMin"), ConfigDefaults::scrollingDefaultColumnWidthValueMin()},
+        {QStringLiteral("proportionMax"), ConfigDefaults::scrollingDefaultColumnWidthProportionMax()},
+        {QStringLiteral("fixedMin"), ConfigDefaults::scrollingDefaultColumnWidthFixedMin()},
+        {QStringLiteral("fixedMax"), ConfigDefaults::scrollingDefaultColumnWidthValueMax()},
+    };
+}
+
 QVariantList SettingsController::valueOptions(const QString& group, const QString& key) const
 {
     QVariantList out;

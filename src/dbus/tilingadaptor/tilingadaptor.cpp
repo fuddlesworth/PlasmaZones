@@ -37,6 +37,13 @@ void TilingAdaptor::setLifecycleEngines(const QVector<PhosphorEngine::IPlacement
     // entry points).
     m_lifecycleEngines = engines;
     m_lifecycleEngines.removeAll(nullptr);
+    if (m_lifecycleEngines.isEmpty()) {
+        // Teardown contract (header: "pass an empty list on teardown"):
+        // parked opens can never be retried without a pipeline, and the
+        // announce path's empty-union bail deliberately skips the retry, so
+        // they would otherwise sit for the rest of the process.
+        m_unclaimedOpens.clear();
+    }
 }
 
 bool TilingAdaptor::ensurePipeline(const char* methodName) const
@@ -106,6 +113,13 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         entry.screenId = obj.value(QLatin1String("screenId")).toString();
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
+        // The protocol type ships its own validator (empty windowId /
+        // screenId, degenerate rect) — run it rather than re-deriving a
+        // subset of its checks here.
+        if (const QString validationError = entry.validationError(); !validationError.isEmpty()) {
+            qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping entry:" << validationError;
+            continue;
+        }
         requests.append(entry);
     }
 

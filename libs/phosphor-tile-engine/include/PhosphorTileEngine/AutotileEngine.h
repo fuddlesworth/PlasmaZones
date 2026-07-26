@@ -125,7 +125,7 @@ public:
      * pruneStatesForDesktop(). The m_states map itself stays private; per-screen
      * lookup is available through tilingStateForScreen(screenId). (Design notes
      * on why the older screenStates() accessor was removed live above the
-     * definition in AutotileEngine.cpp.)
+     * definition in src/autotileengine/algorithm_state.cpp.)
      */
     QSet<int> desktopsWithActiveState() const override;
 
@@ -339,6 +339,15 @@ public:
      * Called when activities change so stale entries don't accumulate.
      */
     void pruneStatesForActivities(const QStringList& validActivities) override;
+
+    /**
+     * Prune every TilingState (all desktops/activities) whose screen is the
+     * removed physical output or one of its virtual sub-screens.
+     * updateEngineScreens only reaps CURRENT-context states, so without
+     * this the sibling-context states of an unplugged monitor would leak
+     * and resurface ghost tiles when the connector returns.
+     */
+    void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
 
     /**
      * @brief Get the current virtual desktop tracked by the engine

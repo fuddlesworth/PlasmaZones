@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/ContextResolveKey.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutSettingsStore.h>
@@ -957,50 +958,10 @@ private:
     /// keyed by the physical/connector id still matches a virtual-screen query.
     bool hasMatchingAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity) const;
 
-    /// Lookup key for @c m_contextResolveCache. Mirrors the parameters of
-    /// @ref resolveAssignmentEntry — three independent context dimensions
-    /// the windowless cascade walks (screen id, virtual desktop, activity).
-    /// Field-equal + per-field hash composition is enough: every dimension is
-    /// part of the cascade identity.
-    struct ContextResolveKey
-    {
-        QString screenId;
-        int virtualDesktop = 0;
-        QString activity;
-        // A free-form fourth key dimension, used by the context resolvers that
-        // share the ContextResolveKey type but never the same cache container. It
-        // folds in every non-rule-set input the resolved value depends on, so a
-        // change in one yields a fresh entry rather than a stale hit:
-        //   - gap cascade: contextCacheKeyToken(mode, activeLayout, orientation) —
-        //     the SAME (screen, desktop, activity) resolves DIFFERENT gaps per
-        //     placement mode, active layout, and screen orientation.
-        //   - lock / default-assignment / overlay: contextCacheKeyToken with an
-        //     empty mode (they are mode-agnostic) plus activeLayout (except
-        //     default-assignment, which omits it to avoid recursion) and orientation.
-        //   - assignment resolver: "twc:N|or:<token>" — the tiled-window-count and
-        //     the screen orientation (it does not read the active layout).
-        // Each resolver owns its own cache hash, so the token vocabularies never
-        // collide.
-        QString mode;
-        bool operator==(const ContextResolveKey& other) const noexcept
-        {
-            return virtualDesktop == other.virtualDesktop && screenId == other.screenId && activity == other.activity
-                && mode == other.mode;
-        }
-    };
-    friend size_t qHash(const LayoutRegistry::ContextResolveKey& key, size_t seed) noexcept
-    {
-        // ::qHash routes to the global Qt qHash overloads — without the leading
-        // qualifier ADL would pick up @c qHash(LayoutAssignmentKey&) (declared
-        // in @c AssignmentEntry.h alongside this header) and fail to convert
-        // each field. Mirrors the same pattern @c LayoutAssignmentKey itself uses.
-        size_t h = seed;
-        h = ::qHash(key.screenId, h);
-        h = ::qHash(key.virtualDesktop, h);
-        h = ::qHash(key.activity, h);
-        h = ::qHash(key.mode, h);
-        return h;
-    }
+    /// Lookup key for the context-resolver caches below. Hoisted to
+    /// PhosphorZones/ContextResolveKey.h (a self-contained value type with
+    /// its own qHash); the alias keeps existing qualified uses compiling.
+    using ContextResolveKey = PhosphorZones::ContextResolveKey;
 
     /// Shared revision-invalidated memoization for the five context resolvers
     /// (@ref resolveAssignmentEntry, @ref resolveContextGaps,
@@ -1145,8 +1106,10 @@ private:
     Layout* m_activeLayout = nullptr;
     Layout* m_previousLayout = nullptr; ///< Active layout before last setActiveLayout (for resnap)
     /// Quick-layout slots keyed by mode: index 0 = Snapping (zone-layout
-    /// UUIDs), index 1 = Autotile (autotile algorithm IDs). Each maps slot
-    /// number (1..9) → layout/algorithm ID. See @ref modeIndex.
+    /// UUIDs), index 1 = Autotile (autotile algorithm IDs); Scrolling has
+    /// no slot array (no per-slot artefact to assign — see @ref
+    /// slotIndexFor, the one authority for this mapping). Each maps slot
+    /// number (1..9) → layout/algorithm ID.
     QHash<int, QString> m_quickLayoutSlots[2];
     /// Per-layout settings sidecar (layout-settings.json), keyed by layout UUID.
     /// Settings are split out of the structural layout file on save and merged

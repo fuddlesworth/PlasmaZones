@@ -111,7 +111,7 @@ private Q_SLOTS:
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
         QScopedPointer<PhosphorPlacement::WindowTrackingService> service(
-            new PhosphorPlacement::WindowTrackingService(layoutManager.data(), detector.data(), nullptr, nullptr));
+            new PhosphorPlacement::WindowTrackingService(layoutManager.data(), nullptr, nullptr));
 
         auto* layout = new PhosphorZones::Layout(QStringLiteral("Test"), layoutManager.data());
         auto* z1 = new PhosphorZones::Zone(layout);
@@ -144,7 +144,7 @@ private Q_SLOTS:
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
         QScopedPointer<PhosphorPlacement::WindowTrackingService> service(
-            new PhosphorPlacement::WindowTrackingService(layoutManager.data(), detector.data(), nullptr, nullptr));
+            new PhosphorPlacement::WindowTrackingService(layoutManager.data(), nullptr, nullptr));
         QScopedPointer<SnapEngine> engine(
             new SnapEngine(layoutManager.data(), service.data(), detector.data(), nullptr, nullptr));
         engine->setEngineSettings(settings.data());

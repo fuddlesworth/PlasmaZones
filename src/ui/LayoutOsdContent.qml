@@ -93,6 +93,10 @@ Item {
     property bool locked: false
     property bool disabled: false
     property string disabledReason: ""
+    // Icon for the disabled-style overlay card. The default is the failure
+    // glyph; a positive announcement that reuses this card (the Scrolling
+    // mode switch) overrides it so success does not wear the failure icon.
+    property string disabledIcon: "dialog-cancel"
     /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
     /// The unified shell host re-emits this as its `osdDismissRequested`
     /// signal, which C++ (wirePassiveShellSlots) routes to
@@ -212,7 +216,7 @@ Item {
 
             Kirigami.Icon {
                 anchors.centerIn: parent
-                source: "dialog-cancel"
+                source: root.disabledIcon
                 width: Kirigami.Units.iconSizes.large
                 height: Kirigami.Units.iconSizes.large
                 color: Kirigami.Theme.disabledTextColor

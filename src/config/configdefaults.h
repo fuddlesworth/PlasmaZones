@@ -561,11 +561,19 @@ public:
     {
         return 0.05;
     }
+    /// Proportion-kind ceiling (100% of the work area). The QML slider and
+    /// the schema's proportion-list canonicalizer bound against the same
+    /// value conceptually; this accessor is the C++ home for it.
+    static constexpr qreal scrollingDefaultColumnWidthProportionMax()
+    {
+        return 1.0;
+    }
     /// Fixed-kind pixel floor. Enforced by the hand-written SETTER only —
     /// the D-Bus registry routes through it, but store-level writers
     /// (profile staging, config import, hand edits) see only the schema's
-    /// wider clampDouble, and the QML SpinBox carries its own literal
-    /// bounds. The engine's qMax(1, …) keeps any bypass value renderable.
+    /// wider clampDouble. The QML SpinBox reads its bounds from here via
+    /// SettingsController::scrollingWidthConstants(). The engine's
+    /// qMax(1, …) keeps any bypass value renderable.
     static constexpr qreal scrollingDefaultColumnWidthFixedMin()
     {
         return 100.0;

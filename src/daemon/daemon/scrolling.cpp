@@ -110,6 +110,12 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // the overrides diff. Mirrors the load-bearing autotile loop in
     // updateEngineScreens; scheduleRetileForScreen coalesces, so the
     // identical-set overlap costs nothing.
+    // LOAD-BEARING dependency: this gate is only correct because
+    // ScrollEngine::setActiveScreens' identical-set branch
+    // (engine_core.cpp, screens == m_scrollingScreens) retiles every screen
+    // itself. If that branch ever stops retiling, this gate must be
+    // dropped (scheduleRetileForScreen coalesces, so the ungated loop is
+    // cheap — the autotile twin runs ungated for exactly that reason).
     if (scrollingScreens != currentScrollScreens) {
         for (const QString& screenId : (scrollingScreens & currentScrollScreens)) {
             m_scrollEngine->scheduleRetileForScreen(screenId);

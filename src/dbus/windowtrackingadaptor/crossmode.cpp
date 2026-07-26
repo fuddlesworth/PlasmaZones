@@ -10,6 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "windowtrackingadaptor.h"
+#include "internal.h"
 
 #include "dbus/zonedetectionadaptor.h"
 #include "core/interfaces/isettings.h"
@@ -95,30 +96,15 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         }
     }
 
-    // Relinquish from the source (tracking-only). An autotile source must reflow
-    // — the remaining tiles expand into the vacated slot; handoffRelease does not
-    // retile. A snap source just vacates a zone (no reflow). A scroll source's
-    // handoffRelease schedules its own coalesced retile, so the strip closes up
-    // without an explicit call here. The min size is queried first: release
-    // drops the source's tracking, and the receiver seeds from ctx.minSize.
+    // The source is relinquished inside guardedHandoff below (or explicitly
+    // on the reactive-arrival branch). An autotile source must reflow — the
+    // remaining tiles expand into the vacated slot; handoffRelease does not
+    // retile. A snap source just vacates a zone (no reflow). A scroll
+    // source's handoffRelease schedules its own coalesced retile, so the
+    // strip closes up without an explicit call. The min size is queried
+    // BEFORE any release (the release drops the source's tracking, and the
+    // receiver seeds from ctx.minSize).
     const QSize windowMinSize = sourceEngine->windowMinimumSize(windowId);
-    sourceEngine->handoffRelease(windowId);
-    if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
-        sourceEngine->retile(sourceScreen);
-    }
-
-    // A MONITOR crossing physically relocates the window to a different output.
-    // Tell the compositor the imminent output change is daemon-owned BEFORE the
-    // placement geometry triggers it — otherwise the effect's reactive
-    // outputChanged handler re-issues windowClosed/windowOpened and tears down
-    // the placement we're about to make (the exact tear-down NavigationController's
-    // in-mode cross-output move guards against). A cross-DESKTOP crossing keeps the
-    // window on the same screen (targetScreenId == sourceScreen), so no marker —
-    // arming a one-shot for an output change that never comes would swallow the
-    // next genuine outputChanged for this window.
-    if (!sourceScreen.isEmpty() && targetScreenId != sourceScreen) {
-        Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
-    }
 
     // Place on the target. A cross-DESKTOP move onto an AUTOTILE desktop uses the
     // existing reactive path: the window changes desktops below and the autotile
@@ -158,7 +144,31 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         // tiled (non-floating) state on the passive float-sync channel —
         // intended: the arrival IS tiled, and the relay's last-broadcast
         // gate dedups when the bit already agrees.
-        targetEngine->handoffReceive(ctx);
+        //
+        // Guarded (the swap path's pass-4 fix, mirrored): handoffReceive can
+        // silently refuse, and the source has already released inside the
+        // helper — on refusal the helper re-homes into the source so the
+        // window is not stranded tracked-by-no-engine.
+        const bool adopted = WindowTrackingInternal::guardedHandoff(sourceEngine, targetEngine, ctx, sourceScreen);
+        // A MONITOR crossing physically relocates the window to a different
+        // output. Mark the imminent output change as daemon-owned so the
+        // effect's reactive outputChanged handler does not re-issue
+        // windowClosed/windowOpened and tear down the placement just made.
+        // Post-receive and adoption-gated (same contract as the swap path):
+        // a refused receive must not arm a one-shot for a move that never
+        // happens — it would swallow the next genuine outputChanged. The
+        // effect applies geometry through deferred commits, so the marker
+        // signal lands before the output change is processed.
+        if (adopted && !sourceScreen.isEmpty() && targetScreenId != sourceScreen) {
+            Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
+        }
+    } else {
+        // Reactive autotile desktop arrival: no receive here (the effect
+        // catch-scan tiles it on the target desktop), so just release.
+        sourceEngine->handoffRelease(windowId);
+    }
+    if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
+        sourceEngine->retile(sourceScreen);
     }
 
     // Physical relocation for a cross-desktop crossing: ask the compositor to

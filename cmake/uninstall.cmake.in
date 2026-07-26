@@ -43,7 +43,7 @@ endif()
 # Step 2: Remove known PlasmaZones files. The install manifest (step 1) is
 # the AUTHORITATIVE uninstall; this list is a best-effort backstop for
 # manifest-less installs and does not cover every artifact (QML plugin dirs
-# under org/phosphor, the lowercase QPA plugin, header/CMake package files).
+# under org/phosphor and header/CMake package files stay manifest-covered).
 # Covers: bin, lib, share/applications, share/autostart, share/dbus-1/interfaces,
 # share/icons, share/kglobalaccel, share/plasmazones, lib/.../qml, lib/.../plugins
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -61,7 +61,7 @@ set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-settings"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-shader-validate"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/kglobalaccel/plasmazonesd.desktop"
-    "$ENV{DESTDIR}@PZ_UNINSTALL_QT_PLUGINS@/wayland-shell-integration/libphosphorwayland-qpa.so"
+    "$ENV{DESTDIR}@PZ_UNINSTALL_QT_PLUGINS@/wayland-shell-integration/phosphorwayland-qpa.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.daemon.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.editor.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.settings.desktop"
@@ -92,8 +92,9 @@ set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor-light/scalable/apps/plasmazones-editor.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor-light/scalable/apps/plasmazones-settings.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kwin/effects/plugins/kwin_effect_plasmazones.so"
-    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kcm_plasmazones.so"
-    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/plasma/kcms/systemsettings/kcm_plasmazones.so"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/plasma/kcms/systemsettings/kcm_plasmazones_about.so"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/kcm_plasmazones_about.desktop"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/systemsettings/categories/settings-windowmanagement-plasmazones.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_SYSTEMDUSERUNITDIR@/plasmazones.service"
 )
 
@@ -104,13 +105,57 @@ foreach(f ${KNOWN_FILES})
     endif()
 endforeach()
 
-# Shared libraries in LIBDIR: libplasmazones_* (core, rendering,
-# shaderpreview) and libPhosphor* engine/support libs, all soversion
-# variants. (QML plugin .so files under org/phosphor and the lowercase
-# libphosphorwayland-qpa.so live elsewhere — manifest-covered only.)
-file(GLOB CORE_LIBS
-    "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/libplasmazones_*.so*"
-    "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/libPhosphor*.so*")
+# Shared libraries in LIBDIR, enumerated by NAME rather than a libPhosphor*
+# glob: the Phosphor libs are designed to graduate to standalone repos, and
+# a wildcard would delete a separately-packaged Phosphor library that this
+# install never shipped — an uninstall must not reach outside its own
+# manifest. Soversion variants are globbed per name. libplasmazones_* stays
+# a glob (the project prefix is not shared). The QML plugin .so files under
+# org/phosphor and the QPA plugin live elsewhere (KNOWN_FILES / manifest).
+set(PZ_SHARED_LIB_NAMES
+    "libPhosphorAnimation"
+    "libPhosphorAnimationQmlShared"
+    "libPhosphorAudio"
+    "libPhosphorCompositor"
+    "libPhosphorConfig"
+    "libPhosphorContextResolver"
+    "libPhosphorControl"
+    "libPhosphorDBus"
+    "libPhosphorEngine"
+    "libPhosphorFsLoader"
+    "libPhosphorGeometry"
+    "libPhosphorLayer"
+    "libPhosphorLayoutApi"
+    "libPhosphorOverlay"
+    "libPhosphorPlacement"
+    "libPhosphorProtocol"
+    "libPhosphorProtocolTypes"
+    "libPhosphorRegistry"
+    "libPhosphorRendering"
+    "libPhosphorRules"
+    "libPhosphorScreens"
+    "libPhosphorScreensCore"
+    "libPhosphorScreensRuntime"
+    "libPhosphorScripting"
+    "libPhosphorScrollEngine"
+    "libPhosphorServiceIdle"
+    "libPhosphorShaders"
+    "libPhosphorShellPatterns"
+    "libPhosphorShortcuts"
+    "libPhosphorSnapEngine"
+    "libPhosphorSurface"
+    "libPhosphorSurfaces"
+    "libPhosphorTileEngine"
+    "libPhosphorTiles"
+    "libPhosphorWayland"
+    "libPhosphorWorkspaces"
+    "libPhosphorZones"
+)
+file(GLOB CORE_LIBS "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/libplasmazones_*.so*")
+foreach(name ${PZ_SHARED_LIB_NAMES})
+    file(GLOB _pz_lib_matches "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/${name}.so*")
+    list(APPEND CORE_LIBS ${_pz_lib_matches})
+endforeach()
 foreach(f ${CORE_LIBS})
     message(STATUS "  Removing: ${f}")
     execute_process(COMMAND "@CMAKE_COMMAND@" -E remove "${f}" ERROR_QUIET)
@@ -120,7 +165,6 @@ endforeach()
 set(KNOWN_DIRS
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/plasmazones"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/phosphorwayland"
-    "$ENV{DESTDIR}@KDE_INSTALL_FULL_QMLDIR@/org/kde/kcms/plasmazones"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_QMLDIR@/org/phosphor"
 )
 

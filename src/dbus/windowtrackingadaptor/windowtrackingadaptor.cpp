@@ -83,7 +83,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
 
     // Create business logic service
     m_service = new PhosphorPlacement::WindowTrackingService(
-        layoutManager, zoneDetector, screenManager, virtualDesktopManager, m_geometryResolver.get(),
+        layoutManager, screenManager, virtualDesktopManager, m_geometryResolver.get(),
         PhosphorPlacement::PlacementConfig{settings->keepWindowsInZonesOnResolutionChange()}, this);
 
     // Wire the disabled-context gate consulted before recording a snap-side

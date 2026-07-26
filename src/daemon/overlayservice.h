@@ -260,7 +260,11 @@ public:
                        bool producesOverlappingZones = false, const QString& zoneNumberDisplay = QStringLiteral("all"),
                        int masterCount = 1);
     void showLockedLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
-    void showDisabledOsd(const QString& reason, const QString& screenId = QString());
+    /// @p icon overrides the card's overlay glyph — the default is the
+    /// failure "dialog-cancel"; a positive announcement that reuses this
+    /// card (showScrollingModeOsd) passes its own so success does not wear
+    /// the failure icon.
+    void showDisabledOsd(const QString& reason, const QString& screenId = QString(), const QString& icon = QString());
 
     /**
      * @brief Pre-create the per-screen passive overlay shell for all connected

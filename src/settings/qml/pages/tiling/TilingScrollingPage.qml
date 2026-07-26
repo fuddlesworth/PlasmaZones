@@ -17,16 +17,13 @@ SettingsFlickable {
     id: root
 
     // Width kind selector values, mirroring ConfigDefaults'
-    // scrollingDefaultColumnWidthKind vocabulary: 0 proportion, 1 fixed px,
-    // 2 the window decides. The paired value row shows the control that
-    // matches the kind and collapses out entirely for "window decides",
-    // which has no value to set.
-    // KEEP IN SYNC with ConfigDefaults::scrollingWidthKind*() and the
-    // engine's DefaultWidthKind enum (ScrollTypes.h) — the QML bridge has
-    // no C++ enum exposure for this vocabulary.
-    readonly property int widthKindProportion: 0
-    readonly property int widthKindFixed: 1
-    readonly property int widthKindClientDecides: 2
+    // scrollingDefaultColumnWidthKind vocabulary and value bounds, read
+    // once from ConfigDefaults via the controller — the C++ side is the
+    // single home for these numbers (kind ints, slider range, spin range).
+    readonly property var _scrollWidthConsts: settingsController.scrollingWidthConstants()
+    readonly property int widthKindProportion: _scrollWidthConsts.kindProportion
+    readonly property int widthKindFixed: _scrollWidthConsts.kindFixed
+    readonly property int widthKindClientDecides: _scrollWidthConsts.kindClientDecides
     readonly property int fieldWidth: Kirigami.Units.gridUnit * 16
 
     contentHeight: content.implicitHeight
@@ -126,8 +123,8 @@ SettingsFlickable {
 
                     SettingsSlider {
                         accessibleName: i18n("Proportion of the screen")
-                        from: 0.05
-                        to: 1.0
+                        from: root._scrollWidthConsts.proportionMin
+                        to: root._scrollWidthConsts.proportionMax
                         stepSize: 0.05
                         value: appSettings.scrollingDefaultColumnWidthValue
                         formatValue: function (v) {
@@ -149,8 +146,8 @@ SettingsFlickable {
                         id: fixedWidthSpin
 
                         accessibleName: i18n("Fixed column width")
-                        from: 100
-                        to: 10000
+                        from: root._scrollWidthConsts.fixedMin
+                        to: root._scrollWidthConsts.fixedMax
                         stepSize: 10
                         onValueModified: value => appSettings.scrollingDefaultColumnWidthValue = value
                         // Fed through a guarded Binding rather than a plain
@@ -200,7 +197,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Column widths")
                     searchAnchor: "presetColumnWidths"
-                    description: i18n("Comma separated fractions of the work area width, cycled by the preset shortcuts")
+                    description: i18n("Comma-separated fractions of the work area width, cycled by the preset shortcuts")
 
                     TextField {
                         id: widthPresetField
@@ -235,7 +232,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Window heights")
                     searchAnchor: "presetWindowHeights"
-                    description: i18n("Comma separated fractions of the work area height, cycled by the preset shortcuts")
+                    description: i18n("Comma-separated fractions of the work area height, cycled by the preset shortcuts")
 
                     TextField {
                         id: heightPresetField

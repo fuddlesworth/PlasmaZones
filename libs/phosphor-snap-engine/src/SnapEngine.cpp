@@ -519,8 +519,16 @@ void SnapEngine::setNavigationStateProvider(INavigationStateProvider* provider)
 
 bool SnapEngine::isActiveOnScreen(const QString& screenId) const
 {
-    // SnapEngine is active on any screen where AutotileEngine is NOT active.
-    // Guard via QPointer: if the QObject was destroyed, m_autotileEngineTyped is stale.
+    // Router-backed live resolver first: with THREE engines, "not autotile"
+    // no longer implies snapping — a scrolling screen must not be claimed.
+    // The resolver carries the router's downgrade semantics (an unclaimed
+    // tiling mode resolves to Snapping), which is exactly the live truth.
+    if (m_liveModeResolver) {
+        return m_liveModeResolver(screenId) == PhosphorZones::AssignmentEntry::Mode::Snapping;
+    }
+    // Legacy cross-wire fallback (resolver not injected, e.g. unit tests):
+    // active wherever AutotileEngine is not. Guard via QPointer: if the
+    // QObject was destroyed, m_autotileEngineTyped is stale.
     if (m_autotileEngineObj && m_autotileEngineTyped) {
         return !m_autotileEngineTyped->isActiveOnScreen(screenId);
     }

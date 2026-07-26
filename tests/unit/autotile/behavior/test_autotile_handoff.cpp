@@ -384,7 +384,7 @@ private Q_SLOTS:
         PhosphorZones::LayoutRegistry* layout =
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
         PlasmaZones::StubZoneDetector zoneDet;
-        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layout, nullptr, nullptr);
         AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         layout->setSnappingPreferredProvider([] {
@@ -441,7 +441,7 @@ private Q_SLOTS:
         PhosphorZones::LayoutRegistry* layout =
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
         PlasmaZones::StubZoneDetector zoneDet;
-        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layout, nullptr, nullptr);
         AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         layout->setSnappingPreferredProvider([] {
@@ -529,7 +529,7 @@ private Q_SLOTS:
         PhosphorZones::LayoutRegistry* layout =
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
         PlasmaZones::StubZoneDetector zoneDet;
-        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layout, nullptr, nullptr);
         AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString autotileScreen = QStringLiteral("DP-2");
@@ -586,7 +586,7 @@ private:
         PhosphorZones::LayoutRegistry* layout =
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
         PlasmaZones::StubZoneDetector zoneDet;
-        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layout, nullptr, nullptr);
         AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString autotileScreen = QStringLiteral("DP-2");

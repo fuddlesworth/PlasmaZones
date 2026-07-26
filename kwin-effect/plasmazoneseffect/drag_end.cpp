@@ -154,10 +154,6 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     if (!safeWindow || safeWindow->isDeleted()) {
                         break;
                     }
-                    const QString dropScreenId = getWindowScreenId(safeWindow);
-                    if (dropScreenId.isEmpty()) {
-                        break;
-                    }
                     // Only run the float transition (which restores the
                     // pre-autotile size) when the window was TILED at drag
                     // start. A window that was already floating is merely being
@@ -171,6 +167,16 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     }
                     // Window is now floating — drop it from snapping's set.
                     m_snapHandler->clearWindowSnapped(windowId);
+                    // Resolve the drop screen only AFTER the float cleanup
+                    // above cleared tiled membership: while the window was
+                    // still scroll-tiled, getWindowScreenId answers from the
+                    // engine override and would pin a cross-monitor drag-out
+                    // to the SOURCE strip's screen instead of where the user
+                    // actually dropped it.
+                    const QString dropScreenId = getWindowScreenId(safeWindow);
+                    if (dropScreenId.isEmpty()) {
+                        break;
+                    }
                     // Now floating — flips the Mode / IsSnapped / IsFloating rule
                     // fields; re-resolve now instead of waiting for the broadcast.
                     invalidateRuleCacheForStateChange(windowId);

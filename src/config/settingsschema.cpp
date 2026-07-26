@@ -144,12 +144,13 @@ QVariant canonicalCommaList(const QVariant& v)
 }
 
 /// Canonicalize a comma-joined proportion list: parse each entry as a
-/// decimal, keep only values in (0, 1], de-dupe, and re-serialize. Stored ≈
-/// effective, with one asymmetry: a list whose entries are ALL invalid
-/// canonicalizes to the empty string, and the engine treats an empty list
-/// as "use built-in presets" — so an all-garbage hand edit falls back to
-/// the defaults instead of storing an accepted-but-dead value.
-QVariant canonicalProportionList(const QVariant& v)
+/// decimal, keep only values in (0, 1], de-dupe, and re-serialize. When
+/// NOTHING survives (all-garbage hand edit, or a cleared field), snap to
+/// @p fallback — the key's default — matching the validIntOr/validStringOr
+/// convention. Persisting the empty string instead would leave the page
+/// showing an empty field while the engine silently cycles its built-ins:
+/// the accepted-but-dead divergence this validator exists to prevent.
+QVariant canonicalProportionList(const QVariant& v, const QString& fallback)
 {
     // Same size-cap rationale as canonicalTriggerList: a hand-edited file
     // must not smuggle an unbounded list past the setter path (each entry
@@ -170,6 +171,9 @@ QVariant canonicalProportionList(const QVariant& v)
         if (!kept.contains(canonical)) {
             kept.append(canonical);
         }
+    }
+    if (kept.isEmpty()) {
+        return QVariant(fallback);
     }
     return QVariant(kept.join(QLatin1Char(',')));
 }
@@ -1079,12 +1083,16 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          CD::scrollingPresetColumnWidths(),
          QMetaType::QString,
          {},
-         canonicalProportionList},
+         [](const QVariant& v) {
+             return canonicalProportionList(v, CD::scrollingPresetColumnWidths());
+         }},
         {CD::presetWindowHeightsKey(),
          CD::scrollingPresetWindowHeights(),
          QMetaType::QString,
          {},
-         canonicalProportionList},
+         [](const QVariant& v) {
+             return canonicalProportionList(v, CD::scrollingPresetWindowHeights());
+         }},
     };
 }
 

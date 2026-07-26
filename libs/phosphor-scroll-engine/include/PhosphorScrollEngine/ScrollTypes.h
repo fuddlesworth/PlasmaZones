@@ -237,6 +237,11 @@ struct ScrollLayoutParams
     int gap = 0;
     /// Preset proportion lists (niri defaults: 1/3, 1/2, 2/3). Never empty —
     /// resolvers clamp preset indices into range.
+    /// KEEP IN SYNC with ScrollEngine::refreshConfigFromSettings' fallback
+    /// list (engine_core.cpp): these are the no-settings defaults, that is
+    /// the empty-config fallback, and the ops-suite literal-260 preset
+    /// assertion pins THIS copy — a change to only one side would leave
+    /// the test green while a configured engine shifts.
     QList<qreal> presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};
     QList<qreal> presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0};
     CenterFocusedColumn centerFocusedColumn = CenterFocusedColumn::Never;

@@ -356,6 +356,13 @@ public:
     /// Empty list + warning for a key with no declared choices.
     Q_INVOKABLE QVariantList valueOptions(const QString& group, const QString& key) const;
 
+    /// The scrolling width-kind vocabulary and value bounds, from
+    /// ConfigDefaults — the C++ home for these numbers. The Scrolling page
+    /// binds to this map instead of re-spelling the literals in QML (the
+    /// kind ints, the proportion slider range, and the pixel spin range
+    /// would otherwise be duplicated across the C++/QML boundary).
+    Q_INVOKABLE QVariantMap scrollingWidthConstants() const;
+
     // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
     // Loads the on-disk layouts via an in-process LayoutRegistry +
     // ZonesLayoutSource so QML preview paths render even when the daemon

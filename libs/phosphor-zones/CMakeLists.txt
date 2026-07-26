@@ -81,6 +81,7 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/ZonesLayoutSource.h
     include/PhosphorZones/ZonesLayoutSourceFactory.h
     include/PhosphorZones/AssignmentEntry.h
+    include/PhosphorZones/ContextResolveKey.h
     include/PhosphorZones/LayoutRegistry.h
     include/PhosphorZones/LayoutFactory.h
     include/PhosphorZones/LayoutComputeTypes.h

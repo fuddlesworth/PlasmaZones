@@ -597,6 +597,16 @@ inline constexpr int MaxZoneOrdinal = 64;
 inline constexpr double MaxBorderWidth = 10.0;
 inline constexpr double MaxBorderRadius = 20.0;
 
+/// Bounds for a `SetScrollDefaultColumnWidth` / `OpenColumnWidth` fraction of
+/// the work-area width. Shared for the same lockstep reason as the border
+/// bounds above: the load-time descriptor validator (via the private percent
+/// pair in ruleaction_builtins_p.h) and the zones-layer context resolver
+/// (layoutregistry_contextresolve.cpp) both clamp against these — a private
+/// copy in either would drift by hand-mirroring. A column may legitimately
+/// take the whole work area, so the upper bound is 1.0.
+inline constexpr double MinColumnWidthRatio = 0.05;
+inline constexpr double MaxColumnWidthRatio = 1.0;
+
 /// Upper bound for a `RouteToDesktop` 1-based virtual-desktop number. KWin tops
 /// out far below this in practice; the cap exists only to reject a grossly
 /// malformed hand-edited payload and to keep the validator's integrality check

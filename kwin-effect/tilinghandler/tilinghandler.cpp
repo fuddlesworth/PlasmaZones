@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "tilinghandler.h"
+
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/windowanimator.h"
 #include "handlers/navigationhandler.h"
@@ -177,6 +179,22 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
 // ═══════════════════════════════════════════════════════════════════════════════
 // Integration points
 // ═══════════════════════════════════════════════════════════════════════════════
+
+QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
+{
+    const QString tracked = m_notifiedWindowScreens.value(windowId);
+    if (tracked.isEmpty() || !m_scrollingScreens.contains(tracked)) {
+        return QString();
+    }
+    if (!TilingStateHelpers::isTiledWindow(m_border, windowId)) {
+        return QString();
+    }
+    // Connected-output gate (see the header doc): cached set lookup, so the
+    // per-candidate calls inside the focus-follows-mouse stacking walks pay
+    // a hash probe instead of an O(outputs) id-building scan.
+    const QString trackedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(tracked);
+    return m_effect->connectedPhysicalIds().contains(trackedPhysical) ? tracked : QString();
+}
 
 bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating)
 {
@@ -391,13 +409,45 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
 
     const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
 
+    // Daemon-driven handoff FIRST, and by POSITION. For a window tiled on a
+    // scrolling screen, getWindowScreenId answers from the very map
+    // oldScreenId was read from (the engine-authoritative override), so the
+    // old-vs-new diff below is an identity for scroll windows and can never
+    // route a scroll handoff — the marker is the only reliable signal. The
+    // positional check keeps parking hops honest: a strip parking a column
+    // onto a neighbour output fires outputChanged too, and its positional
+    // screen does NOT match the marker's destination, so the marker
+    // survives for the real handoff echo and the hop falls through to the
+    // same-screen return below.
+    if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
+        const QPointF cf = w->frameGeometry().center();
+        const QString positional =
+            m_effect->resolveEffectiveScreenId(QPoint(qRound(cf.x()), qRound(cf.y())), m_effect->windowOutput(w));
+        if (expIt.value() == positional) {
+            m_expectedOutputMove.erase(expIt);
+            if (m_managedScreens.contains(positional)) {
+                m_notifiedWindowScreens[windowId] = positional;
+            } else if (m_managedScreens.contains(oldScreenId)) {
+                // Cross-MODE move: window left autotile. Drop effect-side
+                // autotile tracking (daemon already relinquished via
+                // handoffRelease) — else it lingers phantom.
+                cleanupAutotileTracking(windowId, oldScreenId);
+            } else {
+                // scroll↔snap / scroll↔scroll: keep the record current so
+                // later diffs measure from the true screen.
+                m_notifiedWindowScreens[windowId] = positional;
+            }
+            m_effect->updateAllDecorations();
+            return;
+        }
+    }
+
     if (oldScreenId.isEmpty() || oldScreenId == newScreenId) {
-        // Belt-and-braces drain: with the tile-apply path now writing
-        // m_notifiedWindowScreens, a scroll handoff's outputChanged
-        // resolves old != new and consumes the marker in the main branch —
-        // this drain only catches a marker whose move never materialised
-        // (refused receive, window closed mid-move) so it cannot swallow a
-        // later genuine move's suppression.
+        // Belt-and-braces drain for a marker whose move never materialised
+        // (refused receive, window closed mid-move): once the tracked
+        // record already equals the marked destination there is no echo
+        // left to consume, so drop the one-shot rather than let it swallow
+        // a later genuine move's notification.
         if (const auto expIt = m_expectedOutputMove.constFind(windowId);
             expIt != m_expectedOutputMove.constEnd() && expIt.value() == newScreenId) {
             m_expectedOutputMove.erase(expIt);

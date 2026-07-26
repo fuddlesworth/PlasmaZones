@@ -323,15 +323,23 @@ private Q_SLOTS:
         const QString appId = wta->service()->currentAppIdFor(windowId);
         const QRect tileRect(1540, 8, 1524, 829);
 
+        // Seed a genuine free-geometry record first: the guard must
+        // PRESERVE it, and without the seed the assert below would only
+        // prove "did not create", passing even if the guard clobbered an
+        // existing record with the tile rect.
+        const QRect realFreeBack(120, 90, 800, 600);
+        wta->service()->recordFreeGeometry(windowId, screenId, realFreeBack, true);
+
         // Untracked by snap (no float/zone state) and the stub tile engine's
         // capturePlacement default returns nullopt — the close capture takes
         // the engine-miss fallback. The frame still equals the remembered
-        // tile rect, so the fallback must record NOTHING.
+        // tile rect, so the fallback must record NOTHING new.
         wta->setFrameGeometry(windowId, tileRect.x(), tileRect.y(), tileRect.width(), tileRect.height());
         tileEngine.managedRect = tileRect;
         wta->captureWindowPlacement(windowId, screenId);
-        QVERIFY2(!wta->service()->placementStore().peek(windowId, appId),
-                 "a close frame still on the tile rect must not become the reopen float-back");
+        const auto seeded = wta->service()->placementStore().peek(windowId, appId);
+        QVERIFY2(seeded && seeded->freeGeometryFor(screenId) == realFreeBack,
+                 "a close frame still on the tile rect must not clobber the recorded free geometry");
 
         // A close frame off the tile rect records the genuine free position.
         const QRect freeFrame(600, 400, 900, 700);

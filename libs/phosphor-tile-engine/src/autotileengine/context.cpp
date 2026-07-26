@@ -437,9 +437,12 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // is no longer in the autotile set. States for other contexts are left
     // untouched here — by the time their desktop becomes current the screen is
     // already absent from m_autotileScreens, so this loop never sees them again;
-    // they are healed per-window (windowFocused / windowOpened migration) and
+    // they are healed per-window (windowFocused / windowOpened migration),
     // reaped wholesale by pruneStatesForDesktop / pruneStatesForActivities when
-    // their desktop or activity is destroyed.
+    // their desktop or activity is destroyed, and by
+    // pruneStatesForRemovedScreen when the OUTPUT itself is unplugged (the
+    // daemon calls it for all three engines; this sweep alone would leak
+    // sibling-context states for a removed monitor).
     m_states.removeStatesIf(
         [&](const TilingStateKey& key, PhosphorTiles::TilingState*) {
             return key.desktop == currentKeyForScreen(key.screenId).desktop

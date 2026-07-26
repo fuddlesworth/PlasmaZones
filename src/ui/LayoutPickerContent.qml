@@ -182,6 +182,7 @@ Item {
         onClicked: root._requestDismiss()
         Accessible.name: i18n("Dismiss layout picker")
         Accessible.role: Accessible.Button
+        Accessible.onPressAction: root._requestDismiss()
     }
 
     // Main container card

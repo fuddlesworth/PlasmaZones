@@ -243,102 +243,102 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="305"/>
         <source>Focus First Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Eerste kolom focussen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="310"/>
         <source>Focus Last Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Laatste kolom focussen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="315"/>
         <source>Move Column to Start</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolom naar begin verplaatsen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="320"/>
         <source>Move Column to End</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolom naar einde verplaatsen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="325"/>
         <source>Consume Window into Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Venster in kolom opnemen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="330"/>
         <source>Expel Window from Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Venster uit kolom nemen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="335"/>
         <source>Consume or Expel Left</source>
-        <translation type="unfinished"></translation>
+        <translation>Links opnemen of uitnemen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="340"/>
         <source>Consume or Expel Right</source>
-        <translation type="unfinished"></translation>
+        <translation>Rechts opnemen of uitnemen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="345"/>
         <source>Center Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolom centreren</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="350"/>
         <source>Toggle Tabbed Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Tabbladkolom omschakelen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="355"/>
         <source>Cycle Column Width Preset</source>
-        <translation type="unfinished"></translation>
+        <translation>Voorinstelling voor kolombreedte doorlopen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="361"/>
         <source>Cycle Column Width Preset Back</source>
-        <translation type="unfinished"></translation>
+        <translation>Voorinstelling voor kolombreedte terug doorlopen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="366"/>
         <source>Increase Column Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolombreedte vergroten</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="371"/>
         <source>Decrease Column Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolombreedte verkleinen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="376"/>
         <source>Maximize Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolom maximaliseren</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="381"/>
         <source>Expand Column to Available Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolom uitbreiden tot de beschikbare breedte</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="386"/>
         <source>Cycle Window Height Preset</source>
-        <translation type="unfinished"></translation>
+        <translation>Voorinstelling voor vensterhoogte doorlopen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="391"/>
         <source>Increase Window Height</source>
-        <translation type="unfinished"></translation>
+        <translation>Vensterhoogte vergroten</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="396"/>
         <source>Decrease Window Height</source>
-        <translation type="unfinished"></translation>
+        <translation>Vensterhoogte verkleinen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="401"/>
         <source>Reset Window Heights</source>
-        <translation type="unfinished"></translation>
+        <translation>Vensterhoogtes herstellen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="408"/>
@@ -347,6 +347,7 @@
         <translation>Sneltoetsoverzicht openen</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="85"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="289"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="283"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="279"/>
@@ -355,144 +356,144 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="75"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="195"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="250"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="408"/>
         <source>Scrolling</source>
         <comment>tiling mode name</comment>
         <translation>Scrollen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="93"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="94"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="179"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="98"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="99"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="184"/>
         <source>Snap to Zone</source>
         <translation>Vastklikken in zone</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="116"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="132"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="121"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="137"/>
         <source>Rotate Clockwise</source>
         <translation>Rechtsom draaien</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="118"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="134"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="123"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="139"/>
         <source>Rotate Counterclockwise</source>
         <translation>Linksom draaien</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="120"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="125"/>
         <source>Cycle Forward in Zone</source>
         <translation>Vooruit doorlopen in zone</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="122"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="127"/>
         <source>Cycle Backward in Zone</source>
         <translation>Achteruit doorlopen in zone</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="124"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="129"/>
         <source>Swap Screen Left</source>
         <translation>Scherm naar links wisselen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="126"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="131"/>
         <source>Swap Screen Right</source>
         <translation>Scherm naar rechts wisselen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="128"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="133"/>
         <source>Swap Screen Up</source>
         <translation>Scherm omhoog wisselen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="130"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="135"/>
         <source>Swap Screen Down</source>
         <translation>Scherm omlaag wisselen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="147"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="152"/>
         <source>Consume Window</source>
-        <translation type="unfinished"></translation>
+        <translation>Venster opnemen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="149"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="154"/>
         <source>Expel Window</source>
-        <translation type="unfinished"></translation>
+        <translation>Venster uitnemen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="155"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="160"/>
         <source>Cycle Column Width</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="157"/>
-        <source>Cycle Column Width Back</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolombreedte doorlopen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="162"/>
-        <source>Expand Column</source>
-        <translation type="unfinished"></translation>
+        <source>Cycle Column Width Back</source>
+        <translation>Kolombreedte terug doorlopen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="236"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="167"/>
+        <source>Expand Column</source>
+        <translation>Kolom uitbreiden</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="241"/>
         <source>Arrows</source>
         <translation>Pijltoetsen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="246"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="251"/>
         <source>Apply Layout 1-9</source>
         <translation>Indeling 1-9 toepassen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="247"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="252"/>
         <source>Snap to Zone 1-9</source>
         <translation>Vastklikken in zone 1-9</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="251"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="256"/>
         <source>Move Window</source>
         <translation>Venster verplaatsen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="256"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="261"/>
         <source>Focus Zone</source>
         <translation>Zone focussen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="261"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="266"/>
         <source>Swap Window</source>
         <translation>Venster wisselen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="266"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="271"/>
         <source>Span Window</source>
         <translation>Venster overspannen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="272"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="277"/>
         <source>Swap Screens</source>
         <translation>Schermen wisselen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="278"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="283"/>
         <source>Consume / Expel Window</source>
-        <translation type="unfinished"></translation>
+        <translation>Venster opnemen / uitnemen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="282"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="287"/>
         <source>Consume or Expel Left / Right</source>
-        <translation type="unfinished"></translation>
+        <translation>Links / rechts opnemen of uitnemen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="286"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="291"/>
         <source>Adjust Column Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolombreedte aanpassen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="290"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="295"/>
         <source>Adjust Window Height</source>
-        <translation type="unfinished"></translation>
+        <translation>Vensterhoogte aanpassen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="787"/>
@@ -761,7 +762,7 @@
         <translation>Geen indeling toegewezen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="797"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="800"/>
         <source>Dismiss Shortcut Cheatsheet</source>
         <translation>Sneltoetsoverzicht sluiten</translation>
     </message>
@@ -912,7 +913,7 @@
         <translation>Naam van doelscherm</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="318"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="321"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="290"/>
         <source>Tiling: %1</source>
         <translation>Tegelen: %1</translation>
@@ -1362,7 +1363,7 @@
         <translation>Context</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="184"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="189"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="96"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="35"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="93"/>
@@ -1767,13 +1768,13 @@
         <translation>Vastklikken</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="135"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="136"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="137"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="138"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="139"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="140"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="141"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="142"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="143"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="144"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="145"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="146"/>
         <source>Autotile</source>
         <translation>Automatisch tegelen</translation>
     </message>
@@ -1809,17 +1810,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="165"/>
         <source>Whether the window has been floated out of tiling (snapping or tiling mode).</source>
-        <translation type="unfinished"></translation>
+        <translation>Of het venster zwevend is gemaakt buiten de tegeling (vastklik- of tegelmodus).</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="170"/>
         <source>Whether the window is managed by the tiling engine.</source>
-        <translation type="unfinished"></translation>
+        <translation>Of het venster wordt beheerd door de tegel-engine.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="180"/>
         <source>The engine mode the window is placed by (snapping, tiling or scrolling).</source>
-        <translation type="unfinished"></translation>
+        <translation>De enginemodus waarmee het venster wordt geplaatst (vastklikken, tegelen of scrollen).</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="187"/>
@@ -1854,17 +1855,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="141"/>
         <source>Column width (%)</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolombreedte (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="144"/>
         <source>Centering</source>
-        <translation type="unfinished"></translation>
+        <translation>Centreren</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="150"/>
         <source>Open in a tabbed column (off = a normal column)</source>
-        <translation type="unfinished"></translation>
+        <translation>Openen in een tabbladkolom (uit = een normale kolom)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="172"/>
@@ -1972,33 +1973,33 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="421"/>
         <source>Set default column width</source>
-        <translation type="unfinished"></translation>
+        <translation>Standaard kolombreedte instellen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="424"/>
         <source>Set focused column centering</source>
-        <translation type="unfinished"></translation>
+        <translation>Centreren van de gefocuste kolom instellen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="427"/>
         <source>Set default column display</source>
-        <translation type="unfinished"></translation>
+        <translation>Standaardweergave van kolommen instellen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="430"/>
         <source>Open at column width</source>
-        <translation type="unfinished"></translation>
+        <translation>Openen op kolombreedte</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="433"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="616"/>
         <source>Open in a tabbed column</source>
-        <translation type="unfinished"></translation>
+        <translation>Openen in een tabbladkolom</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="436"/>
         <source>Open into column</source>
-        <translation type="unfinished"></translation>
+        <translation>Openen in kolom</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="439"/>
@@ -2231,7 +2232,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="616"/>
         <source>Open in a normal column</source>
-        <translation type="unfinished"></translation>
+        <translation>Openen in een normale kolom</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="202"/>
@@ -2727,51 +2728,51 @@
         <location filename="../src/config/settingsvaluelabels.cpp" line="177"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="374"/>
         <source>Never</source>
-        <translation type="unfinished"></translation>
+        <translation>Nooit</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="178"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="377"/>
         <source>Always</source>
-        <translation type="unfinished"></translation>
+        <translation>Altijd</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="179"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="380"/>
         <source>On overflow</source>
-        <translation type="unfinished"></translation>
+        <translation>Bij overloop</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="183"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="580"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="122"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="128"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="119"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="125"/>
         <source>Proportion of the screen</source>
-        <translation type="unfinished"></translation>
+        <translation>Deel van het scherm</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="184"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="143"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="140"/>
         <source>Fixed width</source>
-        <translation type="unfinished"></translation>
+        <translation>Vaste breedte</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="185"/>
         <source>Window decides</source>
-        <translation type="unfinished"></translation>
+        <translation>Venster bepaalt</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="189"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="385"/>
         <source>Normal</source>
-        <translation type="unfinished"></translation>
+        <translation>Normaal</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="190"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="388"/>
         <source>Tabbed</source>
-        <translation type="unfinished"></translation>
+        <translation>Tabbladen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="363"/>
@@ -2787,12 +2788,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="393"/>
         <source>New column</source>
-        <translation type="unfinished"></translation>
+        <translation>Nieuwe kolom</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="396"/>
         <source>Consume into focused column</source>
-        <translation type="unfinished"></translation>
+        <translation>Opnemen in de gefocuste kolom</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="401"/>
@@ -3183,27 +3184,27 @@
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="504"/>
         <source>Column width: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolombreedte: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="507"/>
         <source>Open at width: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Openen op breedte: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="510"/>
         <source>Centering: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Centreren: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="514"/>
         <source>New columns: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Nieuwe kolommen: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="518"/>
         <source>Open: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Openen: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="525"/>
@@ -3619,17 +3620,17 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="124"/>
         <source>Pick a tiling algorithm to use on one monitor.</source>
-        <translation type="unfinished"></translation>
+        <translation>Kies een tegelalgoritme voor één scherm.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="126"/>
         <source>Use scrolling mode on a monitor</source>
-        <translation type="unfinished"></translation>
+        <translation>Scrollmodus gebruiken op een scherm</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="127"/>
         <source>Switch one monitor to the scrolling placement mode.</source>
-        <translation type="unfinished"></translation>
+        <translation>Zet één scherm over op de scrollmodus voor vensterplaatsing.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="129"/>
@@ -3703,7 +3704,7 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="151"/>
         <source>Keep one application&apos;s windows out of window placement entirely.</source>
-        <translation type="unfinished"></translation>
+        <translation>Houd de vensters van één toepassing volledig buiten de vensterplaatsing.</translation>
     </message>
     <message>
         <source>Keep one application&apos;s windows out of the snap and autotile engines entirely.</source>
@@ -3733,7 +3734,7 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="189"/>
         <source>Scrolling mode on monitor</source>
-        <translation type="unfinished"></translation>
+        <translation>Scrollmodus op scherm</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="200"/>
@@ -4870,7 +4871,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="75"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="36"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="142"/>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="185"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="186"/>
         <source>Keyboard Shortcuts</source>
         <translation>Sneltoetsen</translation>
     </message>
@@ -4918,7 +4919,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="145"/>
         <source>scrolling</source>
-        <translation type="unfinished"></translation>
+        <translation>scrollen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="145"/>
@@ -4927,17 +4928,17 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="577"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
         <source>column</source>
-        <translation type="unfinished"></translation>
+        <translation>kolom</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="146"/>
         <source>strip</source>
-        <translation type="unfinished"></translation>
+        <translation>strook</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="149"/>
         <source>tab</source>
-        <translation type="unfinished"></translation>
+        <translation>tabblad</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="197"/>
@@ -5747,35 +5748,35 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="565"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="46"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="43"/>
         <source>Focus and view</source>
-        <translation type="unfinished"></translation>
+        <translation>Focus en weergave</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="567"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="54"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="59"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="51"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="56"/>
         <source>Center the focused column</source>
-        <translation type="unfinished"></translation>
+        <translation>De gefocuste kolom centreren</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="571"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="71"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="77"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="68"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="74"/>
         <source>Center a lone column</source>
-        <translation type="unfinished"></translation>
+        <translation>Een enkele kolom centreren</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="574"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="91"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="88"/>
         <source>New columns</source>
-        <translation type="unfinished"></translation>
+        <translation>Nieuwe kolommen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="576"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="99"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="96"/>
         <source>Default width</source>
-        <translation type="unfinished"></translation>
+        <translation>Standaardbreedte</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="577"/>
@@ -5783,64 +5784,64 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="591"/>
         <source>width</source>
-        <translation type="unfinished"></translation>
+        <translation>breedte</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="578"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
         <source>pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>pixels</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="581"/>
         <source>percent</source>
-        <translation type="unfinished"></translation>
+        <translation>procent</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="585"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="172"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="177"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="169"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="174"/>
         <source>Open new columns as</source>
-        <translation type="unfinished"></translation>
+        <translation>Nieuwe kolommen openen als</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
         <source>tabbed</source>
-        <translation type="unfinished"></translation>
+        <translation>tabbladen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
         <source>tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>tabbladen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="588"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="193"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="190"/>
         <source>Width and height presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Voorinstellingen voor breedte en hoogte</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="198"/>
         <source>Column widths</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolombreedtes</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="591"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="594"/>
         <source>cycle</source>
-        <translation type="unfinished"></translation>
+        <translation>doorlopen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="593"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="236"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="233"/>
         <source>Window heights</source>
-        <translation type="unfinished"></translation>
+        <translation>Vensterhoogtes</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="594"/>
         <source>height</source>
-        <translation type="unfinished"></translation>
+        <translation>hoogte</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="630"/>
@@ -6864,14 +6865,14 @@
         <translation>Vastklikken bij formaat wijzigen (sleepvoorbeeld)</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller.cpp" line="719"/>
+        <location filename="../src/settings/controller/settingscontroller.cpp" line="732"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="276"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="315"/>
         <source>Zone %1</source>
         <translation>Zone %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller.cpp" line="721"/>
+        <location filename="../src/settings/controller/settingscontroller.cpp" line="734"/>
         <source>%1 — %2</source>
         <translation>%1 — %2</translation>
     </message>
@@ -6941,11 +6942,11 @@
         <translation>Overzicht</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="82"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="83"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="84"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="85"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="86"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="87"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="88"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="89"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="90"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="91"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="98"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="307"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="388"/>
@@ -6959,11 +6960,6 @@
         <translation>Plaatsing</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="98"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="99"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="100"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="101"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="102"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="103"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="104"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="105"/>
@@ -6971,14 +6967,19 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="107"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="108"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="109"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="110"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="111"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="112"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="113"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="114"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="115"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="116"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="117"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="118"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="119"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="121"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="120"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="122"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="124"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="126"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
@@ -7001,24 +7002,24 @@
         <translation>Over</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="123"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="125"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="127"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="129"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="131"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="133"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="128"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="130"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="132"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="134"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="136"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="138"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="173"/>
         <source>Virtual Screens</source>
         <translation>Virtuele schermen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="87"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="88"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="89"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="90"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="91"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="92"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="176"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="93"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="94"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="95"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="96"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="97"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="181"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="177"/>
         <source>Layouts</source>
         <translation>Indelingen</translation>
@@ -12506,10 +12507,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="33"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="336"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="362"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="413"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="431"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="347"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="430"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="448"/>
         <source>Default</source>
         <translation>Standaard</translation>
     </message>
@@ -13124,7 +13125,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="439"/>
         <source>Aspect ratio</source>
-        <translation type="unfinished"></translation>
+        <translation>Beeldverhouding</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="440"/>
@@ -13789,7 +13790,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="668"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="390"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="401"/>
         <source>Placement mode</source>
         <translation>Plaatsingsmodus</translation>
     </message>
@@ -14165,51 +14166,51 @@
         <translation>Dit scherm herstellen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="238"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="249"/>
         <source>View and change the active mode and layout for each monitor.</source>
         <translation>Bekijk en wijzig de actieve modus en indeling voor elk scherm.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="256"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="267"/>
         <source>Unable to retrieve monitor state. Make sure the daemon is running.</source>
         <translation>Kan de schermstatus niet ophalen. Zorg dat de daemon draait.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="345"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="356"/>
         <source>Snapping layout preview: %1</source>
         <translation>Voorbeeld van vastklikindeling: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="345"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="356"/>
         <source>Snapping layout preview</source>
         <translation>Voorbeeld van vastklikindeling</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="384"/>
         <source>Tiling algorithm preview: %1</source>
         <translation>Voorbeeld van tegelalgoritme: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="384"/>
         <source>Tiling algorithm preview</source>
         <translation>Voorbeeld van tegelalgoritme</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="383"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="394"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.</source>
-        <translation type="unfinished"></translation>
+        <translation>Scrollmodus schikt vensters in kolommen met instelbare grootte op een eindeloze strook. Er wordt geen zone-indeling gebruikt.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="408"/>
         <source>Snapping</source>
         <comment>tiling mode name</comment>
-        <translation type="unfinished">Vastklikken</translation>
+        <translation>Vastklikken</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="408"/>
         <source>Tiling</source>
         <comment>tiling mode name</comment>
-        <translation type="unfinished">Tegelen</translation>
+        <translation>Tegelen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreenPreview.qml.cpp" line="53"/>
@@ -16083,39 +16084,39 @@
         <translation>Sneltoetsoverzicht sluiten</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="202"/>
         <source>No shortcuts apply in the current mode.</source>
         <translation>In de huidige modus zijn geen sneltoetsen van toepassing.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="282"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="283"/>
         <source>%1, %2</source>
         <comment>shortcut row: action, keys</comment>
         <translation>%1, %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="282"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="283"/>
         <source>%1, unassigned</source>
         <comment>shortcut row: action unassigned</comment>
         <translation>%1, niet toegewezen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="335"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="336"/>
         <source>Unassigned</source>
         <translation>Niet toegewezen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="110"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="114"/>
         <source>Layout indicator</source>
         <translation>Indelingsindicator</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="252"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="256"/>
         <source>%1 (Locked)</source>
         <translation>%1 (vergrendeld)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="272"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="276"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="499"/>
         <source>Dismiss notification</source>
         <translation>Melding sluiten</translation>
@@ -16126,12 +16127,12 @@
         <translation>Indelingskiezer sluiten</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutPickerContent.qml.cpp" line="229"/>
+        <location filename=".qml-stubs/src/ui/LayoutPickerContent.qml.cpp" line="230"/>
         <source>Choose Layout</source>
         <translation>Indeling kiezen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutPickerContent.qml.cpp" line="321"/>
+        <location filename=".qml-stubs/src/ui/LayoutPickerContent.qml.cpp" line="322"/>
         <source>Layout is locked. Unlock the current layout before switching to another one.</source>
         <comment>@info:whatsthis layout picker lock overlay</comment>
         <translation>De indeling is vergrendeld. Ontgrendel de huidige indeling voordat je naar een andere overschakelt.</translation>
@@ -16481,12 +16482,12 @@
         <translation>Vastklikhulp-overlay sluiten</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/SnapAssistContent.qml.cpp" line="243"/>
+        <location filename=".qml-stubs/src/ui/SnapAssistContent.qml.cpp" line="244"/>
         <source>Snap %1 to this zone</source>
         <translation>%1 vastklikken in deze zone</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/SnapAssistContent.qml.cpp" line="243"/>
+        <location filename=".qml-stubs/src/ui/SnapAssistContent.qml.cpp" line="244"/>
         <source>Snap window to this zone</source>
         <translation>Venster vastklikken in deze zone</translation>
     </message>
@@ -16510,78 +16511,83 @@
         <translation>Geen indelingen beschikbaar</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="56"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="53"/>
         <source>With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.</source>
         <oldsource>Never keeps the strip still until the focused column would leave the screen. Always parks the focused column in the middle. On overflow centers it only once the strip is wider than the screen.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Met Nooit blijft de strook stilstaan totdat de gefocuste kolom van het scherm zou verdwijnen. Met Altijd staat de gefocuste kolom steeds in het midden. Met Bij overloop wordt die pas gecentreerd zodra de strook breder is dan het scherm.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="73"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="70"/>
         <source>When the strip holds a single column, center it no matter what the setting above says</source>
         <oldsource>When the strip holds a single column, center it whatever the setting above says</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Als de strook maar één kolom bevat, centreer die dan ongeacht de instelling hierboven</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="98"/>
+        <source>How wide a column is when it first opens</source>
+        <translation>Hoe breed een kolom is wanneer die voor het eerst wordt geopend</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="101"/>
-        <source>How wide a column is when it first opens</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="104"/>
         <source>Default column width</source>
-        <translation type="unfinished"></translation>
+        <translation>Standaard kolombreedte</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="124"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="121"/>
         <source>How much of the usable screen width a new column takes</source>
-        <translation type="unfinished"></translation>
+        <translation>Hoeveel van de bruikbare schermbreedte een nieuwe kolom inneemt</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="145"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="142"/>
         <source>How many pixels wide a new column is</source>
-        <translation type="unfinished"></translation>
+        <translation>Hoeveel pixels breed een nieuwe kolom is</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="151"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="148"/>
         <source>Fixed column width</source>
-        <translation type="unfinished"></translation>
+        <translation>Vaste kolombreedte</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="174"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="171"/>
         <source>Normal stacks the windows of a column above each other. Tabbed shows one window at a time behind a tab strip.</source>
-        <translation type="unfinished"></translation>
+        <translation>Normaal stapelt de vensters van een kolom boven elkaar. Tabbladen toont één venster tegelijk achter een tabbladbalk.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="203"/>
-        <source>Comma separated fractions of the work area width, cycled by the preset shortcuts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="210"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="207"/>
         <source>0.333,0.5,0.667</source>
         <comment>@info:placeholder comma separated column width fractions</comment>
-        <translation type="unfinished"></translation>
+        <translation>0.333,0.5,0.667</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="238"/>
-        <source>Comma separated fractions of the work area height, cycled by the preset shortcuts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="245"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="242"/>
         <source>0.333,0.5,0.667</source>
         <comment>@info:placeholder comma separated window height fractions</comment>
-        <translation type="unfinished"></translation>
+        <translation>0.333,0.5,0.667</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="209"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="206"/>
         <source>Column width presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Voorinstellingen voor kolombreedte</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="244"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="200"/>
+        <source>Comma-separated fractions of the work area width, cycled by the preset shortcuts</source>
+        <translation>Door komma&apos;s gescheiden delen van de breedte van het werkgebied, doorlopen met de sneltoetsen voor voorinstellingen</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="235"/>
+        <source>Comma-separated fractions of the work area height, cycled by the preset shortcuts</source>
+        <translation>Door komma&apos;s gescheiden delen van de hoogte van het werkgebied, doorlopen met de sneltoetsen voor voorinstellingen</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="241"/>
         <source>Window height presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Voorinstellingen voor vensterhoogte</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/ScrollTabStripContent.qml.cpp" line="108"/>
+        <source>Untitled window</source>
+        <translation>Naamloos venster</translation>
     </message>
 </context>
 </TS>

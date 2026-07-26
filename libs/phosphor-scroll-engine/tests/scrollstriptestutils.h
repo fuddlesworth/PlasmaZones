@@ -37,6 +37,21 @@ inline QRect rectOf(const PhosphorScrollEngine::ResolvedStrip& resolved, const Q
     return {};
 }
 
+/// True when @p windowId is resolved HIDDEN. Returns false for an ABSENT
+/// window too — pair negative assertions with `resolveContains`, exactly
+/// like rectOf, or a dropped tile passes them vacuously.
+inline bool isHidden(const PhosphorScrollEngine::ResolvedStrip& resolved, const QString& windowId)
+{
+    for (const PhosphorScrollEngine::ResolvedColumn& rc : resolved.columns) {
+        for (const PhosphorScrollEngine::ResolvedTile& rt : rc.tiles) {
+            if (rt.windowId == windowId) {
+                return rt.hidden;
+            }
+        }
+    }
+    return false;
+}
+
 /// True when @p windowId appears anywhere in the resolve.
 inline bool resolveContains(const PhosphorScrollEngine::ResolvedStrip& resolved, const QString& windowId)
 {

@@ -294,9 +294,12 @@ void ScrollEngine::reapplyLayout(const PhosphorEngine::NavigationContext& ctx)
 void ScrollEngine::snapAllWindows(const PhosphorEngine::NavigationContext& ctx)
 {
     // "Snap everything to the layout" in scrolling terms: pull every
-    // floating window back into the strip.
-    P_SCROLL_RESOLVE(ctx.screenId);
-    Q_UNUSED(params)
+    // floating window back into the strip. Hand-expanded resolve (not
+    // P_SCROLL_RESOLVE): this shortcut path never needs layout params, and
+    // the macro's layoutParamsForScreen runs a ScreenManager query plus a
+    // context-gap-provider invocation per call.
+    const QString screen = resolveOperationScreen(ctx.screenId);
+    ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false);
     if (!state) {
         return;
     }
@@ -372,13 +375,14 @@ void ScrollEngine::toggleFocusedFloat(const PhosphorEngine::NavigationContext& c
                                   QString(), screen);                                                                  \
         return;                                                                                                        \
     }                                                                                                                  \
+    const QString sourceWindow = state->strip().activeWindowId();                                                      \
     const bool changed = (opExpr);                                                                                     \
     if (changed) {                                                                                                     \
         applyLayout(screen, true);                                                                                     \
         Q_EMIT placementChanged(screen);                                                                               \
     }                                                                                                                  \
     Q_EMIT navigationFeedback(changed, QStringLiteral(actionStr), changed ? QString() : QStringLiteral("no_target"),   \
-                              QString(), changed ? state->strip().activeWindowId() : QString(), screen)
+                              sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen)
 
 void ScrollEngine::focusColumnFirst(const QString& screenId)
 {
@@ -403,7 +407,7 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 // NOTE on the P_SCROLL_* macros above: they deliberately inject `screen`,
 // `state`, and `params` into the caller's scope and embed an early return.
 // A helper struct + lambda was considered and rejected: every verb would
-// still need the three names plus the bail-out, and the macro keeps the 20
+// still need the three names plus the bail-out, and the macro keeps the 16
 // verb bodies one line each. The names are part of the macro's documented
 // contract, and both macros are #undef'd at the end of this file.
 void ScrollEngine::consumeWindowIntoColumn(const QString& screenId)

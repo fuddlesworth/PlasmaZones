@@ -234,6 +234,14 @@ struct IdCacheState
     // Cleared on screen geometry changes (add/remove/reconfigure).
     QHash<QString, QString> screenIdCache;
 
+    // Connected physical screen ids (outputScreenId per KWin output),
+    // rebuilt lazily after every screenIdCache invalidation. Lets the
+    // scroll-override path (getWindowScreenId — a per-candidate call inside
+    // both focus-follows-mouse stacking walks) test output liveness with a
+    // set lookup instead of an O(outputs) string-building scan per call.
+    QSet<QString> connectedPhysicalIds;
+    bool connectedPhysicalIdsValid = false;
+
     // Window ID cache: EffectWindow* → "appId|uuid" (populated on first getWindowId call,
     // cleared in slotWindowClosed/windowDeleted). Eliminates 3-5 QString allocations per
     // getWindowId call across all hot paths (~1000-3000 allocs/sec during drag).

@@ -374,8 +374,11 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
         removeWindowDecoration(closedWindowId, w);
     }
 
-    // Notify general daemon for cleanup
-    notifyWindowClosed(w);
+    // Notify general daemon for cleanup. Pass the screen resolved at the
+    // top of this slot: the tiling teardown above erased the scroll
+    // tracking override, so re-deriving inside would report a
+    // position-based screen (wrong for a parked scroll column).
+    notifyWindowClosed(w, closedScreenId);
 
     // Clean up caches AFTER all consumers that call getWindowId(w).
     // The windowDeleted handler does final cleanup, but removing here
@@ -449,7 +452,7 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     updateAllDecorations();
 }
 
-void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
+void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w, const QString& preTeardownScreenId)
 {
     if (!w) {
         return;
@@ -462,11 +465,12 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
     }
 
     const int kindInt = static_cast<int>(classifyWindowKind(w));
-    // Pass KWin's authoritative current screen for the window. The daemon uses it
-    // as the final-placement screen when a cross-screen move has left the window
-    // untracked by both engines at close — otherwise its float-back records the
-    // stale source screen and it reopens on the wrong monitor.
-    const QString closeScreenId = getWindowScreenId(w);
+    // Pass the caller-resolved screen (captured before the tiling teardown
+    // dropped the scroll override). The daemon uses it as the
+    // final-placement screen when a cross-screen move has left the window
+    // untracked by both engines at close — otherwise its float-back records
+    // the stale source screen and it reopens on the wrong monitor.
+    const QString closeScreenId = preTeardownScreenId.isEmpty() ? getWindowScreenId(w) : preTeardownScreenId;
     qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId << "kind=" << kindInt
                      << "screen=" << closeScreenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,

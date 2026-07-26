@@ -163,6 +163,18 @@ void Daemon::initEnginesAndWiring()
             m_settings.get(), screenId);
     });
 
+    // Snap-restore defer gate (ScrollEngine::windowOpened): bakes BOTH the
+    // global snapping toggle and the recorded context's mode into one
+    // closure, matching the predicate autotile's twin gate evaluates
+    // through its own layout-manager reference. When snapping is disabled
+    // SnapEngine::resolveWindowRestore never claims, so the gate must
+    // answer false or the window would strand unmanaged.
+    scrollEngine->setSnappingModeResolver([this](const QString& screenId, int desktop, const QString& activity) {
+        return m_layoutManager && m_layoutManager->snappingPreferred()
+            && m_layoutManager->modeForScreen(screenId, desktop, activity)
+            == PhosphorZones::AssignmentEntry::Mode::Snapping;
+    });
+
     // Autotile provider. setContextGapProvider is derived-only
     // (AutotileEngine); m_autotileEngine is held as the base
     // PlacementEngineBase, so use the derived `autotileEngine` pointer

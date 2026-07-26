@@ -1127,6 +1127,12 @@ private Q_SLOTS:
         m_wta->setWindowFloating(windowId, false);
         QCOMPARE(spy.count(), 2);
         QCOMPARE(spy.at(1).at(1).toBool(), false);
+
+        // Clear the injected resolver (same discipline as the tiled
+        // predicate in the float-back test): cleanup() rebuilds the fixture
+        // today, but a stale closure would outlive this slot if it ever
+        // becomes per-class.
+        m_wta->service()->setEngineFloatResolver({});
     }
 
 private:
