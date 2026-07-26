@@ -852,6 +852,31 @@ private Q_SLOTS:
         const PhosphorZones::ContextGapOverride tiledAgain =
             f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("tiling"));
         QVERIFY(!tiledAgain.innerGap.has_value());
+
+        // COEXISTING per-mode rules (not replacement): a tiling-pinned and a
+        // scrolling-pinned gap rule in the SAME rule set must each fire only
+        // for their own mode token.
+        PWR::RuleAction tilingGapAction2;
+        tilingGapAction2.type = QString(PWR::ActionType::SetInnerGap);
+        tilingGapAction2.params.insert(QString(PWR::ActionParam::Value), 14);
+        PWR::Rule tilingGap2;
+        tilingGap2.id = QUuid::createUuid();
+        tilingGap2.name = QStringLiteral("Tiling inner gap");
+        tilingGap2.enabled = true;
+        tilingGap2.priority = 400;
+        tilingGap2.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("tiling"));
+        tilingGap2.actions = {tilingGapAction2};
+        QVERIFY(f.store->setAllRules({scrollGap, tilingGap2}));
+
+        const PhosphorZones::ContextGapOverride scrolledBoth =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("scrolling"));
+        QVERIFY(scrolledBoth.innerGap.has_value());
+        QCOMPARE(*scrolledBoth.innerGap, 8);
+        const PhosphorZones::ContextGapOverride tiledBoth =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("tiling"));
+        QVERIFY(tiledBoth.innerGap.has_value());
+        QCOMPARE(*tiledBoth.innerGap, 14);
     }
 
     // ─── Per-monitor gap beats a global per-mode gap (specificity, not priority) ─

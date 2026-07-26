@@ -271,10 +271,18 @@ bool ScrollStrip::setWindowMinimized(const QString& windowId, bool minimized, co
     const int oldViewX = viewXFor(params);
     tile.minimized = minimized;
     if (minimized && col.activeTileIdx == tileIdx) {
-        // Prefer a visible sibling as the column's active tile.
-        for (int i = 0; i < col.tiles.size(); ++i) {
-            if (!col.tiles.at(i).minimized) {
-                col.activeTileIdx = i;
+        // Prefer the NEAREST visible sibling as the column's active tile
+        // (ties break downward), so focus does not jump to the top of a
+        // tall stack when a middle tile minimizes.
+        for (int dist = 1; dist < col.tiles.size(); ++dist) {
+            const int below = tileIdx + dist;
+            const int above = tileIdx - dist;
+            if (below < col.tiles.size() && !col.tiles.at(below).minimized) {
+                col.activeTileIdx = below;
+                break;
+            }
+            if (above >= 0 && !col.tiles.at(above).minimized) {
+                col.activeTileIdx = above;
                 break;
             }
         }
@@ -283,9 +291,10 @@ bool ScrollStrip::setWindowMinimized(const QString& windowId, bool minimized, co
         col.activeTileIdx = tileIdx;
     }
     // A column collapsing to / expanding from fully-minimized shifts strip
-    // positions; keep the view where it was — clamped, so the collapse can
-    // never leave dead space beyond the strip's right end.
-    m_viewAnchor = clampedAnchor(columnStripX(m_activeColumnIdx, params) - oldViewX, params);
+    // positions; keep the view where it was (clamped so the collapse can
+    // never leave dead space beyond the strip's right end) unless the
+    // centering policy re-centers the focused column.
+    m_viewAnchor = keepOrRecenterAnchor(oldViewX, params);
     return true;
 }
 
@@ -297,6 +306,17 @@ bool ScrollStrip::isWindowMinimized(const QString& windowId) const
     }
     const Column& col = m_columns.at(colIdx);
     return col.tiles.at(col.indexOfWindow(windowId)).minimized;
+}
+
+QSize ScrollStrip::windowMinimumSize(const QString& windowId) const
+{
+    const int colIdx = columnOfWindow(windowId);
+    if (colIdx < 0) {
+        return QSize(0, 0);
+    }
+    const Column& col = m_columns.at(colIdx);
+    const Tile& tile = col.tiles.at(col.indexOfWindow(windowId));
+    return QSize(tile.minWidth, tile.minHeight);
 }
 
 bool ScrollStrip::setWindowMinimumSize(const QString& windowId, int minWidth, int minHeight)
@@ -430,8 +450,10 @@ bool ScrollStrip::consumeWindowIntoColumn(const ScrollLayoutParams& params)
         removeColumnAt(m_activeColumnIdx + 1);
     }
     // Consuming shifts everything right of the active column; the anchor is
-    // active-relative so the focused column stays put by construction.
-    m_viewAnchor = clampedAnchor(columnStripX(m_activeColumnIdx, params) - oldViewX, params);
+    // active-relative so the focused column stays put by construction —
+    // except under the Always/lone-column centering policy, where the
+    // narrower strip re-centers it.
+    m_viewAnchor = keepOrRecenterAnchor(oldViewX, params);
     return true;
 }
 

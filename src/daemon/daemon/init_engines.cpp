@@ -124,12 +124,12 @@ void Daemon::initEnginesAndWiring()
     auto* snapEngine = engines.snap.get();
     auto* scrollEngine = engines.scroll.get();
     // Factory contract: createEngines always constructs all three engines
-    // and the router. Assert once here; the code below dereferences the
-    // raw pointers unconditionally, so a sometimes-null contract would need
-    // guards on EVERY use, not just some (release pair: the router's own
-    // ctor qFatals on a null engine, so a violated contract still fails
-    // loudly before any window is placed).
-    Q_ASSERT(autotileEngine && snapEngine && scrollEngine && engines.router);
+    // and the router. Fail loudly once here in every build; the code below
+    // dereferences the raw pointers unconditionally, so a sometimes-null
+    // contract would need guards on EVERY use, not just some.
+    if (!autotileEngine || !snapEngine || !scrollEngine || !engines.router) {
+        qFatal("Daemon::initializeEngines: createEngines violated its all-engines contract");
+    }
     // Move the shared cross-surface resolver BEFORE the engines so it is
     // destroyed AFTER them (they borrow it). Declared earlier than the engines
     // in daemon.h for the same reason.
@@ -540,10 +540,14 @@ void Daemon::initEnginesAndWiring()
         // engine state, "is this window actively tiled right now". Guards
         // recordFreeGeometry against recording a tile rect as a float-back —
         // the engine-backed answer survives effect reloads, which the
-        // effect-side capture guard cannot.
-        m_windowTrackingAdaptor->service()->setAutotileTiledPredicate(
-            [autotilePtr = QPointer(autotileEngine)](const QString& windowId) -> bool {
-                return autotilePtr && autotilePtr->isWindowTiled(windowId);
+        // effect-side capture guard cannot. Covers BOTH tiling-family
+        // engines: a scroll column rect recorded as float-back is the same
+        // poison class the guard exists for.
+        m_windowTrackingAdaptor->service()->setEngineTiledPredicate(
+            [autotilePtr = QPointer(autotileEngine),
+             scrollPtr = QPointer(scrollEngine)](const QString& windowId) -> bool {
+                return (autotilePtr && autotilePtr->isWindowTiled(windowId))
+                    || (scrollPtr && scrollPtr->isWindowTiled(windowId));
             });
     }
 
@@ -789,7 +793,7 @@ void Daemon::initEnginesAndWiring()
             struct ScreenOsd
             {
                 QString screenId;
-                bool isAutotile;
+                PhosphorZones::AssignmentEntry::Mode mode;
                 QString algoId;
             };
             QVector<ScreenOsd> osdEntries;
@@ -799,15 +803,21 @@ void Daemon::initEnginesAndWiring()
                 const int desktop = currentDesktopForScreen(screenId);
                 const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
                 const bool isAutotileScreen = PhosphorLayout::LayoutId::isAutotile(assignmentId);
-                if (isAutotileScreen || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+                const bool isScrollingScreen = PhosphorLayout::LayoutId::isScrolling(assignmentId);
+                if (isAutotileScreen || isScrollingScreen) {
                     engineManagedScreens.insert(screenId);
                 }
-                // Only show OSD for screens that actually changed
+                // Only show OSD for screens that actually changed. Three-way:
+                // a Scrolling screen must neither be announced with a snap
+                // layout nor have its lock queried against the wrong mode.
                 if (changedScreenIds.isEmpty() || changedScreenIds.contains(screenId)) {
                     if (isAutotileScreen) {
-                        osdEntries.append({screenId, true, PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId)});
+                        osdEntries.append({screenId, PhosphorZones::AssignmentEntry::Autotile,
+                                           PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId)});
+                    } else if (isScrollingScreen) {
+                        osdEntries.append({screenId, PhosphorZones::AssignmentEntry::Scrolling, {}});
                     } else {
-                        osdEntries.append({screenId, false, {}});
+                        osdEntries.append({screenId, PhosphorZones::AssignmentEntry::Snapping, {}});
                     }
                 }
             }
@@ -845,14 +855,16 @@ void Daemon::initEnginesAndWiring()
                         osd.screenId, currentDesktopForScreen(osd.screenId), activity)) {
                     continue;
                 }
-                const PhosphorZones::AssignmentEntry::Mode mode = osd.isAutotile
-                    ? PhosphorZones::AssignmentEntry::Autotile
-                    : PhosphorZones::AssignmentEntry::Snapping;
-                if (isCurrentContextLockedForMode(osd.screenId, mode)) {
+                if (isCurrentContextLockedForMode(osd.screenId, osd.mode)) {
                     showLockedPreviewOsd(osd.screenId);
                 } else if (!osdEnabled) {
                     continue;
-                } else if (osd.isAutotile) {
+                } else if (osd.mode == PhosphorZones::AssignmentEntry::Scrolling) {
+                    // Scrolling has no layout entity to announce; the mode
+                    // switch itself is the OSD content (mirrors
+                    // cheatsheetModeString's three-way handling).
+                    showScrollingModeOsd(osd.screenId);
+                } else if (osd.mode == PhosphorZones::AssignmentEntry::Autotile) {
                     if (!osd.algoId.isEmpty()) {
                         // Resolve the algorithm's human-readable display
                         // name via the registry instead of surfacing the

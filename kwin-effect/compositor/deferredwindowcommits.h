@@ -50,11 +50,12 @@ public:
         return m_pending.contains(windowId);
     }
 
-    /// Schedule @p fire to run after @p intervalMs, replacing nothing —
-    /// callers gate on contains() when an existing pending commit should
-    /// win. The pending entry is consumed (erased, timer released) before
-    /// @p fire runs, so every early-return inside the callback leaves no
-    /// bookkeeping behind.
+    /// Schedule @p fire to run after @p intervalMs. An already-pending
+    /// commit for the window is cancelled first (last-schedule-wins at the
+    /// class level); callers that want an EXISTING pending commit to win
+    /// gate on contains() before calling. The pending entry is consumed
+    /// (erased, timer released) before @p fire runs, so every early-return
+    /// inside the callback leaves no bookkeeping behind.
     void schedule(const QString& windowId, int intervalMs, std::function<void()> fire)
     {
         // Enforce one-pending-commit-per-window AT THE CLASS, not by caller

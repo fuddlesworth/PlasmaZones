@@ -17,7 +17,7 @@
  * become the nearest enumerator) and the preset-list numeric canonicalizer.
  */
 
-#include <QRegularExpression>
+#include <QKeySequence>
 #include <QSet>
 #include <QTest>
 
@@ -63,10 +63,17 @@ private Q_SLOTS:
                 continue;
             }
             for (const PhosphorConfig::KeyDef& def : git.value()) {
-                const QString chord = def.defaultValue.toString();
-                if (chord.isEmpty()) {
+                const QString raw = def.defaultValue.toString();
+                if (raw.isEmpty()) {
                     continue; // deliberately unbound defaults are fine
                 }
+                // Canonicalise through QKeySequence so spelling variants of
+                // the same chord ("Meta+Alt+=" vs "Alt+Meta+=", stray
+                // whitespace) still collide; an unparsable spelling falls
+                // back to the raw string rather than silently passing.
+                const QString parsed =
+                    QKeySequence::fromString(raw, QKeySequence::PortableText).toString(QKeySequence::PortableText);
+                const QString chord = parsed.isEmpty() ? raw : parsed;
                 const QString qualified = git.key() + QLatin1Char('/') + def.key;
                 if (chordToKey.contains(chord)) {
                     collisions.append(chord + QLatin1String(": ") + chordToKey.value(chord) + QLatin1String(" vs ")
@@ -85,9 +92,12 @@ private Q_SLOTS:
     void noShiftSymbolDefaults()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
-        // "Shift+" followed by a single NON-alphanumeric character at the
-        // end of the chord (letters and named keys like Home/PgUp are fine).
-        const QRegularExpression shiftSymbol(QStringLiteral("Shift\\+[^A-Za-z0-9]$"));
+        // Structural check through QKeySequence, not a text regex: it sees
+        // every combination of a multi-chord sequence, tolerates whitespace
+        // and modifier-order variants, and catches a symbol spelled as a
+        // named key. A combination offends when Shift is held and the base
+        // key is a printable non-alphanumeric (letters, digits, and
+        // navigation keys like Home/PgUp are fine).
         QStringList offenders;
         for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
             if (!git.key().startsWith(QLatin1String("Shortcuts"))) {
@@ -95,7 +105,18 @@ private Q_SLOTS:
             }
             for (const PhosphorConfig::KeyDef& def : git.value()) {
                 const QString chord = def.defaultValue.toString();
-                if (shiftSymbol.match(chord).hasMatch()) {
+                const QKeySequence seq = QKeySequence::fromString(chord, QKeySequence::PortableText);
+                bool offends = false;
+                for (int i = 0; i < seq.count(); ++i) {
+                    const QKeyCombination kc = seq[i];
+                    const int key = kc.key();
+                    if ((kc.keyboardModifiers() & Qt::ShiftModifier) && key > 0 && key < 0x100
+                        && !QChar(key).isLetterOrNumber()) {
+                        offends = true;
+                        break;
+                    }
+                }
+                if (offends) {
                     offenders.append(git.key() + QLatin1Char('/') + def.key + QLatin1String(" = ") + chord);
                 }
             }

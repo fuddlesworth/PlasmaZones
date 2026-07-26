@@ -205,7 +205,16 @@ SettingsFlickable {
                         width: root.fieldWidth
                         Accessible.name: i18n("Column width presets")
                         placeholderText: i18nc("@info:placeholder comma separated column width fractions", "0.333, 0.5, 0.667")
-                        onEditingFinished: appSettings.scrollingPresetColumnWidths = text
+                        // Echo the stored value back after the write: Enter
+                        // fires editingFinished with focus still held, and the
+                        // guarded Binding below is blocked while focused — so a
+                        // destructive canonicalisation (dropped garbage entries,
+                        // de-duped values) would stay invisible until focus
+                        // moves. Reading back shows what was actually kept.
+                        onEditingFinished: {
+                            appSettings.scrollingPresetColumnWidths = text;
+                            text = appSettings.scrollingPresetColumnWidths;
+                        }
                         // Guarded Binding, not a plain `text:` one — typing
                         // severs a plain binding, and per-page Discard/Reset,
                         // profile switches, and schema canonicalisation would
@@ -231,7 +240,11 @@ SettingsFlickable {
                         width: root.fieldWidth
                         Accessible.name: i18n("Window height presets")
                         placeholderText: i18nc("@info:placeholder comma separated window height fractions", "0.333, 0.5, 0.667")
-                        onEditingFinished: appSettings.scrollingPresetWindowHeights = text
+                        // Same echo rationale as the width field.
+                        onEditingFinished: {
+                            appSettings.scrollingPresetWindowHeights = text;
+                            text = appSettings.scrollingPresetWindowHeights;
+                        }
                         // Same guarded-binding rationale as the width field.
                         Binding on text {
                             value: appSettings.scrollingPresetWindowHeights

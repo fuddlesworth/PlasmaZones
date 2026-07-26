@@ -68,9 +68,11 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
     // Where the window currently lives — for the source reflow.
     const QString sourceScreen = sourceEngine->screenForTrackedWindow(windowId);
 
-    // For a SNAP target, resolve the landing zone BEFORE relinquishing the source
-    // (snap→snap cross-desktop maps the source's slot; everything else enters the
-    // neighbour's edge zone).
+    // For a SNAP target, resolve the landing zone BEFORE relinquishing the
+    // source (snap→snap cross-desktop maps the source's slot; everything else
+    // enters the neighbour's edge zone). The branch also runs for a SCROLLING
+    // target — the SnapEngine cast fails there and the zone list stays empty,
+    // which is what a strip target needs (its landing is insertIndex, below).
     QStringList landingZoneIds;
     if (!targetIsAutotile) {
         auto* snapTarget = qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine);
@@ -97,7 +99,9 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
     // — the remaining tiles expand into the vacated slot; handoffRelease does not
     // retile. A snap source just vacates a zone (no reflow). A scroll source's
     // handoffRelease schedules its own coalesced retile, so the strip closes up
-    // without an explicit call here.
+    // without an explicit call here. The min size is queried first: release
+    // drops the source's tracking, and the receiver seeds from ctx.minSize.
+    const QSize windowMinSize = sourceEngine->windowMinimumSize(windowId);
     sourceEngine->handoffRelease(windowId);
     if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
         sourceEngine->retile(sourceScreen);
@@ -132,6 +136,7 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         ctx.toDesktop = targetDesktop;
         ctx.fromEngineId = sourceEngine->engineId();
         ctx.sourceZoneIds = landingZoneIds;
+        ctx.minSize = windowMinSize;
         ctx.wasFloating = false; // an explicit move always places, never floats
         // Edge-aware entry for a SCROLLING target: moving right crosses into
         // the strip's LEFT edge, so the arrival becomes the FIRST column
@@ -140,6 +145,9 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         // the snap target's entryZoneForCrossing and the scroll engine's own
         // in-strip boundary semantics — without it every crossing appended
         // at the far end, the opposite edge from the one the window entered.
+        // A vertical crossing ("up"/"down" between stacked monitors) has no
+        // strip edge to enter from; insertIndex stays -1 and the window
+        // appends at the right end, same as "left".
         if (targetMode == PhosphorZones::AssignmentEntry::Scrolling && direction == QLatin1String("right")) {
             ctx.insertIndex = 0;
         }
@@ -259,7 +267,11 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         Q_EMIT windowOutputMoveExpected(partner, sourceScreen);
     }
 
-    // ── Relinquish both windows from their current engines (tracking-only). ──
+    // ── Relinquish both windows from their current engines (tracking-only).
+    //    Min sizes are queried first: release drops each source's tracking,
+    //    and the receivers seed from ctx.minSize. ──
+    const QSize focusedMinSize = sourceEngine->windowMinimumSize(windowId);
+    const QSize partnerMinSize = targetEngine->windowMinimumSize(partner);
     sourceEngine->handoffRelease(windowId);
     targetEngine->handoffRelease(partner);
 
@@ -273,6 +285,7 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         ctx.toScreenId = targetScreenId;
         ctx.fromEngineId = sourceEngine->engineId();
         ctx.sourceZoneIds = focusedLandingZones;
+        ctx.minSize = focusedMinSize;
         ctx.insertIndex = focusedLandingIndex;
         ctx.wasFloating = false;
         targetEngine->handoffReceive(ctx);
@@ -284,6 +297,7 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         ctx.toScreenId = sourceScreen;
         ctx.fromEngineId = targetEngine->engineId();
         ctx.sourceZoneIds = partnerLandingZones;
+        ctx.minSize = partnerMinSize;
         ctx.insertIndex = partnerLandingIndex;
         ctx.wasFloating = false;
         sourceEngine->handoffReceive(ctx);

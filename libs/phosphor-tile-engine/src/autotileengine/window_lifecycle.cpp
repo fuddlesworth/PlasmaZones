@@ -150,6 +150,11 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     onWindowAdded(windowId);
 }
 
+QSize AutotileEngine::windowMinimumSize(const QString& rawWindowId) const
+{
+    return m_windowMinSizes.value(canonicalizeForLookup(rawWindowId), QSize(0, 0));
+}
+
 void AutotileEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth, int minHeight)
 {
     if (!warnIfEmptyWindowId(rawWindowId, "windowMinSizeUpdated")) {

@@ -50,12 +50,12 @@ enum class Field : int {
     PositionY = 28,
     CaptionNormal = 29,
     // ── PlasmaZones extension fields [30, 33] ────────────────────────────
-    IsFloating = 30, ///< floated out of tiling (snap or autotile)
+    IsFloating = 30, ///< floated out of tiling (any placement engine)
     IsSnapped = 31, ///< occupies a snap zone
     Zone = 32, ///< the snap zone's UUID the window occupies
-    IsTiled = 33, ///< managed by the autotile engine (distinct from IsSnapped)
+    IsTiled = 33, ///< managed by a tiling-family engine — autotile or scrolling (distinct from IsSnapped)
     // ── Context placement-mode field [34] ────────────────────────────────
-    Mode = 34, ///< context — current placement mode (snapping / tiling)
+    Mode = 34, ///< context — current placement mode (snapping / tiling / scrolling)
     // ── Context tiling-environment field [35] ────────────────────────────
     TiledWindowCount = 35, ///< context — tiled windows on this screen + desktop
     // ── Window capability fields [36, 37] ────────────────────────────────
@@ -64,7 +64,8 @@ enum class Field : int {
     // ── Context screen-orientation field [38] ────────────────────────────
     ScreenOrientation = 38, ///< context — "portrait" / "landscape" of the resolving screen
     // ── Context active-layout field [39] ─────────────────────────────────
-    ActiveLayout = 39, ///< context — the layout id currently resolved for the screen (snap UUID or "autotile:<algo>")
+    ActiveLayout = 39, ///< context — the layout id currently resolved for the screen (snap UUID, "autotile:<algo>", or
+                       ///< "scrolling:")
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
@@ -167,8 +168,8 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     // orientation rule drive the layout/algorithm assignment for a rotated
     // monitor. Empty (predicate false) when no geometry provider is wired.
     {Field::ScreenOrientation, QLatin1StringView("screenOrientation"), FieldType::String, FieldSource::Context},
-    // [39] — The layout id currently resolved for the screen (snap UUID or
-    // "autotile:<algo>"). String-valued (Equals against the id) and Context-
+    // [39] — The layout id currently resolved for the screen (snap UUID,
+    // "autotile:<algo>", or the bare "scrolling:" sentinel). String-valued (Equals against the id) and Context-
     // sourced. Populated only by the daemon-facing resolvers (gap / lock /
     // overlay), NOT the assignment cascade — reading the active layout while
     // resolving it would recurse. Empty (predicate false) where unpopulated.

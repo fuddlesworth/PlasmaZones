@@ -166,7 +166,7 @@ private Q_SLOTS:
     // toggle the autotile engine clears its tiled bit BEFORE the compositor
     // repositions the window, so when captureWindowPlacement runs (from
     // setWindowFloating) the live frame still IS the tile rect and the
-    // isWindowAutotileTiled gate no longer refuses it. The capture must
+    // isWindowEngineTiled gate no longer refuses it. The capture must
     // compare against the engine's remembered last-applied rect and skip the
     // free-geometry write, or applyGeometryForFloat (which runs AFTER the
     // capture) reads the poisoned value back and "restores" the window onto

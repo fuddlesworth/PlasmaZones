@@ -191,6 +191,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 return;
             }
             m_trackedScreenPerWindow[safeW] = newScreenId;
+            // A VS crossing changes the same rule-match inputs the physical
+            // outputChanged handler invalidates for (screenId, and the Mode
+            // stamp when the two VSes run different engines) — without this
+            // a Mode/screen-pinned appearance rule keeps its stale cached
+            // verdict after a cross-VS transfer.
+            invalidateRuleCacheForStateChange(getWindowId(safeW));
 
             // Skip during drag — the drag system owns state transitions.
             // Autotile drag handles VS transfers via the drag-policy-changed path.

@@ -244,12 +244,19 @@ void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds)
     // "scrolling"` border/opacity/decoration rule would keep its stale
     // verdict indefinitely. Invalidate + sweep on a GENUINE change only
     // (identical-set desktop-switch re-emits stay free).
-    const QSet<QString> newSet(screenIds.cbegin(), screenIds.cend());
+    setScrollingScreens(QSet<QString>(screenIds.cbegin(), screenIds.cend()));
+}
+
+void TilingHandler::setScrollingScreens(const QSet<QString>& newSet)
+{
+    // Any authoritative write voids in-flight property replies, identical
+    // set or not — the writer is always newer than a reply dispatched
+    // earlier (see the m_scrollingScreensGeneration doc).
+    ++m_scrollingScreensGeneration;
     if (newSet == m_scrollingScreens) {
         return;
     }
     m_scrollingScreens = newSet;
-    ++m_scrollingScreensGeneration;
     m_effect->invalidateAllRuleCaches();
     m_effect->scheduleBorderSweep();
 }

@@ -408,6 +408,20 @@ AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId
             return std::nullopt;
         }
         if (entry->activeLayoutId().isEmpty()) {
+            // Payload-less Snapping is still an EXPLICIT mode pin when the
+            // user stored an enabled exact-context rule for this tuple —
+            // the Monitors page stages one when leaving Scrolling while the
+            // context suppresses the default layout, so there is no layout
+            // to pin. Without this carve-out the empty-id rejection would
+            // defer to a sibling screen's entry or the default tier, and
+            // the staged mode switch would hold only when those happen to
+            // resolve Snapping anyway. (Autotile and Scrolling mode-only
+            // entries stay visible through their bare id sentinels; only
+            // Snapping has no sentinel because its ids are layout UUIDs.)
+            const PWR::Rule* exact = findExactContextRule(sid, virtualDesktop, activity);
+            if (exact != nullptr && exact->enabled && entry->mode == AssignmentEntry::Snapping) {
+                return entry;
+            }
             return std::nullopt;
         }
         return entry;

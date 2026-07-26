@@ -10,7 +10,9 @@ namespace PlasmaZones {
 
 // ── Scrolling (PhosphorConfig::Store-backed) ────────────────────────────────
 // Scalars live in m_store under Tiling.Scrolling; the schema validators own
-// the clamping (clampInt / validIntOr / clampDouble / canonicalCommaList).
+// the enum/list validation (validIntOr / canonicalProportionList). The width
+// value's REAL clamp is the kind-aware hand-written setter below — the
+// schema's clampDouble alone spans both kinds' ranges.
 
 P_STORE_GET(int, scrollingCenterFocusedColumn, tilingScrollingGroup, centerFocusedColumnKey, int)
 P_STORE_SET_INT(setScrollingCenterFocusedColumn, tilingScrollingGroup, centerFocusedColumnKey,
@@ -37,28 +39,39 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
     if (after == before) {
         return;
     }
+    // Setter-side coercion only: a hand-edited config with an inconsistent
+    // kind/value pair is left as-is until the next write — the engine's own
+    // load clamps whatever it reads, so the mismatch cannot produce an
+    // out-of-range layout, just a value the page rewrites on first touch.
     const qreal stored =
         m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
-    if (after == 1 && stored <= 1.0) {
+    if (after == ConfigDefaults::scrollingWidthKindFixed() && stored <= 1.0) {
         // Entering Fixed with a proportion stored: seed a sane pixel width.
         setScrollingDefaultColumnWidthValue(ConfigDefaults::scrollingDefaultColumnWidthFixedPx());
-    } else if (after != 1 && stored > 1.0) {
+    } else if (after != ConfigDefaults::scrollingWidthKindFixed() && stored > 1.0) {
         // Leaving Fixed with pixels stored: fall back to the proportion default.
         setScrollingDefaultColumnWidthValue(ConfigDefaults::scrollingDefaultColumnWidthValue());
     }
     Q_EMIT scrollingDefaultColumnWidthKindChanged();
-    Q_EMIT settingsChanged();
+    // One aggregate emit per kind flip: when the value coercion above ran,
+    // its nested setter already emitted settingsChanged — a second emit here
+    // would run the engine's refresh+retile sweep twice for one user action.
+    const qreal storedNow =
+        m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
+    if (qFuzzyCompare(1.0 + storedNow, 1.0 + stored)) {
+        Q_EMIT settingsChanged();
+    }
 }
 
 P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, tilingScrollingGroup, defaultColumnWidthValueKey, double)
 
 // Hand-written value setter: kind-aware clamp (Proportion values live in
-// (0.05, 1.0]; Fixed in pixels) — the schema clamp alone spans both ranges.
+// [0.05, 1.0]; Fixed in whole pixels with a 1px floor) — the schema clamp
+// alone spans both ranges.
 void Settings::setScrollingDefaultColumnWidthValue(qreal value)
 {
-    const bool isFixed = scrollingDefaultColumnWidthKind() == 1;
-    value = isFixed ? qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value,
-                                    ConfigDefaults::scrollingDefaultColumnWidthValueMax())
+    const bool isFixed = scrollingDefaultColumnWidthKind() == ConfigDefaults::scrollingWidthKindFixed();
+    value = isFixed ? qBound<qreal>(1.0, value, ConfigDefaults::scrollingDefaultColumnWidthValueMax())
                     : qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value, 1.0);
     const qreal before =
         m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());

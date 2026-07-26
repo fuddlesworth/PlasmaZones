@@ -274,6 +274,28 @@ void Daemon::showNotAssignedOsd(const QString& screenId)
     qCInfo(lcDaemon) << "Showing not-assigned text OSD: screen=" << screenId;
 }
 
+void Daemon::showScrollingModeOsd(const QString& screenId)
+{
+    // The mode-switch announcement for a screen entering Scrolling: there is
+    // no layout entity or zone preview to show, so both styles collapse to a
+    // text card (mirrors showNotAssignedOsd's shape).
+    if (shouldSuppressOsd()) {
+        return;
+    }
+    const OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+    if (style == OsdStyle::None) {
+        return;
+    }
+    const QString text = PhosphorI18n::tr("Scrolling", "tiling mode name");
+    if (style == OsdStyle::Preview && m_overlayService) {
+        m_overlayService->showDisabledOsd(text, screenId);
+        qCInfo(lcDaemon) << "Showing scrolling-mode preview OSD: screen=" << screenId;
+        return;
+    }
+    showKdeTextOsd(QStringLiteral("plasmazones"), text);
+    qCInfo(lcDaemon) << "Showing scrolling-mode text OSD: screen=" << screenId;
+}
+
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
     if (shouldSuppressOsd()) {
@@ -413,7 +435,9 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
             const QString assignmentId = m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
-            } else {
+            } else if (!PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+                // Scrolling screens contribute to NEITHER bucket: the picker
+                // must not offer manual snap layouts as this screen's list.
                 manualActive = true;
             }
         } else {
@@ -423,7 +447,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
                 const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
                 if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                     autotileActive = true;
-                } else {
+                } else if (!PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
                     manualActive = true;
                 }
             }
@@ -615,6 +639,12 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                 continue;
             }
             const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+            if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+                // Scrolling screens announce the mode, never a fallback snap
+                // layout (the "scrolling:" sentinel is not a manual layout).
+                showScrollingModeOsd(screenId);
+                continue;
+            }
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
                 // Bare autotile (mode set, no concrete algorithm) draws its

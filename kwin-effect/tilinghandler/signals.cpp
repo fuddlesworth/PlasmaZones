@@ -259,7 +259,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         } else {
             QSet<QString> windowsOnRemovedScreens;
             for (KWin::EffectWindow* w : windows) {
-                if (w && removed.contains(m_effect->getWindowScreenId(w))) {
+                if (w && !w->isDeleted() && removed.contains(m_effect->getWindowScreenId(w))) {
                     // Only restore borders for windows on the CURRENT desktop.
                     // Windows on other desktops may still be autotiled and must keep
                     // their borderless state — restoring them here would leak title bars
@@ -299,7 +299,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             for (const QString& screenId : removed) {
                 QStringList autotileOrder;
                 for (KWin::EffectWindow* w : windows) {
-                    if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
+                    if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
                         && m_effect->getWindowScreenId(w) == screenId) {
                         autotileOrder.append(m_effect->getWindowId(w));
                     }
@@ -312,7 +312,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // Unmaximize monocle windows on removed screens so they return to
             // normal geometry when resnapped or restored.
             for (KWin::EffectWindow* w : windows) {
-                if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()) {
+                if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()) {
                     continue;
                 }
                 const QString screenId = m_effect->getWindowScreenId(w);
@@ -657,7 +657,9 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
 
 void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 {
-    if (!w || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)) {
+    // isDeleted: same close-grab hazard the fullscreen slot documents — a
+    // dying window can still fire state signals during its close animation.
+    if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)) {
         return;
     }
     const QString windowId = m_effect->getWindowId(w);
@@ -827,7 +829,8 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 
 void TilingHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool horizontal, bool vertical)
 {
-    if (m_suppressMaximizeChanged || !w) {
+    // isDeleted: same close-grab hazard the fullscreen slot documents.
+    if (m_suppressMaximizeChanged || !w || w->isDeleted()) {
         return;
     }
     const QString windowId = m_effect->getWindowId(w);

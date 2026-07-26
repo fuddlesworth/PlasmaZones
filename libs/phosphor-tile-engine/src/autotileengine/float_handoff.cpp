@@ -241,6 +241,11 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         }
     }
     m_states.setKeyForWindow(windowId, destKey);
+    // Seed the source engine's last-known min size so the first retile
+    // clamps correctly instead of waiting a refuse/re-discover round-trip.
+    if (ctx.minSize.width() > 0 || ctx.minSize.height() > 0) {
+        storeWindowMinSize(windowId, ctx.minSize.width(), ctx.minSize.height());
+    }
 
     // Announce the received float bit on the passive channel (the snap twin
     // announces its float re-homes via windowFloatingChanged from its

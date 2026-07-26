@@ -168,14 +168,21 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId)
     }
     const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnWidth))) {
-        out.insert(QStringLiteral("widthFraction"), action->params.value(PhosphorRules::ActionParam::Value).toDouble());
+        // Only forward a genuinely numeric positive fraction: a missing or
+        // malformed Value would toDouble() to 0.0 and be clamped into a 5%
+        // column instead of falling back to the configured default width.
+        const auto value = action->params.value(PhosphorRules::ActionParam::Value);
+        const double fraction = value.toDouble(0.0);
+        if (value.isDouble() && fraction > 0.0) {
+            out.insert(ScrollOpenKeys::widthFraction(), fraction);
+        }
     }
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenTabbed))) {
-        out.insert(QStringLiteral("tabbed"), action->params.value(PhosphorRules::ActionParam::Value).toBool());
+        out.insert(ScrollOpenKeys::tabbed(), action->params.value(PhosphorRules::ActionParam::Value).toBool());
     }
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnPlacement))) {
         const QString token = action->params.value(PhosphorRules::ActionParam::Value).toString();
-        out.insert(QStringLiteral("consume"), token == QLatin1String(PhosphorRules::ColumnPlacementToken::Consume));
+        out.insert(ScrollOpenKeys::consume(), token == QLatin1String(PhosphorRules::ColumnPlacementToken::Consume));
     }
     return out;
 }
@@ -405,11 +412,11 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     // RouteToDesktop is engine-neutral — emit it for autotile windows too.
     emitRouteToDesktopIfMatched(resolved, windowId);
 
-    // RouteToScreen: redirect the window onto a different AUTOTILE monitor. The
-    // snap open path handles snap-mode targets itself (the placement directive),
-    // so here we only honour a target that is currently in autotile mode — a snap
-    // or disabled target is left to the window's spawn screen (cross-engine
-    // routing is out of scope). Returning the target tells the caller to insert
+    // RouteToScreen: redirect the window onto a different ENGINE-OWNED monitor
+    // (autotile or scrolling). The snap open path handles snap-mode targets
+    // itself (the placement directive), so here we only honour a target whose
+    // mode an engine claims — a snap or disabled target is left to the
+    // window's spawn screen (cross-engine routing is out of scope). Returning the target tells the caller to insert
     // the window into that screen's tiling state; the output-move marker stops the
     // effect from re-processing the resulting outputChanged as a fresh open.
     const std::optional<PhosphorRules::RuleAction> route =

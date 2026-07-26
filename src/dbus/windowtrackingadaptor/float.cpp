@@ -235,6 +235,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
             if (sourceTracked) {
                 ctx.fromEngineId = source->engineId();
                 ctx.sourceGeometry = m_frameGeometry.value(windowId);
+                ctx.minSize = source->windowMinimumSize(windowId);
                 source->handoffRelease(windowId);
             }
             dest->handoffReceive(ctx);

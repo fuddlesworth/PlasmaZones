@@ -111,7 +111,8 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenIdOrName = it.key();
         QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)
+            && !PhosphorLayout::LayoutId::isScrolling(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch screen assignment"));
             if (!uuidOpt) {
                 continue;
@@ -387,7 +388,8 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
         }
 
         QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)
+            && !PhosphorLayout::LayoutId::isScrolling(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch desktop assignment"));
             if (!uuidOpt) {
                 continue;
@@ -572,7 +574,8 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
         }
 
         QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)
+            && !PhosphorLayout::LayoutId::isScrolling(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch activity assignment"));
             if (!uuidOpt) {
                 continue;
@@ -624,7 +627,8 @@ void LayoutAdaptor::setAllCombinedAssignments(const QVariantMap& assignments)
             continue;
         }
         const QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)
+            && !PhosphorLayout::LayoutId::isScrolling(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch combined assignment"));
             if (!uuidOpt) {
                 continue;

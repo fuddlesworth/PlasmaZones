@@ -177,12 +177,10 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     PhosphorEngine::PhosphorEngine
     PhosphorProtocol::PhosphorProtocol
     # Explicit link: `compositorclock.h` and `windowanimator.h` directly
-    # include `<PhosphorAnimation/...>`. The dependency is reachable
-    # transitively via `PhosphorCompositor::PhosphorCompositor`, but depending
-    # on a transitive target for a directly-included header is brittle
-    # — a future reshuffle of compositor-common's link graph could drop
-    # the re-export and this target would break mysteriously. Named
-    # here so the link graph matches the include graph.
+    # include `<PhosphorAnimation/...>`. PhosphorCompositor does NOT link
+    # PhosphorAnimation, so this is a genuine direct dependency, not a
+    # transitive re-export. Named here so the link graph matches the
+    # include graph.
     PhosphorAnimation::PhosphorAnimation
     # PhosphorRules: the unified LGPL rule engine. The effect resolves
     # its per-window animation overrides AND its exclusion gates through

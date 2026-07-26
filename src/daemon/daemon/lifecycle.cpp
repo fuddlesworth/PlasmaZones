@@ -654,7 +654,7 @@ void Daemon::stop()
     // Null the WindowDragAdaptor's engine pointer for the same reason.
     // Clear engine references before destruction
     if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setEngines(nullptr, nullptr);
+        m_windowTrackingAdaptor->setEngines(nullptr, nullptr, nullptr);
     }
 
     // Clear the late-bound WTS float / mode callbacks that capture `this` (Daemon,
@@ -668,7 +668,7 @@ void Daemon::stop()
         wts->setEngineFloatWriter({});
         wts->setEngineFloatLister({});
         wts->setAutotileModePredicate({});
-        wts->setAutotileTiledPredicate({});
+        wts->setEngineTiledPredicate({});
         // Deliberately NOT cleared here: the snap-state resolver (setSnapStateResolver)
         // and setSnapEngine both capture/store only QPointer(snapEngine), so they
         // self-null when the engine is destroyed — there is no `this`/raw-pointer

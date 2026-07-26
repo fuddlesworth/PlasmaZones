@@ -114,6 +114,11 @@ bool ScreenModeRouter::isAutotileMode(const QString& screenId) const
     return modeFor(screenId) == PhosphorZones::AssignmentEntry::Autotile;
 }
 
+bool ScreenModeRouter::isScrollingMode(const QString& screenId) const
+{
+    return modeFor(screenId) == PhosphorZones::AssignmentEntry::Scrolling;
+}
+
 ScreenModeRouter::Partitioned ScreenModeRouter::partitionByMode(const QStringList& screenIds) const
 {
     Partitioned out;

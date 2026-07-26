@@ -114,7 +114,7 @@ QVariantList ruleTemplates()
     // smart gaps already ships as a plain autotile setting
     // (AutotileConfig::smartGaps, Settings → Tiling), and such a rule would
     // silently never fire anyway — the gap resolver (resolveContextGaps in
-    // layoutregistry_assignments.cpp) never stamps tiledWindowCount into its
+    // layoutregistry_contextresolve.cpp) never stamps tiledWindowCount into its
     // context query; only resolveAssignmentEntry does, which is why
     // TiledWindowCount works for algorithm-switch rules but not gap rules.
     QVariantList out;

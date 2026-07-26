@@ -54,6 +54,11 @@ PhosphorEngine::IPlacementEngine* TilingAdaptor::engineOwningScreen(const QStrin
             return engine;
         }
     }
+    // Primary fallback is deliberate here, UNLIKE dispatchWindowOpened's
+    // strict claim loop: the callers route stateless notifications (focus,
+    // desktop switches) where every engine self-guards on ownership, so a
+    // mid-flip miss is a harmless no-op — whereas an open adopted by the
+    // wrong engine would tile a window on a screen it does not own.
     return m_lifecycleEngines.isEmpty() ? nullptr : m_lifecycleEngines.first();
 }
 
@@ -132,8 +137,24 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
             m_screensAnnouncePending = false;
             const bool desktopSwitch = m_pendingIsDesktopSwitch;
             m_pendingIsDesktopSwitch = false;
+            // A queued announce that fires after clearEngine() (shutdown)
+            // must NOT broadcast an empty union — the effect would treat it
+            // as a genuine disable and run its destructive per-window
+            // teardown against a daemon that is merely restarting.
+            if (m_lifecycleEngines.isEmpty()) {
+                return;
+            }
             Q_EMIT managedScreensChanged(combinedManagedScreens(), desktopSwitch);
             relayEnabledChanged();
+            // Retry opens parked during the flip (see m_unclaimedOpens):
+            // engines have their post-flip screen sets by now. Still-
+            // unclaimed entries re-park inside dispatchWindowOpened.
+            if (!m_unclaimedOpens.isEmpty()) {
+                const auto parked = std::exchange(m_unclaimedOpens, {});
+                for (const auto& entry : parked) {
+                    dispatchWindowOpened(entry);
+                }
+            }
         },
         Qt::QueuedConnection);
 }
@@ -246,12 +267,18 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     // batch re-add once the flip settles.
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
         if (engine->isActiveOnScreen(screenId)) {
+            m_unclaimedOpens.remove(entry.windowId);
             engine->windowOpened(entry.windowId, screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
             return;
         }
     }
+    // Mid-flip: neither engine claims the screen yet. Park the entry — a
+    // same-union flip (autotile↔scrolling) never re-adds via the effect's
+    // managedScreensChanged diff, so the coalesced announce retries these
+    // once the flip settles.
+    m_unclaimedOpens.insert(entry.windowId, entry);
     qCDebug(lcDbusTiling) << "dispatchWindowOpened: no pipeline engine claims" << screenId << "for" << entry.windowId
-                          << "- dropped (mid-transition; batch re-add will recover)";
+                          << "- parked until the screens announce retries it";
 }
 
 bool TilingAdaptor::deferUntilPanelReady()
@@ -377,6 +404,7 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     // arriving after clearEngine() (shutdown) must not leak it, or a stale
     // value could suppress the first genuine broadcast of a reused id.
     m_lastFloatBroadcast.remove(windowId);
+    m_unclaimedOpens.remove(windowId);
     if (!ensurePipeline("windowClosed")) {
         return;
     }
@@ -414,8 +442,13 @@ void TilingAdaptor::notifyWindowFocused(const QString& windowId, const QString& 
 
 void TilingAdaptor::clearEngine()
 {
-    // Interface-only borrows, no connections to drop.
+    // Interface-only borrows, no connections to drop. Also neutralise any
+    // pending coalesced announce (its lambda re-checks the empty list, and
+    // the flags must not leak into a restart).
     m_lifecycleEngines.clear();
+    m_screensAnnouncePending = false;
+    m_pendingIsDesktopSwitch = false;
+    m_unclaimedOpens.clear();
 }
 
 } // namespace PlasmaZones

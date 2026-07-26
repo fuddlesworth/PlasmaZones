@@ -74,6 +74,9 @@ private Q_SLOTS:
     void tabbedColumnLayout();
     void tabbedColumnBehavesLikeNormalStructurally();
     void reconcileAppResize();
+    void reconcileGuardsAndEmptyAck();
+    void minimizePicksNearestVisibleSibling();
+    void renormalizationRespectsAutoFloors();
     void takeWindowLeavesFocusPolicyAlone();
 };
 
@@ -365,6 +368,75 @@ void TestScrollStripOps::reconcileAppResize()
     QCOMPARE(rectOf(r, QStringLiteral("a")).width(), ScrollStrip::resolveColumnWidthPx(kHalf, params));
     // Same size again: no change reported.
     QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(640, 780)));
+}
+
+void TestScrollStripOps::reconcileGuardsAndEmptyAck()
+{
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    // widthChanged=false: a vertical-only resize must not convert the
+    // column's Proportion intent into Fixed pixels.
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(999, 300), /*widthChanged=*/false));
+    QCOMPARE(strip.columns().at(0).width.kind, ColumnWidth::Proportion);
+
+    // heightChanged=false: a horizontal-only resize must not pin the tile's
+    // height intent either (multi-tile column, so height IS recordable).
+    const WindowHeight before =
+        strip.columns().at(0).tiles.at(strip.columns().at(0).indexOfWindow(QStringLiteral("b"))).height;
+    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(999, 555), /*widthChanged=*/false,
+                                       /*heightChanged=*/false));
+    const WindowHeight after =
+        strip.columns().at(0).tiles.at(strip.columns().at(0).indexOfWindow(QStringLiteral("b"))).height;
+    QVERIFY(before == after);
+
+    // Unknown window: plain no-op.
+    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("nope"), QSize(100, 100)));
+}
+
+void TestScrollStripOps::minimizePicksNearestVisibleSibling()
+{
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.focusWindow(QStringLiteral("b"), params));
+
+    // Minimizing the active MIDDLE tile hands the column's active slot to
+    // the NEAREST visible sibling (ties break downward: "c"), not the first
+    // tile in the stack.
+    QVERIFY(strip.setWindowMinimized(QStringLiteral("b"), true, params));
+    const Column& col = strip.columns().at(0);
+    QCOMPARE(col.tiles.at(col.activeTileIdx).windowId, QStringLiteral("c"));
+}
+
+void TestScrollStripOps::renormalizationRespectsAutoFloors()
+{
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
+
+    // Pin two tiles to Fixed heights that alone overflow the column, with a
+    // third Auto tile keeping its 1px floor: the renormalization must scale
+    // the Fixed pair into (availH - autoCount) so the stack still fits.
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("a"), QSize(600, 700), /*widthChanged=*/false));
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(600, 700), /*widthChanged=*/false));
+
+    const ResolvedStrip r = strip.relayout(params);
+    int total = 0;
+    for (const ResolvedColumn& rc : r.columns) {
+        for (const ResolvedTile& rt : rc.tiles) {
+            QVERIFY(rt.rect.height() >= 1);
+            total += rt.rect.height();
+        }
+    }
+    // Three tiles, two gaps; the stack must not lay out past the work area.
+    QVERIFY(total + 2 * params.gap <= params.workArea.height());
 }
 
 void TestScrollStripOps::takeWindowLeavesFocusPolicyAlone()

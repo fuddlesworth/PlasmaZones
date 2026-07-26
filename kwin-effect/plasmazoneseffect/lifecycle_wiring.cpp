@@ -395,19 +395,37 @@ void PlasmaZonesEffect::connectDragTracker()
                             m_tilingHandler->handleDragToFloat(safeW, capturedWindowId, /*immediate=*/true);
                             m_dragActivation.floatedWindowIds.insert(capturedWindowId);
                         }
-                    } else if (m_dragBypassedForEngine) {
+                    } else if (m_dragBypassedForEngine
+                               && m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::None) {
                         // The correction layer must correct BOTH ways: the
                         // fast path latched the engine bypass from the
                         // effect's cached union set, but the daemon (the
-                        // authority) answered a non-bypass policy. Without
-                        // this clear, effect and daemon stay divergent for
-                        // the whole drag — the effect suppresses its snap
-                        // path while the daemon runs zone detection, and the
-                        // drop can apply an untracked snap.
+                        // authority) answered the CANONICAL SNAP policy.
+                        // Without this clear, effect and daemon stay
+                        // divergent for the whole drag — the effect
+                        // suppresses its snap path while the daemon runs
+                        // zone detection, and the drop can apply an
+                        // untracked snap. Restricted to None: a
+                        // ContextDisabled/SnappingDisabled answer is a DEAD
+                        // drag, and un-bypassing would re-enter snap-path
+                        // cursor streaming on a screen the user disabled.
+                        // Run the same full transition slotDragPolicyChanged
+                        // uses for the autotile→snap flip (tracking drop,
+                        // activation reset, keyboard grab), not just a flag
+                        // clear — a half transition leaves Escape uncaught
+                        // and the snap state uninitialised.
+                        if (safeW && !safeW->isDeleted()) {
+                            m_tilingHandler->onWindowClosed(capturedWindowId, m_dragBypassScreenId);
+                        }
                         m_dragBypassedForEngine = false;
                         m_dragBypassScreenId.clear();
+                        m_dragActivation.detected = false;
+                        if (!m_keyboardGrabbed) {
+                            KWin::effects->grabKeyboard(this);
+                            m_keyboardGrabbed = true;
+                        }
                         qCInfo(lcEffect) << "beginDrag: daemon rejected engine bypass for" << capturedWindowId
-                                         << "- reverting to policy" << m_currentDragPolicy.bypassReason;
+                                         << "- reverting to the snap path";
                     }
                 });
 

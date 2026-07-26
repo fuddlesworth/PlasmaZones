@@ -350,6 +350,13 @@ private:
     // until panelGeometryReady fires. Non-blocking — no nested event loops, no reentrancy.
     PhosphorProtocol::WindowOpenedList m_pendingOpens;
     bool m_pendingOpensListenerInstalled = false;
+    /// Opens that arrived while NO pipeline engine claimed their screen (the
+    /// brief mid-flip window). An autotile↔scrolling flip keeps the UNION
+    /// unchanged, so the effect's managedScreensChanged batch re-add never
+    /// fires for it — these are retried from the coalesced screens announce
+    /// instead (the flip has settled by then). Latest entry per window wins;
+    /// dropped on close and on clearEngine.
+    QHash<QString, PhosphorProtocol::WindowOpenedEntry> m_unclaimedOpens;
 
 public:
     /**

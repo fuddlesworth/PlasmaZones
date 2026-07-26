@@ -11,11 +11,11 @@
  * tabs (list of {title, active}). Updates are plain property writes; the
  * component is not re-instantiated per relayout.
  *
- * Overflow: a column narrower than its tab row clips the trailing chips
- * (no "+N" affordance) — a deliberate v1 trade-off for a passive
- * indicator; the active tab is always laid out first-fit within the
- * clamped labels, and the strip carries no accessible surface because it
- * is click-through by design.
+ * Overflow: a column narrower than its tab row left-anchors the row and
+ * clips the TRAILING chips (no "+N" affordance) — a deliberate v1
+ * trade-off for a passive indicator. The active tab is laid out first-fit
+ * from the left, so it stays visible under the clip. The strip carries no
+ * accessible surface because it is click-through by design.
  */
 
 import QtQuick
@@ -64,7 +64,12 @@ Item {
             Row {
                 id: tabRow
 
-                anchors.centerIn: parent
+                // Centered while it fits; once the row is wider than the pill,
+                // pin it to the left padding instead — centering would clip
+                // BOTH ends and could hide the active tab (which the model
+                // lays out first-fit from the left).
+                anchors.verticalCenter: parent.verticalCenter
+                x: Math.max(Kirigami.Units.largeSpacing, (pill.width - width) / 2)
                 spacing: Kirigami.Units.smallSpacing
 
                 Repeater {

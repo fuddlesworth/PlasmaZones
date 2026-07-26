@@ -794,10 +794,8 @@ void SettingsAdaptor::initializeRegistry()
                                  setScrollingPresetColumnWidths)
         REGISTER_CONCRETE_STRING("scrollingPresetWindowHeights", scrollingPresetWindowHeightsString,
                                  setScrollingPresetWindowHeights)
-    }
 
-    // Scrolling shortcuts (concrete Settings only)
-    if (concrete) {
+        // Scrolling shortcuts
         REGISTER_CONCRETE_STRING("scrollingFocusColumnFirstShortcut", scrollingFocusColumnFirstShortcut,
                                  setScrollingFocusColumnFirstShortcut)
         REGISTER_CONCRETE_STRING("scrollingFocusColumnLastShortcut", scrollingFocusColumnLastShortcut,

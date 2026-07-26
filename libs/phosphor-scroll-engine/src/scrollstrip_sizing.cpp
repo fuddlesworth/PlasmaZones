@@ -211,9 +211,8 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
 
 bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params)
 {
-    Column* col = activeColumnMutable();
     Tile* tile = activeTileMutable();
-    if (!col || !tile || qFuzzyIsNull(deltaPercent)) {
+    if (!tile || qFuzzyIsNull(deltaPercent)) {
         return false;
     }
     const int workH = params.workArea.height();
@@ -256,7 +255,8 @@ bool ScrollStrip::resetActiveColumnHeights()
     return changed;
 }
 
-bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool widthChanged)
+bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool widthChanged,
+                                      bool heightChanged)
 {
     const int colIdx = columnOfWindow(windowId);
     // isEmpty (not merely isValid): a 0x0 ack is "valid" to QSize but would
@@ -280,7 +280,9 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
     }
     // Only meaningful for multi-tile columns: a lone tile always fills the
     // column height, so recording it as Fixed would fight the work area.
-    if (col.tiles.size() > 1) {
+    // Same guard as width: a purely horizontal resize must not convert the
+    // tile's height intent into Fixed pixels.
+    if (heightChanged && col.tiles.size() > 1) {
         Tile& tile = col.tiles[col.indexOfWindow(windowId)];
         const WindowHeight ackedH = WindowHeight::makeFixed(ackedSize.height());
         if (!(tile.height == ackedH)) {

@@ -110,6 +110,7 @@ public:
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
+    QSize windowMinimumSize(const QString& windowId) const override;
     void onWindowResized(const QString& rawWindowId, const QRect& oldFrame, const QRect& newFrame,
                          const QString& screenId) override;
 
@@ -313,6 +314,8 @@ private:
     /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
     /// screen that had a strip showing, no-op otherwise.
     void clearTabStripsForScreen(const QString& screenId);
+    /// Shared per-window side-map sweep for every state-destruction path.
+    void dropWindowBookkeeping(const ScrollState* state);
     // engine_apply.cpp
     ScrollLayoutParams layoutParamsForScreen(const QString& screenId) const;
     /// Relayout the strip and emit the geometry batch for @p screenId's
@@ -360,9 +363,19 @@ private:
     /// The exact rect last APPLIED per window while strip-managed (float-back
     /// poison guard; see PlacementEngineBase::lastManagedRect).
     QHash<QString, QRect> m_lastAppliedRect;
-    /// Column index a floated/minimized window's column held, so unfloat
-    /// restores the slot.
-    QHash<QString, int> m_floatRestoreColumn;
+    /// What a floated/minimized window's column held, so unfloat restores
+    /// the slot AND the user's width/display intent (a Proportion/Preset
+    /// column must not come back as the default width). The min size is
+    /// deliberately NOT captured: it may change while floating, and the
+    /// compositor re-discovers and re-reports a live one on the next retile
+    /// (same staleness policy as autotile's unfloat).
+    struct FloatRestore
+    {
+        int column = -1;
+        ColumnWidth width;
+        ColumnDisplay display = ColumnDisplay::Normal;
+    };
+    QHash<QString, FloatRestore> m_floatRestore;
     /// Windows floated BY scroll mode (mode-transition marker, ephemeral).
     QSet<QString> m_scrollFloatedWindows;
     /// Restore-order seed for deterministic mode transitions (consumed as

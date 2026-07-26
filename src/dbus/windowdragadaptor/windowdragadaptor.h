@@ -406,12 +406,15 @@ public:
      * beginDrag returns to the compositor plugin and what is emitted on
      * dragPolicyChanged during cross-VS cursor crossings.
      *
-     * Precedence: context_disabled → autotile_screen → snapping_disabled →
-     * snap path (canonical). First match wins so the bypassReason string is
-     * stable across coincidental disables.
+     * Precedence: context_disabled → autotile_screen (either tiling-family
+     * engine claiming the screen — autotile or scrolling) →
+     * snapping_disabled → snap path (canonical). First match wins so the
+     * bypassReason string is stable across coincidental disables.
      *
      * @param settings Settings interface (snappingEnabled, zone-span triggers, etc.)
      * @param autotileEngine May be nullptr in tests that don't exercise autotile
+     * @param scrollEngine May be nullptr in tests that don't exercise scrolling;
+     *        a screen it claims takes the same engine bypass as autotile
      * @param windowId Dragged window (used for the isWindowTracked lookup
      *                 that decides immediateFloatOnStart)
      * @param screenId Virtual-screen-aware screen ID at drag start

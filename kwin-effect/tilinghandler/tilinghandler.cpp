@@ -734,8 +734,12 @@ void TilingHandler::onDaemonReady()
     // m_managedScreens is deliberately NOT cleared here — it carries real
     // per-screen lifecycle state whose removal transitions run through
     // slotScreensChanged / the serviceUnregistered teardown.
-    m_scrollingScreens.clear();
-    ++m_scrollingScreensGeneration;
+    setScrollingScreens({});
+    // Void the DEAD session's in-flight managedScreens property reply too:
+    // loadSettings below re-queries, and a stale reply from the previous
+    // daemon would otherwise pass its generation gate and reinstate a
+    // screen set the new daemon never published.
+    ++m_screensSignalGeneration;
     loadSettings();
     m_notifiedWindows.clear();
     m_notifiedWindowScreens.clear();

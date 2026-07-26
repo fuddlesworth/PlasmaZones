@@ -1033,9 +1033,10 @@ public:
     // Scrolling Settings (IScrollSettings + Tiling.Scrolling group)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Store-backed scalars; the ranged int values rely on the schema
-    // validators for clamping (clampInt / validIntOr), like every other
-    // stored scalar.
+    // Store-backed scalars; the enum int values rely on the schema
+    // validators (validIntOr), like every other stored scalar. The width
+    // VALUE is the exception: its clamp is kind-aware and lives in the
+    // hand-written setter below.
     int scrollingCenterFocusedColumn() const override;
     void setScrollingCenterFocusedColumn(int mode);
     bool scrollingAlwaysCenterSingleColumn() const override;
@@ -1046,8 +1047,9 @@ public:
     void setScrollingDefaultColumnWidthValue(qreal value);
     int scrollingDefaultColumnDisplay() const override;
     void setScrollingDefaultColumnDisplay(int display);
-    // Preset lists: comma-joined string on disk (canonicalCommaList schema
-    // validator), QStringList through IScrollSettings, raw string for QML.
+    // Preset lists: comma-joined string on disk (canonicalProportionList
+    // schema validator — a numeric filter, not the plain comma-list),
+    // QStringList through IScrollSettings, raw string for QML.
     QStringList scrollingPresetColumnWidths() const override;
     QString scrollingPresetColumnWidthsString() const;
     void setScrollingPresetColumnWidths(const QString& presets);

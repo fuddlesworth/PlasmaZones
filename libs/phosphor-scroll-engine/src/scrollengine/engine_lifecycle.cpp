@@ -143,8 +143,11 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     if (!state) {
         return;
     }
-    insertOpenedWindow(state, windowId, screenId, minWidth, minHeight);
+    // Track BEFORE inserting: insertOpenedWindow's oversized/rule-float
+    // paths emit windowFloatingChanged, and a synchronous query-back from a
+    // subscriber must already see the window as this engine's.
     m_states.setKeyForWindow(windowId, key);
+    insertOpenedWindow(state, windowId, screenId, minWidth, minHeight);
     m_activeScreen = screenId;
 
     bool focusNew = true;
@@ -171,7 +174,7 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     }
     m_states.removeWindow(windowId);
     m_lastAppliedRect.remove(windowId);
-    m_floatRestoreColumn.remove(windowId);
+    m_floatRestore.remove(windowId);
     m_scrollFloatedWindows.remove(windowId);
 
     if (inStrip) {
@@ -197,6 +200,16 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
         // (the compositor initiated this focus).
         applyLayout(key.screenId, false);
     }
+}
+
+QSize ScrollEngine::windowMinimumSize(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    const ScrollState* state = stateForWindow(windowId);
+    if (!state) {
+        return {};
+    }
+    return state->strip().windowMinimumSize(windowId);
 }
 
 void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth, int minHeight)
@@ -229,7 +242,8 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // resize must not pin a Proportion/Preset column to pixels.
     const QRect lastApplied = m_lastAppliedRect.value(windowId);
     const bool widthChanged = !lastApplied.isValid() || lastApplied.width() != newFrame.width();
-    if (state->strip().reconcileWindowSize(windowId, newFrame.size(), widthChanged)) {
+    const bool heightChanged = !lastApplied.isValid() || lastApplied.height() != newFrame.height();
+    if (state->strip().reconcileWindowSize(windowId, newFrame.size(), widthChanged, heightChanged)) {
         scheduleRetileForScreen(screenId.isEmpty() ? key.screenId : screenId);
     }
 }
@@ -247,9 +261,13 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     if (columnIdx < 0) {
         return false;
     }
+    FloatRestore restore;
+    restore.column = columnIdx;
+    restore.width = state->strip().columns().at(columnIdx).width;
+    restore.display = state->strip().columns().at(columnIdx).display;
     state->strip().takeWindow(windowId, params);
     state->addFloating(windowId);
-    m_floatRestoreColumn.insert(windowId, columnIdx);
+    m_floatRestore.insert(windowId, restore);
     m_scrollFloatedWindows.insert(windowId);
     m_lastAppliedRect.remove(windowId);
     Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
@@ -267,12 +285,11 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
     // Restore the remembered column slot (minimize/unminimize and float
     // round-trips keep their place); fall back to next-to-focus.
-    const bool hadSlot = m_floatRestoreColumn.contains(windowId);
-    const int restoreColumn = m_floatRestoreColumn.take(windowId);
+    const bool hadSlot = m_floatRestore.contains(windowId);
+    const FloatRestore restore = m_floatRestore.take(windowId);
     bool inserted = false;
     if (hadSlot) {
-        inserted = state->strip().insertWindowAt(restoreColumn, windowId, effectiveDefaultColumnWidth(screenId),
-                                                 effectiveDefaultColumnDisplay(screenId));
+        inserted = state->strip().insertWindowAt(restore.column, windowId, restore.width, restore.display);
     }
     if (!inserted) {
         inserted = state->strip().insertWindow(windowId, effectiveDefaultColumnWidth(screenId),
@@ -355,7 +372,7 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     state->removeFloating(windowId);
     m_states.removeWindow(windowId);
     m_lastAppliedRect.remove(windowId);
-    m_floatRestoreColumn.remove(windowId);
+    m_floatRestore.remove(windowId);
     scheduleRetileForScreen(key.screenId);
 }
 
@@ -390,6 +407,11 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // function has no direction of its own to derive an edge from.
     const int columnIdx = (ctx.insertIndex >= 0) ? ctx.insertIndex : state->strip().columnCount();
     if (state->strip().insertWindowAt(columnIdx, windowId, width, effectiveDefaultColumnDisplay(ctx.toScreenId))) {
+        // Seed the source engine's last-known min size so the first relayout
+        // clamps correctly instead of waiting a refuse/re-discover round-trip.
+        if (ctx.minSize.width() > 0 || ctx.minSize.height() > 0) {
+            state->strip().setWindowMinimumSize(windowId, ctx.minSize.width(), ctx.minSize.height());
+        }
         m_states.setKeyForWindow(windowId, key);
         const bool isCurrentContext = key == currentKeyForScreen(ctx.toScreenId);
         if (isCurrentContext) {

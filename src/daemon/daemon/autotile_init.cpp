@@ -142,6 +142,22 @@ void Daemon::initializeAutotile()
                             }
                             if (!m_autotileEngine || !m_snapEngine)
                                 continue;
+                            // A screen flipping autotile→SCROLLING releases its windows
+                            // here BEFORE updateScrollingScreens adopts them (the two
+                            // setActiveScreens calls run in one synchronous pass). Those
+                            // windows return to the scroll engine, not to snapping —
+                            // queuing snap-float/zone restores for them would corrupt the
+                            // next genuine toggle's restore batch. Re-resolve the released
+                            // screen's mode and skip windows headed into scrolling.
+                            if (m_layoutManager && !windowScreen.isEmpty()
+                                && m_layoutManager->modeForScreen(windowScreen, currentDesktopForScreen(windowScreen),
+                                                                  currentActivity())
+                                    == PhosphorZones::AssignmentEntry::Scrolling) {
+                                m_autotileEngine->clearModeSpecificFloatMarker(windowId);
+                                qCDebug(lcDaemon)
+                                    << "windowsReleased: skipping" << windowId << "- screen entering scrolling";
+                                continue;
+                            }
                             // Clear autotile-originated floats (they don't persist into snap mode)
                             bool wasAutotileFloated = m_autotileEngine->isModeSpecificFloated(windowId);
                             if (wasAutotileFloated) {

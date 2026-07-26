@@ -128,6 +128,19 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
     if (!w) {
         return QString();
     }
+    // Engine-authoritative override for scroll-managed windows: the strip
+    // parks off-viewport columns and hidden tabs ENTIRELY outside their
+    // screen rect, so a parked frame's centre lands inside a NEIGHBOUR
+    // output's geometry and the position-derived resolution below would
+    // misattribute the window (wrong minimize routing, wrong close/float
+    // record, wrong Mode stamp). Scroll windows change screens only through
+    // engine-driven handoffs, which update the tracked screen first.
+    if (m_tilingHandler) {
+        const QString tracked = m_tilingHandler->scrollTrackedScreenFor(getWindowId(w));
+        if (!tracked.isEmpty()) {
+            return tracked;
+        }
+    }
     const QPointF cf = w->frameGeometry().center();
     const QPoint c(qRound(cf.x()), qRound(cf.y()));
 
@@ -355,7 +368,10 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 {
                     // Position-based resolution (getWindowScreenId), consistent
                     // with the daemon — do not trust window->screen() for
-                    // identical-model monitors.
+                    // identical-model monitors. Scroll-managed windows are
+                    // safe here: getWindowScreenId answers from the engine's
+                    // tracked screen for them, so a parked frame's position
+                    // never writes a neighbour id into these maps.
                     const QString newScreenId = self->getWindowScreenId(window);
                     if (!newScreenId.isEmpty()) {
                         it.value() = newScreenId;

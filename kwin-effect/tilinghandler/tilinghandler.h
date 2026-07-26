@@ -180,6 +180,16 @@ public:
     /// engine-managed set the daemon publishes as managedScreens (which is
     /// the union of both tiling-family engines); tracked separately so
     /// window rule queries can stamp Mode "scrolling" instead of "tiling".
+    /// The engine-authoritative screen for a window notified onto a
+    /// SCROLLING screen, or empty. Parked scroll frames sit inside a
+    /// neighbouring output's geometry by design, so position-derived screen
+    /// resolution must yield to this for scroll-managed windows.
+    QString scrollTrackedScreenFor(const QString& windowId) const
+    {
+        const QString tracked = m_notifiedWindowScreens.value(windowId);
+        return (!tracked.isEmpty() && m_scrollingScreens.contains(tracked)) ? tracked : QString();
+    }
+
     bool isScrollingScreen(const QString& screenId) const
     {
         return m_scrollingScreens.contains(screenId);
@@ -393,15 +403,20 @@ private:
     /// (see isScrollingScreen); all lifecycle gating keys on
     /// m_managedScreens, which carries the union.
     QSet<QString> m_scrollingScreens;
+    void setScrollingScreens(const QSet<QString>& newSet);
     /// Bumped on every managedScreensChanged signal. loadSettings' async
     /// Properties.Get reply captures the value at dispatch and discards
     /// itself if a signal landed in between — the signal carried a newer
     /// set AND ran the full per-screen transition handling the raw reply
     /// assignment lacks.
     quint64 m_screensSignalGeneration = 0;
-    /// Same stale-reply guard for the scrolling-screens property fetch: a
-    /// scrollingScreensChanged signal landing while loadSettings' async Get
-    /// is in flight carries the newer set.
+    /// Same stale-reply guard for the scrolling-screens property fetch.
+    /// Bumped by setScrollingScreens on EVERY authoritative write (live
+    /// signal, property reply, daemon-restart clear) — even an identical
+    /// set voids in-flight replies dispatched earlier, since the writer is
+    /// always newer than the reply. All writes to m_scrollingScreens go
+    /// through setScrollingScreens so the rule-cache invalidate + border
+    /// sweep on a genuine change cannot be bypassed.
     quint64 m_scrollingScreensGeneration = 0;
     /// Pre-autotile frame geometry, keyed [screenId][windowId].
     ///

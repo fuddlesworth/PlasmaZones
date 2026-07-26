@@ -223,12 +223,12 @@ public:
      * which cannot help on an effect reload (the effect's border tracking
      * starts empty while this engine still holds the tiling state).
      */
-    using AutotileTiledPredicate = std::function<bool(const QString& windowId)>;
-    void setAutotileTiledPredicate(AutotileTiledPredicate predicate);
+    using EngineTiledPredicate = std::function<bool(const QString& windowId)>;
+    void setEngineTiledPredicate(EngineTiledPredicate predicate);
 
     /// True if the autotile engine reports the window actively tiled.
     /// Returns false when the predicate is unwired (snap-only tests).
-    bool isWindowAutotileTiled(const QString& windowId) const;
+    bool isWindowEngineTiled(const QString& windowId) const;
 
     /**
      * @brief Accessor for consumers that need direct access (effect, adaptor).
@@ -1080,7 +1080,7 @@ private:
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     AutotileModePredicate m_autotileModePredicate{};
-    AutotileTiledPredicate m_autotileTiledPredicate{};
+    EngineTiledPredicate m_engineTiledPredicate{};
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence.

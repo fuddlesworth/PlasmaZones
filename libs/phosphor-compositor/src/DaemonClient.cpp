@@ -115,23 +115,30 @@ void DaemonClient::notifyWindowActivated(const QString& windowId, const QString&
 // Drag operations (plugin → daemon)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void DaemonClient::dragStarted(const QString& windowId, const QString& screenId, const QRect& geometry)
+void DaemonClient::dragStarted(const QString& windowId, const QRectF& geometry)
 {
+    // Wire: dragStarted(s, dddd) — doubles, no screenId (the daemon derives
+    // the screen from the geometry/cursor itself).
     PhosphorProtocol::ClientHelpers::sendOneWay(
         PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("dragStarted"),
-        {windowId, screenId, geometry.x(), geometry.y(), geometry.width(), geometry.height()});
+        {windowId, geometry.x(), geometry.y(), geometry.width(), geometry.height()});
 }
 
-void DaemonClient::dragMoved(const QString& windowId, int cursorX, int cursorY)
+void DaemonClient::dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
 {
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
-                                                QStringLiteral("dragMoved"), {windowId, cursorX, cursorY});
+                                                QStringLiteral("dragMoved"),
+                                                {windowId, cursorX, cursorY, modifiers, mouseButtons});
 }
 
-void DaemonClient::dragStopped(const QString& windowId, const QString& screenId, const QString& zoneId)
+void DaemonClient::dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
 {
+    // dragStopped has snap-target out-params on the wire; this one-way client
+    // ignores the reply — a compositor that needs the snap rect must use the
+    // canonical endDrag round-trip instead.
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
-                                                QStringLiteral("dragStopped"), {windowId, screenId, zoneId});
+                                                QStringLiteral("dragStopped"),
+                                                {windowId, cursorX, cursorY, modifiers, mouseButtons});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -295,7 +302,7 @@ void DaemonClient::connectDaemonSignals()
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("dragPolicyChanged"), this,
-                SLOT(handleDragPolicyChanged(QString, int)));
+                SLOT(handleDragPolicyChanged(QString, PhosphorProtocol::DragPolicy)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("snapAssistReady"), this,
@@ -426,10 +433,12 @@ void DaemonClient::handleActivateWindow(const QString& windowId)
     }
 }
 
-void DaemonClient::handleDragPolicyChanged(const QString& windowId, int newPolicy)
+void DaemonClient::handleDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy)
 {
     if (m_dragHandler) {
-        m_dragHandler->onDragPolicyChanged(windowId, newPolicy);
+        // The IDragHandler API predates the structured policy; forward the
+        // routing verdict (the bypass reason) as its integer code.
+        m_dragHandler->onDragPolicyChanged(windowId, static_cast<int>(newPolicy.bypassReason));
     }
 }
 

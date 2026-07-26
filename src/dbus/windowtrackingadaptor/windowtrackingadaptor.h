@@ -170,8 +170,9 @@ public:
      * @brief Set engine references for routing operations per-screen
      *
      * The adaptor routes IPlacementEngine operations to the correct engine:
-     * AutotileEngine for autotile screens, SnapEngine for manual-zone screens.
-     * Both must be set before navigation/float D-Bus calls work.
+     * AutotileEngine for autotile screens, ScrollEngine for scrolling
+     * screens, SnapEngine for manual-zone screens. All must be set before
+     * navigation/float D-Bus calls work.
      *
      * Signal connections from SnapEngine to adaptor D-Bus signals are established here.
      * The snap-specific signal (windowSnapStateChanged) is connected via qobject_cast.
@@ -734,13 +735,15 @@ public:
     /// placementZonesByRule seeds.
     void applyOpenDesktopRouting(const QString& windowId, const QString& screenId);
 
-    /// Autotile open-path routing. Emits RouteToDesktop (as applyOpenDesktopRouting)
-    /// AND resolves a RouteToScreen pin: when the matched rule routes the window to a
-    /// DIFFERENT monitor that is itself in autotile mode, emits windowOutputMoveExpected
-    /// and returns that screen id so the caller inserts the window into that screen's
-    /// tiling state. Returns an empty string when there is no autotile redirect (no
-    /// rule, snap/disabled target, or same screen) — the caller then uses the spawn
-    /// screen. Snap-mode targets are handled by the snap placement directive, not here.
+    /// Tiling-family open-path routing. Emits RouteToDesktop (as
+    /// applyOpenDesktopRouting) AND resolves a RouteToScreen pin: when the
+    /// matched rule routes the window to a DIFFERENT monitor that an engine
+    /// (autotile or scrolling) owns, emits windowOutputMoveExpected and
+    /// returns that screen id so the caller hands the window to that
+    /// screen's claiming engine. Returns an empty string when there is no
+    /// engine-owned redirect (no rule, snap/disabled target, or same
+    /// screen) — the caller then uses the spawn screen. Snap-mode targets
+    /// are handled by the snap placement directive, not here.
     QString applyOpenRoutingForTiling(const QString& windowId, const QString& screenId);
 
     /// Engine-neutral RouteToScreen for a BARE route (no SnapToZone): if a matched
@@ -1121,8 +1124,9 @@ private:
 
     /// Tile-rect poison guard, shared by captureWindowPlacement's primary
     /// free-geometry write and its engine-miss close fallback: true when the
-    /// live @p frame still equals the tile rect the autotile engine last
-    /// applied to @p windowId (the engine remembers it PAST the tiled-bit
+    /// live @p frame still equals the tile rect a tiling-family engine
+    /// (autotile or scrolling) last applied to @p windowId (each engine
+    /// remembers it PAST the tiled-bit
     /// clear, past a cross-engine handoff, and past its own windowClosed
     /// teardown — see AutotileEngine::lastManagedRect). Such a frame is a
     /// managed rect, not a genuine free position, and must never become the
@@ -1133,7 +1137,7 @@ private:
     /// effect notifies autotile of a close BEFORE WindowTracking (same
     /// connection, in-order delivery), so a window closing tiled on an
     /// autotile screen reaches this capture already untracked — both
-    /// engines' capturePlacement decline and the isWindowAutotileTiled gate
+    /// engines' capturePlacement decline and the isWindowEngineTiled gate
     /// reads false — and takes the close-path fallback with its live frame
     /// still on the tile rect. Only the retained memory lets this guard
     /// refuse that frame. The guard therefore covers: a float toggle in

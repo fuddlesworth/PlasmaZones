@@ -410,13 +410,13 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
             scroll->setOpenParamsResolver([this](const QString& windowId) -> PhosphorScrollEngine::ScrollOpenParams {
                 PhosphorScrollEngine::ScrollOpenParams params;
                 const QVariantMap raw = scrollOpenRuleParams(windowId);
-                if (const auto it = raw.constFind(QStringLiteral("widthFraction")); it != raw.constEnd()) {
+                if (const auto it = raw.constFind(ScrollOpenKeys::widthFraction()); it != raw.constEnd()) {
                     params.widthFraction = it->toDouble();
                 }
-                if (const auto it = raw.constFind(QStringLiteral("tabbed")); it != raw.constEnd()) {
+                if (const auto it = raw.constFind(ScrollOpenKeys::tabbed()); it != raw.constEnd()) {
                     params.tabbed = it->toBool();
                 }
-                if (const auto it = raw.constFind(QStringLiteral("consume")); it != raw.constEnd()) {
+                if (const auto it = raw.constFind(ScrollOpenKeys::consume()); it != raw.constEnd()) {
                     params.consume = it->toBool();
                 }
                 return params;

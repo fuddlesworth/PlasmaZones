@@ -902,7 +902,9 @@ public:
      * @brief Notify the engine that a new window was added
      *
      * Called by Daemon when KWin reports a new window. Triggers retiling
-     * if autotile is enabled and window is tileable.
+     * if autotile is enabled and window is tileable. A no-op when
+     * @p screenId names a screen this engine does not own — the claiming
+     * engine (scrolling/snap) handles the open instead.
      *
      * @param windowId Window identifier from KWin
      * @param screenId Screen where the window appeared
@@ -923,6 +925,7 @@ public:
      * @param minHeight New minimum height in pixels (0 if unconstrained)
      */
     void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
+    QSize windowMinimumSize(const QString& windowId) const override;
 
     /**
      * @brief Notify the engine that a window was closed

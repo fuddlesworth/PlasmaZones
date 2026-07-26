@@ -31,6 +31,7 @@
 #include <QObject>
 
 #include <PhosphorContext/IContextResolver.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "helpers/AutotileTestHelpers.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
@@ -151,6 +152,17 @@ void seedTrackedWindow(AutotileEngine& engine, const QString& windowId, const QS
     QCoreApplication::processEvents();
 }
 
+/// Real ScrollEngine with null deps (the headless pattern the router test
+/// uses); claims @p screenId when @p screenIsScrolling.
+std::unique_ptr<PhosphorScrollEngine::ScrollEngine> makeScrollEngine(bool screenIsScrolling, const QString& screenId)
+{
+    auto engine = std::make_unique<PhosphorScrollEngine::ScrollEngine>(nullptr, nullptr);
+    if (screenIsScrolling) {
+        engine->setActiveScreens(QSet<QString>{screenId});
+    }
+    return engine;
+}
+
 } // namespace
 
 class TestDragPolicy : public QObject
@@ -224,9 +236,9 @@ private Q_SLOTS:
     // takes the same engine bypass as autotile (drag-to-float) instead of
     // falling through to the snap pipeline. The scroll branch ignores
     // reorderMode: the strip has no drag-insert preview, so a tracked
-    // window always floats immediately. The param is typed IPlacementEngine
-    // so an AutotileEngine instance exercises the branch contract exactly
-    // (isActiveOnScreen + isWindowTracked are the only reads).
+    // window always floats immediately. Uses the REAL ScrollEngine so the
+    // branch is exercised against the production isActiveOnScreen /
+    // isWindowTracked implementations, not a stand-in.
     // ─────────────────────────────────────────────────────────────────────
     void scrollingScreen_bypassesSnapPath()
     {
@@ -235,8 +247,9 @@ private Q_SLOTS:
         settings.m_snapEnabled = true;
         settings.m_dragBehavior = AutotileDragBehavior::Reorder;
         auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
-        auto scroll = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
-        seedTrackedWindow(*scroll, QStringLiteral("win-1"), QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+        scroll->windowOpened(QStringLiteral("win-1"), QStringLiteral("HP-1"), 0, 0);
+        QCoreApplication::processEvents();
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
             &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
@@ -250,6 +263,35 @@ private Q_SLOTS:
         // Reorder mode does NOT clear the float for a scrolling screen — the
         // strip has no reorder preview.
         QVERIFY(p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Both engines claim the screen (transition artefact): the autotile
+    // branch is consulted first, so its reorder-mode behaviour wins — in
+    // Reorder mode a tracked autotile drag keeps the window tiled for the
+    // drag-insert preview (no immediate float), unlike the scroll branch.
+    // ─────────────────────────────────────────────────────────────────────
+    void bothEnginesClaim_autotileBranchWins()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        settings.m_dragBehavior = AutotileDragBehavior::Reorder;
+        auto autotile = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-2"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-2"));
+        seedTrackedWindow(*autotile, QStringLiteral("win-2"), QStringLiteral("HP-2"));
+        scroll->windowOpened(QStringLiteral("win-2"), QStringLiteral("HP-2"), 0, 0);
+        QCoreApplication::processEvents();
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-2"), QStringLiteral("HP-2"), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        // The autotile Reorder branch keeps the window tiled for the
+        // drag-insert preview; the scroll branch would have floated it.
+        QVERIFY(!p.immediateFloatOnStart);
         QVERIFY(p.validationError().isEmpty());
     }
 

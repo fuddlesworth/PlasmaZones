@@ -750,14 +750,14 @@ bool WindowTrackingService::isWindowInAutotileMode(const QString& windowId) cons
     return m_autotileModePredicate && m_autotileModePredicate(windowId);
 }
 
-void WindowTrackingService::setAutotileTiledPredicate(AutotileTiledPredicate predicate)
+void WindowTrackingService::setEngineTiledPredicate(EngineTiledPredicate predicate)
 {
-    m_autotileTiledPredicate = std::move(predicate);
+    m_engineTiledPredicate = std::move(predicate);
 }
 
-bool WindowTrackingService::isWindowAutotileTiled(const QString& windowId) const
+bool WindowTrackingService::isWindowEngineTiled(const QString& windowId) const
 {
-    return m_autotileTiledPredicate && m_autotileTiledPredicate(windowId);
+    return m_engineTiledPredicate && m_engineTiledPredicate(windowId);
 }
 
 PhosphorEngine::WindowRegistry* WindowTrackingService::windowRegistry() const

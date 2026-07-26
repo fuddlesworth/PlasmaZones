@@ -146,14 +146,7 @@ private Q_SLOTS:
 
         emitPanelGeometryReady(mgr);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
-
-        // Second batch arriving after flush: depending on whether
-        // m_panelGeometryReceived got set on the real ScreenManager (we only
-        // emitted the signal, didn't flip the flag), the adaptor either
-        // dispatches synchronously (count stays 0) or re-queues (count = 1).
-        // The contract pinned here is only that the flush drained the queue;
-        // the "arrive after ready" path is covered by
-        // testNoScreenManager_passThrough.
+        // The contract pinned here is only that the flush drained the queue.
     }
 
     // -------------------------------------------------------------------------
@@ -177,7 +170,7 @@ private Q_SLOTS:
 
         adaptor.clearEngine();
 
-        // Should not crash — ensureEngine() returns false, queue is cleared.
+        // Should not crash — ensurePipeline() returns false, queue is cleared.
         emitPanelGeometryReady(mgr);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
     }

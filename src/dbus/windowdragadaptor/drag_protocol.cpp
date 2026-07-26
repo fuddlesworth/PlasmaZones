@@ -621,8 +621,9 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
     // `windowId != m_draggedWindowId` guard would NOT early-return. The
     // snap-side overlay branches inside dragMoved instead become no-ops
     // because `prepareHandlerContext` suppresses the overlay path when the
-    // cursor screen is in autotile mode or context-disabled — the same gate
-    // that decided the bypass branch at beginDrag.
+    // cursor screen is engine-owned (autotile or scrolling) or
+    // context-disabled — the same gate that decided the bypass branch at
+    // beginDrag.
     dragMoved(windowId, cursorX, cursorY, modifiers, mouseButtons);
 }
 

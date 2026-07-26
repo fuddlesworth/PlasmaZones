@@ -613,6 +613,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             const auto guard = qScopeGuard([this] {
                 m_effect->m_daemonGate.inGeometryApply = false;
             });
+            // Pre-seed the effect's tracked screen (mirrors daemon_apply's
+            // pre-seed): the outputChanged handler early-returns while
+            // inGeometryApply is set, so without this a cross-output tile
+            // apply leaves the map naming the OLD screen and the next
+            // genuine user move diffs against stale state.
+            m_effect->m_trackedScreenPerWindow[snap.window] = snap.screenId;
             saveAndRecordPreTileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
             KWin::Window* kwForLog = snap.window->window();
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry

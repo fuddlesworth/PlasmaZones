@@ -274,6 +274,11 @@ void SettingsController::buildApplicationController()
     // Scrolling is the third placement engine's own leaf. It sits beside
     // Algorithm rather than under it: the scrolling strip has no zone layout
     // and no tiling algorithm, so none of the Algorithm page's knobs reach it.
+    // AdvancedOnly is deliberate even though the Monitors page offers the
+    // Scrolling mode button in simple mode: the engine works fine on its
+    // defaults, and simple mode's contract is "the settings most people
+    // need", not "every reachable feature's full page" (the Algorithm page
+    // above is tiered the same way). Simple-mode curation may revisit this.
     regVirtual(QStringLiteral("tiling-scrolling"), QStringLiteral("tiling"),
                PhosphorI18n::tr("Scrolling", "tiling mode name"),
                QStringLiteral("pages/tiling/TilingScrollingPage.qml"), QStringLiteral("view-split-left-right"),

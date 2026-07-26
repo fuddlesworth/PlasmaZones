@@ -107,15 +107,15 @@ void TilingHandler::loadSettings()
                 QDBusPendingReply<QDBusVariant> reply = *w;
                 if (reply.isValid()) {
                     QStringList screens = reply.value().variant().toStringList();
-                    // The ENTIRE published set, not a diff. The raw replace is
-                    // safe only because removals are covered elsewhere: a
-                    // daemon restart that manages fewer screens is preceded by
-                    // the serviceUnregistered teardown (which already restored
-                    // and untracked every window), so there is never a
-                    // carried-over screen for this reply to miss. If that
-                    // teardown ever stops being load-bearing, this handler
-                    // must route through slotScreensChanged's removed/added
-                    // diff instead.
+                    // The ENTIRE published set, not a diff. The raw replace
+                    // is safe only because removals are covered elsewhere:
+                    // onDaemonReady's clears (and, when the daemon exits
+                    // outright, the serviceUnregistered teardown) already
+                    // reset the per-window tracking before loadSettings
+                    // re-queries, so there is never a carried-over screen for
+                    // this reply to miss. If those resets ever stop being
+                    // load-bearing, this handler must route through
+                    // slotScreensChanged's removed/added diff instead.
                     const QSet<QString> published(screens.begin(), screens.end());
                     m_managedScreens = published;
                     qCInfo(lcEffect) << "Loaded managed screens:" << m_managedScreens;
@@ -151,7 +151,11 @@ void TilingHandler::loadSettings()
                 QDBusPendingReply<QDBusVariant> reply = *w;
                 if (reply.isValid()) {
                     const QStringList screens = reply.value().variant().toStringList();
-                    m_scrollingScreens = QSet<QString>(screens.cbegin(), screens.cend());
+                    // Through the chokepoint: the initial load must run the
+                    // same rule-cache invalidate + border sweep as a live
+                    // signal, or a Mode "scrolling" rule verdict memoised
+                    // before the reply landed would stick.
+                    setScrollingScreens(QSet<QString>(screens.cbegin(), screens.cend()));
                     qCInfo(lcEffect) << "Loaded scrolling screens:" << m_scrollingScreens;
                 } else {
                     // Without this trail, "Mode == scrolling rules never

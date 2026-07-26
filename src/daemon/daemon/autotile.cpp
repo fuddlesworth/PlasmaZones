@@ -503,7 +503,10 @@ void Daemon::handleSnappingToAutotile()
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
         const int desktop = currentDesktopForScreen(screenId);
         const QString existing = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (!PhosphorLayout::LayoutId::isAutotile(existing)) {
+        // Skip Scrolling screens too: a global autotile ENABLE must not
+        // clobber an explicit scrolling assignment (its id is the
+        // "scrolling:" sentinel, which is not an autotile id).
+        if (!PhosphorLayout::LayoutId::isAutotile(existing) && !PhosphorLayout::LayoutId::isScrolling(existing)) {
             screensToConvert.append(screenId);
         }
     }

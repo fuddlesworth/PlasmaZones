@@ -35,10 +35,11 @@ PickerCategory actionCategory(const QString& type)
         return {PhosphorI18n::tr("Other"), 99};
     }
     const QString& cat = desc->category;
-    // Two groups, alphabetised within each: the context-domain categories
-    // (resolved per screen/desktop/activity/mode) come first (orders 0-5), then
-    // the window-domain categories (orders 6-8). Keep these orders in lockstep
-    // with each category's action domains in RuleAction.cpp.
+    // Two groups: the context-domain categories (resolved per
+    // screen/desktop/activity/mode) come first (orders 0-5), then the
+    // window-domain categories (orders 6-8). Order within a group is
+    // curated, not alphabetical. Keep these orders in lockstep with each
+    // category's action domains in RuleAction.cpp.
     if (cat == QLatin1String("gap")) {
         return {PhosphorI18n::tr("Gaps"), 0};
     }

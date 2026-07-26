@@ -523,10 +523,26 @@ public:
     {
         return false;
     }
+    /// Width-kind wire values (0 = proportion, 1 = fixed px, 2 = client
+    /// decides). Named so the settings layer's kind-aware branches read
+    /// against the vocabulary instead of raw ints; the LGPL engine keeps
+    /// its own interpretation of the same values (IScrollSettings docs).
+    static constexpr int scrollingWidthKindProportion()
+    {
+        return 0;
+    }
+    static constexpr int scrollingWidthKindFixed()
+    {
+        return 1;
+    }
+    static constexpr int scrollingWidthKindClientDecides()
+    {
+        return 2;
+    }
     /// Default column width kind: 0 = proportion, 1 = fixed px, 2 = client decides.
     static constexpr int scrollingDefaultColumnWidthKind()
     {
-        return 0;
+        return scrollingWidthKindProportion();
     }
     static constexpr int scrollingDefaultColumnWidthKindMin()
     {
@@ -1037,9 +1053,9 @@ public:
     // Anchored on Meta+Alt to stay clear of stock Plasma and the Meta+Shift /
     // Meta+Ctrl families above. NOTE: the Meta+Alt family is SHARED with the
     // layouts pair (Meta+Alt+[ ]), the cheatsheet (Meta+Alt+/), cycle-in-zone
-    // (Meta+Alt+, .), and the zone digits (Meta+Alt+0-9) — KGlobalAccel routes
-    // one action per chord, so every default here must be unique across the
-    // WHOLE file (test_scrolling_settings pins this). Shift+symbol spellings
+    // (Meta+Alt+, .), and the quick-layout digits (Meta+Alt+1-9) — KGlobalAccel
+    // routes one action per chord, so every default here must be unique across
+    // the WHOLE file (test_scrolling_settings pins this). Shift+symbol spellings
     // are forbidden: see toggleCheatsheetShortcut() — KWin consumes Shift in
     // the keysym translation on Wayland and the chord can never fire.
     // Directional focus/move/swap reuse the existing generic navigation

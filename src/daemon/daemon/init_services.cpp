@@ -335,10 +335,7 @@ void Daemon::initLayoutAndSettingsWiring()
             for (auto it = captured.constBegin(); it != captured.constEnd(); ++it) {
                 m_lastEngineOrders.insert(it.key(), it.value());
             }
-        }
-
-        // Handle autotile feature gate toggle
-        if (autotileToggled && !autotileNow) {
+            // Feature gate toggled off: release the engine's screens.
             handleAutotileDisabled();
         }
 

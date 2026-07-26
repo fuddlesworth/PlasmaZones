@@ -190,7 +190,10 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
     if (predicate.field == Field::ActiveLayout) {
         const QString value = predicate.value.toString();
         QString label = value;
-        if (PhosphorLayout::LayoutId::isAutotile(value)) {
+        if (PhosphorLayout::LayoutId::isScrolling(value)) {
+            // The bare mode sentinel has no layout entity to look up.
+            label = PhosphorI18n::tr("Scrolling", "tiling mode name");
+        } else if (PhosphorLayout::LayoutId::isAutotile(value)) {
             if (tilingAlgorithmLookup) {
                 const QString resolved = tilingAlgorithmLookup(PhosphorLayout::LayoutId::extractAlgorithmId(value));
                 if (!resolved.isEmpty()) {
@@ -242,7 +245,7 @@ QString engineModeDisplayLabel(const QString& wire)
     case PhosphorZones::AssignmentEntry::Autotile:
         return PhosphorI18n::tr("Autotile");
     case PhosphorZones::AssignmentEntry::Scrolling:
-        return PhosphorI18n::tr("Scrolling");
+        return PhosphorI18n::tr("Scrolling", "tiling mode name");
     }
     return wire;
 }

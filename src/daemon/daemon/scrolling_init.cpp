@@ -15,7 +15,6 @@
 
 #include "daemon/controllers/shortcutmanager.h"
 #include "core/resolve/screenmoderouter.h"
-#include "core/platform/logging.h"
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -37,7 +36,7 @@ PhosphorScrollEngine::ScrollEngine* scrollTargetFor(PhosphorScreens::ScreenManag
         return nullptr;
     }
     const QString screenId = resolveShortcutScreenId(screenManager, wta);
-    if (screenId.isEmpty() || router->modeFor(screenId) != PhosphorZones::AssignmentEntry::Scrolling) {
+    if (screenId.isEmpty() || !router->isScrollingMode(screenId)) {
         return nullptr;
     }
     auto* scroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(engineBase);

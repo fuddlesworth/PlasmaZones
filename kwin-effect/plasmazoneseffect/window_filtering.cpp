@@ -72,28 +72,6 @@ QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QR
     if (!kw) {
         return fallback;
     }
-    if (kw->isFullScreen()) {
-        // A window maximized and THEN made fullscreen has a fullscreenGeometryRestore()
-        // equal to the maximized (full work-area) rect, so it would still float back
-        // maximized-sized. When the pre-fullscreen state was itself maximized, prefer
-        // the un-maximized geometryRestore() (the true free size), then the fullscreen
-        // restore rect, before giving up to the fallback.
-        if (kw->maximizeMode() != KWin::MaximizeRestore) {
-            const QRectF unmaximized(kw->geometryRestore());
-            if (unmaximized.width() > 0 && unmaximized.height() > 0) {
-                return unmaximized;
-            }
-        }
-        const QRectF restore(kw->fullscreenGeometryRestore());
-        if (restore.width() > 0 && restore.height() > 0) {
-            return restore;
-        }
-    } else if (kw->maximizeMode() != KWin::MaximizeRestore) {
-        const QRectF restore(kw->geometryRestore());
-        if (restore.width() > 0 && restore.height() > 0) {
-            return restore;
-        }
-    }
     // Off-screen poison guard: the scrolling engine parks off-viewport
     // columns and hidden tabs ENTIRELY outside every screen rect, so a
     // capture that runs while the frame is parked (float toggle on a parked
@@ -102,15 +80,45 @@ QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QR
     // later restore off-screen. A rect intersecting no screen is never a
     // legitimate free geometry — return invalid so the caller skips the
     // capture entirely (this is the shared chokepoint for both engines'
-    // free-geometry capture paths).
-    bool onAnyScreen = false;
-    for (const auto* screen : KWin::effects->screens()) {
-        if (fallback.intersects(QRectF(screen->geometry()))) {
-            onAnyScreen = true;
-            break;
+    // free-geometry capture paths). The restore rects below get the same
+    // check: KWin records geometryRestore from the live frame, so a
+    // maximize while parked snapshots the parked rect too.
+    const auto onAnyScreen = [](const QRectF& rect) {
+        if (!KWin::effects) {
+            // No compositor context to verify against (teardown); treat as
+            // on-screen rather than discarding a possibly-good capture.
+            return true;
+        }
+        for (const auto* screen : KWin::effects->screens()) {
+            if (rect.intersects(QRectF(screen->geometry()))) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (kw->isFullScreen()) {
+        // A window maximized and THEN made fullscreen has a fullscreenGeometryRestore()
+        // equal to the maximized (full work-area) rect, so it would still float back
+        // maximized-sized. When the pre-fullscreen state was itself maximized, prefer
+        // the un-maximized geometryRestore() (the true free size), then the fullscreen
+        // restore rect, before giving up to the fallback.
+        if (kw->maximizeMode() != KWin::MaximizeRestore) {
+            const QRectF unmaximized(kw->geometryRestore());
+            if (unmaximized.width() > 0 && unmaximized.height() > 0 && onAnyScreen(unmaximized)) {
+                return unmaximized;
+            }
+        }
+        const QRectF restore(kw->fullscreenGeometryRestore());
+        if (restore.width() > 0 && restore.height() > 0 && onAnyScreen(restore)) {
+            return restore;
+        }
+    } else if (kw->maximizeMode() != KWin::MaximizeRestore) {
+        const QRectF restore(kw->geometryRestore());
+        if (restore.width() > 0 && restore.height() > 0 && onAnyScreen(restore)) {
+            return restore;
         }
     }
-    if (!onAnyScreen) {
+    if (!onAnyScreen(fallback)) {
         return QRectF();
     }
     return fallback;

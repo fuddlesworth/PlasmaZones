@@ -945,8 +945,20 @@ SettingsController::SettingsController(QObject* parent)
             } else {
                 releases = doc.object().value(QLatin1String("releases")).toArray();
             }
+            // Only entries for THIS build or older are consumed: whatsnew.json
+            // gains the next release's entry while it is still unreleased, and
+            // without the clamp a user opening What's New on the current build
+            // would both SEE the unreleased entry and get it stamped as seen,
+            // so the badge never fires when that release actually ships. An
+            // unparsable app version fails open (no filtering).
+            const QVersionNumber appVersion = QVersionNumber::fromString(QCoreApplication::applicationVersion());
             for (const auto& entry : releases) {
                 const auto obj = entry.toObject();
+                const QVersionNumber entryVersion =
+                    QVersionNumber::fromString(obj.value(QLatin1String("version")).toString());
+                if (!appVersion.isNull() && !entryVersion.isNull() && entryVersion > appVersion) {
+                    continue;
+                }
                 QVariantMap release;
                 release[QStringLiteral("version")] = obj.value(QLatin1String("version")).toString();
                 release[QStringLiteral("date")] = obj.value(QLatin1String("date")).toString();

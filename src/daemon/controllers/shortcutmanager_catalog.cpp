@@ -70,13 +70,14 @@ CatalogMeta catalogMetaForId(const QString& id)
     static const QHash<QString, CatalogMeta> kMeta = [] {
         QHash<QString, CatalogMeta> m;
         const auto add = [&m](const char* id, const char* category, int order, const char* mode,
-                              const char* shortLabel = nullptr, const char* categoryDisambiguation = nullptr) {
+                              const char* categoryDisambiguation = nullptr, const char* shortLabel = nullptr) {
             m.insert(QLatin1String(id), {category, order, mode, categoryDisambiguation, shortLabel});
         };
         // The scrolling category word needs a disambiguation or it inherits
         // the scrollbar-sense translation (extraction marker below; the
         // rows pass the same comment).
-        static const auto kScrollingCategory = QT_TRANSLATE_NOOP3("plasmazones", "Scrolling", "tiling mode name");
+        static constexpr const char* kScrollingCategory[] =
+            QT_TRANSLATE_NOOP3("plasmazones", "Scrolling", "tiling mode name");
         Q_UNUSED(kScrollingCategory)
         constexpr const char* kModeNameContext = "tiling mode name";
         add(kIdOpenEditor, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
@@ -112,25 +113,25 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdSpanWindowRight, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
         add(kIdSpanWindowUp, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
         add(kIdSpanWindowDown, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
-        add(kIdRotateWindowsCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
+        add(kIdRotateWindowsCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Rotate Clockwise"));
-        add(kIdRotateWindowsCCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
+        add(kIdRotateWindowsCCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Rotate Counterclockwise"));
-        add(kIdCycleWindowForward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
+        add(kIdCycleWindowForward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Forward in Zone"));
-        add(kIdCycleWindowBackward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
+        add(kIdCycleWindowBackward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Backward in Zone"));
-        add(kIdSwapVirtualScreenLeft, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+        add(kIdSwapVirtualScreenLeft, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Swap Screen Left"));
-        add(kIdSwapVirtualScreenRight, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+        add(kIdSwapVirtualScreenRight, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Swap Screen Right"));
-        add(kIdSwapVirtualScreenUp, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+        add(kIdSwapVirtualScreenUp, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Swap Screen Up"));
-        add(kIdSwapVirtualScreenDown, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+        add(kIdSwapVirtualScreenDown, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Swap Screen Down"));
-        add(kIdRotateVirtualScreensCW, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+        add(kIdRotateVirtualScreensCW, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Rotate Clockwise"));
-        add(kIdRotateVirtualScreensCCW, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+        add(kIdRotateVirtualScreensCCW, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Rotate Counterclockwise"));
         add(kIdFocusMaster, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         add(kIdSwapMaster, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
@@ -139,31 +140,31 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdIncreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         add(kIdDecreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         add(kIdRetile, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
-        add(kIdScrollFocusColumnFirst, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollFocusColumnLast, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollMoveColumnToFirst, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollMoveColumnToLast, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollConsumeWindow, "Scrolling", 10, "scrolling", QT_TRANSLATE_NOOP("plasmazones", "Consume Window"),
-            kModeNameContext);
-        add(kIdScrollExpelWindow, "Scrolling", 10, "scrolling", QT_TRANSLATE_NOOP("plasmazones", "Expel Window"),
-            kModeNameContext);
-        add(kIdScrollConsumeOrExpelLeft, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollConsumeOrExpelRight, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollCenterColumn, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollToggleColumnTabbed, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollCycleColumnWidth, "Scrolling", 10, "scrolling",
-            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"), kModeNameContext);
-        add(kIdScrollCycleColumnWidthBack, "Scrolling", 10, "scrolling",
-            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width Back"), kModeNameContext);
-        add(kIdScrollIncreaseColumnWidth, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollDecreaseColumnWidth, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollMaximizeColumn, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollExpandColumn, "Scrolling", 10, "scrolling", QT_TRANSLATE_NOOP("plasmazones", "Expand Column"),
-            kModeNameContext);
-        add(kIdScrollCycleWindowHeight, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollIncreaseWindowHeight, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollDecreaseWindowHeight, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
-        add(kIdScrollResetWindowHeights, "Scrolling", 10, "scrolling", nullptr, kModeNameContext);
+        add(kIdScrollFocusColumnFirst, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollFocusColumnLast, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollMoveColumnToFirst, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollMoveColumnToLast, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollConsumeWindow, "Scrolling", 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Consume Window"));
+        add(kIdScrollExpelWindow, "Scrolling", 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Expel Window"));
+        add(kIdScrollConsumeOrExpelLeft, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollConsumeOrExpelRight, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollCenterColumn, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollToggleColumnTabbed, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollCycleColumnWidth, "Scrolling", 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"));
+        add(kIdScrollCycleColumnWidthBack, "Scrolling", 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width Back"));
+        add(kIdScrollIncreaseColumnWidth, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollDecreaseColumnWidth, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollMaximizeColumn, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollExpandColumn, "Scrolling", 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Expand Column"));
+        add(kIdScrollCycleWindowHeight, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollIncreaseWindowHeight, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollDecreaseWindowHeight, "Scrolling", 10, "scrolling", kModeNameContext);
+        add(kIdScrollResetWindowHeights, "Scrolling", 10, "scrolling", kModeNameContext);
         return m;
     }();
 

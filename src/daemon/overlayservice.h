@@ -649,8 +649,13 @@ private:
     /// Per-screen generation guard for the scroll tab-strip animated hide:
     /// bumped by every updateScrollTabStrips call, so a hide completion
     /// that lost the race to a newer non-empty update no-ops instead of
-    /// tearing down a repopulated slot.
+    /// tearing down a repopulated slot. Entries are retained after teardown
+    /// on purpose — monotonic counters must never restart.
     QHash<QString, quint64> m_scrollTabsHideGuard;
+    /// Screens with a hide animation currently in flight. The show path
+    /// treats these as "not visible" so a mid-hide repopulation re-runs
+    /// beginShow instead of stranding the slot at opacity 0.
+    QSet<QString> m_scrollTabsHidePending;
     std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
 
     QPointer<PhosphorZones::Layout> m_layout;

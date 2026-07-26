@@ -276,7 +276,7 @@ QList<ClosedTokenOption> modeOptions()
 {
     return {{QStringLiteral("snapping"), PhosphorI18n::tr("Snapping")},
             {QStringLiteral("tiling"), PhosphorI18n::tr("Tiling")},
-            {QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling")}};
+            {QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling", "tiling mode name")}};
 }
 QList<ClosedTokenOption> orientationOptions()
 {
@@ -328,7 +328,7 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Autotile");
         }
         if (wireValue == QLatin1String("scrolling")) {
-            return PhosphorI18n::tr("Scrolling");
+            return PhosphorI18n::tr("Scrolling", "tiling mode name");
         }
     }
     if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
@@ -514,7 +514,8 @@ QVariantList matchFields()
             }
             entry[QStringLiteral("options")] = options;
         } else if (f == Field::ActiveLayout) {
-            // The value is a layout id (snap UUID or "autotile:<algo>"). The QML
+            // The value is a layout id (snap UUID, "autotile:<algo>", or the
+            // bare "scrolling:" sentinel a Scrolling assignment carries). The QML
             // editor swaps this for a layout-picker ComboBox driven by
             // `settingsController.layouts` (like the screen / activity pickers), so
             // the user picks a friendly name while the wire value stays the id.

@@ -322,6 +322,8 @@ public:
     /// Whether the engine considers the window "managed" (eligible for
     /// layout operations). Semantics are engine-specific:
     /// - Autotile: equivalent to isWindowTiled (floating windows excluded).
+    /// - Scrolling: the window occupies a strip column (floating windows
+    ///   excluded), same shape as autotile.
     /// - Snap: a window assigned to a zone (including floated-in-zone).
     /// Callers that need a consistent cross-engine check for "engine owns
     /// this window at all" should use isWindowTracked instead.
@@ -350,6 +352,16 @@ public:
     /// shortcut routes to whichever engine the cached focus screen pointed at
     /// rather than the engine that now owns the window.
     virtual QString screenForTrackedWindow(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return {};
+    }
+
+    /// The window's client-reported minimum size as last known by this
+    /// engine, or 0x0 when unknown / untracked. Read by the cross-engine
+    /// handoff dispatcher to seed HandoffContext::minSize; must be queried
+    /// before handoffRelease. Default suits engines without a min-size model.
+    virtual QSize windowMinimumSize(const QString& windowId) const
     {
         Q_UNUSED(windowId)
         return {};
@@ -427,6 +439,13 @@ public:
                            ///< state/layout, not the currently-visible one.
         QPoint dropPos; ///< cursor position at drop, or invalid for non-drag handoffs
         QRect sourceGeometry; ///< window's frame at handoff time (for size preservation)
+        QSize minSize; ///< client-reported minimum size as last known by the
+                       ///< SOURCE engine (0x0 when unknown). The compositor only
+                       ///< re-reports a min size when it changes or a retile
+                       ///< discovers a refusal, so the receiver seeds its own
+                       ///< min-size model from this instead of waiting a
+                       ///< refuse/re-discover round-trip. Callers must query
+                       ///< the source BEFORE handoffRelease drops its tracking.
         QStringList sourceZoneIds; ///< zones the window held at source (empty if not snapped)
         bool wasFloating = false; ///< window was floating in source engine
         int insertIndex = -1; ///< PER-TARGET unit. Autotile target: raw

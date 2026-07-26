@@ -553,7 +553,7 @@ void Daemon::connectShortcutSignals()
         resnapIfManualMode();
     });
 
-    // Cycle layout shortcuts (Meta+[/])
+    // Cycle layout shortcuts (Meta+Alt+[ / Meta+Alt+])
     connect(m_shortcutManager.get(), &ShortcutManager::previousLayoutRequested, this, [this]() {
         if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
             return;

@@ -141,6 +141,9 @@ public:
     /// the mode is selected but nothing is assigned, instead of silently showing
     /// no OSD.
     void showNotAssignedOsd(const QString& screenId);
+    /// Mode-switch OSD for a screen entering Scrolling (no layout entity to
+    /// preview; both styles show a text card).
+    void showScrollingModeOsd(const QString& screenId);
 
     // Shortcut cheatsheet overlay (impls in daemon/osd.cpp).
     /// Toggle the cheatsheet on the cursor's screen. Show path resolves the

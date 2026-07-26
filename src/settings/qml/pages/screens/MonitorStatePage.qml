@@ -387,6 +387,7 @@ SettingsFlickable {
             // Mode toggle (below preview)
             SettingsButtonGroup {
                 Layout.alignment: Qt.AlignHCenter
+                Accessible.name: i18n("Placement mode")
                 model: [i18n("Snapping"), i18n("Tiling"), i18nc("tiling mode name", "Scrolling")]
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {

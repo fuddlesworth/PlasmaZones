@@ -183,6 +183,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             }
             const bool engineTypeChanged = destEngine && destEngine != sourceEngine;
 
+            const QSize windowMinSize = sourceEngine->windowMinimumSize(windowId);
             sourceEngine->handoffRelease(windowId);
             qCInfo(lcDbusWindow) << "Cross-screen drag: released" << sourceEngine->engineId() << "state for" << windowId
                                  << "from" << sourceScreen << "to" << releaseScreenId;
@@ -198,6 +199,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 ctx.fromEngineId = sourceEngine->engineId();
                 ctx.dropPos = QPoint(cursorX, cursorY);
                 ctx.sourceGeometry = capturedOriginalGeometry;
+                ctx.minSize = windowMinSize;
                 ctx.wasFloating = m_windowTracking->service()->isWindowFloating(windowId);
                 if (capturedWasSnapped && !ctx.wasFloating && !capturedZoneId.isEmpty()) {
                     // sourceZoneIds is informational for receiving engines —

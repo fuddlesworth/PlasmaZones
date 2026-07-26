@@ -20,6 +20,8 @@
 #include <memory>
 
 #include "dbus/compositorbridgeadaptor.h"
+
+#include <PhosphorProtocol/ServiceConstants.h>
 #include "dbus/controladaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -168,14 +170,16 @@ private Q_SLOTS:
     void testRegisterBridge_returnsApiVersion()
     {
         PhosphorProtocol::BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
-            QStringLiteral("kwin"), QStringLiteral("4"), {QStringLiteral("borderless"), QStringLiteral("animation")});
+            QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+            {QStringLiteral("borderless"), QStringLiteral("animation")});
 
-        QCOMPARE(result.apiVersion, QStringLiteral("4"));
+        QCOMPARE(result.apiVersion, QString::number(PhosphorProtocol::Service::ApiVersion));
     }
 
     void testRegisterBridge_storesBridgeName()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), {});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        {});
 
         QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
     }
@@ -183,7 +187,8 @@ private Q_SLOTS:
     void testRegisterBridge_storesCapabilities()
     {
         QStringList caps = {QStringLiteral("borderless"), QStringLiteral("maximize"), QStringLiteral("animation")};
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), caps);
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        caps);
 
         QCOMPARE(m_bridgeAdaptor->bridgeCapabilities(), caps);
     }
@@ -192,11 +197,13 @@ private Q_SLOTS:
     {
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
 
-        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"), QStringLiteral("4"), {QStringLiteral("modifiers")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"),
+                                        QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        {QStringLiteral("modifiers")});
 
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("hyprland"));
-        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("4"));
+        QCOMPARE(spy.at(0).at(1).toString(), QString::number(PhosphorProtocol::Service::ApiVersion));
     }
 
     // Version gate regression test: a peer speaking an older protocol
@@ -215,7 +222,7 @@ private Q_SLOTS:
             QStringLiteral("kwin"), QStringLiteral("3"), {QStringLiteral("borderless")});
 
         QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
-        QCOMPARE(result.apiVersion, QStringLiteral("4"));
+        QCOMPARE(result.apiVersion, QString::number(PhosphorProtocol::Service::ApiVersion));
         QCOMPARE(spy.count(), 0);
         QVERIFY(m_bridgeAdaptor->bridgeName().isEmpty());
     }
@@ -237,14 +244,16 @@ private Q_SLOTS:
 
     void testHasCapability_registered_returnsTrue()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        {QStringLiteral("borderless")});
 
         QVERIFY(m_bridgeAdaptor->hasCapability(QStringLiteral("borderless")));
     }
 
     void testHasCapability_notRegistered_returnsFalse()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        {QStringLiteral("borderless")});
 
         QVERIFY(!m_bridgeAdaptor->hasCapability(QStringLiteral("unknown_capability")));
     }

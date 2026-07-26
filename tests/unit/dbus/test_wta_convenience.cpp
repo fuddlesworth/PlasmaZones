@@ -875,7 +875,7 @@ private Q_SLOTS:
         const QRect tileRect(8, 1138, 3184, 602); // a full-width bottom-row tile rect
 
         // The autotile engine still reports this window actively tiled.
-        wta->service()->setAutotileTiledPredicate([&](const QString& id) {
+        wta->service()->setEngineTiledPredicate([&](const QString& id) {
             return id == w1;
         });
 
@@ -904,7 +904,7 @@ private Q_SLOTS:
         QCOMPARE(rec->freeGeometryFor(screenId), goodFloat);
         QVERIFY(rec->freeGeometryFor(screenId) != tileRect);
 
-        wta->service()->setAutotileTiledPredicate({});
+        wta->service()->setEngineTiledPredicate({});
         wta->service()->setSnapEngine(nullptr);
         wta->service()->setSnapState(nullptr);
         delete snap;

@@ -138,6 +138,11 @@ struct AssignmentEntry
         }
         return snappingLayout;
     }
+    /// True when the entry carries a concrete layout/algorithm PAYLOAD.
+    /// This is NOT the cascade's visibility predicate — that is
+    /// activeLayoutId() non-empty, which a payload-less Scrolling entry
+    /// satisfies through the "scrolling:" sentinel while isValid() stays
+    /// false. Kept for tests/tooling; no production caller branches on it.
     bool isValid() const
     {
         return !snappingLayout.isEmpty() || !tilingAlgorithm.isEmpty();
@@ -158,6 +163,12 @@ struct AssignmentEntry
         if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             entry.mode = Autotile;
             entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        } else if (PhosphorLayout::LayoutId::isScrolling(layoutId)) {
+            // The "scrolling:" sentinel carries no layout entity — flip the
+            // mode and preserve both layout fields (the lossless-toggle
+            // contract), so a get→set round-trip cannot degrade a Scrolling
+            // assignment into Snapping-pointing-at-a-bogus-id.
+            entry.mode = Scrolling;
         } else {
             entry.mode = Snapping;
             entry.snappingLayout = layoutId;
@@ -171,6 +182,8 @@ struct AssignmentEntry
         if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             entry.mode = Autotile;
             entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        } else if (PhosphorLayout::LayoutId::isScrolling(layoutId)) {
+            entry.mode = Scrolling; // sentinel: no layout entity to carry
         } else {
             entry.mode = Snapping;
             entry.snappingLayout = layoutId;

@@ -97,6 +97,19 @@ int ScrollStrip::centeredAnchorFor(int columnIndex, const ScrollLayoutParams& pa
     return (params.workArea.width() - colW) / 2;
 }
 
+int ScrollStrip::keepOrRecenterAnchor(int oldViewX, const ScrollLayoutParams& params) const
+{
+    // Structural changes (minimize collapse, consume) keep the view where it
+    // was UNLESS the centering policy pins the focused column to the middle:
+    // Always / lone-column centering must survive a strip-width change, or
+    // the focused column drifts off-center until the next focus move.
+    const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
+    if (centerLone || params.centerFocusedColumn == CenterFocusedColumn::Always) {
+        return centeredAnchorFor(m_activeColumnIdx, params);
+    }
+    return clampedAnchor(columnStripX(m_activeColumnIdx, params) - oldViewX, params);
+}
+
 int ScrollStrip::clampedAnchor(int anchor, const ScrollLayoutParams& params) const
 {
     if (m_activeColumnIdx < 0) {
@@ -249,13 +262,23 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 // Renormalize when the Fixed/Preset heights alone overflow
                 // the column: scale them down proportionally so the last
                 // window is not laid out past the bottom of the work area
-                // (each tile was only clamped individually above).
-                if (fixedTotal > availH && fixedTotal > 0) {
+                // (each tile was only clamped individually above). Auto
+                // tiles keep a 1px floor below, so the Fixed/Preset budget
+                // is availH minus one pixel per Auto tile — without the
+                // reservation those floors would overflow the column again.
+                int autoCount = 0;
+                for (int vi = 0; vi < n; ++vi) {
+                    if (col.tiles.at(visible.at(vi)).height.kind == WindowHeight::Auto) {
+                        ++autoCount;
+                    }
+                }
+                const int fixedBudget = qMax(0, availH - autoCount);
+                if (fixedTotal > fixedBudget && fixedTotal > 0) {
                     int scaledTotal = 0;
                     for (int vi = 0; vi < n; ++vi) {
                         if (heights[vi] > 0) {
                             heights[vi] =
-                                qMax(1, static_cast<int>(static_cast<qint64>(heights[vi]) * availH / fixedTotal));
+                                qMax(1, static_cast<int>(static_cast<qint64>(heights[vi]) * fixedBudget / fixedTotal));
                             scaledTotal += heights[vi];
                         }
                     }

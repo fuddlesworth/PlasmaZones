@@ -96,6 +96,8 @@ public:
     bool isWindowMinimized(const QString& windowId) const;
     /// Update a tile's stored minimum size. Returns true when it changed.
     bool setWindowMinimumSize(const QString& windowId, int minWidth, int minHeight);
+    /// The tile's client-reported minimum size, or 0x0 when untracked.
+    QSize windowMinimumSize(const QString& windowId) const;
 
     // ── Focus ────────────────────────────────────────────────────────────────
     /// Focus a column by index (clamped; active tile within it unchanged).
@@ -165,7 +167,14 @@ public:
     /// Reconcile a column's stored intent to a size the client actually
     /// acked (app-initiated resize): the owning column takes the acked width
     /// as Fixed, the tile the acked height. Other columns untouched.
-    bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool widthChanged = true);
+    /// Record the size a client/user resize actually settled on. The width
+    /// becomes the column's Fixed intent only when @p widthChanged (the
+    /// engine compares against the last applied rect) — a vertical-only
+    /// resize must not pin a Proportion/Preset column to pixels. The height
+    /// becomes the tile's Fixed intent symmetrically: only when
+    /// @p heightChanged and the column has more than one tile.
+    bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool widthChanged = true,
+                             bool heightChanged = true);
 
     // ── Display ──────────────────────────────────────────────────────────────
     /// Toggle the active column between Normal and Tabbed presentation.
@@ -212,6 +221,7 @@ private:
     /// Clamp @p anchor so the derived viewX stays within [0, stripW - workW]
     /// (left-pinned when the strip fits the viewport entirely).
     int clampedAnchor(int anchor, const ScrollLayoutParams& params) const;
+    int keepOrRecenterAnchor(int oldViewX, const ScrollLayoutParams& params) const;
     /// Apply the center-focused-column policy after the active column moved
     /// from @p prevIdx at @p oldViewX (strip coords) to the current active.
     void reanchorAfterFocusChange(int prevIdx, int oldViewX, const ScrollLayoutParams& params);

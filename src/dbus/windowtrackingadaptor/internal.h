@@ -133,4 +133,23 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     return query;
 }
 
+/// Keys of the QVariantMap seam between scrollOpenRuleParams (rules.cpp,
+/// producer) and the setOpenParamsResolver lambda (enginewiring.cpp,
+/// consumer). One namespace so a typo on either side is a compile error,
+/// not a silently dropped rule.
+namespace ScrollOpenKeys {
+inline QString widthFraction()
+{
+    return QStringLiteral("widthFraction");
+}
+inline QString tabbed()
+{
+    return QStringLiteral("tabbed");
+}
+inline QString consume()
+{
+    return QStringLiteral("consume");
+}
+} // namespace ScrollOpenKeys
+
 } // namespace PlasmaZones

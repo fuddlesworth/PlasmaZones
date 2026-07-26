@@ -125,7 +125,7 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     const QStringList windows = state->managedWindows();
     for (const QString& windowId : windows) {
         m_lastAppliedRect.remove(windowId);
-        m_floatRestoreColumn.remove(windowId);
+        m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         releasedWindows.append(windowId);
     }
@@ -184,7 +184,18 @@ QString ScrollEngine::resolveOperationScreen(const QString& screenId) const
     if (!m_activeScreen.isEmpty() && m_scrollingScreens.contains(m_activeScreen)) {
         return m_activeScreen;
     }
-    return m_scrollingScreens.isEmpty() ? QString() : *m_scrollingScreens.cbegin();
+    if (m_scrollingScreens.isEmpty()) {
+        return {};
+    }
+    // QSet iteration order is unspecified; pick the lexicographic minimum so
+    // repeated shortcut presses with no active screen land deterministically.
+    QString fallback = *m_scrollingScreens.cbegin();
+    for (const QString& candidate : m_scrollingScreens) {
+        if (candidate < fallback) {
+            fallback = candidate;
+        }
+    }
+    return fallback;
 }
 
 // ── Tracking predicates ─────────────────────────────────────────────────────
@@ -287,7 +298,7 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         }
         m_states.removeWindow(windowId);
         m_lastAppliedRect.remove(windowId);
-        m_floatRestoreColumn.remove(windowId);
+        m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         ++pruned;
     }
@@ -329,13 +340,29 @@ QSet<int> ScrollEngine::desktopsWithActiveState() const
     return desktops;
 }
 
+void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
+{
+    // Shared sweep for every state-destruction path: the per-window side
+    // maps must die with the state or they grow unbounded and
+    // lastManagedRect keeps answering for windows whose context is gone —
+    // the float-back poison-guard input (mirrors the autotile prunes'
+    // in-callback drops).
+    const QStringList windows = state->managedWindows();
+    for (const QString& windowId : windows) {
+        m_lastAppliedRect.remove(windowId);
+        m_floatRestore.remove(windowId);
+        m_scrollFloatedWindows.remove(windowId);
+    }
+}
+
 void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
 {
     m_states.removeStatesIf(
         [removedDesktop](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return key.desktop == removedDesktop;
         },
-        [](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+        [this](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+            dropWindowBookkeeping(state);
             state->deleteLater();
         });
     m_states.removeWindowsIf([removedDesktop](const QString&, const PhosphorEngine::PlacementStateKey& key) {
@@ -353,7 +380,8 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
         [&stale](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return stale(key.activity);
         },
-        [](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+        [this](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+            dropWindowBookkeeping(state);
             state->deleteLater();
         });
     m_states.removeWindowsIf([&stale](const QString&, const PhosphorEngine::PlacementStateKey& key) {
@@ -371,7 +399,14 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         [&matches](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return matches(key.screenId);
         },
-        [](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+        [this](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+            // Removed screen: per-screen bookkeeping goes with the state —
+            // stale seeds must not replay if the connector id ever returns,
+            // and the tab-strip latch/overrides must not linger.
+            dropWindowBookkeeping(state);
+            m_pendingInitialOrder.remove(state->screenId());
+            m_screensWithTabStrips.remove(state->screenId());
+            m_perScreenOverrides.remove(state->screenId());
             state->deleteLater();
         });
     m_states.removeWindowsIf([&matches](const QString&, const PhosphorEngine::PlacementStateKey& key) {

@@ -39,8 +39,12 @@ QStringList ScrollingAdaptor::scrollingScreens() const
     if (!m_engine) {
         return {};
     }
+    // Sorted like the scrollingScreensChanged signal payload, so property
+    // reads and signal deltas compare equal for the same set.
     const QSet<QString> screens = m_engine->activeScreens();
-    return QStringList(screens.cbegin(), screens.cend());
+    QStringList out(screens.cbegin(), screens.cend());
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 void ScrollingAdaptor::clearEngine()

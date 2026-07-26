@@ -14,10 +14,7 @@
 #include "daemon/daemon.h"
 #include "helpers.h"
 
-#include "core/platform/logging.h"
-
 #include <PhosphorScrollEngine/ScrollEngine.h>
-#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
 namespace PlasmaZones {
@@ -90,13 +87,16 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             m_scrollEngine->applyPerScreenConfig(screenId, overrides);
         }
     }
+    m_scrollEngine->setActiveScreens(scrollingScreens);
+
     // Screens LEAVING scrolling drop their override entries too — otherwise a
     // stale map is replayed on re-entry before any rule change re-resolves it.
+    // AFTER setActiveScreens: clearPerScreenConfig schedules a retile for the
+    // screen it clears, and a departing screen is no longer in the engine's
+    // live set by now, so the schedule is refused instead of queueing a no-op.
     for (const QString& screenId : currentScrollScreens - scrollingScreens) {
         m_scrollEngine->clearPerScreenConfig(screenId);
     }
-
-    m_scrollEngine->setActiveScreens(scrollingScreens);
 
     // setActiveScreens retiles only ADDED screens on a changed set (the
     // identical-set branch retiles everything itself). Force a retile for
@@ -107,7 +107,7 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // updateEngineScreens; scheduleRetileForScreen coalesces, so the
     // identical-set overlap costs nothing.
     if (scrollingScreens != currentScrollScreens) {
-        for (const QString& screenId : scrollingScreens& currentScrollScreens) {
+        for (const QString& screenId : (scrollingScreens & currentScrollScreens)) {
             m_scrollEngine->scheduleRetileForScreen(screenId);
         }
     }

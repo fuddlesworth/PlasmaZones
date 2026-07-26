@@ -7,6 +7,7 @@
 #include <PhosphorCompositor/IGeometryHandler.h>
 #include <PhosphorCompositor/IDragHandler.h>
 #include <PhosphorCompositor/ILifecycleHandler.h>
+#include <PhosphorProtocol/DragTypes.h>
 #include <PhosphorProtocol/WindowTypes.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 
@@ -58,9 +59,14 @@ public:
     void notifyWindowActivated(const QString& windowId, const QString& screenId);
 
     // Drag operations (plugin → daemon)
-    void dragStarted(const QString& windowId, const QString& screenId, const QRect& geometry);
-    void dragMoved(const QString& windowId, int cursorX, int cursorY);
-    void dragStopped(const QString& windowId, const QString& screenId, const QString& zoneId);
+    /// Legacy snap-drag trio. Signatures mirror the daemon's current
+    /// dragStarted / dragMoved / dragStopped D-Bus methods exactly (the
+    /// canonical entry points are beginDrag / updateDrag / endDrag, which
+    /// this thin client does not wrap yet). @p modifiers / @p mouseButtons
+    /// are the compositor's live keyboard/button state, 0 when unknown.
+    void dragStarted(const QString& windowId, const QRectF& geometry);
+    void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers = 0, int mouseButtons = 0);
+    void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers = 0, int mouseButtons = 0);
 
     // Screen notifications (plugin → daemon)
     void notifyCursorScreenChanged(const QString& screenId);
@@ -105,7 +111,7 @@ private Q_SLOTS:
     void handleApplyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
     void handleRaiseWindows(const QStringList& windowIds);
     void handleActivateWindow(const QString& windowId);
-    void handleDragPolicyChanged(const QString& windowId, int newPolicy);
+    void handleDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy);
     void handleWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
     void handleRestoreSizeDuringDrag(const QString& windowId, int width, int height);
     void handleMoveWindowToZone(const QString& windowId, const QString& screenId, int x, int y, int w, int h);

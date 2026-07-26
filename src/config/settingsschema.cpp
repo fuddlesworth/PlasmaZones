@@ -144,9 +144,11 @@ QVariant canonicalCommaList(const QVariant& v)
 }
 
 /// Canonicalize a comma-joined proportion list: parse each entry as a
-/// decimal, keep only values in (0, 1], de-dupe, and re-serialize — so the
-/// stored value always equals the effective one (the scroll engine ignores
-/// anything else and would otherwise silently diverge from the page).
+/// decimal, keep only values in (0, 1], de-dupe, and re-serialize. Stored ≈
+/// effective, with one asymmetry: a list whose entries are ALL invalid
+/// canonicalizes to the empty string, and the engine treats an empty list
+/// as "use built-in presets" — so an all-garbage hand edit falls back to
+/// the defaults instead of storing an accepted-but-dead value.
 QVariant canonicalProportionList(const QVariant& v)
 {
     const QStringList parts = v.toString().split(QLatin1Char(','));

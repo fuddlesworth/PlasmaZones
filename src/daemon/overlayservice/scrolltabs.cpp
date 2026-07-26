@@ -40,12 +40,18 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         // while this hide is in flight bumps the guard, and the completion
         // below must then NOT tear down the slot it just repopulated —
         // otherwise the indicator stays hidden until the next strip change
-        // (which a stable layout never produces).
+        // (which a stable layout never produces). The show path below pairs
+        // with this by treating hide-in-flight as "not visible" so it
+        // re-runs beginShow (which animates the opacity back up and
+        // supersedes the hide track) instead of early-returning on a slot
+        // that is still visible but fading out.
         const quint64 hideGeneration = ++m_scrollTabsHideGuard[screenId];
+        m_scrollTabsHidePending.insert(screenId);
         m_shellHost->hideSlot(screenId, PhosphorSlotKeys::ScrollTabs(), [this, screenId, hideGeneration]() {
             if (m_scrollTabsHideGuard.value(screenId) != hideGeneration) {
                 return; // superseded by a newer non-empty update
             }
+            m_scrollTabsHidePending.remove(screenId);
             auto stateIt = m_screenStates.find(screenId);
             if (stateIt == m_screenStates.end() || !stateIt->scrollTabsSlot()) {
                 return;
@@ -58,6 +64,7 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     }
     // Any non-empty update invalidates a pending hide (see the guard above).
     ++m_scrollTabsHideGuard[screenId];
+    const bool hideWasInFlight = m_scrollTabsHidePending.remove(screenId);
 
     QScreen* screen = resolveTargetScreen(m_screenManager, screenId);
     if (!screen) {
@@ -95,9 +102,13 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     // picker): the pills must honour the overlay font family and size scale.
     writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
-    if (slot->isVisible()) {
+    if (slot->isVisible() && !hideWasInFlight) {
         return; // live model update — no show choreography needed
     }
+    // Either genuinely hidden, or mid-hide (still visible, opacity
+    // animating toward 0). In BOTH cases the show choreography must run:
+    // early-returning on a fading slot would leave it visible+loaded at
+    // opacity 0 forever once the superseded hide completion no-ops.
 
     if (shellWindow) {
         assertWindowOnScreen(shellWindow, screen, screenGeom);

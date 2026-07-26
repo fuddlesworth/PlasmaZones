@@ -115,7 +115,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
             // the write — exactly as recordFreeGeometry refuses tiled frames. The
             // window's prior, genuine free geometry stays intact for the float-back.
             const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFloating())
-                && !m_service->isWindowAutotileTiled(windowId);
+                && !m_service->isWindowEngineTiled(windowId);
             if (unmanagedState) {
                 const QRect frame = m_frameGeometry.value(windowId);
                 if (frame.isValid()) {
@@ -148,7 +148,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
                         const bool stillOnSnapRect =
                             !slot.zoneIds.isEmpty() && m_service->resolveZoneGeometry(slot.zoneIds, screenKey) == frame;
                         // Tiled analogue of the same poison guard (see the
-                        // helper doc). The isWindowAutotileTiled gate above
+                        // helper doc). The isWindowEngineTiled gate above
                         // cannot catch the float-toggle edge:
                         // AutotileEngine::performToggleFloat clears the tiled
                         // bit BEFORE the daemon's sync slot reaches this
@@ -223,7 +223,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // record the float-back there so the next open restores to the right monitor.
     // Scoped to the engine-miss path so a normally-tracked close (an engine captured
     // above and returned) is never second-guessed.
-    if (!authoritativeScreen.isEmpty() && m_service && !m_service->isWindowAutotileTiled(windowId)) {
+    if (!authoritativeScreen.isEmpty() && m_service && !m_service->isWindowEngineTiled(windowId)) {
         const QRect frame = m_frameGeometry.value(windowId);
         // Same tile-rect poison guard as the primary capture path (see the
         // helper doc): a window tiled by autotile, handed off, and closed
@@ -360,6 +360,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         ctx.fromEngineId = source ? source->engineId() : QString();
         ctx.wasFloating = true;
         ctx.sourceGeometry = m_frameGeometry.value(windowId);
+        ctx.minSize = source ? source->windowMinimumSize(windowId) : QSize();
         if (source && source != dest) {
             source->handoffRelease(windowId);
         }

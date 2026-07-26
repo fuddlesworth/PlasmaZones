@@ -625,13 +625,12 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     // it runs on screen / layout changes rather than the hot per-cursor path, which
     // lets the query carry the active layout and the screen orientation without
     // folding either into a cache key.
-    // Field::Mode is deliberately NOT stamped here (mirrors
-    // resolveContextTilingParams): the scrolling actions are already
-    // engine-specific, so a `Mode Equals "scrolling"` pin on a rule carrying
-    // one would be redundant — and this resolver only runs for screens the
-    // cascade already put in Scrolling mode. resolveContextGaps is the one
-    // mode-stamping resolver, because gap actions are engine-neutral.
-    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+    // Field::Mode IS stamped: this resolver only runs for screens the
+    // cascade already put in Scrolling mode, so the stamp costs nothing —
+    // but a user rule that pins `Mode Equals "scrolling"` alongside a
+    // scroll-param action (a redundant-but-legal spelling) would silently
+    // never fire against an unstamped query.
+    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QStringLiteral("scrolling"));
     stampScreenOrientation(query, screenId);
     query.activeLayout = assignmentIdForScreen(screenId, virtualDesktop, activity);
     const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
@@ -641,7 +640,10 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
         // Defense in depth (the descriptor validator already rejects
         // out-of-range payloads at load): a hand-edited rules.json can only
         // fall through to a sane bound, matching resolveContextOverlay's
-        // documented policy. Bounds mirror the engine's own [0.05, 1.0].
+        // documented policy. The 0.05 / 1.0 literals mirror the engine's own
+        // clamp AND phosphor-rules' private kMin/MaxColumnWidthRatio (its
+        // descriptor validator) — that header is not exported, so a bound
+        // change there must be mirrored here by hand.
         params.defaultColumnWidth = qBound(0.05, action->params.value(PWR::ActionParam::Value).toDouble(), 1.0);
     }
     if (const auto action = resolved.slot(QString(PWR::ActionSlot::CenterFocusedColumn))) {

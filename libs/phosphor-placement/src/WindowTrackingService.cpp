@@ -436,7 +436,7 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
     // restart with the daemon alive) — its border tracking starts empty and
     // the re-announce batch would push every tiled window's zone rect here
     // with overwrite=true. The engine-backed predicate survives that reload.
-    if (isWindowAutotileTiled(windowId)) {
+    if (isWindowEngineTiled(windowId)) {
         qCDebug(lcPlacement) << "recordFreeGeometry: refusing tiled frame for" << windowId
                              << "— float-back stays frozen while the autotile engine tiles it";
         return;
@@ -476,7 +476,7 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     // Never let a tile rect become the float-back — same invariant recordFreeGeometry
     // enforces. (An orphaned cross-screen-dragged window is floating, not tiled, so
     // this is belt-and-braces.)
-    if (isWindowAutotileTiled(windowId)) {
+    if (isWindowEngineTiled(windowId)) {
         return;
     }
     const QString appId = currentAppIdFor(windowId);

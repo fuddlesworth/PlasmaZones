@@ -176,6 +176,9 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         partnerLanding = state->strip().columnOfWindow(windowId);
     }
 
+    // Min sizes are per-strip tile state; capture before takeWindow so the
+    // receiving strip keeps the clamp without a refuse/re-discover round-trip.
+    const QSize windowMinSize = state->strip().windowMinimumSize(windowId);
     state->strip().takeWindow(windowId, sourceParams);
     Q_EMIT windowOutputMoveExpected(windowId, target);
 
@@ -183,18 +186,22 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     // first column, moving left as its last — unless it takes the swap
     // partner's slot.
     int columnIdx = (direction == QLatin1String("right")) ? 0 : targetState->strip().columnCount();
+    QSize partnerMinSize;
     if (!partner.isEmpty()) {
         columnIdx = qMax(0, targetState->strip().columnOfWindow(partner));
+        partnerMinSize = targetState->strip().windowMinimumSize(partner);
         targetState->strip().takeWindow(partner, targetParams);
         Q_EMIT windowOutputMoveExpected(partner, screenId);
     }
     targetState->strip().insertWindowAt(columnIdx, windowId, effectiveDefaultColumnWidth(target),
                                         effectiveDefaultColumnDisplay(target));
+    targetState->strip().setWindowMinimumSize(windowId, windowMinSize.width(), windowMinSize.height());
     targetState->strip().focusWindow(windowId, targetParams);
     m_states.setKeyForWindow(windowId, targetKey);
     if (!partner.isEmpty()) {
         state->strip().insertWindowAt(qMax(0, partnerLanding), partner, effectiveDefaultColumnWidth(screenId),
                                       effectiveDefaultColumnDisplay(screenId));
+        state->strip().setWindowMinimumSize(partner, partnerMinSize.width(), partnerMinSize.height());
         m_states.setKeyForWindow(partner, sourceKey);
     }
     m_activeScreen = target;
