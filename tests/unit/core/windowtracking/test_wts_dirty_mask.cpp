@@ -307,8 +307,10 @@ private Q_SLOTS:
         QCOMPARE(mask,
                  static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
                      PhosphorPlacement::WindowTrackingService::DirtyAll));
-        // Every individual field bit must be included in DirtyAll so
-        // adding a new field without extending DirtyAll fails the test.
+        // Every bit listed here must be included in DirtyAll. The list is
+        // hand-maintained, so this catches a bit being DROPPED from DirtyAll,
+        // not a brand-new field that was never added to either — that one
+        // needs the new bit appended below by hand.
         for (const auto bit : {PhosphorPlacement::WindowTrackingService::DirtyActiveLayoutId,
                                PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments,
                                PhosphorPlacement::WindowTrackingService::DirtyPendingRestores,

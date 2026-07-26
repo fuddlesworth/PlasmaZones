@@ -167,15 +167,24 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
     if (query.mode == QLatin1String("tiling") && m_tilingHandler->isScrollingScreen(screenId)) {
         query.mode = QStringLiteral("scrolling");
     }
-    // Re-stamp the screen orientation from the resolved screen id. The free
-    // helper can only resolve an output from the frame centre, which answers
-    // for the wrong monitor (or not at all) for a scroll strip's windows
-    // parked off-screen beside their column. The id is authoritative for
-    // those: it comes from the engine's own per-window screen override.
+    // Stamp the screen orientation from the resolved screen id. ruleQueryFor
+    // leaves the field to us whenever it is handed an id: its own derivation
+    // is centre-based, which answers for the wrong monitor (or not at all) for
+    // a scroll strip's windows parked off-screen beside their column. The id
+    // is authoritative for those — it comes from the engine's own per-window
+    // screen override. An id that resolves to no output (a screen that just
+    // disconnected) falls back to the centre-derived answer.
+    QString orientation;
     if (const KWin::LogicalOutput* output = outputForScreenId(screenId)) {
         if (const QRect g = output->geometry(); g.isValid()) {
-            query.screenOrientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+            orientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
         }
+    }
+    if (orientation.isEmpty()) {
+        orientation = centreScreenOrientation(w);
+    }
+    if (!orientation.isEmpty()) {
+        query.screenOrientation = orientation;
     }
     applyOwnLayerFlags(query, windowId);
     return query;

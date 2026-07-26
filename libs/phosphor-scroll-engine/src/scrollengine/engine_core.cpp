@@ -108,10 +108,10 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // Even a STATELESS leaving screen (seed pushed before any window
         // arrived) must drop its per-screen bookkeeping — the state-driven
         // sweep in releaseScreenState never ran for it. The tab-strip clear
-        // is latched, so a second call is a no-op. m_perScreenOverrides
-        // deliberately survives a mode change (per-screen rule config
-        // re-applies on re-entry); only pruneStatesForRemovedScreen purges
-        // it.
+        // is latched, so a second call is a no-op. m_perScreenOverrides is
+        // NOT swept here: the daemon clears a departing screen's overrides
+        // itself, right after setActiveScreens in updateScrollingScreens.
+        // pruneStatesForRemovedScreen is the output-removal purge.
         m_pendingInitialOrder.remove(screenId);
         m_consumedInitialOrder.remove(screenId);
         clearTabStripsForScreen(screenId);

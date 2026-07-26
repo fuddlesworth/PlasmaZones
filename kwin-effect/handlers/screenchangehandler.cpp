@@ -77,6 +77,12 @@ void ScreenChangeHandler::stop()
 
 void ScreenChangeHandler::slotScreenGeometryChanged()
 {
+    // Post-stop() signals are dropped: the handler has released its side of
+    // the daemon conversation and must not restart the debounce or issue
+    // D-Bus work during teardown.
+    if (m_stopped) {
+        return;
+    }
     // Debounce screen geometry changes to prevent rapid-fire updates.
     // virtualScreenGeometryChanged can fire multiple times for monitor
     // connect/disconnect, arrangement changes, resolution changes, etc.
@@ -146,6 +152,9 @@ void ScreenChangeHandler::applyScreenGeometryChange()
 
 void ScreenChangeHandler::slotScreenLayoutChanged()
 {
+    if (m_stopped) {
+        return;
+    }
     // KWin emits screenAdded / screenRemoved before per-window outputChanged
     // signals for windows it reassigns when an output appears or disappears.
     // virtualScreenGeometryChanged — which the geometry-debounce slot above
@@ -169,6 +178,9 @@ void ScreenChangeHandler::slotScreenLayoutChanged()
 
 void ScreenChangeHandler::slotReapplyWindowGeometriesRequested()
 {
+    if (m_stopped) {
+        return;
+    }
     qCInfo(lcScreenChange) << "Daemon requested re-apply of window geometries (e.g. after panel editor close)";
     if (m_reapplyInProgress) {
         m_reapplyPending = true;

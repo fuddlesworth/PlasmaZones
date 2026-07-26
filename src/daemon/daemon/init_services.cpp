@@ -383,14 +383,16 @@ void Daemon::initLayoutAndSettingsWiring()
             // would simply skip the batch (no behaviour regression vs the
             // pre-batch shape, which used per-window D-Bus calls).
             if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-                // updateEngineScreens() above fired windowsReleased synchronously,
-                // populating m_pendingSnapFloatRestores with the snap-float and
-                // branch-b snap-zone restores for windows that were floated in
-                // autotile. Those windows must be EXCLUDED from the pre-tile geometry
-                // restore (they get a float/zone restore instead) and their entries
-                // appended to this batch — mirroring the mode-toggle path. Dropping
-                // them (the previous behaviour) lost the snap-float restore entirely
-                // and left stale entries to corrupt the next toggle's preClaimedZoneIds.
+                // updateEngineScreens() above fired windowsReleased synchronously
+                // and its tail drain already emitted the snap-FLOAT half; what
+                // remains in m_pendingSnapFloatRestores is the branch-b snap-zone
+                // restores for windows that were floated in autotile. Append them
+                // to this batch — mirroring the mode-toggle path — so they land in
+                // the same signal as the pre-tile geometry restores rather than
+                // lingering to corrupt the next toggle's preClaimedZoneIds. The
+                // exclusion set keeps buildAutotileRestoreEntries from also
+                // emitting a pre-tile rect for a window that has a zone restore
+                // here (its own floating guard covers the float half).
                 QSet<QString> restoredWindows;
                 for (const ZoneAssignmentEntry& e : m_pendingSnapFloatRestores) {
                     restoredWindows.insert(e.windowId);

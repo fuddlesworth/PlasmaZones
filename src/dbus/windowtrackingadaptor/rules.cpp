@@ -394,7 +394,7 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     // Emit the marker first so the effect treats the resulting outputChanged as an
     // expected daemon-driven move (bookkeeping + decoration only, no reopen), then
     // the free placement (empty zone id ⇒ no snap chrome).
-    Q_EMIT windowOutputMoveExpected(windowId, target);
+    Q_EMIT windowOutputMoveExpected(windowId, target, screenId);
     Q_EMIT applyGeometryRequested(windowId, x, y, w, h, QString(), target, false);
 }
 
@@ -462,7 +462,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
         return QString();
     }
     qCInfo(lcDbusWindow) << "applyOpenRoutingForTiling: routing" << windowId << "to engine-managed screen" << target;
-    Q_EMIT windowOutputMoveExpected(windowId, target);
+    Q_EMIT windowOutputMoveExpected(windowId, target, screenId);
     return target;
 }
 

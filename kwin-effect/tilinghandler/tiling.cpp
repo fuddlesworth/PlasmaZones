@@ -497,8 +497,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // These raises go ON TOP of the global restore, preserving user's
             // z-order choices (e.g. floated window raised to front) across
             // mode toggles.
+            //
+            // Superseded screens are skipped on the same terms as the three
+            // loops above: a newer batch's onComplete owns that screen's
+            // stacking, and this batch must neither re-impose a stale order on
+            // top of it nor CONSUME the saved entry the newer batch still
+            // needs — the remove() below is a one-shot.
             for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
                 const QString& screenId = it.key();
+                if (m_tileStaggerGenByScreen.value(screenId) != genByScreen.value(screenId)) {
+                    continue;
+                }
                 const QStringList savedOrder = m_savedAutotileStackingOrder.value(screenId);
                 if (savedOrder.isEmpty()) {
                     continue;

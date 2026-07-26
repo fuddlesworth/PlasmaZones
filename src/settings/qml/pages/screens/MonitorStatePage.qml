@@ -83,6 +83,34 @@ SettingsFlickable {
         return null;
     }
 
+    // Resolve what one slot (layout or algorithm) carries into a staged entry.
+    // Lossless mode toggling: every staged entry carries the SIBLING mode's
+    // pick too. The daemon rebuilds the whole context rule from the entry, so
+    // staging an empty sibling field would drop a stored layout/algorithm for
+    // good — pin to Scrolling and back and the zone layout would be gone. An
+    // explicit "Default" pick (@p cleared) deliberately carries empty so the
+    // sibling keeps following the global default.
+    // Only a TOUCHED slot carries its local value (@p localId). An untouched
+    // slot falls back to the daemon's assignment (@p resolvedId) and carries
+    // it only when the daemon marked it explicit (@p explicitFlag), so a pure
+    // mode switch never freezes a cascade default into an explicit
+    // assignment. The local ids cannot stand in for that test: they are
+    // pre-filled from the RESOLVED state, so they always look like a pick. A
+    // daemon too old to report the marker leaves it undefined, and there the
+    // existing assignment is preserved rather than silently dropped.
+    function carrySibling(cleared, touched, localId, explicitFlag, resolvedId) {
+        if (cleared)
+            return "";
+
+        if (touched)
+            return localId;
+
+        if (explicitFlag === undefined || explicitFlag)
+            return resolvedId || "";
+
+        return "";
+    }
+
     // Stage the current local state for the selected screen (flushed on Apply).
     // Uses setAssignmentEntry targeting the exact (screen, desktop, activity)
     // context from getScreenStates — most specific context wins.
@@ -98,23 +126,9 @@ SettingsFlickable {
         var activity = state.activity || "";
         var snapping = "";
         var tiling = "";
-        // Lossless mode toggling: every staged entry carries the SIBLING
-        // mode's pick too. The daemon rebuilds the whole context rule from
-        // the entry, so staging an empty sibling field would drop a stored
-        // layout/algorithm for good — pin to Scrolling and back and the zone
-        // layout would be gone. An explicit "Default" pick (cleared flag)
-        // deliberately carries empty so the sibling keeps following the
-        // global default.
-        // Only a TOUCHED slot carries its local value. An untouched slot
-        // falls back to the daemon's assignment and carries it only when the
-        // daemon marked it explicit, so a pure mode switch never freezes a
-        // cascade default into an explicit assignment. The local ids cannot
-        // stand in for that test: they are pre-filled from the RESOLVED
-        // state, so they always look like a pick. A daemon too old to report
-        // the marker leaves it undefined, and there the existing assignment
-        // is preserved rather than silently dropped.
-        var siblingSnapping = stateView.localLayoutCleared ? "" : (stateView.localLayoutTouched ? stateView.localLayoutId : ((state.layoutIdExplicit === undefined || state.layoutIdExplicit) ? (state.layoutId || "") : ""));
-        var siblingAlgo = stateView.localAlgorithmCleared ? "" : (stateView.localAlgorithmTouched ? stateView.localAlgorithmId : ((state.algorithmIdExplicit === undefined || state.algorithmIdExplicit) ? (state.algorithmId || "") : ""));
+        // See carrySibling for the rule both slots follow.
+        var siblingSnapping = root.carrySibling(stateView.localLayoutCleared, stateView.localLayoutTouched, stateView.localLayoutId, state.layoutIdExplicit, state.layoutId);
+        var siblingAlgo = root.carrySibling(stateView.localAlgorithmCleared, stateView.localAlgorithmTouched, stateView.localAlgorithmId, state.algorithmIdExplicit, state.algorithmId);
         var siblingTiling = siblingAlgo ? "autotile:" + siblingAlgo : "";
         if (stateView.isScrolling) {
             // Scrolling has neither a zone layout nor a tiling algorithm of
@@ -322,16 +336,7 @@ SettingsFlickable {
                 localLayoutTouched = false;
                 localAlgorithmTouched = false;
                 var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
-                if (staged.fullCleared) {
-                    // A staged full clear means "Default" is pending for this
-                    // context: show Default rather than re-reading the
-                    // daemon's still-resolved explicit values.
-                    localMode = screenState.mode || 0;
-                    localLayoutId = "";
-                    localAlgorithmId = "";
-                    localLayoutCleared = true;
-                    localAlgorithmCleared = true;
-                } else if (Object.keys(staged).length > 0) {
+                if (Object.keys(staged).length > 0) {
                     // A staged entry carries the WHOLE context rule, so every
                     // slot in it is authoritative: a missing id is a pending
                     // slot clear, not an absent opinion. Re-reading the

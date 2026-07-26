@@ -143,7 +143,7 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule)
             // Decode through `modeFromWireString` so every token the
             // ActionRegistry validator accepts round-trips end-to-end.
             // The canonical vocabulary lives at `engineModeOptions()` in
-            // libs/phosphor-rules/src/ruleaction.cpp — today
+            // libs/phosphor-rules/src/ruleaction_builtins_p.h — today
             // snapping / autotile / scrolling. The previous two-valued
             // `== "autotile"` ternary silently coerced every non-Autotile
             // token to Snapping — including the registered, picker-exposed

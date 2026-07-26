@@ -201,8 +201,8 @@ SettingsController::~SettingsController()
     // ~RuleController runs as part of the QObject teardown, those
     // captured containers are already gone. Any model-signal slot that
     // reaches a lookup during teardown would deref destroyed state.
-    // RuleModel::leafLabel/actionLabel treat empty lookups as
-    // identity, so clearing here is the safe contract.
+    // The leafLabel/actionLabel helpers in rulemodel_labels.cpp treat empty
+    // lookups as identity, so clearing here is the safe contract.
     if (m_rulesPage) {
         m_rulesPage->setScreenLookup({});
         m_rulesPage->setActivityLookup({});

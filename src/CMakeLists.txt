@@ -6,8 +6,8 @@
 include(GenerateExportHeader)
 
 # QTP0004: All QML files are explicitly listed in qt_add_qml_module.
-# Guarded — the policy exists only from Qt 6.8 and QT_MIN_VERSION is 6.6;
-# unguarded, a 6.6/6.7 toolchain fatal-errors on the unknown policy.
+# Guarded — the policy exists only from Qt 6.8, so a toolchain older than that
+# fatal-errors on the unknown policy if it is set unconditionally.
 # QT_KNOWN_POLICY_*, not if(POLICY ...): CMake's POLICY test only knows
 # CMP* policies and is always false for QTP*.
 if(QT_KNOWN_POLICY_QTP0004)

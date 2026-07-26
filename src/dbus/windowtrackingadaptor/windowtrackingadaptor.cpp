@@ -350,15 +350,20 @@ void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* re
 
 void WindowTrackingAdaptor::reapplyWindowAppearance()
 {
-    // Fan out to both engines through the common IPlacementEngine contract.
-    // Each engine re-emits its placement geometry for the windows it manages,
-    // which the compositor turns back into per-window chrome (borders / hidden
-    // title bars). No window moves — see the interface doc comment.
+    // Fan out to all three engines through the common IPlacementEngine
+    // contract. Each engine re-emits its placement geometry for the windows it
+    // manages, which the compositor turns back into per-window chrome (borders
+    // / hidden title bars). No window moves — see the interface doc comment.
+    // The scrolling engine inherits the interface's no-op default today, so
+    // its arm costs nothing until it grows a real implementation.
     if (m_snapEngine) {
         m_snapEngine->reapplyManagedWindowAppearance();
     }
     if (m_autotileEngine) {
         m_autotileEngine->reapplyManagedWindowAppearance();
+    }
+    if (m_scrollEngine) {
+        m_scrollEngine->reapplyManagedWindowAppearance();
     }
 }
 

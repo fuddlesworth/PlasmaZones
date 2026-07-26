@@ -331,6 +331,31 @@ void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         return !key.screenId.isEmpty()
             && PhosphorIdentity::VirtualScreenId::samePhysical(key.screenId, physicalScreenId);
     };
+    // Unlike the desktop / activity prunes, whose contexts are gone along with
+    // everything that could observe them, the windows here are ALIVE: only their
+    // output was unplugged, and KWin relocates them to a surviving monitor.
+    // Deleting their stores below drops the zone assignments, so a silent prune
+    // would leave every zone-state consumer (the effect via the D-Bus
+    // windowZoneChanged relay, autotile's onWindowZoneChanged, the daemon's
+    // snap-assist dismissal) still believing the window occupies a zone on a
+    // monitor that no longer exists. Route the drop through the tracking
+    // service's unassign — the same path the interactive unsnap uses — so the
+    // per-window notification and the DirtyZoneAssignments mark both happen,
+    // matching WindowTrackingService::pruneMigratedWindows, the other bulk prune
+    // of live windows' assignments. Two passes: unassignWindow resolves the
+    // owning store through this engine's reverse map, which the removal clears.
+    if (m_windowTracker) {
+        QStringList assignedWindows;
+        const auto& allStates = m_states.states();
+        for (auto it = allStates.constBegin(); it != allStates.constEnd(); ++it) {
+            if (it.value() && matches(it.key())) {
+                assignedWindows += it.value()->snappedWindows();
+            }
+        }
+        for (const QString& windowId : std::as_const(assignedWindows)) {
+            m_windowTracker->unassignWindow(windowId);
+        }
+    }
     m_states.removeStatesIf(
         [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {
             return matches(key);
@@ -486,12 +511,22 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
         });
     m_targetResolver->setCrossSurfaceResolver(m_crossSurfaceResolver);
     // The resolver lacks the current (desktop, activity) context needed to read a
-    // neighbour output's mode; supply it so move/swap cross-output paths defer an
-    // autotile neighbour to the cross-mode handoff instead of snapping onto it.
-    m_targetResolver->setNeighbourAutotileProvider([this](const QString& screenId) {
+    // neighbour output's mode; supply it so move/swap cross-output paths defer a
+    // tiling neighbour to the cross-mode handoff instead of snapping onto it.
+    // The question is "is the neighbour NOT snapping", not "is it autotile": with
+    // three engines a Scrolling neighbour has no snap zones either, and testing
+    // for Autotile alone let snap navigation move and swap windows onto a
+    // scroll-owned output. The router-backed live resolver answers first when
+    // wired (it carries the unclaimed-tiling-mode downgrade to Snapping, so a
+    // screen no engine has claimed is correctly treated as snap); the registry
+    // cascade is the fallback for the unwired case.
+    m_targetResolver->setNeighbourTilingProvider([this](const QString& screenId) {
+        if (m_liveModeResolver) {
+            return m_liveModeResolver(screenId) != PhosphorZones::AssignmentEntry::Mode::Snapping;
+        }
         return m_layoutManager
             && m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
-            == PhosphorZones::AssignmentEntry::Autotile;
+            != PhosphorZones::AssignmentEntry::Mode::Snapping;
     });
     return m_targetResolver.get();
 }

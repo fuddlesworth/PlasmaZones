@@ -106,19 +106,17 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         // Numeric canonicalizer, not the plain comma-list: entries must be
         // proportions the engine will actually honour, or it silently drops
         // the whole list and falls back to its built-ins while the page keeps
-        // displaying the accepted-but-dead value. The widths list carries the
-        // scalar width key's floor for the same reason — a 1%-wide preset
-        // would be stored here and clamped away by the setter downstream.
+        // displaying the accepted-but-dead value. Both lists take the same
+        // (0, 1] rule the engine applies to a preset entry — the scalar width
+        // key's kind-aware floor governs that key alone and never reaches
+        // preset entries.
         {CD::presetColumnWidthsKey(),
          CD::scrollingPresetColumnWidths(),
          QMetaType::QString,
          {},
          [](const QVariant& v) {
-             return canonicalProportionList(v, CD::scrollingPresetColumnWidths(),
-                                            CD::scrollingDefaultColumnWidthValueMin());
+             return canonicalProportionList(v, CD::scrollingPresetColumnWidths());
          }},
-        // Heights have no scalar counterpart with a floor of its own, so the
-        // bare (0, 1] rule applies.
         {CD::presetWindowHeightsKey(),
          CD::scrollingPresetWindowHeights(),
          QMetaType::QString,
@@ -132,6 +130,10 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
 // ─── Scrolling shortcuts (Shortcuts.Scrolling) ──────────────────────────────
 // Called from appendShortcutsSchema so the whole Shortcuts.* family is still
 // declared by one entry point.
+//
+// These 20 chords are bindable via the system Shortcuts KCM (ShortcutManager
+// registers them like every other action); there is no settings-app page for
+// them yet. That is a deliberate v1 descope, not an oversight.
 
 void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
 {

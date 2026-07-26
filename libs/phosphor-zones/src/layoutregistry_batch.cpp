@@ -73,7 +73,12 @@ void LayoutRegistry::clearAutotileAssignments()
         for (const auto& [sid, desk] : std::as_const(affected)) {
             qCDebug(lcZonesLib) << "clearAutotileAssignments: flipped to Snapping for screen=" << sid
                                 << "desktop=" << desk;
-            Q_EMIT layoutAssigned(sid, desk, nullptr);
+            // Route through emitLayoutAssigned rather than a bare
+            // layoutAssigned(…, nullptr): the flip PRESERVED each rule's
+            // snapping layout, so observers should receive the layout the
+            // context now resolves to, not a null pointer that reads as
+            // "no layout here".
+            emitLayoutAssigned(sid, desk, assignmentIdForScreen(sid, desk, m_currentActivity));
         }
         qCInfo(lcZonesLib) << "Cleared all autotile assignments";
     }
@@ -121,12 +126,21 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         AssignmentEntry entry;
         bool enabled = true;
         int priority = 0;
+        QUuid id;
     };
     QHash<KeyT, OldEntrySnapshot> oldEntries;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const BatchContext ctx = decode(it.key());
+        // Same validity gate the rebuild loop applies (and the Combined
+        // sibling applies up front): an ill-formed key would otherwise route
+        // through findExactContextRule with a degenerate triple and snapshot
+        // an unrelated rule's entry as this key's prior state.
+        if (!valid(ctx)) {
+            continue;
+        }
         if (const PWR::Rule* existing = findExactContextRule(ctx.screenId, ctx.virtualDesktop, ctx.activity)) {
-            oldEntries.insert(it.key(), {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority});
+            oldEntries.insert(
+                it.key(), {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority, existing->id});
         }
     }
 
@@ -138,11 +152,29 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     int seedPriority = nextAssignmentPriority(m_ruleStore->ruleSet().rules());
 
     // Step 2 — drop every rule belonging to this family; keep the rest.
+    //
+    // A snapshot rule that is NOT in the family SURVIVES this drop:
+    // findExactContextRule's shape fallback also claims a LAYOUT-ONLY rule
+    // (no SetEngineMode action), and the family predicate below spares
+    // exactly that shape. Step 3 rebuilds such a rule under its own id and
+    // replaces it in place via `keptIndexById`, mirroring
+    // upsertAssignmentRule's reassign-id + updateRule path. Appending the
+    // rebuild instead would leave the old rule in the set at the same
+    // priority, where RuleEvaluator's list-order tie-break hands it the win
+    // and a duplicate accumulates on every apply.
     QList<PWR::Rule> kept;
+    QHash<QUuid, int> keptIndexById;
+    // Contexts whose rules the family drop removed. Any that step 3 does not
+    // rebuild still needs a layoutAssigned at step 4 — the erasure changed
+    // what the context resolves to just as much as a rewrite does.
+    QSet<QPair<QString, int>> droppedContexts;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         if (hasEngineModeAction(rule) && familyMatches(rule.match)) {
+            const ContextDims dims = decodeDims(rule.match);
+            droppedContexts.insert(qMakePair(dims.screenId, dims.virtualDesktop));
             continue;
         }
+        keptIndexById.insert(rule.id, kept.size());
         kept.append(rule);
     }
 
@@ -193,21 +225,41 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         // precedent. If there's no prior snapshot (new assignment), the
         // default `enabled = true` from the OldEntrySnapshot ctor wins.
         rebuilt.enabled = oldSnapshot.enabled;
-        kept.append(rebuilt);
+        // Carry the prior rule's identity, then replace in place if that rule
+        // survived the family drop — see the step-2 note. On a rule the drop
+        // already removed the carry is inert: the id is either the
+        // deterministic one makeAssignmentRule stamps anyway, or the
+        // settings-UI uuid upsertAssignmentRule would have preserved too.
+        if (hadOld && !oldSnapshot.id.isNull()) {
+            rebuilt.id = oldSnapshot.id;
+        }
+        if (const auto keptIt = keptIndexById.constFind(rebuilt.id); keptIt != keptIndexById.cend()) {
+            kept[*keptIt] = rebuilt;
+        } else {
+            keptIndexById.insert(rebuilt.id, kept.size());
+            kept.append(rebuilt);
+        }
         storedScreens.insert(ctx.screenId);
         ++count;
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << logContext;
     }
 
-    // Step 4 — one commit, then signal per stored screen.
+    // Step 4 — one commit, then signal per affected (screen, desktop).
     m_ruleStore->setAllRules(kept);
+    QSet<QPair<QString, int>> emitContexts;
     for (const QString& screenId : storedScreens) {
         // Per-output virtual desktops (#648): a desktop-family batch passes
         // emitDesktop < 0 so each screen refreshes against the desktop it is
         // actually showing, not a single global one. A concrete emitDesktop
         // (including 0 = base/any) is used verbatim.
         const int ed = emitDesktop < 0 ? currentVirtualDesktopForScreen(screenId) : emitDesktop;
-        emitLayoutAssigned(screenId, ed, assignmentIdForScreen(screenId, ed, emitActivity));
+        emitContexts.insert(qMakePair(screenId, ed));
+    }
+    // Union in the erased-only contexts; the set dedupes any that a rebuild
+    // already covers.
+    emitContexts.unite(droppedContexts);
+    for (const auto& [sid, desk] : std::as_const(emitContexts)) {
+        emitLayoutAssigned(sid, desk, assignmentIdForScreen(sid, desk, emitActivity));
     }
     qCInfo(lcZonesLib) << "Batch set" << count << label << "assignments";
 }
@@ -272,6 +324,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         AssignmentEntry entry;
         bool enabled = true;
         int priority = 0;
+        QUuid id;
     };
     QHash<CombinedAssignmentKey, OldEntrySnapshot> oldEntries;
     // Validity gate up front: a malformed key (zero desktop or empty
@@ -290,7 +343,8 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
             continue;
         }
         if (const PWR::Rule* existing = findExactContextRule(key.screenId, key.virtualDesktop, key.activity)) {
-            oldEntries.insert(key, {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority});
+            oldEntries.insert(
+                key, {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority, existing->id});
         }
     }
 
@@ -298,11 +352,20 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     // applyBatchAssignments for the rationale).
     int seedPriority = nextAssignmentPriority(m_ruleStore->ruleSet().rules());
 
+    // Family drop, with the same two carve-outs applyBatchAssignments makes:
+    // an index so a surviving layout-only snapshot rule is replaced in place
+    // rather than shadowed by a same-priority duplicate, and a record of the
+    // erased contexts so a drop without a rebuild still signals.
     QList<PWR::Rule> kept;
+    QHash<QUuid, int> keptIndexById;
+    QSet<CombinedAssignmentKey> droppedKeys;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         if (hasEngineModeAction(rule) && PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)) {
+            const ContextDims dims = decodeDims(rule.match);
+            droppedKeys.insert(CombinedAssignmentKey{dims.screenId, dims.virtualDesktop, dims.activity});
             continue;
         }
+        keptIndexById.insert(rule.id, kept.size());
         kept.append(rule);
     }
 
@@ -340,7 +403,15 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
             QString(), key.screenId, key.virtualDesktop, key.activity, modeToWireString(entry.mode),
             entry.snappingLayout, entry.tilingAlgorithm, priority);
         rebuilt.enabled = oldSnapshot.enabled;
-        kept.append(rebuilt);
+        if (hadOld && !oldSnapshot.id.isNull()) {
+            rebuilt.id = oldSnapshot.id;
+        }
+        if (const auto keptIt = keptIndexById.constFind(rebuilt.id); keptIt != keptIndexById.cend()) {
+            kept[*keptIt] = rebuilt;
+        } else {
+            keptIndexById.insert(rebuilt.id, kept.size());
+            kept.append(rebuilt);
+        }
         emittedKeys.insert(key);
         ++count;
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << logContext;
@@ -355,6 +426,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     // layoutAssigned(screen, desktop, wrongLayoutPtr) for the just-stored
     // Combined rule. The signal still only carries (screenId, desktop,
     // layoutPtr), but the layoutPtr we resolve here is now the right one.
+    emittedKeys.unite(droppedKeys);
     for (const CombinedAssignmentKey& emitKey : std::as_const(emittedKeys)) {
         emitLayoutAssigned(emitKey.screenId, emitKey.virtualDesktop,
                            assignmentIdForScreen(emitKey.screenId, emitKey.virtualDesktop, emitKey.activity));

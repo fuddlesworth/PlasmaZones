@@ -101,7 +101,8 @@ public:
      * Use this as a fallback when cursor screen is unavailable.
      *
      * Implementation: prefers the active window's current daemon-tracked
-     * screen assignment over the cached value. KWin only fires
+     * screen assignment over the cached value, probing the snap, autotile
+     * and scrolling engines in that order. KWin only fires
      * `windowActivated` on focus changes, so a window that gets dragged or
      * snapped to a different VS without losing focus leaves
      * `m_lastActiveScreenId` pointing at the OLD screen — which then
@@ -472,8 +473,8 @@ public Q_SLOTS:
     /// by the KWin effect once the daemon is ready: on a daemon or effect
     /// restart the compositor drops its window-chrome state, so it must be
     /// re-applied from the daemon's authoritative placement state. Delegates to
-    /// the common IPlacementEngine::reapplyManagedWindowAppearance() on both
-    /// engines — does not move windows.
+    /// the common IPlacementEngine::reapplyManagedWindowAppearance() on all
+    /// three engines (snap, autotile, scrolling) — does not move windows.
     void reapplyWindowAppearance();
 
     /**
@@ -935,7 +936,17 @@ Q_SIGNALS:
     /// reflows. The window's resulting outputChanged is expected; the effect
     /// must update bookkeeping + decoration only, not re-issue windowClosed/
     /// windowOpened. User-drag cross-output moves carry no marker.
-    void windowOutputMoveExpected(const QString& windowId, const QString& targetScreenId);
+    ///
+    /// @p sourceScreenId names the screen the window is leaving, for the arm
+    /// sites that know it authoritatively before the placement runs. It is
+    /// empty when the marker is armed ahead of any placement work (engine
+    /// relays, open-time routing): the compositor's own notified-screen record
+    /// is still the pre-move screen at that point, so it can serve as the
+    /// source itself. Sites that arm AFTER placing the window must pass the
+    /// source explicitly — by then the tile requests have already re-pointed
+    /// the compositor's record at the destination.
+    void windowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,
+                                  const QString& sourceScreenId);
 
     /**
      * @brief Daemon requests KWin to apply geometries for a batch of windows
@@ -1169,6 +1180,11 @@ private:
     // the compositor plugin. Entries are removed on windowClosed. Used by
     // daemon-local shortcut handlers (float toggle, etc.) so they can read
     // fresh geometry without round-tripping through the effect.
+    //
+    // Keyed on CANONICAL window ids. The effect pushes the window's current
+    // composite, but captureWindowPlacement reads this map with canonical ids
+    // on the engine-relay path, so both writes and reads translate through
+    // canonicalWindowId() and the stale sweep uses the canonical alive set.
     QHash<QString, QRect> m_frameGeometry;
 
     // Last floating value broadcast via windowFloatingChanged, per window. The

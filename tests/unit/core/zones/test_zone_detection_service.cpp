@@ -26,6 +26,7 @@
 #include "core/interfaces/interfaces.h"
 #include "core/utils/utils.h"
 #include "helpers/StubSettings.h"
+#include "helpers/StubZoneDetector.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 
@@ -38,56 +39,9 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 // Minimal Stub PhosphorZones::ZoneDetector
 // ═══════════════════════════════════════════════════════════════════════════════
 
-class StubZoneDetectorSvc : public PhosphorZones::IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorSvc(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-
-    PhosphorZones::Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(PhosphorZones::Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-
-private:
-    PhosphorZones::Layout* m_layout = nullptr;
-};
+// Nothing here exercises detection — SnapEngine only stores the detector — so
+// the shared inert stub does.
+using StubZoneDetectorSvc = PlasmaZones::StubZoneDetector;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Test Class
@@ -125,11 +79,19 @@ private Q_SLOTS:
         QString validId = z1->id().toString();
         QString invalidId = QUuid::createUuid().toString();
 
-        // multiZoneGeometry with one valid and one invalid zone.
-        // In headless mode, geometry resolution fails for all zones (no QScreen),
-        // but the method should not crash.
-        QRect geo = service->multiZoneGeometry({validId, invalidId}, QString());
-        Q_UNUSED(geo);
+        const QRect validOnly = service->multiZoneGeometry({validId}, QString());
+        const QRect invalidOnly = service->multiZoneGeometry({invalidId}, QString());
+        const QRect both = service->multiZoneGeometry({validId, invalidId}, QString());
+
+        // The offscreen QPA platform supplies a primary QScreen, so the real
+        // zone resolves to a usable rect.
+        QVERIFY2(validOnly.isValid(), "the layout's own zone must resolve against the offscreen primary screen");
+
+        // An id no layout owns contributes nothing to the union: alone it
+        // yields an empty rect, and beside a real zone it leaves that zone's
+        // rect exactly as it was.
+        QVERIFY(invalidOnly.isEmpty());
+        QCOMPARE(both, validOnly);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -168,19 +130,32 @@ private Q_SLOTS:
         QString zoneIdWithBraces = z1->id().toString(QUuid::WithBraces);
         QString zoneIdWithoutBraces = z1->id().toString(QUuid::WithoutBraces);
 
+        // With two zones the rotation target is z2 in either direction, so the
+        // two arms below differ only in the id FORMAT the assignment was
+        // recorded under. Both must land on the same zone.
+        const QString bracedTarget = z2->id().toString();
+
         // Assign window using with-braces format
         service->assignWindowToZone(QStringLiteral("app:win:123"), zoneIdWithBraces, QString(), 0);
 
-        // calculateRotation should handle both formats without error
         QVector<ZoneAssignmentEntry> result = engine->calculateRotation(true);
-        Q_UNUSED(result);
+        QCOMPARE(result.size(), 1);
+        QCOMPARE(result.first().windowId, QStringLiteral("app:win:123"));
+        QCOMPARE(result.first().sourceZoneId, z1->id().toString());
+        QCOMPARE(result.first().targetZoneId, bracedTarget);
 
-        // Now try with without-braces format
+        // Now try with without-braces format — the stored id no longer matches
+        // any zone key directly, so this exercises the UUID-parse fallback.
         service->unassignWindow(QStringLiteral("app:win:123"));
         service->assignWindowToZone(QStringLiteral("app:win:456"), zoneIdWithoutBraces, QString(), 0);
 
         QVector<ZoneAssignmentEntry> result2 = engine->calculateRotation(false);
-        Q_UNUSED(result2);
+        QCOMPARE(result2.size(), 1);
+        QCOMPARE(result2.first().windowId, QStringLiteral("app:win:456"));
+        // The entry reports the canonical with-braces id regardless of the
+        // format the assignment came in as.
+        QCOMPARE(result2.first().sourceZoneId, z1->id().toString());
+        QCOMPARE(result2.first().targetZoneId, bracedTarget);
     }
 };
 

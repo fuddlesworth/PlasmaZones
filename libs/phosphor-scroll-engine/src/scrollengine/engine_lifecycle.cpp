@@ -188,6 +188,10 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
             if (m_windowTracker->placementStore().peek(windowId, appId, snapCrossRestorePending).has_value()) {
                 qCInfo(lcScrollEngine) << "windowOpened:" << windowId << "on scrolling screen" << screenId
                                        << "defers to snap — carries a cross-screen snap restore";
+                // A deferred arrival is still an arrival: without the
+                // consume, this id never reaches insertOpenedWindow and its
+                // seed entry lingers on the screen forever.
+                consumePendingInitialOrder(screenId, windowId);
                 return;
             }
         }
@@ -499,6 +503,10 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
             return;
         }
         const ScrollLayoutParams params = layoutParamsForScreen(targetScreen);
+        // Same as handoffReceive: the retained close/release rect only has to
+        // outlive the capture window, and carrying it into a re-adoption would
+        // gate away the first windowsTiled batch for this window.
+        m_lastAppliedRect.remove(windowId);
         if (target->strip().insertWindow(windowId, effectiveDefaultColumnWidth(targetScreen),
                                          effectiveDefaultColumnDisplay(targetScreen), params)) {
             // Third unfloat route: clear the mode-transition float marker
@@ -595,6 +603,11 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     if (!state || state->containsWindow(windowId)) {
         return;
     }
+    // Re-adoption starts from a blank rect memory: handoffRelease/windowClosed
+    // only retain m_lastAppliedRect long enough to survive the close/capture
+    // window, and a leftover entry would defeat applyLayout's emit-on-change
+    // gate so no windowsTiled batch ever fires for the re-adopted window.
+    m_lastAppliedRect.remove(windowId);
     if (ctx.wasFloating) {
         state->addFloating(windowId);
         // The float is scroll-managed from here (autotile's receive marks the

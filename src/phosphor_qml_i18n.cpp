@@ -63,11 +63,20 @@ QString PhosphorLocalizedContext::i18nc(const QString& context, const QString& t
 
 QString PhosphorLocalizedContext::i18np(const QString& singular, const QString& plural, int n) const
 {
-    // Qt numerus translation only works with loaded .ts files.
-    // Without them, translate() always returns the singular with %n replaced.
-    // We select the correct English form ourselves, then substitute %n.
-    const QString& form = (n == 1) ? singular : plural;
-    QString result = QCoreApplication::translate("plasmazones", form.toUtf8().constData(), nullptr, n);
+    // The catalog keys every numerus message on the singular (that is what the
+    // stub extractor emits), so the singular is always the lookup key and n
+    // picks the numerusform. Passing the English plural for n != 1 would miss
+    // every entry. A miss returns the key unchanged; only then does the English
+    // plural come into play, since Qt cannot pick a form without a catalog.
+    QString result = QCoreApplication::translate("plasmazones", singular.toUtf8().constData(), nullptr, n);
+    // Miss detection must account for translate() substituting %n into the
+    // returned KEY when no catalog answers: the miss comes back as the
+    // singular with the number already applied, never verbatim.
+    QString missedKey = singular;
+    missedKey.replace(QLatin1String("%n"), QString::number(n));
+    if ((result == singular || result == missedKey) && n != 1) {
+        result = plural;
+    }
     // translate() replaces %n when numerus arg is provided, but guard against
     // cases where it doesn't (e.g. if the string was found in a .ts file
     // without numerusform entries)
@@ -80,9 +89,16 @@ QString PhosphorLocalizedContext::i18np(const QString& singular, const QString& 
 QString PhosphorLocalizedContext::i18ncp(const QString& context, const QString& singular, const QString& plural,
                                          int n) const
 {
-    const QString& form = (n == 1) ? singular : plural;
+    // Singular is the catalog key here too; see i18np above.
     QString result =
-        QCoreApplication::translate("plasmazones", form.toUtf8().constData(), context.toUtf8().constData(), n);
+        QCoreApplication::translate("plasmazones", singular.toUtf8().constData(), context.toUtf8().constData(), n);
+    // Same miss detection as i18np: a catalog miss returns the singular with
+    // %n already substituted.
+    QString missedKey = singular;
+    missedKey.replace(QLatin1String("%n"), QString::number(n));
+    if ((result == singular || result == missedKey) && n != 1) {
+        result = plural;
+    }
     if (result.contains(QLatin1String("%n"))) {
         result.replace(QLatin1String("%n"), QString::number(n));
     }

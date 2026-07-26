@@ -203,12 +203,17 @@ def main():
         # The opening brace has to precede the first statement; put it on the
         # highest free line before it so no call line is displaced.
         first = min(body)
+        opening = "static void generated_%d() {" % first
         for i in range(first - 2, 0, -1):
             if not lines[i]:
-                lines[i] = "static void generated_%d() {" % first
+                lines[i] = opening
                 break
         else:
-            raise SystemExit("no free line before first call in %s" % rel)
+            # No free line, so the first call is on line 1 or 2. Share line 1
+            # rather than shifting anything down: the include, the brace and,
+            # when the call is on line 1, its statement all fit there, so every
+            # call still lands on its own .qml line.
+            lines[0] = '#include "phosphor_i18n.h" ' + opening + (" " + lines[0] if first == 1 else "")
         lines.append("}")
 
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
@@ -218,7 +223,7 @@ def main():
 
     if args.list:
         with open(args.list, "w", encoding="utf-8") as f:
-            f.write("\n".join(written) + "\n")
+            f.write("\n".join(written) + "\n" if written else "")
     print("qml-i18n-stubs: %d calls from %d files, %d not extractable" % (total, len(written), skipped),
           file=sys.stderr)
 

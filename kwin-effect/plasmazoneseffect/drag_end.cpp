@@ -175,6 +175,13 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     }
                     // Window is now floating — drop it from snapping's set.
                     m_snapHandler->clearWindowSnapped(windowId);
+                    // The window is floating now — the Mode / IsSnapped /
+                    // IsFloating rule fields have already flipped, so
+                    // re-resolve before anything can bail out below. Waiting
+                    // until after the drop-screen resolve left the cache
+                    // holding the pre-float answer whenever the screen came
+                    // back empty.
+                    invalidateRuleCacheForStateChange(windowId);
                     // Resolve the drop screen only AFTER the float cleanup
                     // above cleared tiled membership: while the window was
                     // still scroll-tiled, getWindowScreenId answers from the
@@ -192,9 +199,6 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // would diff against a screen the window already left.
                     // No-op for a window the handler does not track.
                     m_tilingHandler->updateNotifiedScreen(windowId, dropScreenId);
-                    // Now floating — flips the Mode / IsSnapped / IsFloating rule
-                    // fields; re-resolve now instead of waiting for the broadcast.
-                    invalidateRuleCacheForStateChange(windowId);
                     // Note: m_dragActivation.floatedWindowIds is intentionally NOT re-set here.
                     // See dragStopped handler — the marker is cleared at drag end
                     // because the daemon's drag-end float path (setWindowFloat →

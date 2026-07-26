@@ -310,8 +310,13 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
             // generation == 0 — otherwise an errored / stale / malformed
             // reply leaves the gate closed forever and VS crossings
             // silently stop being detected for that physical screen.
+            // A live reply arriving while a startup batch is still outstanding
+            // must NOT open the gate: the batch owns it and countdownVsGate is
+            // the only thing entitled to flip it once the last reply lands.
+            // Opening it here would let crossing detection run against a
+            // half-populated m_virtualScreenDefs.
             const auto restoreReadyIfLive = [self, generation]() {
-                if (generation == 0) {
+                if (generation == 0 && self->m_daemonGate.pendingVsConfigReplies == 0) {
                     self->m_daemonGate.virtualScreensReady = true;
                 }
             };
@@ -532,6 +537,10 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
+    // Resolve the dying connector's id BEFORE the cache is dropped: resolving
+    // it afterwards would re-populate the fresh cache with the very entry this
+    // handler exists to purge.
+    const QString removedScreenId = outputScreenId(output);
     // Unplug twin of the onScreenAdded invalidation: KWin fires
     // screenRemoved BEFORE the per-window outputChanged cascade, and the
     // connected-output gate in scrollTrackedScreenFor exists for exactly
@@ -562,7 +571,7 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // reportScreenDesktop's m_lastScreenDesktop cache retains a stale value for
     // a disconnected connector. Runs before the motion-clock early-return below
     // so it fires even for an output that never had an animation clock.
-    m_lastScreenDesktop.remove(outputScreenId(output));
+    m_lastScreenDesktop.remove(removedScreenId);
 
     // Drop any live desktop-switch transition on this output. A disconnected
     // LogicalOutput* left in the transition manager's active map would dangle:

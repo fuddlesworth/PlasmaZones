@@ -67,6 +67,7 @@ private Q_SLOTS:
     void moveActiveColumnToTracksPreMaximizeSlot();
     void moveActiveColumnToShiftsPreMaximizeSlotBothWays();
     void columnInsertShiftsPreMaximizeSlot();
+    void reconcilePreMaximizeSlotKeyedOnResizedColumn();
     void centerActiveColumnCentersAndReports();
     void minWidthClampsResolvedColumn();
     void focusAdjacentSkipsFullyMinimizedColumn();
@@ -605,6 +606,41 @@ void TestScrollStripOps::columnInsertShiftsPreMaximizeSlot()
     QVERIFY(strip.focusColumn(2, params)); // b, now one slot right
     QVERIFY(strip.toggleMaximizeActiveColumn(params));
     QCOMPARE(strip.columns().at(2).width, ColumnWidth::makeFixed(456));
+}
+
+void TestScrollStripOps::reconcilePreMaximizeSlotKeyedOnResizedColumn()
+{
+    // reconcileWindowSize is the one width mutator keyed on the RESIZED
+    // column rather than the active one, so it must leave a maximized
+    // column's restore slot alone when some OTHER column is the one being
+    // reconciled. Both arms below drive a client resize while column 0 sits
+    // maximized and active; either mutation (keying the invalidation on the
+    // active index, or hoisting it out of the width-change branch) wipes the
+    // slot, and the un-maximize toggle then dead-ends on the default-width
+    // fallback of 595px instead of restoring the distinctive 456.
+    //
+    // The invalidation's own POSITIVE arm — reconciling the maximized column
+    // itself — has no observable tail: that reconcile overwrites the column
+    // width, so the next toggle re-maximizes and re-stores the slot from
+    // scratch whether or not the stale one was cleared.
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(456), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("a2"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(300), ColumnDisplay::Normal, params));
+    QVERIFY(strip.focusColumn(0, params));
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+
+    // Height-only ack on a tile of the maximized column: no width intent
+    // moved, so nothing to invalidate.
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("a"), QSize(1200, 300), false, true));
+    // Width ack on the OTHER column while the maximized one stays active.
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(500, 800), true, false));
+
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    const ResolvedStrip r = strip.relayout(params);
+    QCOMPARE(rectOf(r, QStringLiteral("a")).width(), 456);
+    QCOMPARE(rectOf(r, QStringLiteral("b")).width(), 500);
 }
 
 void TestScrollStripOps::centerActiveColumnCentersAndReports()

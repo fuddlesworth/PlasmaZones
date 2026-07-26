@@ -138,8 +138,15 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             if (tile.hidden) {
                 // Non-active tile of a tabbed column: parked off-canvas so it
                 // cannot steal input from the visible tab (hit-testing uses
-                // real geometry only).
-                rect.moveLeft(screenRect.right() + 1 + kParkMargin);
+                // real geometry only). The side follows the COLUMN's own
+                // position, not a fixed right: a column parked off the left
+                // edge must keep its hidden tiles on the left or their
+                // enter/leave origin comes from the wrong side of the screen.
+                if (column.rect.right() < params.workArea.left()) {
+                    rect.moveLeft(screenRect.left() - rect.width() - kParkMargin);
+                } else {
+                    rect.moveLeft(screenRect.right() + 1 + kParkMargin);
+                }
             } else if (rect.right() < params.workArea.left()) {
                 rect.moveLeft(screenRect.left() - rect.width() - kParkMargin);
             } else if (rect.left() > params.workArea.right()) {

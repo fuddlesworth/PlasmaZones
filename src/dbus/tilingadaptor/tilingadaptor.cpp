@@ -332,7 +332,7 @@ bool TilingAdaptor::deferUntilPanelReady(qsizetype incomingCount)
 {
     // Fast path: panel geometry already known, or no PhosphorScreens::ScreenManager at all (tests
     // without a singleton fall through and proceed with whatever geometry exists).
-    if (!m_screenManager || (m_screenManager && m_screenManager->isPanelGeometryReady())) {
+    if (!m_screenManager || m_screenManager->isPanelGeometryReady()) {
         return false;
     }
 
@@ -342,9 +342,16 @@ bool TilingAdaptor::deferUntilPanelReady(qsizetype incomingCount)
     // zones against the unreserved screen rect costs at most one visible
     // correction once the real geometry lands, whereas a dropped entry leaves
     // the window untiled with nothing to retry it.
+    //
+    // Flush the already-queued entries BEFORE returning. Replay order decides
+    // strip column order and master assignment, so the newcomer the caller is
+    // about to dispatch must land AFTER everything that arrived before it —
+    // returning false without draining would put it in front of the whole
+    // backlog, which then replays behind it on the next flush.
     if (m_pendingOpens.size() + incomingCount > kMaxPendingOpens) {
         qCWarning(lcDbusTiling) << "deferUntilPanelReady: pending-open queue at capacity" << kMaxPendingOpens
                                 << "- processing" << incomingCount << "window(s) against unreserved screen geometry";
+        flushPendingWindowOpens();
         return false;
     }
 
@@ -376,8 +383,7 @@ void TilingAdaptor::flushPendingWindowOpens()
     // than mutating the one we're iterating.
     const PhosphorProtocol::WindowOpenedList toFlush = std::move(m_pendingOpens);
     m_pendingOpens.clear();
-    qCInfo(lcDbusTiling) << "flushPendingWindowOpens: processing" << toFlush.size()
-                         << "deferred windows after panel geometry became ready";
+    qCInfo(lcDbusTiling) << "flushPendingWindowOpens: processing" << toFlush.size() << "deferred windows";
     for (const auto& entry : toFlush) {
         dispatchWindowOpened(entry);
     }

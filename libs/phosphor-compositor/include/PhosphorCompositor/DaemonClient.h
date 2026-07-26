@@ -62,14 +62,21 @@ public:
     void notifyWindowActivated(const QString& windowId, const QString& screenId);
 
     // Drag operations (plugin → daemon)
-    /// Legacy snap-drag trio. Signatures mirror the daemon's current
-    /// dragStarted / dragMoved / dragStopped D-Bus methods exactly (the
-    /// canonical entry points are beginDrag / updateDrag / endDrag, which
-    /// this thin client does not wrap yet). @p modifiers / @p mouseButtons
-    /// are the compositor's live keyboard/button state, 0 when unknown.
-    void dragStarted(const QString& windowId, const QRectF& geometry);
-    void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers = 0, int mouseButtons = 0);
-    void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers = 0, int mouseButtons = 0);
+    /// Canonical drag surface, mirroring org.plasmazones.WindowDrag. The
+    /// daemon decides and the plugin applies the verdict verbatim, so both
+    /// ends of the drag are round trips: beginDrag delivers its DragPolicy
+    /// through dragPolicyReceived and endDrag its DragOutcome through
+    /// dragOutcomeReceived. Wire those signals before starting a drag. A
+    /// payload that fails its own validationError() is dropped with a
+    /// warning rather than emitted. updateDragCursor is the fire-and-forget
+    /// hot path; the caller throttles it (~30Hz) and only sends it when the
+    /// policy asked for streaming. @p modifiers / @p mouseButtons are the
+    /// compositor's live keyboard/button state, 0 when unknown.
+    void beginDrag(const QString& windowId, const QRect& frameGeometry, const QString& startScreenId,
+                   int mouseButtons = 0);
+    void updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers = 0, int mouseButtons = 0);
+    void endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers = 0, int mouseButtons = 0,
+                 bool cancelled = false);
 
     // Screen notifications (plugin → daemon)
     void notifyCursorScreenChanged(const QString& screenId);
@@ -98,6 +105,13 @@ Q_SIGNALS:
 
     void settingsChanged();
     void virtualScreensChanged(const QString& screenId);
+
+    /// Daemon's reply to beginDrag. Not emitted if the call failed or the
+    /// policy did not validate.
+    void dragPolicyReceived(const QString& windowId, const PhosphorProtocol::DragPolicy& policy);
+    /// Daemon's reply to endDrag. Not emitted if the call failed or the
+    /// outcome did not validate.
+    void dragOutcomeReceived(const QString& windowId, const PhosphorProtocol::DragOutcome& outcome);
 
     void snapAssistReady(const QString& windowId, const QString& screenId,
                          const PhosphorProtocol::EmptyZoneList& zones);

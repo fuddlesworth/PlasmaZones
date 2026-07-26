@@ -681,6 +681,10 @@ void Daemon::initEnginesAndWiring()
             }
             m_lastTiledCountByScreen.insert(screenId, count);
             updateEngineScreens();
+            // A count rule that swaps the screen out of tiling releases its
+            // windows in that recompute, and this gate has no resnap of its
+            // own to consume the preserved snap-ZONE half.
+            flushPendingSnapZoneRestores();
         });
     // Scrolling twin of the count-change gate above, so a TiledWindowCount
     // rule keys on scrolling screens too (the provider in init_services
@@ -698,6 +702,7 @@ void Daemon::initEnginesAndWiring()
                 }
                 m_lastTiledCountByScreen.insert(screenId, count);
                 updateEngineScreens();
+                flushPendingSnapZoneRestores(); // see the autotile twin above
             });
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that

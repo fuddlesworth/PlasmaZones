@@ -119,7 +119,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
             const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFloating())
                 && !m_service->isWindowEngineTiled(windowId);
             if (unmanagedState) {
-                const QRect frame = m_frameGeometry.value(windowId);
+                const QRect frame = frameGeometry(windowId);
                 if (frame.isValid()) {
                     // Screen key for the shared free/float geometry. The owning engine
                     // normally reports the window's screen, but a FLOATING window whose
@@ -226,7 +226,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // Scoped to the engine-miss path so a normally-tracked close (an engine captured
     // above and returned) is never second-guessed.
     if (!authoritativeScreen.isEmpty() && m_service && !m_service->isWindowEngineTiled(windowId)) {
-        const QRect frame = m_frameGeometry.value(windowId);
+        const QRect frame = frameGeometry(windowId);
         // Same tile-rect poison guard as the primary capture path (see the
         // helper doc): a window tiled by autotile, handed off, and closed
         // before ever being repositioned still sits on its tile rect —
@@ -472,8 +472,10 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // captureWindowPlacement falls back to this screen to record the float-back.
     captureWindowPlacement(windowId, screenId);
 
-    // Drop frame-geometry shadow entry for this window.
-    m_frameGeometry.remove(windowId);
+    // Drop frame-geometry shadow entry for this window, in the map's
+    // canonical key space. Must run before the registry's canonical release
+    // below, which drops the translation.
+    m_frameGeometry.remove(canonicalWindowId(windowId));
     // Drop the last-broadcast floating state for this window — BOTH key
     // forms: the engine relays feed this map canonical ids, and for a
     // class-mutating app the raw close id differs. Must run before the
@@ -703,7 +705,12 @@ void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int
     if (windowId.isEmpty() || width <= 0 || height <= 0) {
         return;
     }
-    m_frameGeometry[windowId] = QRect(x, y, width, height);
+    // Key on the CANONICAL id. The effect reports the window's CURRENT
+    // composite, but captureWindowPlacement reaches this map with canonical
+    // ids on the engine-relay path — a raw key would make that capture miss
+    // the frame for a class-mutating app (Electron/CEF) and silently drop its
+    // float-back geometry. Every read canonicalizes to match.
+    m_frameGeometry[canonicalWindowId(windowId)] = QRect(x, y, width, height);
 }
 
 void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth,
@@ -721,8 +728,9 @@ void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int old
     }
 
     const QRect newFrame(newX, newY, newWidth, newHeight);
-    // Keep the frame shadow in sync with the committed geometry.
-    m_frameGeometry[windowId] = newFrame;
+    // Keep the frame shadow in sync with the committed geometry, in the
+    // map's canonical key space (see setFrameGeometry).
+    m_frameGeometry[canonicalWindowId(windowId)] = newFrame;
 
     const QRect oldFrame(oldX, oldY, oldWidth, oldHeight);
     // Scroll strips reconcile the interactive resize into the column's
@@ -838,10 +846,12 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     // matching close signal reaching the adaptor (effect bug, compositor
     // crash, lost D-Bus call), the entry would otherwise leak forever.
     // The effect calls pruneStaleWindows precisely for this defensive
-    // case — extend the same alive-set filter to m_frameGeometry.
+    // case — extend the same alive-set filter to m_frameGeometry. The map is
+    // keyed on canonical ids, so it is swept against canonicalAlive: a raw
+    // sweep would erase a class-mutating app's live entry every pass.
     int frameGeoPruned = 0;
     for (auto it = m_frameGeometry.begin(); it != m_frameGeometry.end();) {
-        if (!alive.contains(it.key())) {
+        if (!canonicalAlive.contains(it.key())) {
             it = m_frameGeometry.erase(it);
             ++frameGeoPruned;
         } else {

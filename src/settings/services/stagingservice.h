@@ -18,8 +18,8 @@ class Settings;
 ///
 /// Covers three staging categories:
 ///   1. **Assignments** — per-(screen × desktop × activity) snapping /
-///      tiling layout assignments, plus full-context clears and the
-///      atomic mode+layout staging used by the Overview page.
+///      tiling layout assignments, plus per-slot clears and the atomic
+///      mode+layout staging used by the Overview page.
 ///   2. **Virtual-screen configurations** — staged virtual screen layouts
 ///      per physical screen, flushed to Settings (for persistence) BEFORE
 ///      `Settings::save()` and to the daemon (via D-Bus) AFTER.
@@ -36,8 +36,7 @@ class Settings;
 class StagingService
 {
 public:
-    /// A single entry in the assignment staging map. `fullCleared` takes
-    /// precedence over individual field clears; `stagedMode` (Overview
+    /// A single entry in the assignment staging map. `stagedMode` (Overview
     /// page's atomic write) takes precedence over the per-field snapping
     /// / tiling fields.
     struct StagedAssignment
@@ -48,7 +47,6 @@ public:
         std::optional<QString> snappingLayoutId;
         std::optional<QString> tilingAlgorithmId;
         std::optional<int> stagedMode;
-        bool fullCleared = false;
     };
 
     StagingService() = default;
@@ -73,14 +71,10 @@ public:
     /// assignment for the same context.
     void stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
 
-    /// Stage a full clear of the (screen × desktop × activity) context.
-    void stageFullClear(const QString& screen, int desktop, const QString& activity);
-
     /// Remove any staged entry for the (screen × desktop × activity)
-    /// context entirely — a true unstage, unlike `stageFullClear`, which
-    /// stages a daemon-side clear that the flush pushes on Apply. After
-    /// this, the flush leaves the context's daemon-side assignment
-    /// untouched. No-op when nothing is staged for the context.
+    /// context entirely — a true unstage. After this, the flush leaves the
+    /// context's daemon-side assignment untouched. No-op when nothing is
+    /// staged for the context.
     void removeStagedAssignment(const QString& screen, int desktop, const QString& activity);
 
     /// Stage a tiling-only clear (flushes as "mode=0 + no layouts",

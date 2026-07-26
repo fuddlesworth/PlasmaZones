@@ -104,13 +104,6 @@ private Q_SLOTS:
     // reapplyWindowAppearance — daemon-driven, engine-common chrome re-apply
     // =====================================================================
 
-    /// guardedHandoff refusal path: a destination whose screen is not in
-    /// its engine set refuses the receive, and the helper must re-home the
-    /// window into the source so it stays managed (the strand this helper
-    /// exists to prevent). Also pins the pre-tracked adoption test: when
-    /// source == dest (same-mode cross-screen move) isWindowTracked is
-    /// true regardless, so adoption is screen-match, not mere tracking.
-
     void testReapplyWindowAppearance_reemitsSnappedSkipsFloating()
     {
         // On a compositor-bridge reconnect the daemon must re-drive the chrome

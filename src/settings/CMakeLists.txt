@@ -233,7 +233,7 @@ add_executable(plasmazones-settings ${plasmazones_settings_SRCS})
 # LTO so its functions are never re-analysed at link, and silence the same
 # false positive class in its own compile.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    set_source_files_properties(decorationpagecontroller_sets.cpp PROPERTIES
+    set_source_files_properties(pages/decorationpagecontroller_sets.cpp PROPERTIES
         COMPILE_OPTIONS "-fno-lto;-Wno-maybe-uninitialized")
 endif()
 

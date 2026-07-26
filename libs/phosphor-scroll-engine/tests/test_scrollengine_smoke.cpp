@@ -24,6 +24,9 @@ private Q_SLOTS:
     void floatPullsOutAndRestoresSlot();
     void capturePlacementReportsSlot();
     void handoffReleaseIsTrackingOnly();
+    void handoffReceiveAdoptsFloatingWindow();
+    void lastManagedRectSurvivesClose();
+    void pruneStaleWindowsReclaimsRectsAndSeeds();
     void contextKeysSeparateDesktops();
     void floatRestoresDisplayIntent();
     void pruneDropsWindowBookkeeping();
@@ -37,6 +40,7 @@ private Q_SLOTS:
     void handoffReleaseClearsFloatMarker();
     void applyPathEmitsOnChangeOnly();
     void orderedOpenFollowsAndConsumesSeed();
+    void partiallyConsumedSeedGuardsReopens();
     void orderedOpenForwardArrivalsKeepSeedOrder();
     void floatedOpenConsumesSeed();
     void migrateOutAnnouncesDroppedFloat();
@@ -54,6 +58,20 @@ private:
     {
         auto* engine = new ScrollEngine(nullptr, nullptr, parent);
         engine->setActiveScreens({QStringLiteral("S1"), QStringLiteral("S2")});
+        return engine;
+    }
+
+    /// makeEngine's twin with the geometry-provider seam wired, for the tests
+    /// that need the apply path to resolve real rects (only then does
+    /// m_lastAppliedRect populate, and only then does windowsTiled fire).
+    static ScrollEngine* makeProviderEngine(QObject* parent, const QSet<QString>& screens)
+    {
+        auto* engine = new ScrollEngine(nullptr, nullptr, parent);
+        const auto geometry = [](const QString&) {
+            return QRect(0, 0, 1200, 800);
+        };
+        engine->setScreenGeometryProviders(geometry, geometry);
+        engine->setActiveScreens(screens);
         return engine;
     }
 };
@@ -210,6 +228,95 @@ void TestScrollEngineSmoke::handoffReleaseIsTrackingOnly()
     QCOMPARE(engine->screenForTrackedWindow(QStringLiteral("app|a")), QStringLiteral("S2"));
 }
 
+void TestScrollEngineSmoke::handoffReceiveAdoptsFloatingWindow()
+{
+    // The wasFloating arm of handoffReceive: the arrival never reaches the
+    // strip, and the float it carried becomes THIS engine's own — marked, so
+    // the next mode transition does not capture it into the snap slot with
+    // the arrival frame. The announcement is the effect's only input here.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+    PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+    ctx.windowId = QStringLiteral("app|h");
+    ctx.toScreenId = QStringLiteral("S2");
+    ctx.fromEngineId = QStringLiteral("snap");
+    ctx.wasFloating = true;
+    engine->handoffReceive(ctx);
+
+    QVERIFY(engine->isWindowTracked(QStringLiteral("app|h")));
+    QCOMPARE(engine->screenForTrackedWindow(QStringLiteral("app|h")), QStringLiteral("S2"));
+    QVERIFY(engine->isWindowFloatingInScroll(QStringLiteral("app|h")));
+    QVERIFY(engine->isModeSpecificFloated(QStringLiteral("app|h")));
+    QVERIFY(!engine->isWindowTiled(QStringLiteral("app|h")));
+    QVERIFY(engine->managedWindowOrder(QStringLiteral("S2")).isEmpty());
+    QCOMPARE(floatSpy.count(), 1);
+    QCOMPARE(floatSpy.last().at(0).toString(), QStringLiteral("app|h"));
+    QCOMPARE(floatSpy.last().at(1).toBool(), true);
+    QCOMPARE(floatSpy.last().at(2).toString(), QStringLiteral("S2"));
+}
+
+void TestScrollEngineSmoke::lastManagedRectSurvivesClose()
+{
+    // The float-back poison guard's memory: the daemon's close capture reads
+    // lastManagedRect DURING windowClosed (the engines hear the close before
+    // WindowTracking does), so dropping the entry there would hand the
+    // column rect back as the reopen float-back geometry.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    const QRect tiled = engine->lastManagedRect(QStringLiteral("app|a"));
+    QVERIFY(!tiled.isEmpty()); // the strip rect the apply path actually issued
+    engine->windowClosed(QStringLiteral("app|a"));
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|a")));
+    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|a")), tiled);
+}
+
+void TestScrollEngineSmoke::pruneStaleWindowsReclaimsRectsAndSeeds()
+{
+    // Aliveness sweep: because the rect memory is retained through close and
+    // handoffRelease, this prune is its SOLE reclaimer, and it is keyed on
+    // aliveness alone — the window below was untracked long before the
+    // prune, so the tracking sweep (whose count the return value reports)
+    // cannot be what dropped it.
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+        engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+        QCoreApplication::processEvents();
+        engine->windowClosed(QStringLiteral("app|a"));
+        QVERIFY(!engine->lastManagedRect(QStringLiteral("app|a")).isEmpty());
+
+        QCOMPARE(engine->pruneStaleWindows({}), 0); // nothing tracked was reclaimed
+        QVERIFY(engine->lastManagedRect(QStringLiteral("app|a")).isEmpty());
+    }
+
+    // Seed sweep: the dead ids leave the captured order, and the consumed
+    // set is narrowed with them so the all-consumed drop condition stays
+    // exact. Skipping the narrowing makes the (now shorter) list look fully
+    // consumed and drops an entry that a still-pending id needs — a would
+    // then open next to focus instead of at its captured column.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setInitialWindowOrder(QStringLiteral("S1"),
+                                  {QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")});
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+
+    // b dies; a has still never arrived, so the entry must survive as {a,c}
+    // with only c marked consumed.
+    QCOMPARE(engine->pruneStaleWindows({QStringLiteral("app|c")}), 1);
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|b")));
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), (QStringList{QStringLiteral("app|c")}));
+
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             (QStringList{QStringLiteral("app|a"), QStringLiteral("app|c")}));
+}
+
 void TestScrollEngineSmoke::contextKeysSeparateDesktops()
 {
     QObject owner;
@@ -297,7 +404,19 @@ void TestScrollEngineSmoke::pruneRemovedScreenAndActivitiesSweep()
     QVERIFY(engine->isWindowTracked(QStringLiteral("app|v")));
     QVERIFY(engine->isWindowTracked(QStringLiteral("app|s10")));
 
+    // The prune hands the windows back the same way the screens-set sweep
+    // does — they are alive, only their output is gone — so the daemon's
+    // restore consumers hear one windowsReleased naming both the physical
+    // screen and the swept sub-screen.
+    QSignalSpy releasedSpy(engine, &ScrollEngine::windowsReleased);
     engine->pruneStatesForRemovedScreen(QStringLiteral("S1"));
+    QCOMPARE(releasedSpy.count(), 1);
+    const QStringList released = releasedSpy.first().at(0).toStringList();
+    QCOMPARE(released.size(), 2);
+    QVERIFY(released.contains(QStringLiteral("app|p")));
+    QVERIFY(released.contains(QStringLiteral("app|v")));
+    const auto releasedScreens = releasedSpy.first().at(1).value<QSet<QString>>();
+    QCOMPARE(releasedScreens, (QSet<QString>{QStringLiteral("S1"), QStringLiteral("S1/vs:0")}));
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|p")));
     QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|p")));
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|v")));
@@ -356,27 +475,23 @@ void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
     // Pins that a scheduled retile is genuinely DEFERRED to the event loop
     // and then runs under the GUILESS main (uncoverable under the old
     // APPLESS main, where processEvents was a no-op). Driven through
-    // windowMinSizeUpdated, the real asynchronous trigger: it is the only
-    // production caller whose whole effect IS the scheduled retile, so a
-    // mutation to a direct applyLayout call fails the "nothing yet" arm
-    // below. Coalescing itself is NOT observable — a second, un-coalesced
+    // windowMinSizeUpdated, the real asynchronous trigger: like the other
+    // schedule-only callers (applyPerScreenConfig, clearPerScreenConfig) its
+    // whole effect IS the scheduled retile, so a mutation to a direct
+    // applyLayout call fails the "nothing yet" arm below. It is the cheapest
+    // of them to drive headless — the others need a per-screen override map.
+    // Coalescing itself is NOT observable — a second, un-coalesced
     // run would resolve the same rects and the emit-on-change gate would
     // swallow it — so this test deliberately does not claim it.
     QObject owner;
-    ScrollEngine* engine = makeEngine(&owner);
-    engine->setScreenGeometryProviders(
-        [](const QString&) {
-            return QRect(0, 0, 1200, 800);
-        },
-        [](const QString&) {
-            return QRect(0, 0, 1200, 800);
-        });
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")});
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     QCoreApplication::processEvents(); // drain the open's own apply
 
     QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
-    // A 900px minimum outgrows the default half-width column (600px on this
-    // work area), so the retile MUST move the rect and emit.
+    // A 900px minimum outgrows the default half-width column (595px on this
+    // work area — the proportion is gap-aware), so the retile MUST move the
+    // rect and emit.
     engine->windowMinSizeUpdated(QStringLiteral("app|a"), 900, 0);
     QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(900, 0));
     QCOMPARE(tiledSpy.count(), 0); // nothing applied yet: the retile is queued
@@ -487,15 +602,7 @@ void TestScrollEngineSmoke::applyPathEmitsOnChangeOnly()
     // no-op re-apply; the tab-strip payload is change-gated with the empty
     // latch broadcasting exactly one "[]".
     QObject owner;
-    auto* engine = new ScrollEngine(nullptr, nullptr, &owner);
-    engine->setScreenGeometryProviders(
-        [](const QString&) {
-            return QRect(0, 0, 1200, 800);
-        },
-        [](const QString&) {
-            return QRect(0, 0, 1200, 800);
-        });
-    engine->setActiveScreens({QStringLiteral("S1")});
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
 
     QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
     QSignalSpy stripSpy(engine, &ScrollEngine::tabStripsChanged);
@@ -552,13 +659,48 @@ void TestScrollEngineSmoke::orderedOpenFollowsAndConsumesSeed()
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              (QStringList{QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
 
-    // Seed exhausted: a re-open of a consumed id opens next to the focused
-    // column (a is gone, so focus sits on c, the last column) rather than
-    // being re-positioned by a stale entry.
+    // Seed FULLY consumed, so the screen's entry was dropped outright: the
+    // re-open takes the ordinary next-to-focus path. Focus has sat on c
+    // since it arrived into the empty strip (insertWindowAt does not
+    // refocus, it only shifts the active index), so c is where the re-opened
+    // a lands beside.
     engine->windowClosed(QStringLiteral("app|a"));
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              (QStringList{QStringLiteral("app|b"), QStringLiteral("app|c"), QStringLiteral("app|a")}));
+}
+
+void TestScrollEngineSmoke::partiallyConsumedSeedGuardsReopens()
+{
+    // The consumed-id guard, on the only screen state where it can fire: a
+    // PARTIALLY consumed seed, whose entry is still installed because the
+    // remaining ids have not arrived. (The full-consume case drops the entry
+    // first, so the guard never runs there.) A re-open of an already-consumed
+    // id must take the ordinary next-to-focus path, not the seeded position
+    // its stale list entry still names.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setInitialWindowOrder(QStringLiteral("S1"),
+                                  {QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")});
+
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    // c never arrives, so the entry survives with a and b marked consumed.
+    engine->windowClosed(QStringLiteral("app|a"));
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    // Next to the focused column (b), NOT back at the seeded column 0.
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             (QStringList{QStringLiteral("app|b"), QStringLiteral("app|a")}));
+
+    // Re-seeding the same screen RESETS the consumed set, so the very same
+    // re-open is seed-positioned again — the guard keys on the current seed
+    // generation, not on the id having ever been placed.
+    engine->setInitialWindowOrder(QStringLiteral("S1"),
+                                  {QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")});
+    engine->windowClosed(QStringLiteral("app|a"));
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             (QStringList{QStringLiteral("app|a"), QStringLiteral("app|b")}));
 }
 
 void TestScrollEngineSmoke::orderedOpenForwardArrivalsKeepSeedOrder()
@@ -578,13 +720,19 @@ void TestScrollEngineSmoke::orderedOpenForwardArrivalsKeepSeedOrder()
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              (QStringList{QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
 
-    // Out-of-order tail: seed {d,e} arriving e-then-d around the existing
-    // strip still respects relative seed positions for the seeded pair.
-    engine->setInitialWindowOrder(QStringLiteral("S1"), {QStringLiteral("app|d"), QStringLiteral("app|e")});
-    engine->windowOpened(QStringLiteral("app|e"), QStringLiteral("S1"), 0, 0);
+    // Out-of-order tail: a fresh seed {d,e,f} arriving d, f, e around the
+    // existing strip. The middle arrival is what discriminates — e must
+    // count d (present) but not f (already present and LATER in the seed),
+    // landing between them. Two ids would not: any placement of the second
+    // arrival that respects the first is a pass.
+    engine->setInitialWindowOrder(QStringLiteral("S1"),
+                                  {QStringLiteral("app|d"), QStringLiteral("app|e"), QStringLiteral("app|f")});
     engine->windowOpened(QStringLiteral("app|d"), QStringLiteral("S1"), 0, 0);
-    const QStringList order = engine->managedWindowOrder(QStringLiteral("S1"));
-    QVERIFY(order.indexOf(QStringLiteral("app|d")) < order.indexOf(QStringLiteral("app|e")));
+    engine->windowOpened(QStringLiteral("app|f"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|e"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             (QStringList{QStringLiteral("app|d"), QStringLiteral("app|e"), QStringLiteral("app|f"),
+                          QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
 }
 
 void TestScrollEngineSmoke::floatedOpenConsumesSeed()
@@ -604,6 +752,10 @@ void TestScrollEngineSmoke::floatedOpenConsumesSeed()
     engine->windowOpened(QStringLiteral("app|t"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|f"), QStringLiteral("S1"), 0, 0);
     QVERIFY(engine->isWindowFloatingInScroll(QStringLiteral("app|f")));
+    // The rule float is this engine's own decision, so it carries the
+    // mode marker: without it the daemon captures the scroll float into the
+    // snap slot at the next mode transition.
+    QVERIFY(engine->isModeSpecificFloated(QStringLiteral("app|f")));
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), (QStringList{QStringLiteral("app|t")}));
 
     engine->windowClosed(QStringLiteral("app|f"));

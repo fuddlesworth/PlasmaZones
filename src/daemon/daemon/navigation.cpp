@@ -517,13 +517,66 @@ void Daemon::emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntrie
         // dropped (a prune-origin batch's zones reference a dead screen).
         m_pendingSnapFloatRestores.clear();
     }
-    if (floatEntries.isEmpty() || !m_snapEngine) {
+    if (floatEntries.isEmpty()) {
+        return;
+    }
+    if (!m_snapEngine) {
+        qCWarning(lcDaemon) << "emitPendingSnapFloatRestoresForResnapBuffer: dropping" << floatEntries.size()
+                            << "snap-float restores — no snap engine to apply them";
         return;
     }
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         armResnapOsdSuppression(1); // the batched emit drives an additional resnap feedback
         concreteSnap->emitBatchedResnap(floatEntries);
+    } else {
+        qCWarning(lcDaemon) << "emitPendingSnapFloatRestoresForResnapBuffer: dropping" << floatEntries.size()
+                            << "snap-float restores — snap engine is not a SnapEngine";
     }
+}
+
+void Daemon::flushPendingSnapZoneRestores()
+{
+    // Nested inside an outer recompute: our updateEngineScreens() call was
+    // deferred to a queued re-run by the re-entrancy latch, so the batch we
+    // would drain here belongs to the OUTER pass and its consumer (the
+    // mode-toggle / autotile-disable paths feed the zone half into
+    // preClaimedZoneIds). Draining it here strands those windows off their
+    // zones — the exact regression the tail drain's preserveZoneEntries mode
+    // was added to avoid.
+    if (m_updateEngineScreensInProgress) {
+        return;
+    }
+    if (m_pendingSnapFloatRestores.isEmpty()) {
+        return;
+    }
+    QVector<ZoneAssignmentEntry> zoneEntries;
+    for (const ZoneAssignmentEntry& e : std::as_const(m_pendingSnapFloatRestores)) {
+        if (e.targetZoneId != RestoreSentinel) {
+            zoneEntries.append(e);
+        }
+    }
+    // The float half was already emitted by the updateEngineScreens tail
+    // drain on every path that reaches here; clear wholesale regardless so a
+    // leftover entry can never be replayed by a later unrelated consumer.
+    m_pendingSnapFloatRestores.clear();
+    if (zoneEntries.isEmpty()) {
+        return;
+    }
+    if (!m_snapEngine) {
+        qCWarning(lcDaemon) << "flushPendingSnapZoneRestores: dropping" << zoneEntries.size()
+                            << "snap-zone restores — no snap engine to apply them";
+        return;
+    }
+    auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get());
+    if (!concreteSnap) {
+        qCWarning(lcDaemon) << "flushPendingSnapZoneRestores: dropping" << zoneEntries.size()
+                            << "snap-zone restores — snap engine is not a SnapEngine";
+        return;
+    }
+    qCInfo(lcDaemon) << "flushPendingSnapZoneRestores: restoring" << zoneEntries.size()
+                     << "windows to their snap zones";
+    armResnapOsdSuppression(1); // the batched emit drives an additional resnap feedback
+    concreteSnap->emitBatchedResnap(zoneEntries);
 }
 
 void Daemon::handleSwapVirtualScreen(NavigationDirection direction)

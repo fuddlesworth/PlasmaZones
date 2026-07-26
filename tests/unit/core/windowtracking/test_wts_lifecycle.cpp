@@ -86,7 +86,11 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        // Detach BOTH borrowed pointers before the engine dies so the service
+        // never holds a dangling SnapEngine* (same discipline as
+        // wta_convenience_fixture.h).
         m_service->setSnapState(nullptr);
+        m_service->setSnapEngine(nullptr);
         delete m_engine;
         m_engine = nullptr;
         delete m_service;
@@ -223,6 +227,10 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowFloating(windowId));
         QVERIFY(!m_service->isWindowFloating(appId));
         QVERIFY(stateSpy.count() >= 1);
+
+        // The predicate captures this slot's locals by reference — clear it
+        // before they go out of scope so nothing can call it afterwards.
+        m_service->setShouldTrackPredicate({});
     }
 
     void testWindowClosed_predicateAcceptsEnabledContext()
@@ -252,6 +260,10 @@ private Q_SLOTS:
         QCOMPARE(lastScreenId, QStringLiteral("DP-1"));
         QCOMPARE(lastDesktop, 1);
         QVERIFY(m_service->pendingRestoreQueues().contains(appId));
+
+        // The predicate captures this slot's locals by reference — clear it
+        // before they go out of scope so nothing can call it afterwards.
+        m_service->setShouldTrackPredicate({});
     }
 
     void testWindowClosed_persistsWhenPredicateUnset()

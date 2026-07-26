@@ -4,6 +4,8 @@
 #include <QTest>
 #include <QCoreApplication>
 
+#include <algorithm>
+
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "helpers/AutotileTestHelpers.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
@@ -24,7 +26,8 @@ using namespace PhosphorTileEngine;
  *   2. Remove screens via setAutotileScreens()
  *   3. Seed order via setInitialWindowOrder() for screens re-entering
  *   4. Re-add screens via setAutotileScreens()
- *   5. Verify order is preserved after windows are re-inserted
+ *   5. Re-announce the windows in a DIFFERENT sequence than the seed and verify
+ *      the seeded order still wins
  */
 class TestAutotileEngineOrderCycling : public QObject
 {
@@ -41,6 +44,18 @@ private:
         for (const QString& id : windowIds) {
             state->addWindow(id);
         }
+    }
+
+    /// Announce windows through the engine's real open path, in the sequence
+    /// given. Unlike addWindowsToScreen this is the route the KWin effect takes,
+    /// so it is the one that has to cope with an announce order that disagrees
+    /// with the seeded order.
+    void announceWindows(AutotileEngine& engine, const QString& screenId, const QStringList& windowIds)
+    {
+        for (const QString& id : windowIds) {
+            engine.windowOpened(id, screenId);
+        }
+        QCoreApplication::processEvents();
     }
 
 private Q_SLOTS:
@@ -82,15 +97,21 @@ private Q_SLOTS:
         // PhosphorTiles::TilingState is destroyed — tiledWindowOrder returns empty
         QVERIFY(engine.tiledWindowOrder(screen).isEmpty());
 
-        // Step 4: Seed the captured order, then re-add screen (simulates cycling back)
+        // Step 4: Seed the captured order, then re-add screen (simulates cycling back).
+        // A strict (mode-transition) seed is consumed eagerly here, so the state
+        // is rebuilt in the seeded order before any window is announced.
         engine.setInitialWindowOrder(screen, capturedOrder);
         engine.setAutotileScreens({screen});
         QVERIFY(engine.isEnabled());
+        QCOMPARE(engine.tiledWindowOrder(screen), originalOrder);
 
-        // Step 5: Re-insert windows (simulates KWin re-tiling after mode switch)
-        addWindowsToScreen(engine, screen, originalOrder);
+        // Step 5: the KWin effect re-announces the windows after it receives
+        // autotileScreensChanged, and it does NOT promise to do so in the seeded
+        // sequence. Announce them shuffled — C, A, B against a seed of A, B, C —
+        // so a regression that let the announce sequence dictate the state order
+        // produces [C, A, B] here instead of the seeded order.
+        announceWindows(engine, screen, {QStringLiteral("win-C"), QStringLiteral("win-A"), QStringLiteral("win-B")});
 
-        // The pending initial order should have guided insertion
         QCOMPARE(engine.tiledWindowOrder(screen), originalOrder);
     }
 
@@ -152,10 +173,14 @@ private Q_SLOTS:
         // Screen2 windows should be untouched
         QCOMPARE(engine.tiledWindowOrder(screen2), order2);
 
-        // Re-add screen1 with seeded order
+        // Re-add screen1 with seeded order, then re-announce its windows in the
+        // REVERSE of the seed — the seeded order must survive the announce
+        // sequence, exactly as in testOrderPreserved_acrossCycle.
         engine.setInitialWindowOrder(screen1, captured1);
         engine.setAutotileScreens({screen1, screen2});
-        addWindowsToScreen(engine, screen1, order1);
+        QStringList reversed1 = order1;
+        std::reverse(reversed1.begin(), reversed1.end());
+        announceWindows(engine, screen1, reversed1);
 
         QCOMPARE(engine.tiledWindowOrder(screen1), order1);
         QCOMPARE(engine.tiledWindowOrder(screen2), order2);

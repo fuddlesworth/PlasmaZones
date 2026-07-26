@@ -738,7 +738,8 @@ private Q_SLOTS:
         // AppId == firefox} carrying a LockContext action at a far-above band.
         // Against the windowless context query the AppId leaf evaluates false,
         // so the All{} fails and DP-4 must NOT lock — symmetric to the
-        // assignment-path mixed-rule inertness proof (testMixedRule* above).
+        // assignment-path mixed-rule inertness proof (the testMixedRule* slots
+        // in test_rule_cascade_fidelity.cpp).
         PWR::RuleAction mixedLockAction;
         mixedLockAction.type = QString(PWR::ActionType::LockContext);
         mixedLockAction.params.insert(QString(PWR::ActionParam::Value), true);

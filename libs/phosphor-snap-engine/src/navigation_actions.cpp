@@ -311,7 +311,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
         // At a zone-layout boundary with no neighbour output, the resolver
         // deferred the decision to us — try crossing to the adjacent desktop.
         if (result.reason == QLatin1String("no_adjacent_zone")) {
-            // A neighbour OUTPUT in autotile mode → hand the window to autotile.
+            // A neighbour OUTPUT in a tiling mode → hand the window to that engine.
             if (tryCrossModeOutput(windowId, direction, screenId, /*swap=*/false)) {
                 return;
             }
@@ -524,7 +524,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
     PhosphorProtocol::SwapTargetResult result = resolver->getSwapTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
         // At a zone-layout boundary with no SNAP neighbour, the resolver deferred
-        // to us. A cross-MONITOR swap onto an autotile neighbour is a two-way
+        // to us. A cross-MONITOR swap onto a tiling neighbour is a two-way
         // exchange (both surfaces are visible). Swap is NOT extended across
         // virtual desktops — exchanging with a window on a desktop you can't see
         // is meaningless; use move to send a window to another desktop. So a

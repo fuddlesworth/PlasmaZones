@@ -631,7 +631,10 @@ public:
     /// placement with no screens set to reap them, and the two tiling engines'
     /// screens-set sweeps only reap CURRENT-context states, so sibling-context
     /// states (other desktops/activities) of the removed output would leak
-    /// without the explicit whole-output prune.
+    /// without the explicit whole-output prune. A tiling-family engine must emit
+    /// windowsReleased for the windows it drops here, AFTER its reverse-map
+    /// cleanup, so the daemon's restore consumers can re-home them; snap does not,
+    /// because it is the engine those releases are restored INTO.
     virtual void pruneStatesForRemovedScreen(const QString& physicalScreenId)
     {
         Q_UNUSED(physicalScreenId)

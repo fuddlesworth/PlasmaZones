@@ -432,7 +432,9 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // oldScreenId: the move's tile requests land before this echo and
     // pre-seed m_notifiedWindowScreens with the DESTINATION, so oldScreenId
     // here would name the destination bucket and the test would always say
-    // "still tiled".
+    // "still tiled". The daemon puts the source on the wire for the arm
+    // sites that run after the handoff, which are the ones where even the
+    // marker's own arm-time snapshot would have been the destination.
     if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
         const QPointF cf = w->frameGeometry().center();
         const QString positional =

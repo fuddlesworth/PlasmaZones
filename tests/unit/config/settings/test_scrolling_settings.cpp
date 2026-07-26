@@ -203,17 +203,11 @@ private Q_SLOTS:
         // or reordered entries would still pass an isEmpty check while the
         // stored list stopped matching the shipped one.
         QCOMPARE(widths->validator(widths->defaultValue).toString(), ConfigDefaults::scrollingPresetColumnWidths());
-        // Entries below the scalar width key's floor are dropped, not kept:
-        // the setter would clamp them away downstream, so accepting them here
-        // stores a preset the engine will never open a column at.
-        QCOMPARE(widths->validator(QStringLiteral("0.01, 0.5")).toString(), QStringLiteral("0.5"));
-        // A list of ONLY sub-floor entries snaps to the default, like any
-        // other nothing-survives input.
-        QCOMPARE(widths->validator(QStringLiteral("0.01, 0.02")).toString(),
-                 ConfigDefaults::scrollingPresetColumnWidths());
-        // The floor is inclusive — the minimum itself is a legal preset.
-        QCOMPARE(widths->validator(QString::number(ConfigDefaults::scrollingDefaultColumnWidthValueMin())).toString(),
-                 QString::number(ConfigDefaults::scrollingDefaultColumnWidthValueMin()));
+        // The rule is the bare (0, 1] one the engine applies to a preset
+        // entry. The scalar width key's kind-aware floor governs that key
+        // alone, so a very narrow preset is legal here and must survive
+        // rather than being dropped as sub-floor.
+        QCOMPARE(widths->validator(QStringLiteral("0.01, 0.5")).toString(), QStringLiteral("0.01,0.5"));
 
         const auto* heights = findKey(schema, group, ConfigDefaults::presetWindowHeightsKey());
         QVERIFY(heights && heights->validator);
@@ -229,8 +223,7 @@ private Q_SLOTS:
         QCOMPARE(widths->validator(QStringLiteral("")).toString(), ConfigDefaults::scrollingPresetColumnWidths());
         // Size cap: a hand-edited file must not smuggle an unbounded list
         // past the setter path — 26 entries canonicalize to at most 16. Every
-        // entry starts at the floor (0.05) so the cap, not the floor, is what
-        // does the trimming.
+        // entry is a legal proportion, so the cap is the only thing trimming.
         QStringList many;
         for (int i = 5; i <= 30; ++i) {
             many.append(QString::number(i / 100.0));
@@ -286,10 +279,11 @@ private Q_SLOTS:
 
     /// Full kind-transition table for the shared width value key. The kind
     /// setter owns the coercion (see setScrollingDefaultColumnWidthKind):
-    /// entering Fixed re-seeds a pixel width, entering Proportion re-seeds
-    /// only when pixels are stored (directly from Fixed or via a
-    /// ClientDecides hop), ClientDecides leaves the value untouched, and a
-    /// same-kind write is a full no-op. Each effective flip must emit
+    /// each arm re-seeds only when the stored value cannot belong to the kind
+    /// being entered — Fixed below the pixel floor, Proportion above 1.0 —
+    /// ClientDecides leaves the value untouched, and a same-kind write is a
+    /// full no-op. A value of either kind therefore survives a ClientDecides
+    /// round trip intact. Each effective flip must emit
     /// settingsChanged exactly ONCE — a double emit runs the engine's
     /// refresh+retile sweep twice per user action.
     void widthKindTransitionsCoerceAndEmitOnce()
@@ -318,13 +312,15 @@ private Q_SLOTS:
             int expectedKind; // scrollingDefaultColumnWidthKindChanged emits
             int expectedValueSig; // scrollingDefaultColumnWidthValueChanged emits
         };
-        // All nine kind pairs; C→P and C→F appear twice because their
-        // outcome depends on WHAT the ClientDecides hop left stored (it
+        // All nine kind pairs; C→P and C→F appear more than once because
+        // their outcome depends on WHAT the ClientDecides hop left stored (it
         // deliberately leaves the value key untouched, so both a proportion
-        // and a pixel count can be sitting there). "C->F 800px stored" is
-        // the one transition where the coercion branch runs but the nested
-        // value setter is a no-op — the OUTER aggregate emit is the sole
-        // settingsChanged source there, pinning the qFuzzyCompare gate.
+        // and a pixel count can be sitting there). "C->F 1200px retained" is
+        // the pin for the Fixed arm's preservation test: a seed that differs
+        // from the 800 re-seed, so an unconditional re-seed on entry to Fixed
+        // fails the row. The 800px row keeps the case where the coercion is a
+        // no-op regardless, pinning the outer aggregate emit's qFuzzyCompare
+        // gate as the sole settingsChanged source.
         const Row rows[] = {
             {"P->P", kindP, seedProp, kindP, kindP, seedProp, 0, 0, 0},
             {"P->F", kindP, seedProp, kindP, kindF, seededPx, 1, 1, 1},
@@ -336,6 +332,7 @@ private Q_SLOTS:
             {"C->P pixels stored", kindF, seedPx, kindC, kindP, defaultProp, 1, 1, 1},
             {"C->F proportion stored", kindP, seedProp, kindC, kindF, seededPx, 1, 1, 1},
             {"C->F 800px stored", kindF, seededPx, kindC, kindF, seededPx, 1, 1, 0},
+            {"C->F 1200px retained", kindF, seedPx, kindC, kindF, seedPx, 1, 1, 0},
             {"C->C", kindP, seedProp, kindC, kindC, seedProp, 0, 0, 0},
         };
 

@@ -281,15 +281,20 @@ public:
     /// for @p windowId to @p targetScreenId updates bookkeeping only. See
     /// m_expectedOutputMove.
     ///
-    /// The window's notified screen is snapshotted as the move's SOURCE: the
-    /// daemon's tile requests for this move arrive before the compositor's
-    /// geometry echo and pre-seed m_notifiedWindowScreens with the
-    /// destination, so the source is unrecoverable by the time the echo is
-    /// routed.
-    void markExpectedOutputMove(const QString& windowId, const QString& targetScreenId)
+    /// @p sourceScreenId is the screen the daemon moved the window off. It is
+    /// authoritative and must be used whenever it is non-empty: a daemon arm
+    /// site that runs after the handoff has already pushed the destination's
+    /// tiles, so by now m_notifiedWindowScreens names the DESTINATION.
+    ///
+    /// An empty source falls back to the notified screen. That is correct for
+    /// the arm sites that fire ahead of any placement work, and it is what an
+    /// older daemon that does not put the source on the wire produces — in
+    /// which case the fallback is blind for a post-handoff arm exactly as
+    /// described above, and stillTiledOnSource degrades to always-false.
+    void markExpectedOutputMove(const QString& windowId, const QString& targetScreenId, const QString& sourceScreenId)
     {
-        m_expectedOutputMove.insert(windowId,
-                                    ExpectedOutputMove{targetScreenId, m_notifiedWindowScreens.value(windowId)});
+        const QString source = sourceScreenId.isEmpty() ? m_notifiedWindowScreens.value(windowId) : sourceScreenId;
+        m_expectedOutputMove.insert(windowId, ExpectedOutputMove{targetScreenId, source});
     }
 
 public Q_SLOTS:
@@ -486,9 +491,11 @@ private:
     struct ExpectedOutputMove
     {
         QString targetScreenId;
-        /// Notified screen at arm time. Read live membership against this id to
-        /// tell a genuine handoff (source bucket already emptied) from a strip
-        /// parking hop (still tiled on the source) — see markExpectedOutputMove.
+        /// Screen the window left. Comes from the daemon when it knows it, else
+        /// falls back to the notified screen at arm time. Read live membership
+        /// against this id to tell a genuine handoff (source bucket already
+        /// emptied) from a strip parking hop (still tiled on the source) — see
+        /// markExpectedOutputMove.
         QString sourceScreenId;
     };
     QHash<QString, ExpectedOutputMove> m_expectedOutputMove;

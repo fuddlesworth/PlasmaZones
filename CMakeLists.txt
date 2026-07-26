@@ -837,9 +837,11 @@ endif()
 endif() # examples/ present (Nix strips it; see the guard above)
 
 # Custom uninstall target that cleans up directories properly.
-# QT6_INSTALL_PLUGINS mirrors phosphor-wayland's QPA install-path
-# derivation (a subdirectory-scope variable there, so re-derived here for
-# the configure below).
+# QT6_INSTALL_PLUGINS repeats phosphor-wayland's QPA install-path derivation
+# (a subdirectory-scope variable there, so re-derived here for the configure
+# below). The fallback there spells the libdir relative and here absolute,
+# which resolves to the same place: install() roots a relative DESTINATION at
+# the prefix, and the absolute branch below prepends the prefix itself.
 if(NOT DEFINED QT6_INSTALL_PLUGINS)
     get_target_property(QT6_INSTALL_PLUGINS Qt6::Core QT_INSTALL_PLUGINS)
     if(NOT QT6_INSTALL_PLUGINS)

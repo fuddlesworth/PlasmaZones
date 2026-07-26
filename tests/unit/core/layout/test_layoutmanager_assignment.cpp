@@ -652,6 +652,54 @@ private Q_SLOTS:
         QCOMPARE(mgr->desktopAssignments().size(), 1);
     }
 
+    // A LAYOUT-ONLY exact-context rule (no SetEngineMode) is claimed by
+    // findExactContextRule's shape fallback but SPARED by the batch driver's
+    // family drop, which only removes rules carrying SetEngineMode. The batch
+    // must therefore rebuild it under its own id and replace it in place. If
+    // the rebuild is appended instead, the surviving original sits at the same
+    // priority, wins the list-order tie-break, and a duplicate accumulates on
+    // every apply.
+    void testBatch_layoutOnlyRule_rebuiltInPlaceNotDuplicated()
+    {
+        namespace PWR = PhosphorRules;
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+
+        auto* store = mgr->findChild<PWR::RuleStore*>();
+        QVERIFY(store != nullptr);
+
+        // Hand-author the layout-only rule with a settings-UI style uuid (not
+        // the deterministic id), so the shape fallback is the path that finds it.
+        PWR::Rule layoutOnly;
+        layoutOnly.id = QUuid::createUuid();
+        layoutOnly.name = QStringLiteral("test-layout-only");
+        layoutOnly.enabled = true;
+        layoutOnly.priority = PWR::ContextRuleBridge::kContextBandBase;
+        layoutOnly.match = PWR::ContextRuleBridge::makeContextMatch(QStringLiteral("DP-1"), 0, QString());
+        PWR::RuleAction setLayout;
+        setLayout.type = QString(PWR::ActionType::SetSnappingLayout);
+        setLayout.params.insert(PWR::ActionParam::LayoutId, layoutA->id().toString());
+        layoutOnly.actions.append(setLayout);
+        QVERIFY(store->addRule(layoutOnly));
+        QCOMPARE(store->ruleSet().rules().size(), 1);
+
+        QHash<QString, QString> apply;
+        apply.insert(QStringLiteral("DP-1"), layoutB->id().toString());
+
+        // Two applies — the duplicate-accumulation shape grows the set each time.
+        mgr->setAllScreenAssignments(apply);
+        QCOMPARE(store->ruleSet().rules().size(), 1);
+        mgr->setAllScreenAssignments(apply);
+        QCOMPARE(store->ruleSet().rules().size(), 1);
+
+        // The NEW layout wins; the shadowed original would have resolved LayoutA.
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 0), layoutB->id().toString());
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 0)->name(), QStringLiteral("LayoutB"));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // P6: The "scrolling:" sentinel
     // ═══════════════════════════════════════════════════════════════════════════

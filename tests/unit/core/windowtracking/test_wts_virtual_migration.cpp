@@ -255,52 +255,7 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // T2: VS config change while windows are snapped — boundary shift
-    // =====================================================================
-
-    void testVsConfigChange_boundaryShift_windowStaysAssigned()
-    {
-        // This test verifies that WTS screen assignments are keyed by virtual
-        // screen ID (e.g. "Dell:U2722D:115107/vs:0"), NOT by geometry. When
-        // PhosphorScreens::ScreenManager shifts the boundary from 50/50 to 70/30, the virtual
-        // screen IDs remain the same, so WTS assignments must be stable.
-        //
-        // A full integration test would call PhosphorScreens::ScreenManager::setVirtualScreenConfig
-        // with a new boundary, but WTS's test fixture uses nullptr for
-        // PhosphorScreens::ScreenManager (it only needs PhosphorZones::LayoutRegistry + PhosphorZones::ZoneDetector).
-        // The boundary shift is a PhosphorScreens::ScreenManager concern, not a WTS concern — WTS only cares about
-        // the string screen ID.
-        //
-        // We verify the invariant that matters: assigning to vs:0 and then
-        // reading back gives the same screen ID and zone, which proves WTS
-        // does not spontaneously reassign windows when no migration API is called.
-        const QString physId = QStringLiteral("Dell:U2722D:115107");
-        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
-        const QString vs1 = PhosphorIdentity::VirtualScreenId::make(physId, 1);
-
-        const QString windowId = QStringLiteral("konsole|config-change");
-        m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
-
-        QCOMPARE(m_service->screenForWindow(windowId), vs0);
-        QVERIFY(m_service->isWindowSnapped(windowId));
-
-        // Simulate "time passes, boundary shifts" — no migration API called.
-        // Assign a second window to vs:1 to prove cross-contamination doesn't occur.
-        const QString windowId2 = QStringLiteral("dolphin|config-change-2");
-        m_service->assignWindowToZone(windowId2, m_zoneIds[1], vs1, 1);
-
-        // Original window must still be on vs:0 with its zone intact
-        QCOMPARE(m_service->screenForWindow(windowId), vs0);
-        QCOMPARE(m_service->zonesForWindow(windowId).first(), m_zoneIds[0]);
-        QVERIFY(m_service->isWindowSnapped(windowId));
-
-        // Second window must be on vs:1
-        QCOMPARE(m_service->screenForWindow(windowId2), vs1);
-        QCOMPARE(m_service->zonesForWindow(windowId2).first(), m_zoneIds[1]);
-    }
-
-    // =====================================================================
-    // T3: Remove all virtual screens — revert to physical
+    // T2: Remove all virtual screens — revert to physical
     // =====================================================================
 
     void testRemoveAllVirtualScreens_revertToPhysical()
@@ -342,7 +297,15 @@ private Q_SLOTS:
     void testRemoveAllVirtualScreens_mixedScreens_onlyTargetAffected()
     {
         // When reverting virtual screens on one physical monitor, windows
-        // on a second physical monitor must not be touched
+        // on a second physical monitor must not be touched.
+        //
+        // This also carries the intent of a former standalone "boundary shift"
+        // slot: WTS keys screen assignments by the virtual screen ID STRING
+        // ("Dell:U2722D:111111/vs:0"), never by geometry, so where a virtual
+        // boundary sits is a ScreenManager concern that WTS cannot observe.
+        // Only an explicit migrateScreenAssignments* call moves a window, and
+        // it moves only the windows on the physical screen it names — which is
+        // exactly what the assertions below pin.
         const QString physId1 = QStringLiteral("Dell:U2722D:111111");
         const QString physId2 = QStringLiteral("LG:27GP850:222222");
         const QString vs1_0 = PhosphorIdentity::VirtualScreenId::make(physId1, 0);

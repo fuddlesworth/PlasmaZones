@@ -316,16 +316,15 @@ void Daemon::initializeAutotile()
                     if (applied && m_snapEngine) {
                         qCWarning(lcDaemon) << "Snap engine is not a SnapEngine — autotile→snap resnap skipped";
                     }
-                    // The resnap path below is what normally consumes
-                    // m_pendingSnapFloatRestores. Bailing without draining leaves
-                    // them to be wiped by the next windowsReleased clear(), so the
-                    // user's snap-mode floats never come back — emit them here.
-                    //
-                    // NOTE this helper emits only the float half and drops the
-                    // snap-zone entries, on the assumption that an in-flight
-                    // resnap consumes those. No resnap runs on THIS bail, so the
-                    // zone entries are dropped deliberately: without a SnapEngine
-                    // there is nothing that could apply them.
+                    // The resnap path below is what normally consumes the
+                    // snap-ZONE half that the updateEngineScreens tail drain
+                    // preserved for us. Bailing without draining leaves it to be
+                    // wiped by the next recompute's clear, or replayed by an
+                    // unrelated later consumer — so drop the preserved zone half
+                    // here. No restoration is attempted: this arm is reached
+                    // either because the layout apply failed (there is no target
+                    // layout to snap into) or because there is no SnapEngine to
+                    // apply the entries at all.
                     emitPendingSnapFloatRestoresForResnapBuffer();
                 } else if (applied && wasAutotile && concreteSnap) {
                     // Build exclusion set: windows that fit into the target layout's zones
@@ -354,6 +353,11 @@ void Daemon::initializeAutotile()
                     // geometry restore for them.
                     QStringList preClaimedZoneIds;
                     for (const ZoneAssignmentEntry& e : m_pendingSnapFloatRestores) {
+                        // The RestoreSentinel arm is unreachable today — the
+                        // updateEngineScreens tail drain emitted every float
+                        // entry and left only zone entries behind. Kept as
+                        // defence so a future drain-mode change cannot silently
+                        // turn a float restore into a pre-claimed zone id.
                         if (e.targetZoneId.isEmpty() || e.targetZoneId == RestoreSentinel) {
                             continue; // float restore (no zone claimed)
                         }
@@ -420,8 +424,10 @@ void Daemon::initializeAutotile()
                         }
                         allResnapEntries.append(entries);
                     }
-                    // Batch float-restore entries into the resnap signal:
-                    // 1. Snap-float restores (collected during windowsReleased)
+                    // Batch the remaining restore entries into the resnap signal:
+                    // 1. Snap-ZONE restores collected during windowsReleased (the
+                    //    float half was already emitted by the updateEngineScreens
+                    //    tail drain, which preserves only the zone half for us)
                     // 2. Autotile-only windows (never zone-snapped, need pre-tile geometry)
                     // This eliminates individual D-Bus signals that would queue behind
                     // the resnap, causing visible delay for floating/new windows.

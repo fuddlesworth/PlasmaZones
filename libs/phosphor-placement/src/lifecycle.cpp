@@ -16,6 +16,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "placementlogging.h"
 #include <QScreen>

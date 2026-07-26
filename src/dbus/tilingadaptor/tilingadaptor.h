@@ -322,7 +322,8 @@ private:
      *
      * @param incomingCount Entries the caller is about to queue — returns false
      *        (process now, unreserved geometry) rather than growing the queue
-     *        past @c kMaxPendingOpens. See the overflow rationale in the body.
+     *        past @c kMaxPendingOpens, draining the backlog first so replay
+     *        order still holds. See the overflow rationale in the body.
      */
     bool deferUntilPanelReady(qsizetype incomingCount);
 

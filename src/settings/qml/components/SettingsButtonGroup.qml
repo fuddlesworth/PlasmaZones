@@ -36,6 +36,18 @@ Row {
 
     signal indexChanged(int index)
 
+    // Arrow navigation for the exclusive group: moves both the selection and
+    // the active focus to `index`, so the focus ring never lags behind the
+    // checked option. Callers wrap the index themselves.
+    function focusOption(index) {
+        const target = optionRepeater.itemAt(index);
+        if (!target)
+            return;
+
+        target.forceActiveFocus();
+        target.activate();
+    }
+
     // Grouping role so a consumer-supplied Accessible.name labels a real
     // group node above the delegates' RadioButton roles instead of landing
     // on a role-less container.
@@ -44,6 +56,8 @@ Row {
     spacing: Kirigami.Units.smallSpacing / 2
 
     Repeater {
+        id: optionRepeater
+
         model: root.model
 
         delegate: Rectangle {
@@ -70,6 +84,7 @@ Row {
             Accessible.role: Accessible.RadioButton
             Accessible.name: optionDelegate.modelData
             Accessible.checked: optionDelegate.isActive
+            Accessible.checkable: true
             Accessible.focusable: true
             // AT activation path: without this an assistive client can focus
             // the radio but not actuate it (only real clicks and the key
@@ -83,6 +98,16 @@ Row {
             Keys.onReturnPressed: optionDelegate.activate()
             Keys.onEnterPressed: optionDelegate.activate()
             Keys.onSpacePressed: optionDelegate.activate()
+            // Left/Right walk the group the way a native radio group does,
+            // wrapping at both ends. Tab still steps option by option.
+            Keys.onLeftPressed: {
+                if (optionRepeater.count > 0)
+                    root.focusOption((optionDelegate.index + optionRepeater.count - 1) % optionRepeater.count);
+            }
+            Keys.onRightPressed: {
+                if (optionRepeater.count > 0)
+                    root.focusOption((optionDelegate.index + 1) % optionRepeater.count);
+            }
 
             function activate() {
                 if (root.currentIndex !== optionDelegate.index)

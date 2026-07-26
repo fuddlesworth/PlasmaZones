@@ -362,8 +362,9 @@ private:
     /// Consume @p windowId from a screen's mode-transition seed (marking it
     /// in m_consumedInitialOrder; the list itself keeps its positions) and
     /// drop both entries once every listed id is consumed — MUST run on
-    /// every windowOpened outcome (tiled, consumed, floated), or a stale
-    /// seed survives to re-position an unrelated later open.
+    /// every windowOpened outcome (tiled, consumed, floated, and the
+    /// cross-screen snap-restore defer that hands the window to snap), or a
+    /// stale seed survives to re-position an unrelated later open.
     void consumePendingInitialOrder(const QString& screenId, const QString& windowId);
     /// Drop per-screen bookkeeping (seed, tab-strip latch) for each screen
     /// in @p screenIds that no longer has ANY context state. Overrides

@@ -9,7 +9,7 @@
  * in navigation_actions.cpp when a directional operation reaches a layout
  * boundary and must resolve a landing on a neighbouring virtual desktop or
  * output (the positionally-equivalent zone on a target desktop, the cross-mode
- * autotile-neighbour handoff, and the entry zone / occupant lookups they need).
+ * tiling-neighbour handoff, and the entry zone / occupant lookups they need).
  */
 
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -65,12 +65,14 @@ bool SnapEngine::tryCrossModeOutput(const QString& windowId, const QString& dire
         return false;
     }
     // Reaching here means the resolver found no snap entry zone on the neighbour
-    // (the resolver returned no_adjacent_zone). Only an AUTOTILE neighbour is a
-    // cross-mode handoff; a snap neighbour with no entry zone is a genuine
-    // boundary — leave it. A move inserts the window into the neighbour's stack;
-    // a swap trades it with the neighbour's entry-edge tile.
+    // (the resolver returned no_adjacent_zone). Any TILING neighbour — autotile or
+    // scrolling — is a cross-mode handoff; a snap neighbour with no entry zone is a
+    // genuine boundary, so leave it. A move inserts the window into the neighbour's
+    // stack (or its strip); a swap trades it with the neighbour's entry-edge tile
+    // (or column). The daemon's handlers pick the target engine off the same mode
+    // read and already route Scrolling, so the emitted payloads are unchanged.
     if (m_layoutManager->modeForScreen(neighbour, currentVirtualDesktopForScreen(neighbour), currentActivity())
-        != PhosphorZones::AssignmentEntry::Autotile) {
+        == PhosphorZones::AssignmentEntry::Snapping) {
         return false;
     }
     if (swap) {

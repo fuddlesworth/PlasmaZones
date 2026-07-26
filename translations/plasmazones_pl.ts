@@ -356,7 +356,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="83"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="105"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="160"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="424"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="429"/>
         <source>Scrolling</source>
         <comment>tiling mode name</comment>
         <translation>Przewijanie</translation>
@@ -703,7 +703,7 @@
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="1055"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="424"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="546"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="540"/>
         <source>Could not write the export. Check that the folder is writable.</source>
         <translation>Nie udało się zapisać eksportu. Sprawdź, czy w folderze można zapisywać.</translation>
     </message>
@@ -1582,14 +1582,14 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="118"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="191"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="449"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="454"/>
         <source>Snapping layout</source>
         <translation>Układ przyciągania</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="121"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="645"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="469"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="474"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/AlgorithmPreviewCard.qml.cpp" line="152"/>
         <source>Tiling algorithm</source>
         <translation>Algorytm kafelkowania</translation>
@@ -6886,15 +6886,15 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="361"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="510"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="566"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="933"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="560"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="919"/>
         <source>That file path is not allowed.</source>
         <translation>Ta ścieżka pliku jest niedozwolona.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="393"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="568"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="498"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="492"/>
         <source>That export path is not allowed.</source>
         <translation>Ta ścieżka eksportu jest niedozwolona.</translation>
     </message>
@@ -7388,67 +7388,67 @@
         <translation>Nie udało się wyzerować niektórych zastąpień animacji.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="489"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="483"/>
         <source>Settings can only be exported to a local file.</source>
         <translation>Ustawienia można wyeksportować tylko do lokalnego pliku.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="530"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="524"/>
         <source>That is the settings file this app is using. Export to a different file.</source>
         <translation>To jest plik ustawień, którego używa ta aplikacja. Wyeksportuj do innego pliku.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="557"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="551"/>
         <source>Settings can only be imported from a local file.</source>
         <translation>Ustawienia można zaimportować tylko z lokalnego pliku.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="571"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="565"/>
         <source>That settings file is no longer there.</source>
         <translation>Tego pliku ustawień już tam nie ma.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="585"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="579"/>
         <source>Those are the settings this app is already using. Pick a different file to import.</source>
         <translation>To są ustawienia, których ta aplikacja już używa. Wybierz inny plik do zaimportowania.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="608"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="613"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="618"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="642"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="686"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="602"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="607"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="612"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="636"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="680"/>
         <source>That is not a settings file this app can read.</source>
         <translation>To nie jest plik ustawień, który ta aplikacja potrafi odczytać.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="658"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="652"/>
         <source>Could not back up your current settings, so nothing was imported.</source>
         <translation>Nie udało się utworzyć kopii zapasowej bieżących ustawień, więc nic nie zaimportowano.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="671"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="665"/>
         <source>Could not read that older settings file.</source>
         <translation>Nie udało się odczytać tego starszego pliku ustawień.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="678"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="672"/>
         <source>Could not read that settings file.</source>
         <translation>Nie udało się odczytać tego pliku ustawień.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="698"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="692"/>
         <source>Could not replace your settings with that file.</source>
         <translation>Nie udało się zastąpić ustawień tym plikiem.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="726"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="731"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="720"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="725"/>
         <source>Your settings could not be put back. A copy is saved at %1.</source>
         <translation>Nie udało się przywrócić ustawień. Kopia jest zapisana w %1.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="774"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="768"/>
         <source>Your settings were imported, but the animation pages still show the old ones. Reopen the settings window to see the imported values.</source>
         <translation>Ustawienia zostały zaimportowane, ale strony animacji nadal pokazują stare. Otwórz ponownie okno ustawień, aby zobaczyć zaimportowane wartości.</translation>
     </message>
@@ -12544,10 +12544,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="33"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="363"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="389"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="453"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="473"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="368"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="394"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="458"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="478"/>
         <source>Default</source>
         <translation>Domyślne</translation>
     </message>
@@ -13872,7 +13872,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="668"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="417"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="422"/>
         <source>Placement mode</source>
         <translation>Tryb rozmieszczenia</translation>
     </message>
@@ -14294,48 +14294,48 @@
         <translation>Zresetuj ten ekran</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="245"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="259"/>
         <source>View and change the active mode and layout for each monitor.</source>
         <translation>Wyświetl i zmień aktywny tryb oraz układ dla każdego ekranu.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="264"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="278"/>
         <source>Unable to retrieve monitor state. Make sure the daemon is running.</source>
         <translation>Nie można pobrać stanu ekranu. Upewnij się, że demon jest uruchomiony.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="372"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="377"/>
         <source>Snapping layout preview: %1</source>
         <translation>Podgląd układu przyciągania: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="372"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="377"/>
         <source>Snapping layout preview</source>
         <translation>Podgląd układu przyciągania</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="400"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="405"/>
         <source>Tiling algorithm preview: %1</source>
         <translation>Podgląd algorytmu kafelkowania: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="400"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="405"/>
         <source>Tiling algorithm preview</source>
         <translation>Podgląd algorytmu kafelkowania</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="410"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="415"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.</source>
         <translation>Tryb przewijania układa okna w kolumny o zmiennej szerokości na nieskończonym pasie. Nie używa układu stref.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="424"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="429"/>
         <source>Snapping</source>
         <comment>tiling mode name</comment>
         <translation>Przyciąganie</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="424"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="429"/>
         <source>Tiling</source>
         <comment>tiling mode name</comment>
         <translation>Kafelkowanie</translation>
@@ -16698,8 +16698,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="70"/>
-        <source>When the strip holds a single column, center it regardless of how Center the focused column is set</source>
-        <translation>Gdy pas zawiera tylko jedną kolumnę, wyśrodkuj ją niezależnie od ustawienia „Wyśrodkuj aktywną kolumnę”</translation>
+        <source>When the strip holds a single column, center it even when Center the focused column is set to Never.</source>
+        <oldsource>When the strip holds a single column, center it regardless of how Center the focused column is set</oldsource>
+        <translation>Gdy pas zawiera tylko jedną kolumnę, wyśrodkuj ją nawet wtedy, gdy „Wyśrodkuj aktywną kolumnę” jest ustawione na „Nigdy”.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="98"/>

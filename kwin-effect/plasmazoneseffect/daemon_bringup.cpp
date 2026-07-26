@@ -621,7 +621,7 @@ void PlasmaZonesEffect::connectNavigationSignals()
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                           PhosphorProtocol::Service::Interface::WindowTracking,
                                           QStringLiteral("windowOutputMoveExpected"), this,
-                                          SLOT(slotWindowOutputMoveExpected(QString, QString)));
+                                          SLOT(slotWindowOutputMoveExpected(QString, QString, QString)));
 
     // Float toggle is entirely daemon-local: the daemon reads the active
     // window from its own shadow, calls toggleFloatForWindow internally, and

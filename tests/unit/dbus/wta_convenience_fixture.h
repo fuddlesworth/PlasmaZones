@@ -64,75 +64,13 @@ using StubSettingsConvenience = StubSettings;
 // Stub PhosphorZones::Zone Detector
 // =========================================================================
 
-class StubZoneDetectorConvenience : public PhosphorZones::IZoneDetector
-{
-    // No Q_OBJECT: the stub adds no signals/slots/properties, and a marked
-    // class in this shared header would need explicit AUTOMOC wiring in
-    // every consuming target.
-public:
-    explicit StubZoneDetectorConvenience(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-    PhosphorZones::Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(PhosphorZones::Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
+// The shared helper is the same inert placeholder this fixture used to spell
+// out: WindowTrackingAdaptor only null-checks the detector and SnapEngine only
+// stores it, so nothing here ever calls a detection method. createTestLayout
+// comes from the same header.
+#include "helpers/StubZoneDetector.h"
 
-private:
-    PhosphorZones::Layout* m_layout = nullptr;
-};
-
-// =========================================================================
-// Helpers
-// =========================================================================
-
-static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
-{
-    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
-    for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new PhosphorZones::Zone(layout);
-        qreal x = static_cast<qreal>(i) / zoneCount;
-        qreal w = 1.0 / zoneCount;
-        zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
-        zone->setZoneNumber(i + 1);
-        layout->addZone(zone);
-    }
-    return layout;
-}
+using StubZoneDetectorConvenience = PlasmaZones::StubZoneDetector;
 
 // =========================================================================
 // Test Class

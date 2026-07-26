@@ -302,6 +302,12 @@ void Daemon::connectDesktopActivity()
                 // [SEQ E] Per-desktop assignments may differ — recompute autotile
                 // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateEngineScreens();
+                // A desktop whose assignment is snapping demotes the screen out
+                // of tiling in the recompute above; nothing further on this path
+                // consumes the preserved snap-ZONE half, so put the released
+                // windows back on their recorded zones instead of leaving them
+                // sitting at their tile rects.
+                flushPendingSnapZoneRestores();
                 syncModeFromAssignments();
                 if (m_overlayService->isVisible()) {
                     m_overlayService->updateGeometries();
@@ -471,6 +477,11 @@ void Daemon::connectDesktopActivity()
                     }
                     // Per-activity assignments may differ — recompute autotile screens
                     updateEngineScreens();
+                    // Same reason as the per-screen desktop switch above: this
+                    // path has no consumer for the preserved snap-ZONE half, so
+                    // windows released by an activity's snapping assignment need
+                    // their zones restored here.
+                    flushPendingSnapZoneRestores();
                     // Sync mode, layout filter, and controller state from per-activity assignments.
                     syncModeFromAssignments();
                     if (m_overlayService->isVisible()) {
@@ -704,6 +715,10 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // happens until something else (e.g. an assignment change) fires
     // layoutAssigned → updateEngineScreens.
     updateEngineScreens();
+    // Screens dropped by the new VS topology release their windows above. The
+    // reconfigure resnap below works off stored zone assignments and does not
+    // consume the preserved snap-ZONE half, so emit it here.
+    flushPendingSnapZoneRestores();
 
     // Resnap windows on this physical screen and any of its virtual children
     // to their stored zones. Uses calculateResnapFromCurrentAssignments which

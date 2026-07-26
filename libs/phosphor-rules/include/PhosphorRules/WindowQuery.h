@@ -63,7 +63,8 @@ struct WindowQuery
     std::optional<bool> isFloating; ///< floated out of tiling (snap or autotile)
     std::optional<bool> isSnapped; ///< occupies a snap zone (snap mode only)
     std::optional<QString> zone; ///< the snap zone's UUID the window occupies
-    std::optional<bool> isTiled; ///< managed by the autotile engine (distinct from isSnapped)
+    std::optional<bool> isTiled; ///< managed by a tiling-family engine — autotile or scrolling (distinct from
+                                 ///< isSnapped)
 
     // ── Context attributes — always present (except the optional tiledWindowCount) ──
     QString screenId;

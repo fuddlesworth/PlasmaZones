@@ -407,9 +407,11 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 // NOTE on the P_SCROLL_* macros above: they deliberately inject `screen`,
 // `state`, and `params` into the caller's scope and embed an early return.
 // A helper struct + lambda was considered and rejected: every verb would
-// still need the three names plus the bail-out, and the macro keeps the 16
-// verb bodies one line each. The names are part of the macro's documented
-// contract, and both macros are #undef'd at the end of this file.
+// still need the three names plus the bail-out, and the macro keeps 14 of the
+// 16 verb bodies one line each (toggleColumnTabbed and resetWindowHeights are
+// hand-expanded — neither op reads layout params). The names are part of the
+// macro's documented contract, and both macros are #undef'd at the end of this
+// file.
 void ScrollEngine::consumeWindowIntoColumn(const QString& screenId)
 {
     P_SCROLL_VERB(screenId, state->strip().consumeWindowIntoColumn(params), "consume");

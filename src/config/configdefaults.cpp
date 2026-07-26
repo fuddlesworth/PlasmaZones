@@ -5,6 +5,7 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 
 #include <QDir>
 #include <QFile>
@@ -106,7 +107,7 @@ QJsonObject ConfigDefaults::defaultLayoutVisibilitySettings()
         out.insert(id, hidden);
     }
     for (const QString& id : algorithmIds) {
-        out.insert(QStringLiteral("autotile:") + id, hidden);
+        out.insert(PhosphorLayout::LayoutId::makeAutotileId(id), hidden);
     }
     return out;
 }

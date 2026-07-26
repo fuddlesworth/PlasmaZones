@@ -316,9 +316,17 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // the reactive close/open re-issue). Snap mode never performs a
     // daemon-side cross-output tiling migration; BOTH tiling engines are
     // wired (the scroll connect follows below with the rest of its block).
+    //
+    // The relayed marker carries no source screen: an engine arms it BEFORE it
+    // migrates state or retiles either output, so the compositor's own
+    // notified-screen record still names the pre-move screen and is the
+    // correct source. Only the cross-mode paths, which arm after the handoff,
+    // have to put the source on the wire.
     if (m_autotileEngine) {
         connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this,
-                &WindowTrackingAdaptor::windowOutputMoveExpected);
+                [this](const QString& windowId, const QString& targetScreenId) {
+                    Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, QString());
+                });
     }
 
     // Cross-MODE directional move: a source engine reached a boundary whose
@@ -388,8 +396,11 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::navigationFeedback);
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this,
                 &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        // Empty source screen, same reasoning as the autotile relay above.
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this,
-                &WindowTrackingAdaptor::windowOutputMoveExpected);
+                [this](const QString& windowId, const QString& targetScreenId) {
+                    Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, QString());
+                });
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,

@@ -43,24 +43,14 @@ inline auto validIntOr(std::initializer_list<int> valid, int fallback)
 }
 
 /// Canonicalize a comma-joined proportion list: parse each entry as a
-/// decimal, keep only values in [@p floor, 1] (a @p floor of 0 keeps the bare
-/// "greater than zero" rule), de-dupe, and re-serialize. When NOTHING
-/// survives (all-garbage hand edit, a cleared field, or every entry below the
-/// floor), snap to @p fallback — the key's default — matching the
-/// validIntOr/validStringOr convention. Persisting the empty string instead
-/// would leave the page showing an empty field while the engine silently
-/// cycles its built-ins: the accepted-but-dead divergence this validator
-/// exists to prevent.
-///
-/// @p floor exists because a preset list feeds the same width vocabulary as
-/// the scalar width key, whose kind-aware setter refuses anything under
-/// ConfigDefaults::scrollingDefaultColumnWidthValueMin(). A preset below that
-/// floor would be accepted here and then clamped away downstream — the same
-/// accepted-but-dead divergence, one layer deeper. Entries under the floor are
-/// DROPPED rather than clamped, matching how this validator already treats
-/// every other out-of-range entry (clamping would silently mint a duplicate of
-/// the floor for each of them).
-inline QVariant canonicalProportionList(const QVariant& v, const QString& fallback, double floor = 0.0)
+/// decimal, keep only values in (0, 1] — the range the engine itself accepts
+/// for a preset entry — de-dupe, and re-serialize. When NOTHING survives
+/// (all-garbage hand edit or a cleared field), snap to @p fallback — the
+/// key's default — matching the validIntOr/validStringOr convention.
+/// Persisting the empty string instead would leave the page showing an empty
+/// field while the engine silently cycles its built-ins: the accepted-but-dead
+/// divergence this validator exists to prevent.
+inline QVariant canonicalProportionList(const QVariant& v, const QString& fallback)
 {
     // Same size-cap rationale as canonicalTriggerList: a hand-edited file
     // must not smuggle an unbounded list past the setter path (each entry
@@ -74,7 +64,7 @@ inline QVariant canonicalProportionList(const QVariant& v, const QString& fallba
         }
         bool ok = false;
         const double val = raw.trimmed().toDouble(&ok);
-        if (!ok || val <= 0.0 || val > 1.0 || val < floor) {
+        if (!ok || val <= 0.0 || val > 1.0) {
             continue;
         }
         const QString canonical = QString::number(val);

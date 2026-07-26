@@ -6,6 +6,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "tileslogging.h"
 
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorRegistry/IFactoryBase.h>
 #include <PhosphorRegistry/Registry.h>
 
@@ -217,7 +218,7 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     }
     // Reserved namespace: "autotile:" is the prefix LayoutId uses to wrap
     // algorithm ids into composite LayoutPreview ids.
-    if (id.startsWith(QLatin1String("autotile:"))) {
+    if (PhosphorLayout::LayoutId::isAutotile(id)) {
         qCWarning(PhosphorTiles::lcTilesLib)
             << "AlgorithmRegistry: refusing algorithm id with reserved 'autotile:' prefix" << id;
         delete algorithm;

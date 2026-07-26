@@ -162,8 +162,13 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         // happens — it would swallow the next genuine outputChanged. The
         // effect applies geometry through deferred commits, so the marker
         // signal lands before the output change is processed.
+        //
+        // The source screen travels on the wire because this arm site runs
+        // AFTER the handoff: handoffReceive already pushed the destination's
+        // tiles, so the effect's own notified-screen record names the
+        // destination by now and cannot answer "where did it come from".
         if (placedOnTarget && !sourceScreen.isEmpty() && targetScreenId != sourceScreen) {
-            Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
+            Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, sourceScreen);
         }
     } else {
         // Reactive autotile desktop arrival: no receive here (the effect
@@ -366,17 +371,29 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
         sourceEngine->retile(sourceScreen);
     }
+    // Mirrored hole on the TARGET side: targetEngine->handoffRelease(partner)
+    // does not retile either, and if the focused window's receive was refused
+    // (re-homed into the source) while the partner's receive into the source
+    // succeeded, nothing ever arrives on the target to close the partner's
+    // vacated slot. Same autotile-only rule as above.
+    if (!targetScreenId.isEmpty() && targetEngine == m_autotileEngine.data()
+        && !targetEngine->isWindowTracked(windowId)) {
+        targetEngine->retile(targetScreenId);
+    }
 
     // ── Arm the daemon-owned-move markers for the windows that were
     //    genuinely adopted. Placement geometry lands on the coalesced
     //    retile (queued), so post-receive arming is still ahead of the
     //    compositor's outputChanged; a refused receive arms nothing. ──
+    //    Both markers carry their source explicitly, same reason as the move
+    //    path: the receives above already re-pointed the effect's
+    //    notified-screen records at each window's destination.
     if (targetScreenId != sourceScreen) {
         if (targetEngine->isWindowTracked(windowId)) {
-            Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
+            Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, sourceScreen);
         }
         if (sourceEngine->isWindowTracked(partner)) {
-            Q_EMIT windowOutputMoveExpected(partner, sourceScreen);
+            Q_EMIT windowOutputMoveExpected(partner, sourceScreen, targetScreenId);
         }
     }
 }

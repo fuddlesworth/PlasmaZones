@@ -3,6 +3,7 @@
 
 #include <PhosphorCompositor/DaemonClient.h>
 #include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
@@ -14,8 +15,11 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
+#include <QLoggingCategory>
 
 namespace PhosphorCompositor {
+
+Q_LOGGING_CATEGORY(lcDaemonClient, "phosphor.compositor.daemonclient", QtWarningMsg)
 
 DaemonClient::DaemonClient(QObject* parent)
     : QObject(parent)
@@ -145,30 +149,68 @@ void DaemonClient::notifyWindowActivated(const QString& windowId, const QString&
 // Drag operations (plugin → daemon)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void DaemonClient::dragStarted(const QString& windowId, const QRectF& geometry)
+void DaemonClient::beginDrag(const QString& windowId, const QRect& frameGeometry, const QString& startScreenId,
+                             int mouseButtons)
 {
-    // Wire: dragStarted(s, dddd) — doubles, no screenId (the daemon derives
-    // the screen from the geometry/cursor itself).
-    PhosphorProtocol::ClientHelpers::sendOneWay(
-        PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("dragStarted"),
-        {windowId, geometry.x(), geometry.y(), geometry.width(), geometry.height()});
+    auto* watcher =
+        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                        PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("beginDrag"),
+                                        {windowId, frameGeometry.x(), frameGeometry.y(), frameGeometry.width(),
+                                         frameGeometry.height(), startScreenId, mouseButtons}),
+                                    this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (w->isError()) {
+            qCWarning(lcDaemonClient) << "beginDrag failed for" << windowId << ":" << w->error().message();
+            return;
+        }
+        QDBusPendingReply<PhosphorProtocol::DragPolicy> reply = *w;
+        if (!reply.isValid()) {
+            return;
+        }
+        const PhosphorProtocol::DragPolicy policy = reply.value();
+        const QString invalid = policy.validationError();
+        if (!invalid.isEmpty()) {
+            qCWarning(lcDaemonClient) << "beginDrag returned an invalid policy for" << windowId << ":" << invalid;
+            return;
+        }
+        Q_EMIT dragPolicyReceived(windowId, policy);
+    });
 }
 
-void DaemonClient::dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
+void DaemonClient::updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
 {
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
-                                                QStringLiteral("dragMoved"),
+                                                QStringLiteral("updateDragCursor"),
                                                 {windowId, cursorX, cursorY, modifiers, mouseButtons});
 }
 
-void DaemonClient::dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
+void DaemonClient::endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons,
+                           bool cancelled)
 {
-    // dragStopped has snap-target out-params on the wire; this one-way client
-    // ignores the reply — a compositor that needs the snap rect must use the
-    // canonical endDrag round-trip instead.
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
-                                                QStringLiteral("dragStopped"),
-                                                {windowId, cursorX, cursorY, modifiers, mouseButtons});
+    auto* watcher =
+        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                        PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("endDrag"),
+                                        {windowId, cursorX, cursorY, modifiers, mouseButtons, cancelled}),
+                                    this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (w->isError()) {
+            qCWarning(lcDaemonClient) << "endDrag failed for" << windowId << ":" << w->error().message();
+            return;
+        }
+        QDBusPendingReply<PhosphorProtocol::DragOutcome> reply = *w;
+        if (!reply.isValid()) {
+            return;
+        }
+        const PhosphorProtocol::DragOutcome outcome = reply.value();
+        const QString invalid = outcome.validationError();
+        if (!invalid.isEmpty()) {
+            qCWarning(lcDaemonClient) << "endDrag returned an invalid outcome for" << windowId << ":" << invalid;
+            return;
+        }
+        Q_EMIT dragOutcomeReceived(windowId, outcome);
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

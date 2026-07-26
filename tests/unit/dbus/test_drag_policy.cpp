@@ -16,9 +16,10 @@
  *   (snap_enabled, screen_is_autotile, screen_is_scrolling,
  *    window_tracked_by_scroll, context_disabled, reorder_mode)
  *
- * reorder_mode is the RESOLVED bool computeDragPolicy takes; the per-screen
- * rule override that produces it (effectiveReorderMode) is a separate
- * function outside this file's scope.
+ * reorder_mode is the RESOLVED bool computeDragPolicy takes. The function that
+ * produces it, WindowDragAdaptor::resolveReorderMode, is covered here too (see
+ * the reorderMode_* slots): its own precedence is context rule → global
+ * setting, and the two are pinned separately from the routing table below.
  *     → PhosphorProtocol::DragPolicy.bypassReason + flags
  *
  * Precedence (first match wins, strongest disable first):
@@ -422,6 +423,17 @@ private Q_SLOTS:
         QVERIFY(!WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QStringLiteral("DP-2")));
         // …and an empty screen id has no context to match against.
         QVERIFY(!WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QString()));
+
+        // Re-run the two unmatched arms against the OPPOSITE global. The rule
+        // still only matches DP-1, so both must now follow the global and
+        // answer true. Without this the arms above are satisfied just as well
+        // by a resolveReorderMode that always returns false — they would not
+        // distinguish "kept the setting" from "answered no".
+        settings.m_dragBehavior = AutotileDragBehavior::Reorder;
+        QVERIFY2(WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QStringLiteral("DP-2")),
+                 "an unmatched screen must follow the global setting, not the DP-1 rule");
+        QVERIFY2(WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QString()),
+                 "an empty screen id has no rule context, so the global setting stands");
     }
 
     // Empty screen id falls through to the snap check even while the

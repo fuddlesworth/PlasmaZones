@@ -575,6 +575,28 @@ private:
     void emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntries = false);
 
     /**
+     * @brief Consume the snap-ZONE half of m_pendingSnapFloatRestores on a
+     *        context-switch recompute that has no downstream zone consumer.
+     *
+     * updateEngineScreens' tail drain preserves the zone half for the
+     * mode-toggle and autotile-disable paths, which feed it into
+     * preClaimedZoneIds and their batched restore. The context-switch
+     * recomputes (per-screen desktop switch, activity switch, virtual-screen
+     * reconfigure, the tiled-count gates, the rule reconcile) have no such
+     * consumer, so a tiling→snapping demotion there left windows sitting at
+     * their tile rects and the entries lingering for an unrelated later
+     * consumer to replay. The entries are complete (window, zones, geometry,
+     * screen, desktop), so they are emitted directly as their own batch
+     * rather than routed through the resnap buffer — that keeps the move
+     * scoped to the windows the recompute actually released instead of
+     * resnapping every window on the screen.
+     *
+     * No-op while a recompute is in progress: the batch then belongs to the
+     * outer pass, whose own consumer owns the zone half.
+     */
+    void flushPendingSnapZoneRestores();
+
+    /**
      * @brief Update layout filter on overlay service and unified layout controller
      *
      * Shows both manual and autotile layouts when the feature gate is enabled.
@@ -928,6 +950,10 @@ private:
     /// autotile layout. Reads the per-screen desktop (per-output virtual
     /// desktops, #648) and current activity fresh on every call.
     bool isAnyScreenAutotile() const;
+    /// True when @p geometry overlaps at least one currently-connected
+    /// effective screen. Used to reject restore targets that resolve onto an
+    /// output that has gone away (monitor unplug).
+    bool intersectsAnyLiveScreen(const QRect& geometry) const;
     bool isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
     /**

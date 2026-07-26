@@ -203,6 +203,10 @@ Window {
         property string disabledReason: ""
         // Overlay glyph for the disabled-style card; the daemon overwrites
         // it per show (neutral icon for the Scrolling mode announcement).
+        // Third copy of this literal: LayoutOsdContent.qml's failureIcon is
+        // the one the card compares against to decide the failure tint, and
+        // src/daemon/overlayservice/osd.cpp writes the same string as its
+        // empty-icon fallback. Change one and change all three.
         property string disabledIcon: "dialog-cancel"
         property bool success: true
         property string action: ""

@@ -340,14 +340,14 @@ Item {
                             if (root.locked)
                                 return;
 
-                            root.selectedIndex = index;
+                            root.selectedIndex = layoutCard.index;
                             root.confirmSelection();
                         }
                         onEntered: {
                             if (root.locked && !layoutCard.isActive)
                                 return;
 
-                            root.selectedIndex = index;
+                            root.selectedIndex = layoutCard.index;
                         }
                     }
                 }

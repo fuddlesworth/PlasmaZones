@@ -67,7 +67,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Center a lone column")
                     searchAnchor: "alwaysCenterSingleColumn"
-                    description: i18n("When the strip holds a single column, center it regardless of how Center the focused column is set")
+                    description: i18n("When the strip holds a single column, center it even when Center the focused column is set to Never.")
 
                     SettingsSwitch {
                         checked: appSettings.scrollingAlwaysCenterSingleColumn

@@ -726,8 +726,10 @@ void TestNavigationCrossSurface::crossVirtualScreen_focusRight_crossesToSiblingV
 
 void TestNavigationCrossSurface::crossDesktop_focusRight_activatesEntryWindowOnNextDesktop()
 {
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
     FakeCrossSurfaceResolver resolver;
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
     engine->setCrossSurfaceResolver(&resolver);
 
     // Seed a window on desktop 2, then return to desktop 1.
@@ -750,8 +752,10 @@ void TestNavigationCrossSurface::crossDesktop_focusRight_activatesEntryWindowOnN
 
 void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAndRequestsKWinMove()
 {
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
     FakeCrossSurfaceResolver resolver;
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
     engine->setCrossSurfaceResolver(&resolver);
 
     PhosphorTiles::TilingState* d1 = engine->tilingStateForScreen(kScreen);
@@ -803,10 +807,12 @@ void TestNavigationCrossSurface::crossDesktop_moveToSnapTargetDesktop_emitsCross
     snapEntry.mode = PhosphorZones::AssignmentEntry::Snapping;
     registry->setAssignmentEntryDirect(kScreen, 2, QString(), snapEntry); // desktop 2 = snap
 
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
+    FakeCrossSurfaceResolver resolver; // right → next desktop; no neighbour output
     std::unique_ptr<AutotileEngine> engine(
         new AutotileEngine(registry.get(), nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry()));
     engine->setAutotileScreens({kScreen});
-    FakeCrossSurfaceResolver resolver; // right → next desktop; no neighbour output
     engine->setCrossSurfaceResolver(&resolver);
     engine->setCurrentDesktop(1);
     engine->windowOpened(QStringLiteral("w0"), kScreen);
@@ -836,8 +842,10 @@ void TestNavigationCrossSurface::crossDesktop_swapRight_doesNotRelocate()
     // Swap is NOT extended across virtual desktops — only MOVE relocates to an
     // adjacent desktop. Swapping the edge window toward the next desktop is a
     // no-op: no windowDesktopMoveRequested.
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
     FakeCrossSurfaceResolver resolver;
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
     engine->setCrossSurfaceResolver(&resolver);
     PhosphorTiles::TilingState* d1 = engine->tilingStateForScreen(kScreen);
     d1->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
@@ -855,8 +863,10 @@ void TestNavigationCrossSurface::crossDesktop_focusLeft_atGridEdge_doesNotActiva
     // ("no neighbour") for "left" there. Focusing left from the leftmost window
     // has no in-surface neighbour, no neighbour output, and no neighbour desktop
     // — nothing may be activated.
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
     FakeCrossSurfaceResolver resolver;
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
     engine->setCrossSurfaceResolver(&resolver);
     engine->setCurrentDesktop(1);
 
@@ -876,8 +886,10 @@ void TestNavigationCrossSurface::crossDesktop_moveLeft_atGridEdge_doesNotRequest
     // move nor an output-move marker fires. (Drives moveFocusedInDirection, the
     // action this test is named for; swap-at-the-desktop-boundary no-op is covered
     // by crossDesktop_swapRight_doesNotRelocate.)
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
     FakeCrossSurfaceResolver resolver;
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
     engine->setCrossSurfaceResolver(&resolver);
     engine->setCurrentDesktop(1);
 

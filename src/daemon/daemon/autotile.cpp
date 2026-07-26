@@ -58,6 +58,21 @@ bool Daemon::isAnyScreenAutotile() const
     return false;
 }
 
+bool Daemon::intersectsAnyLiveScreen(const QRect& geometry) const
+{
+    if (!geometry.isValid() || !m_screenManager) {
+        return false;
+    }
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : effectiveIds) {
+        const QRect geom = m_screenManager->screenGeometry(screenId);
+        if (geom.isValid() && geom.intersects(geometry)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Daemon::updateEngineScreens()
 {
     // Pre-init calls bail here; after initEnginesAndWiring the factory
@@ -462,6 +477,11 @@ void Daemon::reconcileActiveAssignments()
     // inside updateEngineScreens (see the comment there). SetDragBehavior needs no
     // retile — it is read live by the drag adaptor.
     updateEngineScreens();
+    // A rule edit that demotes a screen from tiling to snapping releases its
+    // windows in the recompute above, and nothing on this path consumes the
+    // preserved snap-ZONE half (the KCM apply below drains it without
+    // applying). Put those windows back on their recorded zones.
+    flushPendingSnapZoneRestores();
     if (changed.isEmpty()) {
         return;
     }
@@ -951,6 +971,16 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
                 QRect g = rec->freeGeometryFor(screen.isEmpty() ? rec->screenId : screen);
                 if (!g.isValid()) {
                     g = rec->anyFreeGeometry();
+                }
+                // A prune-origin release (monitor unplug) resolves the free
+                // geometry against the screen that just went away, so the rect
+                // can sit entirely on a dead output. Restoring it would push the
+                // window off every live screen; the compositor has already
+                // relocated it somewhere visible, so let that stand.
+                if (g.isValid() && !intersectsAnyLiveScreen(g)) {
+                    qCInfo(lcDaemon) << "windowsReleased: dropping snap-float restore for" << windowId << "geo=" << g
+                                     << "— target intersects no live screen";
+                    g = QRect();
                 }
                 if (g.isValid()) {
                     ZoneAssignmentEntry entry;

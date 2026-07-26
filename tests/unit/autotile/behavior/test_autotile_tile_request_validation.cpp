@@ -203,22 +203,19 @@ private Q_SLOTS:
         // manager reports only NEWLY overflowed windows).
         QCOMPARE(entries.size(), 3);
         int floatingCount = 0;
-        bool sawFloating = false;
         for (const PhosphorProtocol::TileRequestEntry& entry : entries) {
             QVERIFY2(entry.validationError().isEmpty(), qPrintable(entry.validationError()));
             QCOMPARE(entry.screenId, screenName);
             if (entry.floating) {
                 ++floatingCount;
-                sawFloating = true;
                 QCOMPARE(entry.windowId, QStringLiteral("win-3"));
             }
         }
+        // Three windows under a maxWindows=2 cap MUST surface exactly one
+        // overflow entry: without this pin the overflow branch could stop
+        // emitting floating entries entirely and the per-entry validation
+        // above would pass vacuously on the two tiled ones.
         QCOMPARE(floatingCount, 1);
-        // Three windows under a maxWindows=2 cap MUST surface an overflow
-        // entry: without this pin the overflow branch could stop emitting
-        // floating entries entirely and the per-entry validation above
-        // would pass vacuously on the two tiled ones.
-        QVERIFY2(sawFloating, "the overflow branch emitted no floating entry - the overflow path is untested");
     }
 };
 

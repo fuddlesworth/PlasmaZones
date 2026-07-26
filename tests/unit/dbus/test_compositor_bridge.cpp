@@ -50,51 +50,13 @@ using StubSettingsBridge = StubSettings;
 // Stub PhosphorZones::Zone Detector
 // =========================================================================
 
-class StubZoneDetectorBridge : public PhosphorZones::IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorBridge(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-    PhosphorZones::Layout* layout() const override
-    {
-        return nullptr;
-    }
-    void setLayout(PhosphorZones::Layout*) override
-    {
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-};
+// WindowTrackingAdaptor only null-checks the detector and SnapEngine only
+// stores it, so the shared inert stub covers both. The former local copy
+// answered layout() with nullptr instead of remembering the set layout; no
+// caller in this suite reads it either way.
+#include "helpers/StubZoneDetector.h"
+
+using StubZoneDetectorBridge = PlasmaZones::StubZoneDetector;
 
 // =========================================================================
 // Test Class
@@ -145,7 +107,11 @@ private Q_SLOTS:
         delete m_controlParent;
         m_controlParent = nullptr;
         m_controlAdaptor = nullptr;
+        // Detach BOTH borrowed pointers before the engine dies so the service
+        // never holds a dangling SnapEngine* (same discipline as
+        // wta_convenience_fixture.h).
         m_wta->service()->setSnapState(nullptr);
+        m_wta->service()->setSnapEngine(nullptr);
         delete m_snapEngine;
         m_snapEngine = nullptr;
         delete m_wtaParent;

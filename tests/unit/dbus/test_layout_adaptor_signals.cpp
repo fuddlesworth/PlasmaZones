@@ -5,16 +5,17 @@
  * @file test_layout_adaptor_signals.cpp
  * @brief LayoutAdaptor signal emission contract tests.
  *
- * Pins the rule (Phase 1.2 of refactor/dbus-performance): property
- * mutations (setLayoutHidden, setLayoutAutoAssign, setLayoutAspectRatioClass)
- * emit `layoutChanged` but NEVER `layoutListChanged` — the list hasn't
- * changed. layoutListChanged is reserved for genuine add/delete/reload
- * operations (onLayoutsChanged, notifyLayoutListChanged).
+ * Pins the rule: property mutations (setLayoutHidden, setLayoutAutoAssign,
+ * setLayoutAspectRatioClass) emit the compact `layoutPropertyChanged` and
+ * NOTHING else. Neither the heavyweight `layoutChanged(json)` nor
+ * `layoutListChanged` may fire, because neither the serialised layout nor the
+ * list is what the mutation changed. layoutListChanged stays reserved for
+ * genuine add/delete/reload operations (onLayoutsChanged,
+ * notifyLayoutListChanged).
  *
- * Subscribers (SettingsController) wire both signals to the same reload
- * slot, so dropping the redundant list-changed emission is behavior-
- * preserving on the client side but shaves one D-Bus marshal + slot
- * invocation per property mutation.
+ * Subscribers reload from the property payload, so narrowing the emission is
+ * behavior-preserving on the client side and saves a full layout marshal per
+ * property mutation.
  */
 
 #include <QTest>

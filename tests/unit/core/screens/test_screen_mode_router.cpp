@@ -301,6 +301,20 @@ private Q_SLOTS:
                  static_cast<PhosphorEngine::IPlacementEngine*>(m_snapEngine));
     }
 
+    void modeFor_cascadeAutotileWithoutEngineClaim_downgradesToSnapping()
+    {
+        // The twin of the Scrolling downgrade above, and the one the comment
+        // there calls "symmetric": the cascade says Autotile but the autotile
+        // engine's live set does not claim the screen, so the router trusts
+        // the engine and falls back to Snapping.
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-9"), 0, QString(), entry);
+        QCOMPARE(m_router->modeFor(QStringLiteral("DP-9")), PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(m_router->engineFor(QStringLiteral("DP-9")),
+                 static_cast<PhosphorEngine::IPlacementEngine*>(m_snapEngine));
+    }
+
     void modeFor_bothEnginesClaim_autotileWins()
     {
         // Both live sets claiming one screen is a transition artefact; the

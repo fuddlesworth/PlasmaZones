@@ -115,7 +115,6 @@ void StagingService::clearAll()
 void StagingService::stageSnapping(const QString& screen, int desktop, const QString& activity, const QString& layoutId)
 {
     auto& e = assignmentEntry(screen, desktop, activity);
-    e.fullCleared = false;
     e.stagedMode = std::nullopt;
     e.snappingLayoutId = layoutId;
     e.tilingAlgorithmId = std::nullopt;
@@ -124,19 +123,9 @@ void StagingService::stageSnapping(const QString& screen, int desktop, const QSt
 void StagingService::stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId)
 {
     auto& e = assignmentEntry(screen, desktop, activity);
-    e.fullCleared = false;
     e.stagedMode = std::nullopt;
     e.tilingAlgorithmId = layoutId;
     e.snappingLayoutId = std::nullopt;
-}
-
-void StagingService::stageFullClear(const QString& screen, int desktop, const QString& activity)
-{
-    auto& e = assignmentEntry(screen, desktop, activity);
-    e.fullCleared = true;
-    e.stagedMode = std::nullopt;
-    e.snappingLayoutId = std::nullopt;
-    e.tilingAlgorithmId = std::nullopt;
 }
 
 void StagingService::removeStagedAssignment(const QString& screen, int desktop, const QString& activity)
@@ -161,7 +150,6 @@ void StagingService::stageAssignmentEntry(const QString& screen, int desktop, co
                                           const QString& snappingLayoutId, const QString& tilingAlgorithmId)
 {
     auto& e = assignmentEntry(screen, desktop, activity);
-    e.fullCleared = false;
     e.stagedMode = mode;
     e.snappingLayoutId = snappingLayoutId.isEmpty() ? std::nullopt : std::optional<QString>(snappingLayoutId);
     e.tilingAlgorithmId = tilingAlgorithmId.isEmpty() ? std::nullopt : std::optional<QString>(tilingAlgorithmId);
@@ -173,10 +161,6 @@ bool StagingService::stagedSnappingLayout(const QString& screen, int desktop, co
     const auto* s = assignmentEntryConst(screen, desktop, activity);
     if (!s) {
         return false;
-    }
-    if (s->fullCleared && !s->snappingLayoutId.has_value()) {
-        out = QString();
-        return true;
     }
     if (s->snappingLayoutId.has_value()) {
         out = *s->snappingLayoutId;
@@ -190,10 +174,6 @@ bool StagingService::stagedTilingLayout(const QString& screen, int desktop, cons
     const auto* s = assignmentEntryConst(screen, desktop, activity);
     if (!s) {
         return false;
-    }
-    if (s->fullCleared && !s->tilingAlgorithmId.has_value()) {
-        out = QString();
-        return true;
     }
     if (s->tilingAlgorithmId.has_value()) {
         const QString& val = *s->tilingAlgorithmId;
@@ -220,28 +200,12 @@ void StagingService::flushAssignmentsToDaemon()
         const auto& s = it.value();
         const bool isActivity = !s.activityId.isEmpty();
         const bool isDesktop = s.virtualDesktop > 0;
-        qCDebug(lcCore) << "  flush: screen=" << s.screenId << "fullCleared=" << s.fullCleared << "mode="
+        qCDebug(lcCore) << "  flush: screen=" << s.screenId << "mode="
                         << (s.stagedMode.has_value() ? QString::number(*s.stagedMode) : QStringLiteral("(none)"))
                         << "snapping="
                         << (s.snappingLayoutId.has_value() ? *s.snappingLayoutId : QStringLiteral("(none)"))
                         << "tiling="
                         << (s.tilingAlgorithmId.has_value() ? *s.tilingAlgorithmId : QStringLiteral("(none)"));
-
-        // Full clear — clear the entire entry for this context.
-        if (s.fullCleared) {
-            if (isActivity) {
-                DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                       QStringLiteral("clearAssignmentForScreenActivity"), {s.screenId, s.activityId});
-            } else if (isDesktop) {
-                DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                       QStringLiteral("clearAssignmentForScreenDesktop"),
-                                       {s.screenId, s.virtualDesktop});
-            } else {
-                DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                       QStringLiteral("clearAssignment"), {s.screenId});
-            }
-            continue;
-        }
 
         // Normalise the tiling id — callers may store either the raw algo id
         // or the `autotile:` prefixed form; the D-Bus surface wants the raw id.
@@ -285,8 +249,9 @@ void StagingService::flushAssignmentsToDaemon()
 
         // Only snap staged — use the per-field path. An empty staged value
         // here has no dedicated D-Bus surface (there is no `clearSnappingOnly`
-        // method); assignment-page UI always routes empty-snap through
-        // stageFullClear, which took the `fullCleared` branch above.
+        // method), so it is skipped: the page routes a "Default" pick through
+        // stageAssignmentEntry, whose explicit-mode branch above carries the
+        // empty slot alongside the mode pin.
         if (hasSnap) {
             const QString& layoutId = *s.snappingLayoutId;
             if (layoutId.isEmpty()) {

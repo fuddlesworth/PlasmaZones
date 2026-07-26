@@ -40,12 +40,11 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
     if (after == before) {
         return;
     }
-    // The Fixed arm is driven purely by the KIND transition. The
-    // Proportion arm additionally requires a pixel-magnitude value
-    // (stored > 1.0) — that is a preservation test, not a kind sniff: a
-    // legitimate proportion parked through a ClientDecides hop must
-    // survive, while any setter-written Fixed value is >= the 100px floor
-    // and therefore unambiguous. Setter-side only: a hand-edited config with an
+    // Both arms are preservation tests, not kind sniffs: each re-seeds only
+    // when the stored value cannot belong to the kind being entered. Fixed
+    // re-seeds below the pixel floor, Proportion above 1.0. A legitimate
+    // value of either kind parked through a ClientDecides hop therefore
+    // survives the round trip. Setter-side only: a hand-edited config with an
     // inconsistent pair (kind=Fixed, value=0.5) is left as-is until the
     // next write and the engine renders a degenerate-but-clamped column
     // (its own load applies qMax(1, …)) — the page rewrites the pair on
@@ -61,11 +60,12 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
     // No before/after kind comparison is needed inside the arms: the
     // early-return above guarantees after != before, so entering Fixed
     // implies the previous kind was not Fixed.
-    if (isFixed) {
-        // Entering Fixed from anywhere: seed a sane pixel width. (This also
-        // means pixels retained across a Fixed→ClientDecides hop would be
-        // re-seeded on the way back, so there is nothing to retain — see
-        // the Proportion arm.)
+    if (isFixed && stored < ConfigDefaults::scrollingDefaultColumnWidthFixedMin()) {
+        // Entering Fixed with something that is not a plausible pixel width —
+        // a proportion arriving straight from Proportion, or one parked
+        // through a ClientDecides hop. Seed a sane pixel width. A pixel count
+        // already sitting there (the user's retained width across a
+        // Fixed→ClientDecides→Fixed round trip) is left alone.
         setScrollingDefaultColumnWidthValue(ConfigDefaults::scrollingDefaultColumnWidthFixedPx());
     } else if (isProportion && stored > 1.0) {
         // Entering Proportion with pixels stored — whether directly from

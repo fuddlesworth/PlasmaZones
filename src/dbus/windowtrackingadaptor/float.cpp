@@ -270,7 +270,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
             QString recoverScreen;
             if (sourceTracked) {
                 ctx.fromEngineId = source->engineId();
-                ctx.sourceGeometry = m_frameGeometry.value(windowId);
+                ctx.sourceGeometry = frameGeometry(windowId);
                 ctx.minSize = source->windowMinimumSize(windowId);
                 recoverScreen = source->screenForTrackedWindow(windowId);
             }

@@ -234,7 +234,8 @@ private Q_SLOTS:
                                     const QString& screenId, bool sizeOnly);
     void slotActivateWindowRequested(const QString& windowId);
     void slotWindowDesktopMoveRequested(const QString& windowId, int desktop);
-    void slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId);
+    void slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,
+                                      const QString& sourceScreenId);
 
     // Float toggle is entirely daemon-local — no effect-side slot needed.
 
@@ -1551,7 +1552,7 @@ private:
     ///   • autotile member (TilingStateHelpers::isTiledWindow) → "window.tiled"
     ///   • else snap member (SnapHandler::isTiledWindow)         → "window.snapped"
     ///   • else                                                  → "window.floating"
-    /// Autotile-first precedence. The resolved profile's effectiveChain() (an
+    /// Autotile-first precedence. The resolved profile's enabledChain() (an
     /// empty chain = no decoration) is the sole render gate (see
     /// updateWindowDecoration); there is no separate show-border gate.
     QString resolveSurfacePathFor(const QString& windowId) const;

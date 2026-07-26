@@ -260,7 +260,7 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  * returns `nullopt` for unknown tokens and leaves the entry on its
  * Snapping default. Every token the validator accepts — today
  * `snapping`/`autotile`/`scrolling`, see `engineModeOptions()` in
- * `ruleaction.cpp` — round-trips end-to-end through the consumer.
+ * `ruleaction_builtins_p.h` — round-trips end-to-end through the consumer.
  */
 inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const QString& snappingLayout,
                                                const QString& tilingAlgorithm)
@@ -641,7 +641,7 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
  *
  * Open-vocabulary within the bridge itself. At persistence boundaries the
  * DisableEngine action descriptor's load-time validator already enforces
- * the closed `engineModeOptions()` set (see ruleaction.cpp), so a rule
+ * the closed `engineModeOptions()` set (see ruleaction_builtins_p.h), so a rule
  * that survived load has a vocabulary-valid token. The bridge keeps the
  * verbatim contract so an in-memory caller building a rule programmatically
  * — or a test pinning the bridge's unrecognised-token behaviour — can

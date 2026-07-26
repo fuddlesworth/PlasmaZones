@@ -63,6 +63,7 @@ set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-report"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-settings"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-shader-validate"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-shader-render"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/phosphorctl"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/phosphor-shell"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/kglobalaccel/plasmazonesd.desktop"
