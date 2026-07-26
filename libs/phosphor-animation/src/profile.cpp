@@ -14,6 +14,8 @@
 
 #include <cmath>
 #include <limits>
+#include <optional>
+#include <optional>
 
 namespace PhosphorAnimation {
 
@@ -97,6 +99,24 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
 {
     Profile p;
 
+    // Reads a numeric field, or returns nullopt when the key holds something
+    // that is not a JSON number. Type-checked because `QJsonValue::toDouble(d)`
+    // hands back the DEFAULT for any non-number, and every library default
+    // passes the range checks below — so `{"duration": "fast"}` would land as
+    // an ENGAGED library default, which blocks inheritance instead of falling
+    // through to the parent. A malformed value must not quietly pin a node.
+    // `presetName` has always type-checked for the same reason; this makes the
+    // four numeric fields consistent with it.
+    const auto numericField = [&obj](const char* key) -> std::optional<qreal> {
+        const QJsonValue v = obj.value(QLatin1String(key));
+        if (!v.isDouble()) {
+            qCWarning(lcProfile).nospace() << "Profile::fromJson: ignoring non-numeric " << key << " (type=" << v.type()
+                                           << ") — the field will be inherited";
+            return std::nullopt;
+        }
+        return v.toDouble();
+    };
+
     if (obj.contains(QLatin1String(JsonFieldCurve))) {
         const QString spec = obj.value(QLatin1String(JsonFieldCurve)).toString();
         if (!spec.isEmpty()) {
@@ -117,7 +137,7 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
     }
 
     if (obj.contains(QLatin1String(JsonFieldDuration))) {
-        const qreal raw = obj.value(QLatin1String(JsonFieldDuration)).toDouble(DefaultDuration);
+        const qreal raw = numericField(JsonFieldDuration).value_or(std::numeric_limits<qreal>::quiet_NaN());
         // Reject NaN / infinity / non-positive / absurdly-large values.
         // The downstream qRound() into int and QQuickPropertyAnimation::
         // setDuration(int) have no tolerance for these — NaN rounds to
@@ -140,7 +160,7 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // serializer that emitted the integer as a JSON Number would
         // silently fall back to the library default. Route through
         // toDouble() and round to int so `5.0` and `5` both produce 5.
-        const qreal rawDouble = obj.value(QLatin1String(JsonFieldMinDistance)).toDouble(DefaultMinDistance);
+        const qreal rawDouble = numericField(JsonFieldMinDistance).value_or(std::numeric_limits<qreal>::quiet_NaN());
         // Negative minDistance would make the distance-skip check
         // trivially true for every animation (no real distance is
         // less than a negative threshold), effectively disabling the
@@ -165,8 +185,10 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // toDouble + qRound (not toInt): handles `0.0` from non-C++
         // serializers without falling back to the toInt(default) path.
         // Same rationale as minDistance / staggerInterval.
-        const qreal rawDouble =
-            obj.value(QLatin1String(JsonFieldSequenceMode)).toDouble(static_cast<int>(DefaultSequenceMode));
+        // A non-number lands on NaN, which fails the roundable test below and
+        // takes the substituting branch — sequenceMode keeps its documented
+        // engaged-default behaviour rather than being left unset.
+        const qreal rawDouble = numericField(JsonFieldSequenceMode).value_or(std::numeric_limits<qreal>::quiet_NaN());
         // Range-checked as well as finiteness-checked, like the minDistance and
         // staggerInterval branches: `std::isfinite` alone still admits 1e300,
         // and `qRound` on a value outside the int range is undefined behaviour.
@@ -222,7 +244,8 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // toDouble + qRound (not toInt): a JSON Number written as `30.0`
         // by a non-C++ serializer round-trips as 30 instead of falling
         // back to the toInt(default) path. Same shape as minDistance.
-        const qreal rawDouble = obj.value(QLatin1String(JsonFieldStaggerInterval)).toDouble(DefaultStaggerInterval);
+        const qreal rawDouble =
+            numericField(JsonFieldStaggerInterval).value_or(std::numeric_limits<qreal>::quiet_NaN());
         if (!std::isfinite(rawDouble) || rawDouble < 0.0 || rawDouble > static_cast<qreal>(MaxStaggerIntervalMs)) {
             // Negative stagger would make every cascade element fire
             // immediately (its scheduled-start would already be in the

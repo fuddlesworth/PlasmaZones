@@ -293,7 +293,8 @@ bool Daemon::init()
     // Settings constructor already calls load(); avoid duplicate load
 
     // init() decomposes into ordered phase methods (definitions split across
-    // daemon/shader_warmup.cpp, daemon/init_services.cpp, daemon/init_adaptors.cpp,
+    // daemon/shader_warmup.cpp, daemon/animation_profiles.cpp,
+    // daemon/init_services.cpp, daemon/init_adaptors.cpp,
     // daemon/init_engines.cpp). The call order below is byte-order faithful to the
     // former monolithic init() and MUST NOT be reordered — later phases borrow
     // members the earlier phases construct and wire.

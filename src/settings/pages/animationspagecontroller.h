@@ -248,15 +248,28 @@ public:
     // These live here rather than as JS loops in the card for three reasons.
     // The merge and field-removal rules are the same drop-versus-substitute
     // semantics `rawProfile` already documents, and having them in two
-    // languages meant two places to keep in step. The per-path reads they need
-    // (`rawProfile`, the shader tree) are memoised on this side, so the card no
-    // longer has to hold its own snapshot caches to stay off the file-open path
-    // on a drag. And each is now directly testable without driving QML.
+    // languages meant two places to keep in step. Each read is also taken once
+    // per call here rather than once per reader, which is what let the card
+    // drop its own per-path snapshot caches: `rawProfile` is memoised (see
+    // `cachedDiskProfile`), the merge reads every path before its first write
+    // so the memo is not invalidated out from under it, and
+    // `divergentPathCount` reads the shader tree once for the whole group. The
+    // shader tree itself is NOT memoised — `rawShaderProfile` rebuilds it on
+    // every call — which is precisely why anything here must read it once and
+    // pass it down rather than call that accessor in a loop. And each is now
+    // directly testable without driving QML.
     //
     // What deliberately stays in the card: the `_committing` /
     // `_committingShader` re-entrancy latches and the refresh that follows a
     // group write. Those are view state about which signals the card should
     // ignore while its own write is in flight, and they mean nothing here.
+    //
+    // None of these caps `paths.size()`, and none needs to. Every entry is
+    // gated by `isValidEventPath` before it can reach the disk (the write
+    // family through `profileFilePath`, the shader family through
+    // `eventPathSupportsShaderLeg`), so the list is bounded by the built-in
+    // taxonomy rather than by the caller — an in-process QML caller cannot
+    // grow it past `ProfilePaths::allBuiltInPaths()` no matter what it passes.
 
     /// Merge @p fields into the stored override at every path in @p paths and
     /// write each result back.
@@ -285,9 +298,12 @@ public:
     /// override becomes empty has its file DELETED rather than left as an empty
     /// object: the two resolve identically, but the card's toggle and the
     /// pending-changes walk both key on file existence.
-    /// @return the number of paths actually changed. Paths that did not carry
-    /// the field are skipped, so 0 means the field was already inherited
-    /// everywhere.
+    /// @return the number of paths actually changed, or -1 on refusal. Paths
+    /// that did not carry the field are skipped, so 0 means the field was
+    /// already inherited everywhere and nothing needed doing. -1 means the call
+    /// was refused: either @p field is not one this owns, or an async discard
+    /// holds the snapshot map, or a write failed. The last two toast, and a
+    /// caller must not read -1 as "there was nothing to clear".
     Q_INVOKABLE int clearFieldOnPaths(const QStringList& paths, const QString& field);
 
     /// True when ANY path in @p paths takes a shader leg. A group mutation must
@@ -322,8 +338,9 @@ public:
     /// @return the total number cleared, or -1 if any path refused (the
     /// "async discard in flight" sentinel). Stops at the first refusal: the
     /// in-flight gate cannot change between iterations, and the controller
-    /// toasts per refused call. A -1 is never summed in — that would make a
-    /// refusal indistinguishable from a smaller successful clear.
+    /// toasts per refused call. A -1 is never summed in, which would make a
+    /// refusal indistinguishable from a smaller successful clear, and the
+    /// caller gates its own feedback on telling the two apart.
     Q_INVOKABLE int clearShaderOverrideDescendantsOnPaths(const QStringList& paths);
 
     /// How many paths in a card's write group have stored state differing from

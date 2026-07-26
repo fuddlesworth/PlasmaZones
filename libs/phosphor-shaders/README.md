@@ -102,6 +102,7 @@ private:
 
 - `QtCore`, `QtGui`
 - [`phosphor-fsloader`](../phosphor-fsloader/README.md) — `MetadataPackScanStrategy`
+- [`phosphor-registry`](../phosphor-registry/README.md) — `Registry<T>` + `MetadataPackLoader<T>`, both reached through `ShaderRegistry`'s public headers, so this is a PUBLIC dependency
 
 ## See also
 

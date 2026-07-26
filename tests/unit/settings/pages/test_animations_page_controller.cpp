@@ -610,18 +610,18 @@ private Q_SLOTS:
         QTest::newRow("duration astronomical")
             << kDur << QByteArrayLiteral(R"({"duration":1e300})") << QVariant(123) << QVariant(123) << false;
 
-        // A NON-NUMBER is a different case, and the difference is deliberate.
-        // `QJsonValue::toDouble(default)` hands back the default for anything
-        // that is not a JSON double, and the library default passes every range
-        // check — so the field ends up ENGAGED at that default and BLOCKS
-        // inheritance, rather than being dropped. `Profile::fromJson` does
-        // exactly the same, which is the whole point: the settings app must
-        // show what the daemon will animate, and the daemon uses the default
-        // here, not the parent's value.
+        // A NON-NUMBER is dropped too, and both sides type-check to make that
+        // so. `QJsonValue::toDouble(default)` hands back the default for
+        // anything that is not a JSON number, and every library default passes
+        // the range checks — so without an `isDouble()` guard the field would
+        // land ENGAGED at that default and BLOCK inheritance, which is a
+        // malformed value quietly pinning a node. `Profile::fromJson` guards
+        // the same way, so the settings app still shows what the daemon will
+        // animate: the parent's value.
         QTest::newRow("duration string") << kDur << QByteArrayLiteral(R"({"duration":"900"})") << QVariant(123)
-                                         << QVariant(int(P::DefaultDuration)) << true;
+                                         << QVariant(123) << false;
         QTest::newRow("duration bool") << kDur << QByteArrayLiteral(R"({"duration":true})") << QVariant(123)
-                                       << QVariant(int(P::DefaultDuration)) << true;
+                                       << QVariant(123) << false;
         QTest::newRow("duration valid") << kDur << QByteArrayLiteral(R"({"duration":900})") << QVariant(123)
                                         << QVariant(900) << true;
         // The accepted side of duration's shared bound, for the same reason as
@@ -642,8 +642,8 @@ private Q_SLOTS:
             << kMin << QByteArrayLiteral(R"({"minDistance":200000})") << QVariant(7) << QVariant(7) << false;
         QTest::newRow("minDistance astronomical")
             << kMin << QByteArrayLiteral(R"({"minDistance":1e300})") << QVariant(7) << QVariant(7) << false;
-        QTest::newRow("minDistance string") << kMin << QByteArrayLiteral(R"({"minDistance":"5"})") << QVariant(7)
-                                            << QVariant(int(P::DefaultMinDistance)) << true;
+        QTest::newRow("minDistance string")
+            << kMin << QByteArrayLiteral(R"({"minDistance":"5"})") << QVariant(7) << QVariant(7) << false;
         QTest::newRow("minDistance valid")
             << kMin << QByteArrayLiteral(R"({"minDistance":5})") << QVariant(7) << QVariant(5) << true;
         // The ACCEPTED side of the shared bound. Without it, flipping either
@@ -658,7 +658,7 @@ private Q_SLOTS:
         QTest::newRow("stagger over max")
             << kStag << QByteArrayLiteral(R"({"staggerInterval":1e9})") << QVariant(40) << QVariant(40) << false;
         QTest::newRow("stagger string") << kStag << QByteArrayLiteral(R"({"staggerInterval":"20"})") << QVariant(40)
-                                        << QVariant(int(P::DefaultStaggerInterval)) << true;
+                                        << QVariant(40) << false;
         QTest::newRow("stagger valid") << kStag << QByteArrayLiteral(R"({"staggerInterval":20})") << QVariant(40)
                                        << QVariant(20) << true;
 
@@ -941,6 +941,13 @@ private Q_SLOTS:
         expect(QStringLiteral("popup.zoneSelector.hide"), true);
         expect(QStringLiteral("popup.snapAssist.show"), true);
         expect(QStringLiteral("popup.snapAssist.hide"), true);
+        // The cheatsheet family, consumed by buildCheatsheetConfig. Added
+        // after this slot was found to have drifted from its source of truth:
+        // because the list below is a hand-maintained allowlist, an ADDED
+        // supported path is structurally invisible to it, and the cheatsheet
+        // leaves are the proof that happens.
+        expect(QStringLiteral("popup.cheatsheet.show"), true);
+        expect(QStringLiteral("popup.cheatsheet.hide"), true);
 
         // Window family — consumed leaves driven by the KWin effect under
         // kwin-effect/plasmazoneseffect/. The lifecycle legs go through
@@ -990,6 +997,7 @@ private Q_SLOTS:
         expect(QStringLiteral("popup.layoutPicker"), true);
         expect(QStringLiteral("popup.zoneSelector"), true);
         expect(QStringLiteral("popup.snapAssist"), true);
+        expect(QStringLiteral("popup.cheatsheet"), true);
         // `panel` is no longer a popup ancestor — popups moved to their
         // own root, leaving `panel` with only slideIn/slideOut/fadeIn/
         // fadeOut which the daemon's overlay service never consumes.

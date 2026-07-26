@@ -687,7 +687,7 @@ private Q_SLOTS:
         // Edit only `displayName` — score unchanged (so the
         // contributor's view is identical), but bytes change so
         // metadata.json size+mtime shift.
-        obj[QStringLiteral("displayName")] = QStringLiteral("Second-edition");
+        obj[QLatin1String("displayName")] = QStringLiteral("Second-edition");
         QVERIFY(
             writeFile(pkgDir + QStringLiteral("/metadata.json"), QJsonDocument(obj).toJson(QJsonDocument::Compact)));
 

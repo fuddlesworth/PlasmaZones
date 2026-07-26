@@ -16,7 +16,8 @@ namespace PlasmaZones {
 /// actually resolve a shader effect for, by one of three mechanisms:
 /// a @c resolveShaderEffect(tree, ...) call inside one of
 /// @c OverlayService::buildOsdConfig / @c buildLayoutPickerConfig /
-/// @c buildZoneSelectorConfig / @c buildSnapAssistConfig; a
+/// @c buildZoneSelectorConfig / @c buildSnapAssistConfig /
+/// @c buildCheatsheetConfig; a
 /// @c tryBeginShaderForEvent(...) call under
 /// @c kwin-effect/plasmazoneseffect/ (window_lifecycle for the
 /// open/close/move/maximize/focus legs, daemon_apply for minimize); or a

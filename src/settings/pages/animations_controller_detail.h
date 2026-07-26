@@ -7,7 +7,8 @@
 // files (animationspagecontroller.cpp and its _overrides / _shaders / _paths /
 // _groupwrites siblings). Covers the shader-effect / parameter / shader-profile conversions
 // those TUs hand to QML, the override-file read and normalisation
-// (JsonNameKey, readProfileJson, sanitizedProfileMap, profileToVariantMap,
+// (JsonNameKey, JsonEffectIdKey, JsonShaderParametersKey, readProfileJson,
+// sanitizedProfileMap, profileToVariantMap,
 // mergeMissingFields, fillLibraryDefaults), and the two path helpers
 // (humanizeSegment, collectShaderOverrideDescendants). Inline definitions here ensure every TU
 // gets its own copy without relying on unity-build TU merging for cross-TU
@@ -94,13 +95,20 @@ inline QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEf
     return m;
 }
 
+/// Keys of the map `shaderProfileToMap` produces. Named constants because the
+/// map is consumed by name in another TU (the group-write comparison in
+/// animationspagecontroller_groupwrites.cpp) as well as by QML, and two
+/// independently-spelled literals that must agree is how those drift.
+inline constexpr QLatin1String JsonEffectIdKey{"effectId"};
+inline constexpr QLatin1String JsonShaderParametersKey{"parameters"};
+
 inline QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProfile& profile)
 {
     QVariantMap m;
     if (profile.effectId)
-        m.insert(QLatin1String("effectId"), *profile.effectId);
+        m.insert(JsonEffectIdKey, *profile.effectId);
     if (profile.parameters)
-        m.insert(QLatin1String("parameters"), *profile.parameters);
+        m.insert(JsonShaderParametersKey, *profile.parameters);
     return m;
 }
 
@@ -248,9 +256,9 @@ inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
     // `obj.toVariantMap()`, so the type rules are `QJsonValue`'s — the same
     // ones fromJson sees. Pruning a QVariantMap would not be equivalent:
     // `QVariant::toDouble` converts a JSON bool or a numeric string to a
-    // number, where `QJsonValue::toDouble(default)` hands back the default for
-    // any non-double. `{"duration": "900"}` would then show 900 in the UI while
-    // the daemon animated at the library default.
+    // number, where `QJsonValue` reports it as not-a-number. `{"duration":
+    // "900"}` would then show 900 in the UI while the daemon inherited the
+    // value instead.
     //
     // Dropping a key and substituting the library default are also NOT
     // interchangeable, because `mergeMissingFields` only fills keys that are
@@ -306,10 +314,20 @@ inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
         }
     }
 
+    // Type-checked exactly as `Profile::fromJson` type-checks: a non-number is
+    // NOT coerced to the library default, because that default would pass every
+    // range check and land ENGAGED, blocking inheritance where the daemon lets
+    // it through. Returns NaN for a non-number so the range checks below reject
+    // it on the same branch.
+    const auto numeric = [&obj](const char* key) -> double {
+        const QJsonValue v = obj.value(QLatin1String(key));
+        return v.isDouble() ? v.toDouble() : std::numeric_limits<double>::quiet_NaN();
+    };
+
     if (obj.contains(QLatin1String(P::JsonFieldDuration))) {
         // Rejected → left ABSENT, matching fromJson leaving `p.duration` unset
         // so `effectiveDuration()` substitutes the library default.
-        const double raw = obj.value(QLatin1String(P::JsonFieldDuration)).toDouble(P::DefaultDuration);
+        const double raw = numeric(P::JsonFieldDuration);
         if (std::isfinite(raw) && raw > 0.0 && raw <= P::MaxDurationMs) {
             out.insert(QLatin1String(P::JsonFieldDuration), raw);
         }
@@ -318,8 +336,7 @@ inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
     if (obj.contains(QLatin1String(P::JsonFieldMinDistance))) {
         // fromJson leaves this unset when negative, so absent is right here too.
         std::optional<int> rounded;
-        boundedRound(obj.value(QLatin1String(P::JsonFieldMinDistance)).toDouble(P::DefaultMinDistance), 0.0,
-                     double(P::MaxMinDistancePx), rounded);
+        boundedRound(numeric(P::JsonFieldMinDistance), 0.0, double(P::MaxMinDistancePx), rounded);
         if (rounded.has_value()) {
             out.insert(QLatin1String(P::JsonFieldMinDistance), *rounded);
         }
@@ -331,8 +348,8 @@ inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
         // an ancestor's mode cannot leak through where the daemon would use the
         // default.
         std::optional<int> rounded;
-        boundedRound(obj.value(QLatin1String(P::JsonFieldSequenceMode)).toDouble(int(P::DefaultSequenceMode)),
-                     double(std::numeric_limits<int>::min()), double(std::numeric_limits<int>::max()), rounded);
+        boundedRound(numeric(P::JsonFieldSequenceMode), double(std::numeric_limits<int>::min()),
+                     double(std::numeric_limits<int>::max()), rounded);
         const bool known =
             rounded.has_value() && (*rounded == int(SequenceMode::AllAtOnce) || *rounded == int(SequenceMode::Cascade));
         out.insert(QLatin1String(P::JsonFieldSequenceMode), known ? *rounded : int(P::DefaultSequenceMode));
@@ -340,8 +357,7 @@ inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
 
     if (obj.contains(QLatin1String(P::JsonFieldStaggerInterval))) {
         std::optional<int> rounded;
-        boundedRound(obj.value(QLatin1String(P::JsonFieldStaggerInterval)).toDouble(P::DefaultStaggerInterval), 0.0,
-                     double(P::MaxStaggerIntervalMs), rounded);
+        boundedRound(numeric(P::JsonFieldStaggerInterval), 0.0, double(P::MaxStaggerIntervalMs), rounded);
         if (rounded.has_value()) {
             out.insert(QLatin1String(P::JsonFieldStaggerInterval), *rounded);
         }

@@ -36,8 +36,8 @@ namespace PhosphorRegistry {
 // ## What it does
 //
 //   - Owns a phosphor-fsloader MetadataPackScanStrategy<Entry> +
-//     WatchedDirectorySet (the same scan/watch substrate the legacy
-//     the since-removed MetadataPackRegistryBase used), configured with a domain Parser
+//     WatchedDirectorySet (the same scan/watch substrate the
+//     since-removed MetadataPackRegistryBase used), configured with a domain Parser
 //     that turns one pack's metadata.json into a shared_ptr<Factory>.
 //   - On every committed rescan, reconciles the Registry to match the
 //     freshly-scanned set: NEW packs are registerFactory'd, REMOVED
@@ -141,7 +141,14 @@ public:
         , m_strategy(makeStrategy(std::move(parser)))
         , m_watcher(std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, nullptr))
     {
-        Q_ASSERT_X(m_registry != nullptr, "MetadataPackLoader", "registry must not be null");
+        // qFatal, not Q_ASSERT_X: the release-build consequence of a null
+        // registry is a crash inside the first reconcile, far from the cause,
+        // and the sibling with the identical precondition (PluginLoader) is
+        // already qFatal. Crashing here is deterministic, at construction, with
+        // a greppable message.
+        if (m_registry == nullptr) {
+            qFatal("MetadataPackLoader: registry must not be null");
+        }
         m_strategy->setLoggingCategory(logCat);
     }
 

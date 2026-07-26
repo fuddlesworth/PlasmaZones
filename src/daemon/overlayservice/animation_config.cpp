@@ -9,8 +9,8 @@
  *   - resolveShaderEffect / resolveShaderParameters (tree → config field
  *     adapters)
  *   - build*Config factories (one per overlay role: Osd, LayoutPicker,
- *     ZoneSelector, SnapAssist). Each documents the visual shape it
- *     encodes.
+ *     ZoneSelector, SnapAssist, Cheatsheet). Each documents the visual
+ *     shape it encodes.
  *   - OverlayService::setupSurfaceAnimator - animator construction +
  *     initial config registration
  *   - OverlayService::applyShaderProfilesToAnimator - per-role re-
@@ -52,8 +52,8 @@ namespace {
 //       • `popup.layoutPicker.{show, hide, popIn}` (opacity legs +
 //         scale show; hide-scale couples to `.hide`)
 //       • `popup.zoneSelector.{show, hide}` (opacity-only)
-//       • `popup.snapAssist.show` (destroy-on-hide; no `.hide`
-//         leaf because no frame ever paints)
+//       • `popup.snapAssist.{show, hide}` (opacity-only)
+//       • `popup.cheatsheet.{show, hide}` (opacity-only)
 //     A JSON edit to `popup.layoutPicker.hide` affects ONLY the
 //     layout picker; siblings are unaffected.
 //

@@ -324,8 +324,9 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
         // Per-rescan script-count DoS guard. Reverse-iteration scans
         // user-first / system-last, so a cap-trip drops *system* overflow
         // rather than user overrides — matches the user-wins-on-cap-trip
-        // property JsonScanStrategy / ShaderRegistry / AnimationShaderRegistry
-        // enforce. Re-checked inside loadFromDirectory so a single dir
+        // property JsonScanStrategy and MetadataPackScanStrategy enforce (the
+        // pack registries inherit it from the latter rather than implementing
+        // it themselves). Re-checked inside loadFromDirectory so a single dir
         // dropping us at the cap stops mid-iteration too.
         if (m_scriptIdToPath.size() >= kMaxScripts) {
             capTripped = true;
@@ -641,6 +642,17 @@ QStringList ScriptedAlgorithmLoader::validatedLuauFiles(const QString& dirPath, 
             continue;
         if (!fullPath.startsWith(canonicalDir + QLatin1Char('/'))) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Script path escaped directory:" << fullPath;
+            continue;
+        }
+        // Deduped on the CANONICAL path, so an intra-directory symlink
+        // (`link.luau -> a.luau`) does not yield the same file twice. The
+        // second copy would lose the duplicate-id check downstream and land in
+        // `m_refusedFilePaths`, which the header documents as holding only
+        // paths that own no registry entry — and this one would. Harmless while
+        // that set only feeds the watch list, but it makes the stated invariant
+        // false. The list is bounded at `MaxWatchedFilesPerDir`, so the linear
+        // scan is bounded too.
+        if (result.contains(fullPath)) {
             continue;
         }
         result.append(fullPath);

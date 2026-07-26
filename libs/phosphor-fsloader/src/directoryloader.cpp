@@ -56,10 +56,12 @@ public:
         // Asserted, then defaulted — the same shape as
         // MetadataPackScanStrategy::setMaxEntries, for the same reason.
         // Clamping a negative cap to zero would not make it safe: `filesConsidered
-        // >= m_maxEntries` is int-to-int here, so -1 and 0 both trip on the first
-        // file and mass-unregister every tracked key. Falling back to the default
-        // costs the caller its setting instead of costing the registry its
-        // contents. `setMaxEntries(0)` is still honoured as a legal degenerate cap.
+        // >= m_maxEntries` is int-to-int here, so a negative cap trips on the
+        // first file and mass-unregisters every tracked key. Falling back to the
+        // default costs the caller its setting instead of costing the registry
+        // its contents. Zero is a different case and IS honoured: "admit
+        // nothing" is a coherent thing to ask for, where "admit fewer than
+        // nothing" is a caller bug.
         Q_ASSERT_X(cap >= 0, "DirectoryLoader::JsonScanStrategy::setMaxEntries", "cap must be non-negative");
         m_maxEntries = cap >= 0 ? cap : DirectoryLoader::kMaxEntries;
     }
@@ -132,6 +134,16 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
         // Sort within each directory so duplicate-name resolution is
         // deterministic across platforms (ext4/btrfs/APFS differ on
         // entryList ordering).
+        //
+        // Symlinks are FOLLOWED, deliberately, and no canonical-containment
+        // check is applied — unlike ScriptedAlgorithmLoader, which refuses a
+        // `*.luau` resolving outside its directory. The difference is what the
+        // file buys an attacker. A script is executed, so a symlinked one is a
+        // code-execution primitive worth refusing even same-user. A curve or
+        // profile JSON is parsed into a bounded value type behind a size cap,
+        // so following a symlink reads a file the same user could have copied
+        // in anyway. Refusing them would break the one legitimate use people
+        // actually have: symlinking a curve out of a dotfiles repo.
         QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
 
         // Track keys already seen within THIS directory so we can warn
@@ -313,10 +325,13 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
         desiredFileWatches.append(entry.sourcePath);
     }
     desiredFileWatches.append(refusedPaths);
-    // Sorted before returning, like MetadataPackScanStrategy does. The base
-    // dedupes and the interface promises no ordering, so this buys nothing at
-    // runtime — it makes the returned list deterministic across QHash
-    // iteration orders, which is what test assertions compare against.
+    // Sorted before returning, like MetadataPackScanStrategy does. Nothing
+    // depends on it: the base copies into a QSet (so it dedupes and ignores
+    // order), the IScanStrategy contract promises no ordering, and this
+    // strategy is a private nested class whose return value never escapes
+    // `rescanAll`, so no test can assert on it either. It costs one sort of a
+    // small list and keeps the two sibling scanners' return shapes identical,
+    // which is the whole justification.
     std::sort(desiredFileWatches.begin(), desiredFileWatches.end());
     return desiredFileWatches;
 }

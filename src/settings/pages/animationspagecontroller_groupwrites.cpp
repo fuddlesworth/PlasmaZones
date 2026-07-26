@@ -15,9 +15,12 @@
 #include "animationspagecontroller.h"
 
 #include "animations_controller_detail.h"
+#include "core/interfaces/isettings.h"
 #include "core/platform/logging.h"
+#include "phosphor_i18n.h"
 
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -62,33 +65,49 @@ bool AnimationsPageController::setOverrideMergedOnPaths(const QStringList& paths
     const bool curveEdited = curveFromCommit.isValid() && !curveFromCommit.isNull();
     const QString editedCurve = curveEdited ? curveFromCommit.toString() : QString();
 
+    // Every path's stored profile is read BEFORE the first write. `setOverride`
+    // invalidates the whole disk memo, so reading inside the write loop would
+    // miss the memo on every iteration after the first and cost one real file
+    // open per path per call — and this runs at drag rate. The paths are
+    // distinct files and none of the writes can affect another's stored
+    // content, so reading them all up front is equivalent.
+    QList<QVariantMap> bases;
+    bases.reserve(paths.size());
+    for (const QString& path : paths)
+        bases.append(rawProfile(path));
+
+    const QLatin1String curveKey(PhosphorAnimation::Profile::JsonFieldCurve);
     bool allWritten = true;
-    for (const QString& path : paths) {
-        // Read through rawProfile rather than trusting a caller-supplied
-        // snapshot: it is memoised on this side, and it normalises the file the
-        // same way resolvedProfile does, so the merge below operates on exactly
-        // the fields the daemon will honour.
-        QVariantMap merged = rawProfile(path);
+    for (int i = 0; i < paths.size(); ++i) {
+        const QVariantMap& base = bases.at(i);
+        QVariantMap merged = base;
         for (auto it = fields.constBegin(); it != fields.constEnd(); ++it)
             merged.insert(it.key(), it.value());
 
-        // The curve is the one field with three outcomes rather than two.
-        const QLatin1String curveKey(PhosphorAnimation::Profile::JsonFieldCurve);
+        // The curve is the one field with three outcomes rather than two, and
+        // the decision is made against the path's PRE-merge stored profile.
+        // Reading it post-merge would let a `fields` entry stand in for "this
+        // path's own curve" and travel to every path, which is exactly the
+        // "the card must not decide a curve on the user's behalf" rule this
+        // parameter exists to enforce.
         if (curveEdited) {
             merged.insert(curveKey, editedCurve);
         } else {
-            // Keep this path's OWN curve when it has a real one, and otherwise
-            // make sure no curve is written at all. The remove() matters: a
-            // stored curve that is present-but-empty would survive the merge as
-            // an engaged empty value, which BLOCKS inheritance instead of
-            // allowing it, so the path would stop following its parent's curve
-            // without the user ever asking for that.
-            const QVariant own = merged.value(curveKey);
-            if (own.metaType().id() != QMetaType::QString || own.toString().isEmpty())
+            const QVariant own = base.value(curveKey);
+            if (own.metaType().id() == QMetaType::QString && !own.toString().isEmpty()) {
+                // Restore this path's own curve over anything `fields` carried.
+                merged.insert(curveKey, own);
+            } else {
+                // No curve of its own, so none is written. The remove() matters
+                // for two inputs: a curve supplied through `fields`, and a
+                // stored curve that is present-but-empty. Either would land as
+                // an engaged value that BLOCKS inheritance, so the path would
+                // stop following its parent's curve without the user asking.
                 merged.remove(curveKey);
+            }
         }
 
-        if (!setOverride(path, merged))
+        if (!setOverride(paths.at(i), merged))
             allWritten = false;
     }
     return allWritten;
@@ -103,21 +122,80 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& paths, const 
     if (field != QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)
         && field != QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration)) {
         qCWarning(lcConfig) << "clearFieldOnPaths: refusing to clear unrecognised field" << field;
-        return 0;
+        return -1;
+    }
+    // Refused outright while the discard worker owns the snapshot map, for the
+    // same reason clearAllOverrides refuses: every write below would fail
+    // individually and the caller would read the resulting 0 as "the field was
+    // already inherited everywhere" rather than "nothing happened".
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "clearFieldOnPaths: refusing while an async discard is in flight";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
+        return -1;
     }
 
+    const bool wasPending = hasPendingChanges();
+    QStringList removed;
     int changed = 0;
+    int failed = 0;
     for (const QString& path : paths) {
         QVariantMap raw = rawProfile(path);
         if (!raw.contains(field))
             continue;
         raw.remove(field);
+        if (!raw.isEmpty()) {
+            // setOverride owns its own invalidate and its own signals, and
+            // performs no rescan (a write is covered by the disk-first read).
+            if (setOverride(path, raw))
+                ++changed;
+            else
+                ++failed;
+            continue;
+        }
         // An override with nothing left in it is removed outright. An empty
         // file and no file resolve identically, but the card's toggle and the
         // pending-changes walk both key on the file existing.
-        const bool ok = raw.isEmpty() ? clearOverride(path) : setOverride(path, raw);
-        if (ok)
+        //
+        // removeOverrideFile rather than clearOverride: the latter rescans the
+        // whole profiles directory per call, so a mirrored card's single revert
+        // click paid one full re-read and re-parse per path. The batch below
+        // does it once, mirroring clearOverridesForPaths.
+        switch (removeOverrideFile(path)) {
+        case OverrideFileRemoval::Removed:
+            removed.append(path);
             ++changed;
+            break;
+        case OverrideFileRemoval::Absent:
+            // rawProfile said the field was there, so the file existed a moment
+            // ago. Something else removed it in between; the desired end state
+            // holds either way.
+            break;
+        case OverrideFileRemoval::Failed:
+            ++failed;
+            break;
+        }
+    }
+
+    // ONE rescan for every removal in the batch, ahead of the signals the pages
+    // refresh on: the registry is behind a delete until the loader catches up,
+    // and the QML handlers re-read synchronously on this stack.
+    if (!removed.isEmpty())
+        refreshProfileStore();
+    // Sampled after the refresh and before the signals, like both clear paths:
+    // a rescan fans out synchronously, and a listener that mutates in response
+    // would otherwise be measured against a stale read.
+    const bool nowPending = hasPendingChanges();
+    for (const QString& path : removed)
+        Q_EMIT overrideChanged(path);
+    // One dirty signal for the batch's NET flip. Every snapshot drop inside
+    // removeOverrideFile deferred its own precisely so an intermediate state
+    // could not be mistaken for the outcome.
+    if (wasPending != nowPending)
+        Q_EMIT pendingChangesChanged();
+    if (failed > 0) {
+        qCWarning(lcConfig) << "clearFieldOnPaths:" << failed << "paths could not be updated";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Some animation overrides could not be reverted."));
+        return -1;
     }
     return changed;
 }
@@ -135,7 +213,7 @@ bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& paths
 {
     for (const QString& path : paths) {
         const QVariantMap raw = rawShaderProfile(path);
-        const auto it = raw.constFind(QLatin1String("effectId"));
+        const auto it = raw.constFind(JsonEffectIdKey);
         // Absent effectId means no direct override, which is never equal to a
         // stored one — not even to the engaged-empty sentinel.
         if (it == raw.constEnd() || it.value().metaType().id() != QMetaType::QString)
@@ -196,12 +274,22 @@ int AnimationsPageController::divergentPathCount(const QString& primaryPath, con
     if (mirrorPaths.isEmpty())
         return 0;
 
-    const auto keyFor = [this, compareCurve](const QString& path) {
+    // The shader tree is read ONCE for the whole comparison. `rawShaderProfile`
+    // rebuilds it on every call (a settings read plus `ShaderProfileTree::
+    // fromJson` plus a prune walk), and this runs from `refreshFromTree`, i.e.
+    // on every tick of a duration drag for every visible card. Per path it was
+    // a full rebuild each.
+    const PhosphorAnimationShaders::ShaderProfileTree tree =
+        m_settings ? m_settings->shaderProfileTree() : PhosphorAnimationShaders::ShaderProfileTree{};
+
+    const auto keyFor = [this, compareCurve, &tree](const QString& path) {
         // The shader axis is compared only where a shader can actually be
         // stored. A non-supporting path holds nothing there permanently, so
         // comparing it against a supporting path's real leg would report a
         // divergence over an axis no control could converge.
-        const QVariantMap shader = supportsShaderLeg(path) ? rawShaderProfile(path) : QVariantMap();
+        const QVariantMap shader = (supportsShaderLeg(path) && tree.hasOverride(path))
+            ? shaderProfileToMap(tree.directOverride(path))
+            : QVariantMap();
         return comparableStateKey(rawProfile(path), shader, compareCurve);
     };
 

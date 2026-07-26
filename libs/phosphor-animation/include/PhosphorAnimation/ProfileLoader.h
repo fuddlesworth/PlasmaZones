@@ -31,7 +31,7 @@ class PhosphorProfileRegistry;
 /// actively misleading: a path can be tracked here while the registry entry for it
 /// belongs to somebody else, including an untagged direct publish. Ask
 /// `PhosphorProfileRegistry::ownerOf()` instead, which is the ownership question and
-/// is equally O(1). See `shader_warmup.cpp` for the self-poisoning merge this
+/// is equally O(1). See `animation_profiles.cpp` for the self-poisoning merge this
 /// distinction prevents.
 /// User curves must already be registered (CurveLoader first).
 /// Profiles loaded here are preset templates — settings UIs deep-copy into active profiles.

@@ -48,7 +48,9 @@ QtObject {
     /// path then keeps its own, so a path that owns one has it preserved and a
     /// path that inherits stays inheriting. The card must not decide a curve on
     /// the user's behalf. `undefined` arrives C++-side as an invalid QVariant,
-    /// which is how that distinction survives the call.
+    /// which is how that distinction survives the call. Spell it explicitly:
+    /// OMITTING the argument is not the same thing, it raises
+    /// `Error: Insufficient arguments` and the write never happens.
     function _setOverrideMerged(profile, curveFromCommit) {
         card._committing = true;
         try {
@@ -56,20 +58,25 @@ QtObject {
         } finally {
             card._committing = false;
             card._inheritRev++;
-            card.refreshFromTree();
+            card.refreshFromTree(true);
         }
     }
 
     /// Return ONE timing field (`"curve"` or `"duration"`) to inheritance on
     /// every write path, leaving the other field and the motion-set fields put.
+    ///
+    /// False when the controller returned -1: the call was refused (an async
+    /// discard is in flight) or some write failed, and it toasted the reason.
+    /// A caller that shows its own feedback must honour it rather than report a
+    /// revert that did not happen.
     function _clearFieldOnAll(field) {
         card._committing = true;
         try {
-            settingsController.animationsPage.clearFieldOnPaths(card._writePaths, field);
+            return settingsController.animationsPage.clearFieldOnPaths(card._writePaths, field) >= 0;
         } finally {
             card._committing = false;
             card._inheritRev++;
-            card.refreshFromTree();
+            card.refreshFromTree(true);
         }
     }
 
@@ -89,7 +96,7 @@ QtObject {
         } finally {
             card._committing = false;
             card._inheritRev++;
-            card.refreshFromTree();
+            card.refreshFromTree(true);
         }
     }
 
@@ -106,7 +113,7 @@ QtObject {
         } finally {
             card._committingShader = false;
             card.refreshShaderFromTree();
-            card.refreshFromTree();
+            card.refreshFromTree(true);
         }
     }
 
@@ -121,7 +128,7 @@ QtObject {
         } finally {
             card._committingShader = false;
             card.refreshShaderFromTree();
-            card.refreshFromTree();
+            card.refreshFromTree(true);
         }
     }
 
@@ -136,7 +143,7 @@ QtObject {
         } finally {
             card._committingShader = false;
             card.refreshShaderFromTree();
-            card.refreshFromTree();
+            card.refreshFromTree(true);
         }
     }
 

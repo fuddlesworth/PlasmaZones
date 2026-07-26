@@ -110,8 +110,10 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("scraped only %1 animationsPage names from the QML tree").arg(used.size())));
         // At-least-one, not the observed count: this is a non-vacuity floor for
         // the alias leg, not a pin on how many aliases the tree happens to
-        // have. Refactoring the one that exists away is a legitimate change and
-        // must not redden the build, but losing the leg entirely must.
+        // have. There is exactly one alias in the tree today (RulesPage.qml),
+        // so that one IS load-bearing for this check — removing it reddens the
+        // build, and the right response is to point the floor at whatever
+        // alias replaces it rather than to delete the leg.
         QVERIFY2(aliasesResolved >= 1, "no same-file alias was resolved — the alias leg is checking nothing");
 
         AnimationsPageController c;
@@ -250,7 +252,12 @@ private Q_SLOTS:
         // a string literal, which would take the stripper past the closing
         // quote — narrower than the case being guarded, and it fails loudly
         // rather than silently passing.
-        QVERIFY2(!offCode.contains(QLatin1Char('"')) && !offCode.contains(QLatin1Char('`')),
+        // Single quotes included: this runs AFTER comment stripping, so the
+        // arm's prose apostrophes are already gone and a surviving `'` can only
+        // come from a string literal. Checking before the strip is what forced
+        // the ON arm's guard to leave them out.
+        QVERIFY2(!offCode.contains(QLatin1Char('"')) && !offCode.contains(QLatin1Char('\''))
+                     && !offCode.contains(QLatin1Char('`')),
                  "the OFF arm now contains a string literal — the reset count below is only sound without one");
 
         // Whitespace-tolerant, like the two regexes below. A hardcoded-space

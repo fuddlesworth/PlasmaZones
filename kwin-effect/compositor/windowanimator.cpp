@@ -560,10 +560,15 @@ PhosphorAnimation::IMotionClock* WindowAnimator::clockForHandle(KWin::EffectWind
 void WindowAnimator::clampProfile(PhosphorAnimation::Profile& profile)
 {
     if (profile.duration) {
-        if (!std::isfinite(*profile.duration)) {
+        // Non-positive is RESET, not clamped to zero. The library validator
+        // rejects `duration <= 0` outright, and AnimatedValue treats a 0 ms
+        // duration as instant-complete — clamping would turn a bad value into a
+        // silently missing animation, where resetting falls back to the library
+        // default like every other rejection here.
+        if (!std::isfinite(*profile.duration) || *profile.duration <= 0.0) {
             profile.duration.reset();
         } else {
-            profile.duration = qBound(qreal(0.0), *profile.duration, kMaxDurationMs);
+            profile.duration = qMin(*profile.duration, kMaxDurationMs);
         }
     }
     if (profile.minDistance) {

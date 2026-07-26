@@ -590,11 +590,15 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             desiredWatches.append(m_perDirWatch(searchPath));
         }
 
+        // Symlinked pack directories are FOLLOWED, with no canonical-
+        // containment check, for the same reason JsonScanStrategy follows
+        // symlinked `*.json` (see the note there): a pack is parsed data behind
+        // a size cap rather than executed code, and symlinking a pack directory
+        // out of a dotfiles repo or a shared drive is the normal way people
+        // manage them. PluginLoader is the counter-example in this library and
+        // uses QDir::NoSymLinks, because a plugin subdir leads to a dlopen.
         const QStringList subdirs = dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QString& subdir : subdirs) {
-            if (m_subdirSkip && m_subdirSkip(subdir)) {
-                continue;
-            }
             // Per-rescan DoS guard, counting subdirs considered rather than
             // entries registered. Reverse-iteration scans user-first /
             // system-last, so cap-trip drops *system* overflow rather than
@@ -604,11 +608,21 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             // list is the other unbounded quantity here, and a spray of
             // broken packs that never register would otherwise grow it until
             // the inotify per-user watch limit is exhausted.
+            //
+            // Also before the skip predicate, so a skipped subdir is still
+            // CHARGED. Every sibling scanner charges before its own first
+            // filter, for the same reason: a caller-supplied predicate that
+            // inspects the name is work a spray can buy, and "considered" has
+            // to mean every entry the loop reaches or the cap bounds something
+            // other than what its docs claim.
             if (subdirsConsidered >= m_maxEntries) {
                 capTripped = true;
                 break;
             }
             ++subdirsConsidered;
+            if (m_subdirSkip && m_subdirSkip(subdir)) {
+                continue;
+            }
 
             const QString subdirPath = dirObj.filePath(subdir);
             const QString metadataPath = subdirPath + QStringLiteral("/metadata.json");
@@ -714,6 +728,15 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
         qCWarning(log).nospace() << "MetadataPackScanStrategy: reached entry cap (" << m_maxEntries
                                  << ") — later entries skipped to protect the GUI thread. Prune the watched search "
                                     "paths or raise the cap.";
+        // The truncated set IS still committed, so `MetadataPackLoader::
+        // reconcile` unregisters every pack that sorted past the cap even
+        // though it is still on disk. That is deliberate here and differs from
+        // PluginLoader, which skips its removal sweep on a cap trip: a pack
+        // registry's accessors are queried by id from QML on every frame, and
+        // leaving entries registered that this scan never validated would serve
+        // stale payloads indefinitely. Dropping them is visible and recoverable
+        // (prune the search path, or raise the cap, and the next scan restores
+        // them); serving a stale pack is neither.
     }
 
     // Sort by id once. Stable hash + stable accessor ordering both fall
