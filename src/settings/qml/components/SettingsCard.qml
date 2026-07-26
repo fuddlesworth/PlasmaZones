@@ -112,7 +112,9 @@ Item {
     /// duration before measuring the card can measure it half-open. The reveal
     /// path in SettingsFlickable sizes its settle timer from this.
     readonly property int expandDurationMs: expandMotion.duration
-    /// Opacity applied to the card body when the master toggle is off. Kept
+    /// Opacity applied to the card body when the master toggle is off AND
+    /// `gateBodyOnToggle` is set. A card that opts out of toggle-gating keeps
+    /// its body at full opacity, because its controls stay clickable. Kept
     /// high enough that muted content stays legible — the disabled palette
     /// already greys the text, so a low opacity on top compounds into an
     /// unreadable wash. Note SettingsRows and SettingsSeparators hide themselves

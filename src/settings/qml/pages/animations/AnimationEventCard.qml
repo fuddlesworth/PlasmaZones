@@ -828,13 +828,18 @@ Item {
         // advanced page) has to re-run this card's refresh or the banner goes
         // stale. Refreshing costs a re-read of the unchanged primary.
         // "global" is the tree ROOT, and ProfilePaths::parentPath maps every
-        // category root to it as a bare literal, not as a dotted prefix. A
-        // startsWith(path + ".") test therefore never matches it, so clearing
-        // or reverting a field on the Global card left every descendant card
-        // showing the pre-revert value — this card's whole reason for
-        // listening, still broken for the one path every card inherits from.
-        // Special-cased rather than folded into the prefix test because the
-        // root genuinely is not spelled like an ancestor of anything.
+        // category root to it as a bare literal, not as a dotted prefix, so a
+        // startsWith(path + ".") test never matches it. Every OTHER ancestor is
+        // genuinely spelled as a dotted prefix of its descendants, so the loop
+        // below already covers them; the root is the only gap.
+        //
+        // The case this closes is a `global.json` OVERRIDE FILE, which is a
+        // valid built-in path: a Discard, a per-page Reset, or a scoped revert
+        // that restores or removes it emits overrideChanged("global"), and
+        // without this every descendant card kept showing the pre-revert value.
+        // Edits to the Global CARD are a different path entirely — that card
+        // writes ISettings, and the `Connections { target: settingsController.settings }`
+        // block above handles it.
         if (path === "global")
             return true;
 

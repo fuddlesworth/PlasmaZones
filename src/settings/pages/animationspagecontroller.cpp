@@ -229,6 +229,11 @@ void AnimationsPageController::setProfileStoreRefresher(std::function<void()> re
     m_profileStoreRefresher = std::move(refresher);
 }
 
+void AnimationsPageController::forgetCachedOverrideFiles()
+{
+    invalidateDiskProfileCache();
+}
+
 void AnimationsPageController::refreshProfileStore()
 {
     // Unconditional, not inside the `if`: a refresh is the point at which the

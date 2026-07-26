@@ -331,6 +331,15 @@ private Q_SLOTS:
         loader.loadFromDirectory(target, LiveReload::On);
         QCOMPARE(loader.registeredCount(), 0);
 
+        // Captured NOW, while the target still does not exist. The end-state
+        // assertion below is "no ancestor watch remains", which is also true
+        // when no ancestor watch was ever recorded — i.e. exactly when the
+        // watch-the-missing-dir-via-its-parent feature is broken. Pinning the
+        // ancestor here is what makes that end-state assertion mean something.
+        const QString ancestor = loader.watchedAncestorForTest(target);
+        QVERIFY2(!ancestor.isEmpty(), "no ancestor watch was recorded for the missing target directory");
+        QVERIFY(loader.hasParentWatchForTest(ancestor));
+
         // Create the target + drop a file. Parent-watch fires on the
         // directory creation; the rescan+promote logic attaches a
         // direct watch and subsequent file edits work normally.
@@ -345,9 +354,13 @@ private Q_SLOTS:
         // ~1 ms debounce — the watcher can take several hundred ms to
         // deliver the parent-dir-changed event on some kernels / CI
         // loads.
-        // Result is asserted below rather than discarded: the fallback rescan
-        // must not be allowed to paper over a watcher that never fired.
-        const bool watcherFired = spy.wait(2000);
+        // The outcome is deliberately NOT asserted: inotify delivery is not
+        // guaranteed on every kernel or sandboxed CI, which is why the
+        // fallback rescan below exists. What IS asserted, unconditionally, is
+        // the promotion post-condition at the end of the slot — that holds
+        // whichever of the two routes got us there, and unlike the entry count
+        // it cannot be produced by a plain rescan of an already-attached dir.
+        spy.wait(2000);
 
         // Known race: on some filesystems the parent-watch fires for
         // the mkdir BEFORE the file-create inotify event, so the first
@@ -367,14 +380,12 @@ private Q_SLOTS:
 
         // The entry count alone does not test what this slot is named for: the
         // fallback rescan above produces it whether or not the parent watch was
-        // ever promoted. Assert the promotion directly. Either the watcher
-        // fired (in which case promotion must already have happened), or it did
-        // not and the explicit rescan is what promoted it — both end with the
-        // ancestor watch released and a direct watch on the target.
-        QVERIFY2(watcherFired || loader.registeredCount() == 1,
-                 "neither the parent watch nor the fallback rescan produced the entry");
+        // ever promoted. Assert the promotion directly. The ancestor pinned at
+        // the top of the slot must now be released, because the target exists
+        // and carries a direct watch of its own.
         QVERIFY2(loader.watchedAncestorForTest(target).isEmpty(),
                  "parent watch was never promoted — the loader is still watching the ancestor");
+        QVERIFY2(!loader.hasParentWatchForTest(ancestor), "the ancestor parent-watch outlived the promotion");
     }
 
     /// Regression guard for the grandparent-watch leak. When the

@@ -214,6 +214,19 @@ int main(int argc, char* argv[])
                 }
                 loader->rescanNow();
             });
+
+        // The other direction. The page memoises the override files it reads,
+        // and drops that memo itself on every edit IT makes — but the profiles
+        // directory is a filesystem boundary the user can also edit by hand
+        // (the page offers to open it). The bootstrap loader already watches
+        // that directory, so its change signal is the notification that
+        // somebody else wrote, and the page has to forget what it cached.
+        if (auto* loader = animationBootstrap.profileLoader()) {
+            QObject::connect(loader, &PhosphorAnimation::ProfileLoader::profilesChanged, animationsPage,
+                             [animationsPage]() {
+                                 animationsPage->forgetCachedOverrideFiles();
+                             });
+        }
     }
 
     // The launch controller owns the D-Bus single-instance lifecycle. Holds a

@@ -97,7 +97,14 @@ QVariantMap AnimationsPageController::rawProfile(const QString& path) const
 {
     if (!isValidEventPath(path))
         return {};
-    return readProfileJson(profileFilePath(path)).toVariantMap();
+    // Sanitised on the same terms as `cachedDiskProfile`, because QML reads
+    // BOTH for one card: `rawProfile` decides which fields the event owns (and
+    // so whether the revert link shows), `resolvedProfile` supplies the number
+    // beside it. Leaving this raw made a file with a rejected field render as
+    // "Overridden for this event", with a live revert link, next to the
+    // INHERITED value the sanitizer had substituted — the card contradicting
+    // itself on the one screen this controller exists to make honest.
+    return sanitizedProfileMap(readProfileJson(profileFilePath(path)));
 }
 
 QVariantMap AnimationsPageController::cachedDiskProfile(const QString& path) const
@@ -468,7 +475,10 @@ int AnimationsPageController::clearOverridesUnder(const QStringList& eventPaths)
     // snapshots each for a later Discard.
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "clearOverridesUnder: refusing while an async discard is in flight";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+        // Deliberately not "Cannot reset": this entry point also backs a
+        // per-event card's Override toggle, and a user flipping one switch did
+        // not experience that as a reset.
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
         return -1;
     }
     return clearOverridesForPaths(eventPaths, QLatin1String("clearOverridesUnder"));

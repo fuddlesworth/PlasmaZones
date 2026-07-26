@@ -1014,18 +1014,18 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="360"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="365"/>
         <source>Cannot save while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="600"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="605"/>
         <location filename="../src/settings/rules/rulecontroller.cpp" line="150"/>
         <source>Discard already in flight.</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="675"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="680"/>
         <source>Could not restore %n profile file(s). They remain pending.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -1033,8 +1033,8 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="809"/>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="819"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="814"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="824"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6932,15 +6932,19 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="400"/>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="471"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="407"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="408"/>
         <source>Cannot reset while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="454"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="461"/>
         <source>Some animation overrides could not be reset.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="481"/>
+        <source>Cannot change this while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -10332,12 +10336,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="305"/>
+        <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="307"/>
         <source>Collapsed. Activate to expand.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="305"/>
+        <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="307"/>
         <source>Expanded. Activate to collapse.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10414,7 +10418,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="77"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="111"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="161"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="422"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="426"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="408"/>
@@ -10840,13 +10844,13 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="743"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="747"/>
         <source>Select a pack…</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="744"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="748"/>
         <source>Set the shader pack this event uses</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11272,19 +11276,19 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="107"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="272"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="111"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="276"/>
         <source>Preset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="112"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="116"/>
         <source>Easing preset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="113"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="279"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="117"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="283"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="296"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="302"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="64"/>
@@ -11293,131 +11297,131 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="135"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="139"/>
         <source>Direction</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="136"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="140"/>
         <source>Ease In accelerates, Ease Out decelerates</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="154"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="158"/>
         <source>Easing direction</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="179"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="185"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="183"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="189"/>
         <source>Overshoot</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="179"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="185"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="183"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="189"/>
         <source>Amplitude</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="180"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="184"/>
         <source>How far past the target it travels before settling back</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="180"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="184"/>
         <source>Height of bounce peaks</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="212"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="216"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="220"/>
         <source>Period</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="213"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="217"/>
         <source>Lower values wobble faster</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="238"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="242"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="246"/>
         <source>Bounces</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="239"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="243"/>
         <source>Number of bounce repetitions</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="273"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="277"/>
         <source>Quick-select spring behavior</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="278"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="282"/>
         <source>Spring preset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="301"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="305"/>
         <source>Speed (ω)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="302"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="306"/>
         <source>Higher values make the spring respond faster</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="327"/>
-        <source>Below 1 bounces, 1 settles without bouncing, above 1 is slow and heavy</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="352"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="356"/>
         <source>Save as preset…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="305"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="309"/>
         <source>Speed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="326"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="330"/>
         <source>Damping ratio (ζ)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="330"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="331"/>
+        <source>Values below 1 bounce before settling. At 1 and above the spring settles without bouncing, more slowly the higher it goes.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="334"/>
         <source>Damping ratio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="354"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="358"/>
         <source>Save current curve as preset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="364"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="368"/>
         <source>Preset name</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="369"/>
         <source>Preset name…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="410"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="414"/>
         <source>Save preset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="413"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="417"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="221"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="123"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="181"/>
@@ -11425,7 +11429,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="420"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="424"/>
         <source>Cancel saving preset</source>
         <translation type="unfinished"></translation>
     </message>
@@ -13065,19 +13069,19 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="534"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="538"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="368"/>
         <source>Add a pack…</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="651"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="655"/>
         <source>Choose a shader…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="678"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="682"/>
         <source>Choose an overlay shader…</source>
         <translation type="unfinished"></translation>
     </message>

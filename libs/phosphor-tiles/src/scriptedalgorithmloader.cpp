@@ -23,6 +23,7 @@
 #include <QSet>
 #include <QStandardPaths>
 
+#include <algorithm>
 #include <utility>
 
 namespace PhosphorTiles {
@@ -485,6 +486,14 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         // reverse (a new user script shadowing a stamped bundled one) is caught
         // by the first-wins guard below, which runs after the id is known and
         // refuses the bundled file whichever way its id was derived.
+        // (size, mtime) is the whole key, so a content edit preserving both —
+        // `cp -p`, `touch -r`, or an edit finer than the filesystem's mtime
+        // granularity — keeps the OLD compiled algorithm live indefinitely.
+        // Before reuse existed every rescan re-parsed the source, so that
+        // window closed on the next inotify wake. Accepted: it is the same
+        // (size, mtime) pair the change signature already trusts, so a stamp
+        // that can fool this can equally fool the signature into reporting no
+        // change at all.
         const ScriptStamp prev = prevStamps.value(fullPath);
         const QFileInfo scriptInfo(fullPath);
         const bool stampMatches = !prev.id.isEmpty() && prev.size == scriptInfo.size()
@@ -526,13 +535,12 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
 
         // registerAlgorithm() handles replacement internally (removes old,
         // takes ownership of new) — no need to unregister first.
-        auto* registry = m_registry;
         if (!reusedExisting) {
             algo->setUserScript(isUserDir);
         }
 
         // First-registration-wins, scoped to THIS scan. `m_scriptIdToPath`
-        // was cleared at the top of `scanAndRegister`, so a hit here means
+        // was cleared at the top of `performScan`, so a hit here means
         // an EARLIER `loadFromDirectory` call in the same scan already
         // registered this id. Combined with the dir order the strategy
         // feeds us — `[user, sys-highest, ..., sys-lowest]` after the
@@ -579,7 +587,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         }
 
         if (!reusedExisting) {
-            registry->registerAlgorithm(scriptId, algo.release());
+            m_registry->registerAlgorithm(scriptId, algo.release());
         }
         m_scriptIdToPath[scriptId] = fullPath;
         m_scriptStamps.insert(fullPath,
@@ -610,7 +618,11 @@ QStringList ScriptedAlgorithmLoader::validatedLuauFiles(const QString& dirPath, 
     // inside canonicalDir after symlink expansion). Leaving NoSymLinks in the
     // filter would additionally block benign user-local symlinks pointing at
     // read-only system script directories.
-    const QStringList files = dirObj.entryList({QStringLiteral("*.luau")}, QDir::Files | QDir::Readable);
+    // `QDir::Name` explicitly, matching JsonScanStrategy and PluginLoader. The
+    // default sort is Name|IgnoreCase, and the ordering stopped being cosmetic
+    // the moment the cap below started counting files CONSIDERED: in a
+    // directory over the cap, sort order decides which files survive.
+    const QStringList files = dirObj.entryList({QStringLiteral("*.luau")}, QDir::Files | QDir::Readable, QDir::Name);
     // Count files CONSIDERED, not files kept. Counting survivors would let a
     // directory sprayed with dangling or escaping `*.luau` symlinks spend one
     // `canonicalFilePath()` realpath syscall per entry on the GUI thread while

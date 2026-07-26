@@ -233,6 +233,89 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // Unchanged-file reuse across rescans
+    // =========================================================================
+
+    /// A file whose (size, mtime) still match the previous scan, and whose id
+    /// still holds a live scripted registry entry, keeps that entry instead of
+    /// being re-parsed into a fresh sandboxed Luau VM.
+    ///
+    /// Asserted on the entry POINTER rather than on the name: rebuilding
+    /// produces an algorithm that compares equal on every value the registry
+    /// exposes, so only identity can tell "kept" from "rebuilt and replaced".
+    void testRescanKeepsTheEntryForAnUnchangedScript()
+    {
+        XdgEnvGuard envGuard;
+        QTemporaryDir xdgRoot;
+        QVERIFY(xdgRoot.isValid());
+
+        const QString userAlgoDir = xdgRoot.path() + QStringLiteral("/user/plasmazones/algorithms");
+        QVERIFY(QDir().mkpath(userAlgoDir));
+        writeScript(userAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("Original")));
+        qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
+
+        PhosphorTiles::ScriptedAlgorithmLoader loader(QStringLiteral("plasmazones/algorithms"),
+                                                      PlasmaZones::TestHelpers::testRegistry());
+        loader.scanAndRegister();
+
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
+        const PhosphorTiles::TilingAlgorithm* first = registry->algorithm(QStringLiteral("script:shared"));
+        QVERIFY(first != nullptr);
+
+        // Nothing touched on disk between the two scans.
+        loader.scanAndRegister();
+
+        QCOMPARE(registry->algorithm(QStringLiteral("script:shared")), first);
+    }
+
+    /// The shadowing case in both directions, which is where the reuse stamp
+    /// could resurrect a file that should have been rebuilt.
+    ///
+    /// A user script appearing over a stamped bundled one must win, and the
+    /// bundled file must NOT be stamped while it is shadowed — otherwise, when
+    /// the user script goes away again, the bundled file would be "reused" into
+    /// a registry entry that no longer belongs to it.
+    void testShadowedScriptIsRebuiltRatherThanResurrected()
+    {
+        XdgEnvGuard envGuard;
+        QTemporaryDir xdgRoot;
+        QVERIFY(xdgRoot.isValid());
+
+        const QString systemAlgoDir = xdgRoot.path() + QStringLiteral("/system/plasmazones/algorithms");
+        const QString userAlgoDir = xdgRoot.path() + QStringLiteral("/user/plasmazones/algorithms");
+        QVERIFY(QDir().mkpath(systemAlgoDir));
+        QVERIFY(QDir().mkpath(userAlgoDir));
+        writeScript(systemAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("SystemVersion")));
+        qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
+        qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
+
+        PhosphorTiles::ScriptedAlgorithmLoader loader(QStringLiteral("plasmazones/algorithms"),
+                                                      PlasmaZones::TestHelpers::testRegistry());
+        loader.scanAndRegister();
+
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
+        QCOMPARE(registry->algorithm(QStringLiteral("script:shared"))->name(), QStringLiteral("SystemVersion"));
+
+        // A user script arrives and claims the same id. It must win, even
+        // though the bundled file is unchanged and carries a stamp.
+        writeScript(userAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("UserVersion")));
+        loader.scanAndRegister();
+        QCOMPARE(registry->algorithm(QStringLiteral("script:shared"))->name(), QStringLiteral("UserVersion"));
+
+        // The user script goes away. The bundled file has not changed on disk
+        // since its very first scan, but it was REFUSED (and so unstamped)
+        // while shadowed, so it has to be rebuilt rather than reused into the
+        // entry the user script left behind.
+        QVERIFY(QFile::remove(userAlgoDir + QStringLiteral("/shared.luau")));
+        loader.scanAndRegister();
+
+        const PhosphorTiles::TilingAlgorithm* restored = registry->algorithm(QStringLiteral("script:shared"));
+        QVERIFY(restored != nullptr);
+        QCOMPARE(restored->name(), QStringLiteral("SystemVersion"));
+        QVERIFY(!restored->isUserScript());
+    }
+
+    // =========================================================================
     // Stale script cleanup on rescan
     // =========================================================================
 

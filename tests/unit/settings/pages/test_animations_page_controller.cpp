@@ -45,15 +45,12 @@
 #include <QJsonObject>
 #include <QMetaMethod>
 #include <QRegularExpression>
-#include <QScopeGuard>
 #include <QSet>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
-#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
@@ -373,6 +370,54 @@ private Q_SLOTS:
     /// expression or a property reference would not be seen, and the page has
     /// never used one. The count guards below are what stop a rewrite in that
     /// style from turning this into a test that asserts nothing.
+    /// The Override toggle's ON branch is a no-write latch: it opens the timing
+    /// editor and writes nothing until a control is actually edited. The old
+    /// behaviour committed a snapshot of the inherited values so the derived
+    /// toggle state would stick, which silently pinned a copy of the Global
+    /// curve and duration the moment the toggle was flipped.
+    ///
+    /// Scraped rather than exercised, because the branch lives entirely in QML
+    /// and calls nothing on the controller — a C++ slot driving the controller
+    /// directly would stay green no matter what the branch did. What CAN be
+    /// pinned is the property this test actually cares about: that the branch
+    /// body reaches no controller method at all.
+    void overrideToggleOnBranchCallsNothingOnTheController()
+    {
+        const QString qmlPath =
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationEventCard.qml");
+        const QString src = readFile(qmlPath);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
+
+        // Body of the `if (checked)` arm inside onToggleClicked, up to its
+        // closing `} else {`. Anchored on both ends so a rewrite that renames
+        // the handler or drops the else fails the guard below rather than
+        // silently matching nothing.
+        static const QRegularExpression armRe(
+            QStringLiteral("onToggleClicked\\s*:\\s*function\\s*\\(\\s*checked\\s*\\)\\s*\\{\\s*"
+                           "if\\s*\\(\\s*checked\\s*\\)\\s*\\{(.*?)\\}\\s*else\\s*\\{"),
+            QRegularExpression::DotMatchesEverythingOption);
+        const QRegularExpressionMatch m = armRe.match(src);
+        QVERIFY2(m.hasMatch(), "could not locate the onToggleClicked if/else in AnimationEventCard.qml");
+
+        const QString arm = m.captured(1);
+        // Strip comments first: the arm's own comment explains the behaviour by
+        // naming the calls it does NOT make, and matching those would fail the
+        // test for describing itself.
+        static const QRegularExpression commentRe(QStringLiteral("//[^\\n]*"));
+        const QString code = QString(arm).remove(commentRe);
+
+        static const QRegularExpression callRe(
+            QStringLiteral("\\b(animationsPage|settingsController)\\.[A-Za-z_][A-Za-z0-9_]*\\s*\\("));
+        QStringList calls;
+        auto it = callRe.globalMatch(code);
+        while (it.hasNext())
+            calls.append(it.next().captured(0));
+
+        QVERIFY2(calls.isEmpty(),
+                 qPrintable(QStringLiteral("the Override toggle's ON branch is a no-write latch, but it calls: ")
+                            + calls.join(QStringLiteral(", "))));
+    }
+
     void simpleScopeCoversEverySimplePageCard()
     {
         const QString qmlPath =

@@ -89,7 +89,11 @@ Kirigami.Dialog {
             visible: root.timingMode === CurvePresets.timingModeEasing
             Layout.fillWidth: true
             curve: root._workingCurve
-            animationDuration: settingsController.settings.animationDuration
+            // The edited event's duration, not the global one. Replaying the
+            // curve at a tempo the event never uses means the user tunes
+            // against the wrong feel, and it would disagree with the duration
+            // "Save as preset…" stamps a few lines below.
+            animationDuration: root.duration
             previewEnabled: root.visible && root.timingMode === CurvePresets.timingModeEasing
             onCurveEdited: function (newCurve) {
                 root._workingCurve = newCurve;
@@ -324,7 +328,7 @@ Kirigami.Dialog {
         SettingsRow {
             visible: root.timingMode === CurvePresets.timingModeSpring
             title: i18n("Damping ratio (ζ)")
-            description: i18n("Below 1 bounces, 1 settles without bouncing, above 1 is slow and heavy")
+            description: i18n("Values below 1 bounce before settling. At 1 and above the spring settles without bouncing, more slowly the higher it goes.")
 
             SettingsSlider {
                 accessibleName: i18n("Damping ratio")

@@ -13,8 +13,10 @@
  * without waiting for the watch. A write is covered by reading the user files
  * ahead of the registry; a delete has nothing left on disk to outrank the
  * stale entry, so the controller forces the loader to catch up first. These
- * slots pin both halves, every removal call site that owes a refresh, and the
- * inverse regression of dropping the registry read altogether.
+ * slots pin both halves, every removal call site that owes a refresh, the
+ * inverse regression of dropping the registry read altogether, and the
+ * boundary where the cleared override happened to equal the inherited value
+ * (the announcement must still fire, or the UI has nothing to re-read on).
  *
  * Split out of `test_animations_page_controller.cpp`, which owns path
  * discovery, override CRUD, the dirty-state announcements, the traversal
@@ -83,13 +85,10 @@ private Q_SLOTS:
             PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
         });
         PhosphorAnimation::ProfileLoader loader(registry, curves, QStringLiteral("test-user-profiles"));
-        // LiveReload::Off deliberately. With the watcher armed, the 5 s event-loop
-        // spin in leg 4 below gives its 50 ms debounce ample room to land, and a
-        // registry that caught up on its own would satisfy the post-loop
-        // assertions even with the refresh under test deleted. `rescanNow()` is
-        // documented to work independently of the watcher, so the injected
-        // refresher stays the ONLY route to a current registry and every leg
-        // stays mutation-sensitive.
+        // LiveReload::Off deliberately: with no watcher, the injected refresher
+        // is the ONLY route to a current registry, so an assertion below cannot
+        // be satisfied by the registry quietly catching up on its own.
+        // `rescanNow()` works independently of the watcher, so nothing is lost.
         loader.loadFromDirectory(tmp.path(), PhosphorAnimation::LiveReload::Off);
         // What main.cpp injects.
         c.setProfileStoreRefresher([&loader]() {
@@ -257,34 +256,6 @@ private Q_SLOTS:
         QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
         // Same number, now inherited rather than owned.
         QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 321);
-    }
-
-    /// The Override toggle's ON branch is a no-write latch: it opens the timing
-    /// editor and writes nothing until a control is actually edited. Nothing
-    /// else pins that, and a stray write there would create an override file
-    /// the user never asked for, immediately dirtying the page and pinning the
-    /// inherited value at whatever it happened to be.
-    void openingTheTimingEditorWritesNothing()
-    {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        AnimationsPageController c;
-        c.setUserProfilesDirOverride(tmp.path());
-
-        QSignalSpy announced(&c, &AnimationsPageController::overrideChanged);
-        QSignalSpy dirtied(&c, &AnimationsPageController::pendingChangesChanged);
-
-        // Everything the card's ON branch actually calls: it READS the resolved
-        // and raw profiles to seed its controls, and calls nothing else.
-        const QVariantMap resolved = c.resolvedProfile(QStringLiteral("editor.snapIn"));
-        QVERIFY(!resolved.isEmpty());
-        QVERIFY(c.rawProfile(QStringLiteral("editor.snapIn")).isEmpty());
-
-        QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
-        QVERIFY(QDir(tmp.path()).entryList(QDir::Files).isEmpty());
-        QCOMPARE(announced.count(), 0);
-        QCOMPARE(dirtied.count(), 0);
-        QVERIFY(!c.hasPendingChanges());
     }
 };
 

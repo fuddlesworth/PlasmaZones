@@ -358,12 +358,18 @@ public:
     /// `subdirsConsidered >= m_maxEntries` with both sides `int`, so a negative
     /// cap does not wrap — it trips on the very first subdir of every scan,
     /// which purges every previously registered pack. Asserted in debug builds
-    /// and clamped in release so the worst case is "cap of zero", not a
-    /// silently emptied registry with no diagnostic.
+    /// and, in release, ignored in favour of `kDefaultMaxEntries` so a bad cap
+    /// costs the caller its setting rather than the registry its contents.
     void setMaxEntries(int cap)
     {
         Q_ASSERT_X(cap >= 0, "MetadataPackScanStrategy::setMaxEntries", "cap must be non-negative");
-        m_maxEntries = std::max(0, cap);
+        // Release fallback is the DEFAULT, not zero. Clamping to zero would
+        // make the assert's release counterpart destructive in exactly the way
+        // the assert exists to prevent: the cap trips on the first subdir,
+        // `m_packs` rebuilds empty, and `OnCommit` fires as though every pack
+        // had been uninstalled. Falling back to the default degrades to
+        // "the caller's cap was ignored", which is recoverable and obvious.
+        m_maxEntries = cap >= 0 ? cap : kDefaultMaxEntries;
     }
 
     /// Override the logging category used for the strategy's own

@@ -495,6 +495,10 @@ QtObject {
                 easingCurve: curveSlot._easingCurve
                 springOmega: curveSlot._springOmega
                 springZeta: curveSlot._springZeta
+                // Drives the in-dialog preview tempo and the duration stamped
+                // into a saved preset. A rule action carries no duration of its
+                // own, so the global default is the honest answer here.
+                duration: settingsController.settings.animationDuration
                 onCurveApplied: function (curve) {
                     row.actionEdited(row._withParam(curveSlot._param.key, curve));
                 }

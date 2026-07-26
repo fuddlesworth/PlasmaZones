@@ -504,13 +504,14 @@ private Q_SLOTS:
     }
 
     /// Empty `directoriesInScanOrder` runs cleanly: empty packs map,
-    /// empty watch list, and no commit on either scan. This is the
+    /// empty watch list, and no commit on either scan here. This is the
     /// "no-content baseline" contract. `changed` is
-    /// `isFirstScan ? !fresh.isEmpty() : signature != m_lastSignature`, so
-    /// an empty result set cannot commit on ANY scan, first or later — the
-    /// strategy never announces a state it has nothing to report about.
-    /// The purge half of the contract, where a non-empty scan is followed
-    /// by an empty one and the drop DOES commit, is pinned below.
+    /// `isFirstScan ? !fresh.isEmpty() : signature != m_lastSignature`, so an
+    /// empty result set cannot commit on the FIRST scan, and cannot commit on
+    /// a later scan either when the previous scan was ALSO empty (identical
+    /// signature). It does commit on a later scan when the previous scan was
+    /// not empty, which is the purge case pinned by
+    /// `testEmptyScanAfterNonEmptyCommitsThePurge` below.
     void testEmptyDirectoriesInScanOrder()
     {
         // First scan: no directories registered → empty packs, no
@@ -543,6 +544,35 @@ private Q_SLOTS:
         set.setDirectories({}, LiveReload::Off);
         QCOMPARE(strategy.size(), 0);
         QCOMPARE(commits, 0);
+    }
+
+    /// The other half of the no-content-baseline contract: a scan that DROPS
+    /// content is a change and must commit, even though the result set it
+    /// lands on is empty. Without this, `testEmptyDirectoriesInScanOrder`
+    /// alone is satisfied by a strategy that never commits for an empty
+    /// result under any circumstances — e.g. a regression narrowing `changed`
+    /// to `!fresh.isEmpty() && ...` would keep every other slot green.
+    void testEmptyScanAfterNonEmptyCommitsThePurge()
+    {
+        const QString dir = m_tmp->filePath(QStringLiteral("d"));
+        QVERIFY(QDir().mkpath(dir));
+        QVERIFY(writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 1));
+
+        int commits = 0;
+        MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [&]() {
+            ++commits;
+        });
+        WatchedDirectorySet set(strategy);
+
+        set.registerDirectory(dir, LiveReload::Off);
+        QCOMPARE(strategy.size(), 1);
+        QCOMPARE(commits, 1);
+
+        // Drop every directory. The result set is empty, but it differs from
+        // the signature already seeded, so this IS a commit.
+        set.setDirectories({}, LiveReload::Off);
+        QCOMPARE(strategy.size(), 0);
+        QCOMPARE(commits, 2);
     }
 
     /// Editing a `metadata.json` field that the parser consumes but
