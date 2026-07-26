@@ -66,7 +66,7 @@ set(plasmazones_settings_SRCS
     pages/animationspagecontroller.h
     pages/animationspagecontroller.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
-    # helpers shared across the four AnimationsPageController TUs. Inline
+    # helpers shared across the five AnimationsPageController TUs. Inline
     # definitions make cross-TU linkage independent of unity-build merging.
     pages/animations_controller_detail.h
     # AnimationsPageController shader-leg methods compile into the same
@@ -76,6 +76,10 @@ set(plasmazones_settings_SRCS
     # hasOverride / rawProfile / resolvedProfile / setOverride /
     # clearOverride).
     pages/animationspagecontroller_overrides.cpp
+    # AnimationsPageController group-write methods — the per-field merge, the
+    # per-field clear, the shader-leg group mutators and the divergence measure
+    # an event card applies across its whole write-path group.
+    pages/animationspagecontroller_groupwrites.cpp
     # AnimationsPageController path-discovery helpers, small per-Q_INVOKABLE
     # methods (sectionForPath / eventLabel / parentChain).
     pages/animationspagecontroller_paths.cpp

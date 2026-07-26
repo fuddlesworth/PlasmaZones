@@ -237,6 +237,116 @@ public:
     /// eventPaths must be built-in event paths; non-built-in entries are skipped.
     Q_INVOKABLE int clearOverridesUnder(const QStringList& eventPaths);
 
+    // ─── Group writes ─────────────────────────────────────────────────────
+    //
+    // An event card writes to a GROUP of paths, not one: its own event path
+    // plus any `mirrorPaths` it declares (the two window.appearance legs, for
+    // instance). Every one of the calls below takes the whole group and applies
+    // one policy across it, so a card cannot write a group partially and cannot
+    // reach a per-path mutator directly and bypass its mirrors.
+    //
+    // These live here rather than as JS loops in the card for three reasons.
+    // The merge and field-removal rules are the same drop-versus-substitute
+    // semantics `rawProfile` already documents, and having them in two
+    // languages meant two places to keep in step. The per-path reads they need
+    // (`rawProfile`, the shader tree) are memoised on this side, so the card no
+    // longer has to hold its own snapshot caches to stay off the file-open path
+    // on a drag. And each is now directly testable without driving QML.
+    //
+    // What deliberately stays in the card: the `_committing` /
+    // `_committingShader` re-entrancy latches and the refresh that follows a
+    // group write. Those are view state about which signals the card should
+    // ignore while its own write is in flight, and they mean nothing here.
+
+    /// Merge @p fields into the stored override at every path in @p paths and
+    /// write each result back.
+    ///
+    /// Merged over each path's OWN stored profile rather than replacing it, so
+    /// fields the caller does not mention (minDistance, sequenceMode,
+    /// staggerInterval, presetName) survive. A motion set can write those to a
+    /// leaf, and a caller that replaced the whole map would drop them the
+    /// moment the user nudged Duration.
+    ///
+    /// @p curveFromCommit distinguishes the two things a caller can mean about
+    /// the curve, which a plain map cannot express. An INVALID QVariant (QML
+    /// `undefined`) means "the user did not touch the curve": each path keeps
+    /// its own, so a path that owns one keeps it and a path that inherits stays
+    /// inheriting. A valid string means the user edited the curve and it
+    /// travels to every path. Never decide a curve on the user's behalf by
+    /// passing the resolved one here.
+    ///
+    /// @return true when every path in @p paths was written.
+    Q_INVOKABLE bool setOverrideMergedOnPaths(const QStringList& paths, const QVariantMap& fields,
+                                              const QVariant& curveFromCommit);
+
+    /// Remove ONE field (`"curve"` or `"duration"`) from the stored override at
+    /// every path in @p paths, returning that field to inheritance while the
+    /// other timing field and the motion-set fields stay put. A path whose
+    /// override becomes empty has its file DELETED rather than left as an empty
+    /// object: the two resolve identically, but the card's toggle and the
+    /// pending-changes walk both key on file existence.
+    /// @return the number of paths actually changed. Paths that did not carry
+    /// the field are skipped, so 0 means the field was already inherited
+    /// everywhere.
+    Q_INVOKABLE int clearFieldOnPaths(const QStringList& paths, const QString& field);
+
+    /// True when ANY path in @p paths takes a shader leg. A group mutation must
+    /// gate on this rather than on the primary path alone: a mirror that does
+    /// support a leg would otherwise keep its shader override across a toggle
+    /// off, and `divergentPathCount` would then report a divergence no control
+    /// on the card could clear.
+    Q_INVOKABLE bool anyPathSupportsShaderLeg(const QStringList& paths) const;
+
+    /// True iff every path in @p paths already carries @p effectId as its
+    /// DIRECT shader override. The empty string is the engaged-empty "None"
+    /// sentinel, which is a real stored value and distinct from carrying no
+    /// override at all.
+    Q_INVOKABLE bool allPathsHoldShaderEffect(const QStringList& paths, const QString& effectId) const;
+
+    /// Set @p effectId (with @p parameters) as the shader override on every
+    /// path in @p paths that can host a shader leg. Non-supporting paths are
+    /// SKIPPED rather than attempted: `setShaderOverride` would reject them
+    /// anyway, and skipping keeps the warning out of the log for a call that
+    /// was never going to land.
+    /// @return the number of paths written.
+    Q_INVOKABLE int setShaderOverrideOnPaths(const QStringList& paths, const QString& effectId,
+                                             const QVariantMap& parameters);
+
+    /// Clear the shader override on every path in @p paths, returning the event
+    /// to inheritance. Distinct from writing the engaged-empty sentinel, which
+    /// is an explicit "None" that BLOCKS inheritance.
+    /// @return the number of paths whose override was removed.
+    Q_INVOKABLE int clearShaderOverrideOnPaths(const QStringList& paths);
+
+    /// Clear the shader overrides BELOW every path in @p paths.
+    /// @return the total number cleared, or -1 if any path refused (the
+    /// "async discard in flight" sentinel). Stops at the first refusal: the
+    /// in-flight gate cannot change between iterations, and the controller
+    /// toasts per refused call. A -1 is never summed in — that would make a
+    /// refusal indistinguishable from a smaller successful clear.
+    Q_INVOKABLE int clearShaderOverrideDescendantsOnPaths(const QStringList& paths);
+
+    /// How many paths in a card's write group have stored state differing from
+    /// @p primaryPath's, expressed the way the card's divergence banner needs
+    /// it: 0 when everything agrees, otherwise the number of diverging mirrors
+    /// PLUS ONE for the primary, which each of them differs from and which the
+    /// converging edit also rewrites.
+    ///
+    /// Comparison is on exactly what a single edit can converge, not on
+    /// everything stored. The duration and the whole shader leg always count.
+    /// The curve counts only when @p compareCurve is true, which the caller
+    /// sets false in simple mode: there is no curve control there, so no edit
+    /// could converge a divergent curve and counting it would latch the banner
+    /// on permanently. The motion-set fields never count, because the merged
+    /// writer preserves each path's own rather than converging them.
+    ///
+    /// The shader axis is compared only for paths that can host a shader leg. A
+    /// non-supporting path always stores nothing on that axis, so comparing its
+    /// permanently-empty leg against a supporting path's real one would report
+    /// a divergence over an axis nothing could converge.
+    Q_INVOKABLE int divergentPathCount(const QString& primaryPath, const QStringList& mirrorPaths,
+                                       bool compareCurve) const;
+
     /// Scoped sibling of revertPending: restore ONLY the snapshotted override
     /// files at @p eventPaths from their pre-edit content, leaving every other
     /// page's staged file edits (and any preset / motion-set snapshots) pending.

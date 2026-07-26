@@ -1004,7 +1004,7 @@ target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Co
 target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
 
-# Animations-controller sources shared by the six test executables below
+# Animations-controller sources shared by the seven test executables below
 # (page controller / QML contracts / profile-store sync / motion sets / presets
 # / shader overrides). One list so a new controller source file can't silently
 # miss one of the six.
@@ -1012,6 +1012,7 @@ set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_shaders.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_overrides.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_groupwrites.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/stores/animationpresetlibrary.cpp
@@ -1085,6 +1086,26 @@ target_link_libraries(test_animations_profile_store_sync
         plasmazones_core
 )
 add_test(NAME test_animations_profile_store_sync COMMAND test_animations_profile_store_sync)
+
+# Companion test executable: the group-write API an event card applies across
+# its whole write-path group (the per-field merge, the per-field clear, the
+# divergence measure, the shader-leg group queries). These rules lived as JS
+# loops in AnimationEventCard.qml until they moved to the controller, where they
+# can be driven directly instead of scraped out of the QML source.
+add_executable(test_animations_group_writes
+    settings/pages/test_animations_group_writes.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_group_writes
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_group_writes COMMAND test_animations_group_writes)
 
 # Companion test executable: motion-set + pending-changes coverage.
 add_executable(test_animations_motion_sets
