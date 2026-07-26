@@ -109,7 +109,7 @@ ColumnLayout {
         Layout.rightMargin: Kirigami.Units.largeSpacing
         type: Kirigami.MessageType.Warning
         visible: root.mirrorsDiverged
-        // Names both axes the card's _storedStateKey compares, because
+        // Names both axes `divergentPathCount` compares, because
         // both have a group writer. Writes are per setting: editing the
         // duration converges the duration everywhere but leaves a
         // divergent curve alone, so the sentence promises convergence

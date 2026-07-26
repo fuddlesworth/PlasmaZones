@@ -78,32 +78,6 @@ Item {
     /// silently turning every mirror write into a write to a bogus path.
     property var mirrorPaths: []
 
-    /// Raw stored TIMING profile per write path, refreshed by refreshFromTree.
-    /// _setOverrideMerged and _storedStateKey read it to merge over, and to
-    /// compare against, each path's own stored fields; _clearFieldOnAll and
-    /// the _primaryRaw ownership captions read it too. It exists to avoid DISK
-    /// I/O: the first two run from the duration slider's durationEdited, i.e. every tick
-    /// of a drag, and reading each path's stored profile there meant a
-    /// synchronous file open per path per reader per tick. With the cache the
-    /// only timing reads left on a tick are refreshFromTree's own, which seeds
-    /// it at exactly one open per path (the primary reuses the read
-    /// refreshFromTree already performs). Re-entrancy is _committing's job,
-    /// not this cache's.
-    property var _pathProfiles: ({})
-
-    /// The shader-axis counterpart, seeded on the same pass and read by
-    /// _storedStateKey. rawShaderProfile is not a file open but it is not cheap
-    /// either: every call re-reads the whole tree through
-    /// Settings::shaderProfileTree(), which does QJsonObject::fromVariantMap
-    /// plus ShaderProfileTree::fromJson plus a full prune walk. _storedStateKey
-    /// runs once per write path per divergence pass, so an uncached read there
-    /// made a mirrored card's drag tick cost one full tree parse per path on
-    /// top of the timing reads. With both snapshots seeded together, the reads
-    /// left on a tick are refreshFromTree's own on BOTH axes: one timing open
-    /// and one tree parse per path, with the primary reusing the reads
-    /// refreshFromTree already performs for its own toggle state.
-    property var _pathShaderProfiles: ({})
-
     /// True while _setOverrideMerged is writing, so the overrideChanged each
     /// write emits does not re-enter refreshFromTree mid-loop.
     property bool _committing: false
@@ -153,9 +127,16 @@ Item {
     /// Cleared by the toggle's OFF path, and by `refreshFromTree` when an
     /// EXTERNAL clear drops the stored state out from under it. Not persisted.
     property bool _editingTiming: false
-    /// The primary path's stored profile, from the cache refreshFromTree
-    /// seeds (so no extra file open). Drives the per-field status captions.
-    readonly property var _primaryRaw: root._pathProfiles[root.eventPath] || ({})
+    /// This path's own stored TIMING profile, assigned by refreshFromTree from
+    /// the read it already performs (so no extra file open). Drives the
+    /// per-field status captions and the ownership tests below.
+    ///
+    /// Only the PRIMARY path's, not a map over the whole write group. The group
+    /// writers used to need every path's stored profile to merge over, and
+    /// cached them here to stay off the file-open path on a drag tick; that
+    /// merge now happens C++-side against its own memoised reads, so the cache
+    /// and its per-path read loop are gone with it.
+    property var _primaryRaw: ({})
     /// Whether this event DIRECTLY owns each timing field. Matches the
     /// presence tests the resolver uses: any engaged duration counts, and a
     /// curve counts only as a non-empty string.
@@ -221,8 +202,8 @@ Item {
     /// too: a card that pins only the duration still has to track Global
     /// curve changes. Only a card owning BOTH fields short-circuits before
     /// the walk — Global cannot reach any of its controls. The overlay of the
-    /// card's own stored fields uses the _pathProfiles cache, so the cost
-    /// stays one chain walk with no file open on THIS side. resolvedProfile
+    /// card's own stored fields reads `_primaryRaw`, already in hand, so the
+    /// cost stays one chain walk with no file open on THIS side. resolvedProfile
     /// itself reads a per-ancestor override file first and consults the
     /// registry only where no user file exists, which is what keeps the walk
     /// honest immediately after a mutation.
@@ -363,9 +344,6 @@ Item {
     function _setOverrideMerged() {
         return writers._setOverrideMerged.apply(writers, arguments);
     }
-    function _setOverrideMergedLoop() {
-        return writers._setOverrideMergedLoop.apply(writers, arguments);
-    }
     function _anyWritePathSupportsShaderLeg() {
         return writers._anyWritePathSupportsShaderLeg.apply(writers, arguments);
     }
@@ -383,9 +361,6 @@ Item {
     }
     function _allWritePathsHold() {
         return writers._allWritePathsHold.apply(writers, arguments);
-    }
-    function _storedStateKey() {
-        return writers._storedStateKey.apply(writers, arguments);
     }
     function _refreshMirrorDivergence() {
         return writers._refreshMirrorDivergence.apply(writers, arguments);
@@ -529,25 +504,9 @@ Item {
         // curve that is present-yet-empty would survive the merge, and
         // _applyEffective's non-empty check then needs somewhere to fall.
         root._applyEffective(effective, resolved.curve);
-        // Cache each write path's stored profile on both axes, for
-        // _setOverrideMerged and _storedStateKey. This runs on every
-        // overrideChanged and on every shader-side refresh, which is exactly
-        // when a path's stored state can have moved.
-        var cache = {};
-        var shaderCache = {};
-        for (var pi = 0; pi < root._writePaths.length; ++pi) {
-            const wp = root._writePaths[pi];
-            // The primary reuses `raw` and `rawShader`, both read at the top of
-            // this function, rather than repeating the same file open and the
-            // same tree parse on the same tick. That is what makes the caches'
-            // "one read per path per tick" claim true on both axes instead of
-            // merely halving the reads.
-            const isPrimary = wp === root.eventPath;
-            cache[wp] = isPrimary ? (raw || ({})) : (settingsController.animationsPage.rawProfile(wp) || ({}));
-            shaderCache[wp] = isPrimary ? (rawShader || ({})) : (settingsController.animationsPage.rawShaderProfile(wp) || ({}));
-        }
-        root._pathProfiles = cache;
-        root._pathShaderProfiles = shaderCache;
+        // The stored profile this card's own captions read, taken from the
+        // `raw` read at the top of this function rather than repeated.
+        root._primaryRaw = raw || ({});
         root._refreshMirrorDivergence();
     }
 

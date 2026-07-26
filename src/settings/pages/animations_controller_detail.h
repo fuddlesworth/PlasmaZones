@@ -3,9 +3,9 @@
 
 #pragma once
 
-// Shared helpers for the four TUs that split AnimationsPageController across
-// files (animationspagecontroller.cpp and its _overrides / _shaders / _paths
-// siblings). Covers the shader-effect / parameter / shader-profile conversions
+// Shared helpers for the five TUs that split AnimationsPageController across
+// files (animationspagecontroller.cpp and its _overrides / _shaders / _paths /
+// _groupwrites siblings). Covers the shader-effect / parameter / shader-profile conversions
 // those TUs hand to QML, the override-file read and normalisation
 // (JsonNameKey, readProfileJson, sanitizedProfileMap, profileToVariantMap,
 // mergeMissingFields, fillLibraryDefaults), and the two path helpers
