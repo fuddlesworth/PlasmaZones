@@ -230,6 +230,12 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
         qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: bufferFilters has" << filtersArr.size()
                                    << "entries, cap is" << kMaxBufferPasses << "- surplus dropped";
     }
+    // Deliberately NOT truncated to bufferShaderPaths.size() (unlike the overlay
+    // parser): the surface tree keeps every wrap/filter entry in its declared
+    // position so a round trip through toJson is byte-stable and operator==
+    // stays meaningful, and the consumer simply never indexes past the buffer
+    // count. Truncating here would break fromJson's documented in-place
+    // positional contract (pinned by the surface registry tests).
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
 
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();

@@ -19,6 +19,13 @@ namespace PhosphorShaders {
 inline constexpr double kMinBufferScale = 0.125;
 inline constexpr double kMaxBufferScale = 1.0;
 
+/// Maximum number of multipass buffer passes a pack may declare. Canonical
+/// home shared by the overlay parser and the pack validator (the surface tree
+/// keeps its own SurfaceShaderEffect::kMaxBufferPasses at the same value, and
+/// the animation tree AnimationShaderContract::kMaxBufferPasses); every buffer
+/// pass costs a canvas-sized RGBA8 texture, so the cap bounds GPU memory.
+inline constexpr int kMaxBufferPasses = 4;
+
 /// The accepted texture / buffer `wrap` vocabulary, shared by every
 /// validation site across the shader registries (overlay image-param
 /// parse, surface metadata parse, per-slot texture parse, and runtime
@@ -87,6 +94,12 @@ inline constexpr int kFlatSlotCount = 4 * kVecCount;
 /// the GLSL-author convention.
 inline QString slotKey(int vec, char comp)
 {
+    // Same graceful-degradation contract as the flat slotKey(int) below: an
+    // out-of-range vec or a component outside {x,y,z,w} returns an empty string
+    // rather than fabricating a key that could collide with a valid one.
+    if (vec < 0 || vec >= kVecCount || (comp != 'x' && comp != 'y' && comp != 'z' && comp != 'w')) {
+        return {};
+    }
     return QStringLiteral("customParams") + QString::number(vec + 1) + QLatin1Char('_') + QLatin1Char(comp);
 }
 

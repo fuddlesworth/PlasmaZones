@@ -49,7 +49,7 @@
                     "description": "Marshalling type of the uniform (image binds a texture slot). An unknown type cannot be bound, so it is rejected."
                 },
                 "default": {
-                    "type": ["number", "string", "boolean"],
+                    "type": ["number", "string", "boolean", "null"],
                     "description": "Default value. Use a string for color (#rrggbb), a number for float or int, and a boolean for bool."
                 },
                 "min": { "type": "number" },

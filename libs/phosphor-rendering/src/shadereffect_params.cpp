@@ -221,8 +221,9 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     // each still synthesise a temporary `QString` for the hash lookup, so
     // we bind the QLatin1String to a local `QString` once per slot per key
     // and reuse it across the contains/value pair to deduplicate that
-    // implicit conversion as well. Tables sized to `kMaxUserTextureSlots`,
-    // which is also the loop bound.
+    // implicit conversion as well. Tables sized to `kMaxUserTextures`, which
+    // is also the loop bound (pinned equal to the contract's
+    // kMaxUserTextureSlots by the static_assert in shadereffect.cpp).
     for (int i = 0; i < kMaxUserTextures; ++i) {
         const QString sizeKey(kUserTextureSvgSizeKeys[i]);
         bool svgSizeChanged = false;

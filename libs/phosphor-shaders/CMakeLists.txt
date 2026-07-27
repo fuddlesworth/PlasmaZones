@@ -83,6 +83,8 @@ set(phosphorshaders_public_HDRS
 # Extension-less Qt-style camelcase forwarders, installed alongside the .h files.
 set(phosphorshaders_camelcase_HDRS
     include/PhosphorShaders/BaseUniformProfile
+    include/PhosphorShaders/BaseUniforms
+    include/PhosphorShaders/CustomParamsKey
     include/PhosphorShaders/IUboProfile
     include/PhosphorShaders/IUniformExtension
     include/PhosphorShaders/IWallpaperProvider
@@ -98,6 +100,7 @@ set(phosphorshaders_SRCS
     src/shaderincluderesolver.cpp
     src/shaderparampreamble.cpp
     src/shaderregistry.cpp
+    src/shaderregistry_params.cpp
     src/shaderregistry_wallpaper.cpp
     src/wallpaperprovider.cpp
 )
@@ -127,6 +130,12 @@ add_library(PhosphorShaders::PhosphorShaders ALIAS PhosphorShaders)
 # pack's metadata.json on load without an installed data path. The committed
 # data/schemas/shader-metadata.schema.json is the single source of truth shared
 # with CI; read at :/phosphorshaders/schemas/shader-metadata.schema.json.
+#
+# NOTE: this reaches into ../../data/schemas (the app tree), so despite the
+# project() fallback above the library is NOT standalone-buildable out of this
+# repo layout as-is — a truly standalone build would have to vendor the schema
+# under libs/phosphor-shaders/schemas/. Kept in the app tree because CI shares
+# the same file; move it here if standalone packaging is ever required.
 qt6_add_resources(PhosphorShaders "phosphorshaders_schemas"
     PREFIX "/phosphorshaders/schemas"
     BASE "${CMAKE_CURRENT_SOURCE_DIR}/../../data/schemas"

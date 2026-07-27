@@ -444,13 +444,11 @@ private Q_SLOTS:
         QCOMPARE(*p.minDistance, 0);
     }
 
-    /// `QJsonValue::toInt(default)` returns `default` verbatim when
-    /// the value is a JSON Number-with-fractional-zero like `5.0`,
-    /// so a file written by a non-C++ serializer that emits the
-    /// integer as a double silently fell back to the library
-    /// default. The fix routes through `toDouble()` + `qRound()`.
-    /// Regression guard: a JSON double `5.0` must produce
-    /// `minDistance = 5`, not the library default.
+    /// `QJsonValue::toInt(default)` substitutes `default` for a FRACTIONAL
+    /// double and rejects rather than rounds (on a whole-number double like
+    /// `5.0` Qt 6 does return 5). The parser routes through `toDouble()` +
+    /// `qRound()` so `5`, `5.0` and a fractional `5.4` all resolve. Regression
+    /// guard: a JSON double `5.0` must produce `minDistance = 5`.
     void testFromJsonMinDistanceAcceptsWholeDouble()
     {
         QJsonObject obj;
