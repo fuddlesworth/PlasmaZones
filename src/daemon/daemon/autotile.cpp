@@ -267,10 +267,11 @@ void Daemon::updateEngineScreens()
 
                 // When the per-screen algorithm differs from the engine's
                 // current global algorithm and there's no explicit MaxWindows
-                // override, inject the per-screen algorithm's default — but
-                // only if the global maxWindows is still at the global
-                // algorithm's default.  If the user customized maxWindows,
-                // respect their choice.
+                // override, inject that algorithm's cap: the user's saved
+                // per-algorithm slot when one exists, else the algorithm's own
+                // default — the default only if the global maxWindows is still
+                // at the global algorithm's default (a customized global is
+                // respected).
                 //
                 // Use the engine's runtime algorithm (m_autotileEngine->algorithm())
                 // instead of m_settings->defaultAutotileAlgorithm(). During layout cycling,
@@ -281,9 +282,10 @@ void Daemon::updateEngineScreens()
                 //
                 // Note: in applyEntry(), this runs BEFORE setAlgorithm() updates
                 // the global ID, so globalAlgo is the OLD algorithm. This is safe:
-                // effectiveMaxWindows() has identical fallback logic (step 2) that
-                // dynamically derives the correct MaxWindows at retile time even
-                // without a per-screen override. The override here is an optimization.
+                // effectiveMaxWindows() has identical fallback logic (its step 3
+                // mirrors this cascade) that dynamically derives the correct
+                // MaxWindows at retile time even without a per-screen override.
+                // The override here is an optimization.
                 //
                 // Skip the injection entirely when the context is Unlimited: the
                 // injected finite default would sit at effectiveMaxWindows step 1,
