@@ -90,13 +90,14 @@ namespace PAS = PhosphorAnimationShaders;
 /// setSettings() handler later re-registers configs with the live tree once
 /// settings exist, applying any user overrides on top.
 ///
-/// **Source-of-truth note.** The settings UI gates its shader picker on
-/// `src/core/types/animationshadersupportedpaths.h::shaderSupportedEventPaths`,
-/// which enumerates the paths consumed HERE by `resolveShaderLeg` in the
-/// build*Config functions below AND the window / desktop legs the kwin-effect
-/// consumes (see that header's own consumer list). When a new shader-leg surface
-/// lands here, append its leg paths to that list in lockstep so the
-/// settings UI starts surfacing the picker on the new path.
+/// **Source-of-truth note.** The settings UI gates its shader picker on the
+/// paths in `src/core/types/animationshadersupportedpaths.h`. The editable
+/// SSOT is `shaderConsumedLeafEventPaths` there (the leaf list);
+/// `shaderSupportedEventPaths` is DERIVED from it by walking ancestors, so a
+/// new shader-leg surface's leg paths must be appended to
+/// `shaderConsumedLeafEventPaths`, in lockstep with the `resolveShaderLeg`
+/// consumption below, so the settings UI starts surfacing the picker on the
+/// new path.
 ///
 /// The build*Config factories need BOTH halves of a leg (the effect id and
 /// the parameter map), and
@@ -128,10 +129,12 @@ QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const QString& p
 /// (1 - showScaleFrom on show, 1 - hideScaleTo on hide; 0.0 for opacity-only
 /// surfaces) — so the shader reproduces the surface's existing pop feel. A user
 /// override of the shader (to anything but the default) or of scaleAmount
-/// itself wins. Gated on `PP::defaultShaderEffectIdForPath(path)` rather than
-/// a hardcoded "fade" literal so the two halves of the contract (that
-/// function's comment names this file as its partner) cannot drift silently
-/// when the overlay default is retuned.
+/// itself wins. The seed only fires when the overlay default for this path IS
+/// "fade" (checked below): if the overlay default is ever retuned to a
+/// different pack id, the seeding silently stops rather than following the new
+/// default — the `builtinDefault == "fade"` guard is a deliberate scale-seed
+/// that is specific to the fade pack's scaleAmount parameter, not a generic
+/// contract that tracks whatever the default becomes.
 QVariantMap shaderParametersFor(const PAS::ShaderProfile& resolved, const QString& path, double fadeScaleAmount)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;

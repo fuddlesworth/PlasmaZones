@@ -689,7 +689,8 @@ void Daemon::stop()
     //
     // The one partition stop() still sheds is the loader-owned user-JSON
     // partition (tagged `kPlasmaZonesUserProfilesOwnerTag`), and only as a side
-    // effect of the loader teardown below: `m_profileLoader` / `m_curveLoader`
+    // effect of the loader teardown ABOVE (the loader resets are hoisted above
+    // the m_running gate): `m_profileLoader` / `m_curveLoader`
     // are reset so their destructors run NOW (issuing their own
     // `clearOwner(ownerTag)` and tearing down the QFileSystemWatchers) rather
     // than in the `~Daemon` body, where they would fire path-change signals
@@ -931,6 +932,12 @@ void Daemon::queryPlasmaWorkspaceState()
     auto* getUnitWatcher = new QDBusPendingCallWatcher(sessionBus.asyncCall(getUnitMsg), this);
     connect(getUnitWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        // A stop() may have landed between the async call and this reply; do not
+        // continue into fetchPlasmaWorkspaceActiveState (which installs the
+        // PropertiesChanged subscription) after shutdown began.
+        if (m_shuttingDown) {
+            return;
+        }
         QDBusPendingReply<QDBusObjectPath> reply = *w;
         if (reply.isError()) {
             qCInfo(lcDaemon) << "queryPlasmaWorkspaceState: GetUnit('plasma-workspace.target') failed:"
@@ -955,6 +962,9 @@ void Daemon::fetchPlasmaWorkspaceActiveState()
     auto* watcher = new QDBusPendingCallWatcher(sessionBus.asyncCall(msg), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        if (m_shuttingDown) {
+            return;
+        }
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isError()) {
             qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: ActiveState Get failed:" << reply.error().message();
@@ -967,6 +977,13 @@ void Daemon::fetchPlasmaWorkspaceActiveState()
                          << "path=" << m_plasmaWorkspaceTargetPath;
 
         QDBusConnection bus = QDBusConnection::sessionBus();
+        // Disconnect first: a stop() -> start() cycle re-runs this whole query,
+        // and QDBusConnectionPrivate appends identical signal hooks without
+        // deduping, so without this the slot would fire once per registration
+        // per signal. Harmless (the handler is idempotent) but wasteful.
+        bus.disconnect(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
+                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
+                       SLOT(onPlasmaWorkspaceTargetPropertiesChanged(QString, QVariantMap, QStringList)));
         const bool ok =
             bus.connect(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
                         QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,

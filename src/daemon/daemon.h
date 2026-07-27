@@ -709,8 +709,14 @@ private:
     /// destroy-time `setDefaultManager(nullptr)` call in `stop()` drops
     /// the published handle before the unique_ptr destructs.
     std::unique_ptr<PhosphorAnimation::QtQuickClockManager> m_clockManager;
-    std::unique_ptr<Settings> m_settings;
+    // Declared BEFORE m_settings so reverse-order destruction frees it AFTER
+    // m_settings: the ctor's adjacentThresholdChanged lambda (a m_settings->this
+    // connection stop() deliberately does not sever) dereferences m_zoneDetector,
+    // and if m_zoneDetector died first a signal emitted during m_settings
+    // teardown would deref freed memory. Constructed from nullptr, so it has no
+    // dependency on m_settings and the order flip is safe.
     std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;
+    std::unique_ptr<Settings> m_settings;
     // Single source of truth for live-window instance identity + metadata.
     // Populated by the kwin-effect bridge. Consumers query appIdFor() etc.
     // instead of parsing composite windowId strings.
