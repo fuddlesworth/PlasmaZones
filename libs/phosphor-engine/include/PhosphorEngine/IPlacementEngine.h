@@ -595,6 +595,17 @@ public:
     {
         return -1;
     }
+    /// The user's saved per-algorithm max-windows tuning for @p algorithmId,
+    /// or std::nullopt when the engine keeps no such slot. Engines with
+    /// per-algorithm tuning (AutotileEngine) override this; the daemon's
+    /// per-screen MaxWindows injection consults it so a screen pinned to a
+    /// non-global algorithm gets the user's saved cap, not the algorithm's
+    /// built-in default.
+    virtual std::optional<int> savedMaxWindowsForAlgorithm(const QString& algorithmId) const
+    {
+        Q_UNUSED(algorithmId)
+        return std::nullopt;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Retile / refresh (override if engine supports on-demand retile)
