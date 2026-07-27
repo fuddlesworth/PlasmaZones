@@ -463,6 +463,45 @@ private Q_SLOTS:
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->duration.value_or(0.0), 100.0);
     }
+
+    /// sourcesChanged as the SOLE trigger: byte-identical user and system
+    /// copies, so deleting the user file shifts only the winning entry's
+    /// SOURCE PATH while the payload stays equal. Deleting the
+    /// sourcesChanged clause in Sink::commitBatch leaves lastBatchChanged
+    /// false here and the QTRY reddens — the payload-diff siblings cannot
+    /// catch that regression because their fixtures always differ in value.
+    void testRescanFiresSignal_whenOnlyTheWinningSourcePathMoves()
+    {
+        auto& reg = m_profileRegistry;
+
+        QTemporaryDir systemDir;
+        QTemporaryDir userDir;
+        QVERIFY(systemDir.isValid());
+        QVERIFY(userDir.isValid());
+        const QString body = QStringLiteral(R"({"name": "twin", "duration": 300})");
+        QVERIFY(writeFile(systemDir.filePath(QStringLiteral("twin.json")), body));
+        QVERIFY(writeFile(userDir.filePath(QStringLiteral("twin.json")), body));
+
+        ProfileLoader loader(reg, m_curveRegistry, QStringLiteral("test-source-shift"));
+        loader.loadFromDirectories({systemDir.path(), userDir.path()});
+
+        QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
+        QVERIFY(QFile::remove(userDir.filePath(QStringLiteral("twin.json"))));
+        loader.requestRescan();
+        QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 500);
+
+        // The winning entry now reads from the system copy.
+        bool found = false;
+        const auto all = loader.entries();
+        for (const auto& entry : all) {
+            if (entry.path == QStringLiteral("twin")) {
+                found = true;
+                QVERIFY2(entry.sourcePath.startsWith(systemDir.path()),
+                         qPrintable(QStringLiteral("expected system path, got ") + entry.sourcePath));
+            }
+        }
+        QVERIFY(found);
+    }
     /// The shared envelope helper STRIPS `name` from the root it hands back.
     ///
     /// Asserted directly on `validateJsonEnvelope`, because it cannot be seen

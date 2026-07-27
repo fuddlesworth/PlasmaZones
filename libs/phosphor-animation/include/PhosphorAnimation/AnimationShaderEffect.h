@@ -214,6 +214,14 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     static_assert(kMinBufferScale > 0.0 && kMinBufferScale < kMaxBufferScale,
                   "kMinBufferScale must be positive and strictly less than kMaxBufferScale");
 
+    /// Upper bound for `geometryGridSubdivisions`. The value lands on a
+    /// PER-FRAME compositor allocation as n²: the effect's capture path
+    /// reserves and fills n×n WindowQuads every painted frame of the
+    /// transition, so an unbounded pack value is a compositor hang (and
+    /// n*n overflows signed int past ~46341). 128 is 2.5x the largest
+    /// shipping pack (48); the parse warns and clamps past it.
+    static constexpr int kMaxGeometryGridSubdivisions = 128;
+
     /// Declared shader inputs beyond the standard set (iTime, iFrame, etc.).
     /// Each entry maps `parameterId → { type, default, min, max, ... }`.
     /// Field names mirror the regular shader pack format

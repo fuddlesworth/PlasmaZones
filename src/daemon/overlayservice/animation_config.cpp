@@ -82,12 +82,13 @@ namespace {
 namespace PAL = PhosphorAnimationLayer;
 namespace PAS = PhosphorAnimationShaders;
 
-/// Resolve a path's shader effect id, applying the built-in per-event default
-/// via `resolveShaderWithDefault`. A default-constructed tree (empty baseline +
-/// no overrides) therefore resolves overlay show/hide paths to their default
-/// ("fade") and every other path to empty ("no shader leg" - motion runs
-/// alone). The setSettings() handler later re-registers configs with the live
-/// tree once settings exist, applying any user overrides on top.
+/// One tree walk per leg, for the build*Config functions below, applying the
+/// built-in per-event default via `resolveShaderWithDefault`. A
+/// default-constructed tree (empty baseline + no overrides) therefore
+/// resolves overlay show/hide paths to their default ("fade") and every
+/// other path to empty ("no shader leg" - motion runs alone). The
+/// setSettings() handler later re-registers configs with the live tree once
+/// settings exist, applying any user overrides on top.
 ///
 /// **Source-of-truth note.** The settings UI gates its shader picker on
 /// `src/core/types/animationshadersupportedpaths.h::shaderSupportedEventPaths`,
@@ -96,9 +97,9 @@ namespace PAS = PhosphorAnimationShaders;
 /// consumes (see that header's own consumer list). When a new shader-leg surface
 /// lands here, append its leg paths to that list in lockstep so the
 /// settings UI starts surfacing the picker on the new path.
-/// One tree walk per leg, for the build*Config functions below.
 ///
-/// They need BOTH halves of a leg (the effect id and the parameter map), and
+/// The build*Config factories need BOTH halves of a leg (the effect id and
+/// the parameter map), and
 /// asking the two path-taking helpers for them resolved the same path twice —
 /// four walks per config, twenty per `applyShaderProfilesToAnimator`, each one
 /// overlay-merging every override up the parent chain. This is not a paint path,

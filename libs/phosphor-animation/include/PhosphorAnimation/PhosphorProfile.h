@@ -40,6 +40,13 @@ namespace PhosphorAnimation {
  *     the field becomes "explicitly set". A write that FAILS validation
  *     disengages it instead, which is one of two QML-reachable ways to return a
  *     field to "unset" (from C++, call `Profile::*.reset()` directly).
+ *     `presetName` is the exception on this bullet too: its setter validates
+ *     nothing and always engages, so QML has NO path back to "unset" for it,
+ *     and reads cannot tell unset from engaged-empty (both return ""). A QML
+ *     read-modify-write of a profile therefore converts an inherited
+ *     presetName into an explicit empty override — acceptable because the
+ *     field is a display label, but load-bearing on the C++ side where
+ *     engaged-empty blocks tree inheritance (Profile::toJson emits it).
  *
  * `curve` is the exception to BOTH bullets, because there is no
  * `Profile::effectiveCurve()`:

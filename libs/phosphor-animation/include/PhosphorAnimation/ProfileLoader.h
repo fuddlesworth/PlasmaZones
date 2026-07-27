@@ -43,6 +43,11 @@ class PHOSPHORANIMATION_EXPORT ProfileLoader : public QObject
 
 public:
     /// If @p ownerTag is empty, a unique per-instance tag is generated.
+    /// A NON-empty tag must be unique per process against the same registry:
+    /// two loaders sharing one tag each `reloadFromOwner` their own partition
+    /// on every rescan and each `clearOwner` in their destructor, so they
+    /// mutually wipe each other's entries. (Every in-tree tag is a distinct
+    /// constant.)
     explicit ProfileLoader(PhosphorProfileRegistry& registry, CurveRegistry& curveRegistry,
                            const QString& ownerTag = {}, QObject* parent = nullptr);
     ~ProfileLoader() override;
@@ -99,6 +104,10 @@ private:
     class Sink;
     std::unique_ptr<Sink> m_sink;
     std::unique_ptr<PhosphorFsLoader::DirectoryLoader> m_loader;
+    /// Set at the top of the destructor; gates the public rescan entry
+    /// points so a re-entrant call delivered during teardown no-ops instead
+    /// of re-registering the entries clearOwner just removed.
+    bool m_destroying = false;
 };
 
 } // namespace PhosphorAnimation

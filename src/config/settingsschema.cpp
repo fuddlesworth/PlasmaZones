@@ -334,8 +334,8 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
 // is preserved as projections over the Profile blob — see settings.cpp.
 //
 // Validation: the Profile JSON string is stored as-is. Clamping happens
-// at the library level (Profile::effective* + AnimationController's
-// clampProfile on the hot path) rather than in the schema, because the
+// at the library level (Profile::effective* + WindowAnimator::clampProfile
+// on the hot path) rather than in the schema, because the
 // schema's per-field QMetaType::Int validator can't see inside the
 // JSON. A malformed blob falls back to the library default via
 // Profile::fromJson's permissive parse — consistent with the "garbage

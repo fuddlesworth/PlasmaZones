@@ -237,15 +237,42 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
             }
         }
     }
+    // Shared shape guard for the array-valued fields, hoisted from the
+    // appliesTo-specific check: a present-but-non-array value (a bare string
+    // is the plausible author typo) silently reduces to empty via toArray(),
+    // and the parameters/textures/bufferShaders fields deserve the same
+    // journal signal appliesTo gets. Returns the array (empty on mismatch).
+    const auto arrayOrWarn = [&obj, &e](const char* key) -> QJsonArray {
+        const QJsonValue v = obj.value(QLatin1String(key));
+        if (!v.isUndefined() && !v.isArray()) {
+            qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson:" << key << "for effect" << e.id
+                                         << "is not an array; ignoring it.";
+        }
+        return v.toArray();
+    };
     e.fragmentShaderPath = obj.value(QLatin1String("fragmentShader")).toString();
     e.vertexShaderPath = obj.value(QLatin1String("vertexShader")).toString();
     e.previewPath = obj.value(QLatin1String("preview")).toString();
     e.isMultipass = obj.value(QLatin1String("multipass")).toBool(false);
-    const QJsonArray bufArr = obj.value(QLatin1String("bufferShaders")).toArray();
+    // EVERY entry is kept IN PLACE (no empty-string compaction): bufferWraps /
+    // bufferFilters below are positionally aligned with this list, so
+    // compacting an empty entry here would shift every later buffer's
+    // override onto the wrong buffer — the exact misalignment the loops
+    // below were rewritten to prevent. An empty entry fails the existence
+    // check at scan time and fail-closes multipass coherently, like any
+    // other missing buffer source. Capped at the contract budget with a
+    // warning (mirroring the texture cap below): the runtime binds at most
+    // kMaxBufferPasses passes and would silently drop the tail.
+    const QJsonArray bufArr = arrayOrWarn("bufferShaders");
     for (const QJsonValue& v : bufArr) {
-        const QString name = v.toString();
-        if (!name.isEmpty())
-            e.bufferShaderPaths.append(name);
+        if (e.bufferShaderPaths.size() >= AnimationShaderContract::kMaxBufferPasses) {
+            qCWarning(lcAnimationShader).nospace()
+                << "AnimationShaderEffect " << obj.value(QLatin1String("id")).toString() << ": bufferShaders declares "
+                << bufArr.size() << " passes; the contract budget is " << AnimationShaderContract::kMaxBufferPasses
+                << " — surplus passes dropped";
+            break;
+        }
+        e.bufferShaderPaths.append(v.toString());
     }
     e.useWallpaper = obj.value(QLatin1String("wallpaper")).toBool(false);
     e.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
@@ -288,6 +315,20 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     for (const QJsonValue& v : filtersArr) {
         e.bufferFilters.append(validatedFilter(v.toString(), "bufferFilters"));
     }
+    // Positional alignment means entries past the (capped) path list can
+    // never bind to a buffer; retaining them only bloats operator== / toJson
+    // round-trips, so trim with a warning. Entries UP TO the path count are
+    // kept even when empty (the "default for this slot" markers).
+    const auto trimAligned = [&](QStringList& list, const char* field) {
+        if (list.size() > e.bufferShaderPaths.size()) {
+            qCWarning(lcAnimationShader).nospace()
+                << "AnimationShaderEffect " << e.id << ": " << field << " declares " << list.size() << " entries for "
+                << e.bufferShaderPaths.size() << " buffer passes — surplus entries dropped";
+            list = list.mid(0, e.bufferShaderPaths.size());
+        }
+    };
+    trimAligned(e.bufferWraps, "bufferWraps");
+    trimAligned(e.bufferFilters, "bufferFilters");
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
     e.useAudio = obj.value(QLatin1String("audio")).toBool(false);
 
@@ -306,10 +347,19 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
 
     // `geometryGrid` (int): per-axis quad subdivisions for vertex-stage
     // geometry deformation. Negative values are clamped to 0 (no grid);
-    // a missing field falls through to the struct default (0).
-    e.geometryGridSubdivisions = qMax(0, obj.value(QLatin1String("geometryGrid")).toInt());
+    // a missing field falls through to the struct default (0). Bounded above
+    // (the ONE pack scalar that lands on a per-frame compositor allocation
+    // as n² — see kMaxGeometryGridSubdivisions) with a warning, mirroring
+    // the texture-cap warning below.
+    const int rawGrid = obj.value(QLatin1String("geometryGrid")).toInt();
+    e.geometryGridSubdivisions = qBound(0, rawGrid, kMaxGeometryGridSubdivisions);
+    if (rawGrid > kMaxGeometryGridSubdivisions) {
+        qCWarning(lcAnimationShader).nospace()
+            << "AnimationShaderEffect " << e.id << ": geometryGrid " << rawGrid << " exceeds the cap ("
+            << kMaxGeometryGridSubdivisions << ") and was clamped — n*n quads are allocated per painted frame";
+    }
 
-    const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
+    const QJsonArray params = arrayOrWarn("parameters");
     e.parameters.reserve(params.size());
     for (const QJsonValue& v : params) {
         const QJsonObject pObj = v.toObject();
@@ -335,7 +385,7 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     // and exposing more would require both runtimes to grow more
     // sampler bindings. A future contract bump (kMaxUserTextureSlots > 3)
     // would loosen this cap automatically.
-    const QJsonArray texArr = obj.value(QLatin1String("textures")).toArray();
+    const QJsonArray texArr = arrayOrWarn("textures");
     e.textures.reserve(qMin<qsizetype>(texArr.size(), AnimationShaderContract::kMaxUserTextureSlots));
     qsizetype slotIndex = 0;
     int droppedEmpty = 0;

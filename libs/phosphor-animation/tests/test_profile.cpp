@@ -313,6 +313,39 @@ private Q_SLOTS:
         QVERIFY(!p.duration.has_value());
     }
 
+    /// The ACCEPTED side of the duration boundary, matching the minDistance
+    /// and staggerInterval at-cap twins: without it, flipping the validator's
+    /// `>` to `>=` would reject exactly MaxDurationMs and every test would
+    /// still pass.
+    void testFromJsonAcceptsDurationAtTheCap()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("duration"), double(Profile::MaxDurationMs));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.duration.has_value());
+        QCOMPARE(*p.duration, Profile::MaxDurationMs);
+    }
+
+    /// The unresolved-curve branch: a spec `tryCreate` cannot resolve leaves
+    /// `curve` UNSET (so it inherits) rather than substituting anything, and
+    /// warns with the original spec. The sibling fields still parse. Deleting
+    /// the tryCreate routing (falling back to create()'s silent default
+    /// cubic-bezier) reddens the null check; deleting the diagnostic reddens
+    /// ignoreMessage. NOTE for future editors: the rate limiter is
+    /// process-wide, so this slot must stay the only one in this binary
+    /// feeding this exact spec.
+    void testFromJsonLeavesUnresolvableCurveUnsetAndWarns()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("curve"), QStringLiteral("srping:14,0.6"));
+        obj.insert(QLatin1String("duration"), 250.0);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("did not resolve")));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(!p.curve);
+        QVERIFY(p.duration.has_value());
+        QCOMPARE(*p.duration, 250.0);
+    }
+
     void testFromJsonAcceptsLargeButReasonableDuration()
     {
         QJsonObject obj;

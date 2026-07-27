@@ -164,7 +164,20 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
     };
 
     if (obj.contains(QLatin1String(JsonFieldCurve))) {
-        const QString spec = obj.value(QLatin1String(JsonFieldCurve)).toString();
+        const QJsonValue curveValue = obj.value(QLatin1String(JsonFieldCurve));
+        // Type-checked like every sibling field: a non-string (number, bool,
+        // object) would stringify to empty and skip the whole block, leaving
+        // the field correctly unset (inherit) but with NO diagnostic — the
+        // one malformed-field shape that was silent. Rate-limited like the
+        // numeric-field warnings.
+        if (!curveValue.isString()) {
+            if (shouldWarnOnce(fieldWarnKey(JsonFieldCurve, "type") + QByteArray::number(int(curveValue.type())))) {
+                qCWarning(lcProfile).nospace()
+                    << "Profile::fromJson: curve must be a string; got JSON type " << int(curveValue.type())
+                    << " — keeping profile without a curve (library default will apply at animation time)";
+            }
+        }
+        const QString spec = curveValue.toString();
         if (!spec.isEmpty()) {
             // Route through tryCreate (not create): a malformed spec
             // would otherwise silently fall through to the library
@@ -182,9 +195,12 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
             // which is the same "guard that funds its own attack" shape the cap
             // exists to close. A 32-byte prefix keeps the warning readable-ish
             // while the hash keeps distinct long specs distinct.
-            const QByteArray specKey =
-                QByteArrayLiteral("curve/unresolved/") + spec.left(32).toUtf8() + QByteArray::number(qHash(spec), 16);
-            if (!p.curve && shouldWarnOnce(specKey)) {
+            // Built only on the FAILURE branch: this parse runs uncached on
+            // the daemon's ~30 Hz settings republish path, and the common
+            // success case must not pay the allocation + full-string hash.
+            if (!p.curve
+                && shouldWarnOnce(QByteArrayLiteral("curve/unresolved/") + spec.left(32).toUtf8()
+                                  + QByteArray::number(qHash(spec), 16))) {
                 // Rate-limited like the numeric-field diagnostics, and for a
                 // sharper reason: a Global profile naming a user curve that is
                 // not registered YET is a documented normal state during

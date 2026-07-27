@@ -27,7 +27,7 @@ function(pa_add_test _name)
     # XDG sandbox phosphor_apply_test_isolation just installed.
     phosphor_append_test_environment(${_name}
         "QT_QPA_PLATFORM=offscreen"
-        "QT_LOGGING_RULES=phosphoranimation.debug=false")
+        "QT_LOGGING_RULES=phosphoranimation.*.debug=false")
     set_tests_properties(${_name} PROPERTIES LABELS "phosphoranimation")
 endfunction()
 
@@ -38,6 +38,9 @@ pa_add_test(pa_test_spring test_spring.cpp)
 pa_add_test(pa_test_curve test_curve.cpp)
 pa_add_test(pa_test_curveregistry test_curveregistry.cpp)
 pa_add_test(pa_test_profile test_profile.cpp)
+# Own binary: the warn-once limiter it exhausts is process-wide static state
+# and would poison test_profile.cpp's rate-limit assertions.
+pa_add_test(pa_test_profile_warncap test_profile_warncap.cpp)
 pa_add_test(pa_test_profiletree test_profiletree.cpp)
 pa_add_test(pa_test_imotionclock test_imotionclock.cpp)
 pa_add_test(pa_test_animatedvalue_scalar test_animatedvalue_scalar.cpp)
@@ -79,7 +82,7 @@ function(paq_add_test _name)
     # XDG sandbox phosphor_apply_test_isolation just installed.
     phosphor_append_test_environment(${_name}
         "QT_QPA_PLATFORM=offscreen"
-        "QT_LOGGING_RULES=phosphoranimation.debug=false")
+        "QT_LOGGING_RULES=phosphoranimation.*.debug=false")
     set_tests_properties(${_name} PROPERTIES LABELS "phosphoranimation;phosphoranimation-qml")
 endfunction()
 
@@ -116,7 +119,7 @@ function(pas_add_test _name)
     # XDG sandbox phosphor_apply_test_isolation just installed.
     phosphor_append_test_environment(${_name}
         "QT_QPA_PLATFORM=offscreen"
-        "QT_LOGGING_RULES=phosphoranimation.debug=false")
+        "QT_LOGGING_RULES=phosphoranimation.*.debug=false;phosphoranimationshaders.*.debug=false")
     set_tests_properties(${_name} PROPERTIES LABELS "phosphoranimation;phosphoranimationshaders")
 endfunction()
 
@@ -129,6 +132,12 @@ pas_add_test(pas_test_animationshaderregistry test_animationshaderregistry.cpp)
 # above. Pure translateAnimationParams / slot-key logic with no filesystem
 # scan, so it uses the core pa_add_test harness (no PhosphorFsLoader link).
 pa_add_test(pa_test_shaderparamtranslation test_shaderparamtranslation.cpp)
+# The pa_ harness was chosen for the missing PhosphorFsLoader link (see
+# above), but that choice also dropped the phosphoranimationshaders label
+# every other shader-pipeline test carries; restore it so
+# `ctest -L phosphoranimationshaders` runs the whole pipeline.
+set_tests_properties(pa_test_shaderparamtranslation PROPERTIES
+    LABELS "phosphoranimation;phosphoranimationshaders")
 
 # Integration test against the actual data/animations/ packs.
 pas_add_test(pas_test_builtin_effects test_builtin_effects.cpp)
