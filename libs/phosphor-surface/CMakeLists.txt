@@ -151,6 +151,10 @@ set_target_properties(PhosphorSurface PROPERTIES
     SOVERSION 0
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
+    # Match phosphor-shaders: this lib's sources carry anonymous-namespace
+    # helpers whose "defined but not used" GCC diagnostics a unity merge can
+    # surface spuriously, and the TUs are small enough that unity buys nothing.
+    UNITY_BUILD OFF
 )
 
 # ===============================================================================

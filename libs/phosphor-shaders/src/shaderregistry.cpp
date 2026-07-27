@@ -57,7 +57,7 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
 
     if (type == QLatin1String("color")) {
         // Color slots 0-15 -> customColor1-16
-        if (slot >= 0 && slot < 16) {
+        if (slot >= 0 && slot < CustomColors::kColorCount) {
             return QString::fromLatin1(UNIFORM_COLOR_NAMES[slot]);
         }
         return QString();
@@ -65,14 +65,14 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
 
     // Image slots 0-3 -> uTexture0-3
     if (type == QLatin1String("image")) {
-        if (slot >= 0 && slot < 4) {
+        if (slot >= 0 && slot < kMaxImageSlots) {
             return QStringLiteral("uTexture%1").arg(slot);
         }
         return QString();
     }
 
     // Float/int/bool slots 0-31 -> customParams1_x through customParams8_w
-    if (slot >= 0 && slot < 32) {
+    if (slot >= 0 && slot < CustomParams::kFlatSlotCount) {
         const int vecIndex = slot / 4;
         const int compIndex = slot % 4;
         return QString::fromLatin1(UNIFORM_VEC_NAMES[vecIndex]) + QString::fromLatin1(UNIFORM_COMPONENTS[compIndex]);
@@ -191,14 +191,14 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     // Multi-pass: one or more buffer pass shaders (A->B->C->D).
     info.isMultipass = root.value(QLatin1String("multipass")).toBool(false);
     const QJsonArray bufferShadersArray = root.value(QLatin1String("bufferShaders")).toArray();
-    if (bufferShadersArray.size() > 4) {
+    if (bufferShadersArray.size() > kMaxBufferPasses) {
         qCWarning(lcShaderRegistry) << "Shader pack" << info.name << "declares" << bufferShadersArray.size()
                                     << "buffer shaders; only the first 4 are used";
     }
     bool bufferShadersDeclared = false;
     if (!bufferShadersArray.isEmpty()) {
         bufferShadersDeclared = true;
-        for (int i = 0; i < qMin(bufferShadersArray.size(), 4); ++i) {
+        for (int i = 0; i < qMin(bufferShadersArray.size(), kMaxBufferPasses); ++i) {
             const QString name = bufferShadersArray.at(i).toString();
             const QString resolved = resolveWithinPack(dir, name);
             if (resolved.isEmpty()) {
@@ -323,7 +323,12 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
             duplicateParamIds.append(param.id);
             continue;
         }
-        seenParamIds.insert(param.id);
+        // Only real ids go into the seen-set, so it never holds the empty
+        // string (an empty id is a different fault, handled by isValidParamId
+        // downstream) and the set's contents mean what its name says.
+        if (!param.id.isEmpty()) {
+            seenParamIds.insert(param.id);
+        }
         param.name = paramObj.value(QLatin1String("name")).toString(param.id);
         param.group = paramObj.value(QLatin1String("group")).toString();
         param.type = paramObj.value(QLatin1String("type")).toString(QStringLiteral("float"));
@@ -906,152 +911,6 @@ QVariantMap ShaderRegistry::parameterInfoToVariantMap(const ParameterInfo& param
     }
 
     return map;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Parameters, Presets & Validation
-// ═══════════════════════════════════════════════════════════════════════════════
-
-QVariantMap ShaderRegistry::presetParams(const QString& shaderId, const QString& presetName) const
-{
-    const ShaderInfo info = shader(shaderId);
-    if (!info.isValid() || !info.presets.contains(presetName)) {
-        return {};
-    }
-    // Validate and fill defaults for any missing parameters
-    return validateAndCoerceParams(shaderId, info.presets.value(presetName));
-}
-
-QStringList ShaderRegistry::shaderPresetNames(const QString& shaderId) const
-{
-    const ShaderInfo info = shader(shaderId);
-    if (!info.isValid()) {
-        return {};
-    }
-    return info.presets.keys();
-}
-
-QVariantList ShaderRegistry::shaderPresetsVariant(const QString& shaderId) const
-{
-    const ShaderInfo info = shader(shaderId);
-    if (!info.isValid()) {
-        return {};
-    }
-    QVariantList result;
-    for (auto it = info.presets.constBegin(); it != info.presets.constEnd(); ++it) {
-        QVariantMap entry;
-        entry[QStringLiteral("name")] = it.key();
-        entry[QStringLiteral("params")] = it.value();
-        result.append(entry);
-    }
-    return result;
-}
-
-bool ShaderRegistry::validateParams(const QString& id, const QVariantMap& params) const
-{
-    const ShaderInfo info = shader(id);
-    if (!info.isValid()) {
-        return false;
-    }
-
-    for (const ParameterInfo& param : info.parameters) {
-        if (params.contains(param.id)) {
-            if (!validateParameterValue(param, params.value(param.id))) {
-                qCWarning(lcShaderRegistry) << "Invalid shader parameter:" << param.id << "for shader:" << id;
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-bool ShaderRegistry::validateParameterValue(const ParameterInfo& param, const QVariant& value) const
-{
-    if (param.type == QLatin1String("float")) {
-        bool ok = false;
-        double v = value.toDouble(&ok);
-        if (!ok)
-            return false;
-        if (param.minValue.isValid() && v < param.minValue.toDouble())
-            return false;
-        if (param.maxValue.isValid() && v > param.maxValue.toDouble())
-            return false;
-    } else if (param.type == QLatin1String("int")) {
-        bool ok = false;
-        int v = value.toInt(&ok);
-        if (!ok)
-            return false;
-        if (param.minValue.isValid() && v < param.minValue.toInt())
-            return false;
-        if (param.maxValue.isValid() && v > param.maxValue.toInt())
-            return false;
-    } else if (param.type == QLatin1String("color")) {
-        // Metatype-first, matching the surface registry's coercion: a QColor
-        // variant stringifies to "" via toString(), so the string-constructor
-        // path alone silently failed genuine QColor values.
-        if (value.metaType().id() == QMetaType::QColor) {
-            if (!value.value<QColor>().isValid())
-                return false;
-        } else {
-            QColor c(value.toString());
-            if (!c.isValid())
-                return false;
-        }
-    } else if (param.type == QLatin1String("bool")) {
-        // canConvert<bool> is true for nearly every metatype (any QString
-        // converts), so restrict to the types that carry a real truth value.
-        const int mt = value.metaType().id();
-        if (mt != QMetaType::Bool && mt != QMetaType::Int && mt != QMetaType::UInt && mt != QMetaType::LongLong
-            && mt != QMetaType::ULongLong && mt != QMetaType::Double)
-            return false;
-    } else if (param.type == QLatin1String("image")) {
-        // An image value is a path (or empty for "no texture"); accept only
-        // genuine strings — canConvert<QString> is true for numbers too.
-        if (value.metaType().id() != QMetaType::QString)
-            return false;
-    } else {
-        // Unknown type: fail CLOSED.
-        //
-        // Currently UNREACHABLE on every live path, and deliberately kept as a
-        // backstop rather than because a caller needs it today: `type` is a
-        // required enum in data/schemas/shader-metadata.schema.json and the schema
-        // gate runs before the metadata is parsed, so every value arriving here
-        // carries a validated type. (`validateParams` has no callers at all, and
-        // `validateAndCoerceParams` is reached only from `presetParams`, which
-        // feeds it presets from that same validated metadata.) The point is that a
-        // FUTURE caller bypassing the schema gate should hit something here rather
-        // than have an unrecognised type waved through.
-        return false;
-    }
-    return true;
-}
-
-QVariantMap ShaderRegistry::validateAndCoerceParams(const QString& id, const QVariantMap& params) const
-{
-    QVariantMap result;
-    const ShaderInfo info = shader(id);
-    if (!info.isValid()) {
-        return result;
-    }
-
-    for (const ParameterInfo& param : info.parameters) {
-        if (params.contains(param.id) && validateParameterValue(param, params.value(param.id))) {
-            result[param.id] = params.value(param.id);
-        } else {
-            result[param.id] = param.defaultValue;
-        }
-    }
-    return result;
-}
-
-QVariantMap ShaderRegistry::defaultParams(const QString& id) const
-{
-    QVariantMap result;
-    const ShaderInfo info = shader(id);
-    for (const ParameterInfo& param : info.parameters) {
-        result[param.id] = param.defaultValue;
-    }
-    return result;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

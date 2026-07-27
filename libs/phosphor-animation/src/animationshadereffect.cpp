@@ -306,12 +306,12 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     // empty (that slot falls back to the default); an originally-empty entry is
     // the explicit "default for this slot" marker and toJson re-emits it, so
     // dropping one broke alignment on the very next load of a saved pack.
-    const QJsonArray wrapsArr = obj.value(QLatin1String("bufferWraps")).toArray();
+    const QJsonArray wrapsArr = arrayOrWarn("bufferWraps");
     for (const QJsonValue& v : wrapsArr) {
         e.bufferWraps.append(validatedWrap(v.toString(), "bufferWraps"));
     }
     e.bufferFilter = validatedFilter(obj.value(QLatin1String("bufferFilter")).toString(), "bufferFilter");
-    const QJsonArray filtersArr = obj.value(QLatin1String("bufferFilters")).toArray();
+    const QJsonArray filtersArr = arrayOrWarn("bufferFilters");
     for (const QJsonValue& v : filtersArr) {
         e.bufferFilters.append(validatedFilter(v.toString(), "bufferFilters"));
     }

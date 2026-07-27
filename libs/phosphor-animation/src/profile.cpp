@@ -240,12 +240,11 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         }
     }
     if (obj.contains(QLatin1String(JsonFieldMinDistance))) {
-        // `QJsonValue::toInt(default)` returns the default verbatim when
-        // the underlying value is a JSON double (even for whole-number-
-        // valued doubles like `5.0`), so a file written by a non-C++
-        // serializer that emitted the integer as a JSON Number would
-        // silently fall back to the library default. Route through
-        // toDouble() and round to int so `5.0` and `5` both produce 5.
+        // `QJsonValue::toInt(default)` substitutes the default for a
+        // FRACTIONAL double and rejects rather than rounds; on a whole-number
+        // double like `5.0` Qt 6 does return 5. But a fractional value (`5.4`)
+        // would still fall back to the library default. Route through
+        // toDouble() + qRound so `5`, `5.0` and `5.4` all resolve sensibly.
         const std::optional<qreal> minDistanceValue = numericField(JsonFieldMinDistance);
         const qreal rawDouble = minDistanceValue.value_or(std::numeric_limits<qreal>::quiet_NaN());
         // Negative minDistance would make the distance-skip check

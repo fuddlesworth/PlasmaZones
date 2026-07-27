@@ -168,16 +168,21 @@ int validatePack(const QString& packDir, QTextStream& out)
         // drops the surplus with only a journal warning — exactly the
         // "runtime hid the author error" class this block lints for.
         // Compare the RAW declared array against the cap, not the non-empty
-        // subset: parseShaderMetadata iterates qMin(rawSize, 4) and only then
-        // skips empties, so ["", "a", "b", "c", "d"] silently loses "d".
-        if (declared.size() > 4) {
-            lints << QStringLiteral("too many buffer shaders: %1 declared, cap is 4 (surplus dropped at load)")
-                         .arg(static_cast<int>(declared.size()));
+        // subset: parseShaderMetadata iterates qMin(rawSize, kMaxBufferPasses)
+        // and only then skips empties, so ["", "a", "b", "c", "d"] silently
+        // loses "d".
+        if (declared.size() > PhosphorShaders::kMaxBufferPasses) {
+            lints << QStringLiteral("too many buffer shaders: %1 declared, cap is %2 (surplus dropped at load)")
+                         .arg(static_cast<int>(declared.size()))
+                         .arg(PhosphorShaders::kMaxBufferPasses);
         }
 
         const double rawScale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
-        if (rawScale < 0.125 || rawScale > 1.0) {
-            lints << QStringLiteral("bufferScale out of range [0.125, 1.0]: %1 (clamped at load)").arg(rawScale);
+        if (rawScale < PhosphorShaders::kMinBufferScale || rawScale > PhosphorShaders::kMaxBufferScale) {
+            lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")
+                         .arg(PhosphorShaders::kMinBufferScale)
+                         .arg(PhosphorShaders::kMaxBufferScale)
+                         .arg(rawScale);
         }
     }
     if (!QFile::exists(info.sourcePath)) {
@@ -806,9 +811,9 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             }
         }
         // bufferWraps / bufferFilters are positionally aligned to bufferShaders;
-        // surplus entries beyond the buffer count are silently ignored at load
-        // (surfaceshaderregistry.cpp), so flag a length mismatch the author
-        // likely did not intend.
+        // surplus entries beyond the buffer count are never indexed by the
+        // consumer at load (the runtime reads only up to the buffer count), so
+        // flag a length mismatch the author likely did not intend.
         const auto lintBufferArrayLen = [&](QLatin1String key) {
             const int extra = doc.object().value(key).toArray().size() - declaredBuffers.size();
             if (extra > 0) {
@@ -821,8 +826,11 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         lintBufferArrayLen(QLatin1String("bufferWraps"));
         lintBufferArrayLen(QLatin1String("bufferFilters"));
         const double rawScale = doc.object().value(QLatin1String("bufferScale")).toDouble(1.0);
-        if (rawScale < 0.125 || rawScale > 1.0) {
-            lints << QStringLiteral("bufferScale out of range [0.125, 1.0]: %1 (clamped at load)").arg(rawScale);
+        if (rawScale < PhosphorShaders::kMinBufferScale || rawScale > PhosphorShaders::kMaxBufferScale) {
+            lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")
+                         .arg(PhosphorShaders::kMinBufferScale)
+                         .arg(PhosphorShaders::kMaxBufferScale)
+                         .arg(rawScale);
         }
     }
     if (!QFile::exists(eff.fragmentShaderPath)) {
