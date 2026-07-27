@@ -804,6 +804,21 @@ private:
     /// the whole profiles directory once per deleted file.
     OverrideFileRemoval removeOverrideFile(const QString& path);
 
+    enum class OverrideFileWrite {
+        Written,
+        Unchanged,
+        Failed
+    };
+
+    /// The file half of setOverride: guard, snapshot, write, settle the staged
+    /// entry. Emits NOTHING and does NOT invalidate the disk memo — the caller
+    /// owns the invalidate and every signal. Split out so the group writer can
+    /// write every path, invalidate the memo ONCE, then emit — otherwise each
+    /// per-path setOverride dropped the whole memo and forced every sibling
+    /// card to re-walk resolvedProfile uncached, at drag rate. setOverride is a
+    /// thin wrapper: this core, then invalidate + drop + emit for the one path.
+    OverrideFileWrite writeOverrideFileOnly(const QString& path, const QVariantMap& profileJson);
+
     /// Both boundary checks on a shader effect id: the length/character sanity
     /// check and the registry-membership gate. Shared by `setShaderOverride` and
     /// the group writer `setShaderOverrideOnPaths`, because the group writer is

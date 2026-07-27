@@ -119,8 +119,17 @@ bool AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPa
     for (const QString& path : paths)
         bases.append(rawProfile(path));
 
+    // Batched: write every path through the signal-free core, invalidate the
+    // disk memo ONCE, then emit. Going through per-path setOverride instead
+    // dropped the whole memo AND synchronously emitted overrideChanged on every
+    // iteration, so each sibling card re-walked resolvedProfile uncached mid-
+    // batch — O(paths x cards x depth) file opens per drag tick. Here the memo
+    // is invalidated once after all writes land, so a sibling's re-walk on the
+    // first emit reads settled state and re-warms the memo for the rest.
+    const bool wasPending = hasPendingChanges();
     const QLatin1String curveKey(PhosphorAnimation::Profile::JsonFieldCurve);
     bool allWritten = true;
+    QStringList written;
     for (int i = 0; i < paths.size(); ++i) {
         const QVariantMap& base = bases.at(i);
         QVariantMap merged = base;
@@ -155,8 +164,29 @@ bool AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPa
             }
         }
 
-        if (!setOverride(paths.at(i), merged))
+        const OverrideFileWrite result = writeOverrideFileOnly(paths.at(i), merged);
+        if (result == OverrideFileWrite::Failed)
             allWritten = false;
+        else if (result == OverrideFileWrite::Written)
+            written.append(paths.at(i));
+    }
+
+    if (!written.isEmpty()) {
+        // One invalidate for the whole batch, BEFORE any signal (the QML
+        // handlers re-read through resolvedProfile synchronously on this stack).
+        invalidateDiskProfileCache();
+        for (const QString& path : written) {
+            // Drop any phantom snapshot (a write that restored pre-edit content)
+            // before sampling the net dirty flip below. Defer: the single
+            // pendingChangesChanged below owns the batch's net transition, so a
+            // per-drop emit would be redundant.
+            dropFileSnapshotIfUnchanged(profileFilePath(path), SnapshotDropSignal::Defer);
+        }
+        const bool nowPending = hasPendingChanges();
+        for (const QString& path : written)
+            Q_EMIT overrideChanged(path);
+        if (wasPending != nowPending)
+            Q_EMIT pendingChangesChanged();
     }
     return allWritten;
 }
