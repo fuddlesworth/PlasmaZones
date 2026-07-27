@@ -344,6 +344,15 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
         }
     }
 
+    // Warn in causal order: duplicate ids are a parse-time fault (detected in
+    // the loop just above), so they are reported before the slot-budget
+    // overflow that the assignment pass below can only discover afterwards.
+    if (!duplicateParamIds.isEmpty()) {
+        qCWarning(lcShaderRegistry).noquote()
+            << "Shader pack" << dir.dirName() << "declares" << duplicateParamIds.size()
+            << "duplicate parameter id(s); first declaration wins:" << duplicateParamIds.join(QLatin1String(", "));
+    }
+
     // Automatic slot assignment (T1.1): a parameter that omits `slot` is packed
     // into the next free lane of its pool in declaration order — float/int/bool
     // → 0..31, color → 0..15, image → 0..3 — so authors no longer hand-number
@@ -383,7 +392,8 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
             if (p.slot < 0 || !isValidParamId(p.id)) {
                 continue;
             }
-            (poolOf(p.type) == 1 ? usedColor : poolOf(p.type) == 2 ? usedImage : usedScalar).insert(p.slot);
+            const int pool = poolOf(p.type);
+            (pool == 1 ? usedColor : pool == 2 ? usedImage : usedScalar).insert(p.slot);
         }
         int nextScalar = 0, nextColor = 0, nextImage = 0;
         for (ShaderRegistry::ParameterInfo& p : info.parameters) {
@@ -419,9 +429,10 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
             if (p.slot < 0) {
                 continue;
             }
-            const int budget = poolOf(p.type) == 1 ? CustomColors::kColorCount
-                : poolOf(p.type) == 2              ? kMaxImageSlots
-                                                   : CustomParams::kFlatSlotCount;
+            const int pool = poolOf(p.type);
+            const int budget = pool == 1 ? CustomColors::kColorCount
+                : pool == 2              ? kMaxImageSlots
+                                         : CustomParams::kFlatSlotCount;
             if (p.slot >= budget) {
                 overBudget.append(p.id);
             }
@@ -433,11 +444,6 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
                 << CustomColors::kColorCount << "/ image" << kMaxImageSlots
                 << "); they will not bind:" << overBudget.join(QLatin1String(", "));
         }
-    }
-    if (!duplicateParamIds.isEmpty()) {
-        qCWarning(lcShaderRegistry).noquote()
-            << "Shader pack" << dir.dirName() << "declares" << duplicateParamIds.size()
-            << "duplicate parameter id(s); first declaration wins:" << duplicateParamIds.join(QLatin1String(", "));
     }
 
     // Presets

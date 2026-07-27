@@ -59,6 +59,20 @@ int validatePack(const QString& packDir, QTextStream& out)
         return 1;
     }
 
+    // Several lints below deliberately read the RAW metadata rather than the
+    // parsed ShaderInfo (parsePackMetadata clamps bufferScale, clears missing
+    // buffer paths, and only sets vertexShaderPath when the file exists, so a
+    // lint reading the parsed struct would silently pass the author error the
+    // runtime hid). Read and parse metadata.json ONCE here and share it, instead
+    // of reopening the same file per lint block.
+    QJsonObject rawRoot;
+    {
+        QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
+        if (metaFile.open(QIODevice::ReadOnly)) {
+            rawRoot = QJsonDocument::fromJson(metaFile.readAll()).object();
+        }
+    }
+
     // The `fragmentShader` / `bufferShaders` / `vertexShader` paths come from
     // the user-editable metadata.json. parsePackMetadata already confines them
     // to the pack dir (resolveWithinPack), so this re-check is belt-and-braces
@@ -134,16 +148,47 @@ int validatePack(const QString& packDir, QTextStream& out)
                          .arg(p.id);
         }
     }
+    // Per-pool count overflow, independent of how slots were assigned. The
+    // per-param `slot >= budget` lint above only fires for params that LAND on
+    // an out-of-range lane; it misses the case where more params request a pool
+    // than it has lanes but they pile onto in-budget slots (explicit collisions,
+    // or a future change to the auto-assigner). Count the lane-consuming params
+    // per pool (valid id, that pool's type) and flag a pool that is oversubscribed
+    // as a whole, so the author sees the real cause rather than only the symptom.
+    {
+        int scalarCount = 0, colorCount = 0, imageCount = 0;
+        for (const ShaderRegistry::ParameterInfo& p : info.parameters) {
+            if (!PhosphorShaders::isValidParamId(p.id) || !kValidParamTypes.contains(p.type)) {
+                continue;
+            }
+            if (p.type == QLatin1String("color")) {
+                ++colorCount;
+            } else if (p.type == QLatin1String("image")) {
+                ++imageCount;
+            } else {
+                ++scalarCount;
+            }
+        }
+        const auto flagPool = [&lints](const QString& pool, int count, int budget) {
+            if (count > budget) {
+                lints << QStringLiteral(
+                             "%1 pool oversubscribed: %2 parameters for %3 lanes (the last %4 will not bind)")
+                             .arg(pool)
+                             .arg(count)
+                             .arg(budget)
+                             .arg(count - budget);
+            }
+        };
+        flagPool(poolName(QStringLiteral("float")), scalarCount, PhosphorShaders::CustomParams::kFlatSlotCount);
+        flagPool(poolName(QStringLiteral("color")), colorCount, PhosphorShaders::CustomColors::kColorCount);
+        flagPool(poolName(QStringLiteral("image")), imageCount, PhosphorShaders::kMaxImageSlots);
+    }
     // Buffer-pass + bufferScale lints check the RAW metadata, not the parsed
     // ShaderInfo: parseShaderMetadata clamps bufferScale into [0.125, 1.0] and
     // clears bufferShaderPaths when a declared buffer is missing, so a lint reading
     // the parsed values would silently pass an author error the runtime hid.
     if (info.isMultipass) {
-        QJsonObject root;
-        QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-        if (metaFile.open(QIODevice::ReadOnly)) {
-            root = QJsonDocument::fromJson(metaFile.readAll()).object();
-        }
+        const QJsonObject& root = rawRoot;
 
         QStringList bufferNames;
         const QJsonArray declared = root.value(QLatin1String("bufferShaders")).toArray();
@@ -189,43 +234,39 @@ int validatePack(const QString& packDir, QTextStream& out)
         lints << QStringLiteral("fragment shader missing: %1").arg(QFileInfo(info.sourcePath).fileName());
     }
     // A declared-but-absent vertexShader silently falls back to the shared
-    // zone.vert below, hiding the author's typo. Read the RAW metadata: unlike
-    // the animation and surface parsers, ShaderRegistry::parsePackMetadata
-    // only assigns vertexShaderPath when the file EXISTS, so linting the
-    // parsed struct could never fire.
+    // zone.vert below, hiding the author's typo. Read the RAW metadata (shared
+    // rawRoot above): unlike the animation and surface parsers,
+    // ShaderRegistry::parsePackMetadata only assigns vertexShaderPath when the
+    // file EXISTS, so linting the parsed struct could never fire.
     {
-        QFile rawMeta(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-        if (rawMeta.open(QIODevice::ReadOnly)) {
-            const QJsonObject rawRoot = QJsonDocument::fromJson(rawMeta.readAll()).object();
-            const QString declaredVert = rawRoot.value(QLatin1String("vertexShader")).toString();
-            if (!declaredVert.isEmpty() && !QFile::exists(QDir(packDir).filePath(declaredVert))) {
-                lints << QStringLiteral("vertex shader missing: %1").arg(declaredVert);
+        const QString declaredVert = rawRoot.value(QLatin1String("vertexShader")).toString();
+        if (!declaredVert.isEmpty() && !QFile::exists(QDir(packDir).filePath(declaredVert))) {
+            lints << QStringLiteral("vertex shader missing: %1").arg(declaredVert);
+        }
+        // A custom-named vertexShader is silently ignored by the zone
+        // runtime, which only ever loads a file named `zone.vert` (see the
+        // vertex-resolution note below). Warn so the author is not misled by
+        // a green validator into thinking their custom vertex stage runs.
+        if (!declaredVert.isEmpty() && QFileInfo(declaredVert).fileName() != QLatin1String("zone.vert")) {
+            lints << QStringLiteral(
+                         "vertexShader '%1' is ignored at load: the zone runtime only uses a file named "
+                         "zone.vert (sibling, else shared). Rename it to zone.vert or drop the declaration.")
+                         .arg(declaredVert);
+        }
+        // Duplicate ids must be linted from the RAW array: the parser
+        // dedupes (first declaration wins), so the parsed struct can
+        // never show the author their repeated id.
+        QSet<QString> rawIds;
+        const QJsonArray rawParams = rawRoot.value(QLatin1String("parameters")).toArray();
+        for (const QJsonValue& v : rawParams) {
+            const QString rawId = v.toObject().value(QLatin1String("id")).toString();
+            if (rawId.isEmpty()) {
+                continue;
             }
-            // A custom-named vertexShader is silently ignored by the zone
-            // runtime, which only ever loads a file named `zone.vert` (see the
-            // vertex-resolution note below). Warn so the author is not misled by
-            // a green validator into thinking their custom vertex stage runs.
-            if (!declaredVert.isEmpty() && QFileInfo(declaredVert).fileName() != QLatin1String("zone.vert")) {
-                lints << QStringLiteral(
-                             "vertexShader '%1' is ignored at load: the zone runtime only uses a file named "
-                             "zone.vert (sibling, else shared). Rename it to zone.vert or drop the declaration.")
-                             .arg(declaredVert);
-            }
-            // Duplicate ids must be linted from the RAW array: the parser
-            // dedupes (first declaration wins), so the parsed struct can
-            // never show the author their repeated id.
-            QSet<QString> rawIds;
-            const QJsonArray rawParams = rawRoot.value(QLatin1String("parameters")).toArray();
-            for (const QJsonValue& v : rawParams) {
-                const QString rawId = v.toObject().value(QLatin1String("id")).toString();
-                if (rawId.isEmpty()) {
-                    continue;
-                }
-                if (rawIds.contains(rawId)) {
-                    lints << QStringLiteral("duplicate parameter id '%1' (first declaration wins at load)").arg(rawId);
-                } else {
-                    rawIds.insert(rawId);
-                }
+            if (rawIds.contains(rawId)) {
+                lints << QStringLiteral("duplicate parameter id '%1' (first declaration wins at load)").arg(rawId);
+            } else {
+                rawIds.insert(rawId);
             }
         }
     }
