@@ -58,8 +58,9 @@ private:
                         QStringLiteral("script:notile"),   QStringLiteral("script:wellformed")};
         // The per-directory cap slot writes cap+N numbered scripts. Covered by
         // range rather than by name so a change to the fixture size cannot
-        // silently leave ids behind.
-        for (int i = 0; i < 120; ++i)
+        // silently leave ids behind; the bound derives from the same constant
+        // the spray slot uses (kCap + kExtra there).
+        for (int i = 0; i < PhosphorTiles::ScriptedAlgorithmLoader::MaxWatchedFilesPerDir + 10; ++i)
             ids.append(QStringLiteral("script:spray-%1").arg(i, 3, 10, QLatin1Char('0')));
         return ids;
     }
@@ -127,9 +128,10 @@ private Q_SLOTS:
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:gamma")));
         QCOMPARE(spy.count(), 1);
 
-        // Note: both XDG_DATA_DIRS and XDG_DATA_HOME point to the same directory in this
-        // test, so the loader treats it as a user script. The testUserOverridesSystem test
-        // below verifies isUserScript() with separate system/user directories.
+        // Note: XDG_DATA_DIRS points at an (empty) /system subdirectory while
+        // XDG_DATA_HOME is the root the script was written under, so the
+        // loader treats it as a user script. The testUserOverridesSystem test
+        // below verifies isUserScript() with populated system AND user dirs.
     }
 
     // =========================================================================
@@ -525,6 +527,10 @@ private Q_SLOTS:
         // Make sure it doesn't exist yet
         QVERIFY(!QDir(expectedDir).exists());
 
+        // DATA_DIRS pinned alongside DATA_HOME per the file's convention: the
+        // slot never scans, but an ambient value must not leak into any
+        // path resolution the loader does at construction.
+        qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
         PhosphorTiles::ScriptedAlgorithmLoader loader(QStringLiteral("plasmazones/algorithms"),
@@ -578,11 +584,12 @@ private Q_SLOTS:
 
         for (int i = 0; i < kCap + kExtra; ++i) {
             const QString base = QStringLiteral("spray-%1").arg(i, 3, 10, QLatin1Char('0'));
-            const QString linkPath = userAlgoDir + QLatin1Char('/') + base + QStringLiteral(".luau");
-            if (i % 2 == 0)
+            if (i % 2 == 0) {
                 QVERIFY(!writeScript(userAlgoDir, base + QStringLiteral(".luau"), validScript(base)).isEmpty());
-            else
+            } else {
+                const QString linkPath = userAlgoDir + QLatin1Char('/') + base + QStringLiteral(".luau");
                 QVERIFY(QFile::link(outsideTarget, linkPath));
+            }
         }
 
         qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());

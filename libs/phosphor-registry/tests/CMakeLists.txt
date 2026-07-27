@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-find_package(Qt6 REQUIRED COMPONENTS Test Quick)
+find_package(Qt6 REQUIRED COMPONENTS Test Quick Gui Qml)
 
 # ─── Fake plugin fixture helper ────────────────────────────────────────────────
 #

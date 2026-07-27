@@ -112,6 +112,7 @@ set(phosphorfsloader_SRCS
 
 set(phosphorfsloader_public_HDRS
     include/PhosphorFsLoader/DirectoryLoader.h
+    include/PhosphorFsLoader/FileLimits.h
     include/PhosphorFsLoader/IDirectoryLoaderSink.h
     include/PhosphorFsLoader/IScanStrategy.h
     include/PhosphorFsLoader/JsonEnvelopeValidator.h

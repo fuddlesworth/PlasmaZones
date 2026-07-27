@@ -1091,6 +1091,23 @@ target_link_libraries(test_animations_page_controller
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
 
+# The stock-animation suppression mirror, split out of the sibling above
+# when it crossed the 1150-line hard ceiling.
+add_executable(test_animations_suppression_mirror
+    settings/pages/test_animations_suppression_mirror.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_suppression_mirror
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_suppression_mirror COMMAND test_animations_suppression_mirror)
+
 # Companion test executable: the contracts between the animations QML and its
 # controller, pinned by parsing the QML source. Separate from the sibling
 # because these are the only animations slots that need P_SOURCE_DIR to read

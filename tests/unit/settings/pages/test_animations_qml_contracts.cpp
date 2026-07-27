@@ -89,11 +89,14 @@ private Q_SLOTS:
             QDirIterator dirIt(rootDir, QStringList{QStringLiteral("*.qml")}, QDir::Files,
                                QDirIterator::Subdirectories);
             while (dirIt.hasNext()) {
-                // Line comments stripped first: this tree's comments name
-                // controller methods freely, and a comment mentioning a method
-                // that was since removed would fail the slot for prose.
+                // Comments stripped first — LINE and BLOCK alike: this tree's
+                // comments (including /** doc blocks */) name controller
+                // methods freely, and a comment mentioning a method that was
+                // since removed would fail the slot for prose.
                 static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
-                const QString src = readFile(dirIt.next()).remove(lineCommentRe);
+                static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                               QRegularExpression::DotMatchesEverythingOption);
+                const QString src = readFile(dirIt.next()).remove(blockCommentRe).remove(lineCommentRe);
                 used.unite(namesUsedOn(src, QStringLiteral("animationsPage")));
                 // The alias receiver, scraped TREE-WIDE rather than only in the
                 // file that declares it. The sole alias today is RulesPage.qml's
@@ -295,6 +298,106 @@ private Q_SLOTS:
         // reintroducing the whole defect, and the brace-optional form widened
         // that hole. Counting is what closes it.
         QCOMPARE(offFlat.count(anyResetRe), 1);
+    }
+
+    // ─── Revert-latch and refresh-gate contracts (the PR's titled fix) ────
+
+    /// The three QML-only pieces of the "reverted value shows immediately
+    /// without collapsing the editor" fix, scraped because no controller-side
+    /// test can see them: (1) `_timingEditorOpen` is the disjunction of the
+    /// stored state and the session latch; (2) both per-field revert handlers
+    /// set the latch GATED on the clear being accepted; (3) refreshFromTree
+    /// drops the latch only on an EXTERNAL true→false transition
+    /// (`!selfDriven`). Reverting any of the three leaves every other test in
+    /// the suite green.
+    void revertLatchContractsHoldInTheEventCard()
+    {
+        const QString qmlPath =
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationEventCard.qml");
+        QString src = readFile(qmlPath);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
+        static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
+        static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                       QRegularExpression::DotMatchesEverythingOption);
+        src.remove(blockCommentRe);
+        src.remove(lineCommentRe);
+        static const QRegularExpression wsRe(QStringLiteral("\\s+"));
+        const QString flat = QString(src).replace(wsRe, QStringLiteral(" "));
+
+        // (1) The derived open-state is exactly stored-or-latched.
+        QVERIFY2(flat.contains(QStringLiteral(
+                     "readonly property bool _timingEditorOpen: root.overrideEnabled || root._editingTiming")),
+                 "_timingEditorOpen is no longer the overrideEnabled || _editingTiming disjunction");
+
+        // (2) Both revert handlers latch the editor open, gated on the clear
+        // being ACCEPTED (a refused clear must not latch anything).
+        QVERIFY2(flat.contains(QStringLiteral(
+                     "onCurveRevertRequested: { if (root._clearFieldOnAll(\"curve\")) root._editingTiming = true; }")),
+                 "the curve revert no longer latches _editingTiming gated on the clear's return");
+        QVERIFY2(
+            flat.contains(QStringLiteral(
+                "onDurationRevertRequested: { if (root._clearFieldOnAll(\"duration\")) root._editingTiming = true; }")),
+            "the duration revert no longer latches _editingTiming gated on the clear's return");
+
+        // (3) The refresh path clears the latch only for an EXTERNAL clear.
+        QVERIFY2(flat.contains(QStringLiteral(
+                     "if (wasEnabled && !root.overrideEnabled && !selfDriven) root._editingTiming = false;")),
+                 "refreshFromTree's latch reset is no longer transition- and selfDriven-gated");
+    }
+
+    // ─── Shader-browser bridge route ──────────────────────────────────────
+
+    /// The Animations → Shaders page routes AnimationsPageController through
+    /// ShaderBrowserPage as `bridge`, so names the browser tree calls on
+    /// `bridge.` must resolve on the controller — except the documented
+    /// optional surface (`previewController`), which the detail dialog
+    /// null-checks and treats as "no preview pane" (its docstring says so).
+    void everyBridgeCallFromTheShaderBrowserIsReachable()
+    {
+        const QSet<QString> documentedOptional{QStringLiteral("previewController")};
+
+        // Only the files the animations route instantiates: the browser page
+        // and its detail dialog. ShaderSetsPage lives in the same directory
+        // but is a DIFFERENT route with a set-capable bridge the animations
+        // controller never provides, so sweeping the whole directory would
+        // demand its API of the wrong controller.
+        const QStringList routeFiles{
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserPage.qml"),
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserCard.qml"),
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml")};
+        QSet<QString> used;
+        static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
+        static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                       QRegularExpression::DotMatchesEverythingOption);
+        static const QRegularExpression bridgeRe(QStringLiteral("\\bbridge\\.([A-Za-z_][A-Za-z0-9_]*)"));
+        for (const QString& file : routeFiles) {
+            const QString src = readFile(file).remove(blockCommentRe).remove(lineCommentRe);
+            QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + file));
+            auto it = bridgeRe.globalMatch(src);
+            while (it.hasNext())
+                used.insert(it.next().captured(1));
+        }
+        QVERIFY2(!used.isEmpty(), "scraped no bridge.* names — the browser tree or receiver name moved");
+
+        AnimationsPageController c;
+        const QMetaObject* meta = c.metaObject();
+        QStringList unreachable;
+        for (const QString& name : used) {
+            if (documentedOptional.contains(name))
+                continue;
+            const QByteArray raw = name.toUtf8();
+            if (meta->indexOfProperty(raw.constData()) >= 0)
+                continue;
+            bool found = false;
+            for (int i = 0; i < meta->methodCount() && !found; ++i)
+                found = meta->method(i).name() == raw;
+            if (!found)
+                unreachable.append(name);
+        }
+        QVERIFY2(unreachable.isEmpty(),
+                 qPrintable(QStringLiteral("the shader browser calls these on its bridge, but the animations "
+                                           "route's controller lacks them: %1")
+                                .arg(unreachable.join(QStringLiteral(", ")))));
     }
 
     // ─── Simple-page scope contract ───────────────────────────────────────

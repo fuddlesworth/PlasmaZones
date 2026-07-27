@@ -125,6 +125,24 @@ public:
     return f.write(bytes) == bytes.size();
 }
 
+/// Sink variant whose parse ACCEPTS the file but returns an entry with an
+/// EMPTY key — the shape the loader's own empty-key guard exists for.
+/// RecordingSink cannot exercise that branch: it returns nullopt for an
+/// empty name, which takes the refused-file path instead. File scope for
+/// the same -Wsubobject-linkage reason as RacyRecordingSink.
+class EmptyKeySink : public RecordingSink
+{
+public:
+    std::optional<ParsedEntry> parseFile(const QString& filePath) override
+    {
+        auto parsed = RecordingSink::parseFile(filePath);
+        if (parsed && parsed->key == QLatin1String("anon")) {
+            parsed->key.clear();
+        }
+        return parsed;
+    }
+};
+
 } // namespace
 
 class TestDirectoryLoader : public QObject
@@ -1054,6 +1072,53 @@ private Q_SLOTS:
         QVERIFY2(spy.wait(2000), "an in-place rewrite fired no rescan — the per-file watch is not armed");
         QCOMPARE(loader.registeredCount(), 1);
         QCOMPARE(sink.registry.value(QStringLiteral("doc")), std::string("v2"));
+    }
+
+    /// A sink returning a ParsedEntry with an EMPTY key is refused with a
+    /// warning rather than registered: deleting the guard inserts an
+    /// empty-string key into the entry map and every downstream keyed lookup.
+    void testEmptyKeyEntryIsRefused()
+    {
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("good.json")), QStringLiteral("good"), QStringLiteral("v")));
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("anon.json")), QStringLiteral("anon"), QStringLiteral("v")));
+        EmptyKeySink sink;
+        DirectoryLoader loader(sink);
+        const int n = loader.loadFromDirectory(m_tmp->path(), LiveReload::Off);
+        QCOMPARE(n, 1);
+        QVERIFY(sink.registry.contains(QStringLiteral("good")));
+        QVERIFY(!sink.registry.contains(QString()));
+    }
+
+    /// The documented empty-list contract: no scan runs, nothing is emitted,
+    /// and the return value is the count from PRIOR registrations, not zero.
+    void testLoadFromDirectoriesEmptyListIsANoOp()
+    {
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("doc.json")), QStringLiteral("doc"), QStringLiteral("v")));
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        QCOMPARE(loader.loadFromDirectory(m_tmp->path(), LiveReload::Off), 1);
+        const int commitsBefore = sink.commitCount;
+
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+        const int n = loader.loadFromDirectories({}, LiveReload::Off);
+        QCOMPARE(n, 1); // prior registration count, not zero
+        QCOMPARE(sink.commitCount, commitsBefore);
+        QCOMPARE(spy.count(), 0);
+    }
+
+    /// Cap 0 is a legal boundary, mirroring the metadata scanner's twin slot:
+    /// nothing parses, nothing registers, and existing entries are purged on
+    /// the next scan rather than surviving a cap they no longer fit under.
+    void testEntryCapZeroParsesNothing()
+    {
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("doc.json")), QStringLiteral("doc"), QStringLiteral("v")));
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setMaxEntriesForTest(0);
+        const int n = loader.loadFromDirectory(m_tmp->path(), LiveReload::Off);
+        QCOMPARE(n, 0);
+        QCOMPARE(sink.parseCalls, 0);
+        QVERIFY(sink.registry.isEmpty());
     }
 
 private:

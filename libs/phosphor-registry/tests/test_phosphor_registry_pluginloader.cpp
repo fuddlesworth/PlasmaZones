@@ -26,6 +26,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <sys/stat.h> // mkfifo, for the FIFO-manifest slot (Linux-only project)
+
 using namespace PhosphorRegistry;
 using namespace PhosphorRegistryTestHelpers;
 
@@ -44,7 +46,11 @@ private Q_SLOTS:
     void rejectsSymlinkedSoEscapingRoot();
     void rejectsSymlinkedSubdirEscapingRoot();
     void rejectsGroupOrWorldWritableSo();
+    void rejectsGroupOrWorldWritableDir();
+    void ignoresFifoManifest();
     void warnsOnceForMultipleSoFilesThenLoads();
+    void multiSoAdvisoryStaysLatchedWhileDirStaysBroken();
+    void unwritablePluginRootWarnsOnceAndStaysInert();
     void multipleSoFailureStillReportsFailureReason();
     void rejectsNullFactoryReturn();
     void rejectsPluginWithoutEntryPoint();
@@ -366,6 +372,59 @@ void TestPluginLoader::rejectsGroupOrWorldWritableSo()
     QVERIFY(loader.loadedPluginIds().isEmpty());
 }
 
+void TestPluginLoader::rejectsGroupOrWorldWritableDir()
+{
+    // The directory half of the StrictModes clause: a 0644 .so in a
+    // group/world-writable DIRECTORY is still replaceable via
+    // delete-and-recreate, so the guard must refuse on the directory's
+    // mode alone. This is the claimed code-execution guard's second
+    // disjunct; before this slot, deleting it left the suite green.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
+
+    QFile dirAsFile(installedDir);
+    QVERIFY(dirAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner
+                                     | QFileDevice::ReadGroup | QFileDevice::ExeGroup | QFileDevice::WriteGroup));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("group/world-writable")));
+    loader.scanAndLoad();
+
+    QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+
+    // Restore the mode so QTemporaryDir can clean up.
+    QVERIFY(dirAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+}
+
+void TestPluginLoader::ignoresFifoManifest()
+{
+    // A FIFO named manifest.json must be skipped by the isFile() gate:
+    // Manifest::parse opens the path, and open(ReadOnly) on a FIFO blocks
+    // until a writer appears — on the calling thread, forever. Reverting
+    // the gate to exists() turns this slot into a hang, which the ctest
+    // TIMEOUT converts into a failure.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    const QString fifoDir = QDir(pluginRoot).absoluteFilePath(QStringLiteral("fifoplugin"));
+    QVERIFY(QDir().mkpath(fifoDir));
+    const QByteArray fifoPath = QFile::encodeName(QDir(fifoDir).absoluteFilePath(QStringLiteral("manifest.json")));
+    QCOMPARE(::mkfifo(fifoPath.constData(), 0600), 0);
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    loader.scanAndLoad();
+
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
+}
+
 void TestPluginLoader::warnsOnceForMultipleSoFilesThenLoads()
 {
     // Two .so files in one plugin directory is a packaging mistake; the
@@ -445,6 +504,99 @@ void TestPluginLoader::multipleSoFailureStillReportsFailureReason()
 
     QCOMPARE(registry.size(), 0);
     QVERIFY(loader.loadedPluginIds().isEmpty());
+}
+
+void TestPluginLoader::multiSoAdvisoryStaysLatchedWhileDirStaysBroken()
+{
+    // The re-fire leg the loaded-plugin variant cannot pin: a loaded dir is
+    // skipped via m_plugins.contains, so its rescan proves nothing about the
+    // latch. Here the dir stays BROKEN (the lexicographically-first .so has a
+    // mismatching factory id), so every rescan re-enters loadPluginFromDir —
+    // and the advisory must fire on the first scan only.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
+    const QString mismatchSrc =
+        QDir(QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR))
+            .absoluteFilePath(QStringLiteral("libphosphor_registry_test_fake_plugin_idmismatch.so"));
+    QVERIFY(QFileInfo::exists(mismatchSrc));
+    // Replace the valid .so with the mismatch binary AND add a second copy,
+    // so the dir keeps two .so files, the picked (lexicographically first)
+    // one always fails the id check, and the dir never transitions to
+    // loaded — every rescan re-enters loadPluginFromDir.
+    const QString validSo = QDir(installedDir).absoluteFilePath(QStringLiteral("fake-plugin.so"));
+    QVERIFY(QFile::remove(validSo));
+    QVERIFY(QFile::copy(mismatchSrc, validSo));
+    QVERIFY(QFile::copy(mismatchSrc, QDir(installedDir).absoluteFilePath(QStringLiteral("aaa-mismatch.so"))));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QStringList firstScan;
+    {
+        WarningCapture capture(firstScan);
+        loader.scanAndLoad();
+    }
+    QCOMPARE(registry.size(), 0);
+    int advisories = 0;
+    for (const QString& w : firstScan) {
+        if (w.contains(QStringLiteral("contains 2 .so files")))
+            ++advisories;
+    }
+    QCOMPARE(advisories, 1);
+
+    QStringList secondScan;
+    {
+        WarningCapture capture(secondScan);
+        loader.rescanNow();
+    }
+    QCOMPARE(registry.size(), 0);
+    for (const QString& w : secondScan) {
+        QVERIFY2(!w.contains(QStringLiteral("contains 2 .so files")),
+                 qPrintable(QStringLiteral("multi-.so advisory re-fired on a persistently-broken dir: ") + w));
+    }
+}
+
+void TestPluginLoader::unwritablePluginRootWarnsOnceAndStaysInert()
+{
+    // A plugin root whose parent refuses mkpath: the loader must warn once,
+    // stay inert (no crash, nothing loaded), and stay QUIET on subsequent
+    // rescans (the warn-once latch), while still retrying silently.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString parent = QDir(tempDir.path()).absoluteFilePath(QStringLiteral("sealed"));
+    QVERIFY(QDir().mkpath(parent));
+    QFile parentAsFile(parent);
+    QVERIFY(parentAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+    const QString root = QDir(parent).absoluteFilePath(QStringLiteral("plugins"));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, root);
+    QStringList firstScan;
+    {
+        WarningCapture capture(firstScan);
+        loader.scanAndLoad();
+    }
+    QCOMPARE(registry.size(), 0);
+    int failures = 0;
+    for (const QString& w : firstScan) {
+        if (w.contains(QStringLiteral("failed to create plugin root")))
+            ++failures;
+    }
+    QCOMPARE(failures, 1);
+
+    QStringList secondScan;
+    {
+        WarningCapture capture(secondScan);
+        loader.rescanNow();
+    }
+    for (const QString& w : secondScan) {
+        QVERIFY2(!w.contains(QStringLiteral("failed to create plugin root")),
+                 qPrintable(QStringLiteral("mkpath-failure warning re-fired: ") + w));
+    }
+
+    QVERIFY(parentAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
 }
 
 void TestPluginLoader::rejectsNullFactoryReturn()

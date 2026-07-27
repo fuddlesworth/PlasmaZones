@@ -11,31 +11,6 @@ namespace PlasmaZones {
 namespace TestHelpers {
 
 /**
- * @brief Helper to write a temporary Luau script file
- * @param dir Temporary directory to write into
- * @param filename Name of the script file
- * @param content Script content
- * @return Full path to the written file, or empty string on failure
- *
- * `[[nodiscard]]` and the write is checked, matching `writeScript` below. Several
- * callers assert that a script FAILED to load or was NOT registered; without a
- * checked write and a checked result, those assertions pass vacuously when the
- * file was never created — indistinguishable from the rejection they mean to pin.
- */
-[[nodiscard]] inline QString writeTempScript(QTemporaryDir& dir, const QString& filename, const QString& content)
-{
-    QString path = dir.path() + QStringLiteral("/") + filename;
-    QFile f(path);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text))
-        return QString();
-    const QByteArray payload = content.toUtf8();
-    if (f.write(payload) != payload.size())
-        return QString();
-    f.close();
-    return path;
-}
-
-/**
  * @brief Helper to write a script file (e.g. `.luau`) in a given directory path
  * @param dirPath Directory path to write into
  * @param filename Name of the script file
@@ -59,6 +34,25 @@ namespace TestHelpers {
         return QString();
     f.close();
     return path;
+}
+
+/**
+ * @brief Helper to write a temporary Luau script file
+ * @param dir Temporary directory to write into
+ * @param filename Name of the script file
+ * @param content Script content
+ * @return Full path to the written file, or empty string on failure
+ *
+ * `[[nodiscard]]` and the write is checked, matching `writeScript` above. Several
+ * callers assert that a script FAILED to load or was NOT registered; without a
+ * checked write and a checked result, those assertions pass vacuously when the
+ * file was never created — indistinguishable from the rejection they mean to pin.
+ */
+[[nodiscard]] inline QString writeTempScript(QTemporaryDir& dir, const QString& filename, const QString& content)
+{
+    // Byte-identical semantics to writeScript above; delegate so the checked
+    // write logic lives once.
+    return writeScript(dir.path(), filename, content);
 }
 
 } // namespace TestHelpers

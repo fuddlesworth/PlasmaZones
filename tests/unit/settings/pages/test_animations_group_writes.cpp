@@ -48,7 +48,6 @@
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-using P = PhosphorAnimation::Profile;
 
 namespace {
 
@@ -123,6 +122,57 @@ private Q_SLOTS:
 
         QCOMPARE(c.rawProfile(kPrimary).value(QStringLiteral("duration")).toInt(), 750);
         QCOMPARE(c.rawProfile(kMirror).value(QStringLiteral("duration")).toInt(), 750);
+    }
+
+    /// QML builds a group as `[eventPath].concat(mirrorPaths)` without
+    /// deduping, so the primary can arrive in its own mirror list. The write
+    /// side must apply each path ONCE: a doubled write is a doubled
+    /// overrideChanged storm at drag rate, and for clearFieldOnPaths a doubled
+    /// count misreports how many events were actually reverted.
+    void aDuplicatedPathInTheGroupIsWrittenOnce()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QSignalSpy touched(&c, &AnimationsPageController::overrideChanged);
+        QVERIFY(c.setOverrideMergedOnPaths(QStringList{kPrimary, kPrimary, kMirror},
+                                           QVariantMap{{QStringLiteral("duration"), 750}}, QVariant()));
+        int primaryEmits = 0;
+        for (int i = 0; i < touched.count(); ++i) {
+            if (touched.at(i).at(0).toString() == kPrimary)
+                ++primaryEmits;
+        }
+        QCOMPARE(primaryEmits, 1);
+
+        // And the clear side counts the duplicated path once.
+        QCOMPARE(c.clearFieldOnPaths(QStringList{kPrimary, kPrimary, kMirror}, QStringLiteral("duration")), 2);
+    }
+
+    /// The failure branch returns `changed` (with a toast), NEVER -1: -1 is
+    /// reserved for "nothing was attempted" and the QML collapses the timing
+    /// editor on it. A profiles dir made unwritable fails every removal, so
+    /// this pins the branch's return-changed contract at changed == 0 — the
+    /// case previously indistinguishable from a refusal.
+    void aFailedClearReportsChangedCountNotARefusal()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 600}}));
+
+        QFile dirAsFile(tmp.path());
+        QVERIFY(dirAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+
+        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("paths could not be updated")));
+        QCOMPARE(c.clearFieldOnPaths(QStringList{kPrimary}, QStringLiteral("duration")), 0);
+        QCOMPARE(toasts.count(), 1);
+        QCOMPARE(toasts.first().at(0).toString(), PhosphorI18n::tr("Some animation overrides could not be reverted."));
+
+        QVERIFY(dirAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
     }
 
     /// An INVALID QVariant is QML's `undefined` arriving here, and it means the
@@ -450,11 +500,13 @@ private Q_SLOTS:
         QVERIFY(!c.anyPathSupportsShaderLeg(QStringList{}));
     }
 
-    /// With no ISettings the shader tree is unreachable, so no path can hold an
-    /// effect. Pinned because the card asks this to decide whether its picker
-    /// row is already selected, and answering "yes" from an unreadable tree
-    /// would render a selection the tree does not contain.
-    void allPathsHoldShaderEffectIsFalseWhenNoPathStoresOne()
+    /// With no ISettings wired (the fixture passes none) the shader tree is
+    /// unreachable, so no path can hold an effect — this pins the !m_settings
+    /// guard specifically, not the stored-state walk. Pinned because the card
+    /// asks this to decide whether its picker row is already selected, and
+    /// answering "yes" from an unreadable tree would render a selection the
+    /// tree does not contain.
+    void allPathsHoldShaderEffectIsFalseWithoutSettings()
     {
         AnimationsPageController c;
         QVERIFY(!c.allPathsHoldShaderEffect(group(), QStringLiteral("dissolve")));
@@ -667,11 +719,18 @@ private Q_SLOTS:
         QSignalSpy done(&c, &AnimationsPageController::discardResult);
         c.asyncRevertPending();
 
+        // Zero-signal spies, matching the clearField twin above: a refusal
+        // must announce nothing.
+        QSignalSpy touched(&c, &AnimationsPageController::overrideChanged);
+        QSignalSpy dirtied(&c, &AnimationsPageController::pendingChangesChanged);
+
         QTest::ignoreMessage(QtWarningMsg,
                              QRegularExpression(QStringLiteral("refusing while an async discard is in flight")));
         QVERIFY(!c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 900}}, QVariant()));
 
         QCOMPARE(toasts.count(), 1);
+        QCOMPARE(touched.count(), 0);
+        QCOMPARE(dirtied.count(), 0);
         QCOMPARE(toasts.first().at(0).toString(),
                  PhosphorI18n::tr("Cannot change this while a discard is in progress."));
         QCOMPARE(c.rawProfile(kPrimary).value(QStringLiteral("duration")).toInt(), 600);
