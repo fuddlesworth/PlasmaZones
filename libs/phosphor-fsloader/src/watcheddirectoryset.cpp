@@ -66,6 +66,29 @@ bool isForbiddenWatchRoot(const QString& path)
     // cleaned form remains the only check in that case.
     const QString canonical = QFileInfo(path).canonicalFilePath();
 
+    // Canonicalising a candidate root is a realpath() syscall, and this
+    // predicate runs for EVERY registered directory on EVERY rescan (the
+    // re-attach loops re-enter attachWatcherForDir each pass) against ~15
+    // candidates. The candidates' canonical forms are stable for a given
+    // SPELLING, so cache by spelling: a test repointing XDG via qputenv
+    // produces a different candidate string and therefore a fresh entry,
+    // which a whole-list static cache would get wrong. GUI-thread-only per
+    // the class contract, so the static needs no lock.
+    const auto cachedCanonical = [](const QString& path) -> QString {
+        static QHash<QString, QString> cache;
+        const auto it = cache.constFind(path);
+        if (it != cache.constEnd()) {
+            return it.value();
+        }
+        const QString canonical = QFileInfo(path).canonicalFilePath();
+        // Only cache successful resolutions: a not-yet-existing root (fresh
+        // profile) canonicalises empty today and non-empty after first use.
+        if (!canonical.isEmpty()) {
+            cache.insert(path, canonical);
+        }
+        return canonical;
+    };
+
     // Compare a candidate forbidden root against `cleaned` AND `canonical`,
     // and also against the candidate's canonical form so that two
     // independent symlinks pointing at the same inode collapse onto the
@@ -81,7 +104,7 @@ bool isForbiddenWatchRoot(const QString& path)
         if (!canonical.isEmpty() && samePath(canonical, cleanedCandidate)) {
             return true;
         }
-        const QString canonicalCandidate = QFileInfo(candidate).canonicalFilePath();
+        const QString canonicalCandidate = cachedCanonical(candidate);
         if (!canonicalCandidate.isEmpty()) {
             if (samePath(cleaned, canonicalCandidate)) {
                 return true;

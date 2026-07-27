@@ -160,10 +160,14 @@ public:
     // fingerprints are content-aware.
     void setSignatureContrib(SignatureContrib fn)
     {
-        m_sigContrib = fn; // kept for reconcile()
-        m_strategy->setSignatureContrib([fn = std::move(fn)](QCryptographicHash& hasher, const Entry& e) {
-            if (fn && e.factory) {
-                fn(hasher, *e.factory);
+        // Two deliberate copies from the parameter: one kept for
+        // reconcile(), one captured by the strategy lambda. Spelled as two
+        // plain copies (not copy-then-move of the same object) so it cannot
+        // be misread as a use-after-move.
+        m_sigContrib = fn;
+        m_strategy->setSignatureContrib([contrib = fn](QCryptographicHash& hasher, const Entry& e) {
+            if (contrib && e.factory) {
+                contrib(hasher, *e.factory);
             }
         });
     }

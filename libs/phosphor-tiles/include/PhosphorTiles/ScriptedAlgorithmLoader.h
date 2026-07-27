@@ -59,6 +59,14 @@ public:
     /// never reached, assert nothing, and still pass its non-vacuity check.
     static constexpr int MaxWatchedFilesPerDir = 100;
 
+    /// Hard cap on scripts REGISTERED per rescan, summed across every
+    /// registered directory. Header-visible for the same reason as
+    /// MaxWatchedFilesPerDir: a test pinning the cap must read the real
+    /// constant so a bump cannot silently disarm it. The registration count
+    /// is a safe basis only because the considered-count is already bounded
+    /// per directory by MaxWatchedFilesPerDir (see the .cpp comment).
+    static constexpr int MaxScripts = 10'000;
+
     /**
      * @brief Construct a loader for @p subdirectory under XDG data dirs.
      *
@@ -137,6 +145,13 @@ private:
         QString id; ///< Registry id the file registered under
         qint64 size = -1;
         qint64 mtimeMs = -1;
+        /// User/system classification at stamp time. Part of the reuse key:
+        /// the classification decides both the trust flag on the algorithm
+        /// AND which VM the script runs in (shared bundled VM vs isolated
+        /// per-user-script VM), so a path whose classification flips between
+        /// scans (XDG_DATA_HOME repointed, the user dir starting to resolve)
+        /// must be rebuilt rather than reused with the stale trust level.
+        bool isUser = false;
     };
 
     void loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir,
