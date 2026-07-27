@@ -509,6 +509,66 @@ void Daemon::stop()
     // says so in three places) would come back up with them silently gone.
     teardownIdleConnections();
 
+    // Unregister D-Bus object path and service to prevent late calls during shutdown
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    bus.unregisterObject(QString(PhosphorProtocol::Service::ObjectPath));
+    bus.unregisterService(QString(PhosphorProtocol::Service::Name));
+
+    // Sever the remaining raw-pointer adaptors from the unique_ptr members
+    // they borrow. ~QObject destroys these adaptors AFTER all unique_ptr
+    // members have already run their destructors, so without detach the
+    // adaptors would see dangling pointers during the destruction window —
+    // and the SettingsAdaptor dtor's save-on-teardown would deref a freed
+    // Settings object. Each adaptor's detach() is null-safe + idempotent.
+    //
+    // WHY ONLY THESE FOUR: SettingsAdaptor has the confirmed dtor-UAF
+    // (debounced save timer flush). ShaderAdaptor + ControlAdaptor have
+    // non-trivial signal wiring + cached state that benefits from
+    // explicit teardown for the same "queued D-Bus call lands during
+    // destruction window" defense-in-depth. RuleAdaptor borrows
+    // m_ruleStore (a unique_ptr) and m_settings; without detach
+    // its slot bodies could deref freed memory during the window after
+    // ~Daemon's body returns — that is when the unique_ptr members
+    // (including m_ruleStore) run their destructors, and the
+    // raw-Qt-parented RuleAdaptor only runs its own destructor
+    // *after* that, as part of QObject child cleanup.
+    //
+    // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
+    // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
+    // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
+    // SnapAdaptor, AutotileAdaptor) all ship destructors that don't
+    // deref any borrowed pointer — most are `= default` / empty-body
+    // (no member access), and the two outliers do only self-cleanup
+    // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-
+    // line body, and WindowTrackingAdaptor's `~WindowTrackingAdaptor`
+    // calls `m_service->setShouldTrackPredicate({})` on its Qt-child
+    // m_service to clear a captured-this lambda before the child
+    // tears down (see Pass-3 commit c4e3c5125). The substantive
+    // safety claim is "no borrowed-pointer deref runs in any of their
+    // destructors" — confirmed by inspecting each header + cpp pair,
+    // not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
+    // method dispatch to them before we begin tearing down, and Qt's
+    // sender-destruction auto-disconnect cleans up signal wiring when the
+    // borrowed sender (m_layoutManager, etc.) is destroyed during member
+    // destruction. Adding detach() to those nine would require null-guarding
+    // every slot body (they currently rely on the "borrowed pointer is
+    // always valid" invariant), which is a larger refactor than the
+    // defense-in-depth buys. If a future adaptor grows a dtor body that
+    // derefs a borrowed member, add detach() to it AND wire the call here
+    // — same pattern as these four.
+    if (m_settingsAdaptor) {
+        m_settingsAdaptor->detach();
+    }
+    if (m_shaderAdaptor) {
+        m_shaderAdaptor->detach();
+    }
+    if (m_controlAdaptor) {
+        m_controlAdaptor->detach();
+    }
+    if (m_ruleAdaptor) {
+        m_ruleAdaptor->detach();
+    }
+
     if (!m_running) {
         return;
     }
@@ -768,66 +828,6 @@ void Daemon::stop()
     // grep-discoverable — matching the exclude-rule / window-rule borrow
     // severing above — and survives a future member-declaration reorder.
     m_crossSurfaceResolver.reset();
-
-    // Unregister D-Bus object path and service to prevent late calls during shutdown
-    QDBusConnection bus = QDBusConnection::sessionBus();
-    bus.unregisterObject(QString(PhosphorProtocol::Service::ObjectPath));
-    bus.unregisterService(QString(PhosphorProtocol::Service::Name));
-
-    // Sever the remaining raw-pointer adaptors from the unique_ptr members
-    // they borrow. ~QObject destroys these adaptors AFTER all unique_ptr
-    // members have already run their destructors, so without detach the
-    // adaptors would see dangling pointers during the destruction window —
-    // and the SettingsAdaptor dtor's save-on-teardown would deref a freed
-    // Settings object. Each adaptor's detach() is null-safe + idempotent.
-    //
-    // WHY ONLY THESE FOUR: SettingsAdaptor has the confirmed dtor-UAF
-    // (debounced save timer flush). ShaderAdaptor + ControlAdaptor have
-    // non-trivial signal wiring + cached state that benefits from
-    // explicit teardown for the same "queued D-Bus call lands during
-    // destruction window" defense-in-depth. RuleAdaptor borrows
-    // m_ruleStore (a unique_ptr) and m_settings; without detach
-    // its slot bodies could deref freed memory during the window after
-    // ~Daemon's body returns — that is when the unique_ptr members
-    // (including m_ruleStore) run their destructors, and the
-    // raw-Qt-parented RuleAdaptor only runs its own destructor
-    // *after* that, as part of QObject child cleanup.
-    //
-    // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
-    // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
-    // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
-    // SnapAdaptor, AutotileAdaptor) all ship destructors that don't
-    // deref any borrowed pointer — most are `= default` / empty-body
-    // (no member access), and the two outliers do only self-cleanup
-    // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-
-    // line body, and WindowTrackingAdaptor's `~WindowTrackingAdaptor`
-    // calls `m_service->setShouldTrackPredicate({})` on its Qt-child
-    // m_service to clear a captured-this lambda before the child
-    // tears down (see Pass-3 commit c4e3c5125). The substantive
-    // safety claim is "no borrowed-pointer deref runs in any of their
-    // destructors" — confirmed by inspecting each header + cpp pair,
-    // not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
-    // method dispatch to them before we begin tearing down, and Qt's
-    // sender-destruction auto-disconnect cleans up signal wiring when the
-    // borrowed sender (m_layoutManager, etc.) is destroyed during member
-    // destruction. Adding detach() to those nine would require null-guarding
-    // every slot body (they currently rely on the "borrowed pointer is
-    // always valid" invariant), which is a larger refactor than the
-    // defense-in-depth buys. If a future adaptor grows a dtor body that
-    // derefs a borrowed member, add detach() to it AND wire the call here
-    // — same pattern as these four.
-    if (m_settingsAdaptor) {
-        m_settingsAdaptor->detach();
-    }
-    if (m_shaderAdaptor) {
-        m_shaderAdaptor->detach();
-    }
-    if (m_controlAdaptor) {
-        m_controlAdaptor->detach();
-    }
-    if (m_ruleAdaptor) {
-        m_ruleAdaptor->detach();
-    }
 
     // Provider lambdas already cleared at the top of stop() (before the
     // m_running gate) so this point requires no further teardown.

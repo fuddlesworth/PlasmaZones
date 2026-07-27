@@ -81,12 +81,13 @@ Kirigami.Dialog {
     onClosed: {
         // Clear working state so the next open() re-seeds from the
         // (possibly updated) parent bindings rather than reusing stale
-        // values from this session.
+        // values from this session. Mode and duration are not touched here —
+        // onOpened seeds both unconditionally, so clearing them would be dead
+        // work and the old close-time seed of duration was in fact the source
+        // of the first-open stamp bug.
         root._workingCurve = "";
         root._workingOmega = 0;
         root._workingZeta = 0;
-        root._workingMode = root.timingMode;
-        root._workingDuration = root.duration;
         root._dirty = false;
     }
     onOpened: {
@@ -101,6 +102,12 @@ Kirigami.Dialog {
         _workingOmega = springOmega;
         _workingZeta = springZeta;
         root._workingMode = root.timingMode;
+        // Seed the duration snapshot at OPEN, alongside _workingMode and for the
+        // same reason: read live it would shift the preview tempo mid-tuning and,
+        // worse, "Save as preset…" stamped whatever it happened to hold — 0 on a
+        // first open, which _usableDuration then discards, silently dropping the
+        // duration the user saved with the curve.
+        root._workingDuration = root.duration;
         root._dirty = false;
     }
 

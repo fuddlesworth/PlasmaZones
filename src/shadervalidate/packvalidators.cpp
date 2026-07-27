@@ -196,6 +196,16 @@ int validatePack(const QString& packDir, QTextStream& out)
             if (!declaredVert.isEmpty() && !QFile::exists(QDir(packDir).filePath(declaredVert))) {
                 lints << QStringLiteral("vertex shader missing: %1").arg(declaredVert);
             }
+            // A custom-named vertexShader is silently ignored by the zone
+            // runtime, which only ever loads a file named `zone.vert` (see the
+            // vertex-resolution note below). Warn so the author is not misled by
+            // a green validator into thinking their custom vertex stage runs.
+            if (!declaredVert.isEmpty() && QFileInfo(declaredVert).fileName() != QLatin1String("zone.vert")) {
+                lints << QStringLiteral(
+                             "vertexShader '%1' is ignored at load: the zone runtime only uses a file named "
+                             "zone.vert (sibling, else shared). Rename it to zone.vert or drop the declaration.")
+                             .arg(declaredVert);
+            }
             // Duplicate ids must be linted from the RAW array: the parser
             // dedupes (first declaration wins), so the parsed struct can
             // never show the author their repeated id.
@@ -250,10 +260,17 @@ int validatePack(const QString& packDir, QTextStream& out)
             }
         }
     }
-    // Vertex: per-pack zone.vert if present, else the shared zone.vert the runtime
-    // falls back to.
-    QString vertPath = info.vertexShaderPath;
-    if (vertPath.isEmpty()) {
+    // Vertex: resolve EXACTLY as the zone runtime does (resolveZoneVertexPath in
+    // zoneshadernoderhi.h) rather than honouring `info.vertexShaderPath`. The
+    // zone runtime — both ZoneShaderItem and the daemon warm bake — only ever
+    // looks for a file literally named `zone.vert` (the pack's sibling, else the
+    // shared copy) and NEVER compiles a custom-named `vertexShader` declaration,
+    // unlike the animation and surface runtimes. Baking `info.vertexShaderPath`
+    // here would compile a stage the runtime never touches, so a pack with a
+    // broken custom vert would pass CI while its real (shared) vertex stage went
+    // unchecked. So resolve the sibling zone.vert, else the shared zone.vert.
+    QString vertPath = QFileInfo(info.sourcePath).absolutePath() + QStringLiteral("/zone.vert");
+    if (!QFile::exists(vertPath)) {
         vertPath = packsRoot + QStringLiteral("/shared/zone.vert");
     }
     if (QFile::exists(vertPath)) {
