@@ -680,11 +680,16 @@ void PlasmaZonesEffect::loadShaderRegistryFromDbus()
                                     }
                                     if (!paths.isEmpty()) {
                                         m_shaderManager.m_animationShaderRegistry.addSearchPaths(paths);
+                                        // paths.size() is the REQUESTED count, pre-dedupe:
+                                        // addSearchPaths silently drops already-registered
+                                        // paths, so the number actually registered may be
+                                        // lower. Logged inside the guard so an empty reply
+                                        // doesn't print a misleading "requested 0".
+                                        qCDebug(lcEffect)
+                                            << "loadShaderRegistryFromDbus: requested" << paths.size()
+                                            << "search paths (pre-dedupe) — registry effect count="
+                                            << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
                                     }
-                                    qCDebug(lcEffect)
-                                        << "loadShaderRegistryFromDbus: added" << paths.size()
-                                        << "search paths — registry effect count="
-                                        << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
                                 });
         });
 }

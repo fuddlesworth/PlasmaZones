@@ -260,12 +260,21 @@ ProfileLoader::~ProfileLoader()
 
 int ProfileLoader::loadFromDirectory(const QString& directory, LiveReload liveReload)
 {
+    // Same teardown guard as rescanNow(): a consumer slot reacting to the
+    // destructor's clearOwner emission must not be able to re-register entries
+    // through any load entry point either, not just the rescan pair.
+    if (m_destroying) {
+        return 0;
+    }
     return m_loader->loadFromDirectory(directory, liveReload);
 }
 
 int ProfileLoader::loadFromDirectories(const QStringList& directories, LiveReload liveReload,
                                        PhosphorFsLoader::RegistrationOrder order)
 {
+    if (m_destroying) {
+        return 0;
+    }
     return m_loader->loadFromDirectories(directories, liveReload, order);
 }
 
@@ -285,6 +294,9 @@ int ProfileLoader::loadLibraryBuiltins(LiveReload liveReload)
     // propagate the datadir), fall back to a no-op — the caller's
     // consumer-namespaced directories are still loaded via the
     // `loadFromDirectory[ies]` entry points.
+    if (m_destroying) {
+        return 0;
+    }
 #ifdef PHOSPHORANIMATION_INSTALL_DATADIR
     const QString dir = QStringLiteral(PHOSPHORANIMATION_INSTALL_DATADIR "/profiles");
     if (!QDir(dir).exists()) {
