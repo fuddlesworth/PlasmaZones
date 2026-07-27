@@ -176,7 +176,7 @@ SettingsFlickable {
                             // carry no duration today, so this renders the
                             // bare curve — but a future duration-bearing
                             // built-in cannot silently diverge.
-                            text: root._usableDuration(modelData.duration) > 0 ? i18nc("curve wire format, then the preset's duration", "%1 · %2 ms", modelData.curve, root._usableDuration(modelData.duration)) : modelData.curve
+                            text: root._usableDuration(modelData.duration) > 0 ? i18nc("curve, then duration in milliseconds", "%1 · %2 ms", modelData.curve, root._usableDuration(modelData.duration)) : modelData.curve
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
                         }
@@ -223,7 +223,7 @@ SettingsFlickable {
                             // Names the duration when the preset carries one:
                             // "Use as Default" writes it, so it has to be
                             // visible before the click.
-                            text: root._usableDuration(modelData.duration) > 0 ? i18nc("curve wire format, then the preset's duration", "%1 · %2 ms", modelData.curve || "", root._usableDuration(modelData.duration)) : (modelData.curve || "")
+                            text: root._usableDuration(modelData.duration) > 0 ? i18nc("curve, then duration in milliseconds", "%1 · %2 ms", modelData.curve || "", root._usableDuration(modelData.duration)) : (modelData.curve || "")
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
                         }

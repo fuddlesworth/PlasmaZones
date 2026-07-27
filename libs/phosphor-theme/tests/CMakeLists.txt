@@ -19,6 +19,7 @@ function(phosphortheme_add_test name)
     )
     add_test(NAME ${name} COMMAND ${name})
     phosphor_apply_test_isolation(${name})
+    set_property(TEST ${name} APPEND PROPERTY LABELS "phosphortheme")
     phosphor_append_test_environment(${name} "QT_QPA_PLATFORM=offscreen")
 endfunction()
 

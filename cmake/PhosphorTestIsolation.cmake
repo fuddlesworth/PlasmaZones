@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# One place to apply the two isolations every PlasmaZones test needs.
+# One place to apply the two isolations nearly every PlasmaZones test needs
+# (the shader_validate entries in src/CMakeLists.txt apply the XDG half by
+# hand because they share one command target; see the comment there).
 #
 # LGPL-2.1-or-later, matching `PhosphorLibTesting.cmake`: every consumer is an
 # `LGPL` library's own test tree, and CLAUDE.md's test-license split exists so a
@@ -39,7 +41,9 @@ find_program(_phosphor_dbus_run_session dbus-run-session)
 # that library, where there is no `cmake/` directory — so the `include()` errors
 # out before this path is consulted. A standalone build that wants the isolation
 # has to guard its own include.
-set(_phosphor_test_session_bus_conf "${CMAKE_CURRENT_LIST_DIR}/test-session-bus.conf")
+# CACHE INTERNAL so the global functions below read a well-defined value from
+# any directory scope, not whatever directory happened to include the module.
+set(_phosphor_test_session_bus_conf "${CMAKE_CURRENT_LIST_DIR}/test-session-bus.conf" CACHE INTERNAL "")
 
 # Apply the standard test isolation to an already-registered test.
 #
@@ -65,7 +69,8 @@ function(phosphor_apply_test_isolation _target)
             TEST_LAUNCHER
             "${_phosphor_dbus_run_session};--config-file=${_phosphor_test_session_bus_conf};--")
     elseif(NOT _phosphor_isolation_warned)
-        # Once per configure, not once per target.
+        # CACHE INTERNAL persists across configures, so this warns once per
+        # build tree ever (until the cache is cleared), not once per target.
         set(_phosphor_isolation_warned TRUE CACHE INTERNAL "")
         message(STATUS "PlasmaZones: dbus-run-session, CMake >= 3.29, or the test bus config is "
                        "unavailable — tests will use the ambient session bus")
@@ -91,33 +96,23 @@ function(phosphor_apply_test_isolation _target)
         "XDG_DATA_HOME=${_xdg}/data"
         "XDG_STATE_HOME=${_xdg}/state"
         "XDG_CACHE_HOME=${_xdg}/cache")
+
+    # A hung test wedging the whole ctest run is this module's founding
+    # premise, so give every isolated test a default timeout. An explicit
+    # TIMEOUT set before this call wins.
+    get_test_property(${_test_name} TIMEOUT _phosphor_existing_timeout)
+    if(NOT _phosphor_existing_timeout)
+        set_tests_properties(${_test_name} PROPERTIES TIMEOUT 120)
+    endif()
 endfunction()
 
-# Pin XDG_DATA_DIRS to the target's own sandbox, for tests that SCAN for packs.
-#
-#   phosphor_pin_xdg_data_dirs(<target> [<test-name>])
-#
-# Deliberately OPT-IN rather than part of the isolation above, because the two
-# groups of tests want opposite things. A pack-scanning test that leaves
-# XDG_DATA_DIRS ambient enumerates whatever is installed in the developer's real
-# /usr/share, so on a machine with PlasmaZones installed "are the BUNDLED packs
-# valid?" silently becomes "are the bundled packs plus everything installed
-# locally valid?" — a test that passes or fails depending on the host. But other
-# tests legitimately need the real system dirs (the icon-theme resolver walks
-# them, and drives the variable itself), so pinning it for everything would break
-# them.
-#
-# Call this for anything that enumerates packs, shaders, layouts or algorithms
-# from a search path. Leave it off otherwise.
-function(phosphor_pin_xdg_data_dirs _target)
-    set(_test_name "${_target}")
-    if(ARGC GREATER 1)
-        set(_test_name "${ARGV1}")
-    endif()
-    set(_xdg "${CMAKE_BINARY_DIR}/test-xdg/${_target}")
-    file(MAKE_DIRECTORY "${_xdg}/data")
-    set_property(TEST ${_test_name} APPEND PROPERTY ENVIRONMENT "XDG_DATA_DIRS=${_xdg}/data")
-endfunction()
+# (A phosphor_pin_xdg_data_dirs helper used to live here for tests that SCAN
+# for packs via XDG_DATA_DIRS. It never gained a caller — no current test
+# resolves packs through XDG_DATA_DIRS, and the one site that wanted the pin
+# (the shader_validate trio) shares a single command target the helper's
+# target-keyed sandbox cannot express — so it was deleted rather than kept as
+# dead API. Re-derive it keyed on an explicit sandbox name if a real caller
+# appears.)
 
 # Add per-test environment variables WITHOUT clobbering what
 # `phosphor_apply_test_isolation` set. Use this instead of

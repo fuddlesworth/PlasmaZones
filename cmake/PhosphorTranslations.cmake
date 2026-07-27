@@ -49,14 +49,23 @@ file(GLOB_RECURSE PLASMAZONES_I18N_QML CONFIGURE_DEPENDS
 # scripts/qml-i18n-stubs.py transcribes each call into a C++ stub that lupdate
 # does understand, and those stubs go to lupdate instead. See that script for
 # why -tr-function-alias cannot express the shape we need.
+#
+# KNOWN CAVEAT: the committed catalogs' <location> entries for QML strings
+# point into this gitignored stub tree, so on a fresh clone a translator has
+# no on-disk source context for them until update-ts regenerates the stubs.
+# The stub filenames mirror the real .qml paths (translations/.qml-stubs/
+# src/.../Foo.qml.cpp, same line numbers), so the mapping back to the real
+# source is mechanical.
 set(_qml_stub_dir "${CMAKE_SOURCE_DIR}/translations/.qml-stubs")
 
-set(_all_i18n_sources ${PLASMAZONES_I18N_SOURCES})
+# Collect all .ts files once (en template + per-language); the compile list
+# below filters the template back out.
+file(GLOB _all_ts_files CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
 
-# Collect per-language .ts files (plasmazones_de.ts, plasmazones_fr.ts, etc.)
+# Per-language .ts files (plasmazones_de.ts, plasmazones_fr.ts, etc.)
 # Flat layout: translations/plasmazones_<lang>.ts → plasmazones_<lang>.qm
-file(GLOB TRANSLATION_TS_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
-# Exclude the English source template from compilation (it has no translations)
+# The English source template is excluded from compilation (no translations).
+set(TRANSLATION_TS_FILES ${_all_ts_files})
 list(FILTER TRANSLATION_TS_FILES EXCLUDE REGEX "plasmazones_en\\.ts$")
 
 # --- update-ts target ---
@@ -64,9 +73,6 @@ list(FILTER TRANSLATION_TS_FILES EXCLUDE REGEX "plasmazones_en\\.ts$")
 # recognizes the C++ side natively. QML goes through the stub step first.
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Qt6LinguistTools_FOUND AND Python3_Interpreter_FOUND)
-    # All .ts files to update (en template + per-language)
-    file(GLOB _all_ts_files CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
-
     # The stub list is only known after the script runs, so lupdate is pointed
     # at the whole stub tree via the @list file the script writes.
     add_custom_target(update-ts
@@ -84,10 +90,19 @@ if(Qt6LinguistTools_FOUND AND Python3_Interpreter_FOUND)
         # committed catalogs already carry none, so this makes the target
         # reproduce the state the repo is actually kept in rather than relying
         # on whoever runs it remembering the flag.
+        #
+        # The trade-off is deliberate: if a scrape gap (see the incident notes
+        # in this file's history) makes lupdate miss a still-live string, this
+        # flag deletes its translations from all seven catalogs in the same
+        # run. That deletion is NOT data loss — the catalogs are committed, so
+        # `git diff` shows every dropped <message> before it is ever pushed,
+        # and the translations come back verbatim from git history once the
+        # scrape gap is fixed. Review the catalog diff after every update-ts
+        # run; a wave of deletions you did not expect IS the scrape-gap alarm.
         COMMAND Qt6::lupdate
             -no-obsolete
             -I ${CMAKE_SOURCE_DIR}/src
-            ${_all_i18n_sources}
+            ${PLASMAZONES_I18N_SOURCES}
             "@${_qml_stub_dir}/stubs.txt"
             -ts ${_all_ts_files}
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

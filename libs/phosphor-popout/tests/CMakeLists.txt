@@ -26,6 +26,7 @@ function(phosphorpopout_add_test name)
     )
     add_test(NAME ${name} COMMAND ${name})
     phosphor_apply_test_isolation(${name})
+    set_property(TEST ${name} APPEND PROPERTY LABELS "phosphorpopout")
     # offscreen QPA keeps the tests headless on CI; the test binaries
     # transitively link Qt Gui (via QScreen on PopoutRequest) and
     # construct a QCoreApplication via QTEST_MAIN.

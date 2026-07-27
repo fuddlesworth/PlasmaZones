@@ -41,11 +41,11 @@ import os
 import re
 import sys
 
-# Order matters: "cp" must precede "c" or the alternation stops at "c" and
-# never sees the trailing p; the literal prefix already consumed the n, so
-# the plural form is the bare "p" branch (a previous "np" spelling was
-# unreachable and silently dropped every i18np() call).
-CALL_RE = re.compile(r"\bi18n(cp|c|p)?\s*\(")
+# Suffixes after the literal "i18n": "cp" (i18ncp), "p" (i18np), "c" (i18nc).
+# NOT "np" — the leading n is already consumed by the "i18n" literal, so an
+# "np" alternative can never match and i18np calls silently vanish from the
+# catalogs.
+CALL_RE = re.compile(r"\bi18n(cp|p|c)?\s*\(")
 
 # A JS string literal, single or double quoted, with backslash escapes.
 STRING_RE = re.compile(r"""\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')\s*""")
@@ -186,7 +186,6 @@ def main():
 
         rel = os.path.relpath(path, args.source_root)
         out_path = os.path.join(args.out_dir, rel + ".cpp")
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
         # Pad so each tr() sits on its call's line, then wrap in a function so
         # the file is still valid C++ for lupdate's parser.

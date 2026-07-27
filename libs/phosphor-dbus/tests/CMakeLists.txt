@@ -21,6 +21,10 @@ target_link_libraries(test_phosphordbus_client
 
 add_test(NAME test_phosphordbus_client COMMAND test_phosphordbus_client)
 phosphor_apply_test_isolation(test_phosphordbus_client)
+set_property(TEST test_phosphordbus_client APPEND PROPERTY LABELS "phosphordbus")
+# No QT_QPA_PLATFORM=offscreen here, unlike most sibling lib tests:
+# QTEST_GUILESS_MAIN runs on a QCoreApplication, so no platform plugin is
+# ever loaded and headless runs need no help.
 
 add_executable(test_phosphordbus_objectmanager
     test_phosphordbus_objectmanager.cpp
@@ -35,3 +39,4 @@ target_link_libraries(test_phosphordbus_objectmanager
 
 add_test(NAME test_phosphordbus_objectmanager COMMAND test_phosphordbus_objectmanager)
 phosphor_apply_test_isolation(test_phosphordbus_objectmanager)
+set_property(TEST test_phosphordbus_objectmanager APPEND PROPERTY LABELS "phosphordbus")

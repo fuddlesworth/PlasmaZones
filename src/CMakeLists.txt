@@ -948,9 +948,9 @@ if(BUILD_TESTING)
     # The XDG half of the standard isolation, applied by hand — NOT a stray copy
     # that should have used the shared helper. These three tests have no target of
     # their own (they all invoke the one `plasmazones-shader-validate` command), and
-    # both `phosphor_apply_test_isolation` and `phosphor_pin_xdg_data_dirs` key
-    # their sandbox on a TARGET name, so neither applies here. Giving the module a
-    # sandbox key independent of the target name is the only way to fold this in.
+    # `phosphor_apply_test_isolation` keys its sandbox on a TARGET name, so it
+    # cannot apply here. Giving the module a sandbox key independent of the
+    # target name is the only way to fold this in.
     #
     # The validator's pack ENUMERATION never touches QStandardPaths — it walks
     # the explicit --overlay/--animation/--surface directory arguments and

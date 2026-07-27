@@ -20,4 +20,5 @@ target_link_libraries(test_patterns
 
 add_test(NAME test_patterns COMMAND test_patterns)
 phosphor_apply_test_isolation(test_patterns)
+set_property(TEST test_patterns APPEND PROPERTY LABELS "phosphorshellpatterns")
 phosphor_append_test_environment(test_patterns "QT_QPA_PLATFORM=offscreen")

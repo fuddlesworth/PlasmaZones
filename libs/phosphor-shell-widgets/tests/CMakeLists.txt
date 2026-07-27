@@ -41,7 +41,7 @@ add_test(
     COMMAND test_phosphor_shell_widgets -input ${CMAKE_CURRENT_SOURCE_DIR}
 )
 phosphor_apply_test_isolation(test_phosphor_shell_widgets)
-
+set_property(TEST test_phosphor_shell_widgets APPEND PROPERTY LABELS "phosphorshellwidgets")
 # Headless run: the QtQuickTest runner spins up a QQuickView, so it needs
 # a platform plugin. offscreen keeps it display-server-free on CI.
 phosphor_append_test_environment(test_phosphor_shell_widgets "QT_QPA_PLATFORM=offscreen")

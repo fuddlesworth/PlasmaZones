@@ -63,23 +63,27 @@ QString PhosphorLocalizedContext::i18nc(const QString& context, const QString& t
 
 QString PhosphorLocalizedContext::i18np(const QString& singular, const QString& plural, int n) const
 {
-    // The catalog keys every numerus message on the singular (that is what the
-    // stub extractor emits), so the singular is always the lookup key and n
-    // picks the numerusform. Passing the English plural for n != 1 would miss
-    // every entry. A miss returns the key unchanged; only then does the English
-    // plural come into play, since Qt cannot pick a form without a catalog.
-    QString result = QCoreApplication::translate("plasmazones", singular.toUtf8().constData(), nullptr, n);
-    // Miss detection must account for translate() substituting %n into the
-    // returned KEY when no catalog answers: the miss comes back as the
-    // singular with the number already applied, never verbatim.
-    QString missedKey = singular;
-    missedKey.replace(QLatin1String("%n"), QString::number(n));
-    if ((result == singular || result == missedKey) && n != 1) {
-        result = plural;
+    // The SINGULAR is always the catalog key: lupdate indexes the numerus
+    // message under it, and translate() with a numerus arg picks the right
+    // numerusform via the target language's plural rules. Pre-selecting the
+    // English form here made every n != 1 lookup miss the catalog entirely
+    // (the plural text is not a key), so the second numerusform was
+    // unreachable in every language.
+    // Probe WITHOUT the numerus arg first: translate() with a numerus arg
+    // substitutes %n into the source text even when no translator is
+    // installed, so the numerus result can never be compared against the
+    // source to detect a catalog miss.
+    const QByteArray key = singular.toUtf8();
+    const QString probe = QCoreApplication::translate("plasmazones", key.constData());
+    if (probe == singular) {
+        // Catalog miss (or untranslated entry): English form selection.
+        QString result = (n == 1) ? singular : plural;
+        result.replace(QLatin1String("%n"), QString::number(n));
+        return result;
     }
-    // translate() replaces %n when numerus arg is provided, but guard against
-    // cases where it doesn't (e.g. if the string was found in a .ts file
-    // without numerusform entries)
+    QString result = QCoreApplication::translate("plasmazones", key.constData(), nullptr, n);
+    // translate() replaces %n when a numerus arg is provided, but guard
+    // against a .ts entry without numerusform.
     if (result.contains(QLatin1String("%n"))) {
         result.replace(QLatin1String("%n"), QString::number(n));
     }
@@ -89,16 +93,16 @@ QString PhosphorLocalizedContext::i18np(const QString& singular, const QString& 
 QString PhosphorLocalizedContext::i18ncp(const QString& context, const QString& singular, const QString& plural,
                                          int n) const
 {
-    // Singular is the catalog key here too; see i18np above.
-    QString result =
-        QCoreApplication::translate("plasmazones", singular.toUtf8().constData(), context.toUtf8().constData(), n);
-    // Same miss detection as i18np: a catalog miss returns the singular with
-    // %n already substituted.
-    QString missedKey = singular;
-    missedKey.replace(QLatin1String("%n"), QString::number(n));
-    if ((result == singular || result == missedKey) && n != 1) {
-        result = plural;
+    // Same key + probe contract as i18np above.
+    const QByteArray key = singular.toUtf8();
+    const QByteArray ctx = context.toUtf8();
+    const QString probe = QCoreApplication::translate("plasmazones", key.constData(), ctx.constData());
+    if (probe == singular) {
+        QString result = (n == 1) ? singular : plural;
+        result.replace(QLatin1String("%n"), QString::number(n));
+        return result;
     }
+    QString result = QCoreApplication::translate("plasmazones", key.constData(), ctx.constData(), n);
     if (result.contains(QLatin1String("%n"))) {
         result.replace(QLatin1String("%n"), QString::number(n));
     }

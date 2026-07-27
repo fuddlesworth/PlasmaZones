@@ -20,3 +20,8 @@ target_link_libraries(test_phosphoraudio
 
 add_test(NAME test_phosphoraudio COMMAND test_phosphoraudio)
 phosphor_apply_test_isolation(test_phosphoraudio)
+set_property(TEST test_phosphoraudio APPEND PROPERTY LABELS "phosphoraudio")
+# No QT_QPA_PLATFORM=offscreen needed, unlike most sibling lib tests:
+# phosphor-audio is Qt6::Core-only, so QTEST_MAIN emits a QCoreApplication
+# and no platform plugin is ever loaded.
+
