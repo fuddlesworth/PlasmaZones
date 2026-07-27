@@ -23,6 +23,8 @@
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QStringList>
+
+#include <unistd.h> // geteuid — the sealed-root test is a no-op as root
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -564,6 +566,9 @@ void TestPluginLoader::unwritablePluginRootWarnsOnceAndStaysInert()
     // A plugin root whose parent refuses mkpath: the loader must warn once,
     // stay inert (no crash, nothing loaded), and stay QUIET on subsequent
     // rescans (the warn-once latch), while still retrying silently.
+    if (::geteuid() == 0) {
+        QSKIP("running as root — a read-only directory is still writable, so mkpath cannot be made to fail");
+    }
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString parent = QDir(tempDir.path()).absoluteFilePath(QStringLiteral("sealed"));

@@ -640,10 +640,12 @@ int Renderer::render(const RenderOptions& opts)
         // One deliberate divergence from the daemon: no schema validation
         // runs here (the registry scan gates packs on
         // shaderMetadataValidator().validate()), so the tool still previews
-        // a pack the daemon would skip for a schema error.
+        // a pack the daemon would skip for a schema error. validateSchema=false
+        // is what enforces that divergence — without it parsePackMetadata would
+        // apply the same gate and this preview would go dark on a schema error.
         QString metaError;
-        const auto info =
-            PhosphorShaders::ShaderRegistry::parsePackMetadata(QFileInfo(opts.metadataPath).absolutePath(), &metaError);
+        const auto info = PhosphorShaders::ShaderRegistry::parsePackMetadata(
+            QFileInfo(opts.metadataPath).absolutePath(), &metaError, /*validateSchema=*/false);
         if (!metaError.isEmpty()) {
             qCWarning(lcRenderer) << "param preamble unavailable for" << opts.metadata.id << ":" << metaError;
         }

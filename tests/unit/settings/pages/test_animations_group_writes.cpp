@@ -36,6 +36,8 @@
 #include <QScopeGuard>
 #include <QVariant>
 
+#include <unistd.h> // geteuid — the read-only-directory write-failure test is a no-op as root
+
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfileLoader.h>
@@ -157,6 +159,9 @@ private Q_SLOTS:
     /// case previously indistinguishable from a refusal.
     void aFailedClearReportsChangedCountNotARefusal()
     {
+        if (::geteuid() == 0) {
+            QSKIP("running as root — directory mode bits are ignored, so the clear write cannot be made to fail");
+        }
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         AnimationsPageController c;

@@ -224,7 +224,18 @@ public:
     /// shift the rest onto the wrong buffer). Image params are NOT part of this
     /// parse — they are resolved, and containment-checked, in
     /// `translateParamsToUniforms`.
-    static ShaderInfo parsePackMetadata(const QString& packDir, QString* error = nullptr);
+    /// Parse a pack's metadata.json into a ShaderInfo (id, paths, parameters
+    /// with auto-slot assignment).
+    ///
+    /// @param validateSchema when true (the default), the metadata is first run
+    /// through the shared shader-metadata JSON schema and REJECTED on any
+    /// violation — the same gate the daemon's live scan applies, so the offline
+    /// validator refuses exactly the packs the daemon refuses. The shader-render
+    /// preview tool passes false: it is a developer aid that tolerantly previews
+    /// whatever metadata it is handed (defaulting names, dropping out-of-range
+    /// slots) rather than gatekeeping, and its own parse defaults already mirror
+    /// the tolerant behaviour. Path-traversal confinement is applied either way.
+    static ShaderInfo parsePackMetadata(const QString& packDir, QString* error = nullptr, bool validateSchema = true);
 
     Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
     Q_INVOKABLE QStringList shaderPresetNames(const QString& shaderId) const;
