@@ -203,14 +203,31 @@ Item {
     Layout.fillWidth: true
     implicitHeight: cardBg.height
     implicitWidth: cardBg.width
+    // The current content item, held so a REPLACEMENT can detach the
+    // previous one — mirroring the _customHeader dance below. Without the
+    // detach, reassigning contentItem left the old item parented, painting,
+    // and in the a11y tree while implicitHeight measured only the new one.
+    property Item _currentContent: null
     // Reparent contentItem into our content area with top padding
     onContentItemChanged: {
+        if (_currentContent && _currentContent !== contentItem) {
+            // The caller created it, so unparent rather than destroy an item
+            // this card does not own.
+            _currentContent.parent = null;
+            _currentContent = null;
+        }
         if (contentItem) {
             contentItem.parent = contentColumn;
-            contentItem.y = Kirigami.Units.largeSpacing;
+            // Qt.binding like the width line, so a runtime Units/DPI change
+            // refreshes the inset instead of freezing the construction-time
+            // value.
+            contentItem.y = Qt.binding(function () {
+                return Kirigami.Units.largeSpacing;
+            });
             contentItem.width = Qt.binding(function () {
                 return contentColumn.width;
             });
+            _currentContent = contentItem;
         }
     }
     // The custom header currently reparented under headerLoader, so a
@@ -357,8 +374,11 @@ Item {
                         // rows (SettingsRow insets by largeSpacing) and the
                         // trailing chevron (also largeSpacing), so the header is
                         // uniformly inset rather than hugging the left while the
-                        // right controls sit further in.
-                        leftPadding: Kirigami.Units.largeSpacing
+                        // right controls sit further in. Mirrored for RTL:
+                        // RowLayout mirrors item order under LayoutMirroring
+                        // but leftPadding does not, so the inset must follow.
+                        leftPadding: LayoutMirroring.enabled ? 0 : Kirigami.Units.largeSpacing
+                        rightPadding: LayoutMirroring.enabled ? Kirigami.Units.largeSpacing : padding
                     }
 
                     // Per-monitor scope chip, title-adjacent. Kept clear of the
@@ -392,7 +412,10 @@ Item {
                     Label {
                         visible: root.headerTrailingText.length > 0
                         text: root.headerTrailingText
-                        opacity: 0.6
+                        // Theme colour, not an opacity fade: matches the
+                        // muted-text conversion applied across the animations
+                        // pages, and stays legible on tinted card backgrounds.
+                        color: Kirigami.Theme.disabledTextColor
                         font.italic: true
                         Layout.rightMargin: Kirigami.Units.largeSpacing
                         Layout.alignment: Qt.AlignVCenter

@@ -33,6 +33,13 @@ import org.plasmazones.common as PZCommon
 ColumnLayout {
     id: root
 
+    // Collapse outright when every child is hidden (shader-unsupported leaf
+    // with the timing editor closed) — an all-hidden ColumnLayout still
+    // occupies a spacing slot in the hosting card's column. Same guard the
+    // sibling AnimationEventCardBanners documents; the disjunction below is
+    // exactly what gates every child.
+    visible: root.showTimingSection || root.shaderLegSupported
+
     // ── Working state — full read-write surface ─────────────────────
     /// Easing or spring discriminator. `CurvePresets.timingModeEasing`
     /// or `CurvePresets.timingModeSpring`.

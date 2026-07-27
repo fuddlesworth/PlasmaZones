@@ -37,7 +37,10 @@ SettingsFlickable {
     readonly property var _easingUserPresets: filterUserPresets(false)
     // QVariantList from C++
     readonly property var _springUserPresets: filterUserPresets(true)
-    property bool _deletingPreset: false
+    /// Name of the preset whose delete is in flight, empty when none. A
+    /// string rather than a bool so only the affected row disables while
+    /// userPresetsChanged confirms the removal.
+    property string _deletingPresetName: ""
 
     function isSpringEntry(curveStr) {
         return typeof curveStr === "string" && curveStr.indexOf("spring:") === 0;
@@ -90,10 +93,38 @@ SettingsFlickable {
     Connections {
         function onUserPresetsChanged() {
             root.userPresetsList = settingsController.animationsPage.userPresets();
-            root._deletingPreset = false;
+            root._deletingPresetName = "";
         }
 
         target: settingsController.animationsPage
+    }
+
+    /// ONE page-level dialog for both preset lists, opened with the target
+    /// name captured on `presetName` (the convention LayoutsPage /
+    /// ShaderSetsPage / ProfilesPage use). The previous shape — a
+    /// PromptDialog INSIDE each Repeater delegate — meant any external write
+    /// to the profiles dir rebuilt the model and destroyed a delegate with
+    /// its popup still open (the Qt6 popup-teardown hazard), and its
+    /// onDiscarded read modelData off a delegate possibly mid-teardown.
+    Kirigami.PromptDialog {
+        id: deletePresetConfirm
+
+        property string presetName: ""
+
+        title: i18n("Delete preset?")
+        subtitle: i18n("\"%1\" will be permanently removed.", presetName)
+        standardButtons: Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
+        onDiscarded: {
+            // Block the row until userPresetsChanged confirms the removal.
+            // removeUserPreset returns false on rare disk failures (file
+            // race / permissions) and emits no signal in that case — without
+            // restoring the guard here the row would lock forever.
+            root._deletingPresetName = presetName;
+            if (!settingsController.animationsPage.removeUserPreset(presetName))
+                root._deletingPresetName = "";
+
+            deletePresetConfirm.close();
+        }
     }
 
     ColumnLayout {
@@ -139,14 +170,20 @@ SettingsFlickable {
                         }
 
                         Label {
-                            text: modelData.curve
+                            // Through _usableDuration like the user rows, so
+                            // the row-shows-what-the-write-does invariant the
+                            // predicate documents holds here too. quickPresets
+                            // carry no duration today, so this renders the
+                            // bare curve — but a future duration-bearing
+                            // built-in cannot silently diverge.
+                            text: root._usableDuration(modelData.duration) > 0 ? i18nc("curve wire format, then the preset's duration", "%1 · %2 ms", modelData.curve, root._usableDuration(modelData.duration)) : modelData.curve
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
                         }
 
                         Button {
                             Accessible.name: i18n("Use %1 as default", modelData.label)
-                            text: i18n("Use as Default")
+                            text: i18n("Use as default")
                             onClicked: root.applyAsDefault(modelData.curve, modelData.duration)
                         }
                     }
@@ -193,7 +230,7 @@ SettingsFlickable {
 
                         Button {
                             Accessible.name: i18n("Use %1 as default", modelData.name)
-                            text: i18n("Use as Default")
+                            text: i18n("Use as default")
                             onClicked: root.applyAsDefault(modelData.curve, modelData.duration)
                         }
 
@@ -203,28 +240,10 @@ SettingsFlickable {
                             display: AbstractButton.IconOnly
                             ToolTip.text: i18n("Delete preset")
                             ToolTip.visible: hovered
-                            enabled: !root._deletingPreset
-                            onClicked: easingDeleteConfirm.open()
-                        }
-
-                        Kirigami.PromptDialog {
-                            id: easingDeleteConfirm
-
-                            title: i18n("Delete preset?")
-                            subtitle: i18n("\"%1\" will be permanently removed.", modelData.name)
-                            standardButtons: Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
-                            onDiscarded: {
-                                // Block the button until userPresetsChanged
-                                // confirms the removal. removeUserPreset
-                                // returns false on rare disk failures (file
-                                // race / permissions) and emits no signal in
-                                // that case — without restoring the flag
-                                // here the button would lock forever.
-                                root._deletingPreset = true;
-                                if (!settingsController.animationsPage.removeUserPreset(modelData.name))
-                                    root._deletingPreset = false;
-
-                                easingDeleteConfirm.close();
+                            enabled: root._deletingPresetName !== modelData.name
+                            onClicked: {
+                                deletePresetConfirm.presetName = modelData.name;
+                                deletePresetConfirm.open();
                             }
                         }
                     }
@@ -289,7 +308,7 @@ SettingsFlickable {
 
                         Button {
                             Accessible.name: i18n("Use %1 as default", modelData.label)
-                            text: i18n("Use as Default")
+                            text: i18n("Use as default")
                             onClicked: root.applyAsDefault("spring:" + modelData.omega.toFixed(2) + "," + modelData.zeta.toFixed(2))
                         }
                     }
@@ -338,7 +357,7 @@ SettingsFlickable {
 
                         Button {
                             Accessible.name: i18n("Use %1 as default", modelData.name)
-                            text: i18n("Use as Default")
+                            text: i18n("Use as default")
                             // Curve only, like the built-in spring rows above.
                             // A spring settles on its own physics, so the row
                             // shows no duration — and must not write one a
@@ -352,24 +371,10 @@ SettingsFlickable {
                             display: AbstractButton.IconOnly
                             ToolTip.text: i18n("Delete preset")
                             ToolTip.visible: hovered
-                            enabled: !root._deletingPreset
-                            onClicked: springDeleteConfirm.open()
-                        }
-
-                        Kirigami.PromptDialog {
-                            id: springDeleteConfirm
-
-                            title: i18n("Delete preset?")
-                            subtitle: i18n("\"%1\" will be permanently removed.", modelData.name)
-                            standardButtons: Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
-                            onDiscarded: {
-                                // See easing-preset delete above for the
-                                // failure-restoration rationale.
-                                root._deletingPreset = true;
-                                if (!settingsController.animationsPage.removeUserPreset(modelData.name))
-                                    root._deletingPreset = false;
-
-                                springDeleteConfirm.close();
+                            enabled: root._deletingPresetName !== modelData.name
+                            onClicked: {
+                                deletePresetConfirm.presetName = modelData.name;
+                                deletePresetConfirm.open();
                             }
                         }
                     }

@@ -206,7 +206,15 @@ QtObject {
 
                 color: parent._isAccent ? parent._accentColor : parent._hex
                 Accessible.name: _param.label
-                onClicked: colorDialog.open()
+                onClicked: {
+                    // Seed imperatively at open (the ShaderParamsEditor
+                    // convention): ColorDialog writes selectedColor itself as
+                    // the user drags, and that JS-side write SEVERS a
+                    // declarative binding permanently — a Cancel then left
+                    // the next open on the rejected colour.
+                    colorDialog.selectedColor = swatch.color;
+                    colorDialog.open();
+                }
             }
 
             Label {
@@ -224,7 +232,6 @@ QtObject {
                 id: colorDialog
 
                 options: ColorDialog.ShowAlphaChannel
-                selectedColor: swatch.color
                 onAccepted: row.actionEdited(row._withParam(_param.key, row._toHexArgb(selectedColor)))
             }
         }
@@ -292,7 +299,9 @@ QtObject {
             model: _screens.map(function (s) {
                 var label = s.displayLabel || s.name || "";
                 if (s.isPrimary)
-                    label += " · " + i18n("Primary");
+                    // Composed inside one i18nc so translators control the
+                    // order and the separator survives RTL bidi runs.
+                    label = i18nc("monitor name, then the primary-monitor marker", "%1 · %2", label, i18n("Primary"));
                 return {
                     "label": label,
                     "name": s.name
@@ -635,8 +644,9 @@ QtObject {
     // ones incompatible with the action's target event render dimmed. Wire
     // value is the effect id.
     property Component _shaderEffectEditor: Component {
-        // Cascading category menu (same widget as the action-type picker above
-        // and the animations page's shader picker) instead of a flat combo, so
+        // Cascading category menu (the same widget ActionRow.qml uses for its
+        // action-type picker, and the animations page for its shader picker)
+        // instead of a flat combo, so
         // shaders group by category. The list is path-aware: it is pre-filtered
         // to the shaders that can drive this action's target event, so a
         // geometry-only shader (window-morph) is omitted on a show/hide event,
@@ -718,7 +728,8 @@ QtObject {
             compact: true
             // The shared editor owns the session-only lock map and hosts the
             // colour dialog; the rule only persists values. Locks reset on
-            // effect switch via the Loader (see the Connections handler above).
+            // effect switch via the hosting Loader in ActionRow.qml (its
+            // Connections handler lives there, not in this Component file).
             onValueChanged: function (effectId, paramId, value) {
                 // Clone the current param map and stamp the new value so the
                 // binding re-evaluates (mutating in place wouldn't trigger).
@@ -755,7 +766,6 @@ QtObject {
         PZCommon.ParameterEditor {
             id: algorithmParamEditor
 
-            Layout.fillWidth: true
             parameters: row._adaptedAlgorithmParamSchema
             currentValues: row._algorithmParamValues
             compact: true

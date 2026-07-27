@@ -49,6 +49,13 @@ Kirigami.Dialog {
     /// The editors below are gated on this too, so the dialog stays a stable
     /// modal over the state it opened on.
     property int _workingMode: CurvePresets.timingModeEasing
+    /// The duration snapshotted at open, for the same reason as _workingMode:
+    /// `duration` reaches this dialog through the same live host chain the
+    /// mode does (the card's _applyEffective reassigns currentDuration on
+    /// every refresh, including _reseedFromInherited at Global-slider drag
+    /// rate), so reading it live shifted the EasingPreview tempo mid-tuning
+    /// and changed the duration "Save as preset…" stamps.
+    property real _workingDuration: 0
     property bool _dirty: false
     property bool _savingPreset: false
 
@@ -79,6 +86,7 @@ Kirigami.Dialog {
         root._workingOmega = 0;
         root._workingZeta = 0;
         root._workingMode = root.timingMode;
+        root._workingDuration = root.duration;
         root._dirty = false;
     }
     onOpened: {
@@ -106,11 +114,13 @@ Kirigami.Dialog {
             visible: root._workingMode === CurvePresets.timingModeEasing
             Layout.fillWidth: true
             curve: root._workingCurve
-            // The edited event's duration, not the global one. Replaying the
-            // curve at a tempo the event never uses means the user tunes
-            // against the wrong feel, and it would disagree with the duration
-            // "Save as preset…" stamps a few lines below.
-            animationDuration: root.duration
+            // The edited event's duration AT OPEN, not the live host value.
+            // Replaying at a tempo the event never uses means the user tunes
+            // against the wrong feel, and it must agree with the duration
+            // "Save as preset…" stamps below — both go through the
+            // _workingDuration snapshot so an external refresh mid-session
+            // cannot shift either.
+            animationDuration: root._workingDuration
             previewEnabled: root.visible && root._workingMode === CurvePresets.timingModeEasing
             onCurveEdited: function (newCurve) {
                 root._workingCurve = newCurve;
@@ -402,7 +412,7 @@ Kirigami.Dialog {
                     var profile = {};
                     if (root._workingMode === CurvePresets.timingModeEasing) {
                         profile.curve = root._workingCurve;
-                        profile.duration = root.duration;
+                        profile.duration = root._workingDuration;
                     } else {
                         // No duration on a spring preset. A spring derives its
                         // own settle time from omega and zeta, so the editor
