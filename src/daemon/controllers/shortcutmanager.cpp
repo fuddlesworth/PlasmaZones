@@ -681,6 +681,24 @@ bool ShortcutManager::updateShortcuts()
     return true;
 }
 
+void ShortcutManager::setBackendForTesting(std::unique_ptr<PhosphorShortcuts::IBackend> backend)
+{
+    Q_ASSERT_X(m_entries.isEmpty(), "setBackendForTesting", "inject before registerShortcuts()");
+    if (!m_entries.isEmpty()) {
+        // Release-build pair for the assert. Resetting the registry while
+        // m_entries stays populated would break the "entries non-empty
+        // implies registry present" invariant updateShortcuts() relies on —
+        // the next settings save would deref a null m_registry in
+        // rebindAll(). Release the live registration first so the invariant
+        // survives the misuse.
+        qCWarning(lcShortcuts) << "setBackendForTesting() called after registerShortcuts() — releasing the live "
+                                  "registration before installing the injected backend";
+        unregisterShortcuts();
+    }
+    m_registry.reset();
+    m_backend = std::move(backend);
+}
+
 void ShortcutManager::unregisterShortcuts()
 {
     m_registrationInProgress = false;
@@ -692,11 +710,16 @@ void ShortcutManager::unregisterShortcuts()
     // teardown; replaying them on the next registerShortcuts() would
     // re-bind a stale grab.
     m_pendingAdhocOps.clear();
-    if (m_registry) {
-        for (const auto& e : std::as_const(m_entries)) {
-            m_registry->unbind(e.id);
-        }
-    }
+    // Deliberately NO Registry::unbind() sweep over m_entries: unbind routes
+    // to IBackend::unregisterShortcut, and on KGlobalAccel that purges the
+    // id's persistent kglobalshortcutsrc record — the store where the user's
+    // System Settings customisations live. This runs on the daemon stop()
+    // path (SIGTERM included), so the sweep deleted every customised binding
+    // on each service restart (discussion #851). Destroying the backend below
+    // releases the grabs without touching persistent records: KGlobalAccel
+    // drops its in-memory action table when the QActions die and the backend
+    // destructor purges only transient ids, while PortalBackend releases
+    // everything by closing the session.
     m_entries.clear();
 
     // Tear down the backend so any Portal session is closed and grabs are
