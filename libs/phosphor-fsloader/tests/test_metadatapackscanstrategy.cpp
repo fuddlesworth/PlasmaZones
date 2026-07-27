@@ -26,6 +26,8 @@
 #include <QTest>
 
 #include <memory>
+
+#include <sys/stat.h> // mkfifo, for the FIFO-skipped slot (Linux-only project)
 #include <optional>
 
 using namespace PhosphorFsLoader;
@@ -979,6 +981,53 @@ private Q_SLOTS:
 
         QCOMPARE(strategy.size(), 1);
         QVERIFY(strategy.contains(QStringLiteral("good")));
+    }
+
+    /// A FIFO named metadata.json is SKIPPED, not opened: the scanner's
+    /// isFile() gate exists because QFile::open(ReadOnly) on a FIFO blocks
+    /// until a writer appears — on the GUI thread, forever with no writer.
+    /// Reverting the gate to exists() makes this slot hang instead of fail,
+    /// which the ctest TIMEOUT converts into a failure. The subdirectory must
+    /// still land in the watch set so the FIFO being replaced by a real file
+    /// wakes a rescan.
+    void testFifoMetadataIsSkippedNotOpened()
+    {
+        const QString dir = m_tmp->filePath(QStringLiteral("d"));
+        QVERIFY(writeMetadata(dir + QStringLiteral("/good"), QStringLiteral("good"), 1));
+        const QString fifoDir = dir + QStringLiteral("/fifopack");
+        QVERIFY(QDir().mkpath(fifoDir));
+        const QByteArray fifoPath = QFile::encodeName(fifoDir + QStringLiteral("/metadata.json"));
+        QCOMPARE(::mkfifo(fifoPath.constData(), 0600), 0);
+
+        MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
+        CapturingAdapter adapter(strategy);
+        WatchedDirectorySet set(adapter);
+        set.registerDirectory(dir, LiveReload::Off);
+
+        QCOMPARE(strategy.size(), 1);
+        QVERIFY(strategy.contains(QStringLiteral("good")));
+        QVERIFY(!strategy.contains(QStringLiteral("fifopack")));
+        QVERIFY2(adapter.lastWatches.contains(QDir::cleanPath(fifoDir)),
+                 "the FIFO pack's subdirectory must be watched so a real metadata.json landing later wakes a rescan");
+    }
+
+    /// A payload whose parser sets an empty id is refused before it can claim
+    /// a map key: deleting the empty-id skip inserts an empty-string key into
+    /// the pack map and the content signature.
+    void testEmptyIdPayloadIsSkipped()
+    {
+        const QString dir = m_tmp->filePath(QStringLiteral("d"));
+        QVERIFY(writeMetadata(dir + QStringLiteral("/good"), QStringLiteral("good"), 1));
+        // A parseable pack whose metadata carries an empty id string.
+        QVERIFY(writeMetadata(dir + QStringLiteral("/anon"), QString(), 2));
+
+        MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
+        WatchedDirectorySet set(strategy);
+        set.registerDirectory(dir, LiveReload::Off);
+
+        QCOMPARE(strategy.size(), 1);
+        QVERIFY(strategy.contains(QStringLiteral("good")));
+        QVERIFY(!strategy.contains(QString()));
     }
 
 private:

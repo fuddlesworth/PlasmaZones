@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorFsLoader/FileLimits.h>
 #include <PhosphorFsLoader/IDirectoryLoaderSink.h>
 #include <PhosphorFsLoader/ParsedEntry.h>
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
@@ -153,11 +154,11 @@ public:
     /// deterministic order across platforms and Qt versions.
     QList<Entry> entries() const;
 
-    /// Per-file size cap. Files larger than this are skipped with a
-    /// warning — guards the GUI thread against a pathological user
-    /// JSON. 1 MiB is far above any legitimate curve / profile / layout
-    /// schema in this library's ecosystem.
-    static constexpr qint64 kMaxFileBytes = 1 * 1024 * 1024;
+    /// Per-file size cap — alias of the canonical
+    /// `PhosphorFsLoader::kMaxJsonFileBytes` (see FileLimits.h for the
+    /// rationale). Kept as a member name because callers spell it
+    /// `DirectoryLoader::kMaxFileBytes`.
+    static constexpr qint64 kMaxFileBytes = kMaxJsonFileBytes;
 
     /// Hard cap on files CONSIDERED per rescan (summed across every
     /// registered directory), not on the entries that survive to

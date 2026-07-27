@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSize>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -163,6 +164,87 @@ private Q_SLOTS:
         QVERIFY(info.bufferFilters.isEmpty());
         QVERIFY(!info.bufferFeedback);
         QVERIFY(!info.useDepthBuffer);
+    }
+
+    /// translateParamsToUniforms — first direct coverage of the zone
+    /// registry's translation: scalar and color lane mapping, the wrap
+    /// vocabulary guard, the both-or-neither sampler rule, and the svgSize
+    /// gating. Runs against a real scanned pack so the whole
+    /// parse → auto-slot → translate chain is exercised.
+    void testTranslateParamsToUniforms()
+    {
+        QJsonObject meta = baseMeta();
+        meta.insert(QLatin1String("id"), QStringLiteral("translate-pack"));
+        QJsonArray params;
+        params.append(param(QStringLiteral("speed"), QStringLiteral("float"))); // auto scalar 0
+        params.append(param(QStringLiteral("tint"), QStringLiteral("color"))); // auto color 0
+        QJsonObject img = param(QStringLiteral("tex"), QStringLiteral("image"));
+        img.insert(QLatin1String("default"), QStringLiteral("tex.png"));
+        img.insert(QLatin1String("wrap"), QStringLiteral("wibble")); // invalid token
+        params.append(img);
+        meta.insert(QLatin1String("parameters"), params);
+        const QString packDir = makePack(meta, QStringLiteral("translate"));
+        QFile tex(packDir + QStringLiteral("/tex.png"));
+        QVERIFY(tex.open(QIODevice::WriteOnly));
+        tex.write("png");
+        tex.close();
+
+        ShaderRegistry registry;
+        registry.addSearchPath(m_dir.path(), PhosphorFsLoader::LiveReload::Off);
+        QString shaderId;
+        const auto shaders = registry.availableShaders();
+        for (const auto& info : shaders) {
+            if (info.packDir == QDir(packDir).absolutePath())
+                shaderId = info.id;
+        }
+        QVERIFY2(!shaderId.isEmpty(), "the translate pack was not registered");
+
+        const QVariantMap stored{{QStringLiteral("speed"), 2.5}, {QStringLiteral("tint"), QStringLiteral("#ff0000")}};
+        const QVariantMap uniforms = registry.translateParamsToUniforms(shaderId, stored);
+
+        // Scalar slot 0 → customParams1_x; color slot 0 → customColor1.
+        QCOMPARE(uniforms.value(QStringLiteral("customParams1_x")).toDouble(), 2.5);
+        QCOMPARE(uniforms.value(QStringLiteral("customColor1")).toString().toLower(), QStringLiteral("#ffff0000"));
+
+        // Image default resolved to an absolute in-pack path, and the invalid
+        // wrap token is warned about and reset to clamp rather than forwarded.
+        const QString texKey = QStringLiteral("uTexture0");
+        QCOMPARE(uniforms.value(texKey).toString(), QDir::cleanPath(packDir + QStringLiteral("/tex.png")));
+        QCOMPARE(uniforms.value(texKey + QStringLiteral("_wrap")).toString(), QStringLiteral("clamp"));
+
+        // svgSize passes through only alongside a bound sampler.
+        const QVariantMap withSvg =
+            registry.translateParamsToUniforms(shaderId, QVariantMap{{QStringLiteral("tex_svgSize"), QSize(64, 64)}});
+        QVERIFY(withSvg.contains(texKey + QStringLiteral("_svgSize")));
+
+        // An UNBOUND sampler (empty user override suppresses the default)
+        // emits neither the wrap nor the svgSize key.
+        const QVariantMap unbound = registry.translateParamsToUniforms(
+            shaderId, QVariantMap{{QStringLiteral("tex"), QString()}, {QStringLiteral("tex_svgSize"), QSize(64, 64)}});
+        QVERIFY(unbound.value(texKey).toString().isEmpty());
+        QVERIFY(!unbound.contains(texKey + QStringLiteral("_wrap")));
+        QVERIFY(!unbound.contains(texKey + QStringLiteral("_svgSize")));
+    }
+
+    /// Portrait-output cover crop: on a physAspect < 1 output the crop math
+    /// must divide by the REAL aspect (the old clamp-at-1.0 silently rewrote
+    /// it), and two adjacent virtual screens must tile seam-free — VS-A's
+    /// right crop edge equals VS-B's left crop edge exactly.
+    void testWallpaperCropPortraitTilesSeamFree()
+    {
+        const QSize wp(1000, 1000);
+        const QRect phys(0, 0, 1080, 1920); // portrait
+        const QRect left(0, 0, 540, 1920);
+        const QRect right(540, 0, 540, 1920);
+
+        const QRect cropLeft = ShaderRegistry::computeWallpaperCropRect(wp, phys, left);
+        const QRect cropRight = ShaderRegistry::computeWallpaperCropRect(wp, phys, right);
+        QVERIFY(cropLeft.isValid());
+        QVERIFY(cropRight.isValid());
+        QCOMPARE(cropLeft.x() + cropLeft.width(), cropRight.x());
+        // Both crops sample the full wallpaper height scaled by the REAL
+        // portrait aspect: cover width is wp.height * physAspect < wp.width.
+        QVERIFY(cropLeft.width() < wp.width() / 2 + 1);
     }
 };
 

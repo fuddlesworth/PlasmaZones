@@ -706,6 +706,12 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             // `readAll()` below unbounded — the same TOCTOU that was closed in
             // `validateJsonEnvelope`, and this was the one remaining site that
             // still enforced the cap on the path rather than the descriptor.
+            //
+            // Deliberately untested: hitting this branch requires losing the
+            // stat/open race on purpose, and a test cannot schedule a
+            // same-process rewrite into that window deterministically. The
+            // pre-open cap two blocks up carries the observable coverage; this
+            // recheck is the race-closing twin and is kept correct by review.
             if (file.size() > DirectoryLoader::kMaxFileBytes) {
                 qCWarning(log) << "MetadataPackScanStrategy: skipping oversized metadata.json:" << metadataPath << "("
                                << file.size() << "bytes, cap" << DirectoryLoader::kMaxFileBytes << ")";

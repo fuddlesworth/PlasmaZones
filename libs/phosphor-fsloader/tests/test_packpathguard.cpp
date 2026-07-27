@@ -19,6 +19,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <memory>
+
 using PhosphorFsLoader::AbsolutePathPolicy;
 using PhosphorFsLoader::resolveWithinDirectory;
 
@@ -103,6 +105,20 @@ private Q_SLOTS:
                  qPrintable(*resolved));
     }
 
+    /// The other half of the Reject contract: an absolute path that resolves
+    /// INSIDE the directory survives — Reject means "still containment-
+    /// checked", not "refuse all absolutes" (see the AbsolutePathPolicy enum
+    /// doc). Pinned so neither an over-tightening "absolute = refuse" edit
+    /// nor a doc drift can land silently.
+    void acceptsAContainedAbsolutePathUnderReject()
+    {
+        const QString inside = m_pack->filePath(QStringLiteral("effect.frag"));
+        QVERIFY(touch(inside));
+        const auto resolved = resolveWithinDirectory(inside, m_pack->path(), AbsolutePathPolicy::Reject);
+        QVERIFY(resolved.has_value());
+        QCOMPARE(*resolved, QDir::cleanPath(inside));
+    }
+
     // ─── Refused ──────────────────────────────────────────────────────────
 
     void refusesAnAbsolutePathUnderReject()
@@ -164,30 +180,6 @@ private Q_SLOTS:
                      .has_value());
     }
 
-    /// THE ONE THAT FAILED OPEN. A symlinked directory out of the pack, with a
-    /// leaf that does not exist YET.
-    ///
-    /// `QFileInfo::canonicalFilePath()` returns empty for a missing leaf, so an
-    /// implementation that falls back to a purely lexical compare here accepts
-    /// the path — and this is the live-reload shape, so the accepted path is
-    /// stored, watched, and compiled when the file materialises OUTSIDE the pack.
-    /// Reducing the guard to lexical-only makes this slot, and only this slot,
-    /// fail.
-    void refusesASymlinkedDirectoryWithAMissingLeaf_data()
-    {
-        QTest::addColumn<QString>("declared");
-        // One missing component. The `cdUp()` walk handled this by luck: cd("..")
-        // from `pack/esc/future.frag` lands on `pack/esc`, which DOES exist.
-        QTest::newRow("missing leaf") << QStringLiteral("esc/future.frag");
-        // TWO missing components — the shape that actually failed OPEN. cd("..")
-        // from `pack/esc/sub/future.frag` targets `pack/esc/sub`, which does NOT
-        // exist, so `QDir::cd` returned false, the walk bailed out to a purely
-        // lexical path, and that lexical path was then compared against a
-        // CANONICAL root. Verified accepted-in-error before the fix.
-        QTest::newRow("missing intermediate") << QStringLiteral("esc/sub/future.frag");
-        QTest::newRow("deep missing intermediate") << QStringLiteral("esc/a/b/c/future.frag");
-    }
-
     /// A DANGLING symlink: it exists as a link, but its target does not.
     ///
     /// `canonicalFilePath()` returns empty for this exactly as it does for a
@@ -226,6 +218,30 @@ private Q_SLOTS:
             resolveWithinDirectory(QStringLiteral("loop/effect.frag"), m_pack->path(), AbsolutePathPolicy::Reject);
         QVERIFY2(resolved.has_value(), "a cycle resolves inside the directory, so containment holds");
         QVERIFY(resolved->startsWith(QDir::cleanPath(m_pack->path())));
+    }
+
+    /// THE ONE THAT FAILED OPEN. A symlinked directory out of the pack, with a
+    /// leaf that does not exist YET.
+    ///
+    /// `QFileInfo::canonicalFilePath()` returns empty for a missing leaf, so an
+    /// implementation that falls back to a purely lexical compare here accepts
+    /// the path — and this is the live-reload shape, so the accepted path is
+    /// stored, watched, and compiled when the file materialises OUTSIDE the pack.
+    /// Reducing the guard to lexical-only makes this slot, and only this slot,
+    /// fail.
+    void refusesASymlinkedDirectoryWithAMissingLeaf_data()
+    {
+        QTest::addColumn<QString>("declared");
+        // One missing component. The `cdUp()` walk handled this by luck: cd("..")
+        // from `pack/esc/future.frag` lands on `pack/esc`, which DOES exist.
+        QTest::newRow("missing leaf") << QStringLiteral("esc/future.frag");
+        // TWO missing components — the shape that actually failed OPEN. cd("..")
+        // from `pack/esc/sub/future.frag` targets `pack/esc/sub`, which does NOT
+        // exist, so `QDir::cd` returned false, the walk bailed out to a purely
+        // lexical path, and that lexical path was then compared against a
+        // CANONICAL root. Verified accepted-in-error before the fix.
+        QTest::newRow("missing intermediate") << QStringLiteral("esc/sub/future.frag");
+        QTest::newRow("deep missing intermediate") << QStringLiteral("esc/a/b/c/future.frag");
     }
 
     void refusesASymlinkedDirectoryWithAMissingLeaf()

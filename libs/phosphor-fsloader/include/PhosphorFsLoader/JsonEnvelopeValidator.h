@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/FileLimits.h>
 
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -76,7 +76,7 @@ struct JsonEnvelope
 inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath, const QLoggingCategory& category)
 {
     // Single source of truth for the JSON-envelope size cap is
-    // `DirectoryLoader::kMaxFileBytes`. The loader applies it first via
+    // `kMaxJsonFileBytes`. The loader applies it first via
     // the default sink dispatch path; this helper enforces it again
     // because `validateJsonEnvelope` is a public free function and may
     // be called directly (without a loader stat in front of it). One
@@ -95,9 +95,9 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
         qCWarning(category) << "Skipping non-regular file" << filePath;
         return std::nullopt;
     }
-    if (info.exists() && info.size() > DirectoryLoader::kMaxFileBytes) {
+    if (info.exists() && info.size() > kMaxJsonFileBytes) {
         qCWarning(category).nospace() << "Skipping " << filePath << ": file size " << info.size() << " exceeds limit "
-                                      << DirectoryLoader::kMaxFileBytes;
+                                      << kMaxJsonFileBytes;
         return std::nullopt;
     }
 
@@ -111,9 +111,9 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
     // open bypassed the cap entirely and `readAll()` below was unbounded — which
     // defeats the whole point of the guard. This check is on the descriptor, so
     // there is no window between the size and the read.
-    if (file.size() > DirectoryLoader::kMaxFileBytes) {
+    if (file.size() > kMaxJsonFileBytes) {
         qCWarning(category).nospace() << "Skipping " << filePath << ": file size " << file.size() << " exceeds limit "
-                                      << DirectoryLoader::kMaxFileBytes;
+                                      << kMaxJsonFileBytes;
         return std::nullopt;
     }
 
