@@ -295,9 +295,17 @@ void Daemon::updateEngineScreens()
                 // — those land in `overrides` directly and are untouched here.
                 const QString globalAlgo = m_autotileEngine->algorithmId();
                 if (screenAlgo != globalAlgo && !overrides.contains(PerScreenKeys::MaxWindows) && !contextUnlimited) {
-                    auto* screenAlgoPtr = m_algorithmRegistry->algorithm(screenAlgo);
-                    auto* globalAlgoPtr = m_algorithmRegistry->algorithm(globalAlgo);
-                    if (screenAlgoPtr) {
+                    // The user's saved per-algorithm tuning is more specific
+                    // than either the global maxWindows or the screen
+                    // algorithm's built-in default — mirror effectiveMaxWindows
+                    // step 3, which consults the saved slot first. Without
+                    // this, the injected built-in default sat at step 1 of
+                    // effectiveMaxWindows and pinned the cap over the user's
+                    // saved value for the screen's algorithm.
+                    if (const auto saved = m_autotileEngine->savedMaxWindowsForAlgorithm(screenAlgo)) {
+                        overrides[PerScreenKeys::MaxWindows] = *saved;
+                    } else if (auto* screenAlgoPtr = m_algorithmRegistry->algorithm(screenAlgo)) {
+                        auto* globalAlgoPtr = m_algorithmRegistry->algorithm(globalAlgo);
                         if (!globalAlgoPtr) {
                             qCDebug(lcDaemon) << "updateEngineScreens: global algorithm" << globalAlgo
                                               << "not found - injecting per-screen default MaxWindows";

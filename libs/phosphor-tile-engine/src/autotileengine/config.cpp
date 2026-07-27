@@ -431,6 +431,15 @@ int AutotileEngine::runtimeMaxWindows() const
     return m_config->maxWindows;
 }
 
+std::optional<int> AutotileEngine::savedMaxWindowsForAlgorithm(const QString& algorithmId) const
+{
+    const auto it = m_config->savedAlgorithmSettings.constFind(algorithmId);
+    if (it == m_config->savedAlgorithmSettings.constEnd()) {
+        return std::nullopt;
+    }
+    return it->maxWindows;
+}
+
 QString AutotileEngine::effectiveAlgorithmId(const QString& screenId) const
 {
     return m_configResolver->effectiveAlgorithmId(screenId);

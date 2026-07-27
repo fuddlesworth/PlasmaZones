@@ -699,6 +699,16 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
     //    explicitly customized global maxWindows away from the global algo's default.
     const QString screenAlgo = effectiveAlgorithmId(screenId);
     if (screenAlgo != m_engine->m_algorithmId) {
+        // The user's saved per-algorithm tuning is the most specific answer for
+        // a screen pinned to its own algorithm — more specific than either the
+        // global maxWindows (which belongs to the global algorithm) or the
+        // screen algorithm's built-in default. Without this, a screen whose
+        // layout algorithm differed from the global one was silently capped at
+        // the built-in default no matter what the user saved for it.
+        if (const auto saved = m_engine->savedMaxWindowsForAlgorithm(screenAlgo)) {
+            return qBound(PhosphorTiles::AutotileDefaults::MinMaxWindows, *saved,
+                          PhosphorTiles::AutotileDefaults::MaxMaxWindows);
+        }
         // Registry guarded locally (AutotileEngine's ctor asserts nothing). With
         // no registry both lookups yield null, so this falls to the warning below
         // and returns the global maxWindows — the same outcome as an unknown id.
