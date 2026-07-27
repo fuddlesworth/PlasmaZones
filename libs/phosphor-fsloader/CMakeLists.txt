@@ -138,6 +138,10 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     include(GNUInstallDirs)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    # The install(TARGETS) below names a RUNTIME destination too; without this
+    # a standalone (non-ECM) configure expands it empty. Matches the sibling
+    # fallbacks in phosphor-registry and phosphor-tiles.
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
 
 target_include_directories(PhosphorFsLoader

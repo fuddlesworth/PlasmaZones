@@ -119,9 +119,10 @@ public:
     /**
      * @brief Register a directory for scanning + (optionally) watching.
      *
-     * Idempotent on the directory path — adding the same directory
-     * twice is a no-op on the second call. Triggers an immediate
-     * synchronous rescan via the strategy.
+     * Idempotent on the registered SET, not on the work: adding the same
+     * directory twice leaves the set unchanged, but every call still runs
+     * an immediate synchronous rescan via the strategy (a full scan, a
+     * strategy commit, and a `rescanCompleted` emit).
      *
      * Single-path registration carries no priority direction (one entry
      * has nothing to be priority-ordered against), so no `RegistrationOrder`
@@ -158,8 +159,8 @@ public:
      * `[lowest-priority, ..., highest-priority]` shape before storing
      * — see `RegistrationOrder` for the two accepted input forms. The
      * stored list is what `directories()` returns and what the strategy
-     * sees on every rescan, so all four in-tree strategies can rely on
-     * the same iteration shape regardless of which form the caller used.
+     * sees on every rescan, so every in-tree strategy can rely on the
+     * same iteration shape regardless of which form the caller used.
      *
      * Same set-wide one-way `liveReload` semantics as `registerDirectory`.
      */
@@ -172,9 +173,12 @@ public:
      * Unlike `registerDirectories` (append-only), this is a full replacement:
      * directories present in the current set but not in @p directories are
      * dropped, their direct watches are removed, and any ancestor proxy
-     * watches they alone depended on are released. Directories present in
-     * both sets are preserved (no churn). Directories new to the set are
-     * appended in @p directories' order.
+     * watches they alone depended on are released. The resulting order is
+     * exactly the normalised @p directories order: surviving entries take
+     * their POSITION from the new list, not their old one — and position is
+     * priority for every strategy, so a caller replacing the set must pass
+     * the full list in the layering it wants, not rely on prior ordering
+     * being preserved.
      *
      * Use this when the underlying source-of-truth for the directory list
      * is dynamic (e.g. XDG paths that change as packages install /
@@ -203,7 +207,11 @@ public:
      * @brief Trigger a debounced rescan of every registered directory.
      *
      * Safe to call multiple times in rapid succession — the single-shot
-     * debounce timer collapses into one fire. Consumers wire this into
+     * debounce timer collapses into one fire. Note the defer is UNBOUNDED:
+     * each call restarts the timer, so a write storm delivering events
+     * faster than the debounce interval (a large `cp -r` into a watched
+     * tree) postpones the rescan until the storm ends rather than scanning
+     * periodically during it. Consumers wire this into
      * their own cross-process notification channels (D-Bus signal on
      * config rewrite, etc.) to cover `QFileSystemWatcher`'s known
      * atomic-rename blind spots.
@@ -309,6 +317,13 @@ private:
     /// Individual files currently in the watcher's file set. Re-armed
     /// every rescan from the strategy's returned path list.
     QSet<QString> m_watchedFiles;
+    /// Warn-once latch for per-file watch failures in `syncFileWatches`.
+    /// The causes (inotify quota exhaustion, permissions) are persistent and
+    /// hit many paths at once while rescans keep firing at the debounce
+    /// interval, so an unconditional warn floods the journal. An entry is
+    /// cleared when a later `addPath` for that path succeeds, so a
+    /// recovered-then-refailed path warns again.
+    QSet<QString> m_warnedFailedWatchPaths;
     QTimer m_debounceTimer;
     /// Reentry depth — incremented at the top of every `rescanAll`, decremented
     /// at the bottom. A bool would clobber on nested invocations (a slot wired

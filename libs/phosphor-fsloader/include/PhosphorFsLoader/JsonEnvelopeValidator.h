@@ -84,6 +84,17 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
     // with the alternative of letting a 2 GiB blob fall through to a
     // caller that didn't stat itself.
     QFileInfo info(filePath);
+    // `isFile()`, not `exists()`: `open(ReadOnly)` on a FIFO blocks until a
+    // writer appears — indefinitely, on the caller's thread — and neither size
+    // check helps (a FIFO reports size 0). The loader-driven callers are immune
+    // only incidentally (they enumerate with `QDir::Files`), but this is a
+    // public free function documented as callable without a stat in front of
+    // it, so it must enforce the regular-file precondition itself. This also
+    // subsumes the old `exists()` gate for the size check below.
+    if (info.exists() && !info.isFile()) {
+        qCWarning(category) << "Skipping non-regular file" << filePath;
+        return std::nullopt;
+    }
     if (info.exists() && info.size() > DirectoryLoader::kMaxFileBytes) {
         qCWarning(category).nospace() << "Skipping " << filePath << ": file size " << info.size() << " exceeds limit "
                                       << DirectoryLoader::kMaxFileBytes;

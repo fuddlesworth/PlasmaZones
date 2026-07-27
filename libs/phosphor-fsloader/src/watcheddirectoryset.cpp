@@ -268,7 +268,7 @@ int WatchedDirectorySet::setDirectories(const QStringList& directories, LiveRelo
     // pre-replacement m_directories so we don't drop watches for entries
     // that survive the replacement.
     QStringList removed;
-    for (const QString& existing : m_directories) {
+    for (const QString& existing : std::as_const(m_directories)) {
         if (!canonicalSet.contains(existing)) {
             removed.append(existing);
         }
@@ -284,7 +284,13 @@ int WatchedDirectorySet::setDirectories(const QStringList& directories, LiveRelo
         for (const QString& dir : std::as_const(removed)) {
             // Direct watch removal — silent no-op when the path wasn't
             // directly watched (ancestor-proxied or never-existed targets).
-            if (m_watcher->directories().contains(dir)) {
+            // A dropped directory can ALSO be serving as another target's
+            // climbed ancestor proxy (`m_watchedParents`); the kernel watch
+            // is shared between the two roles, so it must stay armed until
+            // `releaseAncestorWatchFor`'s refcount sweep drops the last
+            // dependent target — removing it here would strand the proxy
+            // bookkeeping and kill hot-reload for the surviving target.
+            if (m_watcher->directories().contains(dir) && !m_watchedParents.contains(dir)) {
                 m_watcher->removePath(dir);
             }
             // Ancestor back-reference cleanup. Same refcount-by-iteration
@@ -378,6 +384,8 @@ QStringList WatchedDirectorySet::filterNewSearchPaths(const QStringList& candida
 
 void WatchedDirectorySet::setDebounceIntervalForTest(int ms)
 {
+    Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::setDebounceIntervalForTest",
+               "GUI-thread only — see class docs");
     m_debounceTimer.setInterval(ms);
 }
 
@@ -429,7 +437,7 @@ void WatchedDirectorySet::rescanAll()
     // runs from the `LiveReload::On` branch in `registerDirectories`,
     // and the watcher is never torn down for the set's lifetime.
     if (m_watcher) {
-        for (const QString& dir : m_directories) {
+        for (const QString& dir : std::as_const(m_directories)) {
             attachWatcherForDir(dir);
         }
     }
@@ -519,6 +527,10 @@ void WatchedDirectorySet::syncFileWatches(const QStringList& desiredPaths)
     for (const QString& path : desired) {
         if (m_watcher->addPath(path)) {
             m_watchedFiles.insert(path);
+            // A previously-unwatchable path recovered (quota freed,
+            // permissions fixed); clear its warn-once latch so a LATER
+            // failure of the same path warns again.
+            m_warnedFailedWatchPaths.remove(path);
         } else if (!m_watchedFiles.contains(path)) {
             // addPath returned false AND we didn't already have it in
             // OUR file-watch set. Three cases:
@@ -549,9 +561,18 @@ void WatchedDirectorySet::syncFileWatches(const QStringList& desiredPaths)
                                    << "— transient, will re-arm on next rescan";
                 continue; // case 2 — transient miss
             }
-            qCWarning(lcWatcher) << "syncFileWatches: failed to add watch for" << path
-                                 << "— check permissions or filesystem-watcher quota (inotify on Linux, "
-                                    "kqueue/FSEvents on macOS, ReadDirectoryChangesW on Windows)";
+            // Warn ONCE per path: the causes named below (quota exhaustion,
+            // permissions) are persistent by nature and hit many paths at
+            // once, while rescans keep firing at the debounce interval — an
+            // unconditional warn floods the journal with N lines per tick
+            // for the lifetime of the condition. The success branch above
+            // clears the latch, so a recovered-then-refailed path re-warns.
+            if (!m_warnedFailedWatchPaths.contains(path)) {
+                m_warnedFailedWatchPaths.insert(path);
+                qCWarning(lcWatcher) << "syncFileWatches: failed to add watch for" << path
+                                     << "— check permissions or filesystem-watcher quota (inotify on Linux, "
+                                        "kqueue/FSEvents on macOS, ReadDirectoryChangesW on Windows)";
+            }
         }
     }
 }
@@ -608,7 +629,16 @@ void WatchedDirectorySet::attachWatcherForDir(const QString& directory)
         // caller passes a cleaned string today, which is exactly why the two
         // spellings cannot be seen to diverge.
         if (!m_watcher->directories().contains(targetKey)) {
-            m_watcher->addPath(targetKey);
+            if (!m_watcher->addPath(targetKey)) {
+                // Same failure surface as the per-file warn in
+                // `syncFileWatches`: without a directory watch, new files in
+                // this root are never discovered at all, which is strictly
+                // worse than a lost in-place-edit watch. Self-heals on the
+                // next rescan (this branch gates on the watcher's real
+                // state), so warn rather than latch.
+                qCWarning(lcWatcher) << "attachWatcherForDir: failed to add directory watch for" << targetKey
+                                     << "— check permissions or filesystem-watcher quota (inotify on Linux)";
+            }
         }
         // Promotion cleanup — release the ancestor watch we recorded
         // for this target on a previous (target-not-yet-existing) call.
@@ -691,18 +721,34 @@ void WatchedDirectorySet::attachWatcherForDir(const QString& directory)
                                << "— call requestRescan() after creating the directory tree.";
             return;
         }
-        if (!m_watchedParents.contains(ancestor)) {
-            if (!m_watcher->directories().contains(ancestor)) {
-                m_watcher->addPath(ancestor);
-            }
-            m_watchedParents.insert(ancestor);
+        // The climb can land on a DIFFERENT ancestor than a previous call
+        // recorded (the previously-recorded one was deleted, so this pass
+        // climbed further up). Release the stale back-reference first, or the
+        // overwrite below strands the old ancestor in `m_watchedParents`
+        // forever — a leaked watch that fires a full rescan for every
+        // unrelated event in that tree.
+        const auto prior = m_parentWatchFor.constFind(targetKey);
+        if (prior != m_parentWatchFor.constEnd() && prior.value() != ancestor) {
+            releaseAncestorWatchFor(targetKey);
         }
+        // Gate on the WATCHER's real state, not the `m_watchedParents`
+        // mirror: Qt silently drops a watch when the watched directory is
+        // deleted, and a mirror-gated skip would then never re-arm it after
+        // the directory reappears (the direct-watch branch above gates on
+        // real state for the same reason). Record the mirror entry only when
+        // the kernel watch is actually armed, so a transient `addPath`
+        // failure (inotify quota, EACCES) is retried by the next rescan
+        // instead of being latched as watched.
+        const bool armed = m_watcher->directories().contains(ancestor) || m_watcher->addPath(ancestor);
+        if (!armed) {
+            qCWarning(lcWatcher) << "attachWatcherForDir: failed to watch ancestor" << ancestor << "for target"
+                                 << directory << "— check permissions or filesystem-watcher quota (inotify on Linux)";
+            return;
+        }
+        m_watchedParents.insert(ancestor);
         // Record the per-target ancestor back-reference — the promotion
         // branch above uses this to find the ACTUALLY-watched ancestor
-        // (may be the grandparent or further up). Re-inserting is
-        // idempotent: the same target path is guaranteed to resolve to
-        // the same ancestor on repeated calls while the filesystem is
-        // steady.
+        // (may be the grandparent or further up).
         m_parentWatchFor.insert(targetKey, ancestor);
     }
 }
@@ -744,8 +790,16 @@ void WatchedDirectorySet::releaseAncestorWatchFor(const QString& targetKey)
             return; // still needed by another target
         }
     }
-    m_watcher->removePath(watchedAncestor);
+    // The ancestor may ALSO be a registered directory holding its own direct
+    // watch (register A and A/b where A/b does not exist yet: A is both
+    // directly watched and A/b's proxy). The kernel watch is shared between
+    // the two roles, so drop only the proxy bookkeeping here and leave the
+    // watch armed for the direct role — removing it would silence every
+    // event under A with nothing left to re-arm it.
     m_watchedParents.remove(watchedAncestor);
+    if (!m_directories.contains(watchedAncestor)) {
+        m_watcher->removePath(watchedAncestor);
+    }
 }
 
 void WatchedDirectorySet::onWatchedPathChanged()

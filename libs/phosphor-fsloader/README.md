@@ -86,7 +86,8 @@ class CurveLoaderSink : public IDirectoryLoaderSink {
 CurveLoaderSink sink{...};
 DirectoryLoader loader(sink);  // sink is borrowed for the loader's lifetime
 loader.loadFromDirectories({systemDir, userDir}, LiveReload::On);
-loader.requestRescan();
+// No requestRescan() needed: loadFromDirectories already ran a full
+// synchronous scan and dispatched commitBatch + entriesChanged.
 ```
 
 A metadata-pack registry (used by shader / animation-shader registries):
@@ -112,6 +113,7 @@ public:
 
     void addSearchPath(const QString& dir) { m_loader->addSearchPath(dir); }
     void setUserPath(const QString& dir) { m_loader->setUserPath(dir); }
+    void refresh() { m_loader->refresh(); }
     // … expose payload-typed lookups over m_registry
 
 Q_SIGNALS:
@@ -132,8 +134,10 @@ registry.refresh();
 - **Watcher is opt-in.** `LiveReload::On` installs a
   `QFileSystemWatcher` on every scanned directory (or its parent, if
   the target doesn't exist yet, so fresh installs that create the
-  user-data dir later still pick up edits without a restart). `LiveReload::Off`
-  disables it for tests.
+  user-data dir later still pick up edits without a restart). The enable is
+  a set-wide ONE-WAY latch: a later `LiveReload::Off` call never disarms an
+  already-armed set. A test that must not watch should never pass `On`, or
+  should destroy and rebuild the set.
 - **Path containment is one shared function.** Every pack parser that resolves a
   declared path routes through `resolveWithinDirectory`. There is exactly one
   correct way to write that check: `QDir::filePath` returns an absolute argument
@@ -157,6 +161,10 @@ registry.refresh();
 ## Dependencies
 
 - `QtCore`
+- valijson 1.1.3 (BSD-2-Clause) — vendored by default and compiled into the
+  library, with its licence text installed alongside the app licences so the
+  notice ships with any distribution. Opt out with
+  `-DPHOSPHORFSLOADER_USE_SYSTEM_VALIJSON=ON` to link a system copy instead.
 
 ## See also
 

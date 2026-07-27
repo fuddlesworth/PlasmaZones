@@ -5,6 +5,7 @@
 
 #include <PhosphorFsLoader/DirectoryLoader.h>
 #include <PhosphorFsLoader/IScanStrategy.h>
+#include <PhosphorFsLoader/phosphorfsloader_export.h>
 
 #include <QtCore/QByteArray>
 #include <QtCore/QCryptographicHash>
@@ -416,11 +417,13 @@ public:
      * rebuilt map; the next signature comparison reports the change
      * and `OnCommit` fires.
      *
-     * @return Per-rescan watch paths: every iterated subdir's
+     * @return Per-rescan watch paths: each accepted subdir's
      *         `metadata.json`, the SUBDIRECTORY itself for any subdir
      *         that has no `metadata.json` yet (the file cannot be
      *         watched before it exists, so the directory stands in for
-     *         it), plus everything `PerEntryWatchPaths` and
+     *         it — a subdir rejected by `PerSubdirSkip` is charged to
+     *         the cap but contributes no watch), plus everything
+     *         `PerEntryWatchPaths` and
      *         `PerDirectoryWatchPaths` returned. Lex-sorted and
      *         deduplicated (the same canonical form already used
      *         internally for the signature pass) so callers can rely
@@ -517,6 +520,13 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
     // Refusing the whole scan instead leaves the previously registered packs
     // in place and logs something an operator can grep for.
     if (!m_parser) {
+        // NOTE the second-order consequence of the empty return: the caller
+        // (`WatchedDirectorySet::rescanAll`) feeds it straight into
+        // `syncFileWatches`, which removes every per-file watch not in the
+        // returned list — so a parserless strategy not only keeps the
+        // previously registered packs frozen, it silently disarms live
+        // reload for them, permanently (there is no parser setter, so the
+        // condition never clears for the strategy's lifetime).
         qCWarning(m_loggingCat ? *m_loggingCat : detail::lcMetadataPackScan())
             << "MetadataPackScanStrategy: no parser configured, skipping scan";
         return {};
@@ -591,7 +601,13 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             !canonicalUserPath.isEmpty() && QFileInfo(searchPath).canonicalFilePath() == canonicalUserPath;
 
         // Per-search-path watch additions (top-level shared files —
-        // shader-pack registry watches `*.glsl` includes here).
+        // shader-pack registry watches `*.glsl` includes here). These sit
+        // OUTSIDE the entry cap: the cap charges per-subdir work, and a
+        // per-directory extractor returning an unbounded glob grows the
+        // watch list with nothing bounding it. Acceptable because the
+        // extractor is trusted first-party code (unlike the pack subdirs,
+        // which are user-writable data), but an extractor author adding a
+        // recursive glob here should know the cap does not cover it.
         if (m_perDirWatch) {
             desiredWatches.append(m_perDirWatch(searchPath));
         }
@@ -738,12 +754,16 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
 
             // Capture the metadata.json fingerprint BEFORE the move so
             // we can mix it into the per-rescan signature below. Any
-            // parser-consumed field's edit shifts the file's mtime
-            // (POSIX guarantees this on a content-change write — the
-            // editors used in our tests and the production save paths
-            // rely on it), so a single mtime+size mix-in covers every
-            // schema field without forcing per-field enumeration in
-            // SignatureContrib.
+            // parser-consumed field's edit shifts the file's mtime (POSIX
+            // guarantees the mtime is UPDATED on a content-change write;
+            // the value mixed here is truncated to milliseconds, so a
+            // same-size rewrite landing in the same millisecond as the
+            // prior stat is theoretically invisible — accepted, because
+            // the alternative is content-hashing every file on every
+            // rescan, and every production save path here goes through an
+            // atomic rename which also changes the inode), so a single
+            // mtime+size mix-in covers every schema field without forcing
+            // per-field enumeration in SignatureContrib.
             QString id = parsed->id;
             seenIds.insert(id);
             entries.push_back(

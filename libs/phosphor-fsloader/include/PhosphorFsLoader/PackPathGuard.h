@@ -14,8 +14,11 @@ namespace PhosphorFsLoader {
 
 /// What to do with a declared path that is already absolute.
 enum class AbsolutePathPolicy {
-    /// Refuse it. Correct for anything a PACK FILE declares: a pack ships its
-    /// own assets, so an absolute path can only be a mistake or an escape.
+    /// Do not trust it as-is: the path is still subject to the containment
+    /// check, so only an absolute path that resolves INSIDE @p directory
+    /// survives. Correct for anything a PACK FILE declares: a pack ships its
+    /// own assets, so an absolute path outside the pack can only be a mistake
+    /// or an escape.
     Reject,
     /// Accept it unchecked. Correct only for a RUNTIME override the user chose
     /// through a file picker or D-Bus, where an absolute path outside any pack
@@ -50,9 +53,11 @@ enum class AbsolutePathPolicy {
 /// their own diagnostics, and conflating "escaped" with "absent" would make
 /// both harder to debug.
 ///
-/// Returns the CLEANED resolved path, so two spellings of one file (`./x` and
-/// `sub//x`) cannot reach watch keys, content signatures or path-keyed caches as
-/// distinct strings.
+/// Returns the CLEANED resolved path, so two LEXICAL spellings of one file
+/// (`./x` and `sub//x`) cannot reach watch keys, content signatures or
+/// path-keyed caches as distinct strings. (A symlinked intermediate component
+/// inside the pack can still yield a second spelling; only the canonical
+/// target is validated, the lexical form is what is returned.)
 [[nodiscard]] inline std::optional<QString> resolveWithinDirectory(const QString& declaredPath,
                                                                    const QString& directory, AbsolutePathPolicy policy)
 {
@@ -115,9 +120,13 @@ enum class AbsolutePathPolicy {
             const QFileInfo info(current);
             // PRESENT but unresolvable is NOT the same as absent, and conflating
             // them is an escape of exactly the kind this climb was rewritten to
-            // close. `canonicalFilePath()` returns empty for a DANGLING or CYCLIC
-            // symlink just as it does for a missing component, so without this the
-            // climb would treat the link as "not there yet", prepend its name, and
+            // close. `canonicalFilePath()` returns empty for a DANGLING symlink
+            // just as it does for a missing component (a self-referential CYCLE
+            // is different: Qt canonicalises it to itself, so a contained cycle
+            // never reaches this branch and is accepted by the containment
+            // check — see acceptsASymlinkCycleBecauseItStaysContained in the
+            // tests). Without this the climb would treat a dangling link as
+            // "not there yet", prepend its name, and
             // re-append it LEXICALLY onto the canonical root — mixing the two
             // domains this function promises never to mix. A pack shipping
             // `link -> /outside` while `/outside` does not exist yet would then be
