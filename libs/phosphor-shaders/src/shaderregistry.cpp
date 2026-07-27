@@ -156,6 +156,16 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     // Fragment shader path (default: effect.frag).
     const QString fragShaderName = root.value(QLatin1String("fragmentShader")).toString(QStringLiteral("effect.frag"));
     info.sourcePath = resolveWithinPack(dir, fragShaderName);
+    // Set the URL here in the SHARED parser (not only on the live parseShader
+    // path), so parsePackMetadata's returned ShaderInfo is isValid() for a
+    // well-formed pack. Without it the offline info was always !isValid()
+    // (isValid requires a valid shaderUrl), which made the validator's
+    // parse-success assertion tautological and would silently reject every
+    // pack for any future caller that gated on isValid(). A missing frag is
+    // still rejected by parseShader's own QFile::exists check downstream.
+    if (!info.sourcePath.isEmpty()) {
+        info.shaderUrl = QUrl::fromLocalFile(info.sourcePath);
+    }
     // Vertex shader: explicit metadata declaration, per-shader zone.vert, or empty
     // (ZoneShaderItem falls back to the shared zone.vert from search paths at render time).
     const QString vertShaderName = root.value(QLatin1String("vertexShader")).toString();
@@ -288,6 +298,14 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
         info.bufferFilters.clear();
         info.bufferFeedback = false;
         info.useDepthBuffer = false;
+        // Also reset the scalar buffer fields, matching the surface parser's
+        // block this is ported from: a single-pass pack that set "bufferScale"
+        // / "bufferWrap" / "bufferFilter" would otherwise publish those through
+        // shaderInfoToVariantMap onto D-Bus/QML (and into the content
+        // signature) for a pipeline that never runs.
+        info.bufferScale = 1.0;
+        info.bufferWrap = QStringLiteral("clamp");
+        info.bufferFilter = QStringLiteral("linear");
     }
 
     // Parameters
@@ -504,8 +522,8 @@ std::optional<ShaderRegistry::ShaderInfo> parseShader(const QString& shaderDir, 
         return std::nullopt;
     }
 
-    // Construct the URL pointing at the fragment shader.
-    info.shaderUrl = QUrl::fromLocalFile(info.sourcePath);
+    // shaderUrl is now set inside parseShaderMetadata (shared with the offline
+    // parsePackMetadata path), so no assignment is needed here.
 
     // Optional preview image. Deliberately excluded from the watch set and
     // the content signature: the preview never feeds the GPU pipeline, so an
@@ -547,6 +565,22 @@ QStringList shaderEntryWatchPaths(const ShaderRegistry::ShaderInfo& info)
             continue;
         }
         paths.append(dir.filePath(f));
+    }
+    // The pack-root glob above is non-recursive, so a pack whose frag/vert/
+    // buffer sits in a SUBDIRECTORY (the very shape the packDir field exists to
+    // support) would not be watched and would silently miss live-reload.
+    // Append the resolved compiled paths explicitly — they are absolute and the
+    // loader dedups against the glob entries — mirroring the surface registry's
+    // effectWatchPaths.
+    const auto appendIfNew = [&paths](const QString& p) {
+        if (!p.isEmpty() && !paths.contains(p)) {
+            paths.append(p);
+        }
+    };
+    appendIfNew(info.sourcePath);
+    appendIfNew(info.vertexShaderPath);
+    for (const QString& buf : info.bufferShaderPaths) {
+        appendIfNew(buf);
     }
     return paths;
 }

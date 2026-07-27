@@ -430,9 +430,17 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
 {
     QStringList trimmed;
     for (int i = 0; i < qMin(paths.size(), kMaxBufferPasses); ++i) {
-        if (!paths.at(i).isEmpty()) {
-            trimmed.append(paths.at(i));
-        }
+        trimmed.append(paths.at(i));
+    }
+    // Drop only TRAILING empties (the common pad-to-kMaxBufferPasses case). An
+    // INTERIOR empty must keep its slot: m_bufferWraps / m_bufferFilters are
+    // indexed positionally against this list, so compacting an interior gap
+    // (the old behaviour) shifted every later buffer onto the wrong wrap and
+    // filter — the exact misalignment the metadata parsers keep every entry in
+    // place to prevent. An interior empty is a malformed pack whose bake then
+    // fails-close per slot, which is the right outcome.
+    while (!trimmed.isEmpty() && trimmed.constLast().isEmpty()) {
+        trimmed.removeLast();
     }
     if (m_bufferPaths == trimmed) {
         return;
