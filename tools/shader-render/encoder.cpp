@@ -3,6 +3,7 @@
 
 #include "encoder.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QProcess>

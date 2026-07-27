@@ -1084,7 +1084,8 @@ QString ShaderRegistry::paramPreamble(const ShaderInfo& info)
     return buildParamPreamble(params);
 }
 
-ShaderRegistry::ShaderInfo ShaderRegistry::parsePackMetadata(const QString& packDir, QString* error)
+ShaderRegistry::ShaderInfo ShaderRegistry::parsePackMetadata(const QString& packDir, QString* error,
+                                                             bool validateSchema)
 {
     const QString metaPath = QDir(packDir).filePath(QStringLiteral("metadata.json"));
     QFile file(metaPath);
@@ -1119,18 +1120,24 @@ ShaderRegistry::ShaderInfo ShaderRegistry::parsePackMetadata(const QString& pack
         return {};
     }
     // Same structural schema gate the live scan applies (parseShader), so the
-    // offline validator refuses exactly the packs the daemon refuses.
+    // offline validator refuses exactly the packs the daemon refuses. Skipped
+    // when validateSchema is false: the shader-render preview tool wants the
+    // tolerant parse below (default names, dropped out-of-range slots) rather
+    // than the daemon's gatekeeping. Path-traversal confinement below still runs.
     const QJsonObject rootObj = doc.object();
-    if (const auto errors = shaderMetadataValidator().validate(rootObj)) {
-        if (error) {
-            QStringList lines;
-            lines.reserve(errors->size());
-            for (const auto& e : *errors) {
-                lines.append((e.path.isEmpty() ? QStringLiteral("(root)") : e.path) + QStringLiteral(": ") + e.message);
+    if (validateSchema) {
+        if (const auto errors = shaderMetadataValidator().validate(rootObj)) {
+            if (error) {
+                QStringList lines;
+                lines.reserve(errors->size());
+                for (const auto& e : *errors) {
+                    lines.append((e.path.isEmpty() ? QStringLiteral("(root)") : e.path) + QStringLiteral(": ")
+                                 + e.message);
+                }
+                *error = QStringLiteral("metadata fails schema validation: %1").arg(lines.join(QStringLiteral("; ")));
             }
-            *error = QStringLiteral("metadata fails schema validation: %1").arg(lines.join(QStringLiteral("; ")));
+            return {};
         }
-        return {};
     }
     // parseShaderMetadata lives in this TU's anonymous namespace; it sets
     // sourcePath / vertexShaderPath / bufferShaderPaths from packDir and applies

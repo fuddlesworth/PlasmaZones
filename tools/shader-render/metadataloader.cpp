@@ -201,9 +201,13 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
     // copy of the registry's algorithm. parsePackMetadata re-reads
     // <dir>/metadata.json itself; that exact filename is the pack layout
     // contract the renderer's preamble path (renderer.cpp) already relies on.
+    // validateSchema=false: this is a preview tool, so tolerate metadata the
+    // daemon would reject (missing name, out-of-range slots) and still show what
+    // renders — the auto-slot lane numbering is what we are after here, not the
+    // schema gate the offline validator applies.
     QString parseError;
     const PhosphorShaders::ShaderRegistry::ShaderInfo packInfo =
-        PhosphorShaders::ShaderRegistry::parsePackMetadata(metadataDir, &parseError);
+        PhosphorShaders::ShaderRegistry::parsePackMetadata(metadataDir, &parseError, /*validateSchema=*/false);
     if (!parseError.isEmpty()) {
         qCWarning(lcMetadataLoader) << "parameter parse failed for" << metadataPath << ":" << parseError;
         return false;
