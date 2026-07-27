@@ -375,7 +375,7 @@ void ShaderEffect::setBufferFeedback(bool enable)
 
 void ShaderEffect::setBufferScale(qreal scale)
 {
-    const qreal clamped = qBound(0.125, scale, 1.0);
+    const qreal clamped = qBound(PhosphorShaders::kMinBufferScale, scale, PhosphorShaders::kMaxBufferScale);
     if (qFuzzyCompare(m_bufferScale, clamped)) {
         return;
     }

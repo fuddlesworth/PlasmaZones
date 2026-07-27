@@ -4,9 +4,44 @@
 #pragma once
 
 #include <QLatin1Char>
+#include <QLatin1String>
 #include <QString>
 
 namespace PhosphorShaders {
+
+/// Lower / upper bounds on a multipass `bufferScale` (FBO downscale
+/// factor). 0.125 means a 1/8 downscale on each axis (1/64 area — the
+/// lowest cost-floor that still gives Shadertoy-style buffer effects
+/// something to work with); 1.0 means full-resolution FBOs. Canonical
+/// home for every clamp site (overlay metadata parse, surface
+/// `SurfaceShaderEffect::kMin/MaxBufferScale` forwarders, and the two
+/// rendering setters), so the bounds cannot drift per-runtime.
+inline constexpr double kMinBufferScale = 0.125;
+inline constexpr double kMaxBufferScale = 1.0;
+
+/// The accepted texture / buffer `wrap` vocabulary, shared by every
+/// validation site across the shader registries (overlay image-param
+/// parse, surface metadata parse, per-slot texture parse, and runtime
+/// override translation). Returns true only for the three canonical
+/// tokens `clamp` / `repeat` / `mirror`. An empty string is NOT a member —
+/// callers treat empty as "use the runtime default" and handle it
+/// explicitly before consulting this predicate. Lives here (the lowest
+/// shader library) so overlay and surface validation cannot drift apart;
+/// `PhosphorSurfaceShaders::isValidWrapToken` forwards to this. Vocabulary
+/// matches the runtime normaliser (`ShaderNodeRhi::normalizeWrapMode`).
+inline bool isValidWrapToken(const QString& wrap)
+{
+    return wrap == QLatin1String("clamp") || wrap == QLatin1String("repeat") || wrap == QLatin1String("mirror");
+}
+
+/// The accepted buffer `filter` vocabulary: `linear` / `nearest` /
+/// `mipmap`. Same membership and empty-string contract as
+/// `isValidWrapToken`; `PhosphorSurfaceShaders::isValidFilterToken`
+/// forwards to this.
+inline bool isValidFilterToken(const QString& filter)
+{
+    return filter == QLatin1String("linear") || filter == QLatin1String("nearest") || filter == QLatin1String("mipmap");
+}
 
 /// Canonical key format for the `customParams[N].<x|y|z|w>` sub-slots in
 /// `BaseUniforms`. Used as the cross-runtime serialisation of per-effect

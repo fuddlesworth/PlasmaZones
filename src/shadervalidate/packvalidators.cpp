@@ -15,6 +15,7 @@
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorShaders/ShaderRegistry.h>
@@ -29,6 +30,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QRegularExpression>
 #include <QString>
 #include <QStringList>
@@ -117,6 +119,19 @@ int validatePack(const QString& packDir, QTextStream& out)
         } else {
             claimedLane.insert(laneKey, p.id);
         }
+        // Mirror the pool budgets the runtime binds against: a slot past its
+        // pool's ceiling gets no p_ define and no upload, so the shader
+        // compiles against an undefined identifier.
+        const int budget = p.type == QLatin1String("color") ? PhosphorShaders::CustomColors::kColorCount
+            : p.type == QLatin1String("image")              ? PhosphorShaders::kMaxImageSlots
+                                                            : PhosphorShaders::CustomParams::kFlatSlotCount;
+        if (p.slot >= budget) {
+            lints << QStringLiteral("slot %1 past the %2-pool budget of %3 for '%4' (will not bind)")
+                         .arg(p.slot)
+                         .arg(poolName(p.type))
+                         .arg(budget)
+                         .arg(p.id);
+        }
     }
     // Buffer-pass + bufferScale lints check the RAW metadata, not the parsed
     // ShaderInfo: parseShaderMetadata clamps bufferScale into [0.125, 1.0] and
@@ -175,10 +190,26 @@ int validatePack(const QString& packDir, QTextStream& out)
     {
         QFile rawMeta(QDir(packDir).filePath(QStringLiteral("metadata.json")));
         if (rawMeta.open(QIODevice::ReadOnly)) {
-            const QString declaredVert =
-                QJsonDocument::fromJson(rawMeta.readAll()).object().value(QLatin1String("vertexShader")).toString();
+            const QJsonObject rawRoot = QJsonDocument::fromJson(rawMeta.readAll()).object();
+            const QString declaredVert = rawRoot.value(QLatin1String("vertexShader")).toString();
             if (!declaredVert.isEmpty() && !QFile::exists(QDir(packDir).filePath(declaredVert))) {
                 lints << QStringLiteral("vertex shader missing: %1").arg(declaredVert);
+            }
+            // Duplicate ids must be linted from the RAW array: the parser
+            // dedupes (first declaration wins), so the parsed struct can
+            // never show the author their repeated id.
+            QSet<QString> rawIds;
+            const QJsonArray rawParams = rawRoot.value(QLatin1String("parameters")).toArray();
+            for (const QJsonValue& v : rawParams) {
+                const QString rawId = v.toObject().value(QLatin1String("id")).toString();
+                if (rawId.isEmpty()) {
+                    continue;
+                }
+                if (rawIds.contains(rawId)) {
+                    lints << QStringLiteral("duplicate parameter id '%1' (first declaration wins at load)").arg(rawId);
+                } else {
+                    rawIds.insert(rawId);
+                }
             }
         }
     }
@@ -205,9 +236,11 @@ int validatePack(const QString& packDir, QTextStream& out)
         errors += compileStage(out, QFileInfo(info.sourcePath).fileName(), info.sourcePath, QShader::FragmentStage,
                                includePaths, /*useScaffold=*/true, preamble, info);
     }
-    // Only multipass packs bake buffer passes — parseShaderMetadata seeds a
-    // default buffer.frag path for every pack, but the runtime (bakeBufferShaders)
-    // ignores it unless isMultipass, so the validator must gate identically.
+    // Only multipass packs bake buffer passes — parseShaderMetadata clears
+    // buffer state for single-pass packs and only keeps an implicit
+    // buffer.frag that exists on disk, and the runtime (bakeBufferShaders)
+    // ignores buffer paths unless isMultipass, so the validator gates
+    // identically.
     if (info.isMultipass) {
         for (const QString& buf : info.bufferShaderPaths) {
             if (QFile::exists(buf)) {

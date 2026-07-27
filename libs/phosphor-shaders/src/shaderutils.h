@@ -9,7 +9,11 @@ namespace PhosphorShaders {
 
 inline QString normalizeWrapMode(const QString& wrap)
 {
-    return (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+    if (wrap == QLatin1String("repeat"))
+        return QStringLiteral("repeat");
+    if (wrap == QLatin1String("mirror"))
+        return QStringLiteral("mirror");
+    return QStringLiteral("clamp");
 }
 
 inline QString normalizeFilterMode(const QString& filter)

@@ -4,6 +4,7 @@
 #include "internal.h"
 
 #include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QFile>
@@ -507,7 +508,7 @@ void ShaderNodeRhi::setBufferFeedback(bool enable)
 
 void ShaderNodeRhi::setBufferScale(qreal scale)
 {
-    const qreal clamped = qBound(0.125, scale, 1.0);
+    const qreal clamped = qBound(PhosphorShaders::kMinBufferScale, scale, PhosphorShaders::kMaxBufferScale);
     if (qFuzzyCompare(m_bufferScale, clamped)) {
         return;
     }

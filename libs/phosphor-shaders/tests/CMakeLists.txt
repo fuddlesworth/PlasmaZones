@@ -16,6 +16,7 @@ function(phosphorshaders_add_test name)
     )
     add_test(NAME ${name} COMMAND ${name})
     phosphor_apply_test_isolation(${name})
+    set_property(TEST ${name} APPEND PROPERTY LABELS "phosphorshaders")
     # Qt requires an offscreen platform plugin when tests run under CI
     # without a display server.
     # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace the XDG
@@ -24,3 +25,4 @@ function(phosphorshaders_add_test name)
 endfunction()
 
 phosphorshaders_add_test(test_baseuniformprofile)
+phosphorshaders_add_test(test_shaderregistry)

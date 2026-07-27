@@ -30,7 +30,7 @@ Phosphor overlay (hosts `ShaderEffect` items in QML).
 |------|---------|
 | `PhosphorShaders::BaseUniforms`           | std140 base UBO layout. Shadertoy-compatible block + two `appField` ints for cheap consumer-defined state |
 | `PhosphorShaders::IUniformExtension`      | Contract for appending custom uniform data after `BaseUniforms`, where `extensionSize()` is fixed for the lifetime of the instance |
-| `PhosphorShaders::CustomParamsKey`        | Canonical key format (`customParams<N>_<x|y|z|w>`) for the per-effect parameter sub-slots in `BaseUniforms` |
+| `PhosphorShaders::CustomParams` / `CustomColors` | Canonical key formats (`customParams<N>_<x|y|z|w>`, `customColor<N>`) for the per-effect parameter sub-slots in `BaseUniforms` (namespaces in `CustomParamsKey.h`) |
 | `PhosphorShaders::ShaderRegistry`         | Discovers shader effects from search paths via metadata-pack scanning. Per-process instance, no singleton |
 | `PhosphorShaders::ShaderRegistry::ParameterInfo` | Parameter declaration: name, type, default, range, UBO uniform name |
 | `PhosphorShaders::ShaderIncludeResolver`  | `#include "path"` / `#include <path>` expansion with depth limit |
@@ -93,9 +93,9 @@ private:
   (vec4), and removing them would break the layout. Repurpose them for
   small (≤2 ints) frequently-updated state that needs to live inside
   `BaseUniforms` rather than the extension region.
-- **GUI-thread only for reads and mutations.** The shader map lives
-  inside the strategy and is rebuilt on the GUI thread inside the
-  rescan. The public lookup methods (`availableShaders`, `shader`,
+- **GUI-thread only for reads and mutations.** The shader map is a
+  `Registry<ShaderPack>` inside `ShaderRegistry`, rebuilt on the GUI
+  thread inside the rescan. The public lookup methods (`availableShaders`, `shader`,
   `shaderInfo`, `shaderUrl`) read it without synchronisation.
   `searchPaths()` returns a by-value snapshot suitable for handing to
   worker threads (the shader-warming path).
@@ -106,7 +106,7 @@ private:
 ## Dependencies
 
 - `QtCore`, `QtGui`
-- [`phosphor-fsloader`](../phosphor-fsloader/README.md) — `MetadataPackScanStrategy`
+- [`phosphor-fsloader`](../phosphor-fsloader/README.md) — schema validation + path guards, reached via `phosphor-registry`'s `MetadataPackLoader`
 - [`phosphor-registry`](../phosphor-registry/README.md) — `Registry<T>` + `MetadataPackLoader<T>`, both reached through `ShaderRegistry`'s public headers, so this is a PUBLIC dependency
 
 ## See also

@@ -45,75 +45,101 @@ int ShaderRegistry::s_cachedWallpaperCropNextSlot = 0;
 
 QString ShaderRegistry::wallpaperPath()
 {
-    QMutexLocker lock(&s_wallpaperCacheMutex);
-
-    if (!s_cachedWallpaperPath.isEmpty() && QFile::exists(s_cachedWallpaperPath)) {
-        return s_cachedWallpaperPath;
-    }
-
-    // A NEGATIVE answer is cached too, but only for a bounded window — never
-    // latched for the process lifetime.
+    // BOTH answers are cached for a bounded window only — never latched for
+    // the process lifetime.
     //
-    // Why cache it at all: without this, an empty result (unsupported desktop, a
-    // Plasma slideshow containment with no Image= key, swww not running) never
-    // engages the fast path above, so every caller re-queries the provider — and
-    // the Hyprland/sway provider spawns a QProcess and blocks in
-    // waitForFinished(1000) while holding this mutex, once per overlay show and
-    // once per shader attach.
+    // Why cache at all: without this every caller re-queries the provider —
+    // and the Hyprland/sway provider spawns a QProcess and blocks in
+    // waitForFinished(1000), once per overlay show and once per shader attach.
     //
-    // Why it must EXPIRE rather than latch: `invalidateWallpaperCache()` has no
-    // callers, so there is no event that would clear it. A permanent latch means a
-    // resolve that happens before plasmashell has written its config (or before
-    // swww is up) leaves every wallpaper-using shader on the transparent fallback
-    // for the whole session with no recovery — and before this negative cache
-    // existed, that case self-healed because an empty path always re-queried.
-    // Expiry keeps the blocking call bounded (at most one per interval) while
-    // preserving recovery. Note this branch is reached for a non-empty path whose
-    // file has since disappeared as well, so a dead path re-queries too rather
-    // than being served forever.
+    // Why it must EXPIRE rather than latch: `invalidateWallpaperCache()` has
+    // no callers, so there is no event that would clear it. A permanent
+    // NEGATIVE latch (resolve before plasmashell has written its config, or
+    // before swww is up) leaves every wallpaper-using shader on the
+    // transparent fallback for the whole session; a permanent POSITIVE latch
+    // means switching wallpaper to a different file is never picked up while
+    // the old file still exists on disk. Expiry keeps the blocking call
+    // bounded (at most one per interval) while preserving recovery in both
+    // directions. A non-empty path whose file has disappeared re-queries
+    // immediately rather than waiting out its window.
+    constexpr qint64 kPositiveCacheMs = 5000;
     constexpr qint64 kNegativeCacheMs = 2000;
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (s_wallpaperPathResolved && now - s_wallpaperPathResolvedAtMs < kNegativeCacheMs) {
-        return s_cachedWallpaperPath;
+    {
+        QMutexLocker lock(&s_wallpaperCacheMutex);
+        if (s_wallpaperPathResolved) {
+            // A live path gets the longer window; an empty or dead one the
+            // shorter — but a dead path is still served inside its window so
+            // a deleted wallpaper cannot drive one provider query per call.
+            const qint64 age = now - s_wallpaperPathResolvedAtMs;
+            const bool alive = !s_cachedWallpaperPath.isEmpty() && QFile::exists(s_cachedWallpaperPath);
+            if (age < (alive ? kPositiveCacheMs : kNegativeCacheMs)) {
+                return s_cachedWallpaperPath;
+            }
+        }
     }
 
-    if (!s_wallpaperProvider) {
-        s_wallpaperProvider = createWallpaperProvider();
+    // Query the provider OUTSIDE the lock — it may block up to a second in a
+    // QProcess wait, and holding the mutex through that stalls every
+    // concurrent wallpaper consumer. The provider handle itself is only
+    // created here and reset in invalidateWallpaperCache() (which has no
+    // callers); a hypothetical concurrent reset is documented there.
+    std::unique_ptr<IWallpaperProvider> freshProvider;
+    IWallpaperProvider* provider = nullptr;
+    {
+        QMutexLocker lock(&s_wallpaperCacheMutex);
+        provider = s_wallpaperProvider.get();
     }
+    if (!provider) {
+        freshProvider = createWallpaperProvider();
+        provider = freshProvider.get();
+    }
+    const QString resolved = provider->wallpaperPath();
 
-    s_cachedWallpaperPath = s_wallpaperProvider->wallpaperPath();
+    QMutexLocker lock(&s_wallpaperCacheMutex);
+    if (freshProvider && !s_wallpaperProvider) {
+        s_wallpaperProvider = std::move(freshProvider);
+    }
+    s_cachedWallpaperPath = resolved;
     s_wallpaperPathResolved = true;
-    s_wallpaperPathResolvedAtMs = now;
+    s_wallpaperPathResolvedAtMs = QDateTime::currentMSecsSinceEpoch();
     return s_cachedWallpaperPath;
 }
 
 QImage ShaderRegistry::loadWallpaperImage()
 {
-    QMutexLocker lock(&s_wallpaperCacheMutex);
-
-    // Inline path resolution (avoid calling wallpaperPath which also locks)
-    QString path = s_cachedWallpaperPath;
-    if (path.isEmpty() || !QFile::exists(path)) {
-        lock.unlock();
-        wallpaperPath(); // populates s_cachedWallpaperPath (acquires lock internally)
-        lock.relock();
-        path = s_cachedWallpaperPath; // re-read after relock — local copy may be stale
-    }
+    const QString path = wallpaperPath(); // resolves (bounded-TTL cached) under its own locking
     if (path.isEmpty()) {
         return {};
     }
-    // Check if cached image is still valid (same path + same mtime)
     const QFileInfo fi(path);
     const qint64 mtime = fi.lastModified().toMSecsSinceEpoch();
-    if (!s_cachedWallpaperImage.isNull() && s_cachedWallpaperMtime == mtime) {
-        return s_cachedWallpaperImage;
+
+    // Cache check under the lock; the decode itself runs WITHOUT the lock — a
+    // 4K wallpaper decode+convert is tens of milliseconds, and holding the
+    // process-wide mutex through it stalls every concurrent wallpaper
+    // consumer. (QImage is implicitly shared, so the returned copy is cheap.)
+    {
+        QMutexLocker lock(&s_wallpaperCacheMutex);
+        if (!s_cachedWallpaperImage.isNull() && s_cachedWallpaperMtime == mtime) {
+            return s_cachedWallpaperImage;
+        }
     }
-    // Load outside of lock scope is not possible since we write to static cache
+
     QImage img(path);
     if (img.isNull()) {
         return {};
     }
-    s_cachedWallpaperImage = img.convertToFormat(QImage::Format_RGBA8888);
+    QImage converted = img.convertToFormat(QImage::Format_RGBA8888);
+
+    QMutexLocker lock(&s_wallpaperCacheMutex);
+    // Recheck after re-acquiring: another thread may have decoded and stored
+    // the same (or a fresher) image while we were outside the lock. Prefer
+    // the stored one so downstream cacheKey() equality checks short-circuit.
+    if (!s_cachedWallpaperImage.isNull() && s_cachedWallpaperMtime == mtime) {
+        return s_cachedWallpaperImage;
+    }
+    s_cachedWallpaperImage = std::move(converted);
     s_cachedWallpaperMtime = mtime;
     qCDebug(lcShaderRegistry) << "Loaded and cached wallpaper image:" << path << s_cachedWallpaperImage.size();
     return s_cachedWallpaperImage;
@@ -236,6 +262,11 @@ QImage ShaderRegistry::loadWallpaperImage(const QRect& subGeom, const QRect& phy
 
 void ShaderRegistry::invalidateWallpaperCache()
 {
+    // Currently has no callers. If one appears, note that wallpaperPath()
+    // queries the provider outside the lock, so resetting the provider here
+    // concurrently with an in-flight query would destroy it mid-use — a
+    // caller must guarantee no concurrent resolution (or this must move to a
+    // shared_ptr handoff).
     QMutexLocker lock(&s_wallpaperCacheMutex);
     s_cachedWallpaperPath.clear();
     s_wallpaperPathResolved = false;

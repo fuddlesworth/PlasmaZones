@@ -5,6 +5,8 @@
 
 #include <PhosphorSurface/phosphorsurface_export.h>
 
+#include <PhosphorShaders/CustomParamsKey.h>
+
 #include <QJsonObject>
 #include <QList>
 #include <QString>
@@ -203,15 +205,13 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     bool useDepthBuffer = false;
 
     /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
-    /// factor). 0.125 means a 1/8 downscale on each axis (1/64 area —
-    /// the lowest cost-floor that still gives Shadertoy-style buffer
-    /// effects something to work with). 1.0 means full-resolution
-    /// FBOs (no downscale). Hosted here as the source-of-truth that
-    /// `fromJson`'s clamp + the round-trip stability comment in
-    /// `toJson` reference; a future runtime that consumes bufferScale
-    /// from a non-JSON source can read these constants directly.
-    static constexpr qreal kMinBufferScale = 0.125;
-    static constexpr qreal kMaxBufferScale = 1.0;
+    /// factor) — forwarders onto the cross-library canonical constants in
+    /// `<PhosphorShaders/CustomParamsKey.h>` (see there for the 0.125
+    /// cost-floor rationale). Kept as names on this class because
+    /// `fromJson`'s clamp + the round-trip stability comment in `toJson`
+    /// reference them.
+    static constexpr qreal kMinBufferScale = PhosphorShaders::kMinBufferScale;
+    static constexpr qreal kMaxBufferScale = PhosphorShaders::kMaxBufferScale;
     static_assert(kMinBufferScale > 0.0 && kMinBufferScale < kMaxBufferScale,
                   "kMinBufferScale must be positive and strictly less than kMaxBufferScale");
 

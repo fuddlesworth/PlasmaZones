@@ -38,7 +38,12 @@
                 },
                 "min": { "type": "number" },
                 "max": { "type": "number" },
-                "slot": { "type": "integer" }
+                "slot": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 31,
+                    "description": "Explicit UBO lane. 31 is the scalar-pool ceiling; the color pool tops out at 15 and the image pool at 3, which the pack validator lints per type."
+                }
             }
         }
     }

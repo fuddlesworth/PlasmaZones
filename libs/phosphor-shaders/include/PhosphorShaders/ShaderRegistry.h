@@ -10,7 +10,6 @@
 #include <PhosphorRegistry/MetadataPackLoader.h>
 #include <PhosphorRegistry/Registry.h>
 
-#include <QHash>
 #include <QImage>
 #include <QList>
 #include <QMap>
@@ -52,12 +51,17 @@ class IWallpaperProvider;
 /// rescan; the public lookup methods (`availableShaders`, `shader`,
 /// `shaderInfo`, `shaderUrl`) read it without synchronisation.
 ///
-/// `searchPaths()` is the one exception: it returns a by-value snapshot
-/// of an implicitly-shared QStringList, so a GUI-thread caller can
-/// snapshot it and propagate the result to worker threads (this is the
-/// shader-warming path's contract). Calling `searchPaths()` *from* a
-/// worker thread concurrently with a GUI-thread mutation is a data race;
-/// snapshot on the GUI thread first.
+/// Two exceptions:
+///
+/// `searchPaths()` returns a by-value snapshot of an implicitly-shared
+/// QStringList, so a GUI-thread caller can snapshot it and propagate the
+/// result to worker threads (this is the shader-warming path's contract).
+/// Calling `searchPaths()` *from* a worker thread concurrently with a
+/// GUI-thread mutation is a data race; snapshot on the GUI thread first.
+///
+/// The static wallpaper-path cache (`resolveWallpaperPath` and friends in
+/// shaderregistry_wallpaper.cpp) is guarded by its own process-wide mutex
+/// and is safe to call from any thread.
 class PHOSPHORSHADERS_EXPORT ShaderRegistry : public QObject
 {
     Q_OBJECT
@@ -90,6 +94,11 @@ public:
         QUrl shaderUrl;
         QString sourcePath;
         QString vertexShaderPath;
+        /// Absolute pack directory (where metadata.json lives). The frag may
+        /// sit in a subdirectory of the pack, so deriving the pack root from
+        /// `sourcePath` is wrong — consumers needing the pack root (watch
+        /// globs, content signature, image-param containment) read this.
+        QString packDir;
         QStringList bufferShaderPaths;
         QString previewPath;
         QString category;
@@ -108,7 +117,9 @@ public:
 
         bool isValid() const
         {
-            return !id.isEmpty() && (isNoneShader(id) || shaderUrl.isValid());
+            // isNoneShader(id) is just id.isEmpty(), which the first conjunct
+            // already excludes, so the "none" shader is never valid here.
+            return !id.isEmpty() && shaderUrl.isValid();
         }
     };
 
@@ -192,7 +203,11 @@ public:
     /// parser the live registry uses (T1.1 auto-slot assignment included), so an
     /// offline validator (`phosphor-shader-validate`) and the daemon agree on
     /// what a pack is. Returns an invalid ShaderInfo and sets @p error on a
-    /// missing/unreadable file or non-object JSON root.
+    /// missing/unreadable/oversized file, non-object JSON root, or a root
+    /// failing the same structural schema gate the live scan applies. Two live
+    /// rejections are deliberately NOT reproduced here — a missing fragment
+    /// shader and a multipass pack with no surviving buffer shader — because
+    /// the offline validator reports those as its own lints with file context.
     ///
     /// Existence is checked unevenly, and a caller cannot infer "not declared"
     /// from an empty field: the FRAGMENT path is returned whether or not the file

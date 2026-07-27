@@ -294,31 +294,25 @@ inline constexpr int kMaxParameterSlots = PhosphorShaders::CustomParams::kFlatSl
 /// settings UI can reuse the same editor components.
 inline constexpr int kMaxUserTextureSlots = 3;
 
-/// The accepted texture / buffer `wrap` vocabulary, shared by every
-/// surface validation site (metadata parse, per-slot texture parse, and
-/// runtime-override translation). Returns true only for the three
-/// canonical tokens `clamp` / `repeat` / `mirror`. An empty string is NOT
-/// a member — callers treat empty as "use the runtime default" and handle
-/// it explicitly before consulting this predicate. Centralised here so the
-/// validation sites can no longer drift apart and accept a token one path
-/// rejects. Vocabulary matches the runtime normaliser
-/// (`ShaderNodeRhi::normalizeWrapMode`).
+/// The accepted texture / buffer `wrap` vocabulary — thin forwarder onto
+/// `PhosphorShaders::isValidWrapToken`, the cross-library canonical
+/// predicate (see `<PhosphorShaders/CustomParamsKey.h>` for membership
+/// and the empty-string contract). Kept here so surface call sites refer
+/// to a name inside this contract namespace, matching the `slotKey`
+/// forwarders below.
 inline bool isValidWrapToken(const QString& wrap)
 {
-    return wrap == QLatin1String("clamp") || wrap == QLatin1String("repeat") || wrap == QLatin1String("mirror");
+    return PhosphorShaders::isValidWrapToken(wrap);
 }
 
-/// The accepted buffer `filter` vocabulary: `linear` / `nearest` / `mipmap`.
-/// An empty string is NOT a member — callers treat empty as "use the runtime
-/// default" and handle it before consulting this predicate.
-///
-/// Hoisted for the same reason as `isValidWrapToken`: it was hand-inlined at a
-/// single site in the surface tree and entirely ABSENT from the animation tree,
-/// so an animation pack's `"bufferFilter": "linaer"` was accepted, silently
-/// coerced by the runtime, and re-persisted to disk on the next save.
+/// The accepted buffer `filter` vocabulary — thin forwarder onto
+/// `PhosphorShaders::isValidFilterToken` (see the canonical header for
+/// the hoist rationale: hand-inlined validation sites drifted, and the
+/// animation tree had none at all, so `"bufferFilter": "linaer"` was
+/// accepted, silently coerced by the runtime, and re-persisted to disk).
 inline bool isValidFilterToken(const QString& filter)
 {
-    return filter == QLatin1String("linear") || filter == QLatin1String("nearest") || filter == QLatin1String("mipmap");
+    return PhosphorShaders::isValidFilterToken(filter);
 }
 
 /// Format a `customParams` slot key — thin forwarder onto
