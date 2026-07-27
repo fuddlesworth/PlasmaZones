@@ -687,7 +687,11 @@ inline QString colorKey(int slot)
 /// metadata.json warned. Vocabulary matches the runtime normaliser.
 inline bool isValidWrapToken(const QString& wrap)
 {
-    return wrap == QLatin1String("clamp") || wrap == QLatin1String("repeat") || wrap == QLatin1String("mirror");
+    // Thin forwarder onto the cross-library canonical predicate in
+    // <PhosphorShaders/CustomParamsKey.h> (already included above), so all
+    // three shader families share one wrap vocabulary rather than each
+    // hand-rolling its own token list that can drift.
+    return PhosphorShaders::isValidWrapToken(wrap);
 }
 
 /// The accepted buffer `filter` vocabulary: `linear` / `nearest` / `mipmap`.
@@ -700,7 +704,9 @@ inline bool isValidWrapToken(const QString& wrap)
 /// coerced by the runtime, and re-persisted to disk on the next save.
 inline bool isValidFilterToken(const QString& filter)
 {
-    return filter == QLatin1String("linear") || filter == QLatin1String("nearest") || filter == QLatin1String("mipmap");
+    // Forwarder onto PhosphorShaders::isValidFilterToken, for the same reason
+    // as isValidWrapToken above.
+    return PhosphorShaders::isValidFilterToken(filter);
 }
 
 } // namespace AnimationShaderContract

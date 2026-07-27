@@ -475,6 +475,71 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         if (v.toObject().value(QLatin1String("path")).toString().isEmpty()) {
             lints << QStringLiteral("texture entry with empty `path` (dropped at load)");
         }
+        // Wrap vocabulary lint — read RAW metadata: AnimationShaderEffect::fromJson
+        // silently clears an invalid texture wrap to empty, so a lint over the
+        // parsed struct could never surface an author's typo. Mirrors the
+        // surface validator.
+        const QString wrap = v.toObject().value(QLatin1String("wrap")).toString();
+        if (!wrap.isEmpty() && !PhosphorAnimationShaders::AnimationShaderContract::isValidWrapToken(wrap)) {
+            lints
+                << QStringLiteral("texture wrap not in {clamp,repeat,mirror}: %1 (cleared to clamp at load)").arg(wrap);
+        }
+    }
+    // Multipass buffer lints — read RAW metadata, not the parsed struct:
+    // AnimationShaderEffect::fromJson clamps bufferScale, drops missing buffers,
+    // and silently coerces invalid buffer wrap/filter tokens, so a lint over the
+    // parsed values would hide the exact author errors this block exists to
+    // surface. The animation validator had none of these, unlike its two
+    // siblings, even though the animation parser silently rewrites all of them.
+    if (eff.isMultipass) {
+        const QJsonObject animRoot = doc.object();
+        const QJsonArray declaredBuffers = animRoot.value(QLatin1String("bufferShaders")).toArray();
+        for (const QJsonValue& v : declaredBuffers) {
+            const QString bufName = v.toString();
+            if (bufName.isEmpty()) {
+                continue;
+            }
+            const auto confined = confinedPackPath(packDir, bufName);
+            if (!confined) {
+                lints << QStringLiteral("multipass buffer shader path escapes the pack directory: %1").arg(bufName);
+            } else if (!QFile::exists(*confined)) {
+                lints << QStringLiteral("multipass buffer shader missing: %1").arg(bufName);
+            }
+        }
+        if (declaredBuffers.size() > PhosphorAnimationShaders::AnimationShaderContract::kMaxBufferPasses) {
+            lints << QStringLiteral("too many buffer shaders: %1 declared, cap is %2 (surplus dropped at load)")
+                         .arg(static_cast<int>(declaredBuffers.size()))
+                         .arg(PhosphorAnimationShaders::AnimationShaderContract::kMaxBufferPasses);
+        }
+        const double rawScale = animRoot.value(QLatin1String("bufferScale")).toDouble(1.0);
+        if (rawScale < PhosphorAnimationShaders::AnimationShaderEffect::kMinBufferScale
+            || rawScale > PhosphorAnimationShaders::AnimationShaderEffect::kMaxBufferScale) {
+            lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")
+                         .arg(PhosphorAnimationShaders::AnimationShaderEffect::kMinBufferScale)
+                         .arg(PhosphorAnimationShaders::AnimationShaderEffect::kMaxBufferScale)
+                         .arg(rawScale);
+        }
+        const auto lintTokens = [&lints](const QJsonArray& arr, const QString& field, bool wrap) {
+            for (const QJsonValue& v : arr) {
+                const QString tok = v.toString();
+                const bool ok = wrap ? PhosphorAnimationShaders::AnimationShaderContract::isValidWrapToken(tok)
+                                     : PhosphorAnimationShaders::AnimationShaderContract::isValidFilterToken(tok);
+                if (!tok.isEmpty() && !ok) {
+                    lints << QStringLiteral("%1 value '%2' not in vocabulary (coerced at load)").arg(field, tok);
+                }
+            }
+        };
+        lintTokens(animRoot.value(QLatin1String("bufferWraps")).toArray(), QStringLiteral("bufferWraps"), true);
+        lintTokens(animRoot.value(QLatin1String("bufferFilters")).toArray(), QStringLiteral("bufferFilters"), false);
+        const QString singleWrap = animRoot.value(QLatin1String("bufferWrap")).toString();
+        if (!singleWrap.isEmpty() && !PhosphorAnimationShaders::AnimationShaderContract::isValidWrapToken(singleWrap)) {
+            lints << QStringLiteral("bufferWrap value '%1' not in vocabulary (coerced at load)").arg(singleWrap);
+        }
+        const QString singleFilter = animRoot.value(QLatin1String("bufferFilter")).toString();
+        if (!singleFilter.isEmpty()
+            && !PhosphorAnimationShaders::AnimationShaderContract::isValidFilterToken(singleFilter)) {
+            lints << QStringLiteral("bufferFilter value '%1' not in vocabulary (coerced at load)").arg(singleFilter);
+        }
     }
     if (!QFile::exists(eff.fragmentShaderPath)) {
         lints << QStringLiteral("fragment shader missing: %1").arg(fragLabel);

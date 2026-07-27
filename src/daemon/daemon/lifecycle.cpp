@@ -574,6 +574,46 @@ void Daemon::stop()
         m_ruleAdaptor->detach();
     }
 
+    // Shader registries + warm-bake pool: torn down ABOVE the !m_running gate
+    // because they are ctor/init-origin (setupAnimationShaderEffects /
+    // setupSurfaceShaderEffects / setupShaderWarmBakes all run from init(),
+    // before start() sets m_running). An init-without-start teardown (a failed
+    // init, or a double-stop) must still null the OverlayService's borrows and
+    // run the registries' destructors, or ~OverlayService is left holding two
+    // dangling registry pointers — the same reverse-destruction hazard the
+    // adaptor detaches above guard against.
+    m_shaderBakePool.clear();
+    m_shaderBakePool.waitForDone(500);
+    if (m_overlayService) {
+        m_overlayService->setAnimationShaderRegistry(nullptr);
+    }
+    m_animationShaderRegistry.reset();
+    // Reset the surface registry here too so its QFileSystemWatcher and the
+    // effectsChanged → warm-bake connection (captured by value into the init()
+    // lambda, targeting `this`) are torn down before the event loop can spin
+    // during shutdown. Null the overlay service's borrow FIRST (Stage d wired
+    // the OSD decoration consumer), mirroring the animation registry above.
+    if (m_overlayService) {
+        m_overlayService->setSurfaceShaderRegistry(nullptr);
+    }
+    m_surfaceShaderRegistry.reset();
+    // Clear the warm-bake dedup so a stop() -> init() cycle re-warms every
+    // pack (the registries are rebuilt, so a remembered fingerprint would
+    // wrongly suppress the fresh bake), and the hash does not grow unbounded
+    // across cycles.
+    m_scheduledBakeFingerprints.clear();
+
+    // Everything ABOVE this gate is init/ctor-origin teardown that must run on
+    // an init-without-start path (a failed init, a double-stop): the adaptor
+    // detaches, the D-Bus unregister, the loader resets, the QML-static
+    // null-outs, and the shader-registry teardown — all of which either sever a
+    // BORROWED pointer a member destructor would otherwise deref, or are
+    // idempotent no-ops. Everything BELOW is start()-origin (the persistent
+    // sender reconnects and the engine/resolver/rule-store borrows established
+    // during a running session); those members' destructors deref no borrowed
+    // pointer, so skipping their explicit clears on the init-failure path is
+    // safe (verified per-adaptor), and running them without a prior start()
+    // could touch half-wired state. Hence the gate sits here.
     if (!m_running) {
         return;
     }
@@ -661,21 +701,6 @@ void Daemon::stop()
     // drop. (The clears and resets themselves run ABOVE the m_running gate,
     // hoisted next to the QML-static null-outs they pair with — the loaders
     // are ctor-origin, so an init-without-start teardown needs them too.)
-    m_shaderBakePool.clear();
-    m_shaderBakePool.waitForDone(500);
-    if (m_overlayService) {
-        m_overlayService->setAnimationShaderRegistry(nullptr);
-    }
-    m_animationShaderRegistry.reset();
-    // Reset the surface registry here too so its QFileSystemWatcher and the
-    // effectsChanged → warm-bake connection (captured by value into the init()
-    // lambda, targeting `this`) are torn down before the event loop can spin
-    // during shutdown. Null the overlay service's borrow FIRST (Stage d wired
-    // the OSD decoration consumer), mirroring the animation registry above.
-    if (m_overlayService) {
-        m_overlayService->setSurfaceShaderRegistry(nullptr);
-    }
-    m_surfaceShaderRegistry.reset();
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();
