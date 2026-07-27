@@ -4,25 +4,9 @@
 #include "daemon.h"
 
 #include <QGuiApplication>
-#include <QFutureWatcher>
-#include <QPointer>
 #include <QStandardPaths>
-#include <QtConcurrent>
-#include <QScreen>
 #include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusObjectPath>
-#include <QDBusPendingCall>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
-#include <QDBusError>
-#include <QDir>
 #include <QFile>
-#include <QFileInfo>
-#include <QPluginLoader>
-#include <QRegularExpression>
-#include <QSet>
-#include <QThread>
 
 #include <PhosphorServiceIdle/IdleService.h>
 
@@ -37,8 +21,6 @@
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
-
-#include <array>
 
 #include "overlayservice.h"
 #include "controllers/unifiedlayoutcontroller.h"

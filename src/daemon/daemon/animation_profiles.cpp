@@ -169,6 +169,13 @@ void Daemon::setupAnimationProfiles()
         requestAnimationProfilePublish();
     });
     connect(m_curveLoader.get(), &CurveLoader::curvesChanged, this, [this]() {
+        // Same staleness rule as the profilesChanged handler above: a cached
+        // raw profile may hold a Profile::curve pointer resolved against the
+        // pre-edit curve. Self-correcting even without this (curvesChanged is
+        // also wired to the profile loader's debounced rescan, whose
+        // profilesChanged clears the cache), but that leaves one publish tick
+        // serving the stale curve; the clear is free.
+        m_rawJsonProfiles.clear();
         requestAnimationProfilePublish();
     });
 
@@ -246,6 +253,16 @@ void Daemon::publishActiveAnimationProfile()
     // library defaults) — see the per-path ownership + merge logic below.
     // On JSON delete, the loader emits profilesChanged, this function
     // re-runs, and the settings-default path is restored.
+    //
+    // SCOPE of that contract: it holds when the JSON exists at the loader's
+    // FIRST scan (setup runs the scan before the first untagged publish).
+    // A user JSON dropped at a settings-driven path AT RUNTIME, into a
+    // session that already published untagged, is deliberately NOT adopted:
+    // reloadFromOwner's "direct owner always wins" rule makes the loader
+    // step aside for the untagged entry, so the file takes effect on the
+    // next daemon start. That is the ownership model, not an accident —
+    // Settings is the live tuning surface, and handing a live session over
+    // to a file drop mid-run would fight the slider the user is holding.
     //
     // This runs on the settings-slider hot path (~30 Hz during drag), so
     // ownership is resolved with an O(1) `ownerOf()` lookup rather than

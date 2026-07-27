@@ -6,8 +6,9 @@
  * @brief Per-role SurfaceAnimator config builders + animator wireup.
  *
  * Owns:
- *   - resolveShaderEffect / resolveShaderParameters (tree → config field
- *     adapters)
+ *   - resolveShaderLeg (tree → resolved leg, the build*Config consumer) /
+ *     resolveShaderEffect (debug-log only) / shaderParametersFor
+ *     (resolved leg → per-event parameter overrides)
  *   - build*Config factories (one per overlay role: Osd, LayoutPicker,
  *     ZoneSelector, SnapAssist, Cheatsheet), plus buildDefaultConfig for
  *     everything else. Each documents the visual shape it encodes.
@@ -90,19 +91,11 @@ namespace PAS = PhosphorAnimationShaders;
 ///
 /// **Source-of-truth note.** The settings UI gates its shader picker on
 /// `src/core/types/animationshadersupportedpaths.h::shaderSupportedEventPaths`,
-/// which enumerates the paths consumed HERE by `resolveShaderEffect` in the
+/// which enumerates the paths consumed HERE by `resolveShaderLeg` in the
 /// build*Config functions below AND the window / desktop legs the kwin-effect
 /// consumes (see that header's own consumer list). When a new shader-leg surface
 /// lands here, append its leg paths to that list in lockstep so the
 /// settings UI starts surfacing the picker on the new path.
-QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const QString& path)
-{
-    // Route through the SSOT so overlay show/hide paths pick up their built-in
-    // default ("fade") when the user has set no override — and a per-app/tree
-    // "None" is still respected (empty id → SurfaceAnimator's C++ legs run).
-    return PAS::resolveShaderWithDefault(tree, path).effectiveEffectId();
-}
-
 /// One tree walk per leg, for the build*Config functions below.
 ///
 /// They need BOTH halves of a leg (the effect id and the parameter map), and
@@ -117,18 +110,42 @@ PAS::ShaderProfile resolveShaderLeg(const PAS::ShaderProfileTree& tree, const QS
     return PAS::resolveShaderWithDefault(tree, path);
 }
 
-/// Resolve a path against the shader profile tree (via the built-in default)
-/// and extract the per-event parameter overrides. When the resolved shader is
-/// the built-in "fade" overlay default and the user left `scaleAmount` unset,
-/// seed it from @p fadeScaleAmount — the surface's prior C++ scale depth
+QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const QString& path)
+{
+    // Route through resolveShaderLeg so the `resolveShaderWithDefault`
+    // knowledge genuinely lives in one place (this helper is debug-log-only
+    // today; keeping it a thin forwarder means it cannot drift from the
+    // build*Config resolution).
+    return resolveShaderLeg(tree, path).effectiveEffectId();
+}
+
+/// Extract the per-event parameter overrides from an already-resolved leg
+/// (the caller resolves the tree via resolveShaderLeg). When the resolved
+/// shader is @p path's built-in default AND that default is the fade overlay
+/// pack, and the user left `scaleAmount` unset, seed it from
+/// @p fadeScaleAmount — the surface's prior C++ scale depth
 /// (1 - showScaleFrom on show, 1 - hideScaleTo on hide; 0.0 for opacity-only
 /// surfaces) — so the shader reproduces the surface's existing pop feel. A user
-/// override of the shader (to anything but fade) or of scaleAmount itself wins.
-QVariantMap shaderParametersFor(const PAS::ShaderProfile& resolved, double fadeScaleAmount)
+/// override of the shader (to anything but the default) or of scaleAmount
+/// itself wins. Gated on `PP::defaultShaderEffectIdForPath(path)` rather than
+/// a hardcoded "fade" literal so the two halves of the contract (that
+/// function's comment names this file as its partner) cannot drift silently
+/// when the overlay default is retuned.
+QVariantMap shaderParametersFor(const PAS::ShaderProfile& resolved, const QString& path, double fadeScaleAmount)
 {
+    namespace PP = PhosphorAnimation::ProfilePaths;
     QVariantMap params = resolved.effectiveParameters();
-    if (resolved.effectiveEffectId() == QLatin1String("fade") && !params.contains(QLatin1String("scaleAmount"))) {
-        params.insert(QStringLiteral("scaleAmount"), fadeScaleAmount);
+    const QString builtinDefault = PP::defaultShaderEffectIdForPath(path);
+    if (builtinDefault == QLatin1String("fade") && resolved.effectiveEffectId() == builtinDefault
+        && !params.contains(QLatin1String("scaleAmount"))) {
+        // Clamped to the fade pack's declared parameter range
+        // (data/animations/fade/metadata.json: scaleAmount min 0.0, max 0.3):
+        // the surface scale envelopes this value derives from are tuned
+        // independently of the pack metadata, and nothing else on this
+        // injection path range-checks, so retuning an envelope past 0.7 would
+        // otherwise emit an out-of-range parameter silently.
+        constexpr double kFadeScaleAmountMax = 0.3;
+        params.insert(QStringLiteral("scaleAmount"), qBound(0.0, fadeScaleAmount, kFadeScaleAmountMax));
     }
     return params;
 }
@@ -166,18 +183,19 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
     // ONE resolve per leg, read twice below.
     const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, PP::OsdShow);
     const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, PP::OsdHide);
-    return PAL::SurfaceAnimator::Config{.showProfile = PP::OsdShow,
-                                        .hideProfile = PP::OsdHide,
-                                        .showScaleProfile = PP::OsdShow,
-                                        .hideScaleProfile = PP::OsdHide,
-                                        .showScaleFrom = kShowScaleFrom,
-                                        .hideScaleTo = kHideScaleTo,
-                                        .showShaderEffectId = showLeg.effectiveEffectId(),
-                                        .hideShaderEffectId = hideLeg.effectiveEffectId(),
-                                        .showShaderProfile = PP::OsdShow,
-                                        .hideShaderProfile = PP::OsdHide,
-                                        .showShaderParameters = shaderParametersFor(showLeg, 1.0 - kShowScaleFrom),
-                                        .hideShaderParameters = shaderParametersFor(hideLeg, 1.0 - kHideScaleTo)};
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = PP::OsdShow,
+        .hideProfile = PP::OsdHide,
+        .showScaleProfile = PP::OsdShow,
+        .hideScaleProfile = PP::OsdHide,
+        .showScaleFrom = kShowScaleFrom,
+        .hideScaleTo = kHideScaleTo,
+        .showShaderEffectId = showLeg.effectiveEffectId(),
+        .hideShaderEffectId = hideLeg.effectiveEffectId(),
+        .showShaderProfile = PP::OsdShow,
+        .hideShaderProfile = PP::OsdHide,
+        .showShaderParameters = shaderParametersFor(showLeg, PP::OsdShow, 1.0 - kShowScaleFrom),
+        .hideShaderParameters = shaderParametersFor(hideLeg, PP::OsdHide, 1.0 - kHideScaleTo)};
 }
 
 /// LayoutPicker: OSD-style fade-and-pop shape with a softer scale
@@ -206,18 +224,19 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTre
     // ONE resolve per leg, read twice below.
     const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, PP::PopupLayoutPickerShow);
     const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, PP::PopupLayoutPickerHide);
-    return PAL::SurfaceAnimator::Config{.showProfile = PP::PopupLayoutPickerShow,
-                                        .hideProfile = PP::PopupLayoutPickerHide,
-                                        .showScaleProfile = PP::PopupLayoutPickerShow,
-                                        .hideScaleProfile = PP::PopupLayoutPickerHide,
-                                        .showScaleFrom = kShowScaleFrom,
-                                        .hideScaleTo = kHideScaleTo,
-                                        .showShaderEffectId = showLeg.effectiveEffectId(),
-                                        .hideShaderEffectId = hideLeg.effectiveEffectId(),
-                                        .showShaderProfile = PP::PopupLayoutPickerShow,
-                                        .hideShaderProfile = PP::PopupLayoutPickerHide,
-                                        .showShaderParameters = shaderParametersFor(showLeg, 1.0 - kShowScaleFrom),
-                                        .hideShaderParameters = shaderParametersFor(hideLeg, 1.0 - kHideScaleTo)};
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = PP::PopupLayoutPickerShow,
+        .hideProfile = PP::PopupLayoutPickerHide,
+        .showScaleProfile = PP::PopupLayoutPickerShow,
+        .hideScaleProfile = PP::PopupLayoutPickerHide,
+        .showScaleFrom = kShowScaleFrom,
+        .hideScaleTo = kHideScaleTo,
+        .showShaderEffectId = showLeg.effectiveEffectId(),
+        .hideShaderEffectId = hideLeg.effectiveEffectId(),
+        .showShaderProfile = PP::PopupLayoutPickerShow,
+        .hideShaderProfile = PP::PopupLayoutPickerHide,
+        .showShaderParameters = shaderParametersFor(showLeg, PP::PopupLayoutPickerShow, 1.0 - kShowScaleFrom),
+        .hideShaderParameters = shaderParametersFor(hideLeg, PP::PopupLayoutPickerHide, 1.0 - kHideScaleTo)};
 }
 
 /// Cheatsheet: fade+scale twin of the layout picker. Every leg resolves
@@ -233,18 +252,19 @@ PAL::SurfaceAnimator::Config buildCheatsheetConfig(const PAS::ShaderProfileTree&
     // ONE resolve per leg, read twice below.
     const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, PP::PopupCheatsheetShow);
     const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, PP::PopupCheatsheetHide);
-    return PAL::SurfaceAnimator::Config{.showProfile = PP::PopupCheatsheetShow,
-                                        .hideProfile = PP::PopupCheatsheetHide,
-                                        .showScaleProfile = PP::PopupCheatsheetShow,
-                                        .hideScaleProfile = PP::PopupCheatsheetHide,
-                                        .showScaleFrom = kShowScaleFrom,
-                                        .hideScaleTo = kHideScaleTo,
-                                        .showShaderEffectId = showLeg.effectiveEffectId(),
-                                        .hideShaderEffectId = hideLeg.effectiveEffectId(),
-                                        .showShaderProfile = PP::PopupCheatsheetShow,
-                                        .hideShaderProfile = PP::PopupCheatsheetHide,
-                                        .showShaderParameters = shaderParametersFor(showLeg, 1.0 - kShowScaleFrom),
-                                        .hideShaderParameters = shaderParametersFor(hideLeg, 1.0 - kHideScaleTo)};
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = PP::PopupCheatsheetShow,
+        .hideProfile = PP::PopupCheatsheetHide,
+        .showScaleProfile = PP::PopupCheatsheetShow,
+        .hideScaleProfile = PP::PopupCheatsheetHide,
+        .showScaleFrom = kShowScaleFrom,
+        .hideScaleTo = kHideScaleTo,
+        .showShaderEffectId = showLeg.effectiveEffectId(),
+        .hideShaderEffectId = hideLeg.effectiveEffectId(),
+        .showShaderProfile = PP::PopupCheatsheetShow,
+        .hideShaderProfile = PP::PopupCheatsheetHide,
+        .showShaderParameters = shaderParametersFor(showLeg, PP::PopupCheatsheetShow, 1.0 - kShowScaleFrom),
+        .hideShaderParameters = shaderParametersFor(hideLeg, PP::PopupCheatsheetHide, 1.0 - kHideScaleTo)};
 }
 
 /// ZoneSelector: opacity-only show/hide. `keepMappedOnHide=true` so the
@@ -263,17 +283,18 @@ PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTre
     // ONE resolve per leg, read twice below.
     const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, PP::PopupZoneSelectorShow);
     const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, PP::PopupZoneSelectorHide);
-    return PAL::SurfaceAnimator::Config{.showProfile = PP::PopupZoneSelectorShow,
-                                        .hideProfile = PP::PopupZoneSelectorHide,
-                                        .showScaleProfile = {},
-                                        .hideScaleProfile = {},
-                                        .showShaderEffectId = showLeg.effectiveEffectId(),
-                                        .hideShaderEffectId = hideLeg.effectiveEffectId(),
-                                        .showShaderProfile = PP::PopupZoneSelectorShow,
-                                        .hideShaderProfile = PP::PopupZoneSelectorHide,
-                                        // Opacity-only surface (no scale leg) → fade scaleAmount 0.0 (pure fade).
-                                        .showShaderParameters = shaderParametersFor(showLeg, 0.0),
-                                        .hideShaderParameters = shaderParametersFor(hideLeg, 0.0)};
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = PP::PopupZoneSelectorShow,
+        .hideProfile = PP::PopupZoneSelectorHide,
+        .showScaleProfile = {},
+        .hideScaleProfile = {},
+        .showShaderEffectId = showLeg.effectiveEffectId(),
+        .hideShaderEffectId = hideLeg.effectiveEffectId(),
+        .showShaderProfile = PP::PopupZoneSelectorShow,
+        .hideShaderProfile = PP::PopupZoneSelectorHide,
+        // Opacity-only surface (no scale leg) → fade scaleAmount 0.0 (pure fade).
+        .showShaderParameters = shaderParametersFor(showLeg, PP::PopupZoneSelectorShow, 0.0),
+        .hideShaderParameters = shaderParametersFor(hideLeg, PP::PopupZoneSelectorHide, 0.0)};
 }
 
 /// SnapAssist: full show/hide pair. Pre-unified-shell, snap-assist
@@ -299,22 +320,23 @@ PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree&
     // ONE resolve per leg, read twice below.
     const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, PP::PopupSnapAssistShow);
     const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, PP::PopupSnapAssistHide);
-    return PAL::SurfaceAnimator::Config{// Popup surface family - dedicated path. A user editing
-                                        // `popup.snapAssist.show.json` affects ONLY the snap
-                                        // assist; siblings are unaffected. Built-in default mirrors the
-                                        // prior `popup` (150 ms widget-out) so behaviour is
-                                        // preserved.
-                                        .showProfile = PP::PopupSnapAssistShow,
-                                        .hideProfile = PP::PopupSnapAssistHide,
-                                        .showScaleProfile = {},
-                                        .hideScaleProfile = {},
-                                        .showShaderEffectId = showLeg.effectiveEffectId(),
-                                        .hideShaderEffectId = hideLeg.effectiveEffectId(),
-                                        .showShaderProfile = PP::PopupSnapAssistShow,
-                                        .hideShaderProfile = PP::PopupSnapAssistHide,
-                                        // Opacity-only surface (no scale leg) → fade scaleAmount 0.0 (pure fade).
-                                        .showShaderParameters = shaderParametersFor(showLeg, 0.0),
-                                        .hideShaderParameters = shaderParametersFor(hideLeg, 0.0)};
+    return PAL::SurfaceAnimator::Config{
+        // Popup surface family - dedicated path. A user editing
+        // `popup.snapAssist.show.json` affects ONLY the snap
+        // assist; siblings are unaffected. Built-in default mirrors the
+        // prior `popup` (150 ms widget-out) so behaviour is
+        // preserved.
+        .showProfile = PP::PopupSnapAssistShow,
+        .hideProfile = PP::PopupSnapAssistHide,
+        .showScaleProfile = {},
+        .hideScaleProfile = {},
+        .showShaderEffectId = showLeg.effectiveEffectId(),
+        .hideShaderEffectId = hideLeg.effectiveEffectId(),
+        .showShaderProfile = PP::PopupSnapAssistShow,
+        .hideShaderProfile = PP::PopupSnapAssistHide,
+        // Opacity-only surface (no scale leg) → fade scaleAmount 0.0 (pure fade).
+        .showShaderParameters = shaderParametersFor(showLeg, PP::PopupSnapAssistShow, 0.0),
+        .hideShaderParameters = shaderParametersFor(hideLeg, PP::PopupSnapAssistHide, 0.0)};
 }
 
 } // namespace
@@ -393,7 +415,12 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
 
 void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree& tree)
 {
-    if (!m_surfaceAnimator) {
+    // The m_shellHost check backs up the setupSurfaceAnimator qFatal for the
+    // one lifetime window where its invariant no longer holds: ~OverlayService
+    // resets m_shellHost while the shaderProfileTreeChanged live-reload
+    // connection stays armed until ~QObject, so a delivery in that window
+    // would dereference a null host below.
+    if (!m_surfaceAnimator || !m_shellHost) {
         return;
     }
     // Diagnostic log gated on lcOverlay().isDebugEnabled() - qCDebug

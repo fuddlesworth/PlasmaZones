@@ -5,36 +5,10 @@
 #include "helpers.h"
 
 #include <QGuiApplication>
-#include <QFutureWatcher>
-#include <QPointer>
-#include <QStandardPaths>
-#include <QtConcurrent>
-#include <QScreen>
 #include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusObjectPath>
-#include <QDBusPendingCall>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
-#include <QDBusError>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QPluginLoader>
-#include <QRegularExpression>
-#include <QSet>
-#include <QThread>
-#include <array>
 
-#include <PhosphorServiceIdle/IdleService.h>
-#include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
-#include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfileLoader.h>
-#include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/PhosphorCurve.h>
-#include <PhosphorAnimation/QtQuickClockManager.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 

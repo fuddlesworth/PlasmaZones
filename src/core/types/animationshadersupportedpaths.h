@@ -14,7 +14,7 @@ namespace PlasmaZones {
 
 /// Leaf event paths the daemon's overlay service AND the KWin effect
 /// actually resolve a shader effect for, by one of three mechanisms:
-/// a @c resolveShaderEffect(tree, ...) call inside one of
+/// a @c resolveShaderLeg(tree, ...) call inside one of
 /// the @c build*Config factories in @c src/daemon/overlayservice/animation_config.cpp
 /// (@c buildOsdConfig / @c buildLayoutPickerConfig /
 /// @c buildZoneSelectorConfig / @c buildSnapAssistConfig /
@@ -23,12 +23,16 @@ namespace PlasmaZones {
 /// @c kwin-effect/plasmazoneseffect/ (window_lifecycle for the open, close and
 /// focus legs, window_connections for move and maximize, daemon_apply for
 /// minimize); or a
-/// @c resolveShaderWithDefault(tree, ...) call, which drives both the
+/// @c resolveShaderWithDefault(tree, ...) call, which drives the
 /// screen-level desktop legs from
-/// @c kwin-effect/plasmazoneseffect/lifecycle_wiring.cpp and the snap geometry
+/// @c kwin-effect/plasmazoneseffect/lifecycle_wiring.cpp, the snap geometry
 /// legs through @c applyWindowGeometry in
-/// @c kwin-effect/plasmazoneseffect/drag_snap.cpp. When a future
-/// surface adds a shader leg, append its leg paths here in lockstep.
+/// @c kwin-effect/plasmazoneseffect/drag_snap.cpp, and the read-only
+/// @c packOwnsEvent predicate inside @c syncStockEffectSuppression
+/// (@c kwin-effect/plasmazoneseffect/lifecycle.cpp), which resolves the
+/// DesktopPeek / WindowMinimize / WindowMaximize paths already listed
+/// below. When a future surface adds a shader leg, append its leg paths
+/// here in lockstep.
 inline QStringList shaderConsumedLeafEventPaths()
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
@@ -112,27 +116,36 @@ inline QStringList shaderConsumedLeafEventPaths()
 /// drops any persisted entry on those paths, so a config from an earlier app
 /// revision can never SERVE one (the entry may still sit in the file until an
 /// unrelated edit rewrites it).
-inline QStringList shaderSupportedEventPaths()
+inline const QStringList& shaderSupportedEventPaths()
 {
-    namespace PP = PhosphorAnimation::ProfilePaths;
-    QStringList out;
-    QSet<QString> seen;
-    const QStringList leaves = shaderConsumedLeafEventPaths();
-    for (const QString& leaf : leaves) {
-        QString cursor = leaf;
-        while (!cursor.isEmpty()) {
-            if (!seen.contains(cursor)) {
-                seen.insert(cursor);
-                out.append(cursor);
+    // Function-local static, mirroring supportedShaderPathSet() below: the
+    // taxonomy is process-constant, and the pruner calls this on EVERY
+    // Settings tree read and write (several per mutation at slider-drag
+    // rate), so rebuilding the list plus the dedup set per call was pure
+    // waste. Range-for callers bind to the reference unchanged.
+    static const QStringList kPaths = []() {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        QStringList out;
+        QSet<QString> seen;
+        const QStringList leaves = shaderConsumedLeafEventPaths();
+        for (const QString& leaf : leaves) {
+            QString cursor = leaf;
+            while (!cursor.isEmpty()) {
+                if (!seen.contains(cursor)) {
+                    seen.insert(cursor);
+                    out.append(cursor);
+                }
+                cursor = PP::parentPath(cursor);
             }
-            cursor = PP::parentPath(cursor);
         }
-    }
-    return out;
+        return out;
+    }();
+    return kPaths;
 }
 
-/// The supported-path set as a QSet, built once. Shared by the predicate and
-/// the pruner below so their membership source cannot drift.
+/// The supported-path set as a QSet, built once. Backs the predicate below;
+/// built from the same SSOT list the pruner iterates, so the two membership
+/// sources cannot drift.
 inline const QSet<QString>& supportedShaderPathSet()
 {
     static const QSet<QString> kSupported = []() {
@@ -173,9 +186,9 @@ inline bool eventPathSupportsShaderLeg(const QString& path)
 inline PhosphorAnimationShaders::ShaderProfileTree
 pruneShaderProfileTreeToSupportedPaths(const PhosphorAnimationShaders::ShaderProfileTree& src)
 {
-    // No membership SET needed any more: iterating the SSOT list is itself the
-    // filter, and `supportedShaderPathSet()` is built from that same list, so the
-    // two cannot disagree.
+    // No membership SET needed: iterating the (memoised) SSOT list is itself
+    // the filter, and `supportedShaderPathSet()` is built from that same
+    // list, so the two cannot disagree.
     PhosphorAnimationShaders::ShaderProfileTree pruned;
     pruned.setBaseline(src.baseline());
     // Emitted in the SSOT's own order, not the source tree's insertion order, so
