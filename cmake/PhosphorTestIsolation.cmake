@@ -98,10 +98,15 @@ function(phosphor_apply_test_isolation _target)
         "XDG_CACHE_HOME=${_xdg}/cache")
 
     # A hung test wedging the whole ctest run is this module's founding
-    # premise, so give every isolated test a default timeout. An explicit
-    # TIMEOUT set before this call wins.
+    # premise, so give every isolated test a default timeout. Any TIMEOUT
+    # already set before this call wins — INCLUDING an explicit 0, which
+    # means "no timeout" and must be honoured, not overwritten. Test against
+    # NOTFOUND rather than a plain falsiness check, because CMake's `if(NOT
+    # "0")` is true and would clobber that deliberate opt-out. A test that
+    # instead wants to override the default sets its own TIMEOUT AFTER this
+    # call, which simply wins by being set last.
     get_test_property(${_test_name} TIMEOUT _phosphor_existing_timeout)
-    if(NOT _phosphor_existing_timeout)
+    if(_phosphor_existing_timeout MATCHES "NOTFOUND")
         set_tests_properties(${_test_name} PROPERTIES TIMEOUT 120)
     endif()
 endfunction()
