@@ -40,13 +40,7 @@
 
 #include <QDesktopServices>
 #include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLoggingCategory>
-#include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -264,7 +258,8 @@ bool AnimationsPageController::acceptableShaderEffectId(const QString& effectId,
     // later as a corrupt resolve. 256 chars is well above any legitimate effect
     // id length and well below the cost of letting garbage through.
     if (!effectId.isEmpty()
-        && (effectId.size() > 256 || effectId.contains(QLatin1Char('/')) || effectId.contains(QLatin1Char('\0')))) {
+        && (effectId.size() > 256 || effectId.contains(QLatin1Char('/')) || effectId.contains(QLatin1Char('\\'))
+            || effectId.contains(QLatin1String("..")) || effectId.contains(QLatin1Char('\0')))) {
         qCWarning(lcConfig) << context
                             << ": rejecting effectId with illegal length/character; size=" << effectId.size();
         return false;
@@ -455,8 +450,8 @@ QVariantList AnimationsPageController::shaderEffectUsages(const QString& effectI
         if (!profile.effectId || *profile.effectId != effectId)
             continue;
         QVariantMap entry;
-        entry.insert(QLatin1String("path"), p);
-        entry.insert(QLatin1String("label"), eventLabel(p));
+        entry.insert(QStringLiteral("path"), p);
+        entry.insert(QStringLiteral("label"), eventLabel(p));
         out.append(entry);
     }
     // Sort by label for deterministic UI order across runs — the tree's

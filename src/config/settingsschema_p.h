@@ -25,7 +25,16 @@ namespace PlasmaZones::SchemaValidators {
 inline auto clampDouble(double minVal, double maxVal)
 {
     return [minVal, maxVal](const QVariant& v) -> QVariant {
-        return qBound(minVal, v.toDouble(), maxVal);
+        const double d = v.toDouble();
+        // qBound on NaN is unspecified — it decays to qMin/qMax comparisons,
+        // all false for NaN, so a corrupt "nan" in the config would land on an
+        // arbitrary bound depending on argument order. NaN is not a value, so
+        // pin it deterministically to the minimum rather than leaving it to
+        // that pathology.
+        if (qIsNaN(d)) {
+            return minVal;
+        }
+        return qBound(minVal, d, maxVal);
     };
 }
 

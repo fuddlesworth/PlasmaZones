@@ -135,7 +135,7 @@ public:
     /// Built-in event paths, grouped by section. Each entry:
     /// ```
     /// { "section": "window", "label": "Window",
-    ///   "paths": [ { "path": "window", "label": "Window (inherited)",
+    ///   "paths": [ { "path": "window", "label": "Window",
     ///                "parent": "global", "isCategory": true },
     ///              { "path": "window.appearance.open", "label": "Open",
     ///                "parent": "window.appearance", "isCategory": false }, ... ] }
@@ -143,8 +143,11 @@ public:
     /// All built-in paths from `ProfilePaths::allBuiltInPaths()` are included.
     Q_INVOKABLE QVariantList eventSections() const;
 
-    /// First dotted segment of @p path, or `"global"` when @p path is the
-    /// global root. Drives the sidebar grouping.
+    /// The UI section @p path groups under, driving the sidebar grouping.
+    /// Usually the first dotted segment (`"window.appearance.open"` →
+    /// `"window"`), and `"global"` for the global root, but three top-level
+    /// segments are remapped: `osd`, `popup`, and `panel` all collapse into
+    /// `"overlays"`, and `cursor` into `"widget"`. Empty for an empty path.
     Q_INVOKABLE QString sectionForPath(const QString& path) const;
 
     /// Title-cased label for @p path's last segment (e.g. `"editor.snapIn"`
@@ -281,7 +284,7 @@ public:
     // they are safe against duplicates anyway because the second visit to a
     // path classifies as Absent and is skipped.)
 
-    /// Merge @p fields into the stored override at every path in @p paths and
+    /// Merge @p fields into the stored override at every path in @p rawPaths and
     /// write each result back.
     ///
     /// Merged over each path's OWN stored profile rather than replacing it, so
@@ -291,19 +294,19 @@ public:
     /// moment the user nudged Duration.
     ///
     /// @p curveFromCommit distinguishes the two things a caller can mean about
-    /// the curve, which a plain map cannot express. An INVALID QVariant (QML
-    /// `undefined`) means "the user did not touch the curve": each path keeps
-    /// its own, so a path that owns one keeps it and a path that inherits stays
-    /// inheriting. A valid string means the user edited the curve and it
-    /// travels to every path. Never decide a curve on the user's behalf by
-    /// passing the resolved one here.
+    /// the curve, which a plain map cannot express. An INVALID or NULL QVariant
+    /// (QML `undefined` or `null`) means "the user did not touch the curve":
+    /// each path keeps its own, so a path that owns one keeps it and a path that
+    /// inherits stays inheriting. A valid non-null string means the user edited
+    /// the curve and it travels to every path. Never decide a curve on the
+    /// user's behalf by passing the resolved one here.
     ///
-    /// @return true when every path in @p paths was written.
-    Q_INVOKABLE bool setOverrideMergedOnPaths(const QStringList& paths, const QVariantMap& fields,
+    /// @return true when every path in @p rawPaths was written.
+    Q_INVOKABLE bool setOverrideMergedOnPaths(const QStringList& rawPaths, const QVariantMap& fields,
                                               const QVariant& curveFromCommit);
 
     /// Remove ONE field (`"curve"` or `"duration"`) from the stored override at
-    /// every path in @p paths, returning that field to inheritance while the
+    /// every path in @p rawPaths, returning that field to inheritance while the
     /// other timing field and the motion-set fields stay put. A path whose
     /// override becomes empty has its file DELETED rather than left as an empty
     /// object: the two resolve identically, but the card's toggle and the
@@ -317,16 +320,16 @@ public:
     /// there collapsed the editor under the cursor of the user who had just
     /// clicked inside it. A caller must not read -1 as "there was nothing to
     /// clear".
-    Q_INVOKABLE int clearFieldOnPaths(const QStringList& paths, const QString& field);
+    Q_INVOKABLE int clearFieldOnPaths(const QStringList& rawPaths, const QString& field);
 
-    /// True when ANY path in @p paths takes a shader leg. A group mutation must
+    /// True when ANY path in @p rawPaths takes a shader leg. A group mutation must
     /// gate on this rather than on the primary path alone: a mirror that does
     /// support a leg would otherwise keep its shader override across a toggle
     /// off, and `divergentPathCount` would then report a divergence no control
     /// on the card could clear.
     Q_INVOKABLE bool anyPathSupportsShaderLeg(const QStringList& paths) const;
 
-    /// True iff every shader-capable path in @p paths already carries
+    /// True iff every shader-capable path in @p rawPaths already carries
     /// @p effectId as its DIRECT shader override. Non-supporting paths are
     /// SKIPPED, mirroring setShaderOverrideOnPaths (which never writes to
     /// them), so a mixed group can report true right after a successful group
@@ -335,7 +338,7 @@ public:
     Q_INVOKABLE bool allPathsHoldShaderEffect(const QStringList& paths, const QString& effectId) const;
 
     /// Set @p effectId (with @p parameters) as the shader override on every
-    /// path in @p paths that can host a shader leg. Non-supporting paths are
+    /// path in @p rawPaths that can host a shader leg. Non-supporting paths are
     /// SKIPPED rather than attempted: `setShaderOverride` would reject them
     /// anyway, and skipping keeps the warning out of the log for a call that
     /// was never going to land.
@@ -344,25 +347,25 @@ public:
     /// parameter costs one settings write per tick rather than one per path.
     /// @return the number of paths written, or -1 if the call was refused
     /// because an async discard owns the tree (it toasts).
-    Q_INVOKABLE int setShaderOverrideOnPaths(const QStringList& paths, const QString& effectId,
+    Q_INVOKABLE int setShaderOverrideOnPaths(const QStringList& rawPaths, const QString& effectId,
                                              const QVariantMap& parameters);
 
-    /// Clear the shader override on every path in @p paths, returning the event
+    /// Clear the shader override on every path in @p rawPaths, returning the event
     /// to inheritance. Distinct from writing the engaged-empty sentinel, which
     /// is an explicit "None" that BLOCKS inheritance.
     /// One tree read and one write for the whole group, like its setter twin.
     /// @return the number of paths whose override was removed, or -1 if the
     /// call was refused because an async discard owns the tree (it toasts).
-    Q_INVOKABLE int clearShaderOverrideOnPaths(const QStringList& paths);
+    Q_INVOKABLE int clearShaderOverrideOnPaths(const QStringList& rawPaths);
 
-    /// Clear the shader overrides BELOW every path in @p paths.
+    /// Clear the shader overrides BELOW every path in @p rawPaths.
     /// @return the total number cleared, or -1 if any path refused (the
     /// "async discard in flight" sentinel). Stops at the first refusal: the
     /// in-flight gate cannot change between iterations, and the controller
     /// toasts per refused call. A -1 is never summed in, which would make a
     /// refusal indistinguishable from a smaller successful clear, and the
     /// caller gates its own feedback on telling the two apart.
-    Q_INVOKABLE int clearShaderOverrideDescendantsOnPaths(const QStringList& paths);
+    Q_INVOKABLE int clearShaderOverrideDescendantsOnPaths(const QStringList& rawPaths);
 
     /// How many paths in a card's write group have stored state differing from
     /// @p primaryPath's, expressed the way the card's divergence banner needs

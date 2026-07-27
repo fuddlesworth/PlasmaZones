@@ -54,7 +54,11 @@ QtObject {
     function _setOverrideMerged(profile, curveFromCommit) {
         card._committing = true;
         try {
-            settingsController.animationsPage.setOverrideMergedOnPaths(card._writePaths, profile, curveFromCommit);
+            // Return whether the write landed (>= 0), like every sibling writer
+            // here. setOverrideMergedOnPaths returns -1 when it refuses (an async
+            // discard in flight); a caller must be able to tell that from a real
+            // commit instead of assuming success.
+            return settingsController.animationsPage.setOverrideMergedOnPaths(card._writePaths, profile, curveFromCommit) >= 0;
         } finally {
             card._committing = false;
             card._inheritRev++;

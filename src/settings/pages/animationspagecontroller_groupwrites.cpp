@@ -476,6 +476,17 @@ int AnimationsPageController::clearShaderOverrideOnPaths(const QStringList& rawP
 int AnimationsPageController::clearShaderOverrideDescendantsOnPaths(const QStringList& rawPaths)
 {
     const QStringList paths = distinctPaths(rawPaths);
+    // Top-level async gate, like every sibling mutator in this file. The
+    // per-path clearShaderOverrideDescendants() below gates too, so this was
+    // already refused transitively — but only after the loop had done its
+    // distinctPaths + per-path validation work, and the refusal toast fired
+    // from whichever path reached the singular first. Refuse up front instead,
+    // once, matching clearShaderOverrideOnPaths.
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "clearShaderOverrideDescendantsOnPaths: refusing while an async discard is in flight";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
+        return -1;
+    }
     int cleared = 0;
     for (const QString& path : paths) {
         // Gated so an unrecognised path cannot cost a tree rebuild apiece; the
