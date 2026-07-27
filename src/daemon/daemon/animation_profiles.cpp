@@ -294,7 +294,14 @@ void Daemon::publishActiveAnimationProfile()
         // below, and this is a ~30 Hz path where each ownerOf() is a locked
         // lookup.
         const QString pathOwner = reg.ownerOf(*path);
-        const bool loaderOwnsPath = m_profileLoader && pathOwner == m_profileLoader->ownerTag();
+        // Compared against the tag CONSTANT, not m_profileLoader->ownerTag(): the
+        // tag is a file-scope constant, so ownership is knowable without the
+        // loader object being alive. Keying on the object's liveness meant that
+        // a settings write after stop() (which resets m_profileLoader but leaves
+        // the animationProfileChanged connection armed) evaluated this false and
+        // re-registered the path UNTAGGED, overwriting the user's Global.json
+        // entry with settings defaults and permanently orphaning the file.
+        const bool loaderOwnsPath = pathOwner == QString(kPlasmaZonesUserProfilesOwnerTag);
         if (loaderOwnsPath) {
             // A user JSON owns this path, but its unset fields must still fall
             // back to the user's settings rather than to library defaults.

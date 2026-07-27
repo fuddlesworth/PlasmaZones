@@ -144,8 +144,11 @@ Daemon::Daemon(QObject* parent)
     // pattern above. Standalone settings / editor processes that have no
     // daemon-owned store pass nullptr and Settings falls back to owning
     // its own.
-    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_ruleStore.get(), nullptr))
+    // m_zoneDetector before m_settings: see the declaration-order note in
+    // daemon.h — reverse-order destruction must outlive the m_settings->this
+    // adjacentThresholdChanged lambda that derefs it.
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
+    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_ruleStore.get(), nullptr))
     , m_windowRegistry(std::make_unique<PhosphorEngine::WindowRegistry>(nullptr))
     , m_panelSource(std::make_unique<PhosphorScreens::PlasmaPanelSource>())
     , m_virtualScreenStore(std::make_unique<SettingsConfigStore>(m_settings.get()))
