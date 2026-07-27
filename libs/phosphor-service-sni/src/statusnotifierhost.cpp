@@ -242,6 +242,13 @@ void StatusNotifierHost::Private::seedExistingItems(bool skipZombieReap)
         watcherService(), watcherPath(), QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     msg << watcherInterface() << QStringLiteral("RegisteredStatusNotifierItems");
     auto pending = bus.asyncCall(msg);
+    // Parenting the watcher to `q` is what makes the raw `this` (Private*)
+    // capture below safe: Private is owned by q (it is q's pimpl), so if q is
+    // destroyed the watcher is destroyed in the same teardown, which severs
+    // this connection before the captured `this` can dangle. The connection is
+    // also bound to `q` as the context object, so a queued `finished` delivery
+    // is dropped once q is gone. Do not reparent the watcher off q without
+    // switching the capture to a QPointer.
     auto* watcher = new QDBusPendingCallWatcher(pending, q);
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, q, [this, watcher, skipZombieReap] {
         watcher->deleteLater();
@@ -297,8 +304,12 @@ void StatusNotifierHost::Private::onItemRegistered(const QString& canonical)
     const QString path = canonical.mid(slash);
     // System boundary: the canonical arrives from an untrusted D-Bus peer
     // (any session process can call RegisterStatusNotifierItem). An empty
-    // service (canonical beginning with '/') or a malformed path would
-    // construct an item that issues calls against nothing; refuse loudly.
+    // service (canonical beginning with '/') would construct an item that
+    // issues calls against nothing; refuse loudly. The `path.startsWith('/')`
+    // term is belt-and-braces only: `path` is `canonical.mid(slash)` where
+    // `slash` is the first '/', so it already begins with '/' by construction
+    // (the `slash < 0` return above guarantees one exists). Kept so a future
+    // change to the derivation cannot silently admit a slashless path.
     if (service.isEmpty() || !path.startsWith(QLatin1Char('/'))) {
         qCWarning(lcSniHost) << "refusing malformed item canonical from bus:" << canonical;
         return;
@@ -339,15 +350,20 @@ StatusNotifierHost::StatusNotifierHost(QObject* parent)
 {
     registerDBusTypes();
     d->connectToWatcher();
-    d->registerHost();
 
-    // Re-register if the Watcher comes back later (e.g., it crashed
-    // and respawned, or we started before any host).
+    // Install the re-registration watcher BEFORE the first registerHost(): if
+    // the Watcher service registered in the window between registerHost()'s
+    // isServiceRegistered probe and this connect, the serviceRegistered signal
+    // would be missed and (with no periodic retry) the host would stay
+    // unregistered for the process lifetime. Wiring it first closes that race —
+    // a Watcher that appears during registerHost() now fires the retry.
     d->nameWatcher = new QDBusServiceWatcher(watcherService(), QDBusConnection::sessionBus(),
                                              QDBusServiceWatcher::WatchForRegistration, this);
     connect(d->nameWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this](const QString&) {
         d->registerHost();
     });
+
+    d->registerHost();
 }
 
 StatusNotifierHost::~StatusNotifierHost()

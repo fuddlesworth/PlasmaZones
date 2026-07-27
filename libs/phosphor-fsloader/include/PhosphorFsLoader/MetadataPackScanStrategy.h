@@ -839,8 +839,13 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
     }
     // Watch-set pass. Sorted + deduped for deterministic ordering across
     // rescans regardless of the order paths were appended during the
-    // outer / inner loops above. `removeDuplicates` is O(n log n) and
-    // entry counts are bounded by `m_maxEntries`, so cost is negligible.
+    // outer / inner loops above. The sort/dedup itself is cheap, but note the
+    // list length is NOT bounded by m_maxEntries: the per-directory and
+    // per-entry watch extractors return arbitrary-length globs (see the
+    // "sit OUTSIDE the entry cap" note earlier in this file). The real
+    // per-rescan cost is the QFileInfo stat (exists/size/lastModified) in the
+    // loop below, one per watch path, on the GUI thread on every debounced
+    // fire — accepted as the dominant syscall cost of a rescan.
     QStringList sortedWatches = desiredWatches;
     sortedWatches.removeDuplicates();
     std::sort(sortedWatches.begin(), sortedWatches.end());

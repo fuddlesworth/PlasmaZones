@@ -197,6 +197,13 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
             // be able to stall the GUI thread with a 2 GB blob. Stat
             // first; skip + warn on oversize. Sinks that want a lower
             // cap enforce their own on top of this.
+            //
+            // This is a stat-side cap, not a read-side one: a file that
+            // passes the size check here and then grows before the sink
+            // reads it is not re-checked. The sink owns the descriptor and
+            // is the only layer that can bound the actual bytes read, so a
+            // descriptor-side ceiling (if a sink needs a hard one) belongs
+            // there, not here.
             const QFileInfo fileInfo(fullPath);
             if (fileInfo.size() > DirectoryLoader::kMaxFileBytes) {
                 qCWarning(lcLoader) << "Skipping oversized file" << fullPath << "(" << fileInfo.size() << "bytes, cap"
@@ -330,9 +337,11 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
     // depends on it: the base copies into a QSet (so it dedupes and ignores
     // order), the IScanStrategy contract promises no ordering, and this
     // strategy is a private nested class whose return value never escapes
-    // `rescanAll`, so no test can assert on it either. It costs one sort of a
-    // small list and keeps the two sibling scanners' return shapes identical,
-    // which is the whole justification.
+    // `rescanAll`, so no test can assert on it either. Note only TWO of the
+    // four IScanStrategy implementations sort (this one and
+    // MetadataPackScanStrategy); PluginLoader and ScriptedAlgorithmLoader
+    // return raw/hash order. So this is a courtesy for consistency with one
+    // sibling, not a contract — it costs one sort of a small list.
     std::sort(desiredFileWatches.begin(), desiredFileWatches.end());
     return desiredFileWatches;
 }

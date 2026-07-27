@@ -111,7 +111,7 @@ auto makeDefaultSignatureContrib()
     return [](QCryptographicHash& h, const FakePayload& p) {
         h.addData(QByteArray::number(p.score));
         h.addData(QByteArrayView("|"));
-        h.addData(p.isUser ? "u" : "s");
+        h.addData(p.isUser ? QByteArrayView("u") : QByteArrayView("s"));
     };
 }
 
@@ -669,7 +669,7 @@ private Q_SLOTS:
         // (or score). Without the strategy's metadata-mtime mix-in the
         // edit below would not change the signature.
         strategy.setSignatureContrib([](QCryptographicHash& h, const FakePayload& p) {
-            h.addData(p.isUser ? "u" : "s");
+            h.addData(p.isUser ? QByteArrayView("u") : QByteArrayView("s"));
         });
 
         WatchedDirectorySet set(strategy);
