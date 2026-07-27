@@ -123,7 +123,7 @@ public:
     P_CONFIG_GROUP(tilingBehaviorGroup, "Tiling.Behavior")
     P_CONFIG_GROUP(tilingBehaviorTriggersGroup, "Tiling.Behavior.Triggers")
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
-    P_CONFIG_GROUP(tilingScrollingGroup, "Tiling.Scrolling")
+    P_CONFIG_GROUP(scrollingGroup, "Scrolling")
 
     // Decorations — per-surface decoration tree (DecorationProfileTree:
     // shader-pack chain + per-pack parameters, keyed on a dot-path surface
@@ -387,7 +387,7 @@ public:
     P_CONFIG_KEY(perAlgorithmSettingsKey, "PerAlgorithmSettings")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Scrolling
+    // Config Keys — Scrolling
     // ═══════════════════════════════════════════════════════════════════════════
 
     P_CONFIG_KEY(centerFocusedColumnKey, "CenterFocusedColumn")

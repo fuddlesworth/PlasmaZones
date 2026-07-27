@@ -575,6 +575,11 @@ PhosphorUi.SettingsAppWindow {
                 window.sidebar.drillOut();
         }
 
+        function onScrollingEnabledChanged() {
+            if (!appSettings.scrollingEnabled && window.sidebar.currentParentId === "scrolling")
+                window.sidebar.drillOut();
+        }
+
         target: appSettings
     }
 
@@ -901,6 +906,7 @@ PhosphorUi.SettingsAppWindow {
             // The inline enable toggles must stay with them.
             readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
             readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
+            readonly property bool isScrolling: entry && (entry.pageId === "scrolling" || entry.pageId === "scrolling-behavior")
             // The id whose dirty state this row REPRESENTS, which is not
             // always the id it renders. Simple mode condenses a whole subtree
             // down to one visible row, and that row's own dirty state covers
@@ -914,10 +920,10 @@ PhosphorUi.SettingsAppWindow {
             readonly property string dirtyScopeId: entry ? settingsController.dirtyScopeFor(entry.pageId) : ""
             // The section-toggle's own scope, deliberately NOT dirtyScopeId.
             // pendingSection feeds discardPage() / beginExternalEdit() and a
-            // subtitle that names one of exactly two features, so it must stay
-            // bounded to the two ids those consumers handle. dirtyScopeId is an
-            // unbounded walk result and could hop past them.
-            readonly property string sectionId: isSnapping ? "snapping" : "tiling"
+            // subtitle that names one of exactly three features, so it must
+            // stay bounded to the three ids those consumers handle.
+            // dirtyScopeId is an unbounded walk result and could hop past them.
+            readonly property string sectionId: isSnapping ? "snapping" : (isTiling ? "tiling" : "scrolling")
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0
@@ -979,12 +985,12 @@ PhosphorUi.SettingsAppWindow {
                 }
             }
 
-            // ── Snapping / Tiling toggle ────────────────────────────
+            // ── Snapping / Tiling / Scrolling toggle ────────────────
             SettingsSwitch {
                 id: sectionToggle
 
-                visible: trailingRow.isSnapping || trailingRow.isTiling
-                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : false)
+                visible: trailingRow.isSnapping || trailingRow.isTiling || trailingRow.isScrolling
+                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : (trailingRow.isScrolling ? appSettings.scrollingEnabled : false))
                 accessibleName: trailingRow.entry ? trailingRow.entry.title : ""
                 onToggled: function (newValue) {
                     // Disabling from the sidebar is a destructive shortcut
@@ -1015,8 +1021,10 @@ PhosphorUi.SettingsAppWindow {
                     settingsController.beginExternalEdit(trailingRow.sectionId);
                     if (trailingRow.isSnapping)
                         appSettings.snappingEnabled = newValue;
-                    else
+                    else if (trailingRow.isTiling)
                         appSettings.autotileEnabled = newValue;
+                    else
+                        appSettings.scrollingEnabled = newValue;
                     settingsController.endExternalEdit();
                 }
             }

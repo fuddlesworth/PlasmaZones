@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The scrolling half of the settings schema: the Tiling.Scrolling knobs and
+// The scrolling half of the settings schema: the Scrolling knobs and
 // the Shortcuts.Scrolling chords. Split out of settingsschema.cpp for
 // file-size; the shared validator helpers live in settingsschema_p.h and the
 // two entry points are declared alongside every other appendXxxSchema in
@@ -48,7 +48,7 @@ static_assert(ConfigDefaults::scrollingColumnDisplayTabbed()
                   == static_cast<int>(PhosphorScrollEngine::ColumnDisplay::Tabbed),
               "ColumnDisplay::Tabbed wire value drifted from ConfigDefaults");
 
-// ─── Scrolling (Tiling.Scrolling) ───────────────────────────────────────────
+// ─── Scrolling (Scrolling) ───────────────────────────────────────────
 // The niri-style scrolling engine's knobs. The strip reuses the shared Gaps
 // group and Tiling.Behavior focus settings; only scroll-specific values live
 // here. The preset lists are comma-joined decimal proportions.
@@ -57,7 +57,11 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
 
-    schema.groups[CD::tilingScrollingGroup()] = {
+    schema.groups[CD::scrollingGroup()] = {
+        // Master switch, the peer of Snapping/Tiling enabled: off, a
+        // Scrolling context downgrades to Snapping in the daemon's derive
+        // pass and the mode toggle skips the mode.
+        {CD::enabledKey(), CD::scrollingEnabled(), QMetaType::Bool},
         // validIntOr (not clampInt) for every enum here: clamping snaps an
         // out-of-range stored value to the MAX enumerator, which both
         // contradicts the sibling file's documented reader-agreement

@@ -7,7 +7,9 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Tiling → Scrolling: the niri-style scrolling engine's own knobs.
+ * @brief Scrolling: the niri-style scrolling engine's own knobs. Its own
+ * top-level placement section, the peer of Snapping and Tiling; the mode's
+ * master switch lives on the sidebar section row like theirs do.
  *
  * Every row binds the app-wide `appSettings` context property directly — the
  * scrolling settings are plain Settings Q_PROPERTYs with no page sub-controller,
@@ -56,7 +58,7 @@ SettingsFlickable {
                         Accessible.name: i18n("Center the focused column")
                         textRole: "text"
                         valueRole: "value"
-                        model: settingsController.valueOptions("Tiling.Scrolling", "CenterFocusedColumn")
+                        model: settingsController.valueOptions("Scrolling", "CenterFocusedColumn")
                         currentIndex: Math.max(0, indexOfValue(appSettings.scrollingCenterFocusedColumn))
                         onActivated: appSettings.scrollingCenterFocusedColumn = currentValue
                     }
@@ -101,7 +103,7 @@ SettingsFlickable {
                         Accessible.name: i18n("Default column width")
                         textRole: "text"
                         valueRole: "value"
-                        model: settingsController.valueOptions("Tiling.Scrolling", "DefaultColumnWidthKind")
+                        model: settingsController.valueOptions("Scrolling", "DefaultColumnWidthKind")
                         currentIndex: Math.max(0, indexOfValue(appSettings.scrollingDefaultColumnWidthKind))
                         onActivated: appSettings.scrollingDefaultColumnWidthKind = currentValue
                     }
@@ -174,7 +176,7 @@ SettingsFlickable {
                         Accessible.name: i18n("Open new columns as")
                         textRole: "text"
                         valueRole: "value"
-                        model: settingsController.valueOptions("Tiling.Scrolling", "DefaultColumnDisplay")
+                        model: settingsController.valueOptions("Scrolling", "DefaultColumnDisplay")
                         currentIndex: Math.max(0, indexOfValue(appSettings.scrollingDefaultColumnDisplay))
                         onActivated: appSettings.scrollingDefaultColumnDisplay = currentValue
                     }

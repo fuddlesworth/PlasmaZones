@@ -339,7 +339,8 @@ public:
     Q_PROPERTY(bool autotileDragInsertToggle READ autotileDragInsertToggle WRITE setAutotileDragInsertToggle NOTIFY
                    autotileDragInsertToggleChanged)
 
-    // Scrolling Settings (Tiling.Scrolling)
+    // Scrolling Settings (Scrolling)
+    Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
     Q_PROPERTY(int scrollingCenterFocusedColumn READ scrollingCenterFocusedColumn WRITE setScrollingCenterFocusedColumn
                    NOTIFY scrollingCenterFocusedColumnChanged)
     Q_PROPERTY(bool scrollingAlwaysCenterSingleColumn READ scrollingAlwaysCenterSingleColumn WRITE
@@ -1042,13 +1043,15 @@ public:
     void setAutotileDragInsertToggle(bool enable) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Scrolling Settings (IScrollSettings + Tiling.Scrolling group)
+    // Scrolling Settings (IScrollSettings + Scrolling group)
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Store-backed scalars; the enum int values rely on the schema
     // validators (validIntOr), like every other stored scalar. The width
     // VALUE is the exception: its clamp is kind-aware and lives in the
     // hand-written setter below.
+    bool scrollingEnabled() const;
+    void setScrollingEnabled(bool enabled);
     int scrollingCenterFocusedColumn() const override;
     void setScrollingCenterFocusedColumn(int mode);
     bool scrollingAlwaysCenterSingleColumn() const override;

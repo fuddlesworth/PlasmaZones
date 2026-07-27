@@ -9,20 +9,23 @@
 namespace PlasmaZones {
 
 // ── Scrolling (PhosphorConfig::Store-backed) ────────────────────────────────
-// Scalars live in m_store under Tiling.Scrolling; the schema validators own
+// Scalars live in m_store under Scrolling; the schema validators own
 // the enum/list validation (validIntOr / canonicalProportionList). The width
 // value's REAL clamp is the kind-aware hand-written setter below — the
 // schema's clampDouble alone spans both kinds' ranges.
 
-P_STORE_GET(int, scrollingCenterFocusedColumn, tilingScrollingGroup, centerFocusedColumnKey, int)
-P_STORE_SET_INT(setScrollingCenterFocusedColumn, tilingScrollingGroup, centerFocusedColumnKey,
+P_STORE_GET(bool, scrollingEnabled, scrollingGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabledChanged)
+
+P_STORE_GET(int, scrollingCenterFocusedColumn, scrollingGroup, centerFocusedColumnKey, int)
+P_STORE_SET_INT(setScrollingCenterFocusedColumn, scrollingGroup, centerFocusedColumnKey,
                 scrollingCenterFocusedColumnChanged)
 
-P_STORE_GET(bool, scrollingAlwaysCenterSingleColumn, tilingScrollingGroup, alwaysCenterSingleColumnKey, bool)
-P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, tilingScrollingGroup, alwaysCenterSingleColumnKey,
+P_STORE_GET(bool, scrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCenterSingleColumnKey, bool)
+P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCenterSingleColumnKey,
                  scrollingAlwaysCenterSingleColumnChanged)
 
-P_STORE_GET(int, scrollingDefaultColumnWidthKind, tilingScrollingGroup, defaultColumnWidthKindKey, int)
+P_STORE_GET(int, scrollingDefaultColumnWidthKind, scrollingGroup, defaultColumnWidthKindKey, int)
 
 // Hand-written kind setter: the shared value key serves two kinds under one
 // schema clamp, so a kind flip must coerce the stored value into the new
@@ -33,10 +36,9 @@ P_STORE_GET(int, scrollingDefaultColumnWidthKind, tilingScrollingGroup, defaultC
 void Settings::setScrollingDefaultColumnWidthKind(int value)
 {
     const int before =
-        m_store->read<int>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthKindKey());
-    m_store->write(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthKindKey(), value);
-    const int after =
-        m_store->read<int>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthKindKey());
+        m_store->read<int>(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthKindKey());
+    m_store->write(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthKindKey(), value);
+    const int after = m_store->read<int>(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthKindKey());
     if (after == before) {
         return;
     }
@@ -54,7 +56,7 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
     // coercion and the engine refresh it triggers.
     Q_EMIT scrollingDefaultColumnWidthKindChanged();
     const qreal stored =
-        m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
+        m_store->read<double>(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
     const bool isFixed = after == ConfigDefaults::scrollingWidthKindFixed();
     const bool isProportion = after == ConfigDefaults::scrollingWidthKindProportion();
     // No before/after kind comparison is needed inside the arms: the
@@ -79,13 +81,13 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
     // its nested setter already emitted settingsChanged — a second emit here
     // would run the engine's refresh+retile sweep twice for one user action.
     const qreal storedNow =
-        m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
+        m_store->read<double>(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
     if (qFuzzyCompare(1.0 + storedNow, 1.0 + stored)) {
         Q_EMIT settingsChanged();
     }
 }
 
-P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, tilingScrollingGroup, defaultColumnWidthValueKey, double)
+P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, scrollingGroup, defaultColumnWidthValueKey, double)
 
 // Hand-written value setter: kind-aware clamp (Proportion values live in
 // [ValueMin, ProportionMax]; Fixed in pixels with a FixedMin floor, rounded
@@ -99,10 +101,10 @@ void Settings::setScrollingDefaultColumnWidthValue(qreal value)
                     : qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value,
                                     ConfigDefaults::scrollingDefaultColumnWidthProportionMax());
     const qreal before =
-        m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
-    m_store->write(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey(), value);
+        m_store->read<double>(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
+    m_store->write(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey(), value);
     const qreal after =
-        m_store->read<double>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
+        m_store->read<double>(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
     if (qFuzzyCompare(1.0 + before, 1.0 + after)) {
         return;
     }
@@ -110,8 +112,8 @@ void Settings::setScrollingDefaultColumnWidthValue(qreal value)
     Q_EMIT settingsChanged();
 }
 
-P_STORE_GET(int, scrollingDefaultColumnDisplay, tilingScrollingGroup, defaultColumnDisplayKey, int)
-P_STORE_SET_INT(setScrollingDefaultColumnDisplay, tilingScrollingGroup, defaultColumnDisplayKey,
+P_STORE_GET(int, scrollingDefaultColumnDisplay, scrollingGroup, defaultColumnDisplayKey, int)
+P_STORE_SET_INT(setScrollingDefaultColumnDisplay, scrollingGroup, defaultColumnDisplayKey,
                 scrollingDefaultColumnDisplayChanged)
 
 // Preset lists: comma-joined QString on disk, QStringList through
@@ -119,21 +121,21 @@ P_STORE_SET_INT(setScrollingDefaultColumnDisplay, tilingScrollingGroup, defaultC
 QStringList Settings::scrollingPresetColumnWidths() const
 {
     return settings_detail::parseCommaList(
-        m_store->read<QString>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::presetColumnWidthsKey()));
+        m_store->read<QString>(ConfigDefaults::scrollingGroup(), ConfigDefaults::presetColumnWidthsKey()));
 }
 
-P_STORE_GET(QString, scrollingPresetColumnWidthsString, tilingScrollingGroup, presetColumnWidthsKey, QString)
-P_STORE_SET_STRING(setScrollingPresetColumnWidths, tilingScrollingGroup, presetColumnWidthsKey,
+P_STORE_GET(QString, scrollingPresetColumnWidthsString, scrollingGroup, presetColumnWidthsKey, QString)
+P_STORE_SET_STRING(setScrollingPresetColumnWidths, scrollingGroup, presetColumnWidthsKey,
                    scrollingPresetColumnWidthsChanged)
 
 QStringList Settings::scrollingPresetWindowHeights() const
 {
     return settings_detail::parseCommaList(
-        m_store->read<QString>(ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::presetWindowHeightsKey()));
+        m_store->read<QString>(ConfigDefaults::scrollingGroup(), ConfigDefaults::presetWindowHeightsKey()));
 }
 
-P_STORE_GET(QString, scrollingPresetWindowHeightsString, tilingScrollingGroup, presetWindowHeightsKey, QString)
-P_STORE_SET_STRING(setScrollingPresetWindowHeights, tilingScrollingGroup, presetWindowHeightsKey,
+P_STORE_GET(QString, scrollingPresetWindowHeightsString, scrollingGroup, presetWindowHeightsKey, QString)
+P_STORE_SET_STRING(setScrollingPresetWindowHeights, scrollingGroup, presetWindowHeightsKey,
                    scrollingPresetWindowHeightsChanged)
 
 // ── Scrolling shortcuts ─────────────────────────────────────────────────────

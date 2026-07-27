@@ -1124,6 +1124,7 @@ private:
     // first settingsChanged won't detect a spurious toggle.
     bool m_prevSnappingEnabled = false;
     bool m_prevAutotileEnabled = false;
+    bool m_prevScrollingEnabled = false;
 
     QTimer m_previewNotifyTimer;
     PhosphorTiles::AlgorithmPreviewParams m_preRetilePreviewParams;

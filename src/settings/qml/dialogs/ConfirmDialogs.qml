@@ -130,7 +130,7 @@ Item {
         property bool pendingValue: false
 
         title: i18n("Discard unsaved changes?")
-        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?")
+        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : (pendingSection === "tiling" ? i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?") : i18n("Disabling Scrolling will discard your unsaved Scrolling changes. Continue?"))
         standardButtons: Kirigami.Dialog.NoButton
         customFooterActions: [
             Kirigami.Action {
@@ -152,8 +152,10 @@ Item {
                     settingsController.beginExternalEdit(section);
                     if (section === "snapping")
                         appSettings.snappingEnabled = value;
-                    else
+                    else if (section === "tiling")
                         appSettings.autotileEnabled = value;
+                    else
+                        appSettings.scrollingEnabled = value;
                     settingsController.endExternalEdit();
                 }
             },

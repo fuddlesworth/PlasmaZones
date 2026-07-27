@@ -259,8 +259,12 @@ const StaticEntry kStaticEntries[] = {
      }},
 
     // ─── Autotile ──────────────────────────────────────────────────────────
+    // Label says "cycle", not "toggle": since scrolling became a first-class
+    // mode this walks Snapping → Tiling → Scrolling, skipping disabled
+    // modes. The id stays toggle_autotile so existing kglobalshortcutsrc
+    // bindings survive.
     {kIdToggleAutotile, &ConfigDefaults::autotileToggleShortcut, &Settings::autotileToggleShortcut,
-     QT_TRANSLATE_NOOP("plasmazones", "Toggle Autotile"),
+     QT_TRANSLATE_NOOP("plasmazones", "Cycle Placement Mode"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->toggleAutotileRequested();
      }},

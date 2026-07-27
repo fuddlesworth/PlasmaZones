@@ -3,7 +3,7 @@
 
 /**
  * @file test_scrolling_settings.cpp
- * @brief Schema-level guards for the Tiling.Scrolling group and the
+ * @brief Schema-level guards for the Scrolling group and the
  *        shortcut-default invariants the scrolling family made load-bearing.
  *
  * Two defect classes shipped once and are pinned here so they cannot recur:
@@ -168,7 +168,7 @@ private Q_SLOTS:
     void scrollingEnumsFallBackToDefault()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
-        const QString group = ConfigDefaults::tilingScrollingGroup();
+        const QString group = ConfigDefaults::scrollingGroup();
 
         const auto* center = findKey(schema, group, ConfigDefaults::centerFocusedColumnKey());
         QVERIFY(center && center->validator);
@@ -192,7 +192,7 @@ private Q_SLOTS:
     void presetListsCanonicalizeNumerically()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
-        const QString group = ConfigDefaults::tilingScrollingGroup();
+        const QString group = ConfigDefaults::scrollingGroup();
 
         const auto* widths = findKey(schema, group, ConfigDefaults::presetColumnWidthsKey());
         QVERIFY(widths && widths->validator);
@@ -238,7 +238,7 @@ private Q_SLOTS:
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
         const auto* value =
-            findKey(schema, ConfigDefaults::tilingScrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
+            findKey(schema, ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
         QVERIFY(value && value->validator);
         QCOMPARE(value->validator(0.001).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthValueMin());
         QCOMPARE(value->validator(99999.0).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthFixedMax());

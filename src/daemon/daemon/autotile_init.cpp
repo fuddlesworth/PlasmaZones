@@ -183,24 +183,51 @@ void Daemon::initializeAutotile()
                 QString currentAssignment = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
 
                 bool applied = false;
-                const bool wasAutotile = PhosphorLayout::LayoutId::isAutotile(currentAssignment);
+                // Three-mode cycle: Snapping → Tiling → Scrolling → Snapping.
+                // currentMode is the router-resolved answer from above, so an
+                // unclaimed/downgraded scrolling context cycles from Snapping,
+                // matching what the user actually sees on screen.
+                using Mode = PhosphorZones::AssignmentEntry::Mode;
+                const auto modeEnabled = [this](Mode m) {
+                    switch (m) {
+                    case Mode::Snapping:
+                        return m_settings->snappingEnabled();
+                    case Mode::Autotile:
+                        return m_settings->autotileEnabled();
+                    case Mode::Scrolling:
+                        return m_settings->scrollingEnabled();
+                    }
+                    return false;
+                };
+                const auto nextInCycle = [](Mode m) {
+                    switch (m) {
+                    case Mode::Snapping:
+                        return Mode::Autotile;
+                    case Mode::Autotile:
+                        return Mode::Scrolling;
+                    case Mode::Scrolling:
+                        return Mode::Snapping;
+                    }
+                    return Mode::Snapping;
+                };
+                // Feature gate: only cycle INTO a mode whose master switch is
+                // on. Disabled modes are skipped, so with scrolling off the
+                // cycle degrades to the historical two-state flip; with every
+                // other mode off the toggle is a no-op.
+                Mode target = nextInCycle(currentMode);
+                while (target != currentMode && !modeEnabled(target)) {
+                    target = nextInCycle(target);
+                }
+                if (target == currentMode) {
+                    qCInfo(lcDaemon) << "Mode toggle: ignored — no other enabled mode to cycle into";
+                    updateLayoutFilter();
+                    return;
+                }
+                const bool wasAutotile = (currentMode == Mode::Autotile);
+                const bool toSnapping = (target == Mode::Snapping);
                 qCInfo(lcDaemon) << "Mode toggle: currentAssignment=" << currentAssignment
-                                 << "wasAutotile=" << wasAutotile;
-
-                // Feature gate: only allow toggling INTO a mode whose feature flag is enabled.
-                // Without this, disabling snapping in the KCM while autotile remains on still
-                // lets the user toggle back into snapping — and vice versa.
-                const bool targetAutotile = !wasAutotile;
-                if (targetAutotile && !m_settings->autotileEnabled()) {
-                    qCInfo(lcDaemon) << "Mode toggle: ignored — autotile disabled in settings";
-                    updateLayoutFilter();
-                    return;
-                }
-                if (!targetAutotile && !m_settings->snappingEnabled()) {
-                    qCInfo(lcDaemon) << "Mode toggle: ignored — snapping disabled in settings";
-                    updateLayoutFilter();
-                    return;
-                }
+                                 << "currentMode=" << static_cast<int>(currentMode)
+                                 << "target=" << static_cast<int>(target);
 
                 // Capture autotile window order BEFORE layout switch destroys PhosphorTiles::TilingState.
                 // Merge (not replace) into m_lastEngineOrders so other desktops' saved
@@ -212,8 +239,8 @@ void Daemon::initializeAutotile()
                     }
                 }
 
-                if (wasAutotile) {
-                    // Autotile → Snapping: restore this context's snappingLayout
+                if (toSnapping) {
+                    // → Snapping: restore this context's snappingLayout
                     // from the PhosphorZones::AssignmentEntry (preserved even when mode is Autotile).
                     // Try current context first; fall back to broader scopes when the
                     // context-specific entry has no snappingLayout (e.g., fresh KCM
@@ -236,7 +263,7 @@ void Daemon::initializeAutotile()
                             applied = m_unifiedLayoutController->applyLayoutById(fallback->id().toString());
                         }
                     }
-                } else {
+                } else if (target == Mode::Autotile) {
                     // Pre-save snap-float state before autotile entry so rapid
                     // toggles don't lose snap-mode floats. Scoped to the toggled
                     // screen — windows floating on other screens are unaffected.
@@ -295,6 +322,32 @@ void Daemon::initializeAutotile()
                         refreshCheatsheetIfVisible();
                         applied = true;
                     }
+                } else {
+                    // → Scrolling. The mode IS the assignment (the strip has
+                    // no layout entity), so like the bare-autotile arm this is
+                    // a direct entry write — applyLayoutById has nothing to
+                    // apply. Both sibling slots are carried so the toggle
+                    // stays lossless: cycling back restores the same snapping
+                    // layout and tiling algorithm this context had before.
+                    // Snap-float presave for a snapping→scrolling flip runs in
+                    // updateEngineScreens' derive pass (driven by the emitted
+                    // layoutAssigned), which fires before the scroll engine
+                    // claims the screen.
+                    PhosphorZones::AssignmentEntry entry;
+                    entry.mode = Mode::Scrolling;
+                    entry.snappingLayout = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+                    if (entry.snappingLayout.isEmpty() && !activity.isEmpty()) {
+                        entry.snappingLayout = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
+                    }
+                    entry.tilingAlgorithm = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
+                    if (entry.tilingAlgorithm.isEmpty() && !activity.isEmpty()) {
+                        entry.tilingAlgorithm = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, QString());
+                    }
+                    m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
+                    // Direct writes fire no layoutApplied/autotileApplied, so
+                    // nudge the surfaces those signals normally refresh.
+                    refreshCheatsheetIfVisible();
+                    applied = true;
                 }
 
                 // If apply failed (e.g. layout was deleted), restore the correct filter
@@ -312,7 +365,14 @@ void Daemon::initializeAutotile()
                 // pre-autotile floating geometry restored via the batched buildAutotileRestoreEntries →
                 // emitBatchedResnap path.
                 auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get());
-                if (wasAutotile && (!applied || !concreteSnap)) {
+                if (wasAutotile && !toSnapping) {
+                    // Autotile → Scrolling: the released windows re-enter the
+                    // strip, so replaying the preserved snap-ZONE half would
+                    // fight the scroll engine's placement. Drop it; the
+                    // windows' snap state stays in the unified record for a
+                    // later scrolling→snapping flip to restore.
+                    m_pendingSnapFloatRestores.clear();
+                } else if (wasAutotile && (!applied || !concreteSnap)) {
                     if (applied && m_snapEngine) {
                         qCWarning(lcDaemon) << "Snap engine is not a SnapEngine — autotile→snap resnap skipped";
                     }

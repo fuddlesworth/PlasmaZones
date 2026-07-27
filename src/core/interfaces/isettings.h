@@ -605,6 +605,7 @@ Q_SIGNALS:
     void autotileDecMasterRatioShortcutChanged();
 
     // Scrolling settings
+    void scrollingEnabledChanged();
     void scrollingCenterFocusedColumnChanged();
     void scrollingAlwaysCenterSingleColumnChanged();
     void scrollingDefaultColumnWidthKindChanged();

@@ -7,7 +7,7 @@
 
 namespace PlasmaZones {
 
-// Chain link 6: the scrolling engine's Tiling.Scrolling defaults and the
+// Chain link 6: the scrolling engine's Scrolling defaults and the
 // Shortcuts.Scrolling chord defaults. Split out of configdefaults.h to keep
 // that file inside the size ceiling; every accessor here reaches call sites
 // through the ConfigDefaults leaf as before, so no consumer changes.
@@ -15,8 +15,17 @@ class ConfigDefaultsScrolling : public ConfigDefaultsScreens
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════
-    // Scrolling (Tiling.Scrolling)
+    // Scrolling (Scrolling)
     // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Master switch for the scrolling placement mode, the peer of
+    /// snappingEnabled and autotileEnabled. Off, a Scrolling context
+    /// downgrades to Snapping in the daemon's derive pass and the mode
+    /// toggle skips the mode.
+    static bool scrollingEnabled()
+    {
+        return true;
+    }
 
     /// CenterFocusedColumn wire values. Named so the predicate below and any
     /// settings-layer branch read against the vocabulary instead of raw ints,

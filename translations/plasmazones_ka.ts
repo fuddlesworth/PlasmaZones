@@ -201,147 +201,147 @@
         <translation>განლაგების ბლოკირების გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="263"/>
-        <source>Toggle Autotile</source>
-        <translation>ავტოფილირების გადართვა</translation>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="267"/>
+        <source>Cycle Placement Mode</source>
+        <translation>განთავსების რეჟიმის გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="268"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="272"/>
         <source>Focus Master Window</source>
         <translation>მთავარ ფანჯარაზე ფოკუსი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="273"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="277"/>
         <source>Swap with Master</source>
         <translation>მთავართან გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="278"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="282"/>
         <source>Increase Master Ratio</source>
         <translation>მთავარი თანაფარდობის გაზრდა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="283"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="287"/>
         <source>Decrease Master Ratio</source>
         <translation>მთავარი თანაფარდობის შემცირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="288"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="292"/>
         <source>Increase Master Count</source>
         <translation>მთავრების რაოდენობის გაზრდა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="293"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="297"/>
         <source>Decrease Master Count</source>
         <translation>მთავრების რაოდენობის შემცირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="298"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="302"/>
         <source>Retile Windows</source>
         <translation>ფანჯრების თავიდან დაფილვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="305"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="309"/>
         <source>Focus First Column</source>
         <translation>პირველ სვეტზე ფოკუსი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="310"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="314"/>
         <source>Focus Last Column</source>
         <translation>ბოლო სვეტზე ფოკუსი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="315"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="319"/>
         <source>Move Column to Start</source>
         <translation>სვეტის დასაწყისში გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="320"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="324"/>
         <source>Move Column to End</source>
         <translation>სვეტის ბოლოში გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="325"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="329"/>
         <source>Consume Window into Column</source>
         <translation>ფანჯრის სვეტში ჩამატება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="330"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="334"/>
         <source>Expel Window from Column</source>
         <translation>ფანჯრის სვეტიდან გამოძევება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="335"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="339"/>
         <source>Consume or Expel Left</source>
         <translation>მარცხნივ ჩამატება ან გამოძევება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="340"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="344"/>
         <source>Consume or Expel Right</source>
         <translation>მარჯვნივ ჩამატება ან გამოძევება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="345"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="349"/>
         <source>Center Column</source>
         <translation>სვეტის ცენტრში მოქცევა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="350"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="354"/>
         <source>Toggle Tabbed Column</source>
         <translation>ჩანართებიანი სვეტის გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="355"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="359"/>
         <source>Cycle Column Width Preset</source>
         <translation>სვეტის სიგანის შაბლონების გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="361"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="365"/>
         <source>Cycle Column Width Preset Back</source>
         <translation>სვეტის სიგანის შაბლონების უკან გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="366"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="370"/>
         <source>Increase Column Width</source>
         <translation>სვეტის სიგანის გაზრდა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="371"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="375"/>
         <source>Decrease Column Width</source>
         <translation>სვეტის სიგანის შემცირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="376"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="380"/>
         <source>Maximize Column</source>
         <translation>სვეტის გადიდება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="381"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="385"/>
         <source>Expand Column to Available Width</source>
         <translation>სვეტის გაშლა ხელმისაწვდომ სიგანემდე</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="386"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="390"/>
         <source>Cycle Window Height Preset</source>
         <translation>ფანჯრის სიმაღლის შაბლონების გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="391"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="395"/>
         <source>Increase Window Height</source>
         <translation>ფანჯრის სიმაღლის გაზრდა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="396"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="400"/>
         <source>Decrease Window Height</source>
         <translation>ფანჯრის სიმაღლის შემცირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="401"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="405"/>
         <source>Reset Window Heights</source>
         <translation>ფანჯრების სიმაღლეების ჩამოყრა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="408"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="412"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="63"/>
         <source>Open Shortcut Cheatsheet</source>
         <translation>მალსახმობების ცნობარის გახსნა</translation>
@@ -349,7 +349,6 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="85"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="289"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="283"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="279"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="334"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="68"/>
@@ -496,7 +495,7 @@
         <translation>ფანჯრის სიმაღლის დარეგულირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="810"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="814"/>
         <source>Apply Layout %1</source>
         <translation>განლაგების %1 გადატარება</translation>
     </message>
@@ -891,7 +890,7 @@
         <translation>სერვისები ინიციალიზებული არაა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="828"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="832"/>
         <source>Snap to Zone %1</source>
         <translation>მიმაგრება ზონასთან %1</translation>
     </message>
@@ -1343,7 +1342,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="169"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="254"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="256"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="81"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="278"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="331"/>
@@ -1548,7 +1547,7 @@
         <translation>დაშორებები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="200"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="202"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="90"/>
         <source>Overlay</source>
         <translation>გადადება</translation>
@@ -1561,15 +1560,15 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="114"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="209"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="211"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="96"/>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="791"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="796"/>
         <source>Appearance</source>
         <translation>გარეგნობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="224"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="263"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="226"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="265"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="82"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="99"/>
         <source>Window</source>
@@ -1713,7 +1712,7 @@
         <translation>მონიტორი</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="340"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="337"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="254"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="292"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="545"/>
@@ -1749,7 +1748,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="167"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="197"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="199"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="277"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="325"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="56"/>
@@ -2735,15 +2734,15 @@
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="183"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="580"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="119"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="125"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="121"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="127"/>
         <source>Proportion of the screen</source>
         <translation>ეკრანის წილი</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="184"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="140"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="142"/>
         <source>Fixed width</source>
         <translation>ფიქსირებული სიგანე</translation>
     </message>
@@ -3289,7 +3288,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="142"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="304"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="301"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="506"/>
         <source>Animations</source>
         <translation>ანიმაციები</translation>
@@ -3486,7 +3485,7 @@
         <translation>დაფილული</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="406"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="403"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="50"/>
         <source>Popups</source>
         <translation>ამომხტარები</translation>
@@ -5730,33 +5729,33 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="565"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="43"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="45"/>
         <source>Focus and view</source>
         <translation>ფოკუსი და ხედი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="567"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="51"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="56"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="53"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="58"/>
         <source>Center the focused column</source>
         <translation>ფოკუსირებული სვეტის ცენტრში მოქცევა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="571"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="68"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="74"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="70"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="76"/>
         <source>Center a lone column</source>
         <translation>ერთადერთი სვეტის ცენტრში მოქცევა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="574"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="88"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="90"/>
         <source>New columns</source>
         <translation>ახალი სვეტები</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="576"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="96"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="98"/>
         <source>Default width</source>
         <translation>ნაგულისხმევი სიგანე</translation>
     </message>
@@ -5781,8 +5780,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="585"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="169"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="174"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="171"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="176"/>
         <source>Open new columns as</source>
         <translation>ახალი სვეტების გახსნა როგორც</translation>
     </message>
@@ -5798,13 +5797,13 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="588"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="190"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="192"/>
         <source>Width and height presets</source>
         <translation>სიგანისა და სიმაღლის შაბლონები</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="198"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="200"/>
         <source>Column widths</source>
         <translation>სვეტების სიგანეები</translation>
     </message>
@@ -5816,7 +5815,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="593"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="233"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="235"/>
         <source>Window heights</source>
         <translation>ფანჯრების სიმაღლეები</translation>
     </message>
@@ -6137,7 +6136,7 @@
         <translation>მაჩვენებელი</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="270"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="272"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="59"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="124"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="545"/>
@@ -6490,8 +6489,8 @@
         <translation>დაბალი</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="229"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="288"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="231"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="276"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="776"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="540"/>
         <source>Configuration</source>
@@ -6930,8 +6929,8 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="90"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="91"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="98"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="307"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="388"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="304"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="385"/>
         <source>General</source>
         <translation>ზოგადი</translation>
     </message>
@@ -6962,8 +6961,8 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="122"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="124"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="126"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="326"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="396"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
         <source>Windows</source>
         <translation>ფანჯრები</translation>
@@ -6990,7 +6989,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="134"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="136"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="138"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="173"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="175"/>
         <source>Virtual Screens</source>
         <translation>ვირტუალური ეკრანები</translation>
     </message>
@@ -7002,26 +7001,26 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="96"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="97"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="181"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="177"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="179"/>
         <source>Layouts</source>
         <translation>განლაგებები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="205"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="207"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="64"/>
         <source>Behavior</source>
         <translation>ქცევა</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="216"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="218"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="54"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="30"/>
         <source>Zone Selector</source>
         <translation>ზონის ამომრჩევი</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="231"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="290"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="233"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="278"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="74"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="75"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="152"/>
@@ -7029,89 +7028,95 @@
         <translation>პრიორიტეტი</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="236"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="295"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="238"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="283"/>
         <source>Quick Shortcuts</source>
         <translation>სწრაფი მალსახმობები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="238"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="371"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="415"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="240"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="368"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="412"/>
         <source>Shaders</source>
         <translation>შეიდერები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="315"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="312"/>
         <source>Transitions</source>
         <translation>გადასვლები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="323"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="320"/>
         <source>Motion</source>
         <translation>მოძრაობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="344"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="341"/>
         <source>Window Motion</source>
         <translation>ფანჯრის მოძრაობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="351"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="348"/>
         <source>Window Dragging</source>
         <translation>ფანჯრის გადათრევა</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="393"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="390"/>
         <source>Surfaces</source>
         <translation>ზედაპირები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="412"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="409"/>
         <source>Decoration Sets</source>
         <translation>დეკორაციის ნაკრებები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="325"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="395"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="322"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="392"/>
         <source>Library</source>
         <translation>ბიბლიოთეკა</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="332"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="402"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="171"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="290"/>
+        <source>Scrolling</source>
+        <translation>გადახვევა</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="48"/>
         <source>OSDs</source>
         <translation>OSD-ები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="337"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="334"/>
         <source>Overlays</source>
         <translation>გადადებები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="354"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="351"/>
         <source>Side Panels</source>
         <translation>გვერდითი პანელები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="356"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="353"/>
         <source>Widgets</source>
         <translation>ვიჯეტები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="361"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="358"/>
         <source>Layout Editor</source>
         <translation>განლაგების რედაქტორი</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="364"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="361"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="625"/>
         <source>Presets</source>
         <translation>შაბლონები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="369"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="366"/>
         <source>Motion Sets</source>
         <translation>მოძრაობის ნაკრებები</translation>
     </message>
@@ -10461,23 +10466,23 @@
         <translation>გაუქმება ვერ დასრულდა: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="691"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="696"/>
         <source>Reset page to defaults</source>
         <translation>გვერდის საწყისებზე დაბრუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="710"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="715"/>
         <source>Discard changes on this page</source>
         <translation>ამ გვერდის ცვლილებების გაუქმება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="852"/>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="871"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="857"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="876"/>
         <source>Advanced</source>
         <translation>დამატებითი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="859"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="864"/>
         <source>Toggle advanced settings</source>
         <translation>დამატებითი პარამეტრების გადართვა</translation>
     </message>
@@ -10866,7 +10871,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="47"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="77"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="111"/>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="161"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="163"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="466"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
@@ -10926,22 +10931,27 @@
         <translation>ფილირების გამორთვა გააუქმებს ფილირების შეუნახავ ცვლილებებს. გავაგრძელო?</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="133"/>
+        <source>Disabling Scrolling will discard your unsaved Scrolling changes. Continue?</source>
+        <translation>გადახვევის გამორთვა გააუქმებს გადახვევის შეუნახავ ცვლილებებს. გავაგრძელო?</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="137"/>
         <source>Discard and Disable</source>
         <translation>გაუქმება და გამორთვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="175"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="177"/>
         <source>Stop daemon?</source>
         <translation>შევაჩერო დემონი?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="176"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="178"/>
         <source>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</source>
         <translation>PlasmaZones დემონის შეჩერება გამორთავს ფანჯრების ფილირებას და მიმაგრებას მის ხელახლა გაშვებამდე.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="180"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
         <source>Stop daemon</source>
         <translation>დემონის შეჩერება</translation>
     </message>
@@ -16634,76 +16644,76 @@
         <translation>განლაგებები ხელმისაწვდომი არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="53"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="55"/>
         <source>With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.</source>
         <oldsource>Never keeps the strip still until the focused column would leave the screen. Always parks the focused column in the middle. On overflow centers it only once the strip is wider than the screen.</oldsource>
         <translation>„არასდროს“-ის დროს ლენტა უძრავად რჩება, სანამ ფოკუსირებული სვეტი ეკრანს არ გასცდება. „ყოველთვის“-ის დროს ფოკუსირებული სვეტი შუაში ჩერდება. „გადავსებისას“-ის დროს ცენტრირება მხოლოდ მაშინ ხდება, როცა ლენტა ეკრანზე განიერი გახდება.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="70"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="72"/>
         <source>When the strip holds a single column, center it even when Center the focused column is set to Never.</source>
         <oldsource>When the strip holds a single column, center it regardless of how Center the focused column is set</oldsource>
         <translation>როცა ლენტა მხოლოდ ერთ სვეტს შეიცავს, მოაქციეთ ის ცენტრში მაშინაც კი, როცა „ფოკუსირებული სვეტის ცენტრში მოქცევა“ დაყენებულია „არასდროს“-ზე.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="98"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="100"/>
         <source>How wide a column is when it first opens</source>
         <translation>რამდენად განიერია სვეტი პირველი გახსნისას</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="101"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="103"/>
         <source>Default column width</source>
         <translation>ნაგულისხმევი სვეტის სიგანე</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="121"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="123"/>
         <source>How much of the usable screen width a new column takes</source>
         <translation>ეკრანის გამოსადეგი სიგანის რა ნაწილს იკავებს ახალი სვეტი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="142"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="144"/>
         <source>How many pixels wide a new column is</source>
         <translation>რამდენი პიქსელის სიგანისაა ახალი სვეტი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="148"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="150"/>
         <source>Fixed column width</source>
         <translation>სვეტის ფიქსირებული სიგანე</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="171"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="173"/>
         <source>Normal stacks the windows of a column above each other. Tabbed shows one window at a time behind a tab strip.</source>
         <translation>„ჩვეულებრივი“ სვეტის ფანჯრებს ერთმანეთის თავზე აწყობს. „ჩანართებიანი“ ერთდროულად ერთ ფანჯარას აჩვენებს ჩანართების ზოლის უკან.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="207"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="209"/>
         <source>0.333,0.5,0.667</source>
         <comment>@info:placeholder comma separated column width fractions</comment>
         <translation>0.333,0.5,0.667</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="242"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="244"/>
         <source>0.333,0.5,0.667</source>
         <comment>@info:placeholder comma separated window height fractions</comment>
         <translation>0.333,0.5,0.667</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="206"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="208"/>
         <source>Column width presets</source>
         <translation>სვეტის სიგანის შაბლონები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="200"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="202"/>
         <source>Comma-separated fractions of the work area width, cycled by the preset shortcuts</source>
         <translation>სამუშაო არის სიგანის მძიმით გამოყოფილი წილები, რომლებსაც შაბლონების მალსახმობები გადართავს</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="235"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="237"/>
         <source>Comma-separated fractions of the work area height, cycled by the preset shortcuts</source>
         <translation>სამუშაო არის სიმაღლის მძიმით გამოყოფილი წილები, რომლებსაც შაბლონების მალსახმობები გადართავს</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="243"/>
         <source>Window height presets</source>
         <translation>ფანჯრის სიმაღლის შაბლონები</translation>
     </message>

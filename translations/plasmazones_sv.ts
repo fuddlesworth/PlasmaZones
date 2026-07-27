@@ -201,147 +201,147 @@
         <translation>Växla layoutlås</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="263"/>
-        <source>Toggle Autotile</source>
-        <translation>Växla autopanelindelning</translation>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="267"/>
+        <source>Cycle Placement Mode</source>
+        <translation>Växla placeringsläge</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="268"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="272"/>
         <source>Focus Master Window</source>
         <translation>Fokusera huvudfönstret</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="273"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="277"/>
         <source>Swap with Master</source>
         <translation>Byt plats med huvudfönstret</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="278"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="282"/>
         <source>Increase Master Ratio</source>
         <translation>Öka huvudförhållandet</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="283"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="287"/>
         <source>Decrease Master Ratio</source>
         <translation>Minska huvudförhållandet</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="288"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="292"/>
         <source>Increase Master Count</source>
         <translation>Öka antalet huvudfönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="293"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="297"/>
         <source>Decrease Master Count</source>
         <translation>Minska antalet huvudfönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="298"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="302"/>
         <source>Retile Windows</source>
         <translation>Panelindela om fönstren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="305"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="309"/>
         <source>Focus First Column</source>
         <translation>Fokusera första kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="310"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="314"/>
         <source>Focus Last Column</source>
         <translation>Fokusera sista kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="315"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="319"/>
         <source>Move Column to Start</source>
         <translation>Flytta kolumnen till början</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="320"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="324"/>
         <source>Move Column to End</source>
         <translation>Flytta kolumnen till slutet</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="325"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="329"/>
         <source>Consume Window into Column</source>
         <translation>Ta in fönstret i kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="330"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="334"/>
         <source>Expel Window from Column</source>
         <translation>Mata ut fönstret ur kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="335"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="339"/>
         <source>Consume or Expel Left</source>
         <translation>Ta in eller mata ut åt vänster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="340"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="344"/>
         <source>Consume or Expel Right</source>
         <translation>Ta in eller mata ut åt höger</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="345"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="349"/>
         <source>Center Column</source>
         <translation>Centrera kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="350"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="354"/>
         <source>Toggle Tabbed Column</source>
         <translation>Växla flikkolumn</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="355"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="359"/>
         <source>Cycle Column Width Preset</source>
         <translation>Bläddra bland förinställda kolumnbredder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="361"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="365"/>
         <source>Cycle Column Width Preset Back</source>
         <translation>Bläddra bakåt bland förinställda kolumnbredder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="366"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="370"/>
         <source>Increase Column Width</source>
         <translation>Öka kolumnbredden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="371"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="375"/>
         <source>Decrease Column Width</source>
         <translation>Minska kolumnbredden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="376"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="380"/>
         <source>Maximize Column</source>
         <translation>Maximera kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="381"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="385"/>
         <source>Expand Column to Available Width</source>
         <translation>Expandera kolumnen till tillgänglig bredd</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="386"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="390"/>
         <source>Cycle Window Height Preset</source>
         <translation>Bläddra bland förinställda fönsterhöjder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="391"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="395"/>
         <source>Increase Window Height</source>
         <translation>Öka fönsterhöjden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="396"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="400"/>
         <source>Decrease Window Height</source>
         <translation>Minska fönsterhöjden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="401"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="405"/>
         <source>Reset Window Heights</source>
         <translation>Återställ fönsterhöjderna</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="408"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="412"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="63"/>
         <source>Open Shortcut Cheatsheet</source>
         <translation>Öppna genvägsöversikten</translation>
@@ -349,7 +349,6 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="85"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="289"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="283"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="279"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="334"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="68"/>
@@ -496,7 +495,7 @@
         <translation>Justera fönsterhöjd</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="810"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="814"/>
         <source>Apply Layout %1</source>
         <translation>Verkställ layout %1</translation>
     </message>
@@ -891,7 +890,7 @@
         <translation>Tjänsterna är inte initierade</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="828"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="832"/>
         <source>Snap to Zone %1</source>
         <translation>Fäst i zon %1</translation>
     </message>
@@ -1343,7 +1342,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="169"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="254"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="256"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="81"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="278"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="331"/>
@@ -1548,7 +1547,7 @@
         <translation>Mellanrum</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="200"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="202"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="90"/>
         <source>Overlay</source>
         <translation>Överlägg</translation>
@@ -1561,15 +1560,15 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="114"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="209"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="211"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="96"/>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="791"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="796"/>
         <source>Appearance</source>
         <translation>Utseende</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="224"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="263"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="226"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="265"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="82"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="99"/>
         <source>Window</source>
@@ -1713,7 +1712,7 @@
         <translation>Skärm</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="340"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="337"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="254"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="292"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="545"/>
@@ -1749,7 +1748,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="167"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="197"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="199"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="277"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="325"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="56"/>
@@ -2735,15 +2734,15 @@
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="183"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="580"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="119"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="125"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="121"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="127"/>
         <source>Proportion of the screen</source>
         <translation>Andel av skärmen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="184"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="140"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="142"/>
         <source>Fixed width</source>
         <translation>Fast bredd</translation>
     </message>
@@ -3289,7 +3288,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="142"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="304"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="301"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="506"/>
         <source>Animations</source>
         <translation>Animeringar</translation>
@@ -3486,7 +3485,7 @@
         <translation>Panelindelad</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="406"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="403"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="50"/>
         <source>Popups</source>
         <translation>Popup-fönster</translation>
@@ -5730,33 +5729,33 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="565"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="43"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="45"/>
         <source>Focus and view</source>
         <translation>Fokus och vy</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="567"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="51"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="56"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="53"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="58"/>
         <source>Center the focused column</source>
         <translation>Centrera den fokuserade kolumnen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="571"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="68"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="74"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="70"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="76"/>
         <source>Center a lone column</source>
         <translation>Centrera en ensam kolumn</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="574"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="88"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="90"/>
         <source>New columns</source>
         <translation>Nya kolumner</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="576"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="96"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="98"/>
         <source>Default width</source>
         <translation>Standardbredd</translation>
     </message>
@@ -5781,8 +5780,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="585"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="169"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="174"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="171"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="176"/>
         <source>Open new columns as</source>
         <translation>Öppna nya kolumner som</translation>
     </message>
@@ -5798,13 +5797,13 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="588"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="190"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="192"/>
         <source>Width and height presets</source>
         <translation>Förinställda bredder och höjder</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="198"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="200"/>
         <source>Column widths</source>
         <translation>Kolumnbredder</translation>
     </message>
@@ -5816,7 +5815,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="593"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="233"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="235"/>
         <source>Window heights</source>
         <translation>Fönsterhöjder</translation>
     </message>
@@ -6137,7 +6136,7 @@
         <translation>pekare</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="270"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="272"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="59"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="124"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="545"/>
@@ -6490,8 +6489,8 @@
         <translation>låg</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="229"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="288"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="231"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="276"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="776"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="540"/>
         <source>Configuration</source>
@@ -6930,8 +6929,8 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="90"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="91"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="98"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="307"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="388"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="304"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="385"/>
         <source>General</source>
         <translation>Allmänt</translation>
     </message>
@@ -6962,8 +6961,8 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="122"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="124"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="126"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="326"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="396"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
         <source>Windows</source>
         <translation>Fönster</translation>
@@ -6990,7 +6989,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="134"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="136"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="138"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="173"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="175"/>
         <source>Virtual Screens</source>
         <translation>Virtuella skärmar</translation>
     </message>
@@ -7002,26 +7001,26 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="96"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="97"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="181"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="177"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="179"/>
         <source>Layouts</source>
         <translation>Layouter</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="205"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="207"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="64"/>
         <source>Behavior</source>
         <translation>Beteende</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="216"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="218"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="54"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="30"/>
         <source>Zone Selector</source>
         <translation>Zonväljare</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="231"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="290"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="233"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="278"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="74"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="75"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="152"/>
@@ -7029,89 +7028,95 @@
         <translation>Prioritet</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="236"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="295"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="238"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="283"/>
         <source>Quick Shortcuts</source>
         <translation>Snabbgenvägar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="238"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="371"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="415"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="240"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="368"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="412"/>
         <source>Shaders</source>
         <translation>Shaders</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="315"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="312"/>
         <source>Transitions</source>
         <translation>Övergångar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="323"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="320"/>
         <source>Motion</source>
         <translation>Rörelse</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="344"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="341"/>
         <source>Window Motion</source>
         <translation>Fönsterrörelse</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="351"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="348"/>
         <source>Window Dragging</source>
         <translation>Fönsterdragning</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="393"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="390"/>
         <source>Surfaces</source>
         <translation>Ytor</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="412"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="409"/>
         <source>Decoration Sets</source>
         <translation>Dekorationsuppsättningar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="325"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="395"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="322"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="392"/>
         <source>Library</source>
         <translation>Bibliotek</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="332"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="402"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="171"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="290"/>
+        <source>Scrolling</source>
+        <translation>Rullning</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="48"/>
         <source>OSDs</source>
         <translation>OSD:er</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="337"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="334"/>
         <source>Overlays</source>
         <translation>Överlägg</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="354"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="351"/>
         <source>Side Panels</source>
         <translation>Sidopaneler</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="356"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="353"/>
         <source>Widgets</source>
         <translation>Widgetar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="361"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="358"/>
         <source>Layout Editor</source>
         <translation>Layoutredigerare</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="364"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="361"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="625"/>
         <source>Presets</source>
         <translation>Förinställningar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="369"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="366"/>
         <source>Motion Sets</source>
         <translation>Rörelseuppsättningar</translation>
     </message>
@@ -10461,23 +10466,23 @@
         <translation>Förkastningen slutfördes inte: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="691"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="696"/>
         <source>Reset page to defaults</source>
         <translation>Återställ sidan till standardvärden</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="710"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="715"/>
         <source>Discard changes on this page</source>
         <translation>Förkasta ändringar på den här sidan</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="852"/>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="871"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="857"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="876"/>
         <source>Advanced</source>
         <translation>Avancerat</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="859"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="864"/>
         <source>Toggle advanced settings</source>
         <translation>Växla avancerade inställningar</translation>
     </message>
@@ -10866,7 +10871,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="47"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="77"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="111"/>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="161"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="163"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="466"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
@@ -10926,22 +10931,27 @@
         <translation>Att inaktivera Panelindelning förkastar dina osparade ändringar för Panelindelning. Fortsätta?</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="133"/>
+        <source>Disabling Scrolling will discard your unsaved Scrolling changes. Continue?</source>
+        <translation>Att inaktivera Rullning förkastar dina osparade ändringar för Rullning. Fortsätta?</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="137"/>
         <source>Discard and Disable</source>
         <translation>Förkasta och inaktivera</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="175"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="177"/>
         <source>Stop daemon?</source>
         <translation>Stoppa bakgrundstjänsten?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="176"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="178"/>
         <source>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</source>
         <translation>Att stoppa PlasmaZones bakgrundstjänst inaktiverar fönsterpanelindelning och fästning tills du startar den igen.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="180"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
         <source>Stop daemon</source>
         <translation>Stoppa bakgrundstjänsten</translation>
     </message>
@@ -16634,76 +16644,76 @@
         <translation>Inga layouter tillgängliga</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="53"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="55"/>
         <source>With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.</source>
         <oldsource>Never keeps the strip still until the focused column would leave the screen. Always parks the focused column in the middle. On overflow centers it only once the strip is wider than the screen.</oldsource>
         <translation>Med Aldrig står remsan stilla tills den fokuserade kolumnen skulle lämna skärmen. Med Alltid parkerar den fokuserade kolumnen i mitten. Med Vid överflöde centreras den först när remsan är bredare än skärmen.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="70"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="72"/>
         <source>When the strip holds a single column, center it even when Center the focused column is set to Never.</source>
         <oldsource>When the strip holds a single column, center it regardless of how Center the focused column is set</oldsource>
         <translation>När remsan bara innehåller en kolumn centreras den även när ”Centrera den fokuserade kolumnen” är inställt på ”Aldrig”.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="98"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="100"/>
         <source>How wide a column is when it first opens</source>
         <translation>Hur bred en kolumn är när den öppnas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="101"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="103"/>
         <source>Default column width</source>
         <translation>Standardkolumnbredd</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="121"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="123"/>
         <source>How much of the usable screen width a new column takes</source>
         <translation>Hur stor del av den användbara skärmbredden en ny kolumn tar</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="142"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="144"/>
         <source>How many pixels wide a new column is</source>
         <translation>Hur många bildpunkter bred en ny kolumn är</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="148"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="150"/>
         <source>Fixed column width</source>
         <translation>Fast kolumnbredd</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="171"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="173"/>
         <source>Normal stacks the windows of a column above each other. Tabbed shows one window at a time behind a tab strip.</source>
         <translation>Normal staplar kolumnens fönster ovanpå varandra. Med flikar visar ett fönster i taget bakom en flikrad.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="207"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="209"/>
         <source>0.333,0.5,0.667</source>
         <comment>@info:placeholder comma separated column width fractions</comment>
         <translation>0.333,0.5,0.667</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="242"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="244"/>
         <source>0.333,0.5,0.667</source>
         <comment>@info:placeholder comma separated window height fractions</comment>
         <translation>0.333,0.5,0.667</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="206"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="208"/>
         <source>Column width presets</source>
         <translation>Förinställda kolumnbredder</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="200"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="202"/>
         <source>Comma-separated fractions of the work area width, cycled by the preset shortcuts</source>
         <translation>Kommaseparerade andelar av arbetsytans bredd, som bläddras igenom med förinställningsgenvägarna</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="235"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="237"/>
         <source>Comma-separated fractions of the work area height, cycled by the preset shortcuts</source>
         <translation>Kommaseparerade andelar av arbetsytans höjd, som bläddras igenom med förinställningsgenvägarna</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingScrollingPage.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingPage.qml.cpp" line="243"/>
         <source>Window height presets</source>
         <translation>Förinställda fönsterhöjder</translation>
     </message>

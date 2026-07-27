@@ -301,6 +301,7 @@ void Daemon::initLayoutAndSettingsWiring()
     // transitions are handled here to avoid redundant retile passes.
     m_prevSnappingEnabled = m_settings->snappingEnabled();
     m_prevAutotileEnabled = m_settings->autotileEnabled();
+    m_prevScrollingEnabled = m_settings->scrollingEnabled();
     m_previewNotifyTimer.setSingleShot(true);
     m_previewNotifyTimer.setInterval(100);
     connect(&m_previewNotifyTimer, &QTimer::timeout, this, [this]() {
@@ -316,10 +317,13 @@ void Daemon::initLayoutAndSettingsWiring()
         // Detect state transitions before syncing
         const bool snappingNow = m_settings->snappingEnabled();
         const bool autotileNow = m_settings->autotileEnabled();
+        const bool scrollingNow = m_settings->scrollingEnabled();
         const bool snappingToggled = snappingNow != m_prevSnappingEnabled;
         const bool autotileToggled = autotileNow != m_prevAutotileEnabled;
+        const bool scrollingToggled = scrollingNow != m_prevScrollingEnabled;
         m_prevSnappingEnabled = snappingNow;
         m_prevAutotileEnabled = autotileNow;
+        m_prevScrollingEnabled = scrollingNow;
 
         // Sync config immediately so the engine never reads stale values.
         // Only retile + preview notification are debounced (100ms timer).
@@ -369,10 +373,15 @@ void Daemon::initLayoutAndSettingsWiring()
         updateEngineScreens();
         updateLayoutFilter();
 
-        // Resnap after autotile disabled: restore windows to their pre-autotile
-        // zone positions. PhosphorZones::Zone assignments are preserved during autotile (onLayoutChanged
-        // skips autotile screens) so resnap uses original snap assignments.
-        if (autotileToggled && !autotileNow && m_windowTrackingAdaptor && m_snapAdaptor && m_snapEngine) {
+        // Resnap after a tiling-family engine is disabled: restore windows to
+        // their pre-tiling zone positions. PhosphorZones::Zone assignments are
+        // preserved while a screen is autotile OR scrolling (onLayoutChanged
+        // skips non-snap screens) so resnap uses original snap assignments.
+        // The scrolling arm is the master-switch twin: its released windows
+        // fell through updateEngineScreens' derive pass to snapping in the
+        // same recompute above.
+        if (((autotileToggled && !autotileNow) || (scrollingToggled && !scrollingNow)) && m_windowTrackingAdaptor
+            && m_snapAdaptor && m_snapEngine) {
             // Pre-arm OSD suppression for the resnap signal(s) about to fire (the
             // feedback returns asynchronously, so arm before emitting).
             armResnapOsdSuppression(1); // resnapCurrentAssignments()

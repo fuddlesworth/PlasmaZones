@@ -130,7 +130,14 @@ void Daemon::updateEngineScreens()
         const int desktop = currentDesktopForScreen(screenId);
         // Scrolling-mode assignment is resolved from the same cascade; it has
         // no layout id of its own, so the mode lookup is the discriminator.
-        if (m_layoutManager->modeForScreen(screenId, desktop, activity) == PhosphorZones::AssignmentEntry::Scrolling) {
+        // The master switch gates here (the peer of the snapping/autotile
+        // feature flags): with scrolling disabled the branch is skipped
+        // entirely, the "scrolling:" assignment falls through as a
+        // non-autotile id, and the screen is treated as snapping — the same
+        // downgrade the router applies for an unclaimed scrolling cascade.
+        if (m_settings && m_settings->scrollingEnabled()
+            && m_layoutManager->modeForScreen(screenId, desktop, activity)
+                == PhosphorZones::AssignmentEntry::Scrolling) {
             if (!m_contextResolver->isDisabled(
                     m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Scrolling))) {
                 scrollingScreens.insert(screenId);

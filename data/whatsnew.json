@@ -6,7 +6,7 @@
             "highlights": [
                 "New: Scrolling mode, a third placement mode modeled on the niri compositor. Windows form columns on an endless horizontal strip and the screen scrolls along it, so opening a window never resizes the ones you have. Assign it to a screen from the Monitors page (#852)",
                 "New: scrolling columns cycle through width presets, maximize, or expand into the free space, and the windows in a column split its height or show one at a time as tabs. Consume and expel shortcuts move windows between columns, all on the Meta+Alt family (#852)",
-                "New: scrolling has a settings page under Tiling and entries in the shortcut cheatsheet. Rule actions let an app open at a chosen width or in a tabbed column, or join the focused column directly (#852)",
+                "New: scrolling is a full third mode with its own settings section and enable switch, and the mode toggle shortcut cycles through all three modes. Rule actions let an app open at a chosen width or in a tabbed column, or join the focused column directly (#852)",
                 "Changed: scripts that used the org.plasmazones.Autotile D-Bus interface for shared window and screen queries should switch to the new org.plasmazones.Tiling interface. Autotile keeps only its own verbs, and scrolling screens announce on org.plasmazones.Scrolling (#852)"
             ]
         },

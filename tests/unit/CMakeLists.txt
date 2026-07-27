@@ -375,7 +375,7 @@ p_add_test(test_configmigration_v2tov3 config/migrations/test_configmigration_v2
 p_add_test(test_migration_v1_animation config/migrations/test_migration_v1_animation.cpp)
 p_add_test(test_layoutsettings_relocation config/migrations/test_layoutsettings_relocation.cpp)
 
-# Tiling.Scrolling schema guards: duplicate/Wayland-dead shortcut defaults,
+# Scrolling schema guards: duplicate/Wayland-dead shortcut defaults,
 # enum fall-back-to-default validators, preset-list canonicalization.
 # test_scrolling_settings constructs Settings (QTEST_MAIN + QGuiApplication
 # palette read on load), so it needs an EXPLICIT Qt6::Gui link — p_add_test
