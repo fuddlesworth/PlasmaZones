@@ -256,9 +256,32 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet)
     if (newSet == m_scrollingScreens) {
         return;
     }
+    const QSet<QString> oldSet = m_scrollingScreens;
     m_scrollingScreens = newSet;
     m_effect->invalidateAllRuleCaches();
     m_effect->scheduleBorderSweep();
+
+    // Engine-flip re-announce. A screen that changes tiling ENGINE while
+    // staying in the union (autotile↔scrolling) never transits
+    // managedScreensChanged — the union is emit-on-change and does not move —
+    // so slotScreensChanged cannot demote and re-announce its windows. The
+    // daemon side has already torn the old engine's state down and the new
+    // engine claims an EMPTY screen: windows keep their old rects and every
+    // verb on the new engine refuses. Re-announce the flipped screens'
+    // windows here; the daemon routes windowOpened by the screen's current
+    // mode, so the receiving engine adopts them (order-seeded from the
+    // capture the daemon took during the flip). Cross-union transitions
+    // (snapping↔scrolling) still announce exactly once regardless of which
+    // signal lands first: whichever handler sees the screen inside
+    // m_managedScreens does the work, the other filters it out
+    // (notifyWindowsAddedBatch drops screens outside the union, and
+    // slotScreensChanged only processes union membership changes).
+    QSet<QString> flipped = (newSet - oldSet) + (oldSet - newSet);
+    flipped &= m_managedScreens;
+    if (!flipped.isEmpty()) {
+        qCInfo(lcEffect) << "Scrolling flip within managed union — re-announcing windows on" << flipped;
+        notifyWindowsAddedBatch(KWin::effects->stackingOrder(), flipped, /*resetNotified=*/true);
+    }
 }
 
 void TilingHandler::savePreTileForDesktopMove(const QString& windowId)
