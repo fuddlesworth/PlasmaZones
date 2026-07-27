@@ -228,8 +228,36 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
 
 bool AnimationsPageController::setOverride(const QString& path, const QVariantMap& profileJson)
 {
-    if (!isValidEventPath(path))
+    // Capture dirty state before the write core mutates disk/snapshots.
+    const bool wasPending = hasPendingChanges();
+    const OverrideFileWrite result = writeOverrideFileOnly(path, profileJson);
+    if (result == OverrideFileWrite::Failed)
         return false;
+    if (result == OverrideFileWrite::Unchanged)
+        return true;
+
+    // Disk changed under the cache. Must happen before any signal below, since
+    // the QML handlers wired to `overrideChanged` re-read through
+    // `resolvedProfile` synchronously on this stack.
+    invalidateDiskProfileCache();
+
+    // The write may have restored the file to exactly its pre-edit content;
+    // drop the phantom snapshot. `dropped` stands in for "the drop already
+    // emitted" — see the long note that was here before the split.
+    const QString filePath = profileFilePath(path);
+    const bool dropped = dropFileSnapshotIfUnchanged(filePath);
+    const bool nowPending = hasPendingChanges();
+    Q_EMIT overrideChanged(path);
+    if (!dropped && wasPending != nowPending)
+        Q_EMIT pendingChangesChanged();
+    return true;
+}
+
+AnimationsPageController::OverrideFileWrite
+AnimationsPageController::writeOverrideFileOnly(const QString& path, const QVariantMap& profileJson)
+{
+    if (!isValidEventPath(path))
+        return OverrideFileWrite::Failed;
 
     // Refuse writes while a Discard worker is in flight — the worker
     // is concurrently rewriting profile files from the snapshot map
@@ -242,7 +270,7 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // are — so this is the sole guard, not defence-in-depth behind a UI one.
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "setOverride: refusing write while async discard is in flight; path=" << path;
-        return false;
+        return OverrideFileWrite::Failed;
     }
 
     const QString dir = userProfilesDir();
@@ -252,12 +280,8 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
         // false into allWritten with no toast of its own, so the slider
         // snaps back with nothing in the journal.
         qCWarning(lcConfig) << "setOverride: cannot create profiles directory" << dir;
-        return false;
+        return OverrideFileWrite::Failed;
     }
-    // Capture dirty state AFTER the cheap validity / mkpath guards so an
-    // invalid path doesn't pay for a hasPendingChanges() walk.
-    const bool wasPending = hasPendingChanges();
-
     const QString filePath = profileFilePath(path);
 
     // Strip the name field for the equality compare against on-disk content
@@ -271,10 +295,8 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // of the memo contract's "one read per path per mutation".
     const QJsonObject existing = readProfileJson(filePath);
     if (existing == obj) {
-        // Round-trip with no real change — bail early so a QML two-way
-        // binding cycle doesn't dirty the page or fire spurious
-        // overrideChanged / pendingChangesChanged emissions.
-        return true;
+        // Round-trip with no real change — the caller emits nothing.
+        return OverrideFileWrite::Unchanged;
     }
     obj.insert(JsonNameKey, path);
 
@@ -282,51 +304,24 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // be captured: an unrecoverable revert is worse than a failed write.
     if (!snapshotFileIfFirst(filePath)) {
         qCWarning(lcConfig) << "setOverride: refusing to write" << filePath << "without a recoverable snapshot";
-        return false;
+        return OverrideFileWrite::Failed;
     }
 
     QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         dropFileSnapshotIfUnchanged(filePath);
-        return false;
+        return OverrideFileWrite::Failed;
     }
     file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
     if (!file.commit()) {
         dropFileSnapshotIfUnchanged(filePath);
-        return false;
+        return OverrideFileWrite::Failed;
     }
 
-    // Disk changed under the cache. Must happen before any signal below, since
-    // the QML handlers wired to `overrideChanged` re-read through
-    // `resolvedProfile` synchronously on this stack.
-    invalidateDiskProfileCache();
-
-    // The write may have restored the file to exactly its pre-edit content (the
-    // user undid an edit by hand). The staged snapshot is then a phantom: disk
-    // already holds what Discard would write back, so keeping it would leave the
-    // page dirty forever with nothing to restore.
-    //
-    // The drop owns the signal for the transition it causes, so the compare below
-    // must not fire again for the same flip.
-    // Emit-side convention here (the clear paths use Defer and own the signal
-    // themselves): `dropped` stands in for "the drop already emitted". Note
-    // this does NOT rest on a drop always flipping — it often does not, since
-    // hasPendingChanges() is equally true when other files are snapshotted or
-    // the shader tree diverges from its committed baseline. It rests on the
-    // weaker and actually true property: a drop that flipped has already
-    // emitted, and a drop that did not flip left wasPending == nowPending, so
-    // suppressing the compare below loses nothing either way.
-    // The early return above
-    // guarantees the written content differs from what was on disk, so a
-    // snapshot staged by THIS call can never match afterwards — a successful
-    // drop therefore means a pre-existing entry went away, which is a real
-    // transition the drop announced.
-    const bool dropped = dropFileSnapshotIfUnchanged(filePath);
-    const bool nowPending = hasPendingChanges();
-    Q_EMIT overrideChanged(path);
-    if (!dropped && wasPending != nowPending)
-        Q_EMIT pendingChangesChanged();
-    return true;
+    // The write landed. The caller owns invalidateDiskProfileCache(), the
+    // phantom-snapshot drop, and every signal — see setOverride for the
+    // single-path tail, and setOverrideMergedOnPaths for the batched one.
+    return OverrideFileWrite::Written;
 }
 
 AnimationsPageController::OverrideFileRemoval AnimationsPageController::removeOverrideFile(const QString& path)

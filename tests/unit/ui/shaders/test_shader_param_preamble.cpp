@@ -385,6 +385,16 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
+        // A real buffer.frag on disk, so the existence-gated implicit fallback
+        // WOULD fire if the `!bufferShadersDeclared` guard were removed. Without
+        // this file the fallback is inert regardless of the guard and the
+        // assertion below passes vacuously — the guard could be deleted and the
+        // slot would stay green.
+        QFile buf(QDir(tmp.path()).filePath(QStringLiteral("buffer.frag")));
+        QVERIFY(buf.open(QIODevice::WriteOnly));
+        QVERIFY(buf.write(QByteArrayLiteral("// buffer\n")) > 0);
+        buf.close();
+
         const ShaderRegistry::ShaderInfo info = parsePack(
             tmp,
             QByteArrayLiteral(

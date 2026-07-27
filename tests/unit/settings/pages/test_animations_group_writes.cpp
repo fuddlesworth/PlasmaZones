@@ -310,7 +310,18 @@ private Q_SLOTS:
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 600}}));
         QVERIFY(c.hasOverride(kPrimary));
 
+        // The REMOVED path owes exactly one overrideChanged so the QML re-reads
+        // through resolvedProfile and the revert link goes live. Deleting the
+        // emit loop for `removed` paths in clearFieldOnPaths otherwise leaves
+        // the whole suite green — this is the only slot that pins it.
+        QSignalSpy announced(&c, &AnimationsPageController::overrideChanged);
         QCOMPARE(c.clearFieldOnPaths(QStringList{kPrimary}, QStringLiteral("duration")), 1);
+        int primaryAnnouncements = 0;
+        for (int i = 0; i < announced.count(); ++i) {
+            if (announced.at(i).at(0).toString() == kPrimary)
+                ++primaryAnnouncements;
+        }
+        QCOMPARE(primaryAnnouncements, 1);
 
         QVERIFY2(!c.hasOverride(kPrimary), "the override file survived as an empty object");
     }
