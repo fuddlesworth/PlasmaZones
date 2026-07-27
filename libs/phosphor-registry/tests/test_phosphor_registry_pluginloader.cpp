@@ -51,6 +51,7 @@ private Q_SLOTS:
     void warnsOnceForMultipleSoFilesThenLoads();
     void multiSoAdvisoryStaysLatchedWhileDirStaysBroken();
     void unwritablePluginRootWarnsOnceAndStaysInert();
+    void capTripSkipsTheRemovalSweepKeepingLoadedPlugins();
     void multipleSoFailureStillReportsFailureReason();
     void rejectsNullFactoryReturn();
     void rejectsPluginWithoutEntryPoint();
@@ -586,10 +587,17 @@ void TestPluginLoader::unwritablePluginRootWarnsOnceAndStaysInert()
     }
     QCOMPARE(failures, 1);
 
+    // A second scanAndLoad(), NOT rescanNow(): ensurePluginRootExists() is
+    // reached ONLY from scanAndLoad (rescanNow forwards to the watcher, which
+    // never touches it, and the first leg left m_initialScanDone false so the
+    // root was never registered — rescanNow would iterate an empty dir list).
+    // scanAndLoad re-enters ensurePluginRootExists, retries the mkpath, fails
+    // again, and MUST stay silent (the warn-once latch). This is the real
+    // re-entry path; the old rescanNow() pinned nothing.
     QStringList secondScan;
     {
         WarningCapture capture(secondScan);
-        loader.rescanNow();
+        loader.scanAndLoad();
     }
     for (const QString& w : secondScan) {
         QVERIFY2(!w.contains(QStringLiteral("failed to create plugin root")),
@@ -597,6 +605,51 @@ void TestPluginLoader::unwritablePluginRootWarnsOnceAndStaysInert()
     }
 
     QVERIFY(parentAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+}
+
+void TestPluginLoader::capTripSkipsTheRemovalSweepKeepingLoadedPlugins()
+{
+    // The per-cycle subdir cap's load-bearing behaviour (pluginloader.cpp): a
+    // truncated cycle SKIPS the removal sweep, so a plugin loaded on an earlier
+    // full cycle is NOT unloaded just because its directory now sorts past the
+    // cap. This exercises the setMaxSubdirsPerCycleForTest seam, which had zero
+    // callers — deleting the whole cap-trip branch left the suite green.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
+    // A dummy subdir that sorts BEFORE "fake-plugin" alphabetically, with no
+    // loadable .so, so that under cap=1 it is the one considered and the cycle
+    // trips before reaching fake-plugin's directory.
+    QVERIFY(QDir(pluginRoot).mkpath(QStringLiteral("aaa-empty")));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    loader.scanAndLoad();
+    QCOMPARE(registry.size(), 1);
+    QVERIFY(loader.loadedPluginIds().contains(QStringLiteral("fake-plugin")));
+
+    // Now trip the cap: only one subdir is considered per cycle.
+    loader.setMaxSubdirsPerCycleForTest(1);
+    QStringList warnings;
+    {
+        WarningCapture capture(warnings);
+        loader.scanAndLoad();
+    }
+
+    // fake-plugin stays loaded even though the truncated cycle never reached
+    // its directory — the removal sweep was skipped. Deleting that skip would
+    // unload it here.
+    QCOMPARE(registry.size(), 1);
+    QVERIFY2(loader.loadedPluginIds().contains(QStringLiteral("fake-plugin")),
+             "a truncated cycle unloaded an already-loaded plugin (removal sweep not skipped)");
+    int capWarnings = 0;
+    for (const QString& w : warnings) {
+        if (w.contains(QStringLiteral("per-cycle subdirectory cap")))
+            ++capWarnings;
+    }
+    QCOMPARE(capWarnings, 1);
 }
 
 void TestPluginLoader::rejectsNullFactoryReturn()

@@ -222,9 +222,13 @@ QString PluginLoader::resolveDefaultPluginRoot() const
 
 bool PluginLoader::ensurePluginRootExists() const
 {
-    // Warn-once latch. Without it, every rescanNow() (the watcher's
-    // timer, the demo's reload button) re-logs the same "failed to
-    // create plugin root" line and floods the journal.
+    // Warn-once latch. This function is reached ONLY from scanAndLoad()
+    // (pluginloader.cpp) — NOT from rescanNow(), the watcher timer, or the
+    // demo's reload button, all of which forward to the watcher's rescan
+    // without touching it. The latch matters because scanAndLoad deliberately
+    // leaves m_initialScanDone false on a mkpath failure (see lines 177-181),
+    // so a later scanAndLoad retries; without the latch each retry re-logs the
+    // same "failed to create plugin root" line and floods the journal.
     //
     // Plain bool: m_pluginRoot is set in the ctor and never mutated,
     // so a single latch covers the only path that can ever reach

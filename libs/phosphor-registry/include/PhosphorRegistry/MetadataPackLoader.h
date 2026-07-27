@@ -326,9 +326,18 @@ private:
                 }
             } else if (!m_registry->factory(e.id)) {
                 // Unchanged CONTENT, but the id is gone from the registry — an
-                // out-of-band unregister. Without this the fingerprint is recorded,
-                // the removal sweep skips it, and the pack stays permanently absent
-                // until its bytes happen to change.
+                // out-of-band unregister. Re-register it defensively. Note this
+                // is only an OPPORTUNISTIC repair, not a general recovery:
+                // reconcile() runs solely from the OnCommit hook, which fires
+                // only when the scan signature moved, and an out-of-band
+                // unregister changes none of the signature's inputs (ids,
+                // isUser, metadata size/mtime, watch-set fingerprint). So this
+                // branch repairs an out-of-band removal only when SOME OTHER
+                // pack's bytes changed in the same scan and dragged the
+                // signature — the loader is documented as the sole writer of
+                // its borrowed Registry (see the removal-sweep note below), so
+                // an out-of-band unregister is out-of-contract to begin with,
+                // and this is belt-and-braces rather than a relied-on path.
                 if (!m_registry->registerFactory(e.factory)) {
                     continue;
                 }
