@@ -23,9 +23,10 @@
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QList>
 #include <QPair>
-#include <QJsonObject>
+#include <QSet>
 #include <QVariant>
 
 namespace PlasmaZones {
@@ -132,7 +133,12 @@ bool AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPa
         // path's own curve" and travel to every path, which is exactly the
         // "the card must not decide a curve on the user's behalf" rule this
         // parameter exists to enforce.
-        if (curveEdited) {
+        if (curveEdited && !editedCurve.isEmpty()) {
+            // The !isEmpty() guard shares the else-branch's invariant: an
+            // engaged-EMPTY curve would block inheritance without the user
+            // asking. Unreachable through today's UI (fillLibraryDefaults
+            // guarantees a non-empty currentCurveString), so an empty edited
+            // curve falls through and resolves like an untouched one.
             merged.insert(curveKey, editedCurve);
         } else {
             const QVariant own = base.value(curveKey);
@@ -190,6 +196,13 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, con
     QStringList toRemove;
     QList<QPair<QString, QVariantMap>> toRewrite;
     for (const QString& path : paths) {
+        // Classified against the SANITIZED view (rawProfile), deliberately:
+        // keys the sanitizer rejects are not part of the profile contract, so
+        // a hand-edited file carrying only unrecognised keys after the field
+        // removal is treated as empty and deleted, and a rewrite re-emits
+        // only the sanitizer-accepted keys. Overrides are canonical-format
+        // files owned by this controller; preserving arbitrary foreign keys
+        // through its writes is a non-goal.
         QVariantMap raw = rawProfile(path);
         if (!raw.contains(field))
             continue;
@@ -223,8 +236,12 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, con
             // rawProfile said the field was there, so the file existed a moment
             // ago. Something else removed it in between; the desired end state
             // holds either way, but the REGISTRY may still hold the vanished
-            // file's entry, so this still owes a rescan.
+            // file's entry, so this still owes a rescan — and the page's VIEW
+            // of the path really did change (the file is gone), so the path
+            // joins the overrideChanged emit list below. Not counted in
+            // `changed`: this call did not do the removing.
             sawAbsent = true;
+            removed.append(path);
             break;
         case OverrideFileRemoval::Failed:
             ++failed;
@@ -310,9 +327,16 @@ bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& rawPa
     const ShaderProfileTree tree = m_settings->shaderProfileTree();
     for (const QString& path : paths) {
         // Gated, so an unrecognised path cannot make the caller's list the bound
-        // on the work done here. A non-supporting path can never hold an id.
-        if (!isValidEventPath(path) || !supportsShaderLeg(path))
+        // on the work done here.
+        if (!isValidEventPath(path))
             return false;
+        // SKIPPED, not failed, mirroring setShaderOverrideOnPaths: a mixed
+        // group (supporting primary + non-supporting mirror — the exact shape
+        // anyPathSupportsShaderLeg exists for) must be able to report true
+        // right after a successful group write, and the setter never wrote to
+        // the non-supporting member in the first place.
+        if (!supportsShaderLeg(path))
+            continue;
         const QVariantMap raw = tree.hasOverride(path) ? shaderProfileToMap(tree.directOverride(path)) : QVariantMap();
         const auto it = raw.constFind(JsonEffectIdKey);
         // Absent effectId means no direct override, which is never equal to a

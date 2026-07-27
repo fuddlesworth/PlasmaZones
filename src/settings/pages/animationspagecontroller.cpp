@@ -40,8 +40,6 @@ constexpr qint64 kMaxSnapshotBytes = animfileutil::kMaxJsonFileBytes;
 
 } // namespace
 
-namespace animations_controller_detail {
-
 /// `JsonNameKey`, `profileToVariantMap`, `readProfileJson`,
 /// `mergeMissingFields`, and `fillLibraryDefaults` live in
 /// `animations_controller_detail.h` so the sibling TU that uses them
@@ -52,9 +50,6 @@ namespace animations_controller_detail {
 /// `animations_controller_detail.h` so animationspagecontroller_paths.cpp
 /// shares the exact same implementation. Both `eventSections` (this TU)
 /// and `eventLabel` (paths TU) call through to the header version.
-
-} // namespace animations_controller_detail
-
 using namespace animations_controller_detail;
 
 // ─── Construction ──────────────────────────────────────────────────────
@@ -119,6 +114,7 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                                       this);
 
     m_lastHadPendingChanges = hasPendingChanges();
+    m_lastStockSuppressedEvents = stockSuppressedEvents();
     // CLAUDE.md: only emit a signal when the value actually changed. The
     // sub-services and the mutators raise pendingChangesChanged unconditionally
     // (a no-op revert, a refused write), so gate the outward dirtyChanged on an
@@ -152,7 +148,7 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // A registry rescan can flip a pack's validity / contract class,
         // which is one of the stock-suppression gate's inputs.
         connect(m_shaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
-                &AnimationsPageController::stockSuppressedEventsChanged);
+                &AnimationsPageController::maybeEmitStockSuppressedEventsChanged);
     }
     if (m_settings) {
         // Sole emitter of pendingChangesChanged for shader-tree edits: EVERY
@@ -175,9 +171,12 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                 // can't tell which path moved without diffing. QML pages refresh
                 // every visible event card on this signal which is cheap enough.
                 Q_EMIT shaderProfileChanged(QString());
+                // The live tree moved, so the value-based dirty compare must
+                // be re-run on the next hasPendingChanges() query.
+                m_treeDirtyCache.reset();
                 // Tree assignment is the primary input of the stock-suppression
                 // gate (see stockSuppressedEvents).
-                Q_EMIT stockSuppressedEventsChanged();
+                maybeEmitStockSuppressedEventsChanged();
                 if (m_asyncRevertInFlight)
                     return;
                 Q_EMIT pendingChangesChanged();
@@ -187,7 +186,7 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // with animations off no pack owns any event and every stock effect
         // is (re)loaded, so the conflict chip must come back.
         connect(m_settings, &ISettings::animationsEnabledChanged, this,
-                &AnimationsPageController::stockSuppressedEventsChanged);
+                &AnimationsPageController::maybeEmitStockSuppressedEventsChanged);
     }
 }
 
@@ -348,7 +347,30 @@ bool AnimationsPageController::hasPendingChanges() const
     // snapshot-based because a file has no committed-baseline value to diff.
     if (!m_pendingFileSnapshots.isEmpty())
         return true;
-    return m_settings != nullptr && m_settings->shaderProfileTree() != m_settings->committedShaderProfileTree();
+    if (m_settings == nullptr)
+        return false;
+    // The tree compare is the expensive half: each side is a config-store
+    // read, a JSON parse, and a prune, and this predicate runs several times
+    // per mutation at slider-drag rate. Memoised; invalidated wherever either
+    // side can move — the live tree via the shaderProfileTreeChanged lambda in
+    // the ctor, the committed baseline via refreshDirtyState() (which is the
+    // documented external poke for exactly that baseline-moved case).
+    if (!m_treeDirtyCache.has_value())
+        m_treeDirtyCache = m_settings->shaderProfileTree() != m_settings->committedShaderProfileTree();
+    return *m_treeDirtyCache;
+}
+
+void AnimationsPageController::maybeEmitStockSuppressedEventsChanged()
+{
+    // Every other dirty signal in this controller is flip-gated; this NOTIFY
+    // used to be the one unguarded emitter, re-running the rule editor's
+    // conflict-chip bindings on every tree edit even though the computed list
+    // can only ever contain the minimize/maximize pair.
+    const QStringList current = stockSuppressedEvents();
+    if (current == m_lastStockSuppressedEvents)
+        return;
+    m_lastStockSuppressedEvents = current;
+    Q_EMIT stockSuppressedEventsChanged();
 }
 
 bool AnimationsPageController::isDirty() const
@@ -408,6 +430,9 @@ void AnimationsPageController::refreshDirtyState()
     // live tree without firing shaderProfileTreeChanged (the value didn't move,
     // only the baseline did). The pendingChangesChanged → dirtyChanged forwarder
     // gates on an actual flip, so a no-op refresh costs nothing.
+    //
+    // Baseline moved means the memoised tree-dirty verdict is stale.
+    m_treeDirtyCache.reset();
     Q_EMIT pendingChangesChanged();
 }
 
@@ -611,6 +636,18 @@ void AnimationsPageController::asyncRevertPending()
         return;
     }
     if (!hasPendingChanges()) {
+        Q_EMIT discardResult(true, QString());
+        return;
+    }
+    if (m_pendingFileSnapshots.isEmpty()) {
+        // Pending because the SHADER TREE diverges, with no file snapshots to
+        // restore: the worker would iterate nothing, but dispatching it still
+        // holds m_asyncRevertInFlight across a thread-pool hop, during which
+        // every mutator refuses and toasts. Complete synchronously instead;
+        // the framework's paired Settings::load() is what actually undoes the
+        // tree divergence. The poke matches the worker path's unconditional
+        // emit (downstream is flip-gated, so it costs one comparison).
+        Q_EMIT pendingChangesChanged();
         Q_EMIT discardResult(true, QString());
         return;
     }

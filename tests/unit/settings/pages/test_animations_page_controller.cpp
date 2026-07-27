@@ -1141,12 +1141,25 @@ private Q_SLOTS:
         s.setShaderProfileTree(tree);
         QVERIFY(c.stockSuppressedEvents().isEmpty());
 
-        // Third NOTIFY input: a committed rescan (a new pack changes the
-        // scan fingerprint) re-fires the chip rebind signal.
+        // Third NOTIFY input: a committed rescan re-fires the chip rebind
+        // signal — but only when the rescan actually CHANGES the suppression
+        // verdict (the NOTIFY is flip-gated, matching every other dirty
+        // signal in the controller). The tree still points minimize at
+        // desktop-pack (not owned, list empty); rewrite that pack as
+        // UNIVERSAL so the rescan flips minimize to owned.
         const int beforeRescan = spy.count();
-        QVERIFY(writeAnimationPack(tmp.path(), QStringLiteral("late-pack"), {}));
+        QVERIFY(writeAnimationPack(tmp.path(), QStringLiteral("desktop-pack"), {}));
         registry.refresh();
-        QTRY_VERIFY2(spy.count() > beforeRescan, "registry rescan must notify the chip bindings");
+        QTRY_VERIFY2(spy.count() > beforeRescan,
+                     "a rescan that changes the suppression set must notify the chip bindings");
+        QCOMPARE(c.stockSuppressedEvents(), QStringList{PhosphorAnimation::ProfilePaths::WindowMinimize});
+        // And the gate half: a rescan with an UNCHANGED verdict stays silent
+        // (deleting the flip gate reddens this).
+        const int afterFlip = spy.count();
+        QVERIFY(writeAnimationPack(tmp.path(), QStringLiteral("unrelated-pack"), {}));
+        registry.refresh();
+        QTRY_VERIFY(registry.hasEffect(QStringLiteral("unrelated-pack")));
+        QCOMPARE(spy.count(), afterFlip);
     }
 };
 
