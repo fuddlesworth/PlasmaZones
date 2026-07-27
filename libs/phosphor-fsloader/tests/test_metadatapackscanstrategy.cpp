@@ -712,18 +712,27 @@ private Q_SLOTS:
         QVERIFY(QDir().mkpath(dir));
         // One legit pack.
         QVERIFY(writeMetadata(dir + QStringLiteral("/keep"), QStringLiteral("keep"), 1));
-        // One pack inside the sentinel subdir — would be valid if not
-        // skipped, so this test fails loudly if skip is broken.
-        QVERIFY(writeMetadata(dir + QStringLiteral("/none"), QStringLiteral("none-pkg"), 2));
+        // One pack inside the sentinel subdir — would be valid if not skipped, so
+        // this test fails loudly if skip is broken.
+        //
+        // Named to sort FIRST under QDir::Name, which is what makes the cap leg
+        // below bite. Enumeration order is alphabetical, and the cap is charged
+        // BEFORE the skip predicate runs, so a sentinel sorting second would trip
+        // the cap and `break` without the predicate ever being consulted — the
+        // slot would then pass whether or not the skip existed.
+        QVERIFY(writeMetadata(dir + QStringLiteral("/aaa-none"), QStringLiteral("none-pkg"), 2));
 
         MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
         strategy.setPerSubdirSkip([](const QString& name) {
-            return name == QLatin1String("none");
+            return name == QLatin1String("aaa-none");
         });
-        // Capped to ONE, so "not counted against the cap" is a real assertion:
-        // if the skipped subdir consumed the single slot, the legitimate pack
-        // below could not land.
-        strategy.setMaxEntries(1);
+        // TWO, not one. The skipped subdir IS charged against the cap — the
+        // strategy documents and implements charge-before-skip deliberately, so a
+        // caller-supplied predicate cannot be work a spray buys for free. A cap of
+        // one would therefore stop at the sentinel and never reach `keep`,
+        // regardless of the predicate. With two, a broken skip registers BOTH packs
+        // and arms two watches, so the assertions below bite.
+        strategy.setMaxEntries(2);
 
         CapturingAdapter adapter(strategy);
         WatchedDirectorySet set(adapter);
@@ -740,7 +749,7 @@ private Q_SLOTS:
         // as a second watch path. Without this leg only the non-registration was
         // pinned, and two of the three claims in the doc above were untested.
         for (const QString& watch : adapter.lastWatches) {
-            QVERIFY2(!watch.contains(QStringLiteral("/none")),
+            QVERIFY2(!watch.contains(QStringLiteral("/aaa-none")),
                      qPrintable(QStringLiteral("a skipped subdir was still reached: ") + watch));
         }
         QCOMPARE(adapter.lastWatches.size(), 1);

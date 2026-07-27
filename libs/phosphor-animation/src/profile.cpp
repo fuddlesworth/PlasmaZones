@@ -148,8 +148,15 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
             // settings slider's drag path, so one hand-edited value would
             // otherwise emit this tens of times a second for the length of a drag.
             if (shouldWarnOnce(fieldWarnKey(key, "type") + QByteArray::number(int(v.type())))) {
-                qCWarning(lcProfile).nospace() << "Profile::fromJson: ignoring non-numeric " << key
-                                               << " (type=" << v.type() << ") — the field will be inherited";
+                // The consequence is per-field, not universal: three of the four
+                // numeric fields are left UNSET and inherit, but `sequenceMode`
+                // substitutes an engaged default and so BLOCKS inheritance (see
+                // Profile.h). Saying "will be inherited" for that one told the
+                // user the opposite of what the parse does.
+                qCWarning(lcProfile).nospace()
+                    << "Profile::fromJson: ignoring non-numeric " << key << " (type=" << v.type() << ") — "
+                    << (qstrcmp(key, JsonFieldSequenceMode) == 0 ? "the field will be pinned to the library default"
+                                                                 : "the field will be inherited");
             }
             return std::nullopt;
         }
@@ -175,8 +182,8 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
             // which is the same "guard that funds its own attack" shape the cap
             // exists to close. A 32-byte prefix keeps the warning readable-ish
             // while the hash keeps distinct long specs distinct.
-            const QByteArray specKey = QByteArrayLiteral("curve/unresolved/") + spec.left(32).toUtf8()
-                + QByteArray::number(qHash(spec), 16);
+            const QByteArray specKey =
+                QByteArrayLiteral("curve/unresolved/") + spec.left(32).toUtf8() + QByteArray::number(qHash(spec), 16);
             if (!p.curve && shouldWarnOnce(specKey)) {
                 // Rate-limited like the numeric-field diagnostics, and for a
                 // sharper reason: a Global profile naming a user curve that is
@@ -363,8 +370,7 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         if (v.isString()) {
             p.presetName = v.toString();
         } else {
-            if (shouldWarnOnce(fieldWarnKey(JsonFieldPresetName, "type")
-                               + QByteArray::number(int(v.type())))) {
+            if (shouldWarnOnce(fieldWarnKey(JsonFieldPresetName, "type") + QByteArray::number(int(v.type())))) {
                 qCWarning(lcProfile).nospace()
                     << "Profile::fromJson: ignoring non-string presetName (type=" << v.type() << ")";
             }

@@ -93,9 +93,40 @@ function(phosphor_apply_test_isolation _target)
         "XDG_CACHE_HOME=${_xdg}/cache")
 endfunction()
 
+# Pin XDG_DATA_DIRS to the target's own sandbox, for tests that SCAN for packs.
+#
+#   phosphor_pin_xdg_data_dirs(<target> [<test-name>])
+#
+# Deliberately OPT-IN rather than part of the isolation above, because the two
+# groups of tests want opposite things. A pack-scanning test that leaves
+# XDG_DATA_DIRS ambient enumerates whatever is installed in the developer's real
+# /usr/share, so on a machine with PlasmaZones installed "are the BUNDLED packs
+# valid?" silently becomes "are the bundled packs plus everything installed
+# locally valid?" — a test that passes or fails depending on the host. But other
+# tests legitimately need the real system dirs (the icon-theme resolver walks
+# them, and drives the variable itself), so pinning it for everything would break
+# them.
+#
+# Call this for anything that enumerates packs, shaders, layouts or algorithms
+# from a search path. Leave it off otherwise.
+function(phosphor_pin_xdg_data_dirs _target)
+    set(_test_name "${_target}")
+    if(ARGC GREATER 1)
+        set(_test_name "${ARGV1}")
+    endif()
+    set(_xdg "${CMAKE_BINARY_DIR}/test-xdg/${_target}")
+    file(MAKE_DIRECTORY "${_xdg}/data")
+    set_property(TEST ${_test_name} APPEND PROPERTY ENVIRONMENT "XDG_DATA_DIRS=${_xdg}/data")
+endfunction()
+
 # Add per-test environment variables WITHOUT clobbering what
 # `phosphor_apply_test_isolation` set. Use this instead of
 # `set_tests_properties(... PROPERTIES ENVIRONMENT ...)`, which is a SET.
-function(phosphor_append_test_environment _target)
-    set_property(TEST ${_target} APPEND PROPERTY ENVIRONMENT ${ARGN})
+#
+# The parameter is a ctest TEST NAME, not a target name — it feeds
+# `set_property(TEST ...)`. Those differ wherever `add_test(NAME x COMMAND y)`
+# uses x != y, and conflating them is what silently applied half the isolation
+# the first time round.
+function(phosphor_append_test_environment _test_name)
+    set_property(TEST ${_test_name} APPEND PROPERTY ENVIRONMENT ${ARGN})
 endfunction()

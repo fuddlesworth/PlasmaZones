@@ -265,8 +265,8 @@ bool AnimationsPageController::acceptableShaderEffectId(const QString& effectId,
     // id length and well below the cost of letting garbage through.
     if (!effectId.isEmpty()
         && (effectId.size() > 256 || effectId.contains(QLatin1Char('/')) || effectId.contains(QLatin1Char('\0')))) {
-        qCWarning(lcConfig) << context << ": rejecting effectId with illegal length/character; size="
-                            << effectId.size();
+        qCWarning(lcConfig) << context
+                            << ": rejecting effectId with illegal length/character; size=" << effectId.size();
         return false;
     }
 
@@ -369,7 +369,6 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         // handler (the sole emitter for tree edits); dirtiness is value-based.
         return true;
     }
-
 
     // Standard pattern: write through Settings::setShaderProfileTree.
     // The shaderProfileTreeJson Q_PROPERTY emits NOTIFY, the

@@ -646,7 +646,14 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             desiredWatches.append(metadataPath);
 
             const QFileInfo metadataInfo(metadataPath);
-            if (!metadataInfo.exists()) {
+            // `isFile()`, not `exists()`. A FIFO in a user-writable pack dir
+            // satisfies exists(), and `QFile::open(ReadOnly)` on a FIFO BLOCKS
+            // until a writer appears — indefinitely, on the GUI thread, and the
+            // size cap cannot help because a FIFO reports size 0. The two sibling
+            // scanners are immune only incidentally: they enumerate with
+            // QDir::Files, which excludes a FIFO, whereas this one constructs the
+            // path. A directory named metadata.json is refused by the same check.
+            if (!metadataInfo.isFile()) {
                 // Watch the SUBDIRECTORY instead. `QFileSystemWatcher` cannot
                 // watch a path that does not exist, so the metadata.json entry
                 // appended above arms nothing here — and only the registered
@@ -676,6 +683,16 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             QFile file(metadataPath);
             if (!file.open(QIODevice::ReadOnly)) {
                 qCWarning(log) << "MetadataPackScanStrategy: failed to open metadata.json:" << metadataPath;
+                continue;
+            }
+            // Re-checked on the OPEN descriptor. The pre-open stat above can be
+            // beaten by a rewrite between the stat and the open, which leaves
+            // `readAll()` below unbounded — the same TOCTOU that was closed in
+            // `validateJsonEnvelope`, and this was the one remaining site that
+            // still enforced the cap on the path rather than the descriptor.
+            if (file.size() > DirectoryLoader::kMaxFileBytes) {
+                qCWarning(log) << "MetadataPackScanStrategy: skipping oversized metadata.json:" << metadataPath << "("
+                               << file.size() << "bytes, cap" << DirectoryLoader::kMaxFileBytes << ")";
                 continue;
             }
 

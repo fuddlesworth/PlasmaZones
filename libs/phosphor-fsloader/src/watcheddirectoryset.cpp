@@ -325,8 +325,16 @@ void WatchedDirectorySet::rescanNow()
 
 void WatchedDirectorySet::requestRescan()
 {
-    Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::requestRescan",
-               "GUI-thread only — see class docs");
+    // Asserted AND guarded, like its siblings. This is reached from
+    // `onWatchedPathChanged` and from every consumer, and it WRITES
+    // `m_rescanRequestedWhileRunning` while reading `m_rescanDepth` — so an
+    // off-thread call races the replay flag, which is a worse outcome than the
+    // timer's own "cannot be started from another thread" warning.
+    if (thread() != QThread::currentThread()) {
+        Q_ASSERT_X(false, "WatchedDirectorySet::requestRescan", "GUI-thread only — see class docs");
+        qCWarning(lcWatcher) << "requestRescan called off the owning thread; refusing";
+        return;
+    }
     // A rescan may already be running on this thread (strategy's commit step
     // or a nested slot re-entered us via a signal — including the case where
     // a `rescanCompleted` slot calls `registerDirectories`, which invokes
@@ -587,7 +595,7 @@ void WatchedDirectorySet::attachWatcherForDir(const QString& directory)
                              << "— registered target resolves to $HOME, /, or an XDG data/config root";
         return;
     }
-    const QFileInfo info(directory);
+    const QFileInfo info(targetKey);
     if (info.exists() && info.isDir()) {
         // Target exists — watch it directly. If we were watching an
         // ancestor as a proxy, we can stop (direct watch is strictly

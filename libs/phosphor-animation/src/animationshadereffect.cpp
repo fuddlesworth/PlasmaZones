@@ -250,19 +250,43 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.useWallpaper = obj.value(QLatin1String("wallpaper")).toBool(false);
     e.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
     e.bufferScale = qBound(kMinBufferScale, obj.value(QLatin1String("bufferScale")).toDouble(1.0), kMaxBufferScale);
-    e.bufferWrap = obj.value(QLatin1String("bufferWrap")).toString();
+    // Buffer wrap / filter tokens are validated exactly like the texture `wrap`
+    // below, and for the same reason: an unknown token is silently coerced by the
+    // runtime, survives operator== and toJson, and is re-persisted to disk on the
+    // next save. These four fields had NO validation at all, so centralising the
+    // vocabulary for textures left the buffer side still accepting typos.
+    const auto validatedWrap = [](QString wrap, const char* field) -> QString {
+        if (!wrap.isEmpty() && !AnimationShaderContract::isValidWrapToken(wrap)) {
+            qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: unknown" << field << "value" << wrap
+                                         << ", reset to runtime default";
+            wrap.clear();
+        }
+        return wrap;
+    };
+    const auto validatedFilter = [](QString filter, const char* field) -> QString {
+        if (!filter.isEmpty() && !AnimationShaderContract::isValidFilterToken(filter)) {
+            qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: unknown" << field << "value" << filter
+                                         << ", reset to runtime default";
+            filter.clear();
+        }
+        return filter;
+    };
+    e.bufferWrap = validatedWrap(obj.value(QLatin1String("bufferWrap")).toString(), "bufferWrap");
+    // EVERY entry is kept in place, matching the surface twin. These lists are
+    // positionally aligned with `bufferShaderPaths`, so dropping an entry — which
+    // the old `if (!w.isEmpty())` shape did for any empty one — shifted every
+    // later buffer's override onto the wrong buffer. An invalid token becomes
+    // empty (that slot falls back to the default); an originally-empty entry is
+    // the explicit "default for this slot" marker and toJson re-emits it, so
+    // dropping one broke alignment on the very next load of a saved pack.
     const QJsonArray wrapsArr = obj.value(QLatin1String("bufferWraps")).toArray();
     for (const QJsonValue& v : wrapsArr) {
-        const QString w = v.toString();
-        if (!w.isEmpty())
-            e.bufferWraps.append(w);
+        e.bufferWraps.append(validatedWrap(v.toString(), "bufferWraps"));
     }
-    e.bufferFilter = obj.value(QLatin1String("bufferFilter")).toString();
+    e.bufferFilter = validatedFilter(obj.value(QLatin1String("bufferFilter")).toString(), "bufferFilter");
     const QJsonArray filtersArr = obj.value(QLatin1String("bufferFilters")).toArray();
     for (const QJsonValue& v : filtersArr) {
-        const QString f = v.toString();
-        if (!f.isEmpty())
-            e.bufferFilters.append(f);
+        e.bufferFilters.append(validatedFilter(v.toString(), "bufferFilters"));
     }
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
     e.useAudio = obj.value(QLatin1String("audio")).toBool(false);

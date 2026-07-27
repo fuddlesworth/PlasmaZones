@@ -101,8 +101,8 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
     // defeats the whole point of the guard. This check is on the descriptor, so
     // there is no window between the size and the read.
     if (file.size() > DirectoryLoader::kMaxFileBytes) {
-        qCWarning(category).nospace() << "Skipping " << filePath << ": file size " << file.size()
-                                      << " exceeds limit " << DirectoryLoader::kMaxFileBytes;
+        qCWarning(category).nospace() << "Skipping " << filePath << ": file size " << file.size() << " exceeds limit "
+                                      << DirectoryLoader::kMaxFileBytes;
         return std::nullopt;
     }
 

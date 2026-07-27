@@ -148,13 +148,16 @@ private Q_SLOTS:
         QDir().mkpath(algoDir);
 
         // Valid filename
-        QVERIFY(!writeScript(algoDir, QStringLiteral("valid-name.luau"), validScript(QStringLiteral("Valid"))).isEmpty());
+        QVERIFY(
+            !writeScript(algoDir, QStringLiteral("valid-name.luau"), validScript(QStringLiteral("Valid"))).isEmpty());
         // Invalid: spaces
-        QVERIFY(!writeScript(algoDir, QStringLiteral("has space.luau"), validScript(QStringLiteral("HasSpace"))).isEmpty());
+        QVERIFY(
+            !writeScript(algoDir, QStringLiteral("has space.luau"), validScript(QStringLiteral("HasSpace"))).isEmpty());
         // Invalid: dots in basename
         QVERIFY(!writeScript(algoDir, QStringLiteral("has.dot.luau"), validScript(QStringLiteral("HasDot"))).isEmpty());
         // Invalid: special chars
-        QVERIFY(!writeScript(algoDir, QStringLiteral("special!char.luau"), validScript(QStringLiteral("Special"))).isEmpty());
+        QVERIFY(!writeScript(algoDir, QStringLiteral("special!char.luau"), validScript(QStringLiteral("Special")))
+                     .isEmpty());
 
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
@@ -187,9 +190,11 @@ private Q_SLOTS:
 
         // Valid filename, valid Luau, returns a table — but no tile() function.
         QVERIFY(!writeScript(algoDir, QStringLiteral("notile.luau"),
-                    QStringLiteral("return { metadata = { name = \"No Tile\" } }\n")).isEmpty());
+                             QStringLiteral("return { metadata = { name = \"No Tile\" } }\n"))
+                     .isEmpty());
         // A well-formed sibling proves the scan ran and only the broken one was dropped.
-        QVERIFY(!writeScript(algoDir, QStringLiteral("wellformed.luau"), validScript(QStringLiteral("Wellformed"))).isEmpty());
+        QVERIFY(!writeScript(algoDir, QStringLiteral("wellformed.luau"), validScript(QStringLiteral("Wellformed")))
+                     .isEmpty());
 
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
@@ -217,12 +222,14 @@ private Q_SLOTS:
         // System dir
         QString systemAlgoDir = xdgRoot.path() + QStringLiteral("/system/plasmazones/algorithms");
         QDir().mkpath(systemAlgoDir);
-        QVERIFY(!writeScript(systemAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("SystemVersion"))).isEmpty());
+        QVERIFY(!writeScript(systemAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("SystemVersion")))
+                     .isEmpty());
 
         // User dir
         QString userAlgoDir = xdgRoot.path() + QStringLiteral("/user/plasmazones/algorithms");
         QDir().mkpath(userAlgoDir);
-        QVERIFY(!writeScript(userAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("UserVersion"))).isEmpty());
+        QVERIFY(!writeScript(userAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("UserVersion")))
+                     .isEmpty());
 
         qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
@@ -262,7 +269,8 @@ private Q_SLOTS:
         const QString userAlgoDir = xdgRoot.path() + QStringLiteral("/user/plasmazones/algorithms");
         QVERIFY(QDir().mkpath(systemAlgoDir));
         QVERIFY(QDir().mkpath(userAlgoDir));
-        QVERIFY(!writeScript(userAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("Original"))).isEmpty());
+        QVERIFY(!writeScript(userAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("Original")))
+                     .isEmpty());
         // XDG_DATA_DIRS pinned to an empty tmp tree, like every sibling slot.
         // XdgEnvGuard saves and restores but does not clear, so leaving it
         // ambient lets the scan pick up the machine's installed
@@ -303,7 +311,8 @@ private Q_SLOTS:
         const QString userAlgoDir = xdgRoot.path() + QStringLiteral("/user/plasmazones/algorithms");
         QVERIFY(QDir().mkpath(systemAlgoDir));
         QVERIFY(QDir().mkpath(userAlgoDir));
-        QVERIFY(!writeScript(systemAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("SystemVersion"))).isEmpty());
+        QVERIFY(!writeScript(systemAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("SystemVersion")))
+                     .isEmpty());
         qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
 
@@ -316,7 +325,8 @@ private Q_SLOTS:
 
         // A user script arrives and claims the same id. It must win, even
         // though the bundled file is unchanged and carries a stamp.
-        QVERIFY(!writeScript(userAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("UserVersion"))).isEmpty());
+        QVERIFY(!writeScript(userAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("UserVersion")))
+                     .isEmpty());
         loader.scanAndRegister();
         QCOMPARE(registry->algorithm(QStringLiteral("script:shared"))->name(), QStringLiteral("UserVersion"));
 
@@ -387,7 +397,8 @@ private Q_SLOTS:
         const QString algoDir = xdgRoot.path() + QStringLiteral("/plasmazones/algorithms");
         QVERIFY(QDir().mkpath(algoDir));
 
-        QVERIFY(!writeScript(algoDir, QStringLiteral("ephemeral.luau"), validScript(QStringLiteral("Ephemeral"))).isEmpty());
+        QVERIFY(!writeScript(algoDir, QStringLiteral("ephemeral.luau"), validScript(QStringLiteral("Ephemeral")))
+                     .isEmpty());
 
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
@@ -425,8 +436,10 @@ private Q_SLOTS:
 
         // Same id, distinguishable name fields — the winner's name field
         // tells us which dir's script registered.
-        QVERIFY(!writeScript(sysHighDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("HighPriority"))).isEmpty());
-        QVERIFY(!writeScript(sysLowDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("LowPriority"))).isEmpty());
+        QVERIFY(!writeScript(sysHighDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("HighPriority")))
+                     .isEmpty());
+        QVERIFY(!writeScript(sysLowDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("LowPriority")))
+                     .isEmpty());
 
         // sys-high listed first => higher priority per XDG spec.
         const QByteArray xdgDirs = (xdgRoot.path() + QStringLiteral("/sys-high")).toUtf8() + ":"
@@ -465,12 +478,16 @@ private Q_SLOTS:
         QVERIFY(QDir().mkpath(sysLowDir));
 
         // Shared id `priority` exists in all three — user wins overall.
-        QVERIFY(!writeScript(userHomeDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("UserVersion"))).isEmpty());
-        QVERIFY(!writeScript(sysHighDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("HighSystem"))).isEmpty());
-        QVERIFY(!writeScript(sysLowDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("LowSystem"))).isEmpty());
+        QVERIFY(!writeScript(userHomeDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("UserVersion")))
+                     .isEmpty());
+        QVERIFY(!writeScript(sysHighDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("HighSystem")))
+                     .isEmpty());
+        QVERIFY(!writeScript(sysLowDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("LowSystem")))
+                     .isEmpty());
 
         // `user_only` lives only in user dir; should be present.
-        QVERIFY(!writeScript(userHomeDir, QStringLiteral("user_only.luau"), validScript(QStringLiteral("UserOnly"))).isEmpty());
+        QVERIFY(!writeScript(userHomeDir, QStringLiteral("user_only.luau"), validScript(QStringLiteral("UserOnly")))
+                     .isEmpty());
 
         const QByteArray xdgDirs = (xdgRoot.path() + QStringLiteral("/sys-high")).toUtf8() + ":"
             + (xdgRoot.path() + QStringLiteral("/sys-low")).toUtf8();
@@ -555,7 +572,8 @@ private Q_SLOTS:
         // A real file OUTSIDE the scanned directory, for the escaping symlinks
         // to point at. It must exist, or QDir::Files would skip the links.
         const QString outsideTarget = xdgRoot.path() + QStringLiteral("/outside.luau");
-        QVERIFY(!writeScript(xdgRoot.path(), QStringLiteral("outside.luau"), validScript(QStringLiteral("Outside"))).isEmpty());
+        QVERIFY(!writeScript(xdgRoot.path(), QStringLiteral("outside.luau"), validScript(QStringLiteral("Outside")))
+                     .isEmpty());
         QVERIFY(QFileInfo::exists(outsideTarget));
 
         for (int i = 0; i < kCap + kExtra; ++i) {
@@ -610,7 +628,8 @@ private Q_SLOTS:
         const QString userAlgoDir = xdgRoot.path() + QStringLiteral("/user/plasmazones/algorithms");
         QVERIFY(QDir().mkpath(systemAlgoDir));
         QVERIFY(QDir().mkpath(userAlgoDir));
-        QVERIFY(!writeScript(userAlgoDir, QStringLiteral("mutable.luau"), validScript(QStringLiteral("BeforeEdit"))).isEmpty());
+        QVERIFY(!writeScript(userAlgoDir, QStringLiteral("mutable.luau"), validScript(QStringLiteral("BeforeEdit")))
+                     .isEmpty());
         qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
 
@@ -627,7 +646,8 @@ private Q_SLOTS:
         // stamp's size comparison alone is enough to notice even on a
         // filesystem with coarse mtime granularity.
         QVERIFY(!writeScript(userAlgoDir, QStringLiteral("mutable.luau"),
-                    validScript(QStringLiteral("AfterEditWithALongerName"))).isEmpty());
+                             validScript(QStringLiteral("AfterEditWithALongerName")))
+                     .isEmpty());
         loader.scanAndRegister();
 
         const auto* after = registry->algorithm(QStringLiteral("script:mutable"));

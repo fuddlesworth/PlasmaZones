@@ -290,11 +290,17 @@ private:
 
     static std::unique_ptr<IWallpaperProvider> s_wallpaperProvider;
     static QString s_cachedWallpaperPath;
-    /// Whether the provider has been asked at all since the last invalidation.
+    /// Whether the provider has been asked since the last invalidation, and when.
+    ///
     /// Distinguishes "not looked up yet" from "looked up, and there is no
-    /// wallpaper" — without it the empty answer is indistinguishable from a cache
-    /// miss and every call re-queries a provider that may block for a second.
+    /// wallpaper": without it the empty answer is indistinguishable from a cache
+    /// miss and every call re-queries a provider that may block for a second. The
+    /// timestamp bounds that negative answer, because `invalidateWallpaperCache()`
+    /// has no callers — a permanent latch would strand every wallpaper shader on
+    /// the transparent fallback for the whole session if the first resolve landed
+    /// before the desktop was ready.
     static bool s_wallpaperPathResolved;
+    static qint64 s_wallpaperPathResolvedAtMs;
     static QImage s_cachedWallpaperImage;
     static qint64 s_cachedWallpaperMtime;
     static QMutex s_wallpaperCacheMutex;

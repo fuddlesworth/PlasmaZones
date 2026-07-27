@@ -22,7 +22,6 @@
 #include <QUrl>
 #include <QUuid>
 
-
 #include <algorithm>
 
 namespace PhosphorShaders {
@@ -837,12 +836,17 @@ bool ShaderRegistry::validateParameterValue(const ParameterInfo& param, const QV
         if (!value.canConvert<QString>())
             return false;
     } else {
-        // Unknown type: fail CLOSED. The metadata schema enumerates `type`, so a
-        // bundled or live-scanned pack cannot land here, but this function is
-        // also reached from validateParams / validateAndCoerceParams with runtime
-        // maps that never saw the schema — and accepting a value whose type
-        // nothing in this function understands is how an unvalidated value gets
-        // downstream.
+        // Unknown type: fail CLOSED.
+        //
+        // Currently UNREACHABLE on every live path, and deliberately kept as a
+        // backstop rather than because a caller needs it today: `type` is a
+        // required enum in data/schemas/shader-metadata.schema.json and the schema
+        // gate runs before the metadata is parsed, so every value arriving here
+        // carries a validated type. (`validateParams` has no callers at all, and
+        // `validateAndCoerceParams` is reached only from `presetParams`, which
+        // feeds it presets from that same validated metadata.) The point is that a
+        // FUTURE caller bypassing the schema gate should hit something here rather
+        // than have an unrecognised type waved through.
         return false;
     }
     return true;
@@ -897,8 +901,12 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
             continue; // Parameter doesn't map to a uniform
         }
 
-        // Check if stored params has this parameter (by ID)
-        if (storedParams.contains(param.id)) {
+        // Provenance, computed ONCE and used by both the value branch below and the
+        // containment policy further down. Evaluating it twice let the two disagree
+        // about where a value came from, which is exactly what the policy turns on.
+        const bool fromUser = storedParams.contains(param.id);
+
+        if (fromUser) {
             QVariant value = storedParams.value(param.id);
 
             // Handle color type - keep as QString for marshalling compatibility
@@ -945,9 +953,8 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
         // registries already Reject at parse time; this one had no image-path
         // check at all, and skipping the absolute case let a third-party pack
         // ship `"default": "/home/user/.ssh/id_rsa"` straight through.
-        if (param.type == QLatin1String("image") && !uName.isEmpty()) {
+        if (param.type == QLatin1String("image")) {
             const QString imgPath = result.value(uName).toString();
-            const bool fromUser = storedParams.contains(param.id);
             // No `isRelative()` pre-filter: the guard itself is what decides what
             // an absolute path means, per policy. Short-circuiting on relative-ness
             // used to skip the guard entirely for a trusted absolute path, which
@@ -956,10 +963,9 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
             // caches in two spellings.
             if (!imgPath.isEmpty()) {
                 const QDir shaderDir = QFileInfo(info.sourcePath).absoluteDir();
-                const QString resolved =
-                    resolveWithinPack(shaderDir, imgPath,
-                                      fromUser ? PhosphorFsLoader::AbsolutePathPolicy::Trust
-                                               : PhosphorFsLoader::AbsolutePathPolicy::Reject);
+                const QString resolved = resolveWithinPack(shaderDir, imgPath,
+                                                           fromUser ? PhosphorFsLoader::AbsolutePathPolicy::Trust
+                                                                    : PhosphorFsLoader::AbsolutePathPolicy::Reject);
                 // Assigned unconditionally once containment has been decided.
                 // Leaving the original RELATIVE string in place — which the old
                 // `else if (exists)` shape did whenever the file was merely

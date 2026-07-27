@@ -271,7 +271,14 @@ PhosphorAnimation::RetargetResult WindowAnimator::retargetWithResult(KWin::Effec
     Q_ASSERT_X(false, "WindowAnimator::retargetWithResult",
                "AnimatedValue rejected retarget without marking complete — spec was never installed");
     if (auto stale = m_animations.find(handle); stale != m_animations.end()) {
-        const QRectF bounds = stale->second.bounds().marginsAdded(expandedPadding(handle, stale->second));
+        // United with `preservedBounds`, mirroring the DegenerateReap path above.
+        // Post-failure bounds alone are not enough: the condition this branch
+        // describes is "no spec was installed", in which case `bounds()` is a
+        // default-constructed QRectF and the erase would schedule NO repaint at
+        // all, leaving the last animated frame on screen. `preservedBounds` was
+        // captured before `retarget()` and is already correct.
+        const QRectF postBounds = stale->second.bounds().marginsAdded(expandedPadding(handle, stale->second));
+        const QRectF bounds = preservedBounds.isValid() ? preservedBounds.united(postBounds) : postBounds;
         m_animations.erase(stale);
         if (bounds.isValid()) {
             onRepaintNeeded(handle, bounds);
@@ -517,11 +524,14 @@ void WindowAnimator::onAnimationComplete(KWin::EffectWindow* window,
 void WindowAnimator::onAnimationReplaced(KWin::EffectWindow* window,
                                          const PhosphorAnimation::AnimatedValue<QRectF>& displaced)
 {
-    if (window && !window->isDeleted()) {
-        const QRectF bounds = displaced.value();
-        if (bounds.isValid()) {
-            KWin::effects->addRepaint(KWin::Rect(bounds.toAlignedRect()));
-        }
+    // Padded and routed through onRepaintNeeded, like every other repaint site in
+    // this file. The bare frame rect left a decorated window's shadow and border
+    // region undamaged, so displacing an animation mid-drag could leave a shadow
+    // trail. `expandedPadding` handles a deleted window itself, so the explicit
+    // isDeleted() check is no longer needed here.
+    const QRectF bounds = displaced.value().marginsAdded(expandedPadding(window, displaced));
+    if (bounds.isValid()) {
+        onRepaintNeeded(window, bounds);
     }
     qCDebug(lcEffect) << "Window snap animation replaced:" << static_cast<const void*>(window)
                       << "displaced-from:" << displaced.from() << "displaced-to:" << displaced.to();

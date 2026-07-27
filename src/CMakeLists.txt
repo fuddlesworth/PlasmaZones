@@ -944,13 +944,18 @@ if(BUILD_TESTING)
     add_test(NAME shader_validate_surface
              COMMAND plasmazones-shader-validate --surface ${PROJECT_SOURCE_DIR}/data/surface)
 
-    # The XDG half of the standard isolation, applied by hand because these three
-    # share ONE command target and the helper keys its per-target sandbox on the
-    # target name. Without it the validator resolves pack search paths through
-    # QStandardPaths and picks up whatever packs are installed in the developer's
-    # real XDG_DATA_DIRS, so "are the BUNDLED packs valid?" silently becomes "are
-    # the bundled packs plus everything installed locally valid?". The bus half is
-    # not needed: the validator never touches D-Bus.
+    # The XDG half of the standard isolation, applied by hand — NOT a stray copy
+    # that should have used the shared helper. These three tests have no target of
+    # their own (they all invoke the one `plasmazones-shader-validate` command), and
+    # both `phosphor_apply_test_isolation` and `phosphor_pin_xdg_data_dirs` key
+    # their sandbox on a TARGET name, so neither applies here. Giving the module a
+    # sandbox key independent of the target name is the only way to fold this in.
+    #
+    # Without it the validator resolves pack search paths through QStandardPaths and
+    # picks up whatever packs are installed in the developer's real XDG_DATA_DIRS,
+    # so "are the BUNDLED packs valid?" silently becomes "are the bundled packs plus
+    # everything installed locally valid?" — a test whose result depends on the host.
+    # The bus half is not needed: the validator never touches D-Bus.
     set(_pz_shader_validate_xdg "${CMAKE_BINARY_DIR}/test-xdg/shader_validate")
     file(MAKE_DIRECTORY "${_pz_shader_validate_xdg}/config" "${_pz_shader_validate_xdg}/data"
                         "${_pz_shader_validate_xdg}/state" "${_pz_shader_validate_xdg}/cache")

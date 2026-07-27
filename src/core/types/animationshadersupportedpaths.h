@@ -142,8 +142,8 @@ inline const QSet<QString>& supportedShaderPathSet()
     return kSupported;
 }
 
-/// Convenience predicate used by the settings UI (Q_INVOKABLE-bridged)
-/// (Q_INVOKABLE-bridged). The only callers today are the two in
+/// Convenience predicate used by the settings UI (Q_INVOKABLE-bridged).
+/// The only callers today are the two in
 /// `animationspagecontroller_shaders.cpp`.
 inline bool eventPathSupportsShaderLeg(const QString& path)
 {
@@ -173,13 +173,27 @@ inline bool eventPathSupportsShaderLeg(const QString& path)
 inline PhosphorAnimationShaders::ShaderProfileTree
 pruneShaderProfileTreeToSupportedPaths(const PhosphorAnimationShaders::ShaderProfileTree& src)
 {
-    const QSet<QString>& supported = supportedShaderPathSet();
-
+    // No membership SET needed any more: iterating the SSOT list is itself the
+    // filter, and `supportedShaderPathSet()` is built from that same list, so the
+    // two cannot disagree.
     PhosphorAnimationShaders::ShaderProfileTree pruned;
     pruned.setBaseline(src.baseline());
-    const QStringList overriddenPaths = src.overriddenPaths();
-    for (const QString& path : overriddenPaths) {
-        if (supported.contains(path)) {
+    // Emitted in the SSOT's own order, not the source tree's insertion order, so
+    // this pruner CANONICALISES as well as filters.
+    //
+    // `ShaderProfileTree::operator==` compares insertion order, but order carries
+    // no meaning for this property — `resolve()` ignores it entirely. Preserving
+    // the caller's order therefore made two value-identical trees compare unequal
+    // whenever a user toggled an override off and back on, because the re-added
+    // path appends rather than returning to its old position. The consequences were
+    // all user-visible: `hasPendingChanges()` stayed true forever, the per-page
+    // Discard could not clear it (it is value-based, finds every value already
+    // equal, and never writes), and the no-op write guard fired a tree-changed
+    // signal for an order-only delta. Since this runs on BOTH the read and the
+    // write side, canonicalising here fixes the dirty check, the no-op guard, and
+    // the persisted JSON in one place.
+    for (const QString& path : shaderSupportedEventPaths()) {
+        if (src.hasOverride(path)) {
             pruned.setOverride(path, src.directOverride(path));
         }
     }

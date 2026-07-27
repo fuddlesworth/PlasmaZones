@@ -571,8 +571,9 @@ private Q_SLOTS:
         // kPrimary: duration only, so clearing duration EMPTIES it → removal.
         QVERIFY(c.setOverride(kPrimary, {{QStringLiteral("duration"), 600}}));
         // kMirror: duration AND curve, so clearing duration leaves a curve → rewrite.
-        QVERIFY(c.setOverride(kMirror, QVariantMap{{QStringLiteral("duration"), 600},
-                                                   {QStringLiteral("curve"), QStringLiteral("0.4,0,0.2,1")}}));
+        QVERIFY(c.setOverride(
+            kMirror,
+            QVariantMap{{QStringLiteral("duration"), 600}, {QStringLiteral("curve"), QStringLiteral("0.4,0,0.2,1")}}));
         loader.rescanNow();
 
         // Read the removed path from INSIDE an overrideChanged handler, which is
@@ -588,8 +589,7 @@ private Q_SLOTS:
 
         QCOMPARE(c.clearFieldOnPaths(group(), QStringLiteral("duration")), 2);
 
-        QVERIFY2(seenFromHandler != 600,
-                 "a handler on the emitting stack saw the removed leaf's STALE duration");
+        QVERIFY2(seenFromHandler != 600, "a handler on the emitting stack saw the removed leaf's STALE duration");
         QCOMPARE(seenFromHandler, 123);
         // End state: kPrimary inherits, kMirror kept its curve and lost its duration.
         QVERIFY(!c.hasOverride(kPrimary));
@@ -700,14 +700,24 @@ private Q_SLOTS:
 
         const int baseline = c.divergentPathCount(kPrimary, QStringList{kMirror}, /*compareCurve=*/true);
         QCOMPARE(baseline, 2);
-        // The mirror repeated, and the primary naming itself. Both must be
-        // absorbed; without the dedup these report 3 and 3.
+        // A REPEATED mirror is the case the dedup actually closes: without it the
+        // same file is compared twice and the count reads 3.
         QCOMPARE(c.divergentPathCount(kPrimary, QStringList{kMirror, kMirror}, /*compareCurve=*/true), baseline);
+        // The primary naming ITSELF is asserted too, but note it is NOT the dedup
+        // that absorbs it: the primary's key always equals its own, so it can never
+        // increment `diverged` whether or not it is removed from the list first.
+        // This row pins the observable answer, not the `removeAll` line — deleting
+        // that line leaves both of these passing, and the comment used to claim
+        // otherwise.
         QCOMPARE(c.divergentPathCount(kPrimary, QStringList{kPrimary, kMirror}, /*compareCurve=*/true), baseline);
     }
 
-    /// A group whose only "mirror" is the primary itself has no mirrors at all,
-    /// so it can never diverge — the same answer as an empty mirror list.
+    /// A group whose only "mirror" is the primary itself can never diverge.
+    ///
+    /// Pinned as a CONTRACT, not as a test of the mirror-dedup: with mirrors ==
+    /// {primary} the comparison is the primary against itself, which matches by
+    /// construction, so this holds for the same reason the row above does. It is
+    /// here so a future change that starts counting self-comparisons is caught.
     void aGroupWhoseOnlyMirrorIsThePrimaryNeverDiverges()
     {
         IsolatedConfigGuard guard;
@@ -719,6 +729,54 @@ private Q_SLOTS:
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 500}}));
         QCOMPARE(c.divergentPathCount(kPrimary, QStringList{kPrimary}, /*compareCurve=*/true), 0);
+    }
+
+    /// An unrecognised MIRROR path must not count as divergent.
+    ///
+    /// The primary is gated by `isValidEventPath`, the mirror list was not: a
+    /// non-built-in mirror yields the all-empty comparison key (no stored profile,
+    /// no shader leg), which differs from any primary holding real state and so
+    /// counted as divergence over a path no edit could ever converge — exactly the
+    /// latch the primary gate exists to prevent. Not reachable from the shipped
+    /// card, which pre-filters its mirrors, but this is a Q_INVOKABLE.
+    void anUnrecognisedMirrorIsNotCountedAsDivergent()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c(nullptr, &settings);
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 500}}));
+        QCOMPARE(c.divergentPathCount(kPrimary, QStringList{QStringLiteral("not.a.real.event")},
+                                      /*compareCurve=*/true),
+                 0);
+    }
+
+    /// An invalid PRIMARY path returns 0 rather than counting every mirror.
+    void anInvalidPrimaryReportsNoDivergence()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c(nullptr, &settings);
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(kMirror, QVariantMap{{QStringLiteral("duration"), 900}}));
+        QCOMPARE(c.divergentPathCount(QStringLiteral("not.a.real.event"), QStringList{kMirror},
+                                      /*compareCurve=*/true),
+                 0);
+    }
+
+    /// `allPathsHoldShaderEffect` is FALSE for an empty list, not vacuously true.
+    void allPathsHoldShaderEffectIsFalseForAnEmptyList()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        AnimationsPageController c(nullptr, &settings);
+        QVERIFY(!c.allPathsHoldShaderEffect(QStringList{}, QStringLiteral("pixelate")));
     }
 };
 
