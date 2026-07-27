@@ -43,8 +43,10 @@ constexpr int MaxWatchedFilesPerDir = ScriptedAlgorithmLoader::MaxWatchedFilesPe
 // already bounded upstream: `validatedLuauFiles` caps files considered per
 // directory at MaxWatchedFilesPerDir, so the total work a spray can buy is
 // 100 x N_dirs regardless of how many of those files survive. Typical script
-// counts are single digits; 10k is purely a DoS guard.
-static constexpr int kMaxScripts = 10'000;
+// counts are single digits; 10k is purely a DoS guard. Defined in the header
+// (test-visible) like MaxWatchedFilesPerDir; this is the same file-local
+// alias shape for the unqualified uses below.
+constexpr int MaxScripts = ScriptedAlgorithmLoader::MaxScripts;
 
 /// Scan strategy backing the loader's `WatchedDirectorySet`. Forwards
 /// the base's registered directory list verbatim. The list is kept up
@@ -223,9 +225,15 @@ void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
     QDir dir(dirPath);
     if (!dir.exists()) {
         if (dir.mkpath(QStringLiteral("."))) {
-            // Restrict user algorithm directory to owner-only access (0700)
-            QFile::setPermissions(dir.absolutePath(),
-                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+            // Restrict user algorithm directory to owner-only access (0700).
+            // The directory holds untrusted-but-executed Luau, so a failed
+            // chmod is worth a warning: the surrounding mkpath failure is
+            // already reported, and this is the same trust boundary.
+            if (!QFile::setPermissions(dir.absolutePath(),
+                                       QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
+                qCWarning(PhosphorTiles::lcTilesLib)
+                    << "Could not restrict permissions (0700) on user algorithm directory:" << dir.absolutePath();
+            }
             qCInfo(PhosphorTiles::lcTilesLib) << "Created user algorithm directory:" << dir.absolutePath();
         } else {
             qCWarning(PhosphorTiles::lcTilesLib) << "Failed to create user algorithm directory:" << dir.absolutePath();
@@ -330,7 +338,7 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
         // pack registries inherit it from the latter rather than implementing
         // it themselves). Re-checked inside loadFromDirectory so a single dir
         // dropping us at the cap stops mid-iteration too.
-        if (m_scriptIdToPath.size() >= kMaxScripts) {
+        if (m_scriptIdToPath.size() >= MaxScripts) {
             capTripped = true;
             break;
         }
@@ -344,11 +352,18 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
         loadFromDirectory(dir, isUserDir, canonicalUserDir, prevStamps);
     }
 
+    // Re-test after the loop: the per-iteration check above runs BEFORE each
+    // directory, so a cap reached while scanning the LAST directory (where
+    // loadFromDirectory bails mid-iteration silently) would otherwise leave
+    // capTripped false and the operator with a silently truncated registry.
+    if (!capTripped && m_scriptIdToPath.size() >= MaxScripts) {
+        capTripped = true;
+    }
     if (capTripped) {
         qCWarning(PhosphorTiles::lcTilesLib).nospace()
-            << "ScriptedAlgorithmLoader: reached script cap (" << kMaxScripts
+            << "ScriptedAlgorithmLoader: reached script cap (" << MaxScripts
             << ") — later scripts skipped to protect the GUI thread. Prune the watched algorithm directories or raise "
-               "kMaxScripts.";
+               "MaxScripts.";
     }
 
     // Collect all newly registered script IDs
@@ -449,10 +464,10 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
 
     for (const QString& fullPath : validFiles) {
         // Mid-directory bail when the global cap was reached during this
-        // scan (e.g. a single user dir holding > kMaxScripts entries).
+        // scan (e.g. a single user dir holding > MaxScripts entries).
         // The outer loop in performScan logs the warning once at the
         // dir boundary; here we silently stop to keep log noise low.
-        if (m_scriptIdToPath.size() >= kMaxScripts) {
+        if (m_scriptIdToPath.size() >= MaxScripts) {
             return;
         }
         // Two layered checks, intentionally not redundant:
@@ -499,8 +514,11 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         // change at all.
         const ScriptStamp prev = prevStamps.value(fullPath);
         const QFileInfo scriptInfo(fullPath);
+        // `isUser` is part of the key: reuse must not carry a stale trust
+        // classification (and with it the wrong VM) across a scan where the
+        // path's user/system classification flipped.
         const bool stampMatches = !prev.id.isEmpty() && prev.size == scriptInfo.size()
-            && prev.mtimeMs == scriptInfo.lastModified().toMSecsSinceEpoch();
+            && prev.mtimeMs == scriptInfo.lastModified().toMSecsSinceEpoch() && prev.isUser == isUserDir;
         bool reusedExisting = false;
         if (stampMatches) {
             const TilingAlgorithm* live = m_registry->algorithm(prev.id);
@@ -593,8 +611,9 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             m_registry->registerAlgorithm(scriptId, algo.release());
         }
         m_scriptIdToPath[scriptId] = fullPath;
-        m_scriptStamps.insert(fullPath,
-                              ScriptStamp{scriptId, scriptInfo.size(), scriptInfo.lastModified().toMSecsSinceEpoch()});
+        m_scriptStamps.insert(
+            fullPath,
+            ScriptStamp{scriptId, scriptInfo.size(), scriptInfo.lastModified().toMSecsSinceEpoch(), isUserDir});
 
         // qCDebug, not qCInfo: this fires once per script on every rescan,
         // including the ones the signature diff proves changed nothing, so at
