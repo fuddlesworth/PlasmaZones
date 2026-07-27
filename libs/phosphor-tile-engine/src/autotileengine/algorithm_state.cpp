@@ -103,7 +103,15 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // Save current algorithm's ratio + master count before switching.
     // Only save after the first setAlgorithm() call has completed, to avoid
     // persisting uninitialised struct defaults from the constructor.
-    if (m_algorithmEverSet && oldAlgo) {
+    //
+    // Skipped on the settings-refresh path: there the saved map was just
+    // reloaded from disk and the live scalars have already been overwritten by
+    // the refresh's global SYNC_FIELDs, so this stamp would replace the
+    // freshly-saved slot with global-default values (discussion #853). The
+    // cost is bounded: live shortcut tunings not yet written back are dropped
+    // for the outgoing algorithm on a settings-driven switch, in favour of the
+    // values the user explicitly saved.
+    if (m_algorithmEverSet && oldAlgo && !m_refreshingFromSettings) {
         auto& entry = m_config->savedAlgorithmSettings[m_algorithmId];
         entry.splitRatio = m_config->splitRatio;
         entry.masterCount = m_config->masterCount;

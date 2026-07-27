@@ -11,6 +11,7 @@
 #include "helpers/AutotileTestHelpers.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 #include "core/types/constants.h"
@@ -194,6 +195,66 @@ private Q_SLOTS:
         // default, so grid's own default is authoritative.
         engine.refreshConfigFromSettings();
         QCOMPARE(engine.config()->maxWindows, gridAlgo->defaultMaxWindows());
+    }
+
+    // Discussion #853: a settings-driven refresh that ALSO switches the ambient
+    // algorithm must not stamp the outgoing algorithm's slot from the engine's
+    // live scalars. The saved map was just reloaded from disk inside the same
+    // refresh, so the outgoing slot in it is the value the user explicitly
+    // saved (settings app: slider → per-algorithm slot → Save → reload); the
+    // live scalars are stale — and, once the write-back guard has lapsed,
+    // already clobbered by the global SYNC_FIELDs. The stamp turned "set
+    // three-column max windows to 7, then switch algorithms" into a silent
+    // revert to 5 (its default), after which persistablePerAlgoSettings pruned
+    // the slot entirely.
+    void testRefresh_settingsDrivenSwitch_preservesOutgoingSlot()
+    {
+        Settings settings;
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setEngineSettings(&settings);
+
+        auto* threeCol = m_scriptSetup.registry()->algorithm(QLatin1String("three-column"));
+        QVERIFY(threeCol);
+        const int customMaxWindows = threeCol->defaultMaxWindows() + 2;
+
+        // Land on three-column as the ambient algorithm.
+        settings.setDefaultAutotileAlgorithm(QLatin1String("three-column"));
+        engine.setAlgorithm(QLatin1String("three-column"));
+
+        // The settings app writes the user's customization: a per-algorithm
+        // slot only, never the global key (TilingAlgorithmController).
+        QVariantMap slot;
+        slot[PhosphorTiles::AutotileJsonKeys::MaxWindows] = customMaxWindows;
+        slot[PhosphorTiles::AutotileJsonKeys::SplitRatio] = 0.6;
+        slot[PhosphorTiles::AutotileJsonKeys::MasterCount] = 1;
+        QVariantMap perAlgo;
+        perAlgo[QStringLiteral("three-column")] = slot;
+        settings.setAutotilePerAlgorithmSettings(perAlgo);
+
+        // Let the switch's write-back guard lapse so the refresh below runs the
+        // global SYNC_FIELDs — the worst-case variant, where the live scalars
+        // hold the global default rather than merely stale values.
+        QTest::qWait(600);
+
+        // The settings app also switched the default algorithm before Save; the
+        // daemon reload delivers both changes in one refresh.
+        settings.setDefaultAutotileAlgorithm(QLatin1String("master-stack"));
+        engine.refreshConfigFromSettings();
+        QCOMPARE(engine.algorithm(), QStringLiteral("master-stack"));
+
+        // The freshly-saved slot survives the switch, both in the live config
+        // and in what writeBackTuning() persisted back to settings.
+        const auto savedIt = engine.config()->savedAlgorithmSettings.constFind(QStringLiteral("three-column"));
+        QVERIFY2(savedIt != engine.config()->savedAlgorithmSettings.constEnd(),
+                 "three-column slot was pruned by the settings-driven switch");
+        QCOMPARE(savedIt->maxWindows, customMaxWindows);
+        const QVariantMap persisted =
+            settings.autotilePerAlgorithmSettings().value(QStringLiteral("three-column")).toMap();
+        QCOMPARE(persisted.value(PhosphorTiles::AutotileJsonKeys::MaxWindows).toInt(), customMaxWindows);
+
+        // Switching back restores the customization.
+        engine.setAlgorithm(QLatin1String("three-column"));
+        QCOMPARE(engine.config()->maxWindows, customMaxWindows);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
