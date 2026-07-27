@@ -95,10 +95,12 @@ inline QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEf
     return m;
 }
 
-/// Keys of the map `shaderProfileToMap` produces. Named constants because the
-/// map is consumed by name in another TU (the group-write comparison in
-/// animationspagecontroller_groupwrites.cpp) as well as by QML, and two
-/// independently-spelled literals that must agree is how those drift.
+/// Keys of the map `shaderProfileToMap` produces. `JsonEffectIdKey` is
+/// consumed by name in another TU (the group-write comparison in
+/// animationspagecontroller_groupwrites.cpp) as well as by QML;
+/// `JsonShaderParametersKey` currently has no consumer outside this header
+/// and is kept as a named constant for symmetry, so a future consumer cannot
+/// introduce a second independently-spelled literal.
 inline constexpr QLatin1String JsonEffectIdKey{"effectId"};
 inline constexpr QLatin1String JsonShaderParametersKey{"parameters"};
 

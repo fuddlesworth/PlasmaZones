@@ -163,9 +163,11 @@ public:
     /// profiles directory.
     ///
     /// Q_INVOKABLE so a card can validate its declared mirrorPaths at load.
-    /// The group writers discard setOverride's bool, so a typo'd mirror path
-    /// fails silently AND latches the divergence banner permanently (the
-    /// mirror's stored state can never match the primary's).
+    /// The group writers cannot report WHICH path failed (their return is a
+    /// single bool / count over the whole batch), so a typo'd mirror path
+    /// would surface only as a permanently latched divergence banner (the
+    /// mirror's stored state can never match the primary's) with nothing
+    /// naming the culprit.
     Q_INVOKABLE bool isValidEventPath(const QString& path) const;
 
     /// True iff a user override file exists for @p path. Returns false
@@ -265,12 +267,19 @@ public:
     // ignore while its own write is in flight, and they mean nothing here.
     //
     // None of these caps `paths.size()`, and none needs to. Each DEDUPLICATES
-    // its list on entry and then skips any entry that is not a built-in event
-    // path, so the WORK is bounded by `ProfilePaths::allBuiltInPaths()` rather
-    // than by the caller's list — a repeat costs nothing and an unrecognised
-    // entry costs one set lookup, never a disk read or a shader-tree rebuild.
-    // The dedup matters because QML builds a group as
-    // `[eventPath].concat(mirrorPaths)` and does not dedupe.
+    // its list on entry (distinctPaths). Invalid entries differ per writer:
+    // clearFieldOnPaths and divergentPathCount SKIP a non-built-in path,
+    // while setOverrideMergedOnPaths forwards it to setOverride, which
+    // rejects it and makes the whole call report false — a caller bug
+    // surfaces instead of being silently dropped. Either way the WORK is
+    // bounded by `ProfilePaths::allBuiltInPaths()` rather than by the
+    // caller's list — a repeat costs nothing and an unrecognised entry costs
+    // one lookup, never a disk read or a shader-tree rebuild. The dedup
+    // matters because QML builds a group as `[eventPath].concat(mirrorPaths)`
+    // and does not dedupe. (The scoped reverts declared elsewhere in this
+    // header — clearOverridesUnder / clearOverridesForPaths — do NOT dedupe;
+    // they are safe against duplicates anyway because the second visit to a
+    // path classifies as Absent and is skipped.)
 
     /// Merge @p fields into the stored override at every path in @p paths and
     /// write each result back.
@@ -301,10 +310,13 @@ public:
     /// pending-changes walk both key on file existence.
     /// @return the number of paths actually changed, or -1 on refusal. Paths
     /// that did not carry the field are skipped, so 0 means the field was
-    /// already inherited everywhere and nothing needed doing. -1 means the call
-    /// was refused: either @p field is not one this owns, or an async discard
-    /// holds the snapshot map, or a write failed. The last two toast, and a
-    /// caller must not read -1 as "there was nothing to clear".
+    /// already inherited everywhere and nothing needed doing. -1 is reserved
+    /// for "nothing was attempted": @p field is not one this owns, or an
+    /// async discard holds the snapshot map (which toasts). A PARTIAL write
+    /// failure toasts and returns the count that DID change — returning -1
+    /// there collapsed the editor under the cursor of the user who had just
+    /// clicked inside it. A caller must not read -1 as "there was nothing to
+    /// clear".
     Q_INVOKABLE int clearFieldOnPaths(const QStringList& paths, const QString& field);
 
     /// True when ANY path in @p paths takes a shader leg. A group mutation must
@@ -314,10 +326,12 @@ public:
     /// on the card could clear.
     Q_INVOKABLE bool anyPathSupportsShaderLeg(const QStringList& paths) const;
 
-    /// True iff every path in @p paths already carries @p effectId as its
-    /// DIRECT shader override. The empty string is the engaged-empty "None"
-    /// sentinel, which is a real stored value and distinct from carrying no
-    /// override at all.
+    /// True iff every shader-capable path in @p paths already carries
+    /// @p effectId as its DIRECT shader override. Non-supporting paths are
+    /// SKIPPED, mirroring setShaderOverrideOnPaths (which never writes to
+    /// them), so a mixed group can report true right after a successful group
+    /// write. The empty string is the engaged-empty "None" sentinel, which is
+    /// a real stored value and distinct from carrying no override at all.
     Q_INVOKABLE bool allPathsHoldShaderEffect(const QStringList& paths, const QString& effectId) const;
 
     /// Set @p effectId (with @p parameters) as the shader override on every
@@ -574,6 +588,11 @@ public:
     ///
     /// Unset (the default, and every unit test) leaves the controller
     /// purely file-backed, which is already self-consistent.
+    ///
+    /// Deliberately one-sided: no teardown path clears it. Safety rests on
+    /// the QPointer the composition root captures inside the callable, which
+    /// logs and no-ops once the loader is gone rather than degrading
+    /// silently.
     void setProfileStoreRefresher(std::function<void()> refresher);
 
     /// Forget the cached contents of every user override file.
@@ -670,6 +689,13 @@ public:
     /// save() calls this right after m_settings.save(); the dirtyChanged forwarder
     /// gates on an actual flip so a no-op refresh is free.
     void refreshDirtyState();
+
+    /// Flip-gated emitter for stockSuppressedEventsChanged: recomputes the
+    /// list and emits only when it actually changed. All three gate inputs
+    /// (registry rescan, tree assignment, animations master toggle) route
+    /// through here so tree edits that cannot affect the suppression set
+    /// stop re-running the conflict-chip bindings.
+    void maybeEmitStockSuppressedEventsChanged();
 
     /// Restore every file in the snapshot to its pre-edit state and
     /// clear the snapshot. Called from `SettingsController::load()`
@@ -872,6 +898,17 @@ private:
     /// forward on this cached state keeps the framework's dirty
     /// Q_PROPERTY NOTIFY contract honest.
     bool m_lastHadPendingChanges = false;
+    /// Memoised verdict of the value-based tree-dirty compare inside
+    /// hasPendingChanges() (each side is a store read + parse + prune, and
+    /// the predicate runs several times per mutation at drag rate). Reset by
+    /// the shaderProfileTreeChanged lambda (live tree moved) and by
+    /// refreshDirtyState() (committed baseline moved).
+    mutable std::optional<bool> m_treeDirtyCache;
+    /// Last emitted stockSuppressedEvents() value; maybeEmitStockSuppressedEventsChanged
+    /// gates the NOTIFY on an actual list change so tree edits that cannot
+    /// affect the suppression set stop re-running the rule editor's
+    /// conflict-chip bindings.
+    QStringList m_lastStockSuppressedEvents;
     /// Memoised eventSections() result — taxonomy is static for the
     /// process lifetime so subsequent QML rebinds reuse the same list.
     /// Populated lazily on first call. NOTE: if `ProfilePaths::

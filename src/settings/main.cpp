@@ -137,6 +137,13 @@ int main(int argc, char* argv[])
     const QString requestedAddress = (!requestedPage.isEmpty() && !requestedAnchor.isEmpty())
         ? (requestedPage + QLatin1Char('#') + requestedAnchor)
         : requestedPage;
+    // Every other user-visible failure in this file logs; silently dropping
+    // the anchor here would make `--setting foo` (no --page) exit 0 against a
+    // running instance having done nothing at all.
+    if (!requestedAnchor.isEmpty() && requestedPage.isEmpty()) {
+        qWarning().noquote()
+            << QStringLiteral("Ignoring --setting/--section anchor \"%1\": it requires --page.").arg(requestedAnchor);
+    }
 
     // Single-instance: if another instance is running, forward the request and exit
     if (activateRunningInstance(requestedAddress)) {
@@ -251,33 +258,38 @@ int main(int argc, char* argv[])
     // shader browser — mirrors daemon/main.cpp + editor/main.cpp).
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
-    // Global settings search, set up BEFORE the engine so the provider locals
-    // below outlive ~QQmlApplicationEngine: a model change signal firing during
-    // engine teardown must not reach a destroyed provider via invalidate() →
-    // buildIndex(). Page entries derive from the page registry; seedSearchCatalog
-    // adds per-page synonyms + addressable anchors. searchController is parented
-    // to `controller` (destroyed last).
-    auto* searchController = new PhosphorControl::SearchController(controller.app(), &controller);
-    PlasmaZones::seedSearchCatalog(searchController);
-
-    // Dynamic content providers (layouts, rules, profiles). unique_ptr locals
-    // declared before the engine so they outlive it; SearchController holds them
-    // non-owning (ISearchProvider is not a QObject, so no parent applies).
+    // Global settings search, set up BEFORE the engine so everything here
+    // outlives ~QQmlApplicationEngine. Declaration order is the lifetime
+    // contract, in three layers:
+    //   1. The provider unique_ptr locals come FIRST so they outlive
+    //      searchController, which holds them non-owning with no removal
+    //      path (ISearchProvider is not a QObject, so no parent applies).
+    //   2. searchController is an UNPARENTED unique_ptr local declared after
+    //      them — parenting it to `controller` would destroy it inside
+    //      ~SettingsController's child teardown, AFTER these providers are
+    //      gone, and ~SettingsController's own body emits signals wired to
+    //      invalidate() (refreshLabels → dataChanged), which recomputes
+    //      synchronously when a query is pending and dereferences every
+    //      registered provider in buildIndex().
+    //   3. `engine` is declared later still, so the QML side drops its
+    //      references before any of this tears down.
     auto layoutsProvider = std::make_unique<PlasmaZones::LayoutsSearchProvider>(&controller);
     auto rulesProvider = std::make_unique<PlasmaZones::RulesSearchProvider>(&controller);
     auto profilesProvider = std::make_unique<PlasmaZones::ProfilesSearchProvider>(&controller);
+    auto searchController = std::make_unique<PhosphorControl::SearchController>(controller.app(), nullptr);
+    PlasmaZones::seedSearchCatalog(searchController.get());
     searchController->registerProvider(layoutsProvider.get());
     searchController->registerProvider(rulesProvider.get());
     searchController->registerProvider(profilesProvider.get());
-    QObject::connect(&controller, &PlasmaZones::SettingsController::layoutsChanged, searchController,
+    QObject::connect(&controller, &PlasmaZones::SettingsController::layoutsChanged, searchController.get(),
                      &PhosphorControl::SearchController::invalidate);
     if (controller.rulesPage() != nullptr && controller.rulesPage()->model() != nullptr) {
         // Both add/remove (countChanged) and any in-place edit (rename,
         // match-summary, … via dataChanged) must refresh the index. invalidate()
         // is lazy, so over-firing on unrelated role changes is cheap.
-        QObject::connect(controller.rulesPage()->model(), &PlasmaZones::RuleModel::countChanged, searchController,
+        QObject::connect(controller.rulesPage()->model(), &PlasmaZones::RuleModel::countChanged, searchController.get(),
                          &PhosphorControl::SearchController::invalidate);
-        QObject::connect(controller.rulesPage()->model(), &PlasmaZones::RuleModel::dataChanged, searchController,
+        QObject::connect(controller.rulesPage()->model(), &PlasmaZones::RuleModel::dataChanged, searchController.get(),
                          &PhosphorControl::SearchController::invalidate);
     }
 
@@ -285,7 +297,7 @@ int main(int argc, char* argv[])
         // One signal covers the lot: profilesChanged fires on create, rename,
         // duplicate, delete, import, reparent, and activation.
         QObject::connect(controller.profilesPage()->bridge(), &PlasmaZones::ProfileStore::profilesChanged,
-                         searchController, &PhosphorControl::SearchController::invalidate);
+                         searchController.get(), &PhosphorControl::SearchController::invalidate);
     }
 
     QQmlApplicationEngine engine;
@@ -295,7 +307,7 @@ int main(int argc, char* argv[])
 
     engine.rootContext()->setContextProperty(QStringLiteral("settingsController"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), controller.settings());
-    engine.rootContext()->setContextProperty(QStringLiteral("searchController"), searchController);
+    engine.rootContext()->setContextProperty(QStringLiteral("searchController"), searchController.get());
 
     if (!requestedAddress.isEmpty()) {
         controller.navigateTo(requestedAddress);

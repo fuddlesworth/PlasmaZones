@@ -81,8 +81,11 @@ QString AnimationsPageController::userMotionSetsDir() const
     // Not perfectly parallel to production, but every test depends on
     // the "profile files at tmp root" convention so restructuring would
     // be a multi-test churn for no behavioural benefit.
-    // The suffix is derived from the production accessor rather than spelled
-    // again, so the two cannot drift.
+    // The suffix is derived from the production accessor, which tracks a
+    // rename of the LEAF segment only: mid() from lastIndexOf('/') keeps just
+    // the last segment, and a separator-free accessor would make lastIndexOf
+    // return -1 and mid(-1) yield the whole string. Both shapes are unreal
+    // today (the accessor is "/plasmazones/motionsets").
     if (!m_userProfilesDirOverride.isEmpty()) {
         const QString subdir = ConfigDefaults::userMotionSetsSubdir();
         return m_userProfilesDirOverride + subdir.mid(subdir.lastIndexOf(QLatin1Char('/')));
@@ -243,8 +246,14 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     }
 
     const QString dir = userProfilesDir();
-    if (!QDir().mkpath(dir))
+    if (!QDir().mkpath(dir)) {
+        // Without this log a read-only or full ~/.local/share turns every
+        // animation edit into a silent no-op: the group writer folds the
+        // false into allWritten with no toast of its own, so the slider
+        // snaps back with nothing in the journal.
+        qCWarning(lcConfig) << "setOverride: cannot create profiles directory" << dir;
         return false;
+    }
     // Capture dirty state AFTER the cheap validity / mkpath guards so an
     // invalid path doesn't pay for a hasPendingChanges() walk.
     const bool wasPending = hasPendingChanges();
@@ -256,6 +265,10 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // back for the write — the canonical name is always the path.
     QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
     obj.remove(JsonNameKey);
+    // Deliberately UNCACHED (bypasses cachedDiskProfile): the memo stores the
+    // sanitized map, which cannot serve this byte-exact raw-object equality
+    // compare. This is the one extra read per write path per mutation on top
+    // of the memo contract's "one read per path per mutation".
     const QJsonObject existing = readProfileJson(filePath);
     if (existing == obj) {
         // Round-trip with no real change — bail early so a QML two-way

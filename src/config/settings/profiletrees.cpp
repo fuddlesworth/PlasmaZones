@@ -64,12 +64,10 @@ void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfil
     // and survives until some other edit forces a write. Acceptable because the
     // READ side prunes unconditionally, so a stale entry can never reach a
     // consumer — it just lingers in the file.
-    const QVariantMap prevMap =
-        m_store->read<QVariantMap>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
-    PhosphorAnimationShaders::ShaderProfileTree prevTree;
-    if (!prevMap.isEmpty())
-        prevTree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(prevMap));
-    const auto prevPruned = pruneShaderProfileTreeToSupportedPaths(prevTree);
+    // The getter is exactly "read + parse + prune", so reuse it instead of
+    // duplicating its body inline. (fromJson({}) already yields the
+    // default-constructed tree, so the old !isEmpty() guard was dead.)
+    const auto prevPruned = shaderProfileTree();
     if (pruned == prevPruned)
         return;
     m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(),

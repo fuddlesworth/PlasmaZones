@@ -564,6 +564,10 @@ private Q_SLOTS:
 
         QVERIFY(c.setShaderOverride(QStringLiteral("popup"), QStringLiteral("dissolve"), {}));
         QVERIFY(c.setShaderOverride(QStringLiteral("popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+        // A FILE-backed pending change too: a tree-only discard completes
+        // synchronously (no worker, no in-flight window), so the refusal
+        // this slot pins requires a snapshot for the worker to restore.
+        QVERIFY(c.setOverride(QStringLiteral("popup"), QVariantMap{{QStringLiteral("duration"), 200}}));
 
         QSignalSpy done(&c, &AnimationsPageController::discardResult);
         QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
@@ -764,6 +768,10 @@ private Q_SLOTS:
 
         QVERIFY(c.setShaderOverride(QStringLiteral("popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
         QVERIFY(c.setShaderOverride(QStringLiteral("popup.zoneSelector.show"), QStringLiteral("pixelate"), {}));
+        // A FILE-backed pending change too: a tree-only discard completes
+        // synchronously (no worker, no in-flight window), so the refusal
+        // this slot pins requires a snapshot for the worker to restore.
+        QVERIFY(c.setOverride(QStringLiteral("popup"), QVariantMap{{QStringLiteral("duration"), 200}}));
 
         // TWO paths, and that is the point. With one path, `cleared += -1` and
         // an early `return -1` are indistinguishable — both yield -1 — so a
