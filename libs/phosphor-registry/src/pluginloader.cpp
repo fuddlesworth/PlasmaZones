@@ -29,7 +29,7 @@ Q_LOGGING_CATEGORY(lcPluginLoader, "phosphorregistry.pluginloader")
 // MetadataPackScanStrategy::kDefaultMaxEntries, one order of magnitude below
 // them: a plugin costs a dlopen rather than a JSON parse, and no plausible
 // install has a four-digit plugin count.
-static constexpr int kMaxPluginSubdirsPerCycle = 1000;
+static constexpr int MAX_PLUGIN_SUBDIRS_PER_CYCLE = 1000;
 
 // Live state for one loaded plugin. The QLibrary holds the .so
 // mapped for the PluginLoader's lifetime — Phase 1.3 deliberately
@@ -97,6 +97,7 @@ PluginLoader::PluginLoader(Registry<IBarWidgetFactory>* registry, const QString&
     if (!m_registry) {
         qFatal("PluginLoader: registry must not be null");
     }
+    m_maxSubdirsPerCycle = MAX_PLUGIN_SUBDIRS_PER_CYCLE;
     m_strategy = std::make_unique<ScanStrategyImpl>(this);
     m_watcher = std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy);
     // Qt::AutoConnection (the default) is correct here: both ends
@@ -145,6 +146,14 @@ PluginLoader::~PluginLoader()
 QString PluginLoader::pluginRoot() const
 {
     return m_pluginRoot;
+}
+
+void PluginLoader::setMaxSubdirsPerCycleForTest(int cap)
+{
+    // Same fallback shape as DirectoryLoader::setMaxEntriesForTest: a
+    // nonsensical cap reverts to the production default rather than zeroing
+    // the scan.
+    m_maxSubdirsPerCycle = cap > 0 ? cap : MAX_PLUGIN_SUBDIRS_PER_CYCLE;
 }
 
 void PluginLoader::scanAndLoad()
@@ -323,7 +332,7 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
         // entries outright.
         const QStringList subdirs = rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDir::Name);
         for (const QString& subdir : subdirs) {
-            if (subdirsConsidered >= kMaxPluginSubdirsPerCycle) {
+            if (subdirsConsidered >= m_maxSubdirsPerCycle) {
                 capTripped = true;
                 break;
             }
@@ -335,8 +344,15 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             // `Manifest::parse` opens this path — `open(ReadOnly)` on a FIFO blocks
             // until a writer appears, indefinitely, on the calling thread. This
             // path is CONSTRUCTED rather than enumerated with QDir::Files, so
-            // nothing upstream has already excluded a non-regular file.
-            if (!QFileInfo(manifestPath).isFile()) {
+            // nothing upstream has already excluded a non-regular file. The
+            // symlink refusal matches the NoSymLinks policy on the subdir
+            // enumeration and the .so pick: `isFile()` follows symlinks, so
+            // without it a manifest.json symlinked out of the plugin root
+            // would be read — bounded impact (metadata only, basename==id is
+            // still enforced), but an unguarded hole in an otherwise uniform
+            // no-symlinks policy for dlopen inputs.
+            const QFileInfo manifestInfo(manifestPath);
+            if (!manifestInfo.isFile() || manifestInfo.isSymLink()) {
                 // Watch the SUBDIRECTORY instead, the way
                 // MetadataPackScanStrategy does for the same race.
                 // QFileSystemWatcher cannot watch a path that does not exist,
@@ -380,7 +396,7 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
 
     if (capTripped) {
         qCWarning(lcPluginLoader).noquote().nospace()
-            << "PluginLoader: reached the per-cycle subdirectory cap (" << kMaxPluginSubdirsPerCycle
+            << "PluginLoader: reached the per-cycle subdirectory cap (" << m_maxSubdirsPerCycle
             << ") — later plugin directories were not scanned. Prune the plugin roots or raise the cap.";
         // A truncated enumeration is not evidence that anything was deleted, so
         // the removal sweep below is skipped: running it would unload every
@@ -550,10 +566,14 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     // data dir, but a permissive umask — or a deliberately loosened
     // mode — would let any local process sharing the group, or any
     // local user when world-writable, overwrite the .so between scans
-    // and gain code execution inside the shell process. OpenSSH and
-    // sudo enforce the same StrictModes discipline on the files they
-    // trust. Checking the directory too closes the delete-and-recreate
-    // path a 0644 .so in a 0777 dir would still allow. Signature /
+    // and gain code execution inside the shell process. This is the
+    // write-bit half of the StrictModes discipline OpenSSH and sudo
+    // apply to the files they trust (their checks also enforce
+    // OWNERSHIP, which this one deliberately does not: creating a
+    // foreign-owned file here already requires write access the
+    // directory check denies). Checking the directory too closes the
+    // delete-and-recreate path a 0644 .so in a 0777 dir would still
+    // allow. Signature /
     // origin verification is Phase 5 (see the class doc); this is the
     // floor until then. Residual: an attacker who can already loosen a
     // parent directory's mode is outside this check's reach.
@@ -648,6 +668,27 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
         return;
     }
 
+    // Checked for the same reason MetadataPackLoader::reconcile checks all
+    // three of its registerFactory calls: the registry's DuplicatePolicy is
+    // Reject, so an id already registered out-of-band (a built-in factory, a
+    // sibling loader) fails silently. Recording the plugin anyway would make
+    // loadedPluginIds() advertise a plugin the registry does not hold and,
+    // when the plugin dir later disappears, unloadPlugin would unregister a
+    // factory this loader never registered — evicting the out-of-band
+    // owner's factory. Abandon the load like the id-mismatch branch above.
+    if (!m_registry->registerFactory(factory)) {
+        if (shouldWarnForPluginDir(pluginDir)) {
+            qCWarning(lcPluginLoader).noquote()
+                << "PluginLoader: id" << manifest.id
+                << "is already registered (built-in or another loader); ignoring plugin at" << pluginDir;
+        }
+        factory.reset(); // runs custom deleter before .so unmap
+        if (!library->unload()) {
+            qCDebug(lcPluginLoader).noquote() << "PluginLoader: unload() returned false for" << libraryPath;
+        }
+        return;
+    }
+
     auto entryRecord = std::make_shared<LoadedPlugin>();
     entryRecord->manifest = manifest;
     entryRecord->library = std::move(library);
@@ -662,7 +703,6 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
 
     const QString pluginId = manifest.id;
     m_plugins.insert(pluginId, entryRecord);
-    m_registry->registerFactory(factory);
 
     Q_EMIT pluginLoaded(pluginId);
 }

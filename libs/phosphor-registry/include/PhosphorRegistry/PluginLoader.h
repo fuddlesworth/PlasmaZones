@@ -128,6 +128,14 @@ public:
     // (additions / removals / .so changes processed identically).
     void rescanNow();
 
+    // Test seam for the per-cycle subdirectory cap, mirroring
+    // DirectoryLoader::setMaxEntriesForTest: the production default is far
+    // too large to exercise from a fixture, and the cap guards a
+    // load-bearing behaviour (a truncated cycle SKIPS the removal sweep so
+    // loaded plugins sorting past the cap are not unloaded). Negative or
+    // zero caps fall back to the default.
+    void setMaxSubdirsPerCycleForTest(int cap);
+
     // Currently-loaded plugin ids (the same ids registered with the
     // Registry). Useful for diagnostic UIs. Order is unspecified
     // (QHash iteration) and not stable across rescans or Qt versions;
@@ -229,6 +237,9 @@ private:
     // assumption (and the qFatal that backs it) must be revisited.
     Registry<IBarWidgetFactory>* m_registry = nullptr;
     QString m_pluginRoot;
+    /// Per-cycle subdirectory cap; production value set in the .cpp,
+    /// overridable only through setMaxSubdirsPerCycleForTest.
+    int m_maxSubdirsPerCycle = 0;
     std::unique_ptr<ScanStrategyImpl> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
     // shared_ptr (not unique_ptr) because Qt 6's QHash still
