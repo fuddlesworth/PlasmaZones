@@ -83,7 +83,7 @@ function(paq_add_test _name)
     phosphor_append_test_environment(${_name}
         "QT_QPA_PLATFORM=offscreen"
         "QT_LOGGING_RULES=phosphoranimation.*.debug=false")
-    set_tests_properties(${_name} PROPERTIES LABELS "phosphoranimation;phosphoranimation-qml")
+    set_tests_properties(${_name} PROPERTIES LABELS "phosphoranimation;phosphoranimationqml")
 endfunction()
 
 paq_add_test(paq_test_phosphoreasing test_phosphoreasing.cpp)

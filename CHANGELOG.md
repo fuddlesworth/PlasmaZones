@@ -14,7 +14,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **Breaking D-Bus interface split**: the shared engine transport moved from org.plasmazones.Autotile to the engine-neutral org.plasmazones.Tiling interface, which serves every tiling-family engine. The moved surface covers the window lifecycle calls (windowOpened, windowsOpenedBatch, windowClosed, windowMinSizeUpdated, notifyWindowFocused), the tile-request and float signals (windowsTileRequested, focusWindowRequested, windowFloatingChanged, tilingChanged, windowsReleasedFromTiling), the retile methods, the enabled property with its change signal, and the screen set, now published as the union property managedScreens. The org.plasmazones.Autotile name still exists but is narrower now, carrying algorithm selection, master operations, focus cycling, and autotile configuration beside the new org.plasmazones.Scrolling interface. Check any external script against the new interface files before relying on it ([#852](https://github.com/fuddlesworth/PlasmaZones/pull/852)).
-- **The curve revert link names the field it reverts**: it now reads "Revert curve to inherited", matching the duration link beside it, and the curve editor is titled `Customize curve for <event>` (or just `Customize curve` where there is no single event to name). The spring Speed and Damping ratio hints are worded as sentences instead of comparison operators. The editor's save action is now spelled "Save as preset…" everywhere, a built-in preset row gained a "Use as default" action, and the settings app shows a short notice when an edit is refused during a discard or when some overrides could not be reverted ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **The curve revert link names the field it reverts**: it now reads "Revert curve to inherited", matching the duration link beside it ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **The curve editor is titled after the event it edits**: it reads `Customize curve for <event>`, or just `Customize curve` where there is no single event to name ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **The spring Speed and Damping ratio hints read as sentences** instead of comparison operators ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **The editor's save action is spelled "Save as preset…" everywhere**, and a built-in preset row gained a "Use as default" action ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **The settings app explains a refused edit**: it shows a short notice when an edit is refused during a discard, or when some overrides could not be reverted ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
 
 ### Fixed
 
@@ -1562,7 +1566,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Active layout always bypasses filters to prevent empty selector state
   - Undo/redo support for visibility changes in the editor
   - Filter badge on KCM layout cards when Tier 2 restrictions are active
-- Layout cycling (Meta+[/]) now respects per-screen visibility filtering
+- Layout cycling (`Meta+[/]`) now respects per-screen visibility filtering
 
 ### Changed
 - OSD style defaults to visual preview instead of text for new installs

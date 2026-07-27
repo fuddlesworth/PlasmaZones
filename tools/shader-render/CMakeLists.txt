@@ -142,5 +142,8 @@ if(BUILD_TESTING)
         # APPEND, never a bare SET — a SET here would drop the XDG sandbox the
         # call above just installed.
         phosphor_append_test_environment(${_pz_sr_test} "QT_QPA_PLATFORM=offscreen")
+        # Give them a label so `ctest -L shaderrender` selects the pair, like
+        # the other library test groups.
+        set_tests_properties(${_pz_sr_test} PROPERTIES LABELS "shaderrender")
     endforeach()
 endif()

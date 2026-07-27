@@ -971,6 +971,11 @@ if(BUILD_TESTING)
             "XDG_STATE_HOME=${_pz_shader_validate_xdg}/state"
             "XDG_CACHE_HOME=${_pz_shader_validate_xdg}/cache"
             "XDG_DATA_DIRS=${_pz_shader_validate_xdg}/data")
+        # These bypass phosphor_apply_test_isolation (target-keyed, can't apply
+        # to a shared command), so they'd otherwise be the only isolated tests
+        # with no default timeout. Pin the same 120s a hung glslang invocation
+        # would need to wedge the run.
+        set_tests_properties(${_pz_sv} PROPERTIES TIMEOUT 120)
     endforeach()
 endif()
 

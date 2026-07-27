@@ -18,12 +18,15 @@ correctly, and hand it those stubs alongside the real sources:
 
     i18n("t")                -> PhosphorI18n::tr("t")
     i18nc("c", "t")          -> PhosphorI18n::tr("t", "c")
-    i18np("s", "p", n)       -> PhosphorI18n::tr("s", nullptr, n)
-    i18ncp("c", "s", "p", n) -> PhosphorI18n::tr("s", "c", n)
+    i18np("s", "p", n)       -> PhosphorI18n::tr("s", nullptr, 2)
+    i18ncp("c", "s", "p", n) -> PhosphorI18n::tr("s", "c", 2)
 
 Qt derives plural forms from the target language, so the English plural is not
-part of the message; the singular is the source text and n makes it a numerus
-entry.  That mirrors what i18np() does at runtime.
+part of the message; the singular is the source text and the count argument
+makes it a numerus entry.  The count is emitted as a fixed literal 2, not the
+call's runtime n: lupdate reads only the numerus SHAPE of the tr() call (a
+third integer argument), never the value, and the real n is not knowable at
+extraction time.  That mirrors what i18np() does at runtime.
 
 One stub per QML file, padded so each tr() lands on the line its i18n() call
 occupies in the .qml.  Locations in the .ts then read
@@ -146,8 +149,15 @@ def scan(source):
 
 
 def cxx_escape(s):
-    # The literal is already JS-escaped; \" \\ \n \t carry over to C++ as-is.
-    # A lone \' is valid JS but not meaningful in a C++ double-quoted string.
+    # The literal is already JS-escaped. The common escapes shared by JS and
+    # C++ (\" \\ \n \t \uXXXX) carry over verbatim and need no work. The only
+    # JS-specific case that reaches here is \' — valid JS, but in a C++
+    # double-quoted string it's a needless escape, so unescape it.
+    #
+    # Not handled, deliberately: the rarer JS-only escapes (\/, \0 followed by a
+    # digit, \xHH with C++'s greedier hex run). None occur in this project's UI
+    # strings, and lupdate would flag a stub that failed to compile, so a bad
+    # escape surfaces loudly rather than silently corrupting a translation.
     return s.replace("\\'", "'")
 
 
@@ -221,6 +231,13 @@ def main():
         written.append(out_path)
 
     if args.list:
+        # A run that extracts nothing (every call non-literal, or an empty file
+        # set) still has to emit the list file the build depends on. os.makedirs
+        # runs per stub above and is skipped entirely when `written` is empty,
+        # so the list's own directory may not exist yet — guard it here.
+        list_dir = os.path.dirname(args.list)
+        if list_dir:
+            os.makedirs(list_dir, exist_ok=True)
         with open(args.list, "w", encoding="utf-8") as f:
             f.write("\n".join(written) + "\n" if written else "")
     print("qml-i18n-stubs: %d calls from %d files, %d not extractable" % (total, len(written), skipped),
