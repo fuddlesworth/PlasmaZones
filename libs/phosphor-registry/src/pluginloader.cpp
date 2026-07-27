@@ -150,9 +150,13 @@ QString PluginLoader::pluginRoot() const
 
 void PluginLoader::setMaxSubdirsPerCycleForTest(int cap)
 {
-    // Same fallback shape as DirectoryLoader::setMaxEntriesForTest: a
-    // nonsensical cap reverts to the production default rather than zeroing
-    // the scan.
+    // A non-positive cap reverts to the production default. This DELIBERATELY
+    // diverges from the two sibling scanners (DirectoryLoader /
+    // MetadataPackScanStrategy), which honour a cap of 0 as "consider nothing":
+    // PluginLoader has no test that needs a zero cap (the cap-trip behaviour is
+    // pinned at cap 1), and a zero here would disable plugin scanning entirely
+    // with no way back for the process, so treating 0 as "unset" is the safer
+    // default for this loader. PluginLoader.h documents the divergence.
     m_maxSubdirsPerCycle = cap > 0 ? cap : MAX_PLUGIN_SUBDIRS_PER_CYCLE;
 }
 
@@ -356,6 +360,16 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             // still enforced), but an unguarded hole in an otherwise uniform
             // no-symlinks policy for dlopen inputs.
             const QFileInfo manifestInfo(manifestPath);
+            // A SYMLINKED manifest is refused, not merely absent: warn once so a
+            // user who symlinked manifest.json out of a dotfiles repo (a normal
+            // habit) gets a diagnostic instead of a permanently invisible plugin
+            // with a clean log. A genuinely missing manifest (the cp -r race
+            // below) stays silent, since it is expected and self-heals.
+            if (manifestInfo.isSymLink() && shouldWarnForPluginDir(pluginDir)) {
+                qCWarning(lcPluginLoader).noquote()
+                    << "PluginLoader: refusing symlinked manifest.json in" << pluginDir
+                    << "(symlinks are not followed for plugin inputs); the plugin is ignored";
+            }
             if (!manifestInfo.isFile() || manifestInfo.isSymLink()) {
                 // Watch the SUBDIRECTORY instead, the way
                 // MetadataPackScanStrategy does for the same race.

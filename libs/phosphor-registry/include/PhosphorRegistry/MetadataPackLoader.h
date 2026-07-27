@@ -204,6 +204,11 @@ public:
     // Add search directories. A single
     // batched register runs one synchronous scan; the reconcile +
     // per-entry Registry signals fire inline before this returns.
+    //
+    // Already-registered paths are filtered out first. If EVERY path in the
+    // batch is already registered this is a complete no-op: it returns without
+    // scanning and emits nothing, so callers must not rely on it as a way to
+    // force a rescan (use rescanNow() for that).
     void
     addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On,
                    PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst)

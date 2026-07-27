@@ -69,11 +69,19 @@ bool isForbiddenWatchRoot(const QString& path)
     // Canonicalising a candidate root is a realpath() syscall, and this
     // predicate runs for EVERY registered directory on EVERY rescan (the
     // re-attach loops re-enter attachWatcherForDir each pass) against ~15
-    // candidates. The candidates' canonical forms are stable for a given
-    // SPELLING, so cache by spelling: a test repointing XDG via qputenv
-    // produces a different candidate string and therefore a fresh entry,
-    // which a whole-list static cache would get wrong. GUI-thread-only per
-    // the class contract, so the static needs no lock.
+    // candidates. So cache the realpath() result keyed on the input SPELLING.
+    //
+    // The cache is process-lifetime and never invalidated, which is sound only
+    // under one assumption: a given path spelling resolves to a stable inode
+    // for the life of the process. Repointing XDG_DATA_HOME (as tests do)
+    // changes the DERIVED candidate spelling, so it lands on a fresh key and is
+    // NOT a stale-cache hazard. The one thing this does NOT catch is the same
+    // spelling being re-symlinked to a different target mid-process — that
+    // would return the stale canonical. We accept that: data roots are not
+    // re-symlinked under a running instance, and the empty-result skip below
+    // already handles the only real transition (a not-yet-existing root
+    // appearing). GUI-thread-only per the class contract, so the static needs
+    // no lock.
     const auto cachedCanonical = [](const QString& path) -> QString {
         static QHash<QString, QString> cache;
         const auto it = cache.constFind(path);
@@ -405,6 +413,11 @@ QStringList WatchedDirectorySet::filterNewSearchPaths(const QStringList& candida
     return result;
 }
 
+// The three *ForTest accessors below use a bare Q_ASSERT_X thread check with no
+// release-build counterpart, unlike the production entry points in this file
+// which are "asserted AND guarded". That is deliberate: these are debug-only
+// test surface with no production caller, so the release-build guard the
+// production paths carry would be dead weight.
 void WatchedDirectorySet::setDebounceIntervalForTest(int ms)
 {
     Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::setDebounceIntervalForTest",

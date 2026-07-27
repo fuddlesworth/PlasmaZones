@@ -84,13 +84,22 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
     // with the alternative of letting a 2 GiB blob fall through to a
     // caller that didn't stat itself.
     QFileInfo info(filePath);
-    // `isFile()`, not `exists()`: `open(ReadOnly)` on a FIFO blocks until a
+    // `isFile()`, not just size: `open(ReadOnly)` on a FIFO blocks until a
     // writer appears — indefinitely, on the caller's thread — and neither size
     // check helps (a FIFO reports size 0). The loader-driven callers are immune
     // only incidentally (they enumerate with `QDir::Files`), but this is a
     // public free function documented as callable without a stat in front of
-    // it, so it must enforce the regular-file precondition itself. This also
-    // subsumes the old `exists()` gate for the size check below.
+    // it, so it screens out the FIFO/device/directory cases it can see at stat
+    // time.
+    //
+    // This is a stat-time screen, not a guarantee: the guard is gated on
+    // `exists()`, so a path that is ABSENT at stat time passes through (there
+    // is nothing to reject yet), and a regular file can still be swapped for a
+    // FIFO in the TOCTOU window between this stat and the `open()` below. Fully
+    // closing that would need an O_NONBLOCK open + fstat on the descriptor;
+    // callers handling genuinely hostile paths must do that themselves. The
+    // gate here removes the common accidental-FIFO/dir footgun, not a motivated
+    // attacker with write access to the exact path mid-call.
     if (info.exists() && !info.isFile()) {
         qCWarning(category) << "Skipping non-regular file" << filePath;
         return std::nullopt;
