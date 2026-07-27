@@ -551,6 +551,17 @@ public:
     PhosphorTiles::AutotileInsertPosition effectiveInsertPosition(const QString& screenId) const;
     qreal effectiveSplitRatioStep(const QString& screenId) const override;
     int runtimeMaxWindows() const override;
+    /**
+     * @brief The user's saved per-algorithm max-windows tuning, if any
+     *
+     * Consulted by the mixed-algorithm cap paths (PerScreenConfigResolver
+     * step 3 and the daemon's per-screen MaxWindows injection): when a
+     * screen's assigned algorithm differs from the engine's global one, the
+     * saved slot is the user's explicit tuning for that algorithm and must
+     * win over the algorithm's built-in default. std::nullopt when the
+     * algorithm has no saved slot.
+     */
+    std::optional<int> savedMaxWindowsForAlgorithm(const QString& algorithmId) const override;
     QString effectiveAlgorithmId(const QString& screenId) const;
     PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 
