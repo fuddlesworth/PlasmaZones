@@ -11,6 +11,18 @@
             ]
         },
         {
+            "version": "3.3.1",
+            "date": "2026-07-27",
+            "highlights": [
+                "Fixed: restarting the PlasmaZones service, which happens on every logout and upgrade, reset every shortcut you had rebound in System Settings back to the defaults. Your customised bindings now survive a restart (#855)",
+                "Fixed: editing a tiling style's max windows and then switching styles silently reverted the edit, and setting the slider to the style's own default was silently dropped while windows were still evicted at the old cap (#854, #856)",
+                "Fixed: a screen tiled with a different style than the global one ignored the window cap you had saved for that style and stayed at its built-in default (#856)",
+                "Fixed: reverting an animation's duration or curve, or turning an event's Override toggle off, kept showing the value you had just removed until the next time you opened the settings app. The inherited value now shows right away (#850)",
+                "Fixed: a curve preset now carries the duration of the event you saved it from, instead of playing at whatever the global default was (#850)",
+                "Fixed: a malformed value in a hand-edited profile file used to pin the event to the built-in default as an explicit override. It now falls through to the parent like any other unset field (#850)"
+            ]
+        },
+        {
             "version": "3.3.0",
             "date": "2026-07-23",
             "highlights": [

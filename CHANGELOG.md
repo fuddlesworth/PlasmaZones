@@ -14,6 +14,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **Breaking D-Bus interface split**: the shared engine transport moved from org.plasmazones.Autotile to the engine-neutral org.plasmazones.Tiling interface, which serves every tiling-family engine. The moved surface covers the window lifecycle calls (windowOpened, windowsOpenedBatch, windowClosed, windowMinSizeUpdated, notifyWindowFocused), the tile-request and float signals (windowsTileRequested, focusWindowRequested, windowFloatingChanged, tilingChanged, windowsReleasedFromTiling), the retile methods, the enabled property with its change signal, and the screen set, now published as the union property managedScreens. The org.plasmazones.Autotile name still exists but is narrower now, carrying algorithm selection, master operations, focus cycling, and autotile configuration beside the new org.plasmazones.Scrolling interface. Check any external script against the new interface files before relying on it ([#852](https://github.com/fuddlesworth/PlasmaZones/pull/852)).
+
+## [3.3.1] - 2026-07-27
+
+### Changed
+
 - **The curve revert link names the field it reverts**: it now reads "Revert curve to inherited", matching the duration link beside it ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
 - **The curve editor is titled after the event it edits**: it reads `Customize curve for <event>`, or just `Customize curve` where there is no single event to name ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
 - **The spring Speed and Damping ratio hints read as sentences** instead of comparison operators ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
@@ -22,6 +27,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Your customised shortcuts survive a service restart**: restarting the PlasmaZones service, which happens on every logout and upgrade, reset every shortcut you had rebound in System Settings back to the defaults. The daemon released its shortcuts on shutdown in a way that also deleted their saved bindings ([#851](https://github.com/fuddlesworth/PlasmaZones/discussions/851), [#855](https://github.com/fuddlesworth/PlasmaZones/pull/855)).
+- **Editing a tiling style's settings and then switching styles keeps the edit**: when one settings reload both changed a style's tuning and switched the active style, stale values were written over the slot you had just edited, so changing a style's max windows and picking another style silently reverted the change ([#853](https://github.com/fuddlesworth/PlasmaZones/discussions/853), [#854](https://github.com/fuddlesworth/PlasmaZones/pull/854)).
+- **Setting a tiling style's max windows to that style's own default now takes effect**: the write was silently dropped, so the slider showed the new value while windows were still evicted at the old cap ([#856](https://github.com/fuddlesworth/PlasmaZones/pull/856)).
+- **A screen tiled with a different style than the global one honours your saved max windows**: picking a tiling layout from the overview leaves that screen on its own style, and such screens ignored the window cap you had saved for that style and stayed at its built-in default ([#856](https://github.com/fuddlesworth/PlasmaZones/pull/856)).
 - **Reverting an animation's duration or curve shows the inherited value right away**: the per-field revert links cleared the override but left the control showing the value you had just removed, and it only caught up the next time you opened the settings app. Turning an event's Override toggle off and resetting an animations page had the same problem and are fixed too ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
 - **Clearing an override on the Global animation card now updates the events below it**: every event inheriting from Global kept showing the old value until the page was rebuilt ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
 - **Editing a profile file by hand while the settings app is open is picked up**: the page cached what it had read and never re-read it, so your edit did not show until you reopened the app ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
@@ -1760,7 +1769,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.1...HEAD
+[3.3.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.0...v3.3.1
 [3.3.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.7...v3.3.0
 [3.2.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.6...v3.2.7
 [3.2.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.5...v3.2.6
