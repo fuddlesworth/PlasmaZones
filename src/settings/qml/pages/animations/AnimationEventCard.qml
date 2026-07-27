@@ -418,8 +418,9 @@ Item {
         // it, and every call site of this function calls refreshFromTree
         // alongside it (the three shader group writers' finally blocks and
         // onShaderProfileChanged call it immediately after; Component.onCompleted
-        // calls it FIRST, which is equally fine because refreshFromTree
-        // recomputes the divergence itself from live reads).
+        // runs refreshFromTree FIRST and this function second, which is
+        // equally fine because refreshFromTree recomputes the divergence
+        // itself from live reads, so the order between the two is moot).
         //
         // A future caller that runs this ALONE must call refreshFromTree too
         // or the banner goes stale.
@@ -446,8 +447,14 @@ Item {
             root.currentSpringZeta = s.zeta;
         } else {
             root.currentTimingMode = CurvePresets.timingModeEasing;
-            if (typeof curve === "string" && curve.length > 0)
-                root.currentEasingCurve = curve;
+            // With a default fallback, matching the duration line below and
+            // inheritSummaryText's read of the same value: without the else,
+            // an absent curve (mid-warmup {} resolution, or resolvedProfile's
+            // empty-path early return) kept the property's PREVIOUS value —
+            // which after a revert is exactly the just-reverted curve, the
+            // stale-view class this card's fix exists to close — while the
+            // italic "Current:" line already showed the default.
+            root.currentEasingCurve = (typeof curve === "string" && curve.length > 0) ? curve : CurvePresets.defaultEasingCurve;
         }
         root.currentDuration = effective.duration !== undefined ? effective.duration : CurvePresets.defaultDurationMs;
     }

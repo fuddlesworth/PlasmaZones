@@ -156,7 +156,6 @@ Menu {
 
                 text: (modelData && modelData.label) ? modelData.label : ""
                 icon.name: isSelected ? "checkmark" : ""
-                Accessible.name: text
                 onClicked: {
                     // SIGSEGV-avoidance — see the matching pattern in
                     // the per-screen edit MenuItem above. The submenu's
@@ -252,7 +251,6 @@ Menu {
 
             text: i18n("Edit on %1", (modelData && modelData.displayLabel) || (modelData && modelData.name) || "")
             icon.name: (modelData && modelData.isPrimary) ? "starred-symbolic" : "monitor"
-            Accessible.name: text
             onClicked: {
                 // Capture by value because Qt.callLater fires after
                 // the menu's onClicked stack unwinds — the model
@@ -284,7 +282,6 @@ Menu {
     MenuItem {
         text: i18n("Open in Text Editor")
         icon.name: "document-open"
-        Accessible.name: text
         onTriggered: {
             if (layoutContextMenu.isAutotile)
                 settingsController.openAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));

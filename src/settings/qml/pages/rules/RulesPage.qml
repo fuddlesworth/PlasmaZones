@@ -46,7 +46,12 @@ SettingsFlickable {
     /// chrome-level `window._pageOwnedModalOpen` flag that Main.qml's
     /// nav-shortcut guard reads (the framework's PageHost Loader keeps
     /// the page item private, so a direct binding can't reach it).
-    readonly property bool anyModalOpen: addRuleWizard.opened || windowPickerDialog.opened || ruleEditorSheet.opened || page._forceSaveConfirmOpen
+    // `.visible`, not `.opened`: opened turns true only when the ENTER
+    // transition finishes and false at the START of the exit transition, so
+    // the nav-shortcut guard had a live window at both edges of an animating
+    // modal. visible covers the whole popup lifetime (the spelling
+    // ConfirmDialogs.qml already uses for the same predicate).
+    readonly property bool anyModalOpen: addRuleWizard.visible || windowPickerDialog.visible || ruleEditorSheet.visible || page._forceSaveConfirmOpen
     /// Internal bridge updated by `forceSaveConfirm.onVisibleChanged` so
     /// `anyModalOpen` can read it without forward-referencing an id that
     /// is declared further down in the file.
@@ -78,6 +83,12 @@ SettingsFlickable {
         // to.
         if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
             window._pageOwnedModalOpen = false;
+        // Symmetric teardown for onCompleted's resolver install: the
+        // controller outlives this page (it hangs off settingsController),
+        // and a closure whose QML context is gone degrades every later
+        // refreshLabels() to raw wire strings while pinning the destroyed
+        // context alive. An invalid QJSValue is the documented clear.
+        page.controller.setCurveLabelResolver(null);
     }
     // Composite "appSettings" surface threaded into the rule editor so the
     // picker components (LayoutComboBox for snapping/tiling actions, and the
@@ -162,9 +173,17 @@ SettingsFlickable {
     /// Managed System rules pin to the bottom for free (their priority is
     /// INT_MIN). Reactive on searchText / excludedFilters / monitorFilter and
     /// `modelRevision`.
-    readonly property var filteredRules: {
+    /// The snapshot is hoisted into its own revision-only binding: building it
+    /// is the expensive half (13 model reads per rule, and ActionSummaryRole
+    /// recomputes through the C++→JS curve-label resolver), and folding it
+    /// into filteredRules re-ran all of that on every search KEYSTROKE and
+    /// filter toggle. Filtering the cached array is the cheap half.
+    readonly property var _rulesSnapshot: {
         var rev = page.modelRevision;
-        var snapshot = page.controller.rulesSnapshot();
+        return page.controller.rulesSnapshot();
+    }
+    readonly property var filteredRules: {
+        var snapshot = page._rulesSnapshot;
         var search = page.searchText.toLowerCase();
         var excluded = page.excludedFilters;
         var out = [];
