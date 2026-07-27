@@ -527,6 +527,52 @@ private Q_SLOTS:
                  "the routing key survived into the schema root the sink parses");
         QCOMPARE(envelope->root.value(QLatin1String("presetName")).toString(), QStringLiteral("My Overlay Preset"));
     }
+
+    /// Pins the destructor's observable teardown contract, which the
+    /// re-entrancy tests above do not: they exercise the LIVE re-entrancy guard
+    /// via rescanNow, but none proves that destroying a loader removes its
+    /// registry entries, nor that a consumer re-registering DURING that teardown
+    /// cannot resurrect them. Deleting `clearOwner` from the destructor leaves
+    /// "gone" resolvable after destruction; dropping the m_destroying gate off
+    /// the load entry points lets the re-entrant reload below put it back. Both
+    /// regressions flip the final assert.
+    void testDestructorClearsOwnedEntriesEvenUnderReentrantReload()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFile(dir.filePath(QStringLiteral("gone.json")), QStringLiteral(R"({
+            "name": "gone",
+            "duration": 200
+        })")));
+
+        bool reentered = false;
+        {
+            ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
+            loader.loadFromDirectory(dir.path());
+            QVERIFY(m_profileRegistry.resolve(QStringLiteral("gone")).has_value());
+
+            // A consumer that reacts to the teardown's synchronous
+            // profileChanged by trying to reload. One-shot so it cannot recurse.
+            // The connection's receiver is `loader`, so it is still live while
+            // the destructor body runs clearOwner (Qt severs receiver
+            // connections later, in ~QObject). If teardown left the door open,
+            // this call re-registers "gone" on a half-destroyed loader.
+            connect(&m_profileRegistry, &PhosphorProfileRegistry::profileChanged, &loader,
+                    [&loader, &reentered, &dir]() {
+                        if (reentered) {
+                            return;
+                        }
+                        reentered = true;
+                        loader.loadFromDirectory(dir.path());
+                    });
+            // loader goes out of scope here → ~ProfileLoader → clearOwner emits.
+        }
+
+        QVERIFY2(reentered, "teardown never reached the consumer handler, so this proves nothing");
+        QVERIFY2(!m_profileRegistry.resolve(QStringLiteral("gone")).has_value(),
+                 "an owned profile outlived its loader: clearOwner was dropped, or a re-entrant reload "
+                 "during teardown resurrected it");
+    }
 };
 
 QTEST_MAIN(TestProfileLoader)

@@ -65,6 +65,16 @@ void WindowAnimator::setEnabled(bool enabled)
             const QRectF bounds = it->second.bounds().marginsAdded(padding);
             PhosphorAnimation::AnimatedValue<QRectF> reapedAnim = std::move(it->second);
             m_animations.erase(it);
+            // Deliberately NOT m_onAnimationCompleteCallback: that callback
+            // calls endShaderTransition(), which does glDeleteProgram /
+            // glDeleteTextures and is only valid with the compositor's GL
+            // context current — i.e. inside a paint pass. setEnabled() fires
+            // from a settings-change signal, between frames, with no current
+            // context, so firing the completion callback here would delete GL
+            // objects against the wrong (or no) context. The animator-driven
+            // shader transition riding this reaped timeline is instead
+            // reconciled on the next paint by the shader manager's own
+            // damage-driven path. Only the debug-log reap hook runs here.
             onAnimationReaped(handle, reapedAnim);
             if (bounds.isValid()) {
                 onRepaintNeeded(handle, bounds);
@@ -182,6 +192,13 @@ WindowAnimator::startAnimationWithResult(KWin::EffectWindow* handle, const QRect
         if (auto existing = m_animations.find(handle); existing != m_animations.end()) {
             PhosphorAnimation::AnimatedValue<QRectF> displaced = std::move(existing->second);
             m_animations.erase(existing);
+            // As with the reap path in setEnabled(), the displaced timeline's
+            // animator-driven shader transition is not torn down via the
+            // completion callback here: startAnimation can be reached outside a
+            // paint pass, and endShaderTransition()'s GL deletes need the
+            // compositor context current. onAnimationReplaced only issues a
+            // padded repaint; the shader manager reconciles the superseded
+            // transition on the next paint.
             onAnimationReplaced(handle, displaced);
         }
         return StartResult::NoMotion;
