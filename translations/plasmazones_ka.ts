@@ -1181,7 +1181,7 @@
     <message>
         <location filename="../src/settings/pages/animationspagecontroller.cpp" line="635"/>
         <source>A discard is already in progress. Try again in a moment.</source>
-        <translation type="unfinished"></translation>
+        <translation>გაუქმება უკვე მიმდინარეობს. სცადეთ ცოტა ხანში.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulecontroller.cpp" line="150"/>
@@ -11113,7 +11113,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="227"/>
         <source>%1 · %2 ms</source>
         <comment>curve, then duration in milliseconds</comment>
-        <translation type="unfinished">%1 · %2 ms</translation>
+        <translation>%1 · %2 ms</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="68"/>
@@ -11178,7 +11178,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="256"/>
         <source>%1 · %2</source>
         <comment>easing style, then direction</comment>
-        <translation type="unfinished">%1 · %2</translation>
+        <translation>%1 · %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="258"/>
@@ -11575,7 +11575,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="312"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="361"/>
         <source>Use as default</source>
-        <translation type="unfinished"></translation>
+        <translation>ნაგულისხმევად გამოყენება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="255"/>
@@ -11745,7 +11745,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="67"/>
         <source>Customize curve</source>
         <comment>@title:window</comment>
-        <translation type="unfinished">მრუდის მორგება</translation>
+        <translation>მრუდის მორგება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="145"/>
@@ -11845,12 +11845,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="340"/>
         <source>Higher values make the spring respond faster</source>
-        <translation type="unfinished"></translation>
+        <translation>მაღალი მნიშვნელობებით ზამბარა უფრო სწრაფად რეაგირებს</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="365"/>
         <source>Values below 1 bounce before settling. At 1 and above the spring settles without bouncing, more slowly the higher it goes.</source>
-        <translation type="unfinished"></translation>
+        <translation>1-ზე ნაკლები მნიშვნელობებით ზამბარა შეჩერებამდე ირხევა. 1-დან ზემოთ ის რხევის გარეშე ჩერდება, რაც უფრო მაღალია მნიშვნელობა, მით უფრო ნელა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="390"/>
@@ -13588,7 +13588,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="312"/>
         <source>%1 · %2</source>
         <comment>monitor name, then the primary-monitor marker</comment>
-        <translation type="unfinished">%1 · %2</translation>
+        <translation>%1 · %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="328"/>
@@ -16721,12 +16721,12 @@
         <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="506"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="426"/>
         <source>Cannot change this while a discard is in progress.</source>
-        <translation type="unfinished"></translation>
+        <translation>ამის შეცვლა შეუძლებელია, სანამ გაუქმება მიმდინარეობს.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="318"/>
         <source>Some animation overrides could not be reverted.</source>
-        <translation type="unfinished"></translation>
+        <translation>ანიმაციის ზოგიერთი გადაფარვის დაბრუნება ვერ მოხერხდა.</translation>
     </message>
 </context>
 </TS>
