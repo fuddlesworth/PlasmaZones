@@ -312,9 +312,24 @@ private:
                 // in lexicographic id order; a pack discovered on a later refresh
                 // appends, so consumers that need a sorted order re-sort ids()
                 // themselves rather than relying on loader registration order.)
-                m_registry->registerFactory(e.factory, QString(), DuplicatePolicy::Replace);
+                if (!m_registry->registerFactory(e.factory, QString(), DuplicatePolicy::Replace)) {
+                    // Checked symmetrically with the newly-discovered branch above.
+                    // Recording a fingerprint for a replace that did not land would
+                    // again have this loader claim an id it does not own, and the
+                    // removal sweep below would then unregister a factory it never
+                    // registered — the very case the new-pack check closes.
+                    continue;
+                }
+            } else if (!m_registry->factory(e.id)) {
+                // Unchanged CONTENT, but the id is gone from the registry — an
+                // out-of-band unregister. Without this the fingerprint is recorded,
+                // the removal sweep skips it, and the pack stays permanently absent
+                // until its bytes happen to change.
+                if (!m_registry->registerFactory(e.factory)) {
+                    continue;
+                }
             }
-            // else: unchanged — leave the registry entry as-is.
+            // else: unchanged and still registered — leave the registry entry as-is.
 
             // Recorded only once this loader is known to own the id, so the
             // removal filter below stays an accurate "packs THIS loader

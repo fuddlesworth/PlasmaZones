@@ -331,7 +331,12 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             const QString pluginDir = rootDir.absoluteFilePath(subdir);
             consideredDirs.insert(pluginDir);
             const QString manifestPath = QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json"));
-            if (!QFileInfo::exists(manifestPath)) {
+            // `isFile()`, not `exists()`: a FIFO satisfies exists(), and
+            // `Manifest::parse` opens this path — `open(ReadOnly)` on a FIFO blocks
+            // until a writer appears, indefinitely, on the calling thread. This
+            // path is CONSTRUCTED rather than enumerated with QDir::Files, so
+            // nothing upstream has already excluded a non-regular file.
+            if (!QFileInfo(manifestPath).isFile()) {
                 // Watch the SUBDIRECTORY instead, the way
                 // MetadataPackScanStrategy does for the same race.
                 // QFileSystemWatcher cannot watch a path that does not exist,

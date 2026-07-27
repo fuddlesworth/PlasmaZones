@@ -195,8 +195,7 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
         return wrap;
     };
     const auto validatedFilter = [](QString filter, const char* field) -> QString {
-        if (!filter.isEmpty() && filter != QLatin1String("linear") && filter != QLatin1String("nearest")
-            && filter != QLatin1String("mipmap")) {
+        if (!filter.isEmpty() && !SurfaceShaderContract::isValidFilterToken(filter)) {
             qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: unknown" << field << "value" << filter
                                        << ", reset to runtime default";
             filter.clear();

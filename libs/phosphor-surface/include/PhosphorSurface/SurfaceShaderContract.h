@@ -308,6 +308,19 @@ inline bool isValidWrapToken(const QString& wrap)
     return wrap == QLatin1String("clamp") || wrap == QLatin1String("repeat") || wrap == QLatin1String("mirror");
 }
 
+/// The accepted buffer `filter` vocabulary: `linear` / `nearest` / `mipmap`.
+/// An empty string is NOT a member — callers treat empty as "use the runtime
+/// default" and handle it before consulting this predicate.
+///
+/// Hoisted for the same reason as `isValidWrapToken`: it was hand-inlined at a
+/// single site in the surface tree and entirely ABSENT from the animation tree,
+/// so an animation pack's `"bufferFilter": "linaer"` was accepted, silently
+/// coerced by the runtime, and re-persisted to disk on the next save.
+inline bool isValidFilterToken(const QString& filter)
+{
+    return filter == QLatin1String("linear") || filter == QLatin1String("nearest") || filter == QLatin1String("mipmap");
+}
+
 /// Format a `customParams` slot key — thin forwarder onto
 /// `PhosphorShaders::CustomParams::slotKey`, the cross-library canonical
 /// helper. Kept here so surface-shader call sites can refer to a name

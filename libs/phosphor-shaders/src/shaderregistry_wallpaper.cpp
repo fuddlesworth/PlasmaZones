@@ -13,6 +13,7 @@
 
 #include <PhosphorShaders/IWallpaperProvider.h>
 
+#include <QtCore/QDateTime>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QLoggingCategory>
@@ -34,6 +35,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcShaderRegistry)
 std::unique_ptr<IWallpaperProvider> ShaderRegistry::s_wallpaperProvider;
 QString ShaderRegistry::s_cachedWallpaperPath;
 bool ShaderRegistry::s_wallpaperPathResolved = false;
+qint64 ShaderRegistry::s_wallpaperPathResolvedAtMs = 0;
 QImage ShaderRegistry::s_cachedWallpaperImage;
 qint64 ShaderRegistry::s_cachedWallpaperMtime = 0;
 QMutex ShaderRegistry::s_wallpaperCacheMutex;
@@ -48,14 +50,30 @@ QString ShaderRegistry::wallpaperPath()
     if (!s_cachedWallpaperPath.isEmpty() && QFile::exists(s_cachedWallpaperPath)) {
         return s_cachedWallpaperPath;
     }
-    // "Resolved to nothing" is a CACHED answer, not a cache miss. Without this
-    // flag an empty result (unsupported desktop, a Plasma slideshow containment
-    // with no Image= key, swww not running) never engages the fast path above, so
-    // every caller re-queries the provider — and the Hyprland/sway provider
-    // spawns a QProcess and blocks in waitForFinished(1000) while holding this
-    // mutex, once per overlay show and once per shader attach. Cleared by
-    // invalidateWallpaperCache(), which is already the invalidation seam.
-    if (s_wallpaperPathResolved) {
+
+    // A NEGATIVE answer is cached too, but only for a bounded window — never
+    // latched for the process lifetime.
+    //
+    // Why cache it at all: without this, an empty result (unsupported desktop, a
+    // Plasma slideshow containment with no Image= key, swww not running) never
+    // engages the fast path above, so every caller re-queries the provider — and
+    // the Hyprland/sway provider spawns a QProcess and blocks in
+    // waitForFinished(1000) while holding this mutex, once per overlay show and
+    // once per shader attach.
+    //
+    // Why it must EXPIRE rather than latch: `invalidateWallpaperCache()` has no
+    // callers, so there is no event that would clear it. A permanent latch means a
+    // resolve that happens before plasmashell has written its config (or before
+    // swww is up) leaves every wallpaper-using shader on the transparent fallback
+    // for the whole session with no recovery — and before this negative cache
+    // existed, that case self-healed because an empty path always re-queried.
+    // Expiry keeps the blocking call bounded (at most one per interval) while
+    // preserving recovery. Note this branch is reached for a non-empty path whose
+    // file has since disappeared as well, so a dead path re-queries too rather
+    // than being served forever.
+    constexpr qint64 kNegativeCacheMs = 2000;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (s_wallpaperPathResolved && now - s_wallpaperPathResolvedAtMs < kNegativeCacheMs) {
         return s_cachedWallpaperPath;
     }
 
@@ -65,6 +83,7 @@ QString ShaderRegistry::wallpaperPath()
 
     s_cachedWallpaperPath = s_wallpaperProvider->wallpaperPath();
     s_wallpaperPathResolved = true;
+    s_wallpaperPathResolvedAtMs = now;
     return s_cachedWallpaperPath;
 }
 
@@ -220,6 +239,7 @@ void ShaderRegistry::invalidateWallpaperCache()
     QMutexLocker lock(&s_wallpaperCacheMutex);
     s_cachedWallpaperPath.clear();
     s_wallpaperPathResolved = false;
+    s_wallpaperPathResolvedAtMs = 0;
     s_cachedWallpaperImage = QImage();
     s_cachedWallpaperMtime = 0;
     for (auto& entry : s_cachedWallpaperCrops) {

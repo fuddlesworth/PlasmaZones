@@ -263,7 +263,7 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
             if (tex.path.isEmpty())
                 continue;
             const auto validated = validateTexturePathWithinEffectDir(tex.path, effectDir, e.id,
-                                                              PhosphorFsLoader::AbsolutePathPolicy::Reject);
+                                                                      PhosphorFsLoader::AbsolutePathPolicy::Reject);
             if (!validated) {
                 // Clear BOTH path and wrap so the slot is internally
                 // coherent — `translateAnimationParams` skips empty-path
@@ -677,11 +677,16 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
             const QString candidate = pathOverride->toString();
             if (candidate.isEmpty()) {
                 // Empty-string override = suppress the pack default for the slot.
-        // NOT an explicit clear: an empty path skips BOTH keys below, and the
-        // consumer's contract is "missing key = no change", so a slot the
-        // consumer has already bound keeps its existing texture across a params
-        // re-push. Clearing a bound slot needs the key PRESENT with an empty
-        // value, which this path deliberately does not emit.
+                // NOT an explicit clear: an empty path skips BOTH keys below.
+                //
+                // What that means depends on the CONSUMER, and there are two with
+                // different rules. The daemon's ShaderEffect treats a missing key as
+                // "no change", so a slot it has already bound keeps its texture
+                // across a params re-push, and clearing it would need the key
+                // PRESENT with an empty value — which this path deliberately does not
+                // emit. The kwin transition path instead rebuilds slot state on every
+                // install and reads the key unconditionally, so for it an absent key
+                // means UNBOUND. Do not restate this as one universal contract.
                 // The pack-default wrap (if any) is intentionally
                 // dropped because wrap is meaningless without a bound
                 // texture — emitting a wrap-only key would attach a
@@ -725,7 +730,7 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
                 }
             } else {
                 const auto validated = validateTexturePathWithinEffectDir(candidate, effect.sourceDir, effect.id,
-                                                                  PhosphorFsLoader::AbsolutePathPolicy::Trust);
+                                                                          PhosphorFsLoader::AbsolutePathPolicy::Trust);
                 if (!validated) {
                     // Rejected override clears BOTH path and wrap for
                     // this slot — same coherence rule parseEffect
@@ -746,15 +751,16 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
             // shader-profile JSON), and taking the value verbatim meant a typo
             // reached `wrapStringToEnum` and was silently coerced to clamp with no
             // diagnostic — while the identical typo in metadata.json warned.
-            // Empty clears to the runtime default; a non-vocabulary token is
-            // rejected and also clears, rather than emitting garbage downstream.
+            // Empty and rejected tokens both omit the wrap key. Consumer-dependent
+            // again: the kwin path then binds clamp, while a daemon ShaderEffect
+            // keeps whatever wrap it last received, because it only reacts to a key
+            // that is present. Not "falls back to clamp" unconditionally.
             if (candidateWrap.isEmpty()
                 || PhosphorAnimationShaders::AnimationShaderContract::isValidWrapToken(candidateWrap)) {
                 wrap = candidateWrap;
             } else {
-                qCWarning(lcRegistry)
-                    << "Animation effect" << effect.id << "runtime override wrap value" << candidateWrap
-                    << "rejected (not clamp/repeat/mirror) — falling back to the runtime default";
+                qCWarning(lcRegistry) << "Animation effect" << effect.id << "runtime override wrap value"
+                                      << candidateWrap << "rejected (not clamp/repeat/mirror) — wrap key omitted";
                 wrap.clear();
             }
         }

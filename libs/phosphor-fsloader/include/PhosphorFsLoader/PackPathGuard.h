@@ -113,6 +113,21 @@ enum class AbsolutePathPolicy {
                 return QDir::cleanPath(canonical + QLatin1Char('/') + tail.join(QLatin1Char('/')));
             }
             const QFileInfo info(current);
+            // PRESENT but unresolvable is NOT the same as absent, and conflating
+            // them is an escape of exactly the kind this climb was rewritten to
+            // close. `canonicalFilePath()` returns empty for a DANGLING or CYCLIC
+            // symlink just as it does for a missing component, so without this the
+            // climb would treat the link as "not there yet", prepend its name, and
+            // re-append it LEXICALLY onto the canonical root — mixing the two
+            // domains this function promises never to mix. A pack shipping
+            // `link -> /outside` while `/outside` does not exist yet would then be
+            // accepted, and the stored path resolves out of the pack the moment the
+            // target materialises. Nothing re-validates at that point either:
+            // QFileSystemWatcher cannot watch a non-existent path, so the
+            // materialisation fires no rescan.
+            if (info.isSymLink()) {
+                return std::nullopt;
+            }
             const QString parent = info.absolutePath();
             const QString name = info.fileName();
             if (name.isEmpty() || parent.isEmpty() || parent == current) {

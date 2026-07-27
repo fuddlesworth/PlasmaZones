@@ -17,15 +17,19 @@ function(_phosphorserviceclipboard_test target source)
     )
     add_test(NAME ${target} COMMAND ${target})
     phosphor_apply_test_isolation(${target})
-    # Isolate XDG_DATA_HOME to a build-tree dir: constructing ClipboardService
-    # loads the on-disk history, so the test must never read the real user's
-    # clipboard directory.
-    # APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
-    # ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
-    # sandbox `phosphor_apply_test_isolation` just installed.
-    phosphor_append_test_environment(${target} "QT_QPA_PLATFORM=offscreen;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/test-xdg-data-${target}")
+    # XDG_DATA_HOME is NOT overridden here. Constructing ClipboardService loads the
+    # on-disk history, so this tree must never read the real user's clipboard
+    # directory — and `phosphor_apply_test_isolation` above already points
+    # XDG_DATA_HOME at a per-target sandbox AND creates it at configure time.
+    #
+    # A second XDG_DATA_HOME entry appended here would WIN (ctest applies the list
+    # in order) while pointing at a directory nothing creates, and
+    # `QStandardPaths::writableLocation` does not mkpath — so the override silently
+    # replaced a created sandbox with a missing one, for exactly the tree that most
+    # needs a working one.
+    phosphor_append_test_environment(${target} "QT_QPA_PLATFORM=offscreen")
     set_tests_properties(${target} PROPERTIES
-            LABELS "phosphorserviceclipboard"
+        LABELS "phosphorserviceclipboard"
     )
 endfunction()
 

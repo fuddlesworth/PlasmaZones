@@ -188,6 +188,46 @@ private Q_SLOTS:
         QTest::newRow("deep missing intermediate") << QStringLiteral("esc/a/b/c/future.frag");
     }
 
+    /// A DANGLING symlink: it exists as a link, but its target does not.
+    ///
+    /// `canonicalFilePath()` returns empty for this exactly as it does for a
+    /// component that is simply absent, so a climb that only asks "did this
+    /// canonicalise?" treats the link as not-yet-there, keeps walking, and
+    /// re-appends the link name LEXICALLY onto the canonical root — mixing the two
+    /// domains the guard promises never to mix. That accepted a pack shipping
+    /// `link -> /outside` while `/outside` did not exist yet, and the stored path
+    /// resolved out of the pack as soon as the target appeared, with no rescan to
+    /// re-validate it (a non-existent path cannot be watched).
+    ///
+    /// Deleting the `isSymLink()` fail-closed guard makes this slot, and only this
+    /// slot, fail.
+    void refusesADanglingSymlink()
+    {
+        const QString link = m_pack->filePath(QStringLiteral("esc"));
+        QVERIFY(QFile::link(m_outside->filePath(QStringLiteral("not-created-yet")), link));
+        QVERIFY2(!resolveWithinDirectory(QStringLiteral("esc/effect.frag"), m_pack->path(), AbsolutePathPolicy::Reject)
+                      .has_value(),
+                 "a dangling symlink out of the directory was accepted");
+    }
+
+    /// A symlink CYCLE is accepted, and that is correct — it is not an escape.
+    ///
+    /// Worth pinning because it looks like the dangling case above and is not: a
+    /// self-referential link canonicalises to ITSELF, which is inside the
+    /// directory, so containment genuinely holds. Opening through it fails with
+    /// ELOOP, and existence/readability is explicitly not this guard's job (see the
+    /// header). Refusing it here would mean refusing a contained path for a reason
+    /// the guard does not own.
+    void acceptsASymlinkCycleBecauseItStaysContained()
+    {
+        const QString link = m_pack->filePath(QStringLiteral("loop"));
+        QVERIFY(QFile::link(QStringLiteral("loop"), link));
+        const auto resolved =
+            resolveWithinDirectory(QStringLiteral("loop/effect.frag"), m_pack->path(), AbsolutePathPolicy::Reject);
+        QVERIFY2(resolved.has_value(), "a cycle resolves inside the directory, so containment holds");
+        QVERIFY(resolved->startsWith(QDir::cleanPath(m_pack->path())));
+    }
+
     void refusesASymlinkedDirectoryWithAMissingLeaf()
     {
         QFETCH(QString, declared);
@@ -210,8 +250,8 @@ private Q_SLOTS:
     void refusesAnEmptyDeclaredPathOrDirectory()
     {
         QVERIFY(!resolveWithinDirectory(QString(), m_pack->path(), AbsolutePathPolicy::Reject).has_value());
-        QVERIFY(!resolveWithinDirectory(QStringLiteral("effect.frag"), QString(), AbsolutePathPolicy::Reject)
-                     .has_value());
+        QVERIFY(
+            !resolveWithinDirectory(QStringLiteral("effect.frag"), QString(), AbsolutePathPolicy::Reject).has_value());
     }
 
     // ─── Policy ───────────────────────────────────────────────────────────
@@ -250,8 +290,7 @@ private Q_SLOTS:
         const QString missing = m_pack->filePath(QStringLiteral("not-created-yet"));
         QVERIFY(!resolveWithinDirectory(QStringLiteral("../../evil.frag"), missing, AbsolutePathPolicy::Reject)
                      .has_value());
-        QVERIFY(resolveWithinDirectory(QStringLiteral("effect.frag"), missing, AbsolutePathPolicy::Reject)
-                    .has_value());
+        QVERIFY(resolveWithinDirectory(QStringLiteral("effect.frag"), missing, AbsolutePathPolicy::Reject).has_value());
     }
 };
 

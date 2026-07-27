@@ -143,6 +143,11 @@ public:
                 // partial-failure path here and it must fail coherently.
                 m_lastCommittedPayloads.remove(parsed.key);
                 m_lastCommittedSources.remove(parsed.key);
+                // `entries` too, or the coherence claim above is not met: the key is
+                // absent from currentMap so reloadFromOwner unregisters it, and a
+                // stale Entry left here would keep `ProfileLoader::entries()`
+                // advertising a path the registry no longer serves.
+                entries.remove(parsed.key);
                 lastBatchChanged = true;
                 continue;
             }

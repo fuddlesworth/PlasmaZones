@@ -269,7 +269,15 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, con
     if (failed > 0) {
         qCWarning(lcConfig) << "clearFieldOnPaths:" << failed << "paths could not be updated";
         Q_EMIT toastRequested(PhosphorI18n::tr("Some animation overrides could not be reverted."));
-        return -1;
+        // `changed`, NOT -1. A partial failure is not a refusal: earlier paths —
+        // including the primary — really were cleared, and the QML gates the
+        // "keep the timing editor open" latch on this return. Reporting -1 here
+        // collapsed the editor under the cursor of the user who had just clicked
+        // inside it, which is the exact regression this change exists to prevent,
+        // re-entering through the partial-failure door. -1 is reserved for
+        // "nothing was attempted"; the toast above is how a partial failure
+        // reaches the user.
+        return changed;
     }
     return changed;
 }
@@ -442,10 +450,25 @@ int AnimationsPageController::divergentPathCount(const QString& primaryPath, con
     if (!isValidEventPath(primaryPath)) {
         return 0;
     }
-    // Deduped, and the primary removed if it names itself: a repeat would be
-    // counted twice in the banner's "%1 of the events" figure.
-    QStringList mirrorPaths = distinctPaths(rawMirrorPaths);
-    mirrorPaths.removeAll(primaryPath);
+    // Deduped, so a repeated mirror is not compared (and counted) twice in the
+    // banner's "%1 of the events" figure.
+    //
+    // The primary is also removed if it names itself. That one is a work-saving
+    // guard, NOT an observable fix: the primary's key always equals its own, so it
+    // could never increment `diverged` either way.
+    //
+    // MIRRORS ARE VALIDATED TOO. Only the primary used to be, and an unrecognised
+    // mirror yields the all-empty comparison key (no stored profile, no shader
+    // leg), which differs from any primary holding real state — so it counted as
+    // divergence over a path no edit could ever converge, latching the banner. That
+    // is the same failure the primary gate above exists to prevent, and the header's
+    // "skips any entry that is not a built-in event path" claim covers this
+    // function too.
+    QStringList mirrorPaths;
+    for (const QString& path : distinctPaths(rawMirrorPaths)) {
+        if (path != primaryPath && isValidEventPath(path))
+            mirrorPaths.append(path);
+    }
     if (mirrorPaths.isEmpty())
         return 0;
 
