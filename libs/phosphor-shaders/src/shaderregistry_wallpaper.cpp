@@ -33,6 +33,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcShaderRegistry)
 
 std::unique_ptr<IWallpaperProvider> ShaderRegistry::s_wallpaperProvider;
 QString ShaderRegistry::s_cachedWallpaperPath;
+bool ShaderRegistry::s_wallpaperPathResolved = false;
 QImage ShaderRegistry::s_cachedWallpaperImage;
 qint64 ShaderRegistry::s_cachedWallpaperMtime = 0;
 QMutex ShaderRegistry::s_wallpaperCacheMutex;
@@ -47,12 +48,23 @@ QString ShaderRegistry::wallpaperPath()
     if (!s_cachedWallpaperPath.isEmpty() && QFile::exists(s_cachedWallpaperPath)) {
         return s_cachedWallpaperPath;
     }
+    // "Resolved to nothing" is a CACHED answer, not a cache miss. Without this
+    // flag an empty result (unsupported desktop, a Plasma slideshow containment
+    // with no Image= key, swww not running) never engages the fast path above, so
+    // every caller re-queries the provider — and the Hyprland/sway provider
+    // spawns a QProcess and blocks in waitForFinished(1000) while holding this
+    // mutex, once per overlay show and once per shader attach. Cleared by
+    // invalidateWallpaperCache(), which is already the invalidation seam.
+    if (s_wallpaperPathResolved) {
+        return s_cachedWallpaperPath;
+    }
 
     if (!s_wallpaperProvider) {
         s_wallpaperProvider = createWallpaperProvider();
     }
 
     s_cachedWallpaperPath = s_wallpaperProvider->wallpaperPath();
+    s_wallpaperPathResolved = true;
     return s_cachedWallpaperPath;
 }
 
@@ -119,7 +131,16 @@ QRect ShaderRegistry::computeWallpaperCropRect(QSize wpSize, const QRect& physGe
         coverY = 0.0;
     } else {
         coverW = wpW;
-        coverH = wpW / qMax<qreal>(physAspect, 1.0);
+        // NOT clamped to 1.0. `physGeom.isValid()` already guarantees height >= 1
+        // so `physAspect` is strictly positive, and clamping at 1.0 silently
+        // rewrote the crop for every PORTRAIT or rotated output (physAspect < 1),
+        // where it must divide by the real aspect. The sibling branch above uses
+        // `physAspect` unclamped, and so does the shader this mirrors
+        // (data/overlays/shared/wallpaper.glsl: uv.y scaled by wpAspect/scrAspect).
+        // Getting this wrong made adjacent virtual screens on such an output
+        // sample different portions of the wallpaper, breaking the seam-free
+        // tiling the edge-independent maths below exists to guarantee.
+        coverH = wpW / physAspect;
         coverX = 0.0;
         coverY = (wpH - coverH) * 0.5;
     }
@@ -198,6 +219,7 @@ void ShaderRegistry::invalidateWallpaperCache()
 {
     QMutexLocker lock(&s_wallpaperCacheMutex);
     s_cachedWallpaperPath.clear();
+    s_wallpaperPathResolved = false;
     s_cachedWallpaperImage = QImage();
     s_cachedWallpaperMtime = 0;
     for (auto& entry : s_cachedWallpaperCrops) {

@@ -29,8 +29,10 @@
 namespace PhosphorTiles {
 
 // Per-directory cap shared by loadFromDirectory() and the validated-files
-// helper used by the scan strategy.
-static constexpr int MaxWatchedFilesPerDir = 100;
+// helper used by the scan strategy. Defined in the header (and therefore
+// test-visible) so a bump cannot silently disarm the spray test that pins it;
+// this is a file-local alias for the unqualified uses below.
+constexpr int MaxWatchedFilesPerDir = ScriptedAlgorithmLoader::MaxWatchedFilesPerDir;
 
 // Hard cap on scripts REGISTERED per rescan, summed across every
 // registered directory. Same magnitude as DirectoryLoader::kMaxEntries and

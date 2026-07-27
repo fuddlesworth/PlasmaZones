@@ -4,9 +4,9 @@
 #pragma once
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
-#include <PhosphorAnimation/PhosphorCurve.h>
 
 #include <QtCore/QJsonObject>
 #include <QtCore/QObject>
@@ -38,8 +38,20 @@ namespace PhosphorAnimation {
  *     effective*`). Unset fields read back as their library default.
  *   - Writing a property engages the optional when the value validates, so
  *     the field becomes "explicitly set". A write that FAILS validation
- *     disengages it instead, which is the only QML-reachable way to return a
+ *     disengages it instead, which is one of two QML-reachable ways to return a
  *     field to "unset" (from C++, call `Profile::*.reset()` directly).
+ *
+ * `curve` is the exception to BOTH bullets, because there is no
+ * `Profile::effectiveCurve()`:
+ *
+ *   - Reading it when unset returns a NULL `PhosphorCurve`, NOT the library
+ *     default. `isNull()` is true and `typeId` is empty on a fresh gadget; the
+ *     OutCubic default is substituted later, by `withDefaults()` and by
+ *     consumers. Check `isNull()` rather than assuming a curve is there.
+ *   - Assigning a default-constructed `PhosphorCurve` disengages it, which is
+ *     the second way to reach "unset" from QML — and `setCurve` is also the one
+ *     setter that applies no validation at all, since a curve handle is either
+ *     a valid curve or null.
  *
  * This matches how plugin authors typically use `PhosphorProfile`:
  * construct a compile-time literal with every field they care about,
@@ -105,6 +117,10 @@ public:
     // with the offending value because it is parsing a file a user hand-edited,
     // whereas this is a programming error in the calling script and the value
     // is visible in the script itself.
+    //
+    // `setCurve` is outside all of the above: a `PhosphorCurve` is either a
+    // valid curve handle or null, so there is nothing to range-check. Assigning
+    // a null one DISENGAGES the field rather than rejecting anything.
 
     PhosphorCurve curve() const
     {

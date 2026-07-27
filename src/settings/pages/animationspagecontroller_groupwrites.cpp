@@ -58,11 +58,49 @@ QByteArray comparableStateKey(const QVariantMap& profile, const QVariantMap& sha
     return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
 
+/// The caller's path list with duplicates removed, preserving order.
+///
+/// QML builds a card's write group as `[eventPath].concat(mirrorPaths)` with no
+/// dedup, so a card naming its own event path as a mirror hands the same file in
+/// twice — which double-counts `changed`, pays a second write, and inflates the
+/// divergence banner. Order is preserved because the primary must stay first.
+///
+/// LINEAR, via a seen-set. The obvious `if (!out.contains(path))` shape is
+/// O(n^2) in the CALLER's list, and this runs as the first statement of every
+/// group writer, BEFORE `isValidEventPath` can reject anything — so it would be
+/// the one step a 20k-entry Q_INVOKABLE call could still make quadratic on the
+/// GUI thread, which is exactly the dedup the header calls free.
+QStringList distinctPaths(const QStringList& paths)
+{
+    QStringList out;
+    out.reserve(paths.size());
+    QSet<QString> seen;
+    seen.reserve(paths.size());
+    for (const QString& path : paths) {
+        if (!seen.contains(path)) {
+            seen.insert(path);
+            out.append(path);
+        }
+    }
+    return out;
+}
+
 } // namespace
 
-bool AnimationsPageController::setOverrideMergedOnPaths(const QStringList& paths, const QVariantMap& fields,
+bool AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPaths, const QVariantMap& fields,
                                                         const QVariant& curveFromCommit)
 {
+    const QStringList paths = distinctPaths(rawPaths);
+    if (m_asyncRevertInFlight) {
+        // Refused as a whole, like every sibling group writer. Without this the
+        // per-path `setOverride` calls refuse individually, `allWritten` goes
+        // false, and a duration drag mid-discard silently does nothing — the
+        // slider just snaps back on the next refresh with no explanation.
+        qCWarning(lcConfig) << "setOverrideMergedOnPaths: refusing while an async discard is in flight";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
+        return false;
+    }
+
     // An invalid QVariant is QML's `undefined` arriving here, and it is the
     // signal for "the user did not touch the curve". Distinguished from a valid
     // empty string, which is a real (if unusual) authored value.
@@ -117,8 +155,9 @@ bool AnimationsPageController::setOverrideMergedOnPaths(const QStringList& paths
     return allWritten;
 }
 
-int AnimationsPageController::clearFieldOnPaths(const QStringList& paths, const QString& field)
+int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, const QString& field)
 {
+    const QStringList paths = distinctPaths(rawPaths);
     // Allowlisted rather than passed through to the JSON: this removes a key
     // from a file, and the only two fields a card's revert links own are the
     // timing pair. Anything else reaching here would be a caller bug, and
@@ -164,6 +203,9 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& paths, const 
     QStringList removed;
     int changed = 0;
     int failed = 0;
+    // Tracks the classification-time-present / removal-time-absent race, so the
+    // registry catch-up below still runs when it is the only thing that happened.
+    bool sawAbsent = false;
     for (const QString& path : toRemove) {
         // An override with nothing left in it is removed outright. An empty
         // file and no file resolve identically, but the card's toggle and the
@@ -180,7 +222,9 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& paths, const 
         case OverrideFileRemoval::Absent:
             // rawProfile said the field was there, so the file existed a moment
             // ago. Something else removed it in between; the desired end state
-            // holds either way.
+            // holds either way, but the REGISTRY may still hold the vanished
+            // file's entry, so this still owes a rescan.
+            sawAbsent = true;
             break;
         case OverrideFileRemoval::Failed:
             ++failed;
@@ -190,7 +234,12 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& paths, const 
 
     // ONE rescan for every removal, BEFORE any signal — including the ones
     // `setOverride` emits for itself in the rewrite pass below.
-    if (!removed.isEmpty())
+    // Also refreshed when every removal reported Absent. A file present at
+    // classification time can vanish before `removeOverrideFile` runs, and then
+    // `removed` is empty while the profile registry still holds an entry for a
+    // file that is gone — which is exactly when `resolvedProfile` falls through
+    // to the registry, so it would serve the stale inherited value.
+    if (!removed.isEmpty() || sawAbsent)
         refreshProfileStore();
 
     for (const auto& [path, raw] : toRewrite) {
@@ -206,9 +255,16 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& paths, const 
     const bool nowPending = hasPendingChanges();
     for (const QString& path : removed)
         Q_EMIT overrideChanged(path);
-    // One dirty signal for the removals' net flip. Each rewrite already emitted
-    // its own from inside setOverride, so this fires only when no rewrite ran.
-    if (wasPending != nowPending && toRewrite.isEmpty())
+    // One dirty signal for the batch's net flip, NOT gated on whether a rewrite
+    // ran. A rewrite's `setOverride` emits only when IT observes a flip, and it
+    // samples pending state after the removal pass has already made the page
+    // dirty — so in a mixed batch neither the rewrite nor a `toRewrite`-gated
+    // batch emit fires, and the clean→dirty transition is lost entirely.
+    //
+    // A redundant emit costs nothing: `pendingChangesChanged` is a "may have
+    // changed" signal, and the ctor's forwarder gates the outward `dirtyChanged`
+    // on an observed flip of `m_lastHadPendingChanges`.
+    if (wasPending != nowPending)
         Q_EMIT pendingChangesChanged();
     if (failed > 0) {
         qCWarning(lcConfig) << "clearFieldOnPaths:" << failed << "paths could not be updated";
@@ -218,8 +274,9 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& paths, const 
     return changed;
 }
 
-bool AnimationsPageController::anyPathSupportsShaderLeg(const QStringList& paths) const
+bool AnimationsPageController::anyPathSupportsShaderLeg(const QStringList& rawPaths) const
 {
+    const QStringList paths = distinctPaths(rawPaths);
     for (const QString& path : paths) {
         if (supportsShaderLeg(path))
             return true;
@@ -227,10 +284,28 @@ bool AnimationsPageController::anyPathSupportsShaderLeg(const QStringList& paths
     return false;
 }
 
-bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& paths, const QString& effectId) const
+bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& rawPaths, const QString& effectId) const
 {
+    // An empty list is FALSE, not a vacuous true. "Every path already carries
+    // this effect" reads as "at least one does" at the call site, and this is a
+    // Q_INVOKABLE with no other gate in front of it.
+    if (rawPaths.isEmpty()) {
+        return false;
+    }
+    const QStringList paths = distinctPaths(rawPaths);
+    using namespace PhosphorAnimationShaders;
+    if (!m_settings)
+        return false;
+    // ONE tree read for the whole group, like divergentPathCount — the header's
+    // rule is that nothing here calls `rawShaderProfile` in a loop, because each
+    // call rebuilds the tree.
+    const ShaderProfileTree tree = m_settings->shaderProfileTree();
     for (const QString& path : paths) {
-        const QVariantMap raw = rawShaderProfile(path);
+        // Gated, so an unrecognised path cannot make the caller's list the bound
+        // on the work done here. A non-supporting path can never hold an id.
+        if (!isValidEventPath(path) || !supportsShaderLeg(path))
+            return false;
+        const QVariantMap raw = tree.hasOverride(path) ? shaderProfileToMap(tree.directOverride(path)) : QVariantMap();
         const auto it = raw.constFind(JsonEffectIdKey);
         // Absent effectId means no direct override, which is never equal to a
         // stored one — not even to the engaged-empty sentinel.
@@ -242,9 +317,10 @@ bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& paths
     return true;
 }
 
-int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& paths, const QString& effectId,
+int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& rawPaths, const QString& effectId,
                                                        const QVariantMap& parameters)
 {
+    const QStringList paths = distinctPaths(rawPaths);
     using namespace PhosphorAnimationShaders;
     if (!m_settings)
         return 0;
@@ -254,6 +330,14 @@ int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& paths,
         // read the resulting 0 as "nothing to write".
         qCWarning(lcConfig) << "setShaderOverrideOnPaths: refusing while an async discard is in flight";
         Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
+        return -1;
+    }
+
+    // The SAME boundary checks the per-path `setShaderOverride` performs. Not
+    // optional: this is the only path QML uses, so skipping them left the id
+    // that reaches the persisted tree entirely unvalidated. Checked once
+    // because an id is per-call, not per-path.
+    if (!acceptableShaderEffectId(effectId, QLatin1String("setShaderOverrideOnPaths"))) {
         return -1;
     }
 
@@ -268,6 +352,7 @@ int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& paths,
     // path's write immediately clears.
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     int written = 0;
+    int mutated = 0;
     for (const QString& path : paths) {
         // Skipped, not attempted: a non-supporting path is rejected downstream
         // anyway, and skipping keeps the warning out of the log for a call that
@@ -280,16 +365,27 @@ int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& paths,
         profile.effectId = effectId;
         if (!parameters.isEmpty())
             profile.parameters = parameters;
+        // Compare-and-skip, like the per-path setter: a param slider that lands
+        // back on its current value, or a Reset that was already at defaults,
+        // would otherwise still pay the settings write and the page-wide
+        // broadcast below. Counted as written either way, because the requested
+        // end state holds for this path.
+        if (tree.hasOverride(path) && tree.directOverride(path) == profile) {
+            ++written;
+            continue;
+        }
         tree.setOverride(path, profile);
         ++written;
+        ++mutated;
     }
-    if (written > 0)
+    if (mutated > 0)
         m_settings->setShaderProfileTree(tree);
     return written;
 }
 
-int AnimationsPageController::clearShaderOverrideOnPaths(const QStringList& paths)
+int AnimationsPageController::clearShaderOverrideOnPaths(const QStringList& rawPaths)
 {
+    const QStringList paths = distinctPaths(rawPaths);
     using namespace PhosphorAnimationShaders;
     if (!m_settings)
         return 0;
@@ -315,8 +411,9 @@ int AnimationsPageController::clearShaderOverrideOnPaths(const QStringList& path
     return cleared;
 }
 
-int AnimationsPageController::clearShaderOverrideDescendantsOnPaths(const QStringList& paths)
+int AnimationsPageController::clearShaderOverrideDescendantsOnPaths(const QStringList& rawPaths)
 {
+    const QStringList paths = distinctPaths(rawPaths);
     int cleared = 0;
     for (const QString& path : paths) {
         // Gated so an unrecognised path cannot cost a tree rebuild apiece; the
@@ -335,9 +432,20 @@ int AnimationsPageController::clearShaderOverrideDescendantsOnPaths(const QStrin
     return cleared;
 }
 
-int AnimationsPageController::divergentPathCount(const QString& primaryPath, const QStringList& mirrorPaths,
+int AnimationsPageController::divergentPathCount(const QString& primaryPath, const QStringList& rawMirrorPaths,
                                                  bool compareCurve) const
 {
+    // Gated like every sibling in this file. An unvalidated primary yields the
+    // all-empty comparison key (rawProfile returns {}, supportsShaderLeg false),
+    // so every valid mirror would read as divergent and the banner would latch at
+    // a count no edit could ever clear.
+    if (!isValidEventPath(primaryPath)) {
+        return 0;
+    }
+    // Deduped, and the primary removed if it names itself: a repeat would be
+    // counted twice in the banner's "%1 of the events" figure.
+    QStringList mirrorPaths = distinctPaths(rawMirrorPaths);
+    mirrorPaths.removeAll(primaryPath);
     if (mirrorPaths.isEmpty())
         return 0;
 

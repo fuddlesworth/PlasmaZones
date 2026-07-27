@@ -117,6 +117,19 @@ public:
     /// any non-number, and every library default passes the range checks, so
     /// without it a malformed value would land ENGAGED and block inheritance.
     ///
+    /// `curve` resolves through @p registry and is left NULL when the key is
+    /// absent or names no registered curve, so an unknown curve inherits rather
+    /// than pinning the library default. `presetName` takes any string as-is (it
+    /// is decorative, so there is nothing to range-check), but a NON-string value
+    /// is rejected, warned about, and leaves the field unset like the others.
+    ///
+    /// Every diagnostic mentioned here is RATE-LIMITED to once per (field,
+    /// reason) per process. `Settings::animationProfile()` parses through here
+    /// with no cache and the daemon republishes on a settings slider's drag path,
+    /// so an unlimited warning would emit tens of times a second for the length
+    /// of a drag. A user debugging a hand-edited profile therefore sees the
+    /// warning on the first parse only.
+    ///
     /// `sequenceMode` is the one exception. A value that is out of range or
     /// not a known enumerator is logged and replaced with
     /// `DefaultSequenceMode` ENGAGED, which blocks inheritance rather than

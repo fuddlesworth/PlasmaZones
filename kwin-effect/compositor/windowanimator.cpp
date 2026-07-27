@@ -170,8 +170,13 @@ WindowAnimator::startAnimationWithResult(KWin::EffectWindow* handle, const QRect
     // seconds later, with no shader left on the window. Slider-reachable, not just
     // hand-editable: "spring:10,0.15" settles in 3.5 s. Routing both legs through
     // resolveTransitionLifetimeMs makes them provably agree rather than
-    // coincidentally agree. A stateless curve is unaffected (the helper hands the
-    // nominal straight back, and the parametric branch bounds itself by duration).
+    // coincidentally agree.
+    //
+    // A stateless curve is unaffected — but NOT because the helper hands the
+    // nominal straight back: it qBounds every result into [50, 2000], stateless
+    // included, so a nominal above that ceiling does come back clamped. The
+    // reason it does not matter is that `AnimatedValue::advance` consults
+    // `maxLifetimeMs` only in the STATEFUL branch.
     spec->maxLifetimeMs = ShaderInternal::resolveTransitionLifetimeMs(qRound(spec->profile.effectiveDuration()),
                                                                       spec->profile.curve.get());
 
@@ -255,8 +260,23 @@ PhosphorAnimation::RetargetResult WindowAnimator::retargetWithResult(KWin::Effec
         return RetargetResult::DegenerateReap;
     }
 
+    // Release path: DROP the animation rather than leaving it in the map heading
+    // to its OLD target. The sole caller tests only for DegenerateReap, so an
+    // InternalError falls through — and by then `moveResize(targetFrame)` has
+    // already committed the new geometry, so a surviving stale animation would
+    // visibly drive the window to the wrong rect and snap on completion.
+    // Degrading to "no animation" is contained; degrading to "wrong animation"
+    // is not. Unreachable today (it means AnimatedValue had no spec installed),
+    // which is why the assert stays.
     Q_ASSERT_X(false, "WindowAnimator::retargetWithResult",
                "AnimatedValue rejected retarget without marking complete — spec was never installed");
+    if (auto stale = m_animations.find(handle); stale != m_animations.end()) {
+        const QRectF bounds = stale->second.bounds().marginsAdded(expandedPadding(handle, stale->second));
+        m_animations.erase(stale);
+        if (bounds.isValid()) {
+            onRepaintNeeded(handle, bounds);
+        }
+    }
     return RetargetResult::InternalError;
 }
 
@@ -264,6 +284,12 @@ PhosphorAnimation::RetargetResult WindowAnimator::retargetWithResult(KWin::Effec
 {
     using PhosphorAnimation::RetargetResult;
 
+    // The guards are repeated here even though the three-arg overload runs them
+    // again, and deliberately so: they establish the RESULT ORDER. Dropping them
+    // and letting the delegate own them would make a disabled animator with an
+    // unknown handle report UnknownHandle instead of Disabled, which is an
+    // observable change in the returned enum. Two extra branches on a
+    // non-per-frame path is the cheaper side of that trade.
     if (!m_enabled) {
         return RetargetResult::Disabled;
     }

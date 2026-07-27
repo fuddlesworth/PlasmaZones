@@ -943,6 +943,25 @@ if(BUILD_TESTING)
              COMMAND plasmazones-shader-validate --animation ${PROJECT_SOURCE_DIR}/data/animations)
     add_test(NAME shader_validate_surface
              COMMAND plasmazones-shader-validate --surface ${PROJECT_SOURCE_DIR}/data/surface)
+
+    # The XDG half of the standard isolation, applied by hand because these three
+    # share ONE command target and the helper keys its per-target sandbox on the
+    # target name. Without it the validator resolves pack search paths through
+    # QStandardPaths and picks up whatever packs are installed in the developer's
+    # real XDG_DATA_DIRS, so "are the BUNDLED packs valid?" silently becomes "are
+    # the bundled packs plus everything installed locally valid?". The bus half is
+    # not needed: the validator never touches D-Bus.
+    set(_pz_shader_validate_xdg "${CMAKE_BINARY_DIR}/test-xdg/shader_validate")
+    file(MAKE_DIRECTORY "${_pz_shader_validate_xdg}/config" "${_pz_shader_validate_xdg}/data"
+                        "${_pz_shader_validate_xdg}/state" "${_pz_shader_validate_xdg}/cache")
+    foreach(_pz_sv shader_validate_bundled shader_validate_animations shader_validate_surface)
+        set_property(TEST ${_pz_sv} APPEND PROPERTY ENVIRONMENT
+            "XDG_CONFIG_HOME=${_pz_shader_validate_xdg}/config"
+            "XDG_DATA_HOME=${_pz_shader_validate_xdg}/data"
+            "XDG_STATE_HOME=${_pz_shader_validate_xdg}/state"
+            "XDG_CACHE_HOME=${_pz_shader_validate_xdg}/cache"
+            "XDG_DATA_DIRS=${_pz_shader_validate_xdg}/data")
+    endforeach()
 endif()
 
 # Standalone settings app (no KDE Frameworks required)

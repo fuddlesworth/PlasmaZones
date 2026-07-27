@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorShaders/ShaderRegistry.h>
-#include <PhosphorShaders/IWallpaperProvider.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include "shaderutils.h"
 
@@ -23,7 +22,6 @@
 #include <QUrl>
 #include <QUuid>
 
-#include <QMutexLocker>
 
 #include <algorithm>
 
@@ -100,15 +98,27 @@ namespace {
 /// refusing separators. A name that does not exist yet resolves lexically, so a
 /// pack referencing a file it does not ship is still rejected later by the
 /// existence checks rather than here.
-QString resolveWithinPack(const QDir& dir, const QString& declaredName)
+///
+/// @p policy defaults to `Reject`, which is right for everything a PACK FILE
+/// declares: a pack ships its own assets, so an absolute path can only be a
+/// mistake or an escape. Only a value the USER supplied at runtime (a file
+/// picker, D-Bus) may pass `Trust`.
+QString resolveWithinPack(const QDir& dir, const QString& declaredName,
+                          PhosphorFsLoader::AbsolutePathPolicy policy = PhosphorFsLoader::AbsolutePathPolicy::Reject)
 {
+    // An empty declared name is ABSENT, not an escape. `toString(default)` hands
+    // back an explicit `""` rather than the default (an empty string IS a
+    // string), so without this the guard refused it and warned "declared a path
+    // outside its own directory: ''", which points the pack author at the wrong
+    // problem. Unreachable via the live scan (the schema sets minLength 1) but
+    // reachable through parsePackMetadata, which has no schema gate.
+    if (declaredName.isEmpty()) {
+        return {};
+    }
     // Delegates to the shared guard rather than hand-rolling a fifth copy: a
     // lexical-only check (which this was) misses a symlink inside the pack
     // pointing out of it, and mixing canonical with lexical fails open.
-    // `Reject` because these are paths a PACK FILE declares — a pack ships its
-    // own assets, so an absolute path can only be a mistake or an escape.
-    const auto resolved = PhosphorFsLoader::resolveWithinDirectory(declaredName, dir.absolutePath(),
-                                                                   PhosphorFsLoader::AbsolutePathPolicy::Reject);
+    const auto resolved = PhosphorFsLoader::resolveWithinDirectory(declaredName, dir.absolutePath(), policy);
     if (!resolved) {
         qCWarning(lcShaderRegistry) << "Shader pack declared a path outside its own directory:" << declaredName << "in"
                                     << dir.absolutePath() << "— ignoring";
@@ -158,6 +168,10 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     // Multi-pass: one or more buffer pass shaders (A->B->C->D).
     info.isMultipass = root.value(QLatin1String("multipass")).toBool(false);
     const QJsonArray bufferShadersArray = root.value(QLatin1String("bufferShaders")).toArray();
+    if (bufferShadersArray.size() > 4) {
+        qCWarning(lcShaderRegistry) << "Shader pack" << info.name << "declares" << bufferShadersArray.size()
+                                    << "buffer shaders; only the first 4 are used";
+    }
     bool bufferShadersDeclared = false;
     if (!bufferShadersArray.isEmpty()) {
         bufferShadersDeclared = true;
@@ -822,6 +836,14 @@ bool ShaderRegistry::validateParameterValue(const ParameterInfo& param, const QV
     } else if (param.type == QLatin1String("image")) {
         if (!value.canConvert<QString>())
             return false;
+    } else {
+        // Unknown type: fail CLOSED. The metadata schema enumerates `type`, so a
+        // bundled or live-scanned pack cannot land here, but this function is
+        // also reached from validateParams / validateAndCoerceParams with runtime
+        // maps that never saw the schema — and accepting a value whose type
+        // nothing in this function understands is how an unvalidated value gets
+        // downstream.
+        return false;
     }
     return true;
 }
@@ -911,27 +933,56 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
             }
         }
 
-        // For image parameters: resolve relative paths against shader directory, emit wrap mode
+        // For image parameters: resolve against the shader directory, emit wrap mode.
+        //
+        // The POLICY depends on where the value came from, which is why the two
+        // sources are distinguished above rather than read off the merged result.
+        // A value the USER picked (`storedParams`, from the file picker or D-Bus)
+        // may legitimately be an absolute path outside any pack. A value the PACK
+        // declared may not: an absolute default is either a mistake or an attempt
+        // to have the consumer bind an arbitrary file as a texture, so it is
+        // containment-checked like every other pack-declared path. Both sibling
+        // registries already Reject at parse time; this one had no image-path
+        // check at all, and skipping the absolute case let a third-party pack
+        // ship `"default": "/home/user/.ssh/id_rsa"` straight through.
         if (param.type == QLatin1String("image") && !uName.isEmpty()) {
             const QString imgPath = result.value(uName).toString();
-            if (!imgPath.isEmpty() && QFileInfo(imgPath).isRelative()) {
+            const bool fromUser = storedParams.contains(param.id);
+            // No `isRelative()` pre-filter: the guard itself is what decides what
+            // an absolute path means, per policy. Short-circuiting on relative-ness
+            // used to skip the guard entirely for a trusted absolute path, which
+            // also skipped the cleanPath normalisation every other accepted return
+            // gets — so one user-picked file could reach watch keys and path-keyed
+            // caches in two spellings.
+            if (!imgPath.isEmpty()) {
                 const QDir shaderDir = QFileInfo(info.sourcePath).absoluteDir();
-                const QString resolved = resolveWithinPack(shaderDir, imgPath);
-                if (resolved.isEmpty()) {
-                    // Fail CLOSED. Leaving the original relative string in place
-                    // would hand an unresolved, unvetted path to the consumer,
-                    // which resolves it against its own base — so a refused
-                    // traversal would escape anyway, one layer down.
-                    result[uName] = QString();
-                } else if (QFile::exists(resolved)) {
-                    result[uName] = resolved;
-                }
+                const QString resolved =
+                    resolveWithinPack(shaderDir, imgPath,
+                                      fromUser ? PhosphorFsLoader::AbsolutePathPolicy::Trust
+                                               : PhosphorFsLoader::AbsolutePathPolicy::Reject);
+                // Assigned unconditionally once containment has been decided.
+                // Leaving the original RELATIVE string in place — which the old
+                // `else if (exists)` shape did whenever the file was merely
+                // absent — hands an unresolved, unvetted path to the consumer,
+                // which then resolves it against its own base (the process CWD).
+                // A refused traversal would escape anyway, one layer down.
+                //
+                // Empty on refusal is the fail-closed answer; the resolved
+                // absolute path on acceptance, existing or not, because the
+                // consumer already treats a failed load as "no texture" and
+                // pre-checking existence here would only add a TOCTOU.
+                result[uName] = resolved;
             }
             // Ensure image params are never null QVariant
             if (!result.value(uName).isValid() || result.value(uName).isNull()) {
                 result[uName] = QString();
             }
-            result[uName + QStringLiteral("_wrap")] = param.wrap.isEmpty() ? QStringLiteral("clamp") : param.wrap;
+            // Both-or-neither, matching the two sibling registries: a wrap mode
+            // on an unbound sampler is meaningless, and the same consumer reads
+            // all three maps.
+            if (!result.value(uName).toString().isEmpty()) {
+                result[uName + QStringLiteral("_wrap")] = param.wrap.isEmpty() ? QStringLiteral("clamp") : param.wrap;
+            }
 
             // Pass through SVG render size if present in stored params
             const QString svgSizeKey = param.id + QStringLiteral("_svgSize");

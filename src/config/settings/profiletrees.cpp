@@ -55,9 +55,15 @@ void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfil
 
     // Value-equality compare so a same-tree write doesn't fire a spurious
     // changed signal (e.g. discard-changes path that calls
-    // setShaderProfileTree(currentTree)). Compare AFTER pruning so the
-    // first save against a stale-on-disk config still produces a write
-    // that drops the unsupported entries.
+    // setShaderProfileTree(currentTree)). Compare AFTER pruning, so a caller
+    // writing back a value it just read (both sides already pruned) is a no-op
+    // rather than a spurious write.
+    //
+    // This does NOT self-heal a stale on-disk config: both sides of the compare
+    // are pruned, so an unsupported entry sitting in the file is invisible here
+    // and survives until some other edit forces a write. Acceptable because the
+    // READ side prunes unconditionally, so a stale entry can never reach a
+    // consumer — it just lingers in the file.
     const QVariantMap prevMap =
         m_store->read<QVariantMap>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
     PhosphorAnimationShaders::ShaderProfileTree prevTree;

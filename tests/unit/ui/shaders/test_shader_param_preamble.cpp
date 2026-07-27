@@ -256,13 +256,21 @@ private Q_SLOTS:
     // does.
 
     /// Write a pack whose metadata.json is @p meta, and return its parse.
+    ///
+    /// `qFatal` rather than a silent `return {}`, because a QVERIFY in a static
+    /// helper cannot abort the CALLER: five slots below assert that a field came
+    /// back EMPTY, and every one of them would pass vacuously if the metadata was
+    /// never written at all. Failing loudly here is the difference between those
+    /// assertions pinning the refusal and pinning nothing.
     static ShaderRegistry::ShaderInfo parsePack(const QTemporaryDir& tmp, const QByteArray& meta)
     {
         QFile f(tmp.filePath(QStringLiteral("metadata.json")));
         if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            return {};
+            qFatal("parsePack: could not open metadata.json for writing");
         }
-        f.write(meta);
+        if (f.write(meta) != meta.size()) {
+            qFatal("parsePack: short write to metadata.json");
+        }
         f.close();
         return ShaderRegistry::parsePackMetadata(tmp.path());
     }
@@ -345,6 +353,16 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
+        // The two LEGITIMATE entries must exist on disk, or this slot is
+        // half-vacuous: the multipass existence sweep clears a list whose files
+        // are missing, so mutating the refusal to "compact the escaping entry
+        // out" would still leave `bufferShaderPaths` empty and the assertion
+        // below would pass for the wrong reason.
+        for (const auto& name : {QStringLiteral("a.frag"), QStringLiteral("c.frag")}) {
+            QFile frag(tmp.filePath(name));
+            QVERIFY(frag.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QVERIFY(frag.write(QByteArrayLiteral("void main() {}\n")) > 0);
+        }
         const ShaderRegistry::ShaderInfo info =
             parsePack(tmp,
                       QByteArrayLiteral(R"({"id":"esc","fragmentShader":"effect.frag","multipass":true,)"

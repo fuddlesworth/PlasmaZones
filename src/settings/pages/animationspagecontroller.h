@@ -264,12 +264,13 @@ public:
     // group write. Those are view state about which signals the card should
     // ignore while its own write is in flight, and they mean nothing here.
     //
-    // None of these caps `paths.size()`, and none needs to: every one of them
-    // skips an entry that is not a built-in event path, so the WORK is bounded
-    // by `ProfilePaths::allBuiltInPaths()` rather than by the caller's list. An
-    // unrecognised entry costs one `isValidEventPath` set lookup and nothing
-    // else — in particular it never reaches the disk and never rebuilds the
-    // shader tree.
+    // None of these caps `paths.size()`, and none needs to. Each DEDUPLICATES
+    // its list on entry and then skips any entry that is not a built-in event
+    // path, so the WORK is bounded by `ProfilePaths::allBuiltInPaths()` rather
+    // than by the caller's list — a repeat costs nothing and an unrecognised
+    // entry costs one set lookup, never a disk read or a shader-tree rebuild.
+    // The dedup matters because QML builds a group as
+    // `[eventPath].concat(mirrorPaths)` and does not dedupe.
 
     /// Merge @p fields into the stored override at every path in @p paths and
     /// write each result back.
@@ -367,7 +368,7 @@ public:
     /// non-supporting path always stores nothing on that axis, so comparing its
     /// permanently-empty leg against a supporting path's real one would report
     /// a divergence over an axis nothing could converge.
-    Q_INVOKABLE int divergentPathCount(const QString& primaryPath, const QStringList& mirrorPaths,
+    Q_INVOKABLE int divergentPathCount(const QString& primaryPath, const QStringList& rawMirrorPaths,
                                        bool compareCurve) const;
 
     /// Scoped sibling of revertPending: restore ONLY the snapshotted override
@@ -679,10 +680,14 @@ public:
     /// own `Settings::load()`.)
     /// Failures (e.g. permission errors during file restore) are
     /// retained in the snapshot so a subsequent revert can retry.
-    /// @return true when the page is CLEAN afterwards. False has two causes, and
-    /// a caller that goes on to declare the state clean (an import, a defaults
-    /// reset) must honour both, or it strands pre-edit snapshots that a later
-    /// Discard writes back over the new state:
+    /// @return true when every snapshotted FILE was restored. This is NOT "the
+    /// page is clean": the shader TREE half of the dirty state is the caller's
+    /// job (see the CALLER CONTRACT block above), so a page whose only remaining
+    /// dirtiness is a diverged tree returns true here while `hasPendingChanges()`
+    /// is still true. False has two causes, and a caller that goes on to declare
+    /// the state clean (an import, a defaults reset) must honour both, or it
+    /// strands pre-edit snapshots that a later Discard writes back over the new
+    /// state:
     ///   * the revert was REFUSED outright, because an asyncRevertPending() worker
     ///     holds the snapshot map, or
     ///   * some file could not be restored (permission drift) and was RETAINED for
@@ -773,6 +778,13 @@ private:
     /// the whole profiles directory once per deleted file.
     OverrideFileRemoval removeOverrideFile(const QString& path);
 
+    /// Both boundary checks on a shader effect id: the length/character sanity
+    /// check and the registry-membership gate. Shared by `setShaderOverride` and
+    /// the group writer `setShaderOverrideOnPaths`, because the group writer is
+    /// the only path QML uses and had silently inherited neither.
+    /// @param context names the caller in the diagnostics.
+    bool acceptableShaderEffectId(const QString& effectId, QLatin1String context) const;
+
     /// Shared body of clearAllOverrides / clearOverridesUnder: clears every
     /// override file among @p eventPaths, refreshes the profile store once,
     /// then emits. @p context names the caller for the failure log.
@@ -814,7 +826,7 @@ private:
     /// the controller would answer its own rescan with a tree-wide reload
     /// broadcast, on top of the precise per-path signals the caller is already
     /// about to send. A counter rather than a bool: no call site nests a
-    /// refresh inside another today (all five are single top-level calls), but
+    /// refresh inside another today (every call site is a single top-level call), but
     /// a counter cannot be left stuck by a nesting one added later, and it
     /// costs nothing over a bool.
     int m_selfDrivenRescanDepth = 0;

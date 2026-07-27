@@ -128,47 +128,19 @@ if(BUILD_TESTING)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
-    # These two targets live outside tests/unit, so the TEST_LAUNCHER loop
-    # there (which iterates only its own directory's tests) does not reach
-    # them and they would run on the ambient session bus. Neither links
-    # Qt6::DBus today, so nothing can hang right now, but the repo's rule is
-    # that a test gets the isolated bus, and the next test added beside these
-    # would silently opt out of it. Same launcher and same config file as
-    # tests/unit/CMakeLists.txt, with the same graceful skip when
-    # dbus-run-session or CMake 3.29 is unavailable.
-    # Redirect XDG to the same throwaway tree tests/unit uses. This half matters
-    # more than the bus half: without it a test that touches QStandardPaths
-    # writes into the developer's real ~/.config/plasmazones. Neither loader
-    # does today, which is exactly the argument that was accepted for the bus
-    # isolation below, so apply it here for the same reason.
-    set(_pz_sr_test_home "${CMAKE_BINARY_DIR}/test-xdg")
-    # Created here as well as in tests/unit: relying on that directory to make
-    # them first is an invisible one-way dependency between two sibling trees.
-    file(MAKE_DIRECTORY
-        "${_pz_sr_test_home}/config"
-        "${_pz_sr_test_home}/data"
-        "${_pz_sr_test_home}/state"
-        "${_pz_sr_test_home}/cache")
-    set_tests_properties(test_shader_render_layoutloader test_shader_render_metadataloader PROPERTIES ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${_pz_sr_test_home}/config;XDG_DATA_HOME=${_pz_sr_test_home}/data;XDG_STATE_HOME=${_pz_sr_test_home}/state;XDG_CACHE_HOME=${_pz_sr_test_home}/cache")
-
-    # Reuses tests/unit's cache entry rather than caching the same program
-    # under a second name a user could set inconsistently.
-    # Fail at configure time rather than as a confusing launcher error inside
-    # ctest if the shared bus config ever moves.
-    set(_pz_sr_bus_conf "${CMAKE_SOURCE_DIR}/tests/unit/test-session-bus.conf")
-    if(NOT EXISTS "${_pz_sr_bus_conf}")
-        message(FATAL_ERROR "shader-render tests: missing D-Bus isolation config at ${_pz_sr_bus_conf}")
-    endif()
-    find_program(_pz_dbus_run_session dbus-run-session)
-    if(_pz_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
-        foreach(_pz_sr_test test_shader_render_layoutloader test_shader_render_metadataloader)
-            set_target_properties(${_pz_sr_test} PROPERTIES
-                TEST_LAUNCHER
-                "${_pz_dbus_run_session};--config-file=${_pz_sr_bus_conf};--")
-        endforeach()
-    else()
-        message(STATUS "shader-render tests: D-Bus isolation unavailable (needs dbus-run-session + CMake 3.29); "
-                       "running on the ambient session bus")
-    endif()
+    # These two targets live outside tests/unit, so they need the isolation
+    # applied explicitly. This used to be a hand-copied duplicate of the block in
+    # tests/unit, which is precisely how it rotted: it kept an absolute path to
+    # `tests/unit/test-session-bus.conf` behind a `FATAL_ERROR` after the config
+    # moved to `cmake/`, so configuring with -DBUILD_TOOLS=ON failed outright. It
+    # also used the raw `set_tests_properties(... PROPERTIES ENVIRONMENT ...)` SET
+    # form and gave BOTH targets one shared XDG home. The helper owns all three
+    # concerns, so there is nothing left here to drift.
+    include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
+    foreach(_pz_sr_test test_shader_render_layoutloader test_shader_render_metadataloader)
+        phosphor_apply_test_isolation(${_pz_sr_test})
+        # APPEND, never a bare SET — a SET here would drop the XDG sandbox the
+        # call above just installed.
+        phosphor_append_test_environment(${_pz_sr_test} "QT_QPA_PLATFORM=offscreen")
+    endforeach()
 endif()

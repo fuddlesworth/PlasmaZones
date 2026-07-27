@@ -720,13 +720,30 @@ private Q_SLOTS:
         strategy.setPerSubdirSkip([](const QString& name) {
             return name == QLatin1String("none");
         });
+        // Capped to ONE, so "not counted against the cap" is a real assertion:
+        // if the skipped subdir consumed the single slot, the legitimate pack
+        // below could not land.
+        strategy.setMaxEntries(1);
 
-        WatchedDirectorySet set(strategy);
+        CapturingAdapter adapter(strategy);
+        WatchedDirectorySet set(adapter);
         set.registerDirectory(dir, LiveReload::Off);
 
         QCOMPARE(strategy.size(), 1);
         QVERIFY(strategy.contains(QStringLiteral("keep")));
         QVERIFY(!strategy.contains(QStringLiteral("none-pkg")));
+
+        // NEVER REACHED, not merely never registered. The watch set is this
+        // file's established proxy for "the subdir was considered" (see
+        // testCapBoundsSubdirsConsideredNotEntriesRegistered), so a skip
+        // implemented as "parse it, then discard the result" would show up here
+        // as a second watch path. Without this leg only the non-registration was
+        // pinned, and two of the three claims in the doc above were untested.
+        for (const QString& watch : adapter.lastWatches) {
+            QVERIFY2(!watch.contains(QStringLiteral("/none")),
+                     qPrintable(QStringLiteral("a skipped subdir was still reached: ") + watch));
+        }
+        QCOMPARE(adapter.lastWatches.size(), 1);
     }
 
     /// Setting the user path *after* `registerDirectories` must

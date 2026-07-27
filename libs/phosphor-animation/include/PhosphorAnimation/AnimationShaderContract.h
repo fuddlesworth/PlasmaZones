@@ -665,6 +665,24 @@ inline QString colorKey(int slot)
 /// std140 offsets) — a layout drift would surface there as a bake
 /// failure.
 
+/// The accepted texture `wrap` vocabulary, shared by every animation
+/// validation site (metadata parse in `AnimationShaderEffect::fromJson`, and
+/// runtime-override translation in `AnimationShaderRegistry`). Returns true only
+/// for the three canonical tokens `clamp` / `repeat` / `mirror`. An empty string
+/// is NOT a member — callers treat empty as "use the runtime default" and handle
+/// it explicitly before consulting this predicate.
+///
+/// Centralised here for the same reason as its surface twin
+/// (`SurfaceShaderContract::isValidWrapToken`): the vocabulary was hand-inlined
+/// at the metadata site and simply MISSING at the runtime-override site, so a
+/// typo in a shader profile was accepted, handed to `wrapStringToEnum`, and
+/// silently coerced to clamp with no diagnostic — while the same typo in
+/// metadata.json warned. Vocabulary matches the runtime normaliser.
+inline bool isValidWrapToken(const QString& wrap)
+{
+    return wrap == QLatin1String("clamp") || wrap == QLatin1String("repeat") || wrap == QLatin1String("mirror");
+}
+
 } // namespace AnimationShaderContract
 
 } // namespace PhosphorAnimationShaders

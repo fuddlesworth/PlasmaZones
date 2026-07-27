@@ -163,8 +163,18 @@ QStringList normaliseToCanonical(const QStringList& input, RegistrationOrder ord
 int WatchedDirectorySet::registerDirectories(const QStringList& directories, LiveReload liveReload,
                                              RegistrationOrder order)
 {
-    Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::registerDirectories",
-               "GUI-thread only — see class docs");
+    // Asserted AND guarded, for the same reason as `rescanNow` below and more
+    // so: this is public API (MetadataPackLoader::addSearchPaths,
+    // ScriptedAlgorithmLoader::scanAndRegister, PluginLoader::scanAndLoad all
+    // reach it), and it mutates m_directories, installs kernel watches, and then
+    // rescans — so a debug-only check would leave a release build corrupting
+    // m_entries from a worker thread. Refuses rather than crashing, because
+    // nothing destructive has happened yet at this point.
+    if (thread() != QThread::currentThread()) {
+        Q_ASSERT_X(false, "WatchedDirectorySet::registerDirectories", "GUI-thread only — see class docs");
+        qCWarning(lcWatcher) << "registerDirectories called off the owning thread; refusing";
+        return m_directories.size();
+    }
     // Empty input is a no-op — skip the rescan entirely. Callers that
     // want to force a rescan call `requestRescan()` / `rescanNow()`
     // directly; routing them here would just be an alias.
@@ -215,8 +225,12 @@ int WatchedDirectorySet::registerDirectories(const QStringList& directories, Liv
 
 int WatchedDirectorySet::setDirectories(const QStringList& directories, LiveReload liveReload, RegistrationOrder order)
 {
-    Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::setDirectories",
-               "GUI-thread only — see class docs");
+    // Asserted AND guarded — see `registerDirectories` above for the rationale.
+    if (thread() != QThread::currentThread()) {
+        Q_ASSERT_X(false, "WatchedDirectorySet::setDirectories", "GUI-thread only — see class docs");
+        qCWarning(lcWatcher) << "setDirectories called off the owning thread; refusing";
+        return m_directories.size();
+    }
 
     // Same normalisation pass as `registerDirectories` — strategies
     // always see the canonical `[lowest, ..., highest]` iteration shape
@@ -579,8 +593,14 @@ void WatchedDirectorySet::attachWatcherForDir(const QString& directory)
         // ancestor as a proxy, we can stop (direct watch is strictly
         // better and avoids duplicate rescan events when a sibling
         // file elsewhere in the parent changes).
-        if (!m_watcher->directories().contains(directory)) {
-            m_watcher->addPath(directory);
+        // `targetKey`, not the raw argument: every other piece of bookkeeping in
+        // this function (`releaseAncestorWatchFor` below, `setDirectories`'
+        // `removePath`) is keyed on the cleaned form, so using the uncleaned one
+        // here would make the invariant depend on call-site discipline. Every
+        // caller passes a cleaned string today, which is exactly why the two
+        // spellings cannot be seen to diverge.
+        if (!m_watcher->directories().contains(targetKey)) {
+            m_watcher->addPath(targetKey);
         }
         // Promotion cleanup — release the ancestor watch we recorded
         // for this target on a previous (target-not-yet-existing) call.

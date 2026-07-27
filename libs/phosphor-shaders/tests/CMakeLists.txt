@@ -18,7 +18,9 @@ function(phosphorshaders_add_test name)
     phosphor_apply_test_isolation(${name})
     # Qt requires an offscreen platform plugin when tests run under CI
     # without a display server.
-    set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace the XDG
+    # sandbox phosphor_apply_test_isolation just installed.
+    phosphor_append_test_environment(${name} "QT_QPA_PLATFORM=offscreen")
 endfunction()
 
 phosphorshaders_add_test(test_baseuniformprofile)

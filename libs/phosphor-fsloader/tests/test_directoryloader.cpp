@@ -1022,6 +1022,40 @@ private Q_SLOTS:
         QCOMPARE(sink.registry.value(QStringLiteral("doc")), std::string("v3"));
     }
 
+    /// The per-file watch, pinned by the ONE shape a directory watch cannot
+    /// produce: an IN-PLACE content rewrite.
+    ///
+    /// `testAtomicRenameSaveDetected` above cannot do this job. Both of its legs
+    /// change a directory ENTRY (a rename, then a remove-and-create), which the
+    /// directory watch reports on its own — so deleting `syncFileWatches`'
+    /// re-add for accepted paths leaves that slot green. Rewriting a file in
+    /// place changes neither the directory's entries nor its mtime, and Qt's
+    /// inotify directory watch does not subscribe to IN_MODIFY for contained
+    /// files, so `entriesChanged` here can only have come from the file watch.
+    ///
+    /// This is also the behaviour the changelog claims: editing a profile file
+    /// by hand is picked up.
+    void testInPlaceRewriteDetectedByTheFileWatch()
+    {
+        const QString target = m_tmp->filePath(QStringLiteral("doc.json"));
+        QVERIFY(writeJson(target, QStringLiteral("doc"), QStringLiteral("v1")));
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setDebounceIntervalForTest(1);
+        loader.loadFromDirectory(m_tmp->path(), LiveReload::On);
+        QCOMPARE(loader.registeredCount(), 1);
+        QCOMPARE(sink.registry.value(QStringLiteral("doc")), std::string("v1"));
+
+        // In place: same inode, same directory entry, directory mtime untouched.
+        QVERIFY(writeJson(target, QStringLiteral("doc"), QStringLiteral("v2")));
+
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+        QVERIFY2(spy.wait(2000), "an in-place rewrite fired no rescan — the per-file watch is not armed");
+        QCOMPARE(loader.registeredCount(), 1);
+        QCOMPARE(sink.registry.value(QStringLiteral("doc")), std::string("v2"));
+    }
+
 private:
     std::unique_ptr<QTemporaryDir> m_tmp;
 };

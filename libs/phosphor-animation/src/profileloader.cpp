@@ -132,6 +132,18 @@ public:
             const auto* payload = std::any_cast<Profile>(&parsed.payload);
             if (!payload) {
                 qCWarning(lcProfileLoader) << "commitBatch: payload type-mismatch for" << parsed.key;
+                // Both snapshots must forget this key, and the batch must report
+                // as changed. Skipping bare leaves the key out of `currentMap` —
+                // so `reloadFromOwner` unregisters it — while this sink still
+                // claims to track it at its old value. A later successful parse
+                // of the same key with the same value would then diff EQUAL and
+                // suppress `profilesChanged` a second time, even though the
+                // registry entry disappeared and came back. Unreachable today
+                // (parseFile always stores a Profile), but this is the only
+                // partial-failure path here and it must fail coherently.
+                m_lastCommittedPayloads.remove(parsed.key);
+                m_lastCommittedSources.remove(parsed.key);
+                lastBatchChanged = true;
                 continue;
             }
 

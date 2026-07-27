@@ -1071,6 +1071,12 @@ private Q_SLOTS:
         tree.setOverride(PhosphorAnimation::ProfilePaths::WindowMinimize, profile);
         s.setShaderProfileTree(tree);
 
+        // `>=`, deliberately, unlike the tightened counts in
+        // test_animations_shader_overrides.cpp. Three separate inputs feed the
+        // stock-suppression gate (shaderProfileTreeChanged, effectsChanged,
+        // animationsEnabledChanged), so one tree assignment may legitimately
+        // notify more than once and the exact count is NOT part of the contract.
+        // What matters is that the chip bindings are notified at all.
         QVERIFY2(spy.count() >= 1, "tree change must notify the chip bindings");
         // Minimize is owned; maximize (unassigned) is not.
         QCOMPARE(c.stockSuppressedEvents(), QStringList{PhosphorAnimation::ProfilePaths::WindowMinimize});

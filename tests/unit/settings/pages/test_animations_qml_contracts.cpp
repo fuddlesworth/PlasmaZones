@@ -95,9 +95,18 @@ private Q_SLOTS:
                 static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
                 const QString src = readFile(dirIt.next()).remove(lineCommentRe);
                 used.unite(namesUsedOn(src, QStringLiteral("animationsPage")));
+                // The alias receiver, scraped TREE-WIDE rather than only in the
+                // file that declares it. The sole alias today is RulesPage.qml's
+                // `animationsController`, and RulesPage.qml never calls anything
+                // on it — the real call sites are in ActionParamEditors.qml, via
+                // `row.appSettings.animationsController`. Scraping same-file only
+                // therefore contributed ZERO names and left three live calls
+                // (eventSections, eventLabel, availableShaderEffectsForPath)
+                // entirely unchecked, while the floor below still passed.
+                used.unite(namesUsedOn(src, QStringLiteral("animationsController")));
                 auto aliasIt = aliasRe.globalMatch(src);
                 while (aliasIt.hasNext()) {
-                    used.unite(namesUsedOn(src, aliasIt.next().captured(1)));
+                    aliasIt.next();
                     ++aliasesResolved;
                 }
             }
@@ -108,13 +117,13 @@ private Q_SLOTS:
         // means the scrape broke, not that the call sites went away.
         QVERIFY2(used.size() >= 15,
                  qPrintable(QStringLiteral("scraped only %1 animationsPage names from the QML tree").arg(used.size())));
-        // At-least-one, not the observed count: this is a non-vacuity floor for
-        // the alias leg, not a pin on how many aliases the tree happens to
-        // have. There is exactly one alias in the tree today (RulesPage.qml),
-        // so that one IS load-bearing for this check — removing it reddens the
-        // build, and the right response is to point the floor at whatever
-        // alias replaces it rather than to delete the leg.
-        QVERIFY2(aliasesResolved >= 1, "no same-file alias was resolved — the alias leg is checking nothing");
+        // At-least-one, not the observed count: a non-vacuity floor on the alias
+        // DECLARATION scrape, not a pin on how many aliases the tree has. The
+        // names reached through an alias are covered by the tree-wide
+        // `animationsController` receiver above; this counter only proves the
+        // alias regex still matches something, so that a rename of the alias
+        // property reddens the build instead of silently dropping the receiver.
+        QVERIFY2(aliasesResolved >= 1, "the alias regex matched nothing — the alias receiver name may have changed");
 
         AnimationsPageController c;
         const QMetaObject* meta = c.metaObject();
@@ -207,10 +216,16 @@ private Q_SLOTS:
         // asserted rather than assumed. Block comments are deliberately NOT
         // stripped: one could hide a statement, and the equality below would
         // then fail loudly, which is the right direction to be wrong in.
-        QVERIFY2(!arm.contains(QLatin1Char('"')) && !arm.contains(QLatin1Char('\'')) && !arm.contains(QLatin1Char('`')),
-                 "the ON arm now contains a string literal — the comment stripper below is only sound without one");
         static const QRegularExpression commentRe(QStringLiteral("//[^\\n]*"));
         QString code = QString(arm).remove(commentRe);
+        // Checked AFTER stripping, like the OFF arm's twin below. Checking BEFORE
+        // meant an ordinary apostrophe in an ON-arm comment ("the user's intent")
+        // failed the build claiming "the ON arm now contains a string literal" —
+        // a message that was simply false about the code. Post-strip, a surviving
+        // quote of any kind really can only come from a literal.
+        QVERIFY2(!code.contains(QLatin1Char('"')) && !code.contains(QLatin1Char('\''))
+                     && !code.contains(QLatin1Char('`')),
+                 "the ON arm now contains a string literal — the comment stripper above is only sound without one");
 
         // Assert what the arm IS, not which receivers it avoids. An
         // exclusion list has to enumerate every route to the controller, and
@@ -247,15 +262,12 @@ private Q_SLOTS:
         // `console.log("root._editingTiming = false")` would be counted as a
         // statement by the reset count below and fail correct code.
         //
-        // Checked AFTER stripping, unlike the ON arm's: this arm's prose
-        // legitimately contains apostrophes. The residual risk is a `//` inside
-        // a string literal, which would take the stripper past the closing
-        // quote — narrower than the case being guarded, and it fails loudly
-        // rather than silently passing.
-        // Single quotes included: this runs AFTER comment stripping, so the
-        // arm's prose apostrophes are already gone and a surviving `'` can only
-        // come from a string literal. Checking before the strip is what forced
-        // the ON arm's guard to leave them out.
+        // Checked AFTER stripping, the same way the ON arm's guard is. Both arms'
+        // prose legitimately contains apostrophes, so a pre-strip check would
+        // reject ordinary comments; post-strip, a surviving quote can only come
+        // from a literal. The residual risk is a `//` inside a string literal,
+        // which would take the stripper past the closing quote — narrower than
+        // the case being guarded, and it fails loudly rather than passing.
         QVERIFY2(!offCode.contains(QLatin1Char('"')) && !offCode.contains(QLatin1Char('\''))
                      && !offCode.contains(QLatin1Char('`')),
                  "the OFF arm now contains a string literal — the reset count below is only sound without one");

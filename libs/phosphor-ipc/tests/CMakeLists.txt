@@ -3,6 +3,11 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Test Network)
 
+# Shared test isolation: a private D-Bus session (so a test that touches D-Bus
+# cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
+# open and hangs ctest after the test itself passed) plus a per-target XDG
+# sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 function(phosphoripc_add_test name)
     add_executable(${name} ${name}.cpp)
     # Qt6::Network is propagated transitively by PhosphorIpc (PUBLIC, for
@@ -14,6 +19,7 @@ function(phosphoripc_add_test name)
             Qt6::Test
     )
     add_test(NAME ${name} COMMAND ${name} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    phosphor_apply_test_isolation(${name})
     # All suites are QTEST_GUILESS_MAIN (QCoreApplication) — no QPA platform
     # needed; even the engine test's QQmlEngine runs headless. TIMEOUT 30
     # caps ctest at 30s per binary so a hung socket test can't wedge CI.

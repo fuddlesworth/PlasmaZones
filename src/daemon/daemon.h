@@ -934,8 +934,8 @@ private:
     std::unique_ptr<PhosphorAnimation::ProfileLoader> m_profileLoader;
 
     /// Coalescing trampoline for the publish path — see
-    /// `requestAnimationProfilePublish`. Single-shot, parented to the
-    /// daemon so destruction is automatic; only its `pending` flag is
+    /// `requestAnimationProfilePublish`. Single-shot, and a VALUE member (no
+    /// QObject parent), so destruction is automatic; only its `pending` flag is
     /// used (the timeout slot fires at 0 ms regardless of when the
     /// trampoline was first armed during the current event-loop tick).
     QTimer m_animationPublishTimer;

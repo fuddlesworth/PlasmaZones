@@ -3,6 +3,11 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Test)
 
+# Shared test isolation: a private D-Bus session (so a test that touches D-Bus
+# cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
+# open and hangs ctest after the test itself passed) plus a per-target XDG
+# sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 function(_phosphorserviceidle_test target source)
     add_executable(${target} ${source})
     target_link_libraries(${target}
@@ -11,6 +16,7 @@ function(_phosphorserviceidle_test target source)
             PhosphorServiceIdle::PhosphorServiceIdle
     )
     add_test(NAME ${target} COMMAND ${target})
+    phosphor_apply_test_isolation(${target})
     # All suites are QTEST_GUILESS_MAIN (QCoreApplication) — no QPA platform
     # is loaded, so no offscreen ENVIRONMENT is needed.
     set_tests_properties(${target}
@@ -47,6 +53,7 @@ target_include_directories(test_phosphorserviceidle_statemachine
 )
 target_link_libraries(test_phosphorserviceidle_statemachine PRIVATE Qt6::Test)
 add_test(NAME test_phosphorserviceidle_statemachine COMMAND test_phosphorserviceidle_statemachine)
+phosphor_apply_test_isolation(test_phosphorserviceidle_statemachine)
 set_tests_properties(test_phosphorserviceidle_statemachine
     PROPERTIES
         LABELS "phosphorserviceidle"
@@ -63,6 +70,7 @@ target_include_directories(test_phosphorserviceidle_inhibition
 )
 target_link_libraries(test_phosphorserviceidle_inhibition PRIVATE Qt6::Test)
 add_test(NAME test_phosphorserviceidle_inhibition COMMAND test_phosphorserviceidle_inhibition)
+phosphor_apply_test_isolation(test_phosphorserviceidle_inhibition)
 set_tests_properties(test_phosphorserviceidle_inhibition
     PROPERTIES
         LABELS "phosphorserviceidle"

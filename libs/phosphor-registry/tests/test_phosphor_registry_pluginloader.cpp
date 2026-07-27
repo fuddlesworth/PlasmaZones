@@ -392,11 +392,26 @@ void TestPluginLoader::warnsOnceForMultipleSoFilesThenLoads()
     QCOMPARE(registry.size(), 1);
     QCOMPARE(loader.loadedPluginIds(), QStringList{QStringLiteral("fake-plugin")});
 
-    // Second rescan: the plugin is already loaded, so the directory is
-    // skipped and the advisory does NOT re-fire (a re-fire would trip an
-    // unexpected-message failure here).
-    loader.rescanNow();
+    // Second rescan: the plugin is already loaded, so the directory is skipped
+    // and the advisory does NOT re-fire.
+    //
+    // CAPTURED, not merely left unmentioned. Qt Test does not fail a slot for an
+    // unexpected `qWarning` — that needs `QTest::failOnWarning()`, which this repo
+    // does not use anywhere — so the earlier "a re-fire would trip an
+    // unexpected-message failure here" was false and this leg pinned nothing:
+    // deleting the warn-once latch left the slot green. The sibling
+    // `rejectsSymlinkedSubdirEscapingRoot` already uses WarningCapture for
+    // exactly this.
+    QStringList rescanWarnings;
+    {
+        WarningCapture capture(rescanWarnings);
+        loader.rescanNow();
+    }
     QCOMPARE(registry.size(), 1);
+    for (const QString& warning : rescanWarnings) {
+        QVERIFY2(!warning.contains(QStringLiteral("contains 2 .so files")),
+                 qPrintable(QStringLiteral("the multi-.so advisory re-fired on rescan: ") + warning));
+    }
 }
 
 void TestPluginLoader::multipleSoFailureStillReportsFailureReason()

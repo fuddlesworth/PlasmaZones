@@ -59,6 +59,9 @@ hand-rolling.
 | `PhosphorFsLoader::ParsedEntry`                   | Parse-result value type with source-path metadata and `std::any` payload |
 | `PhosphorFsLoader::MetadataPackScanStrategy<P>`   | Subdirectory-with-`metadata.json` strategy |
 | `PhosphorFsLoader::validateJsonEnvelope`          | Shared `"name"`-field envelope validator returning a `JsonEnvelope` |
+| `PhosphorFsLoader::resolveWithinDirectory`        | Containment guard: resolves a declared path against a directory and refuses anything landing outside it |
+| `PhosphorFsLoader::AbsolutePathPolicy`            | Whether an already-absolute declared path is refused (pack-declared) or trusted (user-chosen at runtime) |
+| `PhosphorFsLoader::SchemaValidator`               | JSON-Schema gate applied to a pack's `metadata.json` before it is parsed |
 
 ## Typical use
 
@@ -131,6 +134,14 @@ registry.refresh();
   the target doesn't exist yet, so fresh installs that create the
   user-data dir later still pick up edits without a restart). `LiveReload::Off`
   disables it for tests.
+- **Path containment is one shared function.** Every pack parser that resolves a
+  declared path routes through `resolveWithinDirectory`. There is exactly one
+  correct way to write that check: `QDir::filePath` returns an absolute argument
+  unchanged and never normalises `..`, a lexical compare cannot see a symlinked
+  component, and canonicalisation returns empty for a leaf that does not exist
+  yet, which is the ordinary live-reload case. The guard canonicalises the
+  deepest EXISTING ancestor and re-appends the missing tail, so the two domains
+  are never mixed, and it fails closed when nothing on the chain exists.
 - **`commitBatch` is the one mutation point.** The sink only touches
   its target registry inside `commitBatch`, so bulk signals (e.g. a
   QML `reloadAll`) coalesce to one emit per scan.
