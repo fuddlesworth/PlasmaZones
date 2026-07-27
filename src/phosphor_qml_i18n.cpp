@@ -63,14 +63,27 @@ QString PhosphorLocalizedContext::i18nc(const QString& context, const QString& t
 
 QString PhosphorLocalizedContext::i18np(const QString& singular, const QString& plural, int n) const
 {
-    // Qt numerus translation only works with loaded .ts files.
-    // Without them, translate() always returns the singular with %n replaced.
-    // We select the correct English form ourselves, then substitute %n.
-    const QString& form = (n == 1) ? singular : plural;
-    QString result = QCoreApplication::translate("plasmazones", form.toUtf8().constData(), nullptr, n);
-    // translate() replaces %n when numerus arg is provided, but guard against
-    // cases where it doesn't (e.g. if the string was found in a .ts file
-    // without numerusform entries)
+    // The SINGULAR is always the catalog key: lupdate indexes the numerus
+    // message under it, and translate() with a numerus arg picks the right
+    // numerusform via the target language's plural rules. Pre-selecting the
+    // English form here made every n != 1 lookup miss the catalog entirely
+    // (the plural text is not a key), so the second numerusform was
+    // unreachable in every language.
+    // Probe WITHOUT the numerus arg first: translate() with a numerus arg
+    // substitutes %n into the source text even when no translator is
+    // installed, so the numerus result can never be compared against the
+    // source to detect a catalog miss.
+    const QByteArray key = singular.toUtf8();
+    const QString probe = QCoreApplication::translate("plasmazones", key.constData());
+    if (probe == singular) {
+        // Catalog miss (or untranslated entry): English form selection.
+        QString result = (n == 1) ? singular : plural;
+        result.replace(QLatin1String("%n"), QString::number(n));
+        return result;
+    }
+    QString result = QCoreApplication::translate("plasmazones", key.constData(), nullptr, n);
+    // translate() replaces %n when a numerus arg is provided, but guard
+    // against a .ts entry without numerusform.
     if (result.contains(QLatin1String("%n"))) {
         result.replace(QLatin1String("%n"), QString::number(n));
     }
@@ -80,9 +93,16 @@ QString PhosphorLocalizedContext::i18np(const QString& singular, const QString& 
 QString PhosphorLocalizedContext::i18ncp(const QString& context, const QString& singular, const QString& plural,
                                          int n) const
 {
-    const QString& form = (n == 1) ? singular : plural;
-    QString result =
-        QCoreApplication::translate("plasmazones", form.toUtf8().constData(), context.toUtf8().constData(), n);
+    // Same key + probe contract as i18np above.
+    const QByteArray key = singular.toUtf8();
+    const QByteArray ctx = context.toUtf8();
+    const QString probe = QCoreApplication::translate("plasmazones", key.constData(), ctx.constData());
+    if (probe == singular) {
+        QString result = (n == 1) ? singular : plural;
+        result.replace(QLatin1String("%n"), QString::number(n));
+        return result;
+    }
+    QString result = QCoreApplication::translate("plasmazones", key.constData(), ctx.constData(), n);
     if (result.contains(QLatin1String("%n"))) {
         result.replace(QLatin1String("%n"), QString::number(n));
     }

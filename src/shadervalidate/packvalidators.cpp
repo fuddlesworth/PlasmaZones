@@ -60,12 +60,13 @@ int validatePack(const QString& packDir, QTextStream& out)
     }
 
     // The `fragmentShader` / `bufferShaders` / `vertexShader` paths come from
-    // the user-editable metadata.json (parsePackMetadata resolves them against
-    // the pack dir without confinement), so confine each to the pack dir before
-    // it is opened and fed to glslang — the same guard the animation and
-    // surface validators apply. Zone packs have no `builtin:` buffer tokens
-    // (that resolver is surface-only), so every path must stay inside the pack.
-    // An empty path is left as-is (that stage is simply absent).
+    // the user-editable metadata.json. parsePackMetadata already confines them
+    // to the pack dir (resolveWithinPack), so this re-check is belt-and-braces
+    // defense in depth before each path is opened and fed to glslang — the
+    // same guard the animation and surface validators apply. Zone packs have
+    // no `builtin:` buffer tokens (that resolver is surface-only), so every
+    // path must stay inside the pack. An empty path is left as-is (that stage
+    // is simply absent).
     const auto confineToPack = [&packDir](QString& path) {
         return confinePackPathInPlace(packDir, path);
     };

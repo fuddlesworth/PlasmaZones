@@ -25,7 +25,7 @@ function(phosphorcontrol_add_test name)
             Qt6::DBus
             Qt6::Test
     )
-    # LABELS lets `ctest -L phosphor-control` filter to just this
+    # LABELS lets `ctest -L phosphorcontrol` filter to just this
     # lib's tests in a workspace that runs many ctest suites.
     add_test(NAME ${name} COMMAND ${name})
     phosphor_apply_test_isolation(${name})
@@ -34,7 +34,7 @@ function(phosphorcontrol_add_test name)
     # sandbox `phosphor_apply_test_isolation` just installed.
     phosphor_append_test_environment(${name} "QT_QPA_PLATFORM=offscreen")
     set_tests_properties(${name} PROPERTIES
-        LABELS "phosphor-control"
+        LABELS "phosphorcontrol"
     )
 endfunction()
 

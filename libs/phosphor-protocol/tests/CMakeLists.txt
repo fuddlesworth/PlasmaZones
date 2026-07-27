@@ -20,3 +20,7 @@ target_link_libraries(test_phosphorprotocol
 
 add_test(NAME test_phosphorprotocol COMMAND test_phosphorprotocol)
 phosphor_apply_test_isolation(test_phosphorprotocol)
+set_property(TEST test_phosphorprotocol APPEND PROPERTY LABELS "phosphorprotocol")
+# No QT_QPA_PLATFORM=offscreen here, unlike most sibling lib tests:
+# QTEST_GUILESS_MAIN runs on a QCoreApplication, so no platform plugin is
+# ever loaded and headless runs need no help.

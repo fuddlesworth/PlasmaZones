@@ -298,7 +298,7 @@ Item {
             const s = CurvePresets.parseSpring(curve);
             return i18n("Spring · ω=%1 · ζ=%2", s.omega.toFixed(1), s.zeta.toFixed(2));
         }
-        return i18n("%1 · %2 ms", CurvePresets.curveDisplayName(curve), Math.round(dur));
+        return i18nc("curve, then duration in milliseconds", "%1 · %2 ms", CurvePresets.curveDisplayName(curve), Math.round(dur));
     }
 
     function parentChainText() {

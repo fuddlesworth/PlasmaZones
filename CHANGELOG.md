@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **The curve revert link names the field it reverts**: it now reads "Revert curve to inherited", matching the duration link beside it, and the curve editor is titled `Customize curve for <event>` (or just `Customize curve` where there is no single event to name). The spring Speed and Damping ratio hints are worded as sentences instead of comparison operators ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **The curve revert link names the field it reverts**: it now reads "Revert curve to inherited", matching the duration link beside it, and the curve editor is titled `Customize curve for <event>` (or just `Customize curve` where there is no single event to name). The spring Speed and Damping ratio hints are worded as sentences instead of comparison operators. The editor's save action is now spelled "Save as preset…" everywhere, a built-in preset row gained a "Use as default" action, and the settings app shows a short notice when an edit is refused during a discard or when some overrides could not be reverted ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
 
 ### Fixed
 

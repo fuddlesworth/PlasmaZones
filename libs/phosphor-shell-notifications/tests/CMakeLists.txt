@@ -38,5 +38,5 @@ add_test(
     COMMAND test_phosphor_shell_notifications -input ${CMAKE_CURRENT_SOURCE_DIR}
 )
 phosphor_apply_test_isolation(test_phosphor_shell_notifications)
-
+set_property(TEST test_phosphor_shell_notifications APPEND PROPERTY LABELS "phosphorshellnotifications")
 phosphor_append_test_environment(test_phosphor_shell_notifications "QT_QPA_PLATFORM=offscreen")

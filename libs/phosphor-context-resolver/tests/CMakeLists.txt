@@ -22,3 +22,7 @@ set_target_properties(test_contextresolver PROPERTIES
 add_test(NAME PhosphorContext::ContextResolver COMMAND test_contextresolver)
 # The test name is not the target name here, so both are passed.
 phosphor_apply_test_isolation(test_contextresolver PhosphorContext::ContextResolver)
+set_property(TEST PhosphorContext::ContextResolver APPEND PROPERTY LABELS "phosphorcontextresolver")
+# No QT_QPA_PLATFORM=offscreen here, unlike most sibling lib tests:
+# QTEST_GUILESS_MAIN runs on a QCoreApplication, so no platform plugin is
+# ever loaded and headless runs need no help.

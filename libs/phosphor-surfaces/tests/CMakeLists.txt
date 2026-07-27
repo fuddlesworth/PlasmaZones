@@ -21,4 +21,5 @@ target_link_libraries(test_phosphorsurfaces
 
 add_test(NAME test_phosphorsurfaces COMMAND test_phosphorsurfaces)
 phosphor_apply_test_isolation(test_phosphorsurfaces)
+set_property(TEST test_phosphorsurfaces APPEND PROPERTY LABELS "phosphorsurfaces")
 phosphor_append_test_environment(test_phosphorsurfaces "QT_QPA_PLATFORM=offscreen")

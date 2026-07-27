@@ -40,7 +40,7 @@ function(pl_add_test _name)
     # APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
     # ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
     # sandbox `phosphor_apply_test_isolation` just installed.
-    phosphor_append_test_environment(${_name} "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphorlayer.debug=false")
+    phosphor_append_test_environment(${_name} "QT_QPA_PLATFORM=offscreen" "QT_LOGGING_RULES=phosphorlayer.debug=false")
     set_tests_properties(${_name} PROPERTIES
         LABELS "phosphorlayer"
     )

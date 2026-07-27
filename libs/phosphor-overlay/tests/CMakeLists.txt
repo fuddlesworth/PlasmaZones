@@ -20,4 +20,5 @@ target_link_libraries(test_overlay_smoke
 
 add_test(NAME test_overlay_smoke COMMAND test_overlay_smoke)
 phosphor_apply_test_isolation(test_overlay_smoke)
+set_property(TEST test_overlay_smoke APPEND PROPERTY LABELS "phosphoroverlay")
 phosphor_append_test_environment(test_overlay_smoke "QT_QPA_PLATFORM=offscreen")

@@ -19,6 +19,7 @@ function(phosphorconfig_add_test name)
     )
     add_test(NAME ${name} COMMAND ${name})
     phosphor_apply_test_isolation(${name})
+    set_property(TEST ${name} APPEND PROPERTY LABELS "phosphorconfig")
     # Qt requires an offscreen platform plugin when tests run under CI
     # without a display server. The parent project installs a global
     # environment hook that sets this; duplicate it here for standalone
