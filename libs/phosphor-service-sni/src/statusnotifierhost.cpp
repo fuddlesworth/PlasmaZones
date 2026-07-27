@@ -11,7 +11,7 @@
 #include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
-#include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
@@ -176,13 +176,26 @@ void StatusNotifierHost::Private::registerHost()
     // Tell whichever process owns the Watcher service that we're a
     // host. Async; if the Watcher isn't up yet, the NameOwnerChanged
     // wire (below) will retry once it appears.
-    QDBusInterface watcherIface(kWatcherService(), kWatcherPath(), kWatcherInterface(), bus);
+    //
+    // Presence is checked against the BUS DAEMON, not by constructing a
+    // QDBusInterface. `QDBusInterface`'s constructor performs a BLOCKING
+    // introspection call to the target service, so when the watcher is absent it
+    // stalls this thread for the full D-Bus reply timeout (25 s) before
+    // `isValid()` can report false — on the GUI thread of whatever hosts the
+    // tray. That is reachable on a real desktop every time the watcher is
+    // briefly gone (a Plasma restart), not just under test. `isServiceRegistered`
+    // asks the bus daemon, which is always present and answers immediately, and
+    // the call below is built as a plain message so nothing introspects at all.
+    const bool watcherPresent =
+        bus.interface() != nullptr && bus.interface()->isServiceRegistered(kWatcherService()).value();
     if (isFirstRegistration) {
-        qCInfo(lcSniHost) << "host name registered:" << hostServiceName << "watcher iface valid?"
-                          << watcherIface.isValid();
+        qCInfo(lcSniHost) << "host name registered:" << hostServiceName << "watcher present?" << watcherPresent;
     }
-    if (watcherIface.isValid()) {
-        watcherIface.asyncCall(QStringLiteral("RegisterStatusNotifierHost"), hostServiceName);
+    if (watcherPresent) {
+        QDBusMessage registerCall = QDBusMessage::createMethodCall(
+            kWatcherService(), kWatcherPath(), kWatcherInterface(), QStringLiteral("RegisterStatusNotifierHost"));
+        registerCall << hostServiceName;
+        bus.asyncCall(registerCall);
         seedExistingItems();
     } else if (!isFirstRegistration) {
         // Deferred-retry path: the watcher disappeared between our
