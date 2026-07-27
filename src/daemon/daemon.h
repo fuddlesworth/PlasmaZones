@@ -1131,9 +1131,12 @@ private:
     /// animation/surface registries which are recreated each init).
     QMetaObject::Connection m_zoneWarmBakeConnection;
     /// Skip-unchanged gate for the warm bakes: "<category>:<id>" → last
-    /// scheduled fingerprint (vert + frag + param preamble). The bake cache
-    /// is keyed on that same content, so re-queuing an unchanged pack on a
-    /// whole-catalog registry emit is pure wasted pool work.
+    /// scheduled fingerprint (vert path + vert mtime + frag path + frag mtime +
+    /// param preamble). The fingerprint is built as a SUPERSET of the real bake
+    /// cache key (ShaderNodeRhi::shaderCacheKey, which also folds the file
+    /// mtimes in), so an unchanged pack is skipped on a whole-catalog registry
+    /// emit while a pack whose .frag/.vert body was edited re-warms — the paths
+    /// alone would stay identical across such an edit and wrongly suppress it.
     QHash<QString, QString> m_scheduledBakeFingerprints;
 
     // Geometry update debouncing to prevent cascade of redundant recalculations

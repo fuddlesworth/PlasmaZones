@@ -418,11 +418,44 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     }
 
     // Presets
+    //
+    // Image-typed preset values are pack-declared paths, exactly like an image
+    // param's `default`, and must be containment-checked at parse time with the
+    // same Reject policy. They cannot be trusted at translate time: a preset
+    // reaches `translateParamsToUniforms` through `storedParams` (the user picked
+    // the preset), so the provenance heuristic there (`storedParams.contains(id)`
+    // → Trust) would wave a pack-manufactured `"tex": "/home/user/.ssh/id_rsa"`
+    // straight through — the very escape the `default` path already closes. Gate
+    // it here, where the value's true (pack) provenance is known.
+    QSet<QString> imageParamIds;
+    for (const ShaderRegistry::ParameterInfo& p : std::as_const(info.parameters)) {
+        if (p.type == QLatin1String("image")) {
+            imageParamIds.insert(p.id);
+        }
+    }
     const QJsonObject presetsObj = root.value(QLatin1String("presets")).toObject();
     for (auto it = presetsObj.begin(); it != presetsObj.end(); ++it) {
         const QJsonObject values = it.value().toObject();
         QVariantMap presetValues;
         for (auto vit = values.begin(); vit != values.end(); ++vit) {
+            if (imageParamIds.contains(vit.key())) {
+                const QString declared = vit.value().toVariant().toString();
+                if (declared.isEmpty()) {
+                    // Empty = "no texture" for this slot; carry through.
+                    presetValues[vit.key()] = QString();
+                    continue;
+                }
+                // Reject, like every other pack-declared path: an absolute or
+                // escaping preset texture is a mistake or an attack, never
+                // legitimate. A refused value is dropped from the preset so it
+                // falls back to the param's default rather than binding an
+                // arbitrary file.
+                const QString resolved = resolveWithinPack(dir, declared, PhosphorFsLoader::AbsolutePathPolicy::Reject);
+                if (!resolved.isEmpty()) {
+                    presetValues[vit.key()] = resolved;
+                }
+                continue;
+            }
             presetValues[vit.key()] = vit.value().toVariant();
         }
         if (!presetValues.isEmpty()) {

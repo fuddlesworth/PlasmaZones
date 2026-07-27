@@ -125,9 +125,8 @@ void Daemon::setupShaderWarmBakes()
     }
 
     // Skip-unchanged gate shared by all three categories below. A registry
-    // emit reports the whole catalog, but the bake cache is keyed on content
-    // (paths + preambles), so re-queuing a pack whose key inputs are
-    // unchanged is pure wasted work on the single-threaded pool — one user
+    // emit reports the whole catalog, but re-queuing a pack whose bake inputs
+    // are unchanged is pure wasted work on the single-threaded pool — one user
     // pack edit used to re-queue N bakes, and any UI listening to the zone
     // path's started/finished relays saw the entire catalog flip to
     // "compiling" on every one-file change. Returns true when the entry was
@@ -142,12 +141,29 @@ void Daemon::setupShaderWarmBakes()
         return true;
     };
 
+    // Build the dedup fingerprint so it is a SUPERSET of the real bake-cache
+    // key (ShaderNodeRhi::shaderCacheKey). That key folds each source file's
+    // last-modified time in alongside its path, so a fingerprint of paths +
+    // preamble alone stays byte-identical when a user edits a pack's .frag or
+    // .vert body: the cache key moves (mtime changed) but the dedup did not,
+    // so the warm bake was skipped and the next live paint compiled
+    // synchronously on the render thread — the exact stall warm baking exists
+    // to prevent. Folding the mtimes in also re-warms after a failed bake is
+    // fixed (the fix bumps the file's mtime) rather than remembering the stale
+    // failure for the process lifetime.
+    const auto bakeFingerprint = [](const QString& vertPath, const QString& fragPath, const QString& preamble) {
+        const qint64 vertMtime = QFileInfo(vertPath).lastModified().toMSecsSinceEpoch();
+        const qint64 fragMtime = QFileInfo(fragPath).lastModified().toMSecsSinceEpoch();
+        return vertPath + QLatin1Char('\n') + QString::number(vertMtime) + QLatin1Char('\n') + fragPath
+            + QLatin1Char('\n') + QString::number(fragMtime) + QLatin1Char('\n') + preamble;
+    };
+
     // Warm cached shader bakes on every registry refresh so overlay paints
     // never block the GUI thread waiting for qsb. m_shaderRegistry itself
     // is constructed in the ctor init list (before m_overlayService, which
     // borrows it).
     auto scheduleWarmForShader =
-        [this, shouldScheduleBake,
+        [this, shouldScheduleBake, bakeFingerprint,
          registryPtr = QPointer<ShaderRegistry>(m_shaderRegistry.get())](const ShaderRegistry::ShaderInfo& info) {
             if (ShaderRegistry::isNoneShader(info.id) || !info.isValid()) {
                 return;
@@ -176,8 +192,7 @@ void Daemon::setupShaderWarmBakes()
             // part of the skip-unchanged fingerprint.
             const QString paramPreamble = ShaderRegistry::paramPreamble(info);
             if (!shouldScheduleBake(QStringLiteral("zone:") + shaderId,
-                                    zoneVertPath + QLatin1Char('\n') + info.sourcePath + QLatin1Char('\n')
-                                        + paramPreamble)) {
+                                    bakeFingerprint(zoneVertPath, info.sourcePath, paramPreamble))) {
                 return;
             }
             auto* watcher = new QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>(this);
@@ -265,7 +280,7 @@ void Daemon::setupShaderWarmBakes()
     // because stop() resets both (lifecycle.cpp), and a caller reaching this
     // function outside that ordering must skip rather than crash.
     if (m_animationShaderRegistry) {
-        auto scheduleWarmForAnimEffect = [this, shouldScheduleBake,
+        auto scheduleWarmForAnimEffect = [this, shouldScheduleBake, bakeFingerprint,
                                           registryPtr = QPointer<PhosphorAnimationShaders::AnimationShaderRegistry>(
                                               m_animationShaderRegistry.get())](
                                              const PhosphorAnimationShaders::AnimationShaderEffect& info) {
@@ -310,8 +325,7 @@ void Daemon::setupShaderWarmBakes()
             // captured by value into the bake-thread lambda.
             const QString paramPreamble = PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(info);
             if (!shouldScheduleBake(QStringLiteral("anim:") + effectId,
-                                    vertPath + QLatin1Char('\n') + info.fragmentShaderPath + QLatin1Char('\n')
-                                        + paramPreamble)) {
+                                    bakeFingerprint(vertPath, info.fragmentShaderPath, paramPreamble))) {
                 return;
             }
             // T1.5: warm-bake with the same entry-point scaffold SurfaceAnimator
@@ -371,7 +385,7 @@ void Daemon::setupShaderWarmBakes()
     // path would error on it too, so there is nothing to warm.
     if (m_surfaceShaderRegistry) {
         auto scheduleWarmForSurfaceEffect =
-            [this, shouldScheduleBake,
+            [this, shouldScheduleBake, bakeFingerprint,
              registryPtr = QPointer<PhosphorSurfaceShaders::SurfaceShaderRegistry>(m_surfaceShaderRegistry.get())](
                 const PhosphorSurfaceShaders::SurfaceShaderEffect& info) {
                 if (!info.isValid() || info.fragmentShaderPath.isEmpty() || !QFile::exists(info.fragmentShaderPath)) {
@@ -423,8 +437,7 @@ void Daemon::setupShaderWarmBakes()
                 const QString effectId = info.id;
                 const QString paramPreamble = PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(info);
                 if (!shouldScheduleBake(QStringLiteral("surface:") + effectId,
-                                        vertPath + QLatin1Char('\n') + info.fragmentShaderPath + QLatin1Char('\n')
-                                            + paramPreamble)) {
+                                        bakeFingerprint(vertPath, info.fragmentShaderPath, paramPreamble))) {
                     return;
                 }
                 // Bake WITH the same fragment entry-point scaffold the live loader
