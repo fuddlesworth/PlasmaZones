@@ -176,7 +176,8 @@ SettingsFlickable {
                             // carry no duration today, so this renders the
                             // bare curve — but a future duration-bearing
                             // built-in cannot silently diverge.
-                            text: root._usableDuration(modelData.duration) > 0 ? i18nc("curve, then duration in milliseconds", "%1 · %2 ms", modelData.curve, root._usableDuration(modelData.duration)) : modelData.curve
+                            readonly property int usableDuration: root._usableDuration(modelData.duration)
+                            text: usableDuration > 0 ? i18nc("curve, then duration in milliseconds", "%1 · %2 ms", modelData.curve, usableDuration) : modelData.curve
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
                         }
@@ -215,7 +216,7 @@ SettingsFlickable {
 
                         Label {
                             Layout.fillWidth: true
-                            text: i18n("★ %1", modelData.name)
+                            text: "★ " + modelData.name
                             color: Kirigami.Theme.textColor
                         }
 
@@ -345,7 +346,7 @@ SettingsFlickable {
 
                         Label {
                             Layout.fillWidth: true
-                            text: i18n("★ %1", modelData.name)
+                            text: "★ " + modelData.name
                             color: Kirigami.Theme.textColor
                         }
 

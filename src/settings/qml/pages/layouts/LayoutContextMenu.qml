@@ -274,8 +274,6 @@ Menu {
     }
 
     MenuSeparator {
-        id: screenSeparator
-
         visible: layoutContextMenu._cachedScreens.length > 0
     }
 

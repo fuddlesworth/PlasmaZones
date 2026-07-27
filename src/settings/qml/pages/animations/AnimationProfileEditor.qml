@@ -253,7 +253,7 @@ ColumnLayout {
         }
         var idx = CurvePresets.findIndices(easingCurve);
         if (idx.styleIndex >= 0)
-            return CurvePresets.easingStyles[idx.styleIndex].label + " · " + CurvePresets.easingDirections[idx.dirIndex].label;
+            return i18nc("easing style, then direction", "%1 · %2", CurvePresets.easingStyles[idx.styleIndex].label, CurvePresets.easingDirections[idx.dirIndex].label);
 
         return i18n("Easing · Custom");
     }
@@ -441,6 +441,10 @@ ColumnLayout {
                 // as CONSTANT props) rather than the literal 50 / 2000 — those
                 // are PhosphorAnimation::Limits::Min/MaxAnimationDurationMs and
                 // must not be re-typed here where they can silently drift.
+                // These are GLOBAL app limits, not per-profile or per-scope
+                // state, so the app-wide settingsController.generalPage is the
+                // correct source — there is no context-local controller to
+                // prefer, unlike the per-scope appSettings cards elsewhere.
                 from: settingsController.generalPage.animationDurationMin
                 to: settingsController.generalPage.animationDurationMax
                 stepSize: 10
@@ -611,6 +615,10 @@ ColumnLayout {
         clip: true
         opacity: effectiveExpanded ? 1 : 0
         visible: Layout.preferredHeight > 0 || opacity > 0
+        // Non-interactive the instant it starts collapsing, not when the ramp
+        // finishes: without this a click lands on the fading body during the
+        // collapse animation while it is still visible but on its way out.
+        enabled: effectiveExpanded
 
         Behavior on Layout.preferredHeight {
             PhosphorMotionAnimation {

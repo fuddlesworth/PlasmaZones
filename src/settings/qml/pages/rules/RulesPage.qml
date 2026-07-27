@@ -41,9 +41,7 @@ SettingsFlickable {
     /// — read by Main.qml's `_navShortcutsEnabled` guard so Ctrl+PgUp /
     /// Ctrl+PgDown can't drag the user off the page while they have an
     /// unsaved rule edit, picker selection, or force-save prompt open.
-    /// `forceSaveConfirm` lives below mainCol and binds back through
-    /// `_forceSaveConfirmOpen` to avoid a forward reference here. The
-    /// `onAnyModalOpenChanged` handler republishes the value into the
+    /// The `onAnyModalOpenChanged` handler republishes the value into the
     /// chrome-level `window._pageOwnedModalOpen` flag that Main.qml's
     /// nav-shortcut guard reads (the framework's PageHost Loader keeps
     /// the page item private, so a direct binding can't reach it).
@@ -51,12 +49,12 @@ SettingsFlickable {
     // transition finishes and false at the START of the exit transition, so
     // the nav-shortcut guard had a live window at both edges of an animating
     // modal. visible covers the whole popup lifetime (the spelling
-    // ConfirmDialogs.qml already uses for the same predicate).
-    readonly property bool anyModalOpen: addRuleWizard.visible || windowPickerDialog.visible || ruleEditorSheet.visible || colorParamDialog.visible || curveParamDialog.visible || page._forceSaveConfirmOpen
-    /// Internal bridge updated by `forceSaveConfirm.onVisibleChanged` so
-    /// `anyModalOpen` can read it without forward-referencing an id that
-    /// is declared further down in the file.
-    property bool _forceSaveConfirmOpen: false
+    // ConfirmDialogs.qml already uses for the same predicate). forceSaveConfirm
+    // is read directly: it is a plain nested id in this same component, so the
+    // reference resolves regardless of lexical order — no bridge needed, and
+    // reading .visible here (not the old onOpened/onClosed bridge) closes the
+    // same transition-edge gap the note above describes.
+    readonly property bool anyModalOpen: addRuleWizard.visible || windowPickerDialog.visible || ruleEditorSheet.visible || colorParamDialog.visible || curveParamDialog.visible || forceSaveConfirm.visible
 
     onAnyModalOpenChanged: {
         // Defensive truthy-check: this page can be hosted by consumers
@@ -186,7 +184,7 @@ SettingsFlickable {
     /// into filteredRules re-ran all of that on every search KEYSTROKE and
     /// filter toggle. Filtering the cached array is the cheap half.
     readonly property var _rulesSnapshot: {
-        var rev = page.modelRevision;
+        void (page.modelRevision); // touch to re-run on every rebuild
         return page.controller.rulesSnapshot();
     }
     readonly property var filteredRules: {
@@ -460,14 +458,9 @@ SettingsFlickable {
         Kirigami.PromptDialog {
             id: forceSaveConfirm
 
-            // Bridge open-state to page-level `_forceSaveConfirmOpen` so
-            // Main.qml's `_navShortcutsEnabled` can include this dialog
-            // in its modal-open guard. Forward-reference avoidance: the
-            // `anyModalOpen` binding is declared at the top of the file
-            // and `forceSaveConfirm` is nested several scopes deep, so a
-            // direct id reference up there is brittle.
-            onOpened: page._forceSaveConfirmOpen = true
-            onClosed: page._forceSaveConfirmOpen = false
+            // Included in page.anyModalOpen (top of file) via a direct
+            // `forceSaveConfirm.visible` read — no open-state bridge, since the
+            // id resolves across plain nesting within this component.
             title: i18n("Overwrite daemon-side changes?")
             subtitle: i18n("Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.")
             standardButtons: Kirigami.Dialog.NoButton
@@ -507,7 +500,7 @@ SettingsFlickable {
             // counter. See the `Connections { target: settingsController }`
             // above for the bump points.
             tiles: {
-                let _rev = page.tilesRevision;
+                void (page.tilesRevision); // touch to re-run when the monitor lists change
                 return page.controller.monitorOverview(settingsController.screens);
             }
             selectedScreenId: page.monitorFilter
