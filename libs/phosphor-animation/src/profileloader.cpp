@@ -243,6 +243,15 @@ ProfileLoader::ProfileLoader(PhosphorProfileRegistry& registry, CurveRegistry& c
 
 ProfileLoader::~ProfileLoader()
 {
+    // Sever the entriesChanged wire FIRST: clearOwner below emits the
+    // registry's profileChanged synchronously, and a consumer slot that
+    // reacted by calling rescanNow() would re-enter commitBatch →
+    // reloadFromOwner on a half-destroyed loader and RE-REGISTER the very
+    // entries this destructor exists to remove (the test suite defends its
+    // own slots against this with a scope guard; production consumers get
+    // the guarantee here instead).
+    disconnect(m_loader.get(), nullptr, this, nullptr);
+    m_destroying = true;
     // Clean up any registry entries we own so a process hosting multiple
     // sequential loaders (tests, especially) doesn't accumulate ghosts
     // from destroyed loaders.
@@ -297,11 +306,20 @@ QString ProfileLoader::ownerTag() const
 
 void ProfileLoader::requestRescan()
 {
+    if (m_destroying) {
+        return;
+    }
     m_loader->requestRescan();
 }
 
 void ProfileLoader::rescanNow()
 {
+    // Guarded (like requestRescan) so a call re-entering during the
+    // destructor's clearOwner emission cannot re-register the entries the
+    // teardown just removed.
+    if (m_destroying) {
+        return;
+    }
     m_loader->rescanNow();
 }
 

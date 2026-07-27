@@ -52,12 +52,20 @@ Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
 /// validateTexturePathWithinEffectDir docstring), and a path that
 /// cleanPath has reduced to absolute is no different from one the
 /// caller supplied as absolute directly.
+/// Function-local static so the pattern compiles once, not on every call —
+/// this guard runs per texture slot per runtime override translation.
+const QRegularExpression& traversalSeparators()
+{
+    static const QRegularExpression kSeparators(QStringLiteral("[/\\\\]"));
+    return kSeparators;
+}
+
 bool pathHasNoTraversalSegments(const QString& rawPath)
 {
     if (rawPath.isEmpty())
         return true;
     const QString cleaned = QDir::cleanPath(rawPath);
-    const QStringList segments = cleaned.split(QRegularExpression(QStringLiteral("[/\\\\]")), Qt::SkipEmptyParts);
+    const QStringList segments = cleaned.split(traversalSeparators(), Qt::SkipEmptyParts);
     for (const QString& seg : segments) {
         if (seg == QLatin1String("..")) {
             return false;
@@ -336,6 +344,11 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     if (!e.isMultipass) {
         e.bufferWraps.clear();
         e.bufferFilters.clear();
+        // The SINGULAR pair is the all-buffers default and is equally
+        // orphaned on a zero-buffer effect — leaving it engaged survives
+        // toJson and operator== for a setting nothing can consume.
+        e.bufferWrap.clear();
+        e.bufferFilter.clear();
     }
 
     return e;

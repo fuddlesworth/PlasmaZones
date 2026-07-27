@@ -337,7 +337,7 @@ inline constexpr const char* kIAnchorSize = "iAnchorSize";
 /// collapses to (0, 0) only when the expanded geometry equals the frame
 /// (an undecorated, shadowless window). Shaders MUST apply the
 /// anchor-space remap (`anchorRemap` in anchor_remap.glsl) on both
-/// runtimes; `tests/unit/ui/test_anchor_uniforms.cpp` pins the kwin
+/// runtimes; `tests/unit/ui/effect/test_anchor_uniforms.cpp` pins the kwin
 /// inset values.
 inline constexpr const char* kIAnchorPosInFbo = "iAnchorPosInFbo";
 
@@ -526,6 +526,13 @@ inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 /// in the kwin-effect TU).
 inline constexpr int kMaxUserTextureSlots = 3;
 
+/// Multipass buffer-pass budget. Pinned to the runtime's binding budget
+/// (`PhosphorRendering::kMaxBufferPasses`, ShaderNodeRhi) and the GLSL
+/// contract's `vec4 iChannelResolution[4]`: the downstream setters read at
+/// most this many entries, so a pack declaring more would silently lose the
+/// tail — the parser caps (with a warning) at this bound instead.
+inline constexpr int kMaxBufferPasses = 4;
+
 /// `int iAudioSpectrumSize` — CAVA bar count, 0 while the audio visualizer
 /// is off or cava is unavailable. Daemon: BaseUniforms UBO member fed by
 /// `SurfaceAnimator::setAudioSpectrum`. Kwin: default-block uniform
@@ -660,7 +667,7 @@ inline QString colorKey(int slot)
 /// If anyone reorders `BaseUniforms`, those asserts fail at compile time
 /// and the canonical GLSL header has to be updated to match. The GLSL side
 /// is exercised at build time by
-/// `tests/unit/ui/test_animation_shader_bake.cpp`, which runs every
+/// `tests/unit/ui/shaders/test_animation_shader_bake.cpp`, which runs every
 /// built-in animation shader through `qsb` (which in turn computes
 /// std140 offsets) — a layout drift would surface there as a bake
 /// failure.

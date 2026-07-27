@@ -38,25 +38,44 @@ void WindowAnimator::setClock(PhosphorAnimation::IMotionClock* clock)
     m_clock = clock;
 }
 
-PhosphorAnimation::IMotionClock* WindowAnimator::clock() const
-{
-    return m_clock;
-}
-
 void WindowAnimator::setEnabled(bool enabled)
 {
+    if (m_enabled == enabled) {
+        return;
+    }
     m_enabled = enabled;
+    if (!m_enabled && !m_animations.empty()) {
+        // Reap in-flight animations on disable. advanceAnimations has no
+        // m_enabled gate, so entries live from before the toggle would keep
+        // driving the window toward their OLD target — and the snap path's
+        // disabled fall-through commits the NEW geometry with a plain
+        // moveResize and no retarget, exactly the "wrong animation" state
+        // the retarget machinery exists to prevent. Same padded-damage
+        // shape as reapAnimationsForClock so the final frames are cleaned.
+        QVarLengthArray<KWin::EffectWindow*, kMaxInlineHandlesPerTick> handles;
+        for (const auto& [handle, anim] : m_animations) {
+            handles.append(handle);
+        }
+        for (KWin::EffectWindow* handle : handles) {
+            auto it = m_animations.find(handle);
+            if (it == m_animations.end()) {
+                continue;
+            }
+            const QMarginsF padding = expandedPadding(handle, it->second);
+            const QRectF bounds = it->second.bounds().marginsAdded(padding);
+            PhosphorAnimation::AnimatedValue<QRectF> reapedAnim = std::move(it->second);
+            m_animations.erase(it);
+            onAnimationReaped(handle, reapedAnim);
+            if (bounds.isValid()) {
+                onRepaintNeeded(handle, bounds);
+            }
+        }
+    }
 }
 
 bool WindowAnimator::isEnabled() const
 {
     return m_enabled;
-}
-
-void WindowAnimator::setProfile(const PhosphorAnimation::Profile& profile)
-{
-    m_profile = profile;
-    clampProfile(m_profile);
 }
 
 const PhosphorAnimation::Profile& WindowAnimator::profile() const
@@ -69,41 +88,16 @@ void WindowAnimator::setCurve(std::shared_ptr<const PhosphorAnimation::Curve> cu
     m_profile.curve = std::move(curve);
 }
 
-std::shared_ptr<const PhosphorAnimation::Curve> WindowAnimator::curve() const
-{
-    return m_profile.curve;
-}
-
 void WindowAnimator::setDuration(qreal ms)
 {
     m_profile.duration = ms;
     clampProfile(m_profile);
 }
 
-qreal WindowAnimator::duration() const
-{
-    return m_profile.effectiveDuration();
-}
-
 void WindowAnimator::setMinDistance(int pixels)
 {
     m_profile.minDistance = pixels;
     clampProfile(m_profile);
-}
-
-int WindowAnimator::minDistance() const
-{
-    return m_profile.effectiveMinDistance();
-}
-
-void WindowAnimator::setRetargetPolicy(PhosphorAnimation::RetargetPolicy policy)
-{
-    m_retargetPolicy = policy;
-}
-
-PhosphorAnimation::RetargetPolicy WindowAnimator::retargetPolicy() const
-{
-    return m_retargetPolicy;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -157,7 +151,10 @@ WindowAnimator::startAnimationWithResult(KWin::EffectWindow* handle, const QRect
     } else {
         params.profile = m_profile;
     }
-    params.retargetPolicy = m_retargetPolicy;
+    // PreserveVelocity is the fixed policy for fresh starts: the
+    // set-retarget-policy knob had no caller anywhere (audit census) and was
+    // removed rather than left looking configurable.
+    params.retargetPolicy = PhosphorAnimation::RetargetPolicy::PreserveVelocity;
     auto spec = PhosphorAnimation::SnapPolicy::createSnapSpec(oldFrame, newFrame, params, clk);
     if (!spec) {
         return StartResult::PolicyRejected;
@@ -208,17 +205,6 @@ WindowAnimator::startAnimationWithResult(KWin::EffectWindow* handle, const QRect
     auto [it, inserted] = m_animations.emplace(handle, std::move(anim));
     onAnimationStarted(handle, it->second);
     return StartResult::Accepted;
-}
-
-bool WindowAnimator::retarget(KWin::EffectWindow* handle, const QRectF& newFrame,
-                              PhosphorAnimation::RetargetPolicy policy)
-{
-    return retargetWithResult(handle, newFrame, policy) == PhosphorAnimation::RetargetResult::Accepted;
-}
-
-bool WindowAnimator::retarget(KWin::EffectWindow* handle, const QRectF& newFrame)
-{
-    return retargetWithResult(handle, newFrame) == PhosphorAnimation::RetargetResult::Accepted;
 }
 
 PhosphorAnimation::RetargetResult WindowAnimator::retargetWithResult(KWin::EffectWindow* handle, const QRectF& newFrame,
@@ -315,11 +301,6 @@ void WindowAnimator::removeAnimation(KWin::EffectWindow* handle)
     m_animations.erase(handle);
 }
 
-void WindowAnimator::clear()
-{
-    m_animations.clear();
-}
-
 int WindowAnimator::reapAnimationsForClock(const PhosphorAnimation::IMotionClock* clock)
 {
     if (!clock) {
@@ -383,16 +364,6 @@ const PhosphorAnimation::AnimatedValue<QRectF>* WindowAnimator::animationFor(KWi
 {
     auto it = m_animations.find(handle);
     return (it == m_animations.end()) ? nullptr : &it->second;
-}
-
-QRectF WindowAnimator::animationBounds(KWin::EffectWindow* handle) const
-{
-    auto it = m_animations.find(handle);
-    if (it == m_animations.end()) {
-        return QRectF();
-    }
-    const QMarginsF padding = expandedPadding(handle, it->second);
-    return it->second.bounds().marginsAdded(padding);
 }
 
 // ═══════════════════════════════════════════════════════════════════════

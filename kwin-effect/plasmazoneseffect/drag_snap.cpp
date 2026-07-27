@@ -524,12 +524,17 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     }
 
     // No animation path (disabled, during drag, etc.): apply moveResize directly.
-    if (m_windowAnimator->hasAnimation(window)) {
-        m_windowAnimator->removeAnimation(window);
-    }
-
+    // The null check runs BEFORE the removeAnimation so the drop and the
+    // geometry commit share a branch: removeAnimation's contract requires the
+    // caller to commit geometry immediately after (it schedules no damage),
+    // and dropping the animation on the null-window path would strand the
+    // last animated frame. window() is never null in modern KWin, so the
+    // else-branch is defensive.
     KWin::Window* kwinWindow = window->window();
     if (kwinWindow) {
+        if (m_windowAnimator->hasAnimation(window)) {
+            m_windowAnimator->removeAnimation(window);
+        }
         // DEBUG: the resolved rect is already logged at INFO above ("Setting
         // window geometry from ... to ..."), which covers both the animated
         // and non-animated paths — keep this one at debug to avoid a
