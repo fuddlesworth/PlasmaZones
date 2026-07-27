@@ -123,6 +123,23 @@ private Q_SLOTS:
         QCOMPARE(info.parameters[1].slot, 0);
         QCOMPARE(info.parameters[2].slot, 2);
         QCOMPARE(info.parameters[3].slot, 0);
+
+        // Pinning the slots alone is not enough: the two sides that CONSUME a
+        // slot must agree with it, or a shader reads one lane while the daemon
+        // uploads to another. Assert the shader-facing p_<id> preamble and the
+        // upload-facing uniformName() both derive from the same pinned slots.
+        // Both assertions call the very accessors the production code uses, so
+        // they track the format instead of freezing a copy of it.
+        const QString preamble = ShaderRegistry::paramPreamble(info);
+        QVERIFY(preamble.contains(QStringLiteral("#define p_a ") + PhosphorShaders::CustomParams::glslAccessor(1)));
+        QVERIFY(preamble.contains(QStringLiteral("#define p_b ") + PhosphorShaders::CustomParams::glslAccessor(0)));
+        QVERIFY(preamble.contains(QStringLiteral("#define p_c ") + PhosphorShaders::CustomParams::glslAccessor(2)));
+        QVERIFY(preamble.contains(QStringLiteral("#define p_col ") + PhosphorShaders::CustomColors::glslAccessor(0)));
+        // Upload side: uniformName() maps the same slots to the wire uniforms.
+        QCOMPARE(info.parameters[0].uniformName(), QStringLiteral("customParams1_y")); // scalar slot 1
+        QCOMPARE(info.parameters[1].uniformName(), QStringLiteral("customParams1_x")); // scalar slot 0
+        QCOMPARE(info.parameters[2].uniformName(), QStringLiteral("customParams1_z")); // scalar slot 2
+        QCOMPARE(info.parameters[3].uniformName(), QStringLiteral("customColor1")); // color slot 0
     }
 
     void testDuplicateParameterIdFirstDeclarationWins()

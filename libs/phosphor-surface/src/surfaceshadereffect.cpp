@@ -15,6 +15,15 @@ namespace {
 Q_LOGGING_CATEGORY(lcSurfaceShader, "phosphorsurfaceshaders.effect")
 } // namespace
 
+// Serializes the IN-MEMORY effect for two consumers: fromJson round-trips (the
+// registry test suite) and embedding inside a DecorationProfileTree. It is NOT
+// a pack-metadata authoring format. fragmentShaderPath/vertexShaderPath here are
+// the POST-LOAD resolved forms (absolute, produced by resolveWithinDirectory),
+// so feeding this object back through the pack loader would hit its
+// AbsolutePathPolicy::Reject and drop the paths. That is fine because nothing
+// does: fromJson takes the paths verbatim without the Reject gate, and a pack's
+// own metadata.json is author-written with paths RELATIVE to the effect dir.
+// The Reject policy guards untrusted author input, not this trusted re-emit.
 QJsonObject SurfaceShaderEffect::toJson() const
 {
     QJsonObject obj;
