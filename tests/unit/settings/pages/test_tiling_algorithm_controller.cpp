@@ -142,6 +142,39 @@ private Q_SLOTS:
                  PhosphorTiles::AutotileDefaults::DefaultMasterCount);
     }
 
+    // setCustomParam is the other slot author and must uphold the same
+    // materialization contract: a custom-param write on an algorithm with no
+    // prior slot must not leave the numeric fields thin, or the sanitizer
+    // refills the max windows with the generic 5 and silently re-caps the
+    // algorithm the moment any custom param is touched. Cluster declares
+    // custom params AND a non-generic defaultMaxWindows (8), which is the
+    // combination that exposed the bug.
+    void setCustomParam_materializesAlgorithmDefaults()
+    {
+        StubSettings settings;
+        TilingAlgorithmController controller(settings, *m_scriptSetup.registry());
+
+        auto* cluster = m_scriptSetup.registry()->algorithm(QStringLiteral("cluster"));
+        QVERIFY(cluster);
+        QVERIFY(cluster->supportsCustomParams());
+        QVERIFY(cluster->defaultMaxWindows() != PhosphorTiles::AutotileDefaults::DefaultMaxWindows);
+
+        const QVariantList defs = cluster->customParamDefList();
+        QVERIFY(!defs.isEmpty());
+        const QVariantMap def = defs.first().toMap();
+        const QString paramName = def.value(QStringLiteral("name")).toString();
+        QVERIFY(!paramName.isEmpty());
+
+        controller.setCustomParam(QStringLiteral("cluster"), paramName, def.value(QStringLiteral("defaultValue")));
+
+        const QVariantMap entry = settings.autotilePerAlgorithmSettings().value(QStringLiteral("cluster")).toMap();
+        QVERIFY2(entry.contains(PhosphorTiles::AutotileJsonKeys::MaxWindows),
+                 "custom-param write left max windows thin — the sanitizer would refill it with the generic default");
+        QCOMPARE(entry.value(PhosphorTiles::AutotileJsonKeys::MaxWindows).toInt(), cluster->defaultMaxWindows());
+        QVERIFY(entry.contains(PhosphorTiles::AutotileJsonKeys::SplitRatio));
+        QVERIFY(entry.contains(PhosphorTiles::AutotileJsonKeys::MasterCount));
+    }
+
     // Regression for the BullHorn report: a stale sanitizer-shaped slot pins
     // the generic max windows (5), and the user sets the value back to the
     // algorithm's own default. Under the old delete-the-field contract this

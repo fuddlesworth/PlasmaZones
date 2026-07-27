@@ -254,10 +254,21 @@ void TilingAlgorithmController::setCustomParam(const QString& algorithmId, const
 
     customParams[paramName] = coerced;
     algoEntry[PhosphorTiles::AutotileJsonKeys::CustomParams] = customParams;
-    // Persist only the key the user actually set. A missing splitRatio /
-    // masterCount is defaulted by perAlgoFromVariantMap on read, so injecting
-    // them here would just bake a redundant (and potentially-stale) per-algorithm
-    // override into the entry for a value the user never touched.
+    // Materialize the untouched numeric fields with the ALGORITHM'S own
+    // defaults, same as writeAlgorithmField: the Settings sanitize pass
+    // refills missing fields with the GENERIC schema defaults, so a thin
+    // {customParams} slot for an algorithm whose own defaults differ would
+    // read back with the wrong values (grid's max windows 9 would come back
+    // as the generic 5, silently re-capping the algorithm the moment any
+    // custom param is touched).
+    constexpr std::array numericFields{PhosphorTiles::AutotileJsonKeys::SplitRatio,
+                                       PhosphorTiles::AutotileJsonKeys::MasterCount,
+                                       PhosphorTiles::AutotileJsonKeys::MaxWindows};
+    for (const QLatin1String field : numericFields) {
+        if (!algoEntry.contains(field)) {
+            algoEntry[field] = algorithmFieldDefault(algorithmId, field);
+        }
+    }
 
     perAlgo[algorithmId] = algoEntry;
     m_settings->setAutotilePerAlgorithmSettings(perAlgo);
