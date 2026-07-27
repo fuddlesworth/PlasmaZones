@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
@@ -51,7 +52,7 @@ SettingsFlickable {
     // the nav-shortcut guard had a live window at both edges of an animating
     // modal. visible covers the whole popup lifetime (the spelling
     // ConfirmDialogs.qml already uses for the same predicate).
-    readonly property bool anyModalOpen: addRuleWizard.visible || windowPickerDialog.visible || ruleEditorSheet.visible || page._forceSaveConfirmOpen
+    readonly property bool anyModalOpen: addRuleWizard.visible || windowPickerDialog.visible || ruleEditorSheet.visible || colorParamDialog.visible || curveParamDialog.visible || page._forceSaveConfirmOpen
     /// Internal bridge updated by `forceSaveConfirm.onVisibleChanged` so
     /// `anyModalOpen` can read it without forward-referencing an id that
     /// is declared further down in the file.
@@ -130,6 +131,12 @@ SettingsFlickable {
         // doesn't get the full vertical envelope), so the page-level
         // instance is the supported pattern here.
         readonly property var windowPicker: windowPickerDialog
+        // Page-level colour picker (see colorParamDialog above), exposed so
+        // ActionRow's colour-param swatch opens it without owning a
+        // delegate-scoped ColorDialog that a rule-list rebuild could tear down.
+        readonly property var colorPicker: colorParamDialog
+        // Page-level curve editor (see curveParamDialog above).
+        readonly property var curvePicker: curveParamDialog
         readonly property string defaultLayoutId: appSettings.defaultLayoutId
         readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
         readonly property bool autoAssignAllLayouts: appSettings.autoAssignAllLayouts === true
@@ -361,6 +368,44 @@ SettingsFlickable {
         id: windowPickerDialog
 
         controller: settingsController
+    }
+
+    // Page-level colour picker for ActionRow's colour-param swatches, exposed
+    // through the appSettings bridge as `colorPicker`. Page-level (not inside
+    // the per-param Component) so a modelRevision-driven rule-list rebuild
+    // cannot destroy the delegate hosting it while it is open — the same
+    // popup-teardown hazard windowPickerDialog and AnimationsPresetsPage's
+    // deletePresetConfirm are page-level to avoid. The caller connects to
+    // `accepted` transiently, reads `selectedColor`, and disconnects on close.
+    ColorDialog {
+        id: colorParamDialog
+
+        options: ColorDialog.ShowAlphaChannel
+
+        // Seed imperatively at open: ColorDialog writes selectedColor itself as
+        // the user drags, and that JS-side write severs a declarative binding.
+        function openFor(c) {
+            colorParamDialog.selectedColor = c;
+            colorParamDialog.open();
+        }
+    }
+
+    // Page-level curve editor for ActionRow's curve-param slots, exposed via the
+    // bridge as `curvePicker`, page-level for the same popup-teardown reason as
+    // colorParamDialog. The caller reconfigures it per open through openFor()
+    // and connects transiently to curveApplied / springApplied.
+    CurveEditorDialog {
+        id: curveParamDialog
+
+        function openFor(cfg) {
+            curveParamDialog.eventLabel = cfg.eventLabel;
+            curveParamDialog.timingMode = cfg.timingMode;
+            curveParamDialog.easingCurve = cfg.easingCurve;
+            curveParamDialog.springOmega = cfg.springOmega;
+            curveParamDialog.springZeta = cfg.springZeta;
+            curveParamDialog.duration = cfg.duration;
+            curveParamDialog.open();
+        }
     }
 
     RuleEditorSheet {

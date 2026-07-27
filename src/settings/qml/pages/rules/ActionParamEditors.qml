@@ -207,13 +207,28 @@ QtObject {
                 color: parent._isAccent ? parent._accentColor : parent._hex
                 Accessible.name: _param.label
                 onClicked: {
-                    // Seed imperatively at open (the ShaderParamsEditor
-                    // convention): ColorDialog writes selectedColor itself as
-                    // the user drags, and that JS-side write SEVERS a
-                    // declarative binding permanently — a Cancel then left
-                    // the next open on the rejected colour.
-                    colorDialog.selectedColor = swatch.color;
-                    colorDialog.open();
+                    // Open the PAGE-LEVEL colour picker (via the appSettings
+                    // bridge) rather than a delegate-scoped ColorDialog: a
+                    // rule-list rebuild while the dialog is open would destroy
+                    // this delegate and tear the popup down under the user. The
+                    // target param key is captured in the transient accepted
+                    // handler, which self-disconnects on close.
+                    var picker = row.appSettings ? row.appSettings.colorPicker : null;
+                    if (!picker)
+                        return;
+                    var key = _param.key;
+                    function acceptedHandler() {
+                        picker.accepted.disconnect(acceptedHandler);
+                        picker.rejected.disconnect(rejectedHandler);
+                        row.actionEdited(row._withParam(key, row._toHexArgb(picker.selectedColor)));
+                    }
+                    function rejectedHandler() {
+                        picker.accepted.disconnect(acceptedHandler);
+                        picker.rejected.disconnect(rejectedHandler);
+                    }
+                    picker.accepted.connect(acceptedHandler);
+                    picker.rejected.connect(rejectedHandler);
+                    picker.openFor(swatch.color);
                 }
             }
 
@@ -226,13 +241,6 @@ QtObject {
 
             Item {
                 Layout.fillWidth: true
-            }
-
-            ColorDialog {
-                id: colorDialog
-
-                options: ColorDialog.ShowAlphaChannel
-                onAccepted: row.actionEdited(row._withParam(_param.key, row._toHexArgb(selectedColor)))
             }
         }
     }
@@ -492,36 +500,44 @@ QtObject {
                 anchors.fill: parent
                 text: curveSlot._displayName
                 Accessible.name: curveSlot._param.label
-                onClicked: curveDialog.open()
-            }
-
-            CurveEditorDialog {
-                id: curveDialog
-
-                parent: curveSlot.Window.window ? curveSlot.Window.window.contentItem : curveSlot
-                // Through the controller's humaniser rather than the raw dotted
-                // path, so the title reads "Customize curve for Open" instead of
-                // "…for window.appearance.open". `eventLabel()` returns the raw
-                // ENGLISH form by its documented contract, so this one word is
-                // untranslated — the animations pages avoid that by passing
-                // hand-written i18n() literals, which a rule's free-form event
-                // field cannot. Better than the dotted path, and the alternative
-                // is a translated label table this PR does not introduce.
-                eventLabel: (row.action.event && row.appSettings && row.appSettings.animationsController) ? row.appSettings.animationsController.eventLabel(row.action.event) : ""
-                timingMode: curveSlot._isSpring ? CurvePresets.timingModeSpring : CurvePresets.timingModeEasing
-                easingCurve: curveSlot._easingCurve
-                springOmega: curveSlot._springOmega
-                springZeta: curveSlot._springZeta
-                // Drives the in-dialog preview tempo and the duration stamped
-                // into a saved preset. A rule action carries no duration of its
-                // own, so the global default is the honest answer here.
-                duration: row.appSettings ? row.appSettings.animationDuration : CurvePresets.defaultDurationMs
-                onCurveApplied: function (curve) {
-                    row.actionEdited(row._withParam(curveSlot._param.key, curve));
-                }
-                onSpringApplied: function (omega, zeta) {
-                    var encoded = "spring:" + omega.toFixed(2) + "," + zeta.toFixed(2);
-                    row.actionEdited(row._withParam(curveSlot._param.key, encoded));
+                onClicked: {
+                    // Open the PAGE-LEVEL curve editor (via the appSettings
+                    // bridge) rather than a delegate-scoped one, so a rule-list
+                    // rebuild while it is open cannot tear the popup down under
+                    // the user. The target param key is captured in the
+                    // transient handlers, which self-disconnect on close.
+                    var picker = row.appSettings ? row.appSettings.curvePicker : null;
+                    if (!picker)
+                        return;
+                    var key = curveSlot._param.key;
+                    function cleanup() {
+                        picker.curveApplied.disconnect(curveHandler);
+                        picker.springApplied.disconnect(springHandler);
+                        picker.closed.disconnect(cleanup);
+                    }
+                    function curveHandler(curve) {
+                        cleanup();
+                        row.actionEdited(row._withParam(key, curve));
+                    }
+                    function springHandler(omega, zeta) {
+                        cleanup();
+                        row.actionEdited(row._withParam(key, "spring:" + omega.toFixed(2) + "," + zeta.toFixed(2)));
+                    }
+                    picker.curveApplied.connect(curveHandler);
+                    picker.springApplied.connect(springHandler);
+                    picker.closed.connect(cleanup);
+                    // Through the controller's humaniser rather than the raw
+                    // dotted path (eventLabel() returns the English form by
+                    // contract, so this one word is untranslated — a rule's
+                    // free-form event field has no i18n literal to pass).
+                    picker.openFor({
+                        "eventLabel": (row.action.event && row.appSettings && row.appSettings.animationsController) ? row.appSettings.animationsController.eventLabel(row.action.event) : "",
+                        "timingMode": curveSlot._isSpring ? CurvePresets.timingModeSpring : CurvePresets.timingModeEasing,
+                        "easingCurve": curveSlot._easingCurve,
+                        "springOmega": curveSlot._springOmega,
+                        "springZeta": curveSlot._springZeta,
+                        "duration": row.appSettings ? row.appSettings.animationDuration : CurvePresets.defaultDurationMs
+                    });
                 }
             }
         }
