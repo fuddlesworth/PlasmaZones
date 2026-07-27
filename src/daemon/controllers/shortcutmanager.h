@@ -108,6 +108,17 @@ public:
     static QVector<QVariantMap> compressCheatsheetFamilies(QVector<QVariantMap> rows,
                                                            const QVector<CheatsheetFamily>& families);
 
+    /**
+     * Test-only backend injection. Must be called before registerShortcuts()
+     * (which otherwise creates the real platform backend lazily); a call
+     * arriving after registration asserts in debug builds and releases the
+     * live registration first in release builds. Lets tests observe the
+     * exact IBackend calls the manager makes — in particular that
+     * unregisterShortcuts() never purges persistent bindings via
+     * IBackend::unregisterShortcut (discussion #851).
+     */
+    void setBackendForTesting(std::unique_ptr<PhosphorShortcuts::IBackend> backend);
+
 Q_SIGNALS:
     /**
      * The cheatsheet catalog's contents changed: a sequence was rebound
