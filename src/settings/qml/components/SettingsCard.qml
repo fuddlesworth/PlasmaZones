@@ -377,7 +377,7 @@ Item {
                         // right controls sit further in. Mirrored for RTL:
                         // RowLayout mirrors item order under LayoutMirroring
                         // but leftPadding does not, so the inset must follow.
-                        leftPadding: LayoutMirroring.enabled ? 0 : Kirigami.Units.largeSpacing
+                        leftPadding: LayoutMirroring.enabled ? padding : Kirigami.Units.largeSpacing
                         rightPadding: LayoutMirroring.enabled ? Kirigami.Units.largeSpacing : padding
                     }
 
