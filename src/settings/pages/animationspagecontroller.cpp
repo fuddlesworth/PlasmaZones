@@ -515,10 +515,11 @@ bool AnimationsPageController::revertPending()
     if (anyMotionSet && m_motionSets)
         m_motionSets->notifyLiveStateChanged();
     Q_EMIT pendingChangesChanged();
-    // True means the state really is clean now. A retained entry is a file whose
-    // restore FAILED, and a caller that goes on to declare the session clean (an
-    // import, a defaults reset) must not do so while one is still staged: the
-    // next Discard would write it back over the new state.
+    // True means every snapshotted FILE restored — NOT that the page is clean;
+    // the shader tree is not covered here and can still be diverged. A retained
+    // entry is a file whose restore FAILED, and a caller that goes on to declare
+    // the session clean (an import, a defaults reset) must not do so while one is
+    // still staged: the next Discard would write it back over the new state.
     return m_pendingFileSnapshots.isEmpty();
 }
 
@@ -811,8 +812,10 @@ bool AnimationsPageController::addUserPreset(const QString& name, const QVariant
     // Defence-in-depth: the sub-services write through the snapshot
     // callback wired by the controller ctor, so a concurrent mutator
     // here while asyncRevertPending's worker is rewriting profile files
-    // would race the worker on disk. The QML chrome gates the picker on
-    // `discarding`; this guard protects programmatic callers.
+    // would race the worker on disk. NOTHING in the QML gates on `discarding`
+    // except Main.qml's own Apply/Discard buttons — the animations page stays
+    // fully interactive — so this guard is the only thing standing between a
+    // mid-discard edit and that race, and the toast is the user's only signal.
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "addUserPreset: blocked during discard";
         Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));

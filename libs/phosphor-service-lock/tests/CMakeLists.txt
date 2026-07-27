@@ -3,6 +3,11 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Test)
 
+# Shared test isolation: a private D-Bus session (so a test that touches D-Bus
+# cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
+# open and hangs ctest after the test itself passed) plus a per-target XDG
+# sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 function(_phosphorservicelock_test target source)
     add_executable(${target} ${source})
     target_link_libraries(${target}
@@ -11,9 +16,12 @@ function(_phosphorservicelock_test target source)
             PhosphorServiceLock::PhosphorServiceLock
     )
     add_test(NAME ${target} COMMAND ${target})
-    set_tests_properties(${target}
-        PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    phosphor_apply_test_isolation(${target})
+    # APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
+    # ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
+    # sandbox `phosphor_apply_test_isolation` just installed.
+    phosphor_append_test_environment(${target} "QT_QPA_PLATFORM=offscreen")
+    set_tests_properties(${target} PROPERTIES
             LABELS "phosphorservicelock"
     )
 endfunction()
@@ -56,8 +64,11 @@ target_include_directories(test_phosphorservicelock_statemachine
 )
 target_link_libraries(test_phosphorservicelock_statemachine PRIVATE Qt6::Test)
 add_test(NAME test_phosphorservicelock_statemachine COMMAND test_phosphorservicelock_statemachine)
-set_tests_properties(test_phosphorservicelock_statemachine
-    PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-        LABELS "phosphorservicelock"
+phosphor_apply_test_isolation(test_phosphorservicelock_statemachine)
+# APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
+# ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
+# sandbox `phosphor_apply_test_isolation` just installed.
+phosphor_append_test_environment(test_phosphorservicelock_statemachine "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorservicelock_statemachine PROPERTIES
+    LABELS "phosphorservicelock"
 )

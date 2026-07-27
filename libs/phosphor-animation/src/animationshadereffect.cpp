@@ -331,8 +331,7 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
         // to clamp anyway. Keeping unknown values in the in-memory
         // struct would also round-trip them back through toJson,
         // re-persisting the typo to disk on the next save.
-        if (!t.wrap.isEmpty() && t.wrap != QLatin1String("clamp") && t.wrap != QLatin1String("repeat")
-            && t.wrap != QLatin1String("mirror")) {
+        if (!t.wrap.isEmpty() && !PhosphorAnimationShaders::AnimationShaderContract::isValidWrapToken(t.wrap)) {
             qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: unknown wrap value" << t.wrap
                                          << "for slot" << slotIndex << ", reset to runtime default";
             t.wrap.clear();

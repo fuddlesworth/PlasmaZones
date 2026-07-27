@@ -3,6 +3,11 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Test)
 
+# Shared test isolation: a private D-Bus session (so a test that touches D-Bus
+# cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
+# open and hangs ctest after the test itself passed) plus a per-target XDG
+# sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 function(_phosphorserviceclipboard_test target source)
     add_executable(${target} ${source})
     target_link_libraries(${target}
@@ -11,12 +16,15 @@ function(_phosphorserviceclipboard_test target source)
             PhosphorServiceClipboard::PhosphorServiceClipboard
     )
     add_test(NAME ${target} COMMAND ${target})
+    phosphor_apply_test_isolation(${target})
     # Isolate XDG_DATA_HOME to a build-tree dir: constructing ClipboardService
     # loads the on-disk history, so the test must never read the real user's
     # clipboard directory.
-    set_tests_properties(${target}
-        PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/test-xdg-data-${target}"
+    # APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
+    # ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
+    # sandbox `phosphor_apply_test_isolation` just installed.
+    phosphor_append_test_environment(${target} "QT_QPA_PLATFORM=offscreen;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/test-xdg-data-${target}")
+    set_tests_properties(${target} PROPERTIES
             LABELS "phosphorserviceclipboard"
     )
 endfunction()
@@ -49,10 +57,13 @@ target_include_directories(test_phosphorserviceclipboard_historymodel
 )
 target_link_libraries(test_phosphorserviceclipboard_historymodel PRIVATE Qt6::Test)
 add_test(NAME test_phosphorserviceclipboard_historymodel COMMAND test_phosphorserviceclipboard_historymodel)
-set_tests_properties(test_phosphorserviceclipboard_historymodel
-    PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-        LABELS "phosphorserviceclipboard"
+phosphor_apply_test_isolation(test_phosphorserviceclipboard_historymodel)
+# APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
+# ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
+# sandbox `phosphor_apply_test_isolation` just installed.
+phosphor_append_test_environment(test_phosphorserviceclipboard_historymodel "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorserviceclipboard_historymodel PROPERTIES
+    LABELS "phosphorserviceclipboard"
 )
 
 # Store unit test: round-trips entries through a temp directory (no real user
@@ -66,8 +77,11 @@ target_include_directories(test_phosphorserviceclipboard_store
 )
 target_link_libraries(test_phosphorserviceclipboard_store PRIVATE Qt6::Test)
 add_test(NAME test_phosphorserviceclipboard_store COMMAND test_phosphorserviceclipboard_store)
-set_tests_properties(test_phosphorserviceclipboard_store
-    PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-        LABELS "phosphorserviceclipboard"
+phosphor_apply_test_isolation(test_phosphorserviceclipboard_store)
+# APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
+# ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
+# sandbox `phosphor_apply_test_isolation` just installed.
+phosphor_append_test_environment(test_phosphorserviceclipboard_store "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorserviceclipboard_store PROPERTIES
+    LABELS "phosphorserviceclipboard"
 )

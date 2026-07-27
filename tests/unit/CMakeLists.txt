@@ -1005,9 +1005,9 @@ target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DI
 add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
 
 # Animations-controller sources shared by the seven test executables below
-# (page controller / QML contracts / profile-store sync / motion sets / presets
-# / shader overrides). One list so a new controller source file can't silently
-# miss one of the six.
+# (page controller / QML contracts / profile-store sync / motion sets / presets /
+# shader overrides / group writes). One list so a new controller source file
+# cannot silently miss one of the seven.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_shaders.cpp
@@ -1536,46 +1536,31 @@ set_tests_properties(test_surface_decoration_orientation PROPERTIES SKIP_RETURN_
 # configure time, which means tests added BELOW this line are NOT covered.
 # Always add new test targets ABOVE this block — never after it.
 # ═══════════════════════════════════════════════════════════════════════════════
-set(_pz_test_home "${CMAKE_BINARY_DIR}/test-xdg")
-file(MAKE_DIRECTORY
-    "${_pz_test_home}/config"
-    "${_pz_test_home}/data"
-    "${_pz_test_home}/state"
-    "${_pz_test_home}/cache")
-get_property(_all_tests DIRECTORY . PROPERTY TESTS)
-set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT
-    "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${_pz_test_home}/config;XDG_DATA_HOME=${_pz_test_home}/data;XDG_STATE_HOME=${_pz_test_home}/state;XDG_CACHE_HOME=${_pz_test_home}/cache")
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 
-# D-Bus isolation: run every test on its own PRIVATE session bus. Several
-# tests compile client sources whose async calls target the daemon's real
-# well-known name (org.plasmazones) with QDBus's default auto-start flag —
-# on a developer machine the installed org.plasmazones.service activation
-# file turns each such call into a spawn of the installed plasmazonesd,
-# left running after ctest exits. The custom bus config is essential: a
-# stock dbus-run-session bus still reads /usr/share/dbus-1/services, so the
-# installed daemon would be activated on the private bus too (as a child of
-# the private dbus-daemon — it then leaks into the session AND holds the
-# test's stdout pipe open, hanging ctest after the test passes). The config
-# declares no service directories, so activation is impossible and daemon
-# calls fail fast with ServiceUnknown; tests that register their own bus
-# names (adaptor routing, layout-service replies) get a clean bus where the
-# name is never already owned. Uses the TEST_LAUNCHER target property
-# (CMake 3.29+); when dbus-run-session or the CMake version is missing,
-# tests run directly on whatever bus the environment provides — the
-# pre-isolation status quo.
-find_program(_pz_dbus_run_session dbus-run-session)
-if(_pz_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
-    foreach(_pz_test IN LISTS _all_tests)
-        # Every add_test in this directory uses NAME == target; the guard
-        # keeps a future non-target test entry from breaking the configure.
-        if(TARGET ${_pz_test})
-            set_target_properties(${_pz_test} PROPERTIES
-                TEST_LAUNCHER
-                "${_pz_dbus_run_session};--config-file=${CMAKE_CURRENT_SOURCE_DIR}/test-session-bus.conf;--")
-        endif()
-    endforeach()
-else()
-    message(STATUS "PlasmaZones: dbus-run-session or CMake >= 3.29 unavailable — "
-                   "tests will use the ambient session bus")
-endif()
+get_property(_all_tests DIRECTORY . PROPERTY TESTS)
+foreach(_pz_test IN LISTS _all_tests)
+    # Every add_test in this directory uses NAME == target; the guard keeps a
+    # future non-target test entry from breaking the configure.
+    if(TARGET ${_pz_test})
+        # The shared helper, not a hand-rolled copy. This block used to be its
+        # own implementation and the two drifted: the library trees got
+        # per-target XDG homes while this one shared a single home across ~340
+        # tests, so a parallel ctest run interleaved writes into one config dir.
+        #
+        # It supplies the private-bus TEST_LAUNCHER and a per-target XDG sandbox.
+        # The bus config declares no service directories, which is the essential
+        # part: a stock dbus-run-session bus still reads
+        # /usr/share/dbus-1/services, so the installed daemon would be activated
+        # on the private bus too — as a child of the private dbus-daemon, which
+        # then holds the test's stdout pipe open and hangs ctest AFTER the test
+        # itself passed. Several tests here compile client sources whose async
+        # calls target org.plasmazones with QDBus's default auto-start flag.
+        phosphor_apply_test_isolation(${_pz_test})
+        # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace the
+        # sandbox the helper just installed.
+        phosphor_append_test_environment(${_pz_test} "QT_QPA_PLATFORM=offscreen")
+    endif()
+endforeach()
+
 # ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───

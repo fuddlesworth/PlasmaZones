@@ -234,9 +234,9 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // a path the worker is processing would race: last writer wins on
     // disk (non-deterministic), and the worker's finished handler
     // would drop this path's snapshot when it merges its results back,
-    // silently losing the user's concurrent edit. The QML chrome already gates the
-    // editor controls on `discarding`, but defence-in-depth at the
-    // C++ Q_INVOKABLE entry point protects programmatic callers.
+    // silently losing the user's concurrent edit. The QML does NOT gate the
+    // editor controls on `discarding` — only Main.qml's Apply/Discard buttons
+    // are — so this is the sole guard, not defence-in-depth behind a UI one.
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "setOverride: refusing write while async discard is in flight; path=" << path;
         return false;
@@ -437,6 +437,14 @@ int AnimationsPageController::clearOverridesForPaths(const QStringList& eventPat
         case OverrideFileRemoval::Absent:
             // Nothing to clear at this path, which is most of them on any
             // scoped reset. Not a failure: the desired end state already holds.
+            //
+            // And deliberately NOT a rescan trigger, unlike the same enumerator
+            // in `clearFieldOnPaths`. There, every path reaching the removal was
+            // classified as CARRYING the field a moment earlier, so Absent means
+            // the file vanished underneath and the registry may still hold it.
+            // Here the caller hands over a whole subtree with no such
+            // precondition, so Absent is the common case and refreshing on it
+            // would re-read the entire profiles directory on nearly every call.
             break;
         case OverrideFileRemoval::Failed:
             // The file is there and could not be removed. Counting it as a

@@ -51,6 +51,14 @@ class PHOSPHORTILES_EXPORT ScriptedAlgorithmLoader : public QObject
     Q_OBJECT
 
 public:
+    /// Per-directory cap on `.luau` files considered by one scan.
+    ///
+    /// Public so a test can pin its spray fixture to the REAL value instead of a
+    /// hardcoded copy. A copy is worse than it looks: raising the cap would leave
+    /// the fixture below the new bound, so its loop would iterate over ids the cap
+    /// never reached, assert nothing, and still pass its non-vacuity check.
+    static constexpr int MaxWatchedFilesPerDir = 100;
+
     /**
      * @brief Construct a loader for @p subdirectory under XDG data dirs.
      *

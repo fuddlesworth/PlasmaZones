@@ -192,18 +192,23 @@ public:
     /// parser the live registry uses (T1.1 auto-slot assignment included), so an
     /// offline validator (`phosphor-shader-validate`) and the daemon agree on
     /// what a pack is. Returns an invalid ShaderInfo and sets @p error on a
-    /// missing/unreadable file or non-object JSON root. Does NOT verify that the
-    /// frag/buffer files exist on disk — that's a validator lint, not a parse
-    /// failure.
+    /// missing/unreadable file or non-object JSON root.
     ///
-    /// Declared paths ARE containment-checked, though: a `fragmentShader`,
-    /// `vertexShader`, `bufferShaders` entry or image param that resolves
-    /// outside the pack directory is refused, because these name files that get
-    /// compiled and run on the GPU or sampled as a texture. A refused
-    /// `sourcePath` comes back EMPTY, and a refused entry drops the whole
-    /// `bufferShaderPaths` list (they are positionally aligned with the
-    /// per-buffer wrap/filter overrides, so compacting one out would shift the
-    /// rest onto the wrong buffer).
+    /// Existence is checked unevenly, and a caller cannot infer "not declared"
+    /// from an empty field: the FRAGMENT path is returned whether or not the file
+    /// is there (that one is a validator lint), a declared-but-missing
+    /// `vertexShader` is DROPPED, and a missing buffer shader clears the whole
+    /// `bufferShaderPaths` list.
+    ///
+    /// Declared paths are containment-checked: a `fragmentShader`,
+    /// `vertexShader` or `bufferShaders` entry resolving outside the pack
+    /// directory is refused, because these name files that get compiled and run
+    /// on the GPU. A refused `sourcePath` comes back EMPTY, and a refused entry
+    /// drops the whole `bufferShaderPaths` list (they are positionally aligned
+    /// with the per-buffer wrap/filter overrides, so compacting one out would
+    /// shift the rest onto the wrong buffer). Image params are NOT part of this
+    /// parse — they are resolved, and containment-checked, in
+    /// `translateParamsToUniforms`.
     static ShaderInfo parsePackMetadata(const QString& packDir, QString* error = nullptr);
 
     Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
@@ -285,6 +290,11 @@ private:
 
     static std::unique_ptr<IWallpaperProvider> s_wallpaperProvider;
     static QString s_cachedWallpaperPath;
+    /// Whether the provider has been asked at all since the last invalidation.
+    /// Distinguishes "not looked up yet" from "looked up, and there is no
+    /// wallpaper" — without it the empty answer is indistinguishable from a cache
+    /// miss and every call re-queries a provider that may block for a second.
+    static bool s_wallpaperPathResolved;
     static QImage s_cachedWallpaperImage;
     static qint64 s_cachedWallpaperMtime;
     static QMutex s_wallpaperCacheMutex;

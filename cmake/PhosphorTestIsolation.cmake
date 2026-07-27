@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # One place to apply the two isolations every PlasmaZones test needs.
+#
+# LGPL-2.1-or-later, matching `PhosphorLibTesting.cmake`: every consumer is an
+# `LGPL` library's own test tree, and CLAUDE.md's test-license split exists so a
+# library's build tree is not tainted with GPL.
 #
 # This exists because the same block used to be hand-copied into each library's
 # test wrapper, and the copies diverged: one tree had the D-Bus launcher, four
@@ -25,25 +29,73 @@
 
 find_program(_phosphor_dbus_run_session dbus-run-session)
 
-# Apply the standard test isolation to an already-registered test target.
-# Call AFTER add_test(NAME <target> ...), with NAME == the target name.
+# Beside this module rather than under `tests/unit`, so an LGPL library test tree
+# does not reach into the GPL app test tree for it. (The conf file is LGPL for the
+# same reason.)
+#
+# This does NOT make the module reachable from a standalone library configure.
+# Every caller includes it as `${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake`,
+# which in a standalone configure of e.g. libs/phosphor-fsloader resolves inside
+# that library, where there is no `cmake/` directory — so the `include()` errors
+# out before this path is consulted. A standalone build that wants the isolation
+# has to guard its own include.
+set(_phosphor_test_session_bus_conf "${CMAKE_CURRENT_LIST_DIR}/test-session-bus.conf")
+
+# Apply the standard test isolation to an already-registered test.
+#
+#   phosphor_apply_test_isolation(<target> [<test-name>])
+#
+# Call AFTER add_test(). <test-name> defaults to <target>, which is the case for
+# almost every caller; pass it explicitly when a tree registers its test under a
+# name that is not the target name (e.g. a namespaced `Foo::Bar`). The two are
+# genuinely different things — TEST_LAUNCHER is a TARGET property while ENVIRONMENT
+# is a TEST property — and conflating them silently applied half the isolation.
 function(phosphor_apply_test_isolation _target)
     if(NOT TARGET ${_target})
         message(FATAL_ERROR "phosphor_apply_test_isolation: '${_target}' is not a target")
     endif()
+    set(_test_name "${_target}")
+    if(ARGC GREATER 1)
+        set(_test_name "${ARGV1}")
+    endif()
 
-    if(_phosphor_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
+    if(_phosphor_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29
+       AND EXISTS "${_phosphor_test_session_bus_conf}")
         set_target_properties(${_target} PROPERTIES
             TEST_LAUNCHER
-            "${_phosphor_dbus_run_session};--config-file=${CMAKE_SOURCE_DIR}/tests/unit/test-session-bus.conf;--")
+            "${_phosphor_dbus_run_session};--config-file=${_phosphor_test_session_bus_conf};--")
+    elseif(NOT _phosphor_isolation_warned)
+        # Once per configure, not once per target.
+        set(_phosphor_isolation_warned TRUE CACHE INTERNAL "")
+        message(STATUS "PlasmaZones: dbus-run-session, CMake >= 3.29, or the test bus config is "
+                       "unavailable — tests will use the ambient session bus")
     endif()
 
     # Per-target subdirectories, so a test that leaves state behind cannot
     # affect the next one and a parallel ctest run cannot interleave writes.
+    #
+    # CREATED at configure time. `QStandardPaths::writableLocation` does not
+    # mkpath, so a test that writes without its own `QDir::mkpath` would fail
+    # against a root that does not exist.
     set(_xdg "${CMAKE_BINARY_DIR}/test-xdg/${_target}")
-    set_property(TEST ${_target} APPEND PROPERTY ENVIRONMENT
+    file(MAKE_DIRECTORY "${_xdg}/config" "${_xdg}/data" "${_xdg}/state" "${_xdg}/cache")
+
+    # APPEND, and every caller must APPEND too. A plain
+    # `set_tests_properties(... PROPERTIES ENVIRONMENT ...)` anywhere after this
+    # call REPLACES the whole list rather than adding to it, which is how the
+    # first version of this helper ended up setting four variables that never
+    # reached a single test. `phosphor_append_test_environment` below exists so
+    # a caller cannot get that wrong.
+    set_property(TEST ${_test_name} APPEND PROPERTY ENVIRONMENT
         "XDG_CONFIG_HOME=${_xdg}/config"
         "XDG_DATA_HOME=${_xdg}/data"
         "XDG_STATE_HOME=${_xdg}/state"
         "XDG_CACHE_HOME=${_xdg}/cache")
+endfunction()
+
+# Add per-test environment variables WITHOUT clobbering what
+# `phosphor_apply_test_isolation` set. Use this instead of
+# `set_tests_properties(... PROPERTIES ENVIRONMENT ...)`, which is a SET.
+function(phosphor_append_test_environment _target)
+    set_property(TEST ${_target} APPEND PROPERTY ENVIRONMENT ${ARGN})
 endfunction()

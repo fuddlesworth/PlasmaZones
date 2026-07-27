@@ -36,6 +36,11 @@ Phosphor overlay (hosts `ShaderEffect` items in QML).
 | `PhosphorShaders::ShaderIncludeResolver`  | `#include "path"` / `#include <path>` expansion with depth limit |
 | `PhosphorShaders::IWallpaperProvider`     | Abstract source for the active desktop wallpaper image path |
 | `PhosphorShaders::createWallpaperProvider`| Factory that auto-detects KDE / Hyprland / Sway / GNOME |
+| `PhosphorShaders::buildParamPreamble`     | Generates the per-effect `#define` preamble that maps declared parameter ids onto UBO lanes |
+| `PhosphorShaders::spliceAfterVersion`     | Inserts generated GLSL directly after a source's `#version` line |
+| `PhosphorShaders::BaseUniformProfile`     | Describes which base-UBO regions a consumer actually uploads |
+| `PhosphorShaders::IUboProfile`            | Contract for a bounded set of UBO upload regions (`kCapacity` of them) |
+| `PhosphorShaders::ShaderEntryPoint`       | Which entry point a pack's stage declares, so the loader can wrap it correctly |
 
 ## Typical use
 

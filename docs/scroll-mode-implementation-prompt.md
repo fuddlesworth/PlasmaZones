@@ -509,7 +509,7 @@ strip independence, and tabbed-column behavior (toggle normal↔tabbed, active-t
 others reported hidden, tab cycling via focus-window-up/down, tabbed columns still consuming/
 expelling/moving/resizing like normal ones). Tests needing D-Bus/Wayland are hand-rolled (the `p_add_test` macro deliberately
 omits Qt6::DBus) and every test runs under `dbus-run-session --config-file
-tests/unit/test-session-bus.conf` (via `TEST_LAUNCHER`) so the installed daemon can't auto-activate
+cmake/test-session-bus.conf` (via `TEST_LAUNCHER`) so the installed daemon can't auto-activate
 and hang ctest. Model engine/integration tests on `tests/unit/autotile/**`. **Run the full ctest
 suite and verify both the unity and no-unity (`build-nounity`) builds succeed before finishing** —
 unity builds mask missing includes; src-rooted includes are the convention.

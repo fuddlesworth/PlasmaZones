@@ -34,14 +34,22 @@ inline QString writeTempScript(QTemporaryDir& dir, const QString& filename, cons
  * @param filename Name of the script file
  * @param content Script content
  * @return Full path to the written file, or empty string on failure
+ *
+ * `[[nodiscard]]`, and the write itself is checked, matching the three sibling
+ * helpers in the LGPL test trees. Several callers assert that an id was NOT
+ * registered; without a checked write and a checked result those assertions pass
+ * vacuously when the file was never created, which is the same failure the
+ * script under test is supposed to produce.
  */
-inline QString writeScript(const QString& dirPath, const QString& filename, const QString& content)
+[[nodiscard]] inline QString writeScript(const QString& dirPath, const QString& filename, const QString& content)
 {
     QString path = dirPath + QStringLiteral("/") + filename;
     QFile f(path);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text))
         return QString();
-    f.write(content.toUtf8());
+    const QByteArray payload = content.toUtf8();
+    if (f.write(payload) != payload.size())
+        return QString();
     f.close();
     return path;
 }

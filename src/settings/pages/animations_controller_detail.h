@@ -271,12 +271,13 @@ inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
     // range. `std::isfinite` alone is not enough — 1e300 is finite and
     // `qRound` on it is undefined behaviour.
     //
-    // The caller's [lo, hi] is intersected with a band half a unit inside the
+    // The caller's [lo, hi] is intersected with a band a FULL unit inside the
     // int range, because `qRound(d)` is `int(d + 0.5)` for non-negative d and
     // `int(d - 0.5)` otherwise: a caller passing the full int range as its
     // domain (sequenceMode does) would otherwise still hand `qRound` a value
-    // whose conversion is out of range. Matches the same guard in
-    // `Profile::fromJson`.
+    // whose conversion is out of range. Same shape of guard as the one in
+    // `Profile::fromJson`, which needs only half a unit — this one is a whole
+    // unit and so strictly tighter, not identical.
     const auto boundedRound = [](double v, double lo, double hi, std::optional<int>& into) {
         const double safeLo = std::max(lo, double(std::numeric_limits<int>::min()) + 1.0);
         const double safeHi = std::min(hi, double(std::numeric_limits<int>::max()) - 1.0);

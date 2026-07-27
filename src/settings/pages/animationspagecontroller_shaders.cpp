@@ -145,7 +145,7 @@ void AnimationsPageController::openUserShaderDirectory()
 bool AnimationsPageController::installShaderPack(const QString& sourceUrl)
 {
     // All validation + copy lives in the shared ShaderPackInstaller
-    // helper (src/settings/shaderpackinstaller.{h,cpp}). The snapping-
+    // helper (src/settings/services/shaderpackinstaller.{h,cpp}). The snapping-
     // shaders page uses the same primitive; the security-sensitive
     // bits (symlink rejection, metadata.json verification, rollback)
     // only need an audit in one place.
@@ -246,6 +246,51 @@ QStringList AnimationsPageController::stockSuppressedEvents() const
     return owned;
 }
 
+/// Both boundary checks on an effect id, shared by `setShaderOverride` and the
+/// group writer `setShaderOverrideOnPaths`.
+///
+/// Shared because the group writer is now the ONLY path QML uses: when it was
+/// written to apply the whole group to one tree read, it stopped going through
+/// `setShaderOverride` and silently inherited neither gate, so an over-length,
+/// NUL-bearing or unknown id reached the persisted tree through the shipped
+/// event card. An id is per-call rather than per-path, so one check covers a
+/// whole group.
+bool AnimationsPageController::acceptableShaderEffectId(const QString& effectId, QLatin1String context) const
+{
+    // Cheap sanity check BEFORE the registry-membership gate below — that gate
+    // is skipped during the "registry not yet populated" startup window, so
+    // without this a caller could smuggle a NUL byte, a path separator, or a
+    // multi-KB string into the shader-profile tree where it would surface much
+    // later as a corrupt resolve. 256 chars is well above any legitimate effect
+    // id length and well below the cost of letting garbage through.
+    if (!effectId.isEmpty()
+        && (effectId.size() > 256 || effectId.contains(QLatin1Char('/')) || effectId.contains(QLatin1Char('\0')))) {
+        qCWarning(lcConfig) << context << ": rejecting effectId with illegal length/character; size="
+                            << effectId.size();
+        return false;
+    }
+
+    // Reject unknown effect ids at the boundary — without this, a typo from QML
+    // silently writes garbage into the shader-profile tree, and the daemon's
+    // lookup at runtime returns nothing with no settings-side diagnostic (the
+    // failure mode is "no shader applied, no error").
+    //
+    // The `effectIds().isEmpty()` guard avoids tripping the gate when the
+    // registry hasn't yet scanned XDG dirs (asynchronous on some setups, and
+    // unit tests construct an empty registry on purpose) — we cannot distinguish
+    // "id is unknown" from "registry not yet populated" without a separate
+    // readiness signal.
+    //
+    // The engaged-empty "None" sentinel is exempt: it is a real stored value
+    // that blocks inheritance, not an effect the registry has to know.
+    if (!effectId.isEmpty() && m_shaderRegistry && !m_shaderRegistry->effectIds().isEmpty()
+        && !m_shaderRegistry->hasEffect(effectId)) {
+        qCWarning(lcConfig) << context << ": unknown effectId" << effectId << ", ignoring assignment";
+        return false;
+    }
+    return true;
+}
+
 bool AnimationsPageController::setShaderOverride(const QString& path, const QString& effectId,
                                                  const QVariantMap& parameters)
 {
@@ -257,24 +302,15 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     // animationspagecontroller_overrides.cpp — the shader tree is
     // captured in m_pendingFileSnapshots when a discard starts, and
     // a concurrent mutation here would race the worker's
-    // setShaderProfileTree write. The chrome gates the picker UI on
-    // `discarding`; this guard protects programmatic callers.
+    // setShaderProfileTree write. The QML does NOT gate the picker on
+    // `discarding` (only Main.qml's Apply/Discard buttons are gated), so this
+    // guard is load-bearing rather than defence-in-depth.
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "setShaderOverride: refusing write while async discard is in flight; path=" << path;
         return false;
     }
 
-    // Cheap sanity check on effectId BEFORE the registry-membership gate
-    // below — the registry gate is skipped during the "registry not yet
-    // populated" startup window, so without this guard a stray Q_INVOKABLE
-    // caller could smuggle a NUL byte, a path separator, or a multi-KB
-    // string into the shader-profile tree where it would surface much
-    // later as a corrupt resolve. 256 chars is well above any legitimate
-    // effect id length and well below the cost of letting garbage through.
-    if (!effectId.isEmpty()
-        && (effectId.size() > 256 || effectId.contains(QLatin1Char('/')) || effectId.contains(QLatin1Char('\0')))) {
-        qCWarning(lcConfig) << "setShaderOverride: rejecting effectId with illegal length/character; size="
-                            << effectId.size();
+    if (!acceptableShaderEffectId(effectId, QLatin1String("setShaderOverride"))) {
         return false;
     }
 
@@ -334,20 +370,6 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         return true;
     }
 
-    // Reject unknown effect ids at the boundary — without this, a typo
-    // from QML silently writes garbage into the shader-profile tree, and
-    // the daemon's lookup at runtime returns nothing with no settings-side
-    // diagnostic (the failure mode is "no shader applied, no error").
-    //
-    // The `effectIds().isEmpty()` guard avoids tripping the gate when the
-    // registry hasn't yet scanned XDG dirs (asynchronous on some setups,
-    // and unit tests construct an empty registry on purpose) — we can't
-    // distinguish "id is unknown" from "registry not yet populated"
-    // without a separate readiness signal.
-    if (m_shaderRegistry && !m_shaderRegistry->effectIds().isEmpty() && !m_shaderRegistry->hasEffect(effectId)) {
-        qCWarning(lcConfig) << "setShaderOverride: unknown effectId" << effectId << ", ignoring assignment for" << path;
-        return false;
-    }
 
     // Standard pattern: write through Settings::setShaderProfileTree.
     // The shaderProfileTreeJson Q_PROPERTY emits NOTIFY, the
@@ -439,8 +461,10 @@ QVariantList AnimationsPageController::shaderEffectUsages(const QString& effectI
         out.append(entry);
     }
     // Sort by label for deterministic UI order across runs — the tree's
-    // `overriddenPaths()` iterates a QHash internally so the order is
-    // not stable.
+    // `overriddenPaths()` returns the tree's insertion order, which IS stable
+    // across runs (it is rebuilt from the persisted `overrides` JSON array), so
+    // this sort is about the UI reading alphabetically rather than about
+    // determinism.
     std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
         return a.toMap().value(QLatin1String("label")).toString() < b.toMap().value(QLatin1String("label")).toString();
     });

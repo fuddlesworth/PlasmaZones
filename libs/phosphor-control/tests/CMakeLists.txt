@@ -3,6 +3,11 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Test DBus)
 
+# Shared test isolation: a private D-Bus session (so a test that touches D-Bus
+# cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
+# open and hangs ctest after the test itself passed) plus a per-target XDG
+# sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 function(phosphorcontrol_add_test name)
     add_executable(${name} ${name}.cpp)
     # Qt6::Gui is still pulled in transitively by Qt6::Test (which
@@ -23,8 +28,12 @@ function(phosphorcontrol_add_test name)
     # LABELS lets `ctest -L phosphor-control` filter to just this
     # lib's tests in a workspace that runs many ctest suites.
     add_test(NAME ${name} COMMAND ${name})
+    phosphor_apply_test_isolation(${name})
+    # APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
+    # ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
+    # sandbox `phosphor_apply_test_isolation` just installed.
+    phosphor_append_test_environment(${name} "QT_QPA_PLATFORM=offscreen")
     set_tests_properties(${name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         LABELS "phosphor-control"
     )
 endfunction()

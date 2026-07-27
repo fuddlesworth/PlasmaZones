@@ -771,7 +771,7 @@ Item {
                 Layout.fillWidth: true
                 isParentNode: root.isParentNode
                 overrideActive: root.overrideEnabled
-                editingTiming: root._editingTiming
+                timingEditorOpen: root._timingEditorOpen
                 shadowingChildrenCount: root._shadowingChildrenCount
                 mirrorsDiverged: root._mirrorsDiverged
                 divergentPathCount: root._divergentPathCount
@@ -834,9 +834,13 @@ Item {
                 // via `overrideEnabled` and the latch is false. Reverting the
                 // last remaining field then drops overrideEnabled and collapses
                 // the editor under the cursor of the user who just clicked
-                // inside it. Gated on the return so a refused clear (an async
-                // discard is in flight, and the controller toasts) does not
-                // latch open a card that changed nothing.
+                // inside it. Gated on the return, which is false ONLY when the
+                // controller refused the call outright and attempted nothing (an
+                // async discard owns the tree, and it toasts). A PARTIAL failure
+                // reports the count that did land and so still latches the editor
+                // open, because the primary path really was cleared and
+                // collapsing the card under the user is the regression this whole
+                // interaction exists to prevent.
                 onCurveRevertRequested: {
                     if (root._clearFieldOnAll("curve"))
                         root._editingTiming = true;

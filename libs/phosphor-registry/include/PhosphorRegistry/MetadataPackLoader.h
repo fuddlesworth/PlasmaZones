@@ -286,11 +286,22 @@ private:
                 m_sigContrib(hasher, *e.factory);
             }
             const QByteArray fp = hasher.result();
-            fresh.insert(e.id, fp);
 
             const auto prev = m_fingerprints.constFind(e.id);
             if (prev == m_fingerprints.cend()) {
-                m_registry->registerFactory(e.factory); // newly discovered
+                // Newly discovered. The RESULT matters: `registerFactory`
+                // defaults to DuplicatePolicy::Reject, so an id already present
+                // from an out-of-band registration FAILS here. Recording the
+                // fingerprint anyway would make `m_fingerprints.contains(id)`
+                // true below, and on the refresh where that pack disappears this
+                // loader would unregister a factory it never registered — the
+                // exact case the removal filter's comment claims it excludes.
+                // No warning: this is a header-only template with no logging
+                // category of its own, and the condition is benign — the
+                // out-of-band registration wins, which is what Reject means.
+                if (!m_registry->registerFactory(e.factory)) {
+                    continue;
+                }
             } else if (prev.value() != fp) {
                 // Content changed: replace in place. Replace (not a separate
                 // unregister + register) keeps the pack's REGISTRATION-ORDER
@@ -304,6 +315,11 @@ private:
                 m_registry->registerFactory(e.factory, QString(), DuplicatePolicy::Replace);
             }
             // else: unchanged — leave the registry entry as-is.
+
+            // Recorded only once this loader is known to own the id, so the
+            // removal filter below stays an accurate "packs THIS loader
+            // registered" test.
+            fresh.insert(e.id, fp);
         }
         // Remove packs that disappeared. Walk the registry's ids() — which is
         // registration order — rather than m_fingerprints (a QHash, hash order)

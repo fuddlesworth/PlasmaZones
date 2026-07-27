@@ -242,7 +242,7 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
 
         // No `desktop.*` motion seeds — and NOT because a seed here would be
         // unread. It would be read: the daemon runs this same function on its
-        // own registry (daemon.cpp), and settingsadaptor's `motionProfileTree`
+        // own registry (daemon/animation_profiles.cpp), and settingsadaptor's `motionProfileTree`
         // getter flattens that registry's snapshot into the tree the
         // kwin-effect fetches over D-Bus, where every non-`Global` path becomes
         // an OVERRIDE. An override beats the caller's base in overlayChainOnto,

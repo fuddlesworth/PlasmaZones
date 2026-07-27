@@ -109,8 +109,9 @@ inline QStringList shaderConsumedLeafEventPaths()
 /// any assignment would be runtime-dead and silently shadow what the
 /// user thought they set on a sibling. The settings UI hides the
 /// shader picker on those rows; @c Settings::shaderProfileTree's prune
-/// drops any persisted entry on those paths to self-heal configs from
-/// earlier app revisions.
+/// drops any persisted entry on those paths, so a config from an earlier app
+/// revision can never SERVE one (the entry may still sit in the file until an
+/// unrelated edit rewrites it).
 inline QStringList shaderSupportedEventPaths()
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
@@ -142,7 +143,8 @@ inline const QSet<QString>& supportedShaderPathSet()
 }
 
 /// Convenience predicate used by the settings UI (Q_INVOKABLE-bridged)
-/// and the daemon's optional verification path.
+/// (Q_INVOKABLE-bridged). The only callers today are the two in
+/// `animationspagecontroller_shaders.cpp`.
 inline bool eventPathSupportsShaderLeg(const QString& path)
 {
     return supportedShaderPathSet().contains(path);
@@ -161,7 +163,10 @@ inline bool eventPathSupportsShaderLeg(const QString& path)
 /// let the user clear them — making the bug sticky.
 ///
 /// Calling this pruner on every read AND every write at the Settings
-/// layer means an affected config self-heals on the next save, and a
+/// layer means an affected config can never SERVE a stale entry (the read prunes
+/// it), though the entry itself lingers in the file until an unrelated edit
+/// forces a write — the write-side compare happens after pruning on both
+/// sides, so a prune-only delta is not itself a reason to write. And a
 /// fresh write coming from a Q_INVOKABLE that bypasses the UI gate
 /// (e.g. a future scripting hook) still cannot stamp unsupported-path
 /// entries onto disk.

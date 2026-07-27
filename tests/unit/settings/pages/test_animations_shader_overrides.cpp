@@ -110,7 +110,7 @@ private Q_SLOTS:
 
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
-        QVERIFY2(spy.count() >= 1, "setShaderOverride MUST emit pendingChangesChanged");
+        QCOMPARE(spy.count(), 1);
     }
 
     /// `setShaderOverride(path, "")` — the empty-effectId disable shorthand
@@ -131,7 +131,7 @@ private Q_SLOTS:
 
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QString(), {}));
-        QVERIFY2(spy.count() >= 1, "setShaderOverride('','') MUST emit pendingChangesChanged on disable");
+        QCOMPARE(spy.count(), 1);
         // Engaged-empty sentinel: `effectId` is engaged but the value is
         // an empty string, signalling "explicitly no shader" (blocks
         // parent-inheritance cascade).
@@ -151,8 +151,11 @@ private Q_SLOTS:
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
         QVERIFY(c.clearShaderOverride(QStringLiteral("osd.show")));
-        QVERIFY2(spy.count() >= 2,
-                 qPrintable(QStringLiteral("expected >=2 emissions, got ") + QString::number(spy.count())));
+        // Exactly two: the set makes the page dirty, the clear makes it clean
+        // again. `>=` here would let a mutation that announces twice per write
+        // through, and a duplicate pendingChangesChanged is a real defect (the
+        // footer flickers and every listener re-queries).
+        QCOMPARE(spy.count(), 2);
     }
 
     /// clearShaderOverride on a path with NO override is a no-op: it returns
@@ -528,8 +531,11 @@ private Q_SLOTS:
         // (it's the parent the user is keeping intact).
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("popup")), 2);
-        QVERIFY2(spy.count() >= 1,
-                 "clearShaderOverrideDescendants MUST emit pendingChangesChanged when it cleared anything");
+        // Exactly one for the whole batch. That is the documented contract of
+        // the batch entry point — it clears every descendant, rescans once, and
+        // announces the NET flip once — so `>=` would have accepted the
+        // per-path-emit regression the batch exists to avoid.
+        QCOMPARE(spy.count(), 1);
         // Verify count is now zero.
         QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("popup")), 0);
         // Parent override survived.
@@ -574,7 +580,12 @@ private Q_SLOTS:
         QCOMPARE(toastSpy.first().first().toString(),
                  PhosphorI18n::tr("Cannot change this while a discard is in progress."));
 
-        QVERIFY(done.wait(5000));
+        // QTRY, not `done.wait()`: `asyncRevertPending` emits `discardResult`
+        // SYNCHRONOUSLY on two early-return branches, and `QSignalSpy::wait()`
+        // ignores an emission already recorded before it was called — so on
+        // either branch `wait()` would block the full timeout and then fail for
+        // the wrong reason. Every sibling slot in this file uses QTRY for this.
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
     }
 
     /// The leaf-isolated interactive-drag path (window.movement.move) is a

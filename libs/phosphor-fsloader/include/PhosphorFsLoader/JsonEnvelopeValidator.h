@@ -95,6 +95,16 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
         qCWarning(category) << "Skipping unreadable file" << filePath << ":" << file.errorString();
         return std::nullopt;
     }
+    // Re-checked on the OPEN handle. The pre-open `QFileInfo` above is gated on
+    // `exists()`, so a path that was absent at stat time and created before the
+    // open bypassed the cap entirely and `readAll()` below was unbounded — which
+    // defeats the whole point of the guard. This check is on the descriptor, so
+    // there is no window between the size and the read.
+    if (file.size() > DirectoryLoader::kMaxFileBytes) {
+        qCWarning(category).nospace() << "Skipping " << filePath << ": file size " << file.size()
+                                      << " exceeds limit " << DirectoryLoader::kMaxFileBytes;
+        return std::nullopt;
+    }
 
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
