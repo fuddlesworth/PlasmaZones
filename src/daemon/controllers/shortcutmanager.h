@@ -110,8 +110,10 @@ public:
 
     /**
      * Test-only backend injection. Must be called before registerShortcuts()
-     * (which otherwise creates the real platform backend lazily). Lets tests
-     * observe the exact IBackend calls the manager makes — in particular that
+     * (which otherwise creates the real platform backend lazily); a call
+     * arriving after registration asserts in debug builds and releases the
+     * live registration first in release builds. Lets tests observe the
+     * exact IBackend calls the manager makes — in particular that
      * unregisterShortcuts() never purges persistent bindings via
      * IBackend::unregisterShortcut (discussion #851).
      */

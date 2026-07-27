@@ -684,6 +684,17 @@ bool ShortcutManager::updateShortcuts()
 void ShortcutManager::setBackendForTesting(std::unique_ptr<PhosphorShortcuts::IBackend> backend)
 {
     Q_ASSERT_X(m_entries.isEmpty(), "setBackendForTesting", "inject before registerShortcuts()");
+    if (!m_entries.isEmpty()) {
+        // Release-build pair for the assert. Resetting the registry while
+        // m_entries stays populated would break the "entries non-empty
+        // implies registry present" invariant updateShortcuts() relies on —
+        // the next settings save would deref a null m_registry in
+        // rebindAll(). Release the live registration first so the invariant
+        // survives the misuse.
+        qCWarning(lcShortcuts) << "setBackendForTesting() called after registerShortcuts() — releasing the live "
+                                  "registration before installing the injected backend";
+        unregisterShortcuts();
+    }
     m_registry.reset();
     m_backend = std::move(backend);
 }
