@@ -474,6 +474,18 @@ target_link_libraries(test_cheatsheet_compression
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
 add_test(NAME test_cheatsheet_compression COMMAND test_cheatsheet_compression)
 
+# Shortcut teardown contract (discussion #851): unregisterShortcuts() must not
+# purge persistent bindings from the backend. Same daemon-source compilation
+# as test_cheatsheet_compression, plus a backend injected via
+# setBackendForTesting to observe the IBackend calls.
+add_executable(test_shortcutmanager_teardown
+    daemon/test_shortcutmanager_teardown.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+)
+target_link_libraries(test_shortcutmanager_teardown
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
+add_test(NAME test_shortcutmanager_teardown COMMAND test_shortcutmanager_teardown)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Layout Tests (core, zones)
 # ═══════════════════════════════════════════════════════════════════════════════

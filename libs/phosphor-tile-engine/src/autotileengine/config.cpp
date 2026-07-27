@@ -272,7 +272,16 @@ void AutotileEngine::refreshConfigFromSettings()
 #undef SYNC_FIELD
 
     const QString oldAlgorithmId = m_algorithmId;
+    // Flag the switch as settings-driven for the duration of the call:
+    // savedAlgorithmSettings was reloaded from disk just above, so the outgoing
+    // algorithm's slot in it is newer than the engine's live scalars (which the
+    // SYNC_FIELDs above have already pulled down to the global keys). Without
+    // the flag, setAlgorithm() stamped those clobbered scalars over the fresh
+    // slot and writeBackTuning() persisted the corruption — the "max windows
+    // reverts to its default" data loss of discussion #853.
+    m_refreshingFromSettings = true;
     setAlgorithm(s->defaultAutotileAlgorithm());
+    m_refreshingFromSettings = false;
     if (m_algorithmId != oldAlgorithmId) {
         configChanged = true;
     }
