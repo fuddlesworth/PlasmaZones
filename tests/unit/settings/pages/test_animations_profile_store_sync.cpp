@@ -19,9 +19,10 @@
  * (the announcement must still fire, or the UI has nothing to re-read on).
  *
  * Split out of `test_animations_page_controller.cpp`, which owns path
- * discovery, override CRUD, the dirty-state announcements, the traversal
- * gate, and the suppression mirror. The QML↔controller contracts live in
- * `test_animations_qml_contracts.cpp`.
+ * discovery, override CRUD, the dirty-state announcements, and the traversal
+ * gate. The suppression mirror has its own companion,
+ * `test_animations_suppression_mirror.cpp`, and the QML↔controller contracts
+ * live in `test_animations_qml_contracts.cpp`.
  *
  * Every slot redirects override-file I/O into a tmpdir via
  * `setUserProfilesDirOverride()`, so the real user XDG dirs are never touched.
@@ -155,12 +156,13 @@ private Q_SLOTS:
     }
 
     /// clearOverride is not the only path that removes an override file: the
-    /// scoped discard, the bulk clears, and BOTH global discards (the
-    /// synchronous one and the async worker the UI actually dispatches) all
-    /// do, and each carries the same hazard — the file is gone, so nothing on
-    /// disk outranks the entry the registry is still holding. Each leg below
-    /// is a distinct `refreshProfileStore()` call site, seeded with its own
-    /// stale registry value; deleting any one of the four fails this test.
+    /// scoped discard, the bulk clears, BOTH global discards (the synchronous
+    /// one and the async worker the UI actually dispatches), and a field-clear
+    /// that empties the last field out of an override all do, and each carries
+    /// the same hazard — the file is gone, so nothing on disk outranks the
+    /// entry the registry is still holding. Each leg below is a distinct
+    /// `refreshProfileStore()` call site, seeded with its own stale registry
+    /// value; deleting any one of the five fails this test.
     void everyBatchRemovalPathRefreshesTheProfileStore()
     {
         QTemporaryDir tmp;
@@ -237,6 +239,20 @@ private Q_SLOTS:
         QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
         QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toDouble(),
                  PhosphorAnimation::Profile::DefaultDuration);
+
+        // Leg 5 — a field-clear that empties the override. clearFieldOnPaths
+        // removes the one field; an override with nothing left is deleted
+        // outright, so this is a removal path too, with the same stale-registry
+        // hazard. Re-seed the parent so the cleared leaf has a value to fall
+        // back to, and give the leaf a single field so clearing it empties it.
+        QVERIFY(c.setOverride(QStringLiteral("editor"), {{QStringLiteral("duration"), 123}}));
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 555}}));
+        loader.rescanNow();
+        QCOMPARE(c.clearFieldOnPaths(QStringList{QStringLiteral("editor.snapIn")}, QStringLiteral("duration")), 1);
+        QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
+        // Falls back to the parent's 123, not the stale 555 the registry still
+        // holds if the field-clear's refresh were deleted.
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 123);
     }
 
     /// The registry is still the source for every level this controller does

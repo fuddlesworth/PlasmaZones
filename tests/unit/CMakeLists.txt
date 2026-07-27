@@ -1051,10 +1051,10 @@ target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Co
 target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
 
-# Animations-controller sources shared by the seven test executables below
+# Animations-controller sources shared by the eight test executables below
 # (page controller / QML contracts / profile-store sync / motion sets / presets /
-# shader overrides / group writes). One list so a new controller source file
-# cannot silently miss one of the seven.
+# shader overrides / group writes / suppression mirror). One list so a new
+# controller source file cannot silently miss one of the eight.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_shaders.cpp
@@ -1219,7 +1219,7 @@ target_link_libraries(test_animations_shader_overrides
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
-target_compile_definitions(test_animations_shader_overrides PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_compile_definitions(test_animations_shader_overrides PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
 
 # Decoration page (per-surface DecorationProfileTree editor): reader /

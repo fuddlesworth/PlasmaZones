@@ -188,6 +188,12 @@ private Q_SLOTS:
         QVERIFY(writeAnimationPack(tmp.path(), QStringLiteral("unrelated-pack"), {}));
         registry.refresh();
         QTRY_VERIFY(registry.hasEffect(QStringLiteral("unrelated-pack")));
+        // hasEffect settling does not prove the suppression handler has run:
+        // it is a separate slot on the same rescan, and sampling the spy right
+        // after hasEffect could read before it has had its chance to (wrongly)
+        // fire. Drain the queue so a stray emission would have landed, then
+        // assert the count is still unchanged.
+        QCoreApplication::processEvents();
         QCOMPARE(spy.count(), afterFlip);
     }
 };

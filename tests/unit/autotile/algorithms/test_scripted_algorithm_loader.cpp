@@ -411,6 +411,15 @@ private Q_SLOTS:
 
         auto* registry = PlasmaZones::TestHelpers::testRegistry();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:ephemeral")));
+
+        // The point of LiveReload::Off is that no watcher is armed. Assert it:
+        // a script dropped in AFTER the one-shot scan must NOT be auto-picked-up.
+        // Without this the slot would pass identically whether the watcher was
+        // suppressed or not — the very behaviour the flag exists to control.
+        QVERIFY(!writeScript(algoDir, QStringLiteral("late.luau"), validScript(QStringLiteral("Late"))).isEmpty());
+        QTest::qWait(100); // longer than the loader's debounce, so a live watcher would have fired by now
+        QVERIFY2(!registry->hasAlgorithm(QStringLiteral("script:late")),
+                 "a script added after a LiveReload::Off scan was registered — a watcher was armed");
     }
 
     // =========================================================================

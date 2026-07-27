@@ -170,14 +170,19 @@ private Q_SLOTS:
 
         QFile dirAsFile(tmp.path());
         QVERIFY(dirAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        // Restore via a scope guard, not a trailing statement: any QCOMPARE
+        // below early-returns on failure, and a plain restore at the end would
+        // then be skipped, leaving the tmpdir unwritable so QTemporaryDir cannot
+        // clean it up.
+        const auto restorePerms = qScopeGuard([&dirAsFile]() {
+            dirAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        });
 
         QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
         QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("paths could not be updated")));
         QCOMPARE(c.clearFieldOnPaths(QStringList{kPrimary}, QStringLiteral("duration")), 0);
         QCOMPARE(toasts.count(), 1);
         QCOMPARE(toasts.first().at(0).toString(), PhosphorI18n::tr("Some animation overrides could not be reverted."));
-
-        QVERIFY(dirAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
     }
 
     /// An INVALID QVariant is QML's `undefined` arriving here, and it means the
@@ -698,7 +703,10 @@ private Q_SLOTS:
         QCOMPARE(c.clearFieldOnPaths(group(), QStringLiteral("duration")), 2);
 
         QVERIFY(c.hasPendingChanges());
-        QVERIFY2(dirtied.count() > 0, "a mixed batch flipped the page dirty without announcing it");
+        // Exactly one: a group write coalesces its per-path mutations into a
+        // single net dirty flip. `> 0` would also pass a per-path storm of
+        // announcements, which the batching exists precisely to prevent.
+        QCOMPARE(dirtied.count(), 1);
     }
 
     // ─── Refusal parity across the group writers ──────────────────────────
