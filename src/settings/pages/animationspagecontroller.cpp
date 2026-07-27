@@ -632,7 +632,7 @@ void AnimationsPageController::asyncRevertPending()
         // truncated some files on disk, producing inconsistent state.
         // Surface a quick failure so the framework's discard counter
         // ticks down and the user knows to retry.
-        Q_EMIT discardResult(false, PhosphorI18n::tr("Discard already in flight."));
+        Q_EMIT discardResult(false, PhosphorI18n::tr("A discard is already in progress. Try again in a moment."));
         return;
     }
     if (!hasPendingChanges()) {

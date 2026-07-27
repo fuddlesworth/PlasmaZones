@@ -72,7 +72,17 @@ bool activateRunningInstance(const QString& address)
         // The D-Bus method is still "setActivePage" (signature unchanged); the
         // running instance routes it through navigateTo(), so an address with a
         // trailing "#anchor" fragment deep-links to a specific setting.
-        PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {address});
+        //
+        // A running instance still exists (isRunning above), so we return true
+        // and exit either way — spawning a second window would defeat the
+        // single-instance contract. But forward() reporting false means the
+        // deep-link itself did not land (the peer errored or did not reply), so
+        // surface that instead of dropping it silently: the user asked for a
+        // specific page and it will not appear.
+        if (!PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {address})) {
+            qCWarning(PlasmaZones::lcCore)
+                << "A settings instance is running but did not accept the --page deep-link:" << address;
+        }
     }
     return true;
 }

@@ -190,6 +190,11 @@ pruneShaderProfileTreeToSupportedPaths(const PhosphorAnimationShaders::ShaderPro
     // the filter, and `supportedShaderPathSet()` is built from that same
     // list, so the two cannot disagree.
     PhosphorAnimationShaders::ShaderProfileTree pruned;
+    // The baseline is a single global ShaderProfile (the "global" root default),
+    // not one of the path-keyed overrides this filter operates on, so it is
+    // copied through verbatim by design. The supported-path prune decides which
+    // OVERRIDE PATHS survive; the root default always applies and has no path to
+    // filter against.
     pruned.setBaseline(src.baseline());
     // Emitted in the SSOT's own order, not the source tree's insertion order, so
     // this pruner CANONICALISES as well as filters.

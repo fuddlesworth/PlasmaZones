@@ -758,9 +758,12 @@ private Q_SLOTS:
         QSignalSpy done(&c, &AnimationsPageController::discardResult);
         c.asyncRevertPending();
 
-        QTest::ignoreMessage(
-            QtWarningMsg,
-            QRegularExpression(QStringLiteral("clearShaderOverrideDescendants: refusing while async discard")));
+        // The refusal is reported by the method's own top-level async gate,
+        // which short-circuits before any per-path work — so this is the
+        // *OnPaths wrapper's message, not the per-path singular's.
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral(
+                                 "clearShaderOverrideDescendantsOnPaths: refusing while an async discard")));
         // Spy attached before the refused call, for the same reason as its
         // timing-side twin in test_animations_group_writes: a refusal must
         // mutate nothing, and the tree's contents here would race the discard
