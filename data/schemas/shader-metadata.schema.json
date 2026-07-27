@@ -2,9 +2,9 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "urn:plasmazones:schema:shader-metadata",
     "title": "PlasmaZones Wallpaper Shader Metadata",
-    "description": "metadata.json for a bundled or user wallpaper-shader pack. Core identity and the parameter contract are enforced. Optional multipass, buffer, and wallpaper rendering keys, plus descriptive metadata (category, description, author, version), are allowed through.",
+    "description": "metadata.json for a bundled or user wallpaper-shader pack. Core identity and the parameter contract are enforced. Optional multipass, buffer, and wallpaper rendering keys, plus descriptive metadata (category, description, author, version), are type-checked so a wrong-typed value is rejected at the gate rather than silently swallowed by a typed accessor at load.",
     "type": "object",
-    "required": ["id", "name", "fragmentShader", "parameters"],
+    "required": ["id", "name", "fragmentShader"],
     "properties": {
         "id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 },
@@ -17,12 +17,28 @@
         "parameters": {
             "type": "array",
             "items": { "$ref": "#/definitions/parameter" }
-        }
+        },
+        "presets": {
+            "type": "object",
+            "description": "Named parameter presets. Each value is a map of parameter id to value; image-typed values are pack-declared paths and are containment-checked at load like an image param's default.",
+            "additionalProperties": { "type": "object" }
+        },
+        "multipass": { "type": "boolean" },
+        "bufferShader": { "type": "string" },
+        "bufferShaders": { "type": "array", "items": { "type": "string" } },
+        "bufferScale": { "type": "number" },
+        "bufferWrap": { "type": "string" },
+        "bufferWraps": { "type": "array", "items": { "type": "string" } },
+        "bufferFilter": { "type": "string" },
+        "bufferFilters": { "type": "array", "items": { "type": "string" } },
+        "bufferFeedback": { "type": "boolean" },
+        "depthBuffer": { "type": "boolean" },
+        "wallpaper": { "type": "boolean" }
     },
     "definitions": {
         "parameter": {
             "type": "object",
-            "required": ["id", "name", "group", "type", "default"],
+            "required": ["id", "name", "type", "default"],
             "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "name": { "type": "string", "minLength": 1 },
@@ -33,12 +49,17 @@
                     "description": "Marshalling type of the uniform (image binds a texture slot). An unknown type cannot be bound, so it is rejected."
                 },
                 "default": {
-                    "type": ["number", "string", "boolean"],
+                    "type": ["number", "string", "boolean", "null"],
                     "description": "Default value. Use a string for color (#rrggbb), a number for float or int, and a boolean for bool."
                 },
                 "min": { "type": "number" },
                 "max": { "type": "number" },
-                "slot": { "type": "integer" }
+                "slot": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 31,
+                    "description": "Explicit UBO lane. 31 is the scalar-pool ceiling; the color pool tops out at 15 and the image pool at 3, which the pack validator lints per type."
+                }
             }
         }
     }

@@ -10,11 +10,26 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QLibrary>
+#include <QLoggingCategory>
 #include <QObject>
 #include <QSet>
 #include <QStandardPaths>
 
 namespace PhosphorRegistry {
+
+namespace {
+// Own category, like every sibling scanner in phosphor-fsloader. Plugin load
+// failures are the noisiest path here and bare qCWarning(lcPluginLoader) left them
+// unfilterable, so an operator debugging one subsystem could not silence them.
+Q_LOGGING_CATEGORY(lcPluginLoader, "phosphorregistry.pluginloader")
+} // namespace
+
+// Hard cap on plugin subdirectories CONSIDERED per scan cycle, summed across
+// every plugin root. Same counted quantity as DirectoryLoader::kMaxEntries and
+// MetadataPackScanStrategy::kDefaultMaxEntries, one order of magnitude below
+// them: a plugin costs a dlopen rather than a JSON parse, and no plausible
+// install has a four-digit plugin count.
+static constexpr int MAX_PLUGIN_SUBDIRS_PER_CYCLE = 1000;
 
 // Live state for one loaded plugin. The QLibrary holds the .so
 // mapped for the PluginLoader's lifetime — Phase 1.3 deliberately
@@ -56,7 +71,7 @@ struct PluginLoader::LoadedPlugin
 
 // Bridge between WatchedDirectorySet's IScanStrategy interface and
 // PluginLoader's per-cycle scan logic. Mirrors how
-// ScriptedAlgorithmLoader nests a JsScanStrategy inside itself.
+// ScriptedAlgorithmLoader nests a LuauScanStrategy inside itself.
 class PluginLoader::ScanStrategyImpl : public PhosphorFsLoader::IScanStrategy
 {
 public:
@@ -82,6 +97,7 @@ PluginLoader::PluginLoader(Registry<IBarWidgetFactory>* registry, const QString&
     if (!m_registry) {
         qFatal("PluginLoader: registry must not be null");
     }
+    m_maxSubdirsPerCycle = MAX_PLUGIN_SUBDIRS_PER_CYCLE;
     m_strategy = std::make_unique<ScanStrategyImpl>(this);
     m_watcher = std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy);
     // Qt::AutoConnection (the default) is correct here: both ends
@@ -132,6 +148,18 @@ QString PluginLoader::pluginRoot() const
     return m_pluginRoot;
 }
 
+void PluginLoader::setMaxSubdirsPerCycleForTest(int cap)
+{
+    // A non-positive cap reverts to the production default. This DELIBERATELY
+    // diverges from the two sibling scanners (DirectoryLoader /
+    // MetadataPackScanStrategy), which honour a cap of 0 as "consider nothing":
+    // PluginLoader has no test that needs a zero cap (the cap-trip behaviour is
+    // pinned at cap 1), and a zero here would disable plugin scanning entirely
+    // with no way back for the process, so treating 0 as "unset" is the safer
+    // default for this loader. PluginLoader.h documents the divergence.
+    m_maxSubdirsPerCycle = cap > 0 ? cap : MAX_PLUGIN_SUBDIRS_PER_CYCLE;
+}
+
 void PluginLoader::scanAndLoad()
 {
     if (!m_watcher) {
@@ -178,18 +206,6 @@ QStringList PluginLoader::loadedPluginIds() const
     return m_plugins.keys();
 }
 
-int PluginLoader::liveWidgetCount(const QString& pluginId) const
-{
-    // Phase 1.3 does not track per-widget refcount — the unload
-    // contract is "registry-drop only, .so stays mapped for the
-    // process lifetime" so the count is moot. The accessor stays
-    // in the public API as a Phase-5 hook; today it returns -1 to
-    // signal "untracked" so tests don't accidentally assert on a
-    // refcount value Phase 1.3 doesn't maintain.
-    Q_UNUSED(pluginId);
-    return -1;
-}
-
 QString PluginLoader::resolveDefaultPluginRoot() const
 {
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
@@ -201,8 +217,8 @@ QString PluginLoader::resolveDefaultPluginRoot() const
         // wants. Return an empty sentinel; ensurePluginRootExists will
         // refuse to mkpath an empty string and the loader stays inert
         // rather than silently scanning CWD.
-        qWarning().noquote() << "PluginLoader: GenericDataLocation is empty (no XDG_DATA_HOME or HOME); "
-                                "plugin discovery disabled. Pass an explicit pluginRoot to the ctor.";
+        qCWarning(lcPluginLoader).noquote() << "PluginLoader: GenericDataLocation is empty (no XDG_DATA_HOME or HOME); "
+                                               "plugin discovery disabled. Pass an explicit pluginRoot to the ctor.";
         return QString();
     }
     return QDir(base).filePath(QStringLiteral("phosphor/plugins"));
@@ -210,9 +226,13 @@ QString PluginLoader::resolveDefaultPluginRoot() const
 
 bool PluginLoader::ensurePluginRootExists() const
 {
-    // Warn-once latch. Without it, every rescanNow() (the watcher's
-    // timer, the demo's reload button) re-logs the same "failed to
-    // create plugin root" line and floods the journal.
+    // Warn-once latch. This function is reached ONLY from scanAndLoad()
+    // (pluginloader.cpp) — NOT from rescanNow(), the watcher timer, or the
+    // demo's reload button, all of which forward to the watcher's rescan
+    // without touching it. The latch matters because scanAndLoad deliberately
+    // leaves m_initialScanDone false on a mkpath failure (see lines 177-181),
+    // so a later scanAndLoad retries; without the latch each retry re-logs the
+    // same "failed to create plugin root" line and floods the journal.
     //
     // Plain bool: m_pluginRoot is set in the ctor and never mutated,
     // so a single latch covers the only path that can ever reach
@@ -243,8 +263,8 @@ bool PluginLoader::ensurePluginRootExists() const
     }
     if (!QDir().mkpath(m_pluginRoot)) {
         if (!m_loggedPluginRootFailure) {
-            qWarning() << "PluginLoader: failed to create plugin root" << m_pluginRoot
-                       << "(subsequent rescans silently retry)";
+            qCWarning(lcPluginLoader) << "PluginLoader: failed to create plugin root" << m_pluginRoot
+                                      << "(subsequent rescans silently retry)";
             m_loggedPluginRootFailure = true;
         }
         return false;
@@ -288,9 +308,25 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
     // against a live multi-root caller that can actually exercise it —
     // not carried here as untested, known-inverted dead code.
     QSet<QString> discoveredIds; // ids seen this cycle (for removal detection)
+    QSet<QString> consideredDirs; // plugin dirs seen this cycle (for warn-latch pruning)
     QStringList watchedFiles; // returned to the watcher for per-file re-arm
 
+    // Subdirs CONSIDERED this cycle, summed across every root. Counts the same
+    // quantity as MetadataPackScanStrategy's and JsonScanStrategy's caps, and
+    // for the same reason: a subdir that fails `Manifest::parse` has still cost
+    // a stat, an open and a JSON parse on the calling thread, and — because the
+    // manifest is appended to `watchedFiles` BEFORE it is validated — has also
+    // cost an inotify watch. Counting only the plugins that load would let a
+    // spray of broken plugin directories grow the watch list until the per-user
+    // inotify limit is exhausted, taking every other watcher in the process
+    // down with it. Bounded here, before the watch is armed.
+    int subdirsConsidered = 0;
+    bool capTripped = false;
+
     for (const QString& root : directoriesInScanOrder) {
+        if (capTripped) {
+            break;
+        }
         QDir rootDir(root);
         if (!rootDir.exists()) {
             continue;
@@ -304,16 +340,54 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
         // entries outright.
         const QStringList subdirs = rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDir::Name);
         for (const QString& subdir : subdirs) {
+            if (subdirsConsidered >= m_maxSubdirsPerCycle) {
+                capTripped = true;
+                break;
+            }
+            ++subdirsConsidered;
             const QString pluginDir = rootDir.absoluteFilePath(subdir);
+            consideredDirs.insert(pluginDir);
             const QString manifestPath = QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json"));
-            if (!QFileInfo::exists(manifestPath)) {
+            // `isFile()`, not `exists()`: a FIFO satisfies exists(), and
+            // `Manifest::parse` opens this path — `open(ReadOnly)` on a FIFO blocks
+            // until a writer appears, indefinitely, on the calling thread. This
+            // path is CONSTRUCTED rather than enumerated with QDir::Files, so
+            // nothing upstream has already excluded a non-regular file. The
+            // symlink refusal matches the NoSymLinks policy on the subdir
+            // enumeration and the .so pick: `isFile()` follows symlinks, so
+            // without it a manifest.json symlinked out of the plugin root
+            // would be read — bounded impact (metadata only, basename==id is
+            // still enforced), but an unguarded hole in an otherwise uniform
+            // no-symlinks policy for dlopen inputs.
+            const QFileInfo manifestInfo(manifestPath);
+            // A SYMLINKED manifest is refused, not merely absent: warn once so a
+            // user who symlinked manifest.json out of a dotfiles repo (a normal
+            // habit) gets a diagnostic instead of a permanently invisible plugin
+            // with a clean log. A genuinely missing manifest (the cp -r race
+            // below) stays silent, since it is expected and self-heals.
+            if (manifestInfo.isSymLink() && shouldWarnForPluginDir(pluginDir)) {
+                qCWarning(lcPluginLoader).noquote()
+                    << "PluginLoader: refusing symlinked manifest.json in" << pluginDir
+                    << "(symlinks are not followed for plugin inputs); the plugin is ignored";
+            }
+            if (!manifestInfo.isFile() || manifestInfo.isSymLink()) {
+                // Watch the SUBDIRECTORY instead, the way
+                // MetadataPackScanStrategy does for the same race.
+                // QFileSystemWatcher cannot watch a path that does not exist,
+                // and only the plugin ROOT is directory-watched, not the plugin
+                // dirs under it. Without this, `cp -r myplugin <root>/` loses:
+                // the mkdir wakes the debounced rescan, the rescan finds no
+                // manifest, and the manifest landing a moment later fires
+                // nothing — so the plugin stays invisible until some unrelated
+                // rescan happens by.
+                watchedFiles.append(pluginDir);
                 continue;
             }
             watchedFiles.append(manifestPath);
             const Manifest m = Manifest::parse(manifestPath, pluginDir);
             if (!m.isValid) {
                 if (shouldWarnForPluginDir(pluginDir)) {
-                    qWarning().noquote() << "PluginLoader: refusing" << pluginDir << "—" << m.parseError;
+                    qCWarning(lcPluginLoader).noquote() << "PluginLoader: refusing" << pluginDir << "—" << m.parseError;
                 }
                 continue;
             }
@@ -336,6 +410,40 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             // edited concurrently).
             loadPluginFromDir(pluginDir, m);
         }
+    }
+
+    if (capTripped) {
+        qCWarning(lcPluginLoader).noquote().nospace()
+            << "PluginLoader: reached the per-cycle subdirectory cap (" << m_maxSubdirsPerCycle
+            << ") — later plugin directories were not scanned. Prune the plugin roots or raise the cap.";
+        // A truncated enumeration is not evidence that anything was deleted, so
+        // the removal sweep below is skipped: running it would unload every
+        // already-loaded plugin whose directory happened to sort past the cap.
+        // Loaded plugins simply stay loaded until a cycle completes in full.
+        //
+        // The returned watch list IS truncated, though, and the watcher treats
+        // it as the complete desired set — so a plugin kept loaded here loses
+        // its manifest file-watch until a full cycle re-arms it. Preferred over
+        // the alternative: seeding the list from `m_plugins` would re-arm
+        // watches for a cap the operator has already blown past, which is the
+        // inotify pressure the cap exists to bound.
+        return watchedFiles;
+    }
+
+    // Prune the warn-once latches to the directories that still exist — but
+    // only when at least one root was actually enumerated. A transient unmount
+    // or rename of the plugin root yields an empty `consideredDirs`, and
+    // intersecting against that would wipe both latches wholesale, so every
+    // broken plugin re-logs on the next cycle.
+    //
+    // A
+    // successful load clears them, but a directory that is broken and then
+    // deleted (or renamed on each dev iteration) would otherwise leave its
+    // path in the set for the process lifetime. Only safe on a complete
+    // enumeration, which is why it sits below the cap-tripped early return.
+    if (!consideredDirs.isEmpty()) {
+        m_warnedPluginDirs.intersect(consideredDirs);
+        m_warnedMultiSoDirs.intersect(consideredDirs);
     }
 
     // Anything in m_plugins not in discoveredIds was removed from
@@ -400,7 +508,8 @@ bool PluginLoader::unloadPlugin(const QString& id, bool shouldPin)
         // defensive code masking a contract violation rather than
         // catching one — if a future insert path landed a null
         // shared_ptr we'd want a crash, not a silent skip.
-        qDebug() << "PluginLoader: plugin" << id << "vanished mid-unload (rebound from prior signal slot); skipping";
+        qCDebug(lcPluginLoader) << "PluginLoader: plugin" << id
+                                << "vanished mid-unload (rebound from prior signal slot); skipping";
         return false;
     }
     // Move ownership out of the hash BEFORE any signal fires so a
@@ -449,7 +558,7 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
         // rescan. Without the latch the same line floods the journal on
         // each debounced watcher tick.
         if (shouldWarnForPluginDir(pluginDir)) {
-            qWarning() << "PluginLoader: no .so under" << pluginDir;
+            qCWarning(lcPluginLoader) << "PluginLoader: no .so under" << pluginDir;
         }
         return;
     }
@@ -464,8 +573,9 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
         // consumed the shared load-failure token. Both latches clear on
         // a successful load so a regression re-warns.
         m_warnedMultiSoDirs.insert(pluginDir);
-        qWarning().noquote() << "PluginLoader:" << pluginDir << "contains" << soFiles.size() << ".so files; picking"
-                             << soFiles.first() << "(deterministic by lexicographic order)";
+        qCWarning(lcPluginLoader).noquote()
+            << "PluginLoader:" << pluginDir << "contains" << soFiles.size() << ".so files; picking" << soFiles.first()
+            << "(deterministic by lexicographic order)";
     }
     const QString libraryPath = dir.absoluteFilePath(soFiles.first());
 
@@ -474,10 +584,14 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     // data dir, but a permissive umask — or a deliberately loosened
     // mode — would let any local process sharing the group, or any
     // local user when world-writable, overwrite the .so between scans
-    // and gain code execution inside the shell process. OpenSSH and
-    // sudo enforce the same StrictModes discipline on the files they
-    // trust. Checking the directory too closes the delete-and-recreate
-    // path a 0644 .so in a 0777 dir would still allow. Signature /
+    // and gain code execution inside the shell process. This is the
+    // write-bit half of the StrictModes discipline OpenSSH and sudo
+    // apply to the files they trust (their checks also enforce
+    // OWNERSHIP, which this one deliberately does not: creating a
+    // foreign-owned file here already requires write access the
+    // directory check denies). Checking the directory too closes the
+    // delete-and-recreate path a 0644 .so in a 0777 dir would still
+    // allow. Signature /
     // origin verification is Phase 5 (see the class doc); this is the
     // floor until then. Residual: an attacker who can already loosen a
     // parent directory's mode is outside this check's reach.
@@ -487,9 +601,10 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     };
     if (isGroupOrWorldWritable(libraryPath) || isGroupOrWorldWritable(pluginDir)) {
         if (shouldWarnForPluginDir(pluginDir)) {
-            qWarning().noquote() << "PluginLoader: refusing group/world-writable plugin" << libraryPath
-                                 << "— tighten its permissions (chmod go-w on the .so and its directory) before "
-                                    "it will load";
+            qCWarning(lcPluginLoader).noquote()
+                << "PluginLoader: refusing group/world-writable plugin" << libraryPath
+                << "— tighten its permissions (chmod go-w on the .so and its directory) before "
+                   "it will load";
         }
         return;
     }
@@ -503,8 +618,8 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     // here), so populate it onto a local copy before storing.
     if (!parsedManifest.isValid) {
         if (shouldWarnForPluginDir(pluginDir)) {
-            qWarning().noquote() << "PluginLoader: refusing" << pluginDir
-                                 << "— manifest invalid:" << parsedManifest.parseError;
+            qCWarning(lcPluginLoader).noquote()
+                << "PluginLoader: refusing" << pluginDir << "— manifest invalid:" << parsedManifest.parseError;
         }
         return;
     }
@@ -514,22 +629,23 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     auto library = std::make_unique<QLibrary>(libraryPath);
     if (!library->load()) {
         if (shouldWarnForPluginDir(pluginDir)) {
-            qWarning().noquote() << "PluginLoader: failed to load" << libraryPath << "—" << library->errorString();
+            qCWarning(lcPluginLoader).noquote()
+                << "PluginLoader: failed to load" << libraryPath << "—" << library->errorString();
         }
         return;
     }
     auto entryFn = reinterpret_cast<PluginFactoryEntry>(library->resolve(PluginEntryPointSymbol));
     if (!entryFn) {
         if (shouldWarnForPluginDir(pluginDir)) {
-            qWarning().noquote() << "PluginLoader: plugin" << libraryPath << "missing entry point"
-                                 << PluginEntryPointSymbol;
+            qCWarning(lcPluginLoader).noquote()
+                << "PluginLoader: plugin" << libraryPath << "missing entry point" << PluginEntryPointSymbol;
         }
         // QLibrary::unload() can return false (refcount held elsewhere,
         // page-unmap failure). Surface the unload-failure case so a
         // triager seeing a stuck plugin can correlate it with a follow-up
         // load attempt that still finds the old code mapped in.
         if (!library->unload()) {
-            qDebug().noquote() << "PluginLoader: unload() returned false for" << libraryPath;
+            qCDebug(lcPluginLoader).noquote() << "PluginLoader: unload() returned false for" << libraryPath;
         }
         return;
     }
@@ -546,10 +662,10 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     });
     if (!factory) {
         if (shouldWarnForPluginDir(pluginDir)) {
-            qWarning().noquote() << "PluginLoader: entry point returned null for" << libraryPath;
+            qCWarning(lcPluginLoader).noquote() << "PluginLoader: entry point returned null for" << libraryPath;
         }
         if (!library->unload()) {
-            qDebug().noquote() << "PluginLoader: unload() returned false for" << libraryPath;
+            qCDebug(lcPluginLoader).noquote() << "PluginLoader: unload() returned false for" << libraryPath;
         }
         return;
     }
@@ -560,12 +676,33 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
         // string may be empty if the plugin author left it blank,
         // making the libraryPath the only stable identifier.
         if (shouldWarnForPluginDir(pluginDir)) {
-            qWarning().noquote() << "PluginLoader: factory id" << factory->id() << "does not match manifest id"
-                                 << manifest.id << "from" << libraryPath;
+            qCWarning(lcPluginLoader).noquote() << "PluginLoader: factory id" << factory->id()
+                                                << "does not match manifest id" << manifest.id << "from" << libraryPath;
         }
         factory.reset(); // runs custom deleter before .so unmap
         if (!library->unload()) {
-            qDebug().noquote() << "PluginLoader: unload() returned false for" << libraryPath;
+            qCDebug(lcPluginLoader).noquote() << "PluginLoader: unload() returned false for" << libraryPath;
+        }
+        return;
+    }
+
+    // Checked for the same reason MetadataPackLoader::reconcile checks all
+    // three of its registerFactory calls: the registry's DuplicatePolicy is
+    // Reject, so an id already registered out-of-band (a built-in factory, a
+    // sibling loader) fails silently. Recording the plugin anyway would make
+    // loadedPluginIds() advertise a plugin the registry does not hold and,
+    // when the plugin dir later disappears, unloadPlugin would unregister a
+    // factory this loader never registered — evicting the out-of-band
+    // owner's factory. Abandon the load like the id-mismatch branch above.
+    if (!m_registry->registerFactory(factory)) {
+        if (shouldWarnForPluginDir(pluginDir)) {
+            qCWarning(lcPluginLoader).noquote()
+                << "PluginLoader: id" << manifest.id
+                << "is already registered (built-in or another loader); ignoring plugin at" << pluginDir;
+        }
+        factory.reset(); // runs custom deleter before .so unmap
+        if (!library->unload()) {
+            qCDebug(lcPluginLoader).noquote() << "PluginLoader: unload() returned false for" << libraryPath;
         }
         return;
     }
@@ -584,7 +721,6 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
 
     const QString pluginId = manifest.id;
     m_plugins.insert(pluginId, entryRecord);
-    m_registry->registerFactory(factory);
 
     Q_EMIT pluginLoaded(pluginId);
 }

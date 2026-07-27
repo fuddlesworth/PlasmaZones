@@ -337,7 +337,7 @@ inline constexpr const char* kIAnchorSize = "iAnchorSize";
 /// collapses to (0, 0) only when the expanded geometry equals the frame
 /// (an undecorated, shadowless window). Shaders MUST apply the
 /// anchor-space remap (`anchorRemap` in anchor_remap.glsl) on both
-/// runtimes; `tests/unit/ui/test_anchor_uniforms.cpp` pins the kwin
+/// runtimes; `tests/unit/ui/effect/test_anchor_uniforms.cpp` pins the kwin
 /// inset values.
 inline constexpr const char* kIAnchorPosInFbo = "iAnchorPosInFbo";
 
@@ -526,6 +526,13 @@ inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 /// in the kwin-effect TU).
 inline constexpr int kMaxUserTextureSlots = 3;
 
+/// Multipass buffer-pass budget. Pinned to the runtime's binding budget
+/// (`PhosphorRendering::kMaxBufferPasses`, ShaderNodeRhi) and the GLSL
+/// contract's `vec4 iChannelResolution[4]`: the downstream setters read at
+/// most this many entries, so a pack declaring more would silently lose the
+/// tail — the parser caps (with a warning) at this bound instead.
+inline constexpr int kMaxBufferPasses = 4;
+
 /// `int iAudioSpectrumSize` — CAVA bar count, 0 while the audio visualizer
 /// is off or cava is unavailable. Daemon: BaseUniforms UBO member fed by
 /// `SurfaceAnimator::setAudioSpectrum`. Kwin: default-block uniform
@@ -660,10 +667,47 @@ inline QString colorKey(int slot)
 /// If anyone reorders `BaseUniforms`, those asserts fail at compile time
 /// and the canonical GLSL header has to be updated to match. The GLSL side
 /// is exercised at build time by
-/// `tests/unit/ui/test_animation_shader_bake.cpp`, which runs every
+/// `tests/unit/ui/shaders/test_animation_shader_bake.cpp`, which runs every
 /// built-in animation shader through `qsb` (which in turn computes
 /// std140 offsets) — a layout drift would surface there as a bake
 /// failure.
+
+/// The accepted texture `wrap` vocabulary, shared by every animation
+/// validation site (metadata parse in `AnimationShaderEffect::fromJson`, and
+/// runtime-override translation in `AnimationShaderRegistry`). Returns true only
+/// for the three canonical tokens `clamp` / `repeat` / `mirror`. An empty string
+/// is NOT a member — callers treat empty as "use the runtime default" and handle
+/// it explicitly before consulting this predicate.
+///
+/// Centralised here for the same reason as its surface twin
+/// (`SurfaceShaderContract::isValidWrapToken`): the vocabulary was hand-inlined
+/// at the metadata site and simply MISSING at the runtime-override site, so a
+/// typo in a shader profile was accepted, handed to `wrapStringToEnum`, and
+/// silently coerced to clamp with no diagnostic — while the same typo in
+/// metadata.json warned. Vocabulary matches the runtime normaliser.
+inline bool isValidWrapToken(const QString& wrap)
+{
+    // Thin forwarder onto the cross-library canonical predicate in
+    // <PhosphorShaders/CustomParamsKey.h> (already included above), so all
+    // three shader families share one wrap vocabulary rather than each
+    // hand-rolling its own token list that can drift.
+    return PhosphorShaders::isValidWrapToken(wrap);
+}
+
+/// The accepted buffer `filter` vocabulary: `linear` / `nearest` / `mipmap`.
+/// An empty string is NOT a member — callers treat empty as "use the runtime
+/// default" and handle it before consulting this predicate.
+///
+/// Hoisted for the same reason as `isValidWrapToken`: it was hand-inlined at a
+/// single site in the surface tree and entirely ABSENT from the animation tree,
+/// so an animation pack's `"bufferFilter": "linaer"` was accepted, silently
+/// coerced by the runtime, and re-persisted to disk on the next save.
+inline bool isValidFilterToken(const QString& filter)
+{
+    // Forwarder onto PhosphorShaders::isValidFilterToken, for the same reason
+    // as isValidWrapToken above.
+    return PhosphorShaders::isValidFilterToken(filter);
+}
 
 } // namespace AnimationShaderContract
 

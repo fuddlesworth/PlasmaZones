@@ -23,24 +23,32 @@
 #include <QSet>
 #include <QStandardPaths>
 
+#include <algorithm>
+#include <utility>
+
 namespace PhosphorTiles {
 
 // Per-directory cap shared by loadFromDirectory() and the validated-files
-// helper used by the scan strategy.
-static constexpr int MaxWatchedFilesPerDir = 100;
+// helper used by the scan strategy. Defined in the header (and therefore
+// test-visible) so a bump cannot silently disarm the spray test that pins it.
+// Qualified at the use sites rather than aliased, so a sibling TU in a unity
+// build cannot collide on a namespace-scope name.
 
-// Hard cap on scripts registered per rescan, summed across every
-// registered directory. Mirrors DirectoryLoader::kMaxEntries and
-// MetadataPackScanStrategy::kDefaultMaxEntries — same defensive
-// rationale, identical magnitude — so all fsloader-backed registries
-// cap at the same scale. The per-dir MaxWatchedFilesPerDir above is the
-// secondary guard; this is the global one. Typical script counts are
-// single digits; 10k is purely a DoS guard.
-static constexpr int kMaxScripts = 10'000;
+// Hard cap on scripts REGISTERED per rescan, summed across every
+// registered directory. Same magnitude as DirectoryLoader::kMaxEntries and
+// MetadataPackScanStrategy::kDefaultMaxEntries. Those two count entries
+// CONSIDERED, because counting registrations lets a spray of files that each
+// parse and then register nothing slip past the guard entirely. This counter
+// is allowed to count registrations only because the considered-count is
+// already bounded upstream: `validatedLuauFiles` caps files considered per
+// directory at MaxWatchedFilesPerDir, so the total work a spray can buy is
+// 100 x N_dirs regardless of how many of those files survive. Typical script
+// counts are single digits; 10k is purely a DoS guard. Defined in the header
+// (test-visible) like MaxWatchedFilesPerDir; qualified at the use sites.
 
 /// Scan strategy backing the loader's `WatchedDirectorySet`. Forwards
 /// the base's registered directory list verbatim. The list is kept up
-/// to date by `scanAndRegister`, which calls `registerDirectories` with
+/// to date by `scanAndRegister`, which calls `setDirectories` with
 /// the freshly-resolved XDG paths on every invocation — so watcher-
 /// triggered rescans (file edits, parent-watch promotion) reuse the
 /// snapshot from the last `scanAndRegister` and avoid redundantly
@@ -215,9 +223,15 @@ void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
     QDir dir(dirPath);
     if (!dir.exists()) {
         if (dir.mkpath(QStringLiteral("."))) {
-            // Restrict user algorithm directory to owner-only access (0700)
-            QFile::setPermissions(dir.absolutePath(),
-                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+            // Restrict user algorithm directory to owner-only access (0700).
+            // The directory holds untrusted-but-executed Luau, so a failed
+            // chmod is worth a warning: the surrounding mkpath failure is
+            // already reported, and this is the same trust boundary.
+            if (!QFile::setPermissions(dir.absolutePath(),
+                                       QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
+                qCWarning(PhosphorTiles::lcTilesLib)
+                    << "Could not restrict permissions (0700) on user algorithm directory:" << dir.absolutePath();
+            }
             qCInfo(PhosphorTiles::lcTilesLib) << "Created user algorithm directory:" << dir.absolutePath();
         } else {
             qCWarning(PhosphorTiles::lcTilesLib) << "Failed to create user algorithm directory:" << dir.absolutePath();
@@ -292,14 +306,11 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     m_scriptIdToPath.clear();
     m_refusedFilePaths.clear();
 
-    // `algorithmDirectories()` returns dirs in [sys-lowest, ...,
-    // sys-highest, user] order (system-first / user-last). Reverse-
-    // iterate here so we visit [user, sys-highest, ..., sys-lowest] —
-    // matches `JsonScanStrategy::performScan`'s shape and lets first-
-    // registration-wins yield: user > sys-highest > sys-mid > ... >
-    // sys-lowest, which is the actual XDG semantic. `crbegin/crend`
-    // matches the strategy-convention used by `JsonScanStrategy` and
-    // avoids the QStringList copy + std::reverse the previous shape needed.
+    // Previous scan's per-file identities, consumed by loadFromDirectory to
+    // decide whether a file can keep its existing registry entry instead of
+    // being re-parsed into a fresh sandboxed VM. Moved out so this scan starts
+    // from an empty map and only re-stamps files it actually kept.
+    const QHash<QString, ScriptStamp> prevStamps = std::exchange(m_scriptStamps, {});
 
     // Resolve the user dir's canonical path ONCE. `loadFromDirectory`
     // takes the canonical form as a parameter so the per-iteration
@@ -309,14 +320,23 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     const QString userDir = userAlgorithmDir();
     const QString canonicalUserDir = QFileInfo(userDir).canonicalFilePath();
     bool capTripped = false;
+    // `algorithmDirectories()` returns dirs in [sys-lowest, ...,
+    // sys-highest, user] order (system-first / user-last). Reverse-
+    // iterate here so we visit [user, sys-highest, ..., sys-lowest] —
+    // matches `JsonScanStrategy::performScan`'s shape and lets first-
+    // registration-wins yield: user > sys-highest > sys-mid > ... >
+    // sys-lowest, which is the actual XDG semantic. `crbegin/crend`
+    // matches the strategy-convention used by `JsonScanStrategy` and
+    // avoids the QStringList copy + std::reverse the previous shape needed.
     for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend(); ++dirIt) {
         // Per-rescan script-count DoS guard. Reverse-iteration scans
         // user-first / system-last, so a cap-trip drops *system* overflow
         // rather than user overrides — matches the user-wins-on-cap-trip
-        // property JsonScanStrategy / ShaderRegistry / AnimationShaderRegistry
-        // enforce. Re-checked inside loadFromDirectory so a single dir
+        // property JsonScanStrategy and MetadataPackScanStrategy enforce (the
+        // pack registries inherit it from the latter rather than implementing
+        // it themselves). Re-checked inside loadFromDirectory so a single dir
         // dropping us at the cap stops mid-iteration too.
-        if (m_scriptIdToPath.size() >= kMaxScripts) {
+        if (m_scriptIdToPath.size() >= ScriptedAlgorithmLoader::MaxScripts) {
             capTripped = true;
             break;
         }
@@ -327,14 +347,28 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
         // an existing system dir as user.
         const QString canonicalDir = QFileInfo(dir).canonicalFilePath();
         const bool isUserDir = !canonicalUserDir.isEmpty() && canonicalDir == canonicalUserDir;
-        loadFromDirectory(dir, isUserDir, canonicalUserDir);
+        loadFromDirectory(dir, isUserDir, canonicalUserDir, prevStamps);
     }
 
+    // Re-test after the loop: the per-iteration check above runs BEFORE each
+    // directory, so a cap reached while scanning the LAST directory (where
+    // loadFromDirectory bails mid-iteration silently) would otherwise leave
+    // capTripped false and the operator with a silently truncated registry.
+    //
+    // Boundary note: this heuristic also fires when a corpus scanned to
+    // completion holds EXACTLY MaxScripts scripts with nothing skipped, so the
+    // "later scripts skipped" warning below is slightly inaccurate in that one
+    // case. Accepted rather than threading a bail-flag out of loadFromDirectory
+    // for a boundary that needs ~100 registered directories to reach: the only
+    // consequence is one over-cautious log line, never data loss.
+    if (!capTripped && m_scriptIdToPath.size() >= ScriptedAlgorithmLoader::MaxScripts) {
+        capTripped = true;
+    }
     if (capTripped) {
         qCWarning(PhosphorTiles::lcTilesLib).nospace()
-            << "ScriptedAlgorithmLoader: reached script cap (" << kMaxScripts
+            << "ScriptedAlgorithmLoader: reached script cap (" << ScriptedAlgorithmLoader::MaxScripts
             << ") — later scripts skipped to protect the GUI thread. Prune the watched algorithm directories or raise "
-               "kMaxScripts.";
+               "MaxScripts.";
     }
 
     // Collect all newly registered script IDs
@@ -343,6 +377,16 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     }
 
     // Remove stale scripts that no longer exist on disk.
+    //
+    // CAP-TRIP POLICY (unlike PluginLoader, which SKIPS its sweep on a cap
+    // trip): this sweep runs unconditionally even after a truncated scan, so a
+    // script whose directory sorted past MaxScripts is unregistered — which for
+    // this loader means tearing down a live sandboxed Luau VM via deleteLater.
+    // That is acceptable here only because the cap is a pure DoS backstop
+    // (MaxWatchedFilesPerDir is 100, so tripping MaxScripts=10000 needs ~100
+    // registered directories, far past any real configuration); a normal
+    // corpus never trips it, so the "purge past the cap" behaviour is
+    // unreachable in practice rather than a routine data-loss path.
     // AlgorithmRegistry::unregisterAlgorithm() uses deleteLater(), so the
     // algorithm object lives until the event loop drains the deferred-delete
     // queue — safe for any in-flight signal handlers.
@@ -353,7 +397,9 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
         }
     }
 
-    qCInfo(PhosphorTiles::lcTilesLib) << "Scripted algorithms loaded:" << m_scriptIdToPath.size();
+    // qCDebug here, qCInfo only on the changed branch below: this line runs on
+    // every inotify wake, including the ones that changed nothing.
+    qCDebug(PhosphorTiles::lcTilesLib) << "Scripted algorithms loaded:" << m_scriptIdToPath.size();
 
     // Emit only when the registered script set — id, path, size, mtime —
     // actually differs from the last scan. Suppresses redundant emissions
@@ -379,6 +425,7 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     const QByteArray signature = hasher.result();
     if (signature != m_lastScriptSignature) {
         m_lastScriptSignature = signature;
+        qCInfo(PhosphorTiles::lcTilesLib) << "Scripted algorithms changed, now loaded:" << m_scriptIdToPath.size();
         Q_EMIT algorithmsChanged();
     }
 
@@ -425,16 +472,17 @@ std::shared_ptr<PhosphorScripting::LuauEngine> ScriptedAlgorithmLoader::ensureSh
     return m_sharedEngine;
 }
 
-void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir)
+void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir,
+                                                const QHash<QString, ScriptStamp>& prevStamps)
 {
-    const QStringList validFiles = validatedLuauFiles(dir, MaxWatchedFilesPerDir);
+    const QStringList validFiles = validatedLuauFiles(dir, ScriptedAlgorithmLoader::MaxWatchedFilesPerDir);
 
     for (const QString& fullPath : validFiles) {
         // Mid-directory bail when the global cap was reached during this
-        // scan (e.g. a single user dir holding > kMaxScripts entries).
+        // scan (e.g. a single user dir holding > MaxScripts entries).
         // The outer loop in performScan logs the warning once at the
         // dir boundary; here we silently stop to keep log noise low.
-        if (m_scriptIdToPath.size() >= kMaxScripts) {
+        if (m_scriptIdToPath.size() >= ScriptedAlgorithmLoader::MaxScripts) {
             return;
         }
         // Two layered checks, intentionally not redundant:
@@ -459,37 +507,76 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         // watchdog as shared_ptr so the algorithm keeps it alive across
         // deferred-delete teardown (the algorithm dtor can run after the loader
         // is gone — see LuauTileAlgorithm.h for the contract).
+        // Reuse the live registry entry when this exact file registered on a
+        // previous scan, still has the same (size, mtime), and its id still
+        // holds a live scripted entry. Rebuilding would re-run VM setup and a
+        // source parse per script per inotify wake, on the GUI thread, for a
+        // corpus the signature diff below is about to declare unchanged.
+        //
+        // The stale-shadow case is covered by construction: a file refused as a
+        // duplicate never gets stamped, so when the script that shadowed it
+        // disappears the survivor is rebuilt rather than resurrected. The
+        // reverse (a new user script shadowing a stamped bundled one) is caught
+        // by the first-wins guard below, which runs after the id is known and
+        // refuses the bundled file whichever way its id was derived.
+        // (size, mtime) is the whole key, so a content edit preserving both —
+        // `cp -p`, `touch -r`, or an edit finer than the filesystem's mtime
+        // granularity — keeps the OLD compiled algorithm live indefinitely.
+        // Before reuse existed every rescan re-parsed the source, so that
+        // window closed on the next inotify wake. Accepted: it is the same
+        // (size, mtime) pair the change signature already trusts, so a stamp
+        // that can fool this can equally fool the signature into reporting no
+        // change at all.
+        const ScriptStamp prev = prevStamps.value(fullPath);
+        const QFileInfo scriptInfo(fullPath);
+        // `isUser` is part of the key: reuse must not carry a stale trust
+        // classification (and with it the wrong VM) across a scan where the
+        // path's user/system classification flipped.
+        const bool stampMatches = !prev.id.isEmpty() && prev.size == scriptInfo.size()
+            && prev.mtimeMs == scriptInfo.lastModified().toMSecsSinceEpoch() && prev.isUser == isUserDir;
+        bool reusedExisting = false;
+        if (stampMatches) {
+            const TilingAlgorithm* live = m_registry->algorithm(prev.id);
+            reusedExisting = live != nullptr && live->isScripted();
+        }
+
         // Trusted bundled scripts share one sandboxed VM (prelude + baseline
         // paid once); untrusted user scripts each get their own isolated,
         // per-engine-capped VM. If the shared VM can't be built, bundled
         // scripts fall back to their own VMs (correct, just less memory-frugal).
         std::unique_ptr<LuauTileAlgorithm> algo;
-        if (!isUserDir) {
-            if (const std::shared_ptr<PhosphorScripting::LuauEngine> shared = ensureSharedEngine()) {
-                algo = std::make_unique<LuauTileAlgorithm>(fullPath, shared, m_watchdog, nullptr);
+        if (!reusedExisting) {
+            if (!isUserDir) {
+                if (const std::shared_ptr<PhosphorScripting::LuauEngine> shared = ensureSharedEngine()) {
+                    algo = std::make_unique<LuauTileAlgorithm>(fullPath, shared, m_watchdog, nullptr);
+                }
             }
-        }
-        if (!algo) {
-            algo = std::make_unique<LuauTileAlgorithm>(fullPath, m_watchdog, nullptr);
-        }
-        if (!algo->isValid()) {
-            qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;
-            m_refusedFilePaths.insert(fullPath);
-            continue;
+            if (!algo) {
+                algo = std::make_unique<LuauTileAlgorithm>(fullPath, m_watchdog, nullptr);
+            }
+            if (!algo->isValid()) {
+                qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;
+                m_refusedFilePaths.insert(fullPath);
+                continue;
+            }
         }
 
         // Use id metadata if present, otherwise default to "script:filename".
         // LuauTileAlgorithm builds the same id for itself, so the prefix is
-        // shared rather than spelled twice.
-        const QString scriptId = algo->id().isEmpty() ? (AutotileDefaults::ScriptIdPrefix + baseName) : algo->id();
+        // shared rather than spelled twice. A reused entry keeps the id it
+        // registered under, which is what the stamp recorded.
+        const QString scriptId = reusedExisting
+            ? prev.id
+            : (algo->id().isEmpty() ? (AutotileDefaults::ScriptIdPrefix + baseName) : algo->id());
 
         // registerAlgorithm() handles replacement internally (removes old,
         // takes ownership of new) — no need to unregister first.
-        auto* registry = m_registry;
-        algo->setUserScript(isUserDir);
+        if (!reusedExisting) {
+            algo->setUserScript(isUserDir);
+        }
 
         // First-registration-wins, scoped to THIS scan. `m_scriptIdToPath`
-        // was cleared at the top of `scanAndRegister`, so a hit here means
+        // was cleared at the top of `performScan`, so a hit here means
         // an EARLIER `loadFromDirectory` call in the same scan already
         // registered this id. Combined with the dir order the strategy
         // feeds us — `[user, sys-highest, ..., sys-lowest]` after the
@@ -503,8 +590,12 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         // current iteration is a *system* dir, not user.
         if (m_scriptIdToPath.contains(scriptId)) {
             const QString existingPath = m_scriptIdToPath.value(scriptId);
-            const bool existingIsUser = !canonicalUserDir.isEmpty()
-                && QFileInfo(existingPath).canonicalFilePath().startsWith(canonicalUserDir + QLatin1Char('/'));
+            // Directory EQUALITY, matching the authoritative per-directory
+            // classification (canonicalDir == canonicalUserDir) rather than a
+            // prefix test, so the two cannot disagree for a script one level
+            // below the user dir.
+            const bool existingIsUser =
+                !canonicalUserDir.isEmpty() && QFileInfo(existingPath).canonicalPath() == canonicalUserDir;
             if (existingIsUser && !isUserDir) {
                 qCInfo(PhosphorTiles::lcTilesLib).nospace()
                     << "User script overrides bundled algorithm: " << scriptId << " — kept '" << existingPath
@@ -514,6 +605,13 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
                     << "Duplicate algorithm '" << scriptId << "' — kept '" << existingPath << "', skipped '" << fullPath
                     << "' (first registration wins)";
             }
+            // Edge case for the "refused files never appear in m_scriptIdToPath"
+            // invariant: two directories each holding a symlink resolving to the
+            // SAME canonical .luau register the id from the first (kept as
+            // existingPath) and refuse the second's distinct raw path here, so
+            // the one canonical target lands in both desiredFileWatches sets.
+            // Benign — WatchedDirectorySet QSet-dedups the watch list — so the
+            // duplicate is documented rather than canonicalised away here.
             m_refusedFilePaths.insert(fullPath);
             continue;
         }
@@ -535,11 +633,20 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             continue;
         }
 
-        registry->registerAlgorithm(scriptId, algo.release());
+        if (!reusedExisting) {
+            m_registry->registerAlgorithm(scriptId, algo.release());
+        }
         m_scriptIdToPath[scriptId] = fullPath;
+        m_scriptStamps.insert(
+            fullPath,
+            ScriptStamp{scriptId, scriptInfo.size(), scriptInfo.lastModified().toMSecsSinceEpoch(), isUserDir});
 
-        qCInfo(PhosphorTiles::lcTilesLib)
-            << "Registered scripted algorithm:" << scriptId << "from=" << fullPath << "user=" << isUserDir;
+        // qCDebug, not qCInfo: this fires once per script on every rescan,
+        // including the ones the signature diff proves changed nothing, so at
+        // Info it turns every inotify wake into journal noise.
+        qCDebug(PhosphorTiles::lcTilesLib)
+            << (reusedExisting ? "Kept scripted algorithm:" : "Registered scripted algorithm:") << scriptId
+            << "from=" << fullPath << "user=" << isUserDir;
     }
 }
 
@@ -559,18 +666,40 @@ QStringList ScriptedAlgorithmLoader::validatedLuauFiles(const QString& dirPath, 
     // inside canonicalDir after symlink expansion). Leaving NoSymLinks in the
     // filter would additionally block benign user-local symlinks pointing at
     // read-only system script directories.
-    const QStringList files = dirObj.entryList({QStringLiteral("*.luau")}, QDir::Files | QDir::Readable);
+    // `QDir::Name` explicitly, matching JsonScanStrategy and PluginLoader. The
+    // default sort is Name|IgnoreCase, and the ordering stopped being cosmetic
+    // the moment the cap below started counting files CONSIDERED: in a
+    // directory over the cap, sort order decides which files survive.
+    const QStringList files = dirObj.entryList({QStringLiteral("*.luau")}, QDir::Files | QDir::Readable, QDir::Name);
+    // Count files CONSIDERED, not files kept. Counting survivors would let a
+    // directory sprayed with dangling or escaping `*.luau` symlinks spend one
+    // `canonicalFilePath()` realpath syscall per entry on the GUI thread while
+    // never advancing the counter, so the cap would never trip. Same quantity
+    // JsonScanStrategy and MetadataPackScanStrategy count, for the same reason.
+    int filesConsidered = 0;
     for (const QString& file : files) {
-        if (result.size() >= maxFiles) {
+        if (filesConsidered >= maxFiles) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Reached max file limit (" << maxFiles
                                                  << ") for directory:" << dirPath << "— skipping remaining files";
             break;
         }
+        ++filesConsidered;
         const QString fullPath = QFileInfo(dirObj.filePath(file)).canonicalFilePath();
         if (fullPath.isEmpty())
             continue;
         if (!fullPath.startsWith(canonicalDir + QLatin1Char('/'))) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Script path escaped directory:" << fullPath;
+            continue;
+        }
+        // Deduped on the CANONICAL path, so an intra-directory symlink
+        // (`link.luau -> a.luau`) does not yield the same file twice. The
+        // second copy would lose the duplicate-id check downstream and land in
+        // `m_refusedFilePaths`, which the header documents as holding only
+        // paths that own no registry entry — and this one would. Harmless while
+        // that set only feeds the watch list, but it makes the stated invariant
+        // false. The list is bounded at `MaxWatchedFilesPerDir`, so the linear
+        // scan is bounded too.
+        if (result.contains(fullPath)) {
             continue;
         }
         result.append(fullPath);

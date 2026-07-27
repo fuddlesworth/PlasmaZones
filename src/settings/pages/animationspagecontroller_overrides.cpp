@@ -7,8 +7,12 @@
 //
 // Group covers:
 //   * Path derivation (userProfilesDir / profileFilePath / userMotionSetsDir)
-//   * Existence + read (hasOverride / rawProfile / resolvedProfile)
-//   * Write + clear (setOverride / clearOverride / clearAllOverrides)
+//   * Existence + read (hasOverride / rawProfile / resolvedProfile), including
+//     the per-path disk-read memo (cachedDiskProfile / invalidateDiskProfileCache)
+//   * Write + clear (setOverride, and the clear family: removeOverrideFile /
+//     clearOverride / clearOverridesForPaths / clearAllOverrides /
+//     clearOverridesUnder)
+//   * Scoped dirty check (hasScopedPendingFiles)
 //
 // Sibling _shaders.cpp owns the shader-tree side; the main TU owns
 // pending-changes tracking, async-revert, and the section catalog.
@@ -77,8 +81,15 @@ QString AnimationsPageController::userMotionSetsDir() const
     // Not perfectly parallel to production, but every test depends on
     // the "profile files at tmp root" convention so restructuring would
     // be a multi-test churn for no behavioural benefit.
-    if (!m_userProfilesDirOverride.isEmpty())
-        return m_userProfilesDirOverride + QStringLiteral("/motionsets");
+    // The suffix is derived from the production accessor, which tracks a
+    // rename of the LEAF segment only: mid() from lastIndexOf('/') keeps just
+    // the last segment, and a separator-free accessor would make lastIndexOf
+    // return -1 and mid(-1) yield the whole string. Both shapes are unreal
+    // today (the accessor is "/plasmazones/motionsets").
+    if (!m_userProfilesDirOverride.isEmpty()) {
+        const QString subdir = ConfigDefaults::userMotionSetsSubdir();
+        return m_userProfilesDirOverride + subdir.mid(subdir.lastIndexOf(QLatin1Char('/')));
+    }
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return base + ConfigDefaults::userMotionSetsSubdir();
 }
@@ -94,7 +105,34 @@ QVariantMap AnimationsPageController::rawProfile(const QString& path) const
 {
     if (!isValidEventPath(path))
         return {};
-    return readProfileJson(profileFilePath(path)).toVariantMap();
+    // Sanitised on the same terms as `cachedDiskProfile`, because QML reads
+    // BOTH for one card: `rawProfile` decides which fields the event owns (and
+    // so whether the revert link shows), `resolvedProfile` supplies the number
+    // beside it. Leaving this raw made a file with a rejected field render as
+    // "Overridden for this event", with a live revert link, next to the
+    // INHERITED value the sanitizer had substituted — the card contradicting
+    // itself on the one screen this controller exists to make honest.
+    // Through the memo, not a second read of the same file: QML calls this once
+    // per write path on every refreshFromTree, which runs after every commit —
+    // i.e. every tick of a duration drag. An uncached read here would falsify
+    // `cachedDiskProfile`'s own "one read per path per mutation" contract.
+    return cachedDiskProfile(path);
+}
+
+QVariantMap AnimationsPageController::cachedDiskProfile(const QString& path) const
+{
+    const auto cached = m_diskProfileCache.constFind(path);
+    if (cached != m_diskProfileCache.constEnd()) {
+        return cached.value();
+    }
+    QVariantMap fresh = sanitizedProfileMap(readProfileJson(profileFilePath(path)));
+    m_diskProfileCache.insert(path, fresh);
+    return fresh;
+}
+
+void AnimationsPageController::invalidateDiskProfileCache() const
+{
+    m_diskProfileCache.clear();
 }
 
 QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
@@ -109,20 +147,46 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
     QString cur = path;
     while (!cur.isEmpty()) {
         QVariantMap source;
-        if (registry) {
+        if (isValidEventPath(cur)) {
+            // The user override files this controller writes are read FIRST,
+            // ahead of the registry. The registry is fed by a ProfileLoader
+            // watching this same directory, and that watch is debounced, so
+            // for ~50 ms after any write the registry still holds the pre-edit
+            // entry. The registry does catch up on its own once the debounce
+            // lands; the PAGE does not, because its only re-read runs
+            // synchronously inside the overrideChanged handler this mutation
+            // is about to emit. Registry-first therefore handed that read the
+            // state the user had just left. Disk is what this process wrote,
+            // so disk is the answer. Skipped for non-event paths so a crafted
+            // parent like "../" can't cause a stray file open.
+            //
+            // Cost: a level that HAD a registry entry used to resolve from RAM
+            // with no filesystem I/O at all. Bounded by chain depth (four levels
+            // at the deepest, e.g. window.movement.snapIn), but this function
+            // backs a QML binding that every card in scope re-evaluates on each
+            // overrideChanged, and setOverride emits one of those per write path
+            // per slider tick — so the naive form costs (visible cards x 4)
+            // synchronous opens and parses per tick of a duration drag. The
+            // per-path cache below collapses that back to one read per path per
+            // mutation; see `invalidateDiskProfileCache` for the invalidation
+            // points. The alternative — keeping the RAM read and forcing a
+            // rescan on writes too — costs a full directory re-parse per tick,
+            // which is worse again.
+            //
+            // Sanitised, not raw: the registry path this replaces ran every file
+            // through Profile::fromJson. See `sanitizedProfileMap`.
+            source = cachedDiskProfile(cur);
+        }
+        if (source.isEmpty() && registry) {
+            // No user file at this level: the registry supplies whatever the
+            // hosting process registered and this controller cannot write —
+            // bundled and system-dir profiles here. (A process that also seeds
+            // shell animation families, i.e. the daemon, would see those too;
+            // the settings app registers none.)
             const auto entry = registry->resolve(cur);
             if (entry.has_value()) {
                 source = profileToVariantMap(*entry);
             }
-        }
-        if (source.isEmpty() && isValidEventPath(cur)) {
-            // Registry not published, or no entry at this path. Fall
-            // back to a direct user-dir read so unit tests (which never
-            // bootstrap a registry) still get walk-up resolution over
-            // their own override files. Skip the read for non-event
-            // paths so a crafted parent like "../" can't cause a stray
-            // file open.
-            source = readProfileJson(profileFilePath(cur)).toVariantMap();
         }
         mergeMissingFields(merged, source);
         cur = ProfilePaths::parentPath(cur);
@@ -164,8 +228,36 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
 
 bool AnimationsPageController::setOverride(const QString& path, const QVariantMap& profileJson)
 {
-    if (!isValidEventPath(path))
+    // Capture dirty state before the write core mutates disk/snapshots.
+    const bool wasPending = hasPendingChanges();
+    const OverrideFileWrite result = writeOverrideFileOnly(path, profileJson);
+    if (result == OverrideFileWrite::Failed)
         return false;
+    if (result == OverrideFileWrite::Unchanged)
+        return true;
+
+    // Disk changed under the cache. Must happen before any signal below, since
+    // the QML handlers wired to `overrideChanged` re-read through
+    // `resolvedProfile` synchronously on this stack.
+    invalidateDiskProfileCache();
+
+    // The write may have restored the file to exactly its pre-edit content;
+    // drop the phantom snapshot. `dropped` stands in for "the drop already
+    // emitted" — see the long note that was here before the split.
+    const QString filePath = profileFilePath(path);
+    const bool dropped = dropFileSnapshotIfUnchanged(filePath);
+    const bool nowPending = hasPendingChanges();
+    Q_EMIT overrideChanged(path);
+    if (!dropped && wasPending != nowPending)
+        Q_EMIT pendingChangesChanged();
+    return true;
+}
+
+AnimationsPageController::OverrideFileWrite
+AnimationsPageController::writeOverrideFileOnly(const QString& path, const QVariantMap& profileJson)
+{
+    if (!isValidEventPath(path))
+        return OverrideFileWrite::Failed;
 
     // Refuse writes while a Discard worker is in flight — the worker
     // is concurrently rewriting profile files from the snapshot map
@@ -173,21 +265,23 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // a path the worker is processing would race: last writer wins on
     // disk (non-deterministic), and the worker's finished handler
     // would drop this path's snapshot when it merges its results back,
-    // silently losing the user's concurrent edit. The QML chrome already gates the
-    // editor controls on `discarding`, but defence-in-depth at the
-    // C++ Q_INVOKABLE entry point protects programmatic callers.
+    // silently losing the user's concurrent edit. The QML does NOT gate the
+    // editor controls on `discarding` — only Main.qml's Apply/Discard buttons
+    // are — so this is the sole guard, not defence-in-depth behind a UI one.
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "setOverride: refusing write while async discard is in flight; path=" << path;
-        return false;
+        return OverrideFileWrite::Failed;
     }
 
     const QString dir = userProfilesDir();
-    if (!QDir().mkpath(dir))
-        return false;
-    // Capture dirty state AFTER the cheap validity / mkpath guards so an
-    // invalid path doesn't pay for a hasPendingChanges() walk.
-    const bool wasPending = hasPendingChanges();
-
+    if (!QDir().mkpath(dir)) {
+        // Without this log a read-only or full ~/.local/share turns every
+        // animation edit into a silent no-op: the group writer folds the
+        // false into allWritten with no toast of its own, so the slider
+        // snaps back with nothing in the journal.
+        qCWarning(lcConfig) << "setOverride: cannot create profiles directory" << dir;
+        return OverrideFileWrite::Failed;
+    }
     const QString filePath = profileFilePath(path);
 
     // Strip the name field for the equality compare against on-disk content
@@ -195,12 +289,14 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // back for the write — the canonical name is always the path.
     QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
     obj.remove(JsonNameKey);
+    // Deliberately UNCACHED (bypasses cachedDiskProfile): the memo stores the
+    // sanitized map, which cannot serve this byte-exact raw-object equality
+    // compare. This is the one extra read per write path per mutation on top
+    // of the memo contract's "one read per path per mutation".
     const QJsonObject existing = readProfileJson(filePath);
     if (existing == obj) {
-        // Round-trip with no real change — bail early so a QML two-way
-        // binding cycle doesn't dirty the page or fire spurious
-        // overrideChanged / pendingChangesChanged emissions.
-        return true;
+        // Round-trip with no real change — the caller emits nothing.
+        return OverrideFileWrite::Unchanged;
     }
     obj.insert(JsonNameKey, path);
 
@@ -208,33 +304,58 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // be captured: an unrecoverable revert is worse than a failed write.
     if (!snapshotFileIfFirst(filePath)) {
         qCWarning(lcConfig) << "setOverride: refusing to write" << filePath << "without a recoverable snapshot";
-        return false;
+        return OverrideFileWrite::Failed;
     }
 
     QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         dropFileSnapshotIfUnchanged(filePath);
-        return false;
+        return OverrideFileWrite::Failed;
     }
     file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
     if (!file.commit()) {
         dropFileSnapshotIfUnchanged(filePath);
-        return false;
+        return OverrideFileWrite::Failed;
     }
 
-    // The write may have restored the file to exactly its pre-edit content (the
-    // user undid an edit by hand). The staged snapshot is then a phantom: disk
-    // already holds what Discard would write back, so keeping it would leave the
-    // page dirty forever with nothing to restore.
+    // The write landed. The caller owns invalidateDiskProfileCache(), the
+    // phantom-snapshot drop, and every signal — see setOverride for the
+    // single-path tail, and setOverrideMergedOnPaths for the batched one.
+    return OverrideFileWrite::Written;
+}
+
+AnimationsPageController::OverrideFileRemoval AnimationsPageController::removeOverrideFile(const QString& path)
+{
+    const QString filePath = profileFilePath(path);
+    QFile file(filePath);
+    if (!file.exists())
+        return OverrideFileRemoval::Absent;
+    // Mirror setOverride's snapshot symmetry, through the one shared rollback
+    // primitive: it drops the staged entry only while disk still matches it.
+    if (!snapshotFileIfFirst(filePath)) {
+        qCWarning(lcConfig) << "removeOverrideFile: refusing to delete" << filePath << "without a recoverable snapshot";
+        return OverrideFileRemoval::Failed;
+    }
+    if (!file.remove()) {
+        dropFileSnapshotIfUnchanged(filePath, SnapshotDropSignal::Defer);
+        return OverrideFileRemoval::Failed;
+    }
+    // Deleting a file that did not exist before this session's edits returns it
+    // to its pre-edit state (the snapshot is `nullopt` = "was absent"), so the
+    // staged entry is a phantom and has to go, or the page stays dirty with
+    // nothing to discard.
     //
-    // The drop owns the signal for the transition it causes, so the compare below
-    // must not fire again for the same flip.
-    const bool dropped = dropFileSnapshotIfUnchanged(filePath);
-    const bool nowPending = hasPendingChanges();
-    Q_EMIT overrideChanged(path);
-    if (!dropped && wasPending != nowPending)
-        Q_EMIT pendingChangesChanged();
-    return true;
+    // Deferred: mid-sequence that flip is not the outcome, only a step toward
+    // it. A batch that drops a phantom on its first path and then stages a real
+    // snapshot on a later one would otherwise leave "clean" as the last thing
+    // the page heard while ending dirty. Every caller re-samples and emits once.
+    dropFileSnapshotIfUnchanged(filePath, SnapshotDropSignal::Defer);
+    // This function deliberately does not refresh the profile store, so the
+    // cache drop cannot ride along on `refreshProfileStore`. Without it the
+    // next `resolvedProfile` would serve the deleted file's contents back — the
+    // stale-inherited-value bug, reintroduced one layer down.
+    invalidateDiskProfileCache();
+    return OverrideFileRemoval::Removed;
 }
 
 bool AnimationsPageController::clearOverride(const QString& path)
@@ -249,33 +370,45 @@ bool AnimationsPageController::clearOverride(const QString& path)
         qCWarning(lcConfig) << "clearOverride: refusing delete while async discard is in flight; path=" << path;
         return false;
     }
-    const QString filePath = profileFilePath(path);
-    QFile file(filePath);
-    if (!file.exists())
+    // Capture dirty state AFTER the cheap validity / existence guards so an
+    // invalid path or no-op clear doesn't pay for a hasPendingChanges() walk.
+    // Mirrors setOverride() ordering above so a future refactor doesn't see two
+    // divergent capture-point shapes.
+    if (!hasOverride(path))
         return false;
-    // Capture dirty state AFTER the cheap validity / file.exists() guards
-    // so an invalid path or no-op clear doesn't pay for a
-    // hasPendingChanges() walk. Mirrors setOverride() ordering above so
-    // a future refactor doesn't see two divergent capture-point shapes.
     const bool wasPending = hasPendingChanges();
-    // Mirror setOverride's snapshot symmetry, through the one shared rollback
-    // primitive: it drops the staged entry only while disk still matches it.
-    if (!snapshotFileIfFirst(filePath)) {
-        qCWarning(lcConfig) << "clearOverride: refusing to delete" << filePath << "without a recoverable snapshot";
+    // Absent here means the file went away between that check and this call.
+    // The caller's intent is satisfied and nothing was done, so it reports the
+    // same "nothing to clear" as the guard above rather than a failure.
+    //
+    // A FAILED removal can still have moved the dirty state: the snapshot is
+    // staged before the delete is attempted, and if an external writer touched
+    // the file in between, the deferred drop finds disk no longer matching and
+    // declines, leaving the entry behind. The page is dirty and has to be told
+    // even though the clear did not happen. The drop used to own this signal
+    // before it was deferred, so the early return has to carry it now.
+    //
+    // UNTESTED, deliberately: reaching it needs the file's bytes to change
+    // between snapshotFileIfFirst and the drop, inside one call, with the
+    // removal also failing. There is no seam in the public surface to
+    // interleave that, and adding one purely for the test would be a worse
+    // trade than saying plainly that this branch rests on inspection.
+    if (removeOverrideFile(path) != OverrideFileRemoval::Removed) {
+        if (wasPending != hasPendingChanges())
+            Q_EMIT pendingChangesChanged();
         return false;
     }
-    if (!file.remove()) {
-        dropFileSnapshotIfUnchanged(filePath);
-        return false;
-    }
-    // Deleting a file that did not exist before this session's edits returns it
-    // to its pre-edit state (the snapshot is `nullopt` = "was absent"), so the
-    // staged entry is a phantom and has to go, or the page stays dirty with
-    // nothing to discard. The drop owns the signal for that flip (see setOverride).
-    const bool dropped = dropFileSnapshotIfUnchanged(filePath);
+    // Before the signal, not after: the page re-reads resolvedProfile from
+    // inside its overrideChanged handler, and the profile registry is behind
+    // the delete until the loader's debounced rescan lands. Also before the
+    // nowPending sample, since a rescan fans signals out synchronously and a
+    // listener that mutates would otherwise be measured against a stale read.
+    refreshProfileStore();
     const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
-    if (!dropped && wasPending != nowPending)
+    // Sole emit for this flip now: the snapshot drop inside removeOverrideFile
+    // deferred its own.
+    if (wasPending != nowPending)
         Q_EMIT pendingChangesChanged();
     return true;
 }
@@ -291,61 +424,89 @@ int AnimationsPageController::clearAllOverrides()
         Q_EMIT toastRequested(PhosphorI18n::tr("Cannot reset while a discard is in progress."));
         return -1;
     }
-    // Clear every built-in event path. clearOverride is a no-op (returns false)
-    // for paths without an override file, so only real overrides are removed and
-    // snapshotted; it emits overrideChanged / pendingChangesChanged per removed
-    // file so the pages refresh and the staged-changes state updates.
-    int cleared = 0;
+    // Clear every built-in event path. Paths without an override file are
+    // skipped, so only real overrides are removed and snapshotted.
+    return clearOverridesForPaths(PhosphorAnimation::ProfilePaths::allBuiltInPaths(),
+                                  QLatin1String("clearAllOverrides"));
+}
+
+int AnimationsPageController::clearOverridesForPaths(const QStringList& eventPaths, QLatin1String context)
+{
+    const bool wasPending = hasPendingChanges();
+    QStringList cleared;
     int failed = 0;
-    const QStringList paths = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
-    for (const QString& path : paths) {
-        if (clearOverride(path)) {
-            ++cleared;
-        } else if (hasOverride(path)) {
-            // The file is still there, so this was a real failure and not the
-            // "nothing to clear" no-op. Counting it as either would report a reset
-            // that did not happen.
+    for (const QString& path : eventPaths) {
+        if (!isValidEventPath(path))
+            continue;
+        switch (removeOverrideFile(path)) {
+        case OverrideFileRemoval::Removed:
+            cleared.append(path);
+            break;
+        case OverrideFileRemoval::Absent:
+            // Nothing to clear at this path, which is most of them on any
+            // scoped reset. Not a failure: the desired end state already holds.
+            //
+            // And deliberately NOT a rescan trigger, unlike the same enumerator
+            // in `clearFieldOnPaths`. There, every path reaching the removal was
+            // classified as CARRYING the field a moment earlier, so Absent means
+            // the file vanished underneath and the registry may still hold it.
+            // Here the caller hands over a whole subtree with no such
+            // precondition, so Absent is the common case and refreshing on it
+            // would re-read the entire profiles directory on nearly every call.
+            break;
+        case OverrideFileRemoval::Failed:
+            // The file is there and could not be removed. Counting it as a
+            // clear would report a reset that did not happen.
             ++failed;
+            break;
         }
     }
+    // ONE rescan for the whole batch, ahead of the signals the pages refresh
+    // on. Refreshing inside the loop would re-read and re-parse every file in
+    // the profiles directory once per deleted file.
+    if (!cleared.isEmpty())
+        refreshProfileStore();
+    // Sampled here, after the refresh and before the signals, for the same
+    // reason clearOverride does it: a rescan fans out synchronously, and a
+    // listener that mutates in response would otherwise be measured against a
+    // stale read. The two clear paths must not diverge on this — the last two
+    // regressions in this signal both came in through an unstated divergence.
+    const bool nowPending = hasPendingChanges();
+    for (const QString& path : cleared)
+        Q_EMIT overrideChanged(path);
+    // One dirty signal for the batch, describing the NET flip. Every snapshot
+    // drop inside the loop deferred its own precisely so an intermediate state
+    // could not be mistaken for the outcome: a batch that drops a phantom
+    // early and stages a real snapshot later ends dirty, and must not have
+    // announced "clean" on the way through.
+    if (wasPending != nowPending)
+        Q_EMIT pendingChangesChanged();
     if (failed > 0) {
-        qCWarning(lcConfig) << "clearAllOverrides:" << failed << "override files could not be removed";
+        qCWarning(lcConfig) << context << ":" << failed << "override files could not be removed";
         Q_EMIT toastRequested(PhosphorI18n::tr("Some animation overrides could not be reset."));
-        // Report the incomplete reset the same way as the refusal above: a
+        // Report the incomplete reset the same way as the in-flight refusal: a
         // positive count here would let the caller finish its reset path and
         // declare the page clean while override files remain on disk.
         return -1;
     }
-    return cleared;
+    return int(cleared.size());
 }
 
 int AnimationsPageController::clearOverridesUnder(const QStringList& eventPaths)
 {
     // Scoped clearAllOverrides: same refusal/partial contract, but only over the
-    // caller's own page subtree. clearOverride() is a no-op (false) for a path
-    // with no override file, so passing the full in-scope path list clears just
-    // the real overrides and snapshots each for a later Discard.
+    // caller's own page subtree. A path with no override file is skipped, so
+    // passing the full in-scope path list clears just the real overrides and
+    // snapshots each for a later Discard.
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "clearOverridesUnder: refusing while an async discard is in flight";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+        // Deliberately not "Cannot reset": this entry point also backs a
+        // per-event card's Override toggle, and a user flipping one switch did
+        // not experience that as a reset.
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
         return -1;
     }
-    int cleared = 0;
-    int failed = 0;
-    for (const QString& path : eventPaths) {
-        if (!isValidEventPath(path))
-            continue;
-        if (clearOverride(path))
-            ++cleared;
-        else if (hasOverride(path))
-            ++failed;
-    }
-    if (failed > 0) {
-        qCWarning(lcConfig) << "clearOverridesUnder:" << failed << "override files could not be removed";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Some animation overrides could not be reset."));
-        return -1;
-    }
-    return cleared;
+    return clearOverridesForPaths(eventPaths, QLatin1String("clearOverridesUnder"));
 }
 
 bool AnimationsPageController::hasScopedPendingFiles(const QStringList& eventPaths) const

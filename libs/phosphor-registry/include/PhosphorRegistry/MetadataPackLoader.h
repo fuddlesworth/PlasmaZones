@@ -36,8 +36,8 @@ namespace PhosphorRegistry {
 // ## What it does
 //
 //   - Owns a phosphor-fsloader MetadataPackScanStrategy<Entry> +
-//     WatchedDirectorySet (the same scan/watch substrate the legacy
-//     MetadataPackRegistryBase used), configured with a domain Parser
+//     WatchedDirectorySet (the same scan/watch substrate the
+//     since-removed MetadataPackRegistryBase used), configured with a domain Parser
 //     that turns one pack's metadata.json into a shared_ptr<Factory>.
 //   - On every committed rescan, reconciles the Registry to match the
 //     freshly-scanned set: NEW packs are registerFactory'd, REMOVED
@@ -127,21 +127,28 @@ public:
 
     // @p registry must be non-null and must outlive the loader — it is a
     // hard precondition (the loader is useless without a store and every
-    // reconcile dereferences it). The debug Q_ASSERT_X catches a null in
-    // development; passing null in a release build is a programmer-error
-    // contract violation (undefined behaviour / crash on first reconcile),
-    // not a recoverable condition. In practice callers pass the address of a
+    // reconcile dereferences it). The ctor `qFatal`s on null in EVERY build:
+    // it is a programmer-error contract violation, not a recoverable
+    // condition, and crashing deterministically at construction with a
+    // greppable message beats crashing inside the first reconcile, far from
+    // the cause. In practice callers pass the address of a
     // Registry member they own, so null cannot legitimately occur. @p parser
     // is required (a null parser would silently skip every pack). @p logCat is
     // stored by reference and must outlive the loader (a Q_LOGGING_CATEGORY
     // static is the standard source); it labels the scan/parse diagnostics.
     MetadataPackLoader(Registry<Factory>* registry, Parser parser, const QLoggingCategory& logCat)
         : m_registry(registry)
-        , m_sigContrib() // set via setSignatureContrib before first scan
         , m_strategy(makeStrategy(std::move(parser)))
         , m_watcher(std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, nullptr))
     {
-        Q_ASSERT_X(m_registry != nullptr, "MetadataPackLoader", "registry must not be null");
+        // qFatal, not Q_ASSERT_X: the release-build consequence of a null
+        // registry is a crash inside the first reconcile, far from the cause,
+        // and the sibling with the identical precondition (PluginLoader) is
+        // already qFatal. Crashing here is deterministic, at construction, with
+        // a greppable message.
+        if (m_registry == nullptr) {
+            qFatal("MetadataPackLoader: registry must not be null");
+        }
         m_strategy->setLoggingCategory(logCat);
     }
 
@@ -153,10 +160,14 @@ public:
     // fingerprints are content-aware.
     void setSignatureContrib(SignatureContrib fn)
     {
-        m_sigContrib = fn; // kept for reconcile()
-        m_strategy->setSignatureContrib([fn = std::move(fn)](QCryptographicHash& hasher, const Entry& e) {
-            if (fn && e.factory) {
-                fn(hasher, *e.factory);
+        // Two deliberate copies from the parameter: one kept for
+        // reconcile(), one captured by the strategy lambda. Spelled as two
+        // plain copies (not copy-then-move of the same object) so it cannot
+        // be misread as a use-after-move.
+        m_sigContrib = fn;
+        m_strategy->setSignatureContrib([contrib = fn](QCryptographicHash& hasher, const Entry& e) {
+            if (contrib && e.factory) {
+                contrib(hasher, *e.factory);
             }
         });
     }
@@ -190,9 +201,14 @@ public:
         m_onCommitted = std::move(fn);
     }
 
-    // Add search directories. Mirrors MetadataPackRegistryBase: a single
+    // Add search directories. A single
     // batched register runs one synchronous scan; the reconcile +
     // per-entry Registry signals fire inline before this returns.
+    //
+    // Already-registered paths are filtered out first. If EVERY path in the
+    // batch is already registered this is a complete no-op: it returns without
+    // scanning and emits nothing, so callers must not rely on it as a way to
+    // force a rescan (use rescanNow() for that).
     void
     addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On,
                    PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst)
@@ -279,11 +295,22 @@ private:
                 m_sigContrib(hasher, *e.factory);
             }
             const QByteArray fp = hasher.result();
-            fresh.insert(e.id, fp);
 
             const auto prev = m_fingerprints.constFind(e.id);
             if (prev == m_fingerprints.cend()) {
-                m_registry->registerFactory(e.factory); // newly discovered
+                // Newly discovered. The RESULT matters: `registerFactory`
+                // defaults to DuplicatePolicy::Reject, so an id already present
+                // from an out-of-band registration FAILS here. Recording the
+                // fingerprint anyway would make `m_fingerprints.contains(id)`
+                // true below, and on the refresh where that pack disappears this
+                // loader would unregister a factory it never registered — the
+                // exact case the removal filter's comment claims it excludes.
+                // No warning: this is a header-only template with no logging
+                // category of its own, and the condition is benign — the
+                // out-of-band registration wins, which is what Reject means.
+                if (!m_registry->registerFactory(e.factory)) {
+                    continue;
+                }
             } else if (prev.value() != fp) {
                 // Content changed: replace in place. Replace (not a separate
                 // unregister + register) keeps the pack's REGISTRATION-ORDER
@@ -294,9 +321,38 @@ private:
                 // in lexicographic id order; a pack discovered on a later refresh
                 // appends, so consumers that need a sorted order re-sort ids()
                 // themselves rather than relying on loader registration order.)
-                m_registry->registerFactory(e.factory, QString(), DuplicatePolicy::Replace);
+                if (!m_registry->registerFactory(e.factory, QString(), DuplicatePolicy::Replace)) {
+                    // Checked symmetrically with the newly-discovered branch above.
+                    // Recording a fingerprint for a replace that did not land would
+                    // again have this loader claim an id it does not own, and the
+                    // removal sweep below would then unregister a factory it never
+                    // registered — the very case the new-pack check closes.
+                    continue;
+                }
+            } else if (!m_registry->factory(e.id)) {
+                // Unchanged CONTENT, but the id is gone from the registry — an
+                // out-of-band unregister. Re-register it defensively. Note this
+                // is only an OPPORTUNISTIC repair, not a general recovery:
+                // reconcile() runs solely from the OnCommit hook, which fires
+                // only when the scan signature moved, and an out-of-band
+                // unregister changes none of the signature's inputs (ids,
+                // isUser, metadata size/mtime, watch-set fingerprint). So this
+                // branch repairs an out-of-band removal only when SOME OTHER
+                // pack's bytes changed in the same scan and dragged the
+                // signature — the loader is documented as the sole writer of
+                // its borrowed Registry (see the removal-sweep note below), so
+                // an out-of-band unregister is out-of-contract to begin with,
+                // and this is belt-and-braces rather than a relied-on path.
+                if (!m_registry->registerFactory(e.factory)) {
+                    continue;
+                }
             }
-            // else: unchanged — leave the registry entry as-is.
+            // else: unchanged and still registered — leave the registry entry as-is.
+
+            // Recorded only once this loader is known to own the id, so the
+            // removal filter below stays an accurate "packs THIS loader
+            // registered" test.
+            fresh.insert(e.id, fp);
         }
         // Remove packs that disappeared. Walk the registry's ids() — which is
         // registration order — rather than m_fingerprints (a QHash, hash order)

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorFsLoader/FileLimits.h>
 #include <PhosphorFsLoader/IDirectoryLoaderSink.h>
 #include <PhosphorFsLoader/ParsedEntry.h>
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
@@ -77,9 +78,12 @@ public:
     /**
      * @brief Register a directory for scanning + (optionally) watching.
      *
-     * Idempotent on the directory path — adding the same directory
-     * twice is a no-op on the second call. Returns the count of
-     * entries CURRENTLY registered after the scan (not the delta).
+     * Idempotent on the registered SET, not on the work: adding a directory
+     * already present does not duplicate it, but the call still runs a full
+     * rescan and dispatches a `commitBatch` plus `entriesChanged`. A caller
+     * that means "rescan now" should say `requestRescan()`; a caller that
+     * means "make sure this is registered" pays a scan either way. Returns the
+     * count of entries CURRENTLY registered after the scan (not the delta).
      *
      * `liveReload` is a one-way enable: once any call passes
      * `LiveReload::On`, the loader keeps watching for the rest of its
@@ -87,8 +91,8 @@ public:
      *
      * The default is `Off` because this is a library primitive — tests
      * and batch imports compose against it. Consumer wrappers above
-     * this (CurveLoader/ProfileLoader and the shader registries)
-     * inherit the default, but can override it via the explicit
+     * this (CurveLoader and ProfileLoader — the pack registries sit on
+     * `MetadataPackLoader`, not on this class) inherit the default, but can override it via the explicit
      * `LiveReload::On` argument production callers pass.
      */
     int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
@@ -97,10 +101,10 @@ public:
      * @brief Register multiple directories in caller-declared priority order.
      *
      * `RegistrationOrder::LowestPriorityFirst` (the default) takes input
-     * in `[sys-lowest, ..., sys-highest, user]` order — the same shape
-     * the daemon's `setupAnimationProfiles` already builds via
-     * `std::reverse(locateAll(...))` + user-dir append. Passing
-     * `HighestPriorityFirst` lets callers feed `locateAll`'s natural
+     * in `[sys-lowest, ..., sys-highest, user]` order — the shape a
+     * consumer gets from `std::reverse(locateAll(...))` plus a user-dir
+     * append. Passing `HighestPriorityFirst` lets callers feed
+     * `locateAll`'s natural
      * output (with the user dir prepended) directly without their own
      * pre-reverse — the base normalises before the strategy runs, so
      * higher-priority entries always override on key collision.
@@ -110,7 +114,8 @@ public:
      * Empty `directories` is a no-op: no scan runs and the return value
      * is the count of entries currently tracked from PRIOR registrations
      * (not zero). Callers needing "force a rescan with no new dirs"
-     * should use `requestRescan()` instead.
+     * should use `requestRescan()`, or `rescanNow()` when the result has
+     * to be readable before the call returns.
      */
     int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off,
                             RegistrationOrder order = RegistrationOrder::LowestPriorityFirst);
@@ -119,6 +124,29 @@ public:
     /// `WatchedDirectorySet`.
     void requestRescan();
 
+    /// Rescan every registered directory synchronously, on the calling
+    /// stack, cancelling any pending debounced rescan. Forwards to the
+    /// underlying `WatchedDirectorySet`. For a consumer that has just
+    /// written or deleted a file in a watched directory and must read
+    /// the loaded state back before it returns: the debounce would
+    /// otherwise answer that read with the pre-write state.
+    ///
+    /// GUI-thread only, like every other non-test mutating call on this class,
+    /// and refused off-thread in EVERY build: `WatchedDirectorySet::rescanNow`
+    /// asserts in debug and, in release, warns and returns without rescanning
+    /// rather than corrupting its entry map from a worker thread. A refused
+    /// call is therefore a silent no-op to this method's caller, which returns
+    /// void — so an off-thread caller sees nothing happen, by design.
+    /// `entriesChanged` is emitted on the caller's stack, so the sink's
+    /// commit step and every DIRECTLY connected consumer slot run before
+    /// this returns (a queued connection still runs later).
+    ///
+    /// Unlike `requestRescan`, this does not defer when a scan is already
+    /// running: calling it from an `entriesChanged` slot re-enters the
+    /// scan, and nothing bounds that recursion. The caller owns
+    /// termination.
+    void rescanNow();
+
     /// Count of entries currently tracked by the loader.
     int registeredCount() const;
 
@@ -126,15 +154,38 @@ public:
     /// deterministic order across platforms and Qt versions.
     QList<Entry> entries() const;
 
-    /// Per-file size cap. Files larger than this are skipped with a
-    /// warning — guards the GUI thread against a pathological user
-    /// JSON. 1 MiB is far above any legitimate curve / profile / layout
-    /// schema in this library's ecosystem.
-    static constexpr qint64 kMaxFileBytes = 1 * 1024 * 1024;
+    /// Per-file size cap — alias of the canonical
+    /// `PhosphorFsLoader::kMaxJsonFileBytes` (see FileLimits.h for the
+    /// rationale). Kept as a member name because callers spell it
+    /// `DirectoryLoader::kMaxFileBytes`.
+    static constexpr qint64 kMaxFileBytes = kMaxJsonFileBytes;
 
-    /// Hard cap on entries parsed per rescan (summed across every
-    /// registered directory). At 10k entries a rescan has already burned
+    /// Hard cap on files CONSIDERED per rescan (summed across every
+    /// registered directory), not on the entries that survive to
+    /// registration — a file that fails to parse or loses a duplicate check
+    /// has still been read. A file skipped for exceeding `kMaxFileBytes` is
+    /// charged too: the stat is real work, and charging for it is the
+    /// adversarially safer choice. At 10k files a rescan has already burned
     /// the 50 ms debounce budget many times over.
+    ///
+    /// What this does NOT bound is the `entryList` call that materialises
+    /// and sorts every `*.json` name in a directory before the loop starts.
+    /// That enumeration is kept small by `WatchedDirectorySet`'s
+    /// forbidden-root check (no `$HOME`, no `/`) plus caller path
+    /// discipline, not by this cap.
+    ///
+    /// Note the cost of a trip: keys registered on a previous scan that this
+    /// one never reached are reported to the sink as `removedKeys`, so a
+    /// trip unregisters entries that still exist on disk. At 10k that is
+    /// theoretical, but it is why the cap sits far above any real corpus.
+    /// NOTE this now bounds real kernel watches, not just parses: a file this
+    /// scan REFUSES is added to the per-file watch list (so repairing it in
+    /// place wakes the loader), and a refused file exists, so it takes an
+    /// inotify watch. 10,000 unparseable `*.json` in one directory therefore
+    /// holds 10,000 watches — above the 8192 `fs.inotify.max_user_watches`
+    /// default several distributions still ship, which would starve every other
+    /// QFileSystemWatcher in the process. `PluginLoader` sets its own cap an
+    /// order of magnitude lower for exactly this reason.
     static constexpr int kMaxEntries = 10'000;
 
     /// Test-only: override the debounce interval (default 50 ms).
@@ -154,9 +205,14 @@ public:
     bool hasParentWatchForTest(const QString& path) const;
 
 Q_SIGNALS:
-    /// Fired after every rescan, coalesced by the 50 ms debounce —
-    /// regardless of whether the discovered entry set or any underlying
-    /// payload actually changed.
+    /// Fired after every rescan — regardless of whether the discovered
+    /// entry set or any underlying payload actually changed. Rescans
+    /// driven by the watcher or `requestRescan()` are coalesced by the
+    /// 50 ms debounce first. `rescanNow()` bypasses that and fires this on
+    /// the caller's stack, and so does the initial scan inside
+    /// `loadFromDirectory[ies]` — which is why a consumer has to wire its
+    /// slots BEFORE it registers directories, not after. (An empty directory
+    /// list runs no scan and emits nothing; see `loadFromDirectories`.)
     ///
     /// This is **deliberately** a "rescan completed" signal rather than
     /// a "content changed" signal — the loader has no visibility into
@@ -168,11 +224,14 @@ Q_SIGNALS:
     ///
     /// Tests and debug tooling rely on the per-rescan emission to observe
     /// rescans without payload inspection — do not weaken this contract
-    /// without updating the loader-sink consumers and the test suite. The three sister registries (`ShaderRegistry`,
-    /// `AnimationShaderRegistry`, `ScriptedAlgorithmLoader`) gate their
-    /// public content-changed signals at the registry level via SHA-1
-    /// signature or QHash diff because they own their parse output;
-    /// `DirectoryLoader` gates one layer up.
+    /// without updating the loader-sink consumers and the test suite.
+    ///
+    /// The three `MetadataPackLoader`-hosted pack registries (`ShaderRegistry`,
+    /// `AnimationShaderRegistry`, `SurfaceShaderRegistry`) inherit change-only
+    /// emit from BELOW them — `MetadataPackScanStrategy`'s SHA-1 signature plus
+    /// `MetadataPackLoader`'s per-id fingerprint diff — and
+    /// `ScriptedAlgorithmLoader` hashes its own registered set. This class has
+    /// no view of parsed content, so its consumers gate one layer up.
     void entriesChanged();
 
 private:

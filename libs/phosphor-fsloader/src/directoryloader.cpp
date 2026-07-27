@@ -53,7 +53,17 @@ public:
 
     void setMaxEntries(int cap)
     {
-        m_maxEntries = cap;
+        // Asserted, then defaulted — the same shape as
+        // MetadataPackScanStrategy::setMaxEntries, for the same reason.
+        // Clamping a negative cap to zero would not make it safe: `filesConsidered
+        // >= m_maxEntries` is int-to-int here, so a negative cap trips on the
+        // first file and mass-unregisters every tracked key. Falling back to the
+        // default costs the caller its setting instead of costing the registry
+        // its contents. Zero is a different case and IS honoured: "admit
+        // nothing" is a coherent thing to ask for, where "admit fewer than
+        // nothing" is a caller bug.
+        Q_ASSERT_X(cap >= 0, "DirectoryLoader::JsonScanStrategy::setMaxEntries", "cap must be non-negative");
+        m_maxEntries = cap >= 0 ? cap : DirectoryLoader::kMaxEntries;
     }
 
 private:
@@ -87,8 +97,29 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
     // never violated either way.
     QHash<QString, Entry> fresh;
     QHash<QString, ParsedEntry> freshParsedByKey;
+    // Files this scan looked at and did not register — oversized, unparseable,
+    // empty key, or an intra-directory duplicate. NOT the cross-directory
+    // shadowed ones: a shadowed file's content changes nothing observable while
+    // the override that shadows it exists, and its removal is a directory event
+    // the search-path watch already catches.
+    //
+    // The refused files own no entry,
+    // but they still get a per-file watch below: an in-place edit that FIXES a
+    // broken file is the most common way an entry goes from invisible to
+    // visible, and a directory watch does not fire on content changes to a file
+    // that already exists. Both sibling scanners do the same
+    // (MetadataPackScanStrategy re-arms the metadata.json watch regardless of
+    // the parse outcome; ScriptedAlgorithmLoader keeps m_refusedFilePaths).
+    QStringList refusedPaths;
 
     bool capTripped = false;
+    /// Files CONSIDERED this rescan, summed across every registered directory.
+    /// The cap counts these rather than the entries that survive to
+    /// registration: a file that fails to parse, yields an empty key, loses an
+    /// intra-directory duplicate check, or is shadowed cross-directory has
+    /// still been read and parsed on the GUI thread, which is the work the cap
+    /// exists to bound.
+    int filesConsidered = 0;
 
     for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend(); ++dirIt) {
         const QString& directory = *dirIt;
@@ -103,6 +134,17 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
         // Sort within each directory so duplicate-name resolution is
         // deterministic across platforms (ext4/btrfs/APFS differ on
         // entryList ordering).
+        //
+        // Symlinks are FOLLOWED, deliberately, and no canonical-containment
+        // check is applied — unlike ScriptedAlgorithmLoader, which refuses a
+        // `*.luau` resolving outside its directory. The difference is what the
+        // file buys an attacker. A script is executed, so a symlinked one is a
+        // code-execution primitive worth refusing even same-user. A curve or
+        // profile JSON parses into a bounded value type behind a size cap and
+        // names no further files, so following a symlink reads something the
+        // same user could have copied in anyway. Refusing them would break the
+        // one legitimate use people actually have: symlinking a curve out of a
+        // dotfiles repo.
         QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
 
         // Track keys already seen within THIS directory so we can warn
@@ -136,10 +178,18 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
             // below. A directory sprayed with tens of thousands of empty
             // `*.json` files would otherwise parse every one of them on
             // the GUI thread on every watcher fire.
-            if (freshParsedByKey.size() >= m_maxEntries) {
+            //
+            // Counts files considered, NOT keys registered. Every one of the
+            // sprayed files above parses (cheaply, but not freely) and then
+            // registers nothing, so a registered-key count would never reach
+            // the cap and the guard would let exactly the attack it names
+            // straight through. Same for tens of thousands of files that all
+            // resolve to one key.
+            if (filesConsidered >= m_maxEntries) {
                 capTripped = true;
                 break;
             }
+            ++filesConsidered;
 
             const QString fullPath = dir.absoluteFilePath(file);
 
@@ -147,21 +197,31 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
             // be able to stall the GUI thread with a 2 GB blob. Stat
             // first; skip + warn on oversize. Sinks that want a lower
             // cap enforce their own on top of this.
+            //
+            // This is a stat-side cap, not a read-side one: a file that
+            // passes the size check here and then grows before the sink
+            // reads it is not re-checked. The sink owns the descriptor and
+            // is the only layer that can bound the actual bytes read, so a
+            // descriptor-side ceiling (if a sink needs a hard one) belongs
+            // there, not here.
             const QFileInfo fileInfo(fullPath);
             if (fileInfo.size() > DirectoryLoader::kMaxFileBytes) {
                 qCWarning(lcLoader) << "Skipping oversized file" << fullPath << "(" << fileInfo.size() << "bytes, cap"
                                     << DirectoryLoader::kMaxFileBytes << ")";
+                refusedPaths.append(fullPath);
                 continue;
             }
 
             auto parsed = m_sink->parseFile(fullPath);
             if (!parsed) {
+                refusedPaths.append(fullPath);
                 continue;
             }
             const QString key = parsed->key;
             if (key.isEmpty()) {
                 qCWarning(lcLoader) << "parseFile returned entry with empty key from" << fullPath
                                     << "— sinks must set ParsedEntry::key";
+                refusedPaths.append(fullPath);
                 continue;
             }
 
@@ -174,6 +234,7 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
                 qCWarning(lcLoader).nospace()
                     << "Duplicate key '" << key << "' within directory " << directory << " — kept '" << winnerIt.value()
                     << "', ignored '" << fullPath << "' (winner is alphabetically first)";
+                refusedPaths.append(fullPath);
                 continue;
             }
             keysInThisDir.insert(foldedKey, fullPath);
@@ -267,10 +328,21 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
 
     // Tell the base which paths to install per-file watches on.
     QStringList desiredFileWatches;
-    desiredFileWatches.reserve(m_entries.size());
+    desiredFileWatches.reserve(m_entries.size() + refusedPaths.size());
     for (const auto& entry : std::as_const(m_entries)) {
         desiredFileWatches.append(entry.sourcePath);
     }
+    desiredFileWatches.append(refusedPaths);
+    // Sorted before returning, like MetadataPackScanStrategy does. Nothing
+    // depends on it: the base copies into a QSet (so it dedupes and ignores
+    // order), the IScanStrategy contract promises no ordering, and this
+    // strategy is a private nested class whose return value never escapes
+    // `rescanAll`, so no test can assert on it either. Note only TWO of the
+    // four IScanStrategy implementations sort (this one and
+    // MetadataPackScanStrategy); PluginLoader and ScriptedAlgorithmLoader
+    // return raw/hash order. So this is a courtesy for consistency with one
+    // sibling, not a contract — it costs one sort of a small list.
+    std::sort(desiredFileWatches.begin(), desiredFileWatches.end());
     return desiredFileWatches;
 }
 
@@ -302,6 +374,11 @@ int DirectoryLoader::loadFromDirectories(const QStringList& directories, LiveRel
 void DirectoryLoader::requestRescan()
 {
     m_watcher->requestRescan();
+}
+
+void DirectoryLoader::rescanNow()
+{
+    m_watcher->rescanNow();
 }
 
 int DirectoryLoader::registeredCount() const

@@ -17,6 +17,7 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QPair>
+#include <QScopeGuard>
 #include <QUuid>
 
 #include <algorithm>
@@ -45,9 +46,27 @@ public:
 
     /// Parent-loader-visible flag — read by the lambda bound to
     /// `DirectoryLoader::entriesChanged` to decide whether the consumer
-    /// signal (`profilesChanged`) fires. Reset to false at the start of
-    /// every `commitBatch`; flipped to true on any tracked-state change.
+    /// signal (`profilesChanged`) fires. Flipped to true on any
+    /// tracked-state change, and cleared only when the OUTERMOST
+    /// `commitBatch` starts.
+    ///
+    /// Depth-scoped rather than unconditionally cleared: `commitBatch`
+    /// ends in `reloadFromOwner`, which emits `profileChanged` on the
+    /// caller's stack, and `ProfileLoader::rescanNow()` is public, so a
+    /// consumer can re-enter a scan from such a handler. An
+    /// unconditional clear at the top of the nested batch would discard
+    /// the outer batch's evidence, and the outer `entriesChanged` would
+    /// then silently suppress `profilesChanged` for a real change.
+    ///
+    /// The accepted cost is a duplicate: in the nested case the inner
+    /// rescan's `entriesChanged` reads the flag while it still carries the
+    /// OUTER batch's evidence, so `profilesChanged` fires for both. A
+    /// redundant consumer refresh is the right side to err on — the
+    /// alternative is a missed one.
     bool lastBatchChanged = false;
+
+    /// Reentry depth for `commitBatch`. See `lastBatchChanged`.
+    int commitDepth = 0;
 
     const QString& ownerTag() const
     {
@@ -56,11 +75,12 @@ public:
 
     std::optional<PhosphorFsLoader::ParsedEntry> parseFile(const QString& filePath) override
     {
-        // Common envelope checks (read, parse, root-is-object,
+        // Common envelope checks (size cap, read, parse, root-is-object,
         // non-empty `name`, name-matches-filename) live in the shared
-        // helper. The helper strips `name` from the returned root, so
-        // it can't leak into Profile::presetName — the two concepts
-        // are distinct (registry path vs. user-assigned preset label).
+        // helper, which also strips `name` from the returned root: it is
+        // that layer's routing key, not part of this schema. The registry
+        // path and `Profile::presetName` are distinct concepts and stay
+        // distinct — `Profile::fromJson` reads only `presetName`.
         auto envelope = PhosphorFsLoader::validateJsonEnvelope(filePath, lcProfileLoader());
         if (!envelope) {
             return std::nullopt;
@@ -80,7 +100,17 @@ public:
     void commitBatch(const QStringList& removedKeys,
                      const QList<PhosphorFsLoader::ParsedEntry>& currentEntries) override
     {
-        lastBatchChanged = false;
+        // Only the outermost batch starts from a clean slate — a nested one
+        // (reached through `reloadFromOwner`'s synchronous `profileChanged`
+        // into a consumer that calls `rescanNow`) accumulates into the
+        // evidence the outer batch has already gathered.
+        if (commitDepth == 0) {
+            lastBatchChanged = false;
+        }
+        ++commitDepth;
+        const auto leaveBatch = qScopeGuard([this] {
+            --commitDepth;
+        });
 
         // Walk removals first so a re-add of the same key on the same
         // pass sees a clean snapshot and registers fresh.
@@ -102,6 +132,23 @@ public:
             const auto* payload = std::any_cast<Profile>(&parsed.payload);
             if (!payload) {
                 qCWarning(lcProfileLoader) << "commitBatch: payload type-mismatch for" << parsed.key;
+                // Both snapshots must forget this key, and the batch must report
+                // as changed. Skipping bare leaves the key out of `currentMap` —
+                // so `reloadFromOwner` unregisters it — while this sink still
+                // claims to track it at its old value. A later successful parse
+                // of the same key with the same value would then diff EQUAL and
+                // suppress `profilesChanged` a second time, even though the
+                // registry entry disappeared and came back. Unreachable today
+                // (parseFile always stores a Profile), but this is the only
+                // partial-failure path here and it must fail coherently.
+                m_lastCommittedPayloads.remove(parsed.key);
+                m_lastCommittedSources.remove(parsed.key);
+                // `entries` too, or the coherence claim above is not met: the key is
+                // absent from currentMap so reloadFromOwner unregisters it, and a
+                // stale Entry left here would keep `ProfileLoader::entries()`
+                // advertising a path the registry no longer serves.
+                entries.remove(parsed.key);
+                lastBatchChanged = true;
                 continue;
             }
 
@@ -136,10 +183,18 @@ public:
             currentMap.insert(parsed.key, *payload);
         }
 
-        // Single reloadFromOwner -> one profilesReloaded signal regardless
-        // of how many files changed (decision W: coalesce). The partitioning
-        // ensures daemon-direct entries at other paths survive this rescan.
-        Q_ASSERT(registry);
+        // Single reloadFromOwner -> AT MOST one `ownerReloaded` for the whole
+        // batch however many files changed (decision W: coalesce), alongside a
+        // per-path `profileChanged` for each entry that actually moved. None
+        // of either when the registry's own diff comes out empty, i.e. when
+        // the batch neither adds nor removes anything this loader owns.
+        // That diff is independent of this sink's lastBatchChanged,
+        // so the two signal families do not imply one another in either
+        // direction. (`profilesReloaded` is a third signal, fired only by the
+        // registry's wholesale reloadAll / clear.) The partitioning ensures
+        // daemon-direct entries at other paths survive this rescan.
+        // `registry` is bound from a reference in the ctor, so it is never
+        // null and needs no guard.
         registry->reloadFromOwner(m_ownerTag, currentMap);
     }
 
@@ -150,7 +205,7 @@ private:
     QHash<QString, Profile> m_lastCommittedPayloads;
 
     /// Snapshot of (sourcePath, systemSourcePath) per key, used for
-    /// the source-metadata diff (Phase 1c+1d fix).
+    /// the source-metadata diff.
     QHash<QString, QPair<QString, QString>> m_lastCommittedSources;
 };
 
@@ -188,22 +243,38 @@ ProfileLoader::ProfileLoader(PhosphorProfileRegistry& registry, CurveRegistry& c
 
 ProfileLoader::~ProfileLoader()
 {
+    // Sever the entriesChanged wire FIRST: clearOwner below emits the
+    // registry's profileChanged synchronously, and a consumer slot that
+    // reacted by calling rescanNow() would re-enter commitBatch →
+    // reloadFromOwner on a half-destroyed loader and RE-REGISTER the very
+    // entries this destructor exists to remove (the test suite defends its
+    // own slots against this with a scope guard; production consumers get
+    // the guarantee here instead).
+    disconnect(m_loader.get(), nullptr, this, nullptr);
+    m_destroying = true;
     // Clean up any registry entries we own so a process hosting multiple
     // sequential loaders (tests, especially) doesn't accumulate ghosts
     // from destroyed loaders.
-    if (m_sink && m_sink->registry) {
-        m_sink->registry->clearOwner(m_sink->ownerTag());
-    }
+    m_sink->registry->clearOwner(m_sink->ownerTag());
 }
 
 int ProfileLoader::loadFromDirectory(const QString& directory, LiveReload liveReload)
 {
+    // Same teardown guard as rescanNow(): a consumer slot reacting to the
+    // destructor's clearOwner emission must not be able to re-register entries
+    // through any load entry point either, not just the rescan pair.
+    if (m_destroying) {
+        return 0;
+    }
     return m_loader->loadFromDirectory(directory, liveReload);
 }
 
 int ProfileLoader::loadFromDirectories(const QStringList& directories, LiveReload liveReload,
                                        PhosphorFsLoader::RegistrationOrder order)
 {
+    if (m_destroying) {
+        return 0;
+    }
     return m_loader->loadFromDirectories(directories, liveReload, order);
 }
 
@@ -223,6 +294,9 @@ int ProfileLoader::loadLibraryBuiltins(LiveReload liveReload)
     // propagate the datadir), fall back to a no-op — the caller's
     // consumer-namespaced directories are still loaded via the
     // `loadFromDirectory[ies]` entry points.
+    if (m_destroying) {
+        return 0;
+    }
 #ifdef PHOSPHORANIMATION_INSTALL_DATADIR
     const QString dir = QStringLiteral(PHOSPHORANIMATION_INSTALL_DATADIR "/profiles");
     if (!QDir(dir).exists()) {
@@ -237,12 +311,28 @@ int ProfileLoader::loadLibraryBuiltins(LiveReload liveReload)
 
 QString ProfileLoader::ownerTag() const
 {
-    return m_sink ? m_sink->ownerTag() : QString();
+    // No null guard: m_sink is set in the ctor init-list, never reset, and the
+    // ctor itself already dereferences it. Same invariant as Sink::registry.
+    return m_sink->ownerTag();
 }
 
 void ProfileLoader::requestRescan()
 {
+    if (m_destroying) {
+        return;
+    }
     m_loader->requestRescan();
+}
+
+void ProfileLoader::rescanNow()
+{
+    // Guarded (like requestRescan) so a call re-entering during the
+    // destructor's clearOwner emission cannot re-register the entries the
+    // teardown just removed.
+    if (m_destroying) {
+        return;
+    }
+    m_loader->rescanNow();
 }
 
 int ProfileLoader::registeredCount() const
@@ -260,11 +350,6 @@ QList<ProfileLoader::Entry> ProfileLoader::entries() const
         return a.path < b.path;
     });
     return sorted;
-}
-
-bool ProfileLoader::hasPath(const QString& path) const
-{
-    return m_sink->entries.contains(path);
 }
 
 } // namespace PhosphorAnimation

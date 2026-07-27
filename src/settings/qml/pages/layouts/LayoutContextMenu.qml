@@ -44,7 +44,12 @@ Menu {
     /// for the next snap-layout show). Doing the dance on every
     /// show would also churn the popup chain needlessly.
     property string _aspectRatioMenuKind: "none"
-    readonly property bool isAutotile: layout && layout.isAutotile === true
+    // Boolean-coerced: `layout` is untyped `var` and defaults to null, and the
+    // `&&` chain yields the first falsy operand rather than `false`. Wrapped
+    // rather than leaning on QML's null-to-false coercion, because the same
+    // shape is documented elsewhere in this tree as a "Cannot assign
+    // [undefined] to bool" hazard.
+    readonly property bool isAutotile: Boolean(layout && layout.isAutotile === true)
     readonly property string layoutId: layout ? (layout.id || "") : ""
     // Cache the aspect-ratio options + screen list rather than
     // re-deriving them on every binding read. The Instantiator
@@ -64,7 +69,7 @@ Menu {
     // property, and a plain member read throws a TypeError on that
     // first pass (same failure mode documented on
     // KeyboardShortcutOverlay.qml's shortcutsModel and
-    // EasingSettings.qml's appSettings resolution). The empty-object
+    // the animation pages' appSettings resolution). The empty-object
     // fallback keeps the model sane until the property lands and the
     // binding re-runs.
     readonly property var _aspectRatioOptions: {
@@ -97,26 +102,22 @@ Menu {
             }
         ];
     }
-    // Memoise the screen list result. The getter still re-runs on
-    // `settingsController.screensChanged`, but doesn't re-run on
-    // each popup() / every `_screenItemsModel.length` read.
-    // Cache the screens snapshot when there's more than one — the
-    // multi-screen menu items only appear in that case. The binding
-    // tracks settingsController.screens directly so a screensChanged
-    // emit (e.g. daemon-driven hot-plug, late-arriving D-Bus reply)
-    // refreshes the cache without needing a Connections + imperative
-    // seed. Previously Component.onCompleted seeded once and missed
-    // any value that arrived between settingsController construction
+    // Memoised screens snapshot, held only when there is more than one screen
+    // (the multi-screen menu items appear in that case alone). The binding
+    // tracks settingsController.screens directly, so a screensChanged emit
+    // (daemon-driven hot-plug, a late-arriving D-Bus reply) refreshes it with
+    // no Connections + imperative seed, and it does not re-run on each popup()
+    // or on every `.length` read. Previously Component.onCompleted seeded once
+    // and missed any value that arrived between settingsController construction
     // and Main.qml mount.
     // The `settingsController` deref is guarded for the same
     // creation-time reason as `_aspectRatioOptions` above: the binding
     // can run before Main.qml assigns the required property (precedent:
-    // KeyboardShortcutOverlay.qml, EasingSettings.qml).
+    // KeyboardShortcutOverlay.qml).
     readonly property var _cachedScreens: {
         const s = settingsController ? (settingsController.screens || []) : [];
         return s.length > 1 ? s : [];
     }
-    readonly property var _screenItemsModel: _cachedScreens
 
     // Aspect-ratio submenu (added/removed imperatively by showForLayout).
     // Declared as a property VALUE rather than a child object — a Menu
@@ -155,7 +156,6 @@ Menu {
 
                 text: (modelData && modelData.label) ? modelData.label : ""
                 icon.name: isSelected ? "checkmark" : ""
-                Accessible.name: text
                 onClicked: {
                     // SIGSEGV-avoidance — see the matching pattern in
                     // the per-screen edit MenuItem above. The submenu's
@@ -183,8 +183,8 @@ Menu {
     signal deleteRequested(var layout)
     signal exportRequested(string layoutId)
 
-    function showForLayout(layout) {
-        layoutContextMenu.layout = layout;
+    function showForLayout(nextLayout) {
+        layoutContextMenu.layout = nextLayout;
         var wantKind = layoutContextMenu.isAutotile ? "autotile" : "snap";
         if (wantKind !== layoutContextMenu._aspectRatioMenuKind) {
             if (wantKind === "snap") {
@@ -227,7 +227,7 @@ Menu {
     Instantiator {
         id: screenItemInstantiator
 
-        model: layoutContextMenu._screenItemsModel
+        model: layoutContextMenu._cachedScreens
         onObjectAdded: function (index, object) {
             // Insert relative to the Edit marker — a future
             // MenuItem inserted before Edit would otherwise shift
@@ -251,7 +251,6 @@ Menu {
 
             text: i18n("Edit on %1", (modelData && modelData.displayLabel) || (modelData && modelData.name) || "")
             icon.name: (modelData && modelData.isPrimary) ? "starred-symbolic" : "monitor"
-            Accessible.name: text
             onClicked: {
                 // Capture by value because Qt.callLater fires after
                 // the menu's onClicked stack unwinds — the model
@@ -275,15 +274,12 @@ Menu {
     }
 
     MenuSeparator {
-        id: screenSeparator
-
-        visible: layoutContextMenu._screenItemsModel.length > 0
+        visible: layoutContextMenu._cachedScreens.length > 0
     }
 
     MenuItem {
         text: i18n("Open in Text Editor")
         icon.name: "document-open"
-        Accessible.name: text
         onTriggered: {
             if (layoutContextMenu.isAutotile)
                 settingsController.openAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));
@@ -321,8 +317,8 @@ Menu {
     }
 
     MenuItem {
-        readonly property bool perLayoutAuto: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true
-        readonly property bool globalAuto: layoutContextMenu.appSettings && layoutContextMenu.appSettings.autoAssignAllLayouts === true
+        readonly property bool perLayoutAuto: Boolean(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true)
+        readonly property bool globalAuto: Boolean(layoutContextMenu.appSettings && layoutContextMenu.appSettings.autoAssignAllLayouts === true)
 
         text: globalAuto ? i18n("Auto-assign forced on (global setting)") : (perLayoutAuto ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign"))
         icon.name: (perLayoutAuto || globalAuto) ? "window-duplicate" : "window-new"
@@ -339,7 +335,7 @@ Menu {
     // `_aspectRatioMenuKind` — relying solely on `!isAutotile`
     // would show two empty separators during the brief window
     // between layout assignment and showForLayout()'s
-    // insertMenu/removeMenu reconciliation when the menu rebuilds
+    // insertMenu/takeMenu reconciliation when the menu rebuilds
     // (e.g. a layout swap in-place).
     MenuSeparator {
         id: aspectRatioMarker
@@ -366,13 +362,13 @@ Menu {
     }
 
     MenuSeparator {
-        visible: layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+        visible: Boolean(layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile)
     }
 
     MenuItem {
         text: i18n("Delete")
         icon.name: "edit-delete"
-        visible: layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+        visible: Boolean(layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile)
         onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
     }
 
@@ -395,13 +391,13 @@ Menu {
     }
 
     MenuSeparator {
-        visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
+        visible: Boolean(layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem)
     }
 
     MenuItem {
         text: i18n("Delete")
         icon.name: "edit-delete"
-        visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
+        visible: Boolean(layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem)
         onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
     }
 }

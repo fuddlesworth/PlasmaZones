@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/FileLimits.h>
 
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -76,7 +76,7 @@ struct JsonEnvelope
 inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath, const QLoggingCategory& category)
 {
     // Single source of truth for the JSON-envelope size cap is
-    // `DirectoryLoader::kMaxFileBytes`. The loader applies it first via
+    // `kMaxJsonFileBytes`. The loader applies it first via
     // the default sink dispatch path; this helper enforces it again
     // because `validateJsonEnvelope` is a public free function and may
     // be called directly (without a loader stat in front of it). One
@@ -84,15 +84,45 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
     // with the alternative of letting a 2 GiB blob fall through to a
     // caller that didn't stat itself.
     QFileInfo info(filePath);
-    if (info.exists() && info.size() > DirectoryLoader::kMaxFileBytes) {
+    // `isFile()`, not just size: `open(ReadOnly)` on a FIFO blocks until a
+    // writer appears — indefinitely, on the caller's thread — and neither size
+    // check helps (a FIFO reports size 0). The loader-driven callers are immune
+    // only incidentally (they enumerate with `QDir::Files`), but this is a
+    // public free function documented as callable without a stat in front of
+    // it, so it screens out the FIFO/device/directory cases it can see at stat
+    // time.
+    //
+    // This is a stat-time screen, not a guarantee: the guard is gated on
+    // `exists()`, so a path that is ABSENT at stat time passes through (there
+    // is nothing to reject yet), and a regular file can still be swapped for a
+    // FIFO in the TOCTOU window between this stat and the `open()` below. Fully
+    // closing that would need an O_NONBLOCK open + fstat on the descriptor;
+    // callers handling genuinely hostile paths must do that themselves. The
+    // gate here removes the common accidental-FIFO/dir footgun, not a motivated
+    // attacker with write access to the exact path mid-call.
+    if (info.exists() && !info.isFile()) {
+        qCWarning(category) << "Skipping non-regular file" << filePath;
+        return std::nullopt;
+    }
+    if (info.exists() && info.size() > kMaxJsonFileBytes) {
         qCWarning(category).nospace() << "Skipping " << filePath << ": file size " << info.size() << " exceeds limit "
-                                      << DirectoryLoader::kMaxFileBytes;
+                                      << kMaxJsonFileBytes;
         return std::nullopt;
     }
 
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         qCWarning(category) << "Skipping unreadable file" << filePath << ":" << file.errorString();
+        return std::nullopt;
+    }
+    // Re-checked on the OPEN handle. The pre-open `QFileInfo` above is gated on
+    // `exists()`, so a path that was absent at stat time and created before the
+    // open bypassed the cap entirely and `readAll()` below was unbounded — which
+    // defeats the whole point of the guard. This check is on the descriptor, so
+    // there is no window between the size and the read.
+    if (file.size() > kMaxJsonFileBytes) {
+        qCWarning(category).nospace() << "Skipping " << filePath << ": file size " << file.size() << " exceeds limit "
+                                      << kMaxJsonFileBytes;
         return std::nullopt;
     }
 
@@ -122,16 +152,19 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
     // field — the result registers under the inner-name key while the
     // file on disk suggests a different identity. Reject up front with a
     // clear diagnostic naming both sides.
-    const QString basename = QFileInfo(filePath).completeBaseName();
+    // Reuses the QFileInfo built for the size cap above rather than stat-ing
+    // the same path a second time on this per-file hot path.
+    const QString basename = info.completeBaseName();
     if (name != basename) {
         qCWarning(category).nospace() << "Skipping " << filePath << ": name '" << name << "' does not match filename '"
                                       << basename << "' — rejecting to avoid silent shadowing";
         return std::nullopt;
     }
 
-    // Strip the bookkeeping field so the sink's schema-specific
-    // `fromJson` doesn't need to know about it (e.g. ProfileLoader's
-    // `Profile::fromJson` would otherwise leak `name` into `presetName`).
+    // Strip the bookkeeping field before handing the root on. It is this
+    // layer's routing key, not schema data, and a sink's `fromJson` should
+    // never have to know it was ever there — nor re-serialize it as an
+    // unrecognised field it decided to preserve.
     root.remove(QLatin1String("name"));
 
     return JsonEnvelope{name, std::move(root)};

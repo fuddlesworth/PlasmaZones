@@ -3,11 +3,15 @@
 
 #pragma once
 
-// Shared helpers between animationspagecontroller.cpp and
-// animationspagecontroller_shaders.cpp. The two TUs split the same class across
-// files, and both need to convert shader-effect / parameter / shader-profile
-// values to QVariantMap for QML consumption. Inline definitions here ensure both
-// TUs get their own copy without relying on unity-build TU merging for cross-TU
+// Shared helpers for the five TUs that split AnimationsPageController across
+// files (animationspagecontroller.cpp and its _overrides / _shaders / _paths /
+// _groupwrites siblings). Covers the shader-effect / parameter / shader-profile conversions
+// those TUs hand to QML, the override-file read and normalisation
+// (JsonNameKey, JsonEffectIdKey, JsonShaderParametersKey, readProfileJson,
+// sanitizedProfileMap, profileToVariantMap,
+// mergeMissingFields, fillLibraryDefaults), and the two path helpers
+// (humanizeSegment, collectShaderOverrideDescendants). Inline definitions here ensure every TU
+// gets its own copy without relying on unity-build TU merging for cross-TU
 // linkage.
 
 #include "core/platform/logging.h"
@@ -29,6 +33,11 @@
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <optional>
 
 namespace PlasmaZones {
 namespace animations_controller_detail {
@@ -86,13 +95,22 @@ inline QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEf
     return m;
 }
 
+/// Keys of the map `shaderProfileToMap` produces. `JsonEffectIdKey` is
+/// consumed by name in another TU (the group-write comparison in
+/// animationspagecontroller_groupwrites.cpp) as well as by QML;
+/// `JsonShaderParametersKey` currently has no consumer outside this header
+/// and is kept as a named constant for symmetry, so a future consumer cannot
+/// introduce a second independently-spelled literal.
+inline constexpr QLatin1String JsonEffectIdKey{"effectId"};
+inline constexpr QLatin1String JsonShaderParametersKey{"parameters"};
+
 inline QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProfile& profile)
 {
     QVariantMap m;
     if (profile.effectId)
-        m.insert(QLatin1String("effectId"), *profile.effectId);
+        m.insert(JsonEffectIdKey, *profile.effectId);
     if (profile.parameters)
-        m.insert(QLatin1String("parameters"), *profile.parameters);
+        m.insert(JsonShaderParametersKey, *profile.parameters);
     return m;
 }
 
@@ -205,6 +223,161 @@ inline QJsonObject readProfileJson(const QString& path)
     QJsonObject obj = doc.object();
     obj.remove(JsonNameKey);
     return obj;
+}
+
+/// Normalise a user-authored profile object the way `Profile::fromJson` would,
+/// so the disk-first inheritance walk resolves to what the daemon will animate.
+///
+/// Needed because inheritance resolution reads override files straight off disk
+/// rather than through the registry, and the registry path runs every file
+/// through `Profile::fromJson`. Reading the raw JSON skips all of that, so a
+/// hand-placed `{"duration": "fast"}` or `{"duration": -50}` in the user
+/// profiles directory would reach QML verbatim, render as NaN or a negative
+/// slider value, and then be propagated to every mirror path on the next edit.
+/// `fillLibraryDefaults` cannot help on its own — it only fills keys that are
+/// ABSENT, so a present-but-invalid value has to be resolved here.
+///
+/// Field-by-field equivalence with `Profile::fromJson` is the contract, and the
+/// per-field comments below say where each one drops a key versus substitutes
+/// the library default, because the two are not interchangeable under
+/// `mergeMissingFields`. One deliberate divergence: `curve` is type-checked but
+/// not RESOLVED (see the comment at its branch). Every numeric field is
+/// range-checked before rounding, which now matches fromJson exactly — the
+/// library's `minDistance` and `sequenceMode` branches used to round an
+/// unbounded double, which was undefined behaviour, and have since been given
+/// the same bound-first treatment.
+inline QVariantMap sanitizedProfileMap(const QJsonObject& obj)
+{
+    using P = PhosphorAnimation::Profile;
+    using PhosphorAnimation::SequenceMode;
+    if (obj.isEmpty()) {
+        return {};
+    }
+
+    // Built field by field from the JSON object rather than by pruning
+    // `obj.toVariantMap()`, so the type rules are `QJsonValue`'s — the same
+    // ones fromJson sees. Pruning a QVariantMap would not be equivalent:
+    // `QVariant::toDouble` converts a JSON bool or a numeric string to a
+    // number, where `QJsonValue` reports it as not-a-number. `{"duration":
+    // "900"}` would then show 900 in the UI while the daemon inherited the
+    // value instead.
+    //
+    // Dropping a key and substituting the library default are also NOT
+    // interchangeable, because `mergeMissingFields` only fills keys that are
+    // absent: a dropped key lets an ancestor's value through, a substituted one
+    // blocks inheritance at this level. fromJson does each in specific cases,
+    // so this mirrors which it does where rather than dropping uniformly.
+    QVariantMap out;
+
+    // Round only after bounding, so the float-to-int conversion is always in
+    // range. `std::isfinite` alone is not enough — 1e300 is finite and
+    // `qRound` on it is undefined behaviour.
+    //
+    // The caller's [lo, hi] is intersected with a band a FULL unit inside the
+    // int range, because `qRound(d)` is `int(d + 0.5)` for non-negative d and
+    // `int(d - 0.5)` otherwise: a caller passing the full int range as its
+    // domain (sequenceMode does) would otherwise still hand `qRound` a value
+    // whose conversion is out of range. Same shape of guard as the one in
+    // `Profile::fromJson`, which needs only half a unit — this one is a whole
+    // unit and so strictly tighter, not identical.
+    const auto boundedRound = [](double v, double lo, double hi, std::optional<int>& into) {
+        const double safeLo = std::max(lo, double(std::numeric_limits<int>::min()) + 1.0);
+        const double safeHi = std::min(hi, double(std::numeric_limits<int>::max()) - 1.0);
+        if (std::isfinite(v) && v >= safeLo && v <= safeHi) {
+            into = qRound(v);
+        }
+    };
+
+    if (obj.contains(QLatin1String(P::JsonFieldCurve))) {
+        // Type-checked but NOT resolved. Resolving a spec needs a
+        // `CurveRegistry`, and the process-wide accessor for one
+        // (`PhosphorCurve::defaultRegistry`) lives in the QML module. The
+        // settings binary does link that module, so reaching it is possible
+        // here — it is avoided because the unit-test targets that compile this
+        // header do NOT link it, and because a pure normalisation function
+        // should not read process-global state. Validating against a
+        // built-ins-only registry instead would silently drop legitimate
+        // user-authored curves, which is worse than not validating. An unresolvable spec
+        // reaching QML renders as an unrecognised curve, which is visible and
+        // harmless. This is the ONE field where this function knowingly diverges
+        // from fromJson, and the divergence is not free: fromJson drops a spec it
+        // cannot resolve, letting the ancestor's curve through, whereas keeping
+        // the key here BLOCKS `mergeMissingFields` at this level and every
+        // descendant. So a typo'd spec in global.json shows a curve tree-wide
+        // that the daemon will never play, and hides the one it will. Accepted
+        // because the alternative — validating against a built-ins-only registry
+        // — would drop legitimate user-authored curves, which is the same
+        // failure for a much more common input. A non-string value is a different case
+        // and IS rejected: it would reach QML as a map or an int where every
+        // consumer expects a wire string, and fromJson rejects it too via
+        // `toString()` yielding empty.
+        const QJsonValue v = obj.value(QLatin1String(P::JsonFieldCurve));
+        if (v.isString() && !v.toString().isEmpty()) {
+            out.insert(QLatin1String(P::JsonFieldCurve), v.toString());
+        }
+    }
+
+    // Type-checked exactly as `Profile::fromJson` type-checks: a non-number is
+    // NOT coerced to the library default, because that default would pass every
+    // range check and land ENGAGED, blocking inheritance where the daemon lets
+    // it through. Returns NaN for a non-number so the range checks below reject
+    // it on the same branch.
+    const auto numeric = [&obj](const char* key) -> double {
+        const QJsonValue v = obj.value(QLatin1String(key));
+        return v.isDouble() ? v.toDouble() : std::numeric_limits<double>::quiet_NaN();
+    };
+
+    if (obj.contains(QLatin1String(P::JsonFieldDuration))) {
+        // Rejected → left ABSENT, matching fromJson leaving `p.duration` unset
+        // so `effectiveDuration()` substitutes the library default.
+        const double raw = numeric(P::JsonFieldDuration);
+        if (std::isfinite(raw) && raw > 0.0 && raw <= P::MaxDurationMs) {
+            out.insert(QLatin1String(P::JsonFieldDuration), raw);
+        }
+    }
+
+    if (obj.contains(QLatin1String(P::JsonFieldMinDistance))) {
+        // fromJson leaves this unset when negative, so absent is right here too.
+        std::optional<int> rounded;
+        boundedRound(numeric(P::JsonFieldMinDistance), 0.0, double(P::MaxMinDistancePx), rounded);
+        if (rounded.has_value()) {
+            out.insert(QLatin1String(P::JsonFieldMinDistance), *rounded);
+        }
+    }
+
+    if (obj.contains(QLatin1String(P::JsonFieldSequenceMode))) {
+        // The one field fromJson SUBSTITUTES rather than leaves unset: an
+        // unknown enumerator becomes DefaultSequenceMode, engaged. Mirrored, so
+        // an ancestor's mode cannot leak through where the daemon would use the
+        // default.
+        std::optional<int> rounded;
+        boundedRound(numeric(P::JsonFieldSequenceMode), double(std::numeric_limits<int>::min()),
+                     double(std::numeric_limits<int>::max()), rounded);
+        const bool known =
+            rounded.has_value() && (*rounded == int(SequenceMode::AllAtOnce) || *rounded == int(SequenceMode::Cascade));
+        out.insert(QLatin1String(P::JsonFieldSequenceMode), known ? *rounded : int(P::DefaultSequenceMode));
+    }
+
+    if (obj.contains(QLatin1String(P::JsonFieldStaggerInterval))) {
+        std::optional<int> rounded;
+        boundedRound(numeric(P::JsonFieldStaggerInterval), 0.0, double(P::MaxStaggerIntervalMs), rounded);
+        if (rounded.has_value()) {
+            out.insert(QLatin1String(P::JsonFieldStaggerInterval), *rounded);
+        }
+    }
+
+    if (obj.contains(QLatin1String(P::JsonFieldPresetName))) {
+        // `isString()`, for fromJson's reason: `toString()` on a non-string
+        // yields an empty QString, and engaged-empty means "explicit empty
+        // override" rather than "inherit", so a `"presetName": 42` would
+        // otherwise block inheritance with a value nobody wrote.
+        const QJsonValue v = obj.value(QLatin1String(P::JsonFieldPresetName));
+        if (v.isString()) {
+            out.insert(QLatin1String(P::JsonFieldPresetName), v.toString());
+        }
+    }
+
+    return out;
 }
 
 /// Merge fields from @p source into @p target without overwriting keys

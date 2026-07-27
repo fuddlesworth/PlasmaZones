@@ -4,9 +4,9 @@
 #pragma once
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
-#include <PhosphorAnimation/PhosphorCurve.h>
 
 #include <QtCore/QJsonObject>
 #include <QtCore/QObject>
@@ -36,9 +36,29 @@ namespace PhosphorAnimation {
  *
  *   - Reading a property returns the **effective** value (`Profile::
  *     effective*`). Unset fields read back as their library default.
- *   - Writing a property **engages** the optional — the field becomes
- *     "explicitly set". There is no QML-reachable way to reset a field
- *     back to unset (call `Profile::*.reset()` from C++ if needed).
+ *   - Writing a property engages the optional when the value validates, so
+ *     the field becomes "explicitly set". A write that FAILS validation
+ *     disengages it instead, which is one of two QML-reachable ways to return a
+ *     field to "unset" (from C++, call `Profile::*.reset()` directly).
+ *     `presetName` is the exception on this bullet too: its setter validates
+ *     nothing and always engages, so QML has NO path back to "unset" for it,
+ *     and reads cannot tell unset from engaged-empty (both return ""). A QML
+ *     read-modify-write of a profile therefore converts an inherited
+ *     presetName into an explicit empty override — acceptable because the
+ *     field is a display label, but load-bearing on the C++ side where
+ *     engaged-empty blocks tree inheritance (Profile::toJson emits it).
+ *
+ * `curve` is the exception to BOTH bullets, because there is no
+ * `Profile::effectiveCurve()`:
+ *
+ *   - Reading it when unset returns a NULL `PhosphorCurve`, NOT the library
+ *     default. `isNull()` is true and `typeId` is empty on a fresh gadget; the
+ *     OutCubic default is substituted later, by `withDefaults()` and by
+ *     consumers. Check `isNull()` rather than assuming a curve is there.
+ *   - Assigning a default-constructed `PhosphorCurve` disengages it, which is
+ *     the second way to reach "unset" from QML — and `setCurve` is also the one
+ *     setter that applies no validation at all, since a curve handle is either
+ *     a valid curve or null.
  *
  * This matches how plugin authors typically use `PhosphorProfile`:
  * construct a compile-time literal with every field they care about,
@@ -71,7 +91,7 @@ public:
     Q_ENUM(SequenceMode)
 
     PhosphorProfile() = default;
-    /// Implicit-conversion ctor from core-library value.
+    /// Explicit converting ctor from a core-library value.
     explicit PhosphorProfile(const Profile& value)
         : m_value(value)
     {
@@ -81,7 +101,8 @@ public:
     /// was deliberately removed: a mutable handle from QML let scripts
     /// bypass the setter clamps below by writing directly into the
     /// engaged-optional fields. Core-library mutators construct a fresh
-    /// Profile and assign through the implicit-conversion ctor instead.
+    /// Profile and assign through the converting ctor instead, which is
+    /// explicit, so the conversion has to be written out.
     const Profile& value() const
     {
         return m_value;
@@ -89,12 +110,24 @@ public:
 
     // ─── Property delegates ───
     //
-    // Setters mirror the validation in `Profile::fromJson`: NaN/inf
-    // and out-of-range values are silently rejected (the field stays
-    // unset, so `effective*()` substitutes the library default).
-    // QML scripts that pass garbage get the same fault-tolerant
-    // behaviour as a malformed profile JSON file rather than landing
-    // pathological values into a QQuickPropertyAnimation downstream.
+    // Setters apply the same validation as `Profile::fromJson`: NaN/inf and
+    // out-of-range values are rejected, so `effective*()` substitutes the
+    // library default and a QML script that passes garbage gets the same
+    // fault-tolerant behaviour as a malformed profile JSON file rather than
+    // landing pathological values into a QQuickPropertyAnimation downstream.
+    //
+    // Two deliberate differences from `fromJson`. A rejection here leaves the
+    // field UNSET rather than substituting an engaged default, including for
+    // `sequenceMode` — this value type is a plugin-facing handle, not a node in
+    // the ProfileTree, so nothing inherits through it and there is no
+    // inheritance to block. And a rejection here is silent: the JSON path warns
+    // with the offending value because it is parsing a file a user hand-edited,
+    // whereas this is a programming error in the calling script and the value
+    // is visible in the script itself.
+    //
+    // `setCurve` is outside all of the above: a `PhosphorCurve` is either a
+    // valid curve handle or null, so there is nothing to range-check. Assigning
+    // a null one DISENGAGES the field rather than rejecting anything.
 
     PhosphorCurve curve() const
     {
@@ -124,7 +157,7 @@ public:
     }
     void setMinDistance(int px)
     {
-        if (px < 0) {
+        if (px < 0 || px > Profile::MaxMinDistancePx) {
             m_value.minDistance.reset();
             return;
         }
@@ -137,7 +170,20 @@ public:
     }
     void setSequenceMode(SequenceMode mode)
     {
-        m_value.sequenceMode = static_cast<PhosphorAnimation::SequenceMode>(static_cast<int>(mode));
+        // Validated like its scalar siblings, and like them a rejection leaves
+        // the field unset rather than substituting an engaged default the way
+        // `Profile::fromJson` does (see the block comment above for why the two
+        // differ). A QML script can assign any int to a Q_ENUM property, and an
+        // unknown enumerator stored here would be returned verbatim by
+        // `effectiveSequenceMode()` and serialized by `toJson()`, so the wrapper
+        // would emit a blob its own `fromJson` rejects on the next read.
+        const int raw = static_cast<int>(mode);
+        if (raw != static_cast<int>(PhosphorAnimation::SequenceMode::AllAtOnce)
+            && raw != static_cast<int>(PhosphorAnimation::SequenceMode::Cascade)) {
+            m_value.sequenceMode.reset();
+            return;
+        }
+        m_value.sequenceMode = static_cast<PhosphorAnimation::SequenceMode>(raw);
     }
 
     int staggerInterval() const

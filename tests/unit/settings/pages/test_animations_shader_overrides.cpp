@@ -15,6 +15,11 @@
  *   - clearShaderOverride on an unset path is a no-op (false, no signal)
  *   - a populated registry rejects an unknown effectId (false, no write,
  *     no signal) while an empty registry stays permissive
+ *   - the shader-leg GROUP writers (setShaderOverrideOnPaths /
+ *     clearShaderOverrideOnPaths / clearShaderOverrideDescendantsOnPaths /
+ *     allPathsHoldShaderEffect), which need a real ISettings to reach the
+ *     shader tree at all and so cannot live in test_animations_group_writes
+ *     alongside the timing-side group writers
  *   - window.movement.move leaf isolation as the controller surfaces it:
  *     no inherited ancestor shader, no built-in default, runtime-truth
  *     blanking of a stale geometry pack, and a picker that offers only
@@ -37,6 +42,21 @@
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
+/// The standard controller fixture, spelled once: the same four lines were
+/// copy-pasted at the top of two dozen slots and had already drifted once
+/// (a slot forgetting IsolatedConfigGuard writes real user config). Slots
+/// unpack it with a structured binding so their bodies keep the plain
+/// `c` / `registry` / `settings` names.
+namespace {
+struct ControllerFixture
+{
+    PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+    PlasmaZones::Settings settings;
+    PhosphorAnimationShaders::AnimationShaderRegistry registry;
+    PlasmaZones::AnimationsPageController c{&registry, &settings};
+};
+} // namespace
+
 class TestAnimationsShaderOverrides : public QObject
 {
     Q_OBJECT
@@ -52,10 +72,8 @@ private Q_SLOTS:
     /// combo would snap back to "None" — mirrors the user's symptom.
     void setShaderOverride_resolveReturnsTheJustWrittenEffect()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         const QString path = QStringLiteral("osd.show");
 
@@ -74,10 +92,8 @@ private Q_SLOTS:
     /// Both reads must return the corresponding effect.
     void setShaderOverride_repeatedPicksPreserveLatest()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         const QString path = QStringLiteral("osd.show");
 
@@ -98,14 +114,12 @@ private Q_SLOTS:
     /// button never lit up for shader edits.
     void setShaderOverride_emitsPendingChangesChanged()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
-        QVERIFY2(spy.count() >= 1, "setShaderOverride MUST emit pendingChangesChanged");
+        QCOMPARE(spy.count(), 1);
     }
 
     /// `setShaderOverride(path, "")` — the empty-effectId disable shorthand
@@ -116,17 +130,15 @@ private Q_SLOTS:
     /// engaged-empty `effectId`.
     void setShaderOverride_emptyEffectClearsAndEmits()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         // First write something so there's state to clear.
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
 
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QString(), {}));
-        QVERIFY2(spy.count() >= 1, "setShaderOverride('','') MUST emit pendingChangesChanged on disable");
+        QCOMPARE(spy.count(), 1);
         // Engaged-empty sentinel: `effectId` is engaged but the value is
         // an empty string, signalling "explicitly no shader" (blocks
         // parent-inheritance cascade).
@@ -138,16 +150,17 @@ private Q_SLOTS:
     /// Set then explicit clear → both calls fire pendingChangesChanged.
     void setShaderOverride_thenClear_emitsTwice()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
         QVERIFY(c.clearShaderOverride(QStringLiteral("osd.show")));
-        QVERIFY2(spy.count() >= 2,
-                 qPrintable(QStringLiteral("expected >=2 emissions, got ") + QString::number(spy.count())));
+        // Exactly two: the set makes the page dirty, the clear makes it clean
+        // again. `>=` here would let a mutation that announces twice per write
+        // through, and a duplicate pendingChangesChanged is a real defect (the
+        // footer flickers and every listener re-queries).
+        QCOMPARE(spy.count(), 2);
     }
 
     /// clearShaderOverride on a path with NO override is a no-op: it returns
@@ -156,10 +169,8 @@ private Q_SLOTS:
     /// refresh would re-dirty the page on every combo tick.
     void clearShaderOverride_noOverrideReturnsFalseNoSignal()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(!c.clearShaderOverride(QStringLiteral("osd.show")));
@@ -174,7 +185,7 @@ private Q_SLOTS:
     /// succeeds.
     void setShaderOverride_rejectsUnknownEffectIdWithPopulatedRegistry()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
         if (!QDir(dataDir).exists())
             QSKIP("data/animations not found — running outside source tree");
 
@@ -210,7 +221,7 @@ private Q_SLOTS:
     /// hasEffect is false for every id.
     void resolvedShaderProfile_blanksInapplicablePersistedEffect()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
         if (!QDir(dataDir).exists())
             QSKIP("data/animations not found — running outside source tree");
 
@@ -250,10 +261,8 @@ private Q_SLOTS:
     void resolvedShaderProfile_moveLeafRefusesAncestorInheritance()
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         // Family root carries a shader...
         QVERIFY(c.setShaderOverride(QStringLiteral("window"), QStringLiteral("matrix"), {}));
@@ -286,10 +295,8 @@ private Q_SLOTS:
     void resolvedShaderProfile_moveLeafHasNoBuiltInDefault()
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         QVERIFY(c.resolvedShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString().isEmpty());
         // Contrast: the snap sibling gets the built-in geometry default.
@@ -306,7 +313,7 @@ private Q_SLOTS:
     /// appearance-leg case above.
     void resolvedShaderProfile_blanksStaleGeometryPackOnMoveLeaf()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
         if (!QDir(dataDir).exists())
             QSKIP("data/animations not found — running outside source tree");
 
@@ -338,7 +345,7 @@ private Q_SLOTS:
     /// crossfade leg does not offer the move pack.
     void availableShaderEffectsForPath_moveLeafOffersOnlyDragShaders()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
         if (!QDir(dataDir).exists())
             QSKIP("data/animations not found — running outside source tree");
 
@@ -378,10 +385,8 @@ private Q_SLOTS:
     /// reads back is still the inherited parent shader.
     void setShaderOverride_childOverridesParentInheritance()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         // Parent ("All Window Events") set to matrix
         QVERIFY(c.setShaderOverride(QStringLiteral("window"), QStringLiteral("matrix"), {}));
@@ -429,10 +434,8 @@ private Q_SLOTS:
     /// matches the disk-loaded round-trip shape (parameters = nullopt).
     void setShaderOverride_repeatedDisableIsNoOp()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         const QString path = QStringLiteral("popup");
 
@@ -474,10 +477,8 @@ private Q_SLOTS:
     /// plus a deeply-nested chain.
     void shaderOverrideDescendantCount_strictDescendantsOnly()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         // Empty tree → count is zero for any path.
         QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("popup")), 0);
@@ -508,10 +509,8 @@ private Q_SLOTS:
     /// children" semantics), and is a no-op when count is zero.
     void clearShaderOverrideDescendants_clearsStrictDescendantsOnly()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         // Build: parent override + two descendants at different depths.
         QVERIFY(c.setShaderOverride(QStringLiteral("popup"), QStringLiteral("dissolve"), {}));
@@ -523,8 +522,11 @@ private Q_SLOTS:
         // (it's the parent the user is keeping intact).
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
         QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("popup")), 2);
-        QVERIFY2(spy.count() >= 1,
-                 "clearShaderOverrideDescendants MUST emit pendingChangesChanged when it cleared anything");
+        // Exactly one for the whole batch. That is the documented contract of
+        // the batch entry point — it clears every descendant, rescans once, and
+        // announces the NET flip once — so `>=` would have accepted the
+        // per-path-emit regression the batch exists to avoid.
+        QCOMPARE(spy.count(), 1);
         // Verify count is now zero.
         QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("popup")), 0);
         // Parent override survived.
@@ -546,13 +548,15 @@ private Q_SLOTS:
     /// "nothing to clear". Same convention as clearAllOverrides.
     void clearShaderOverrideDescendants_refusesWhileAsyncDiscardIsInFlight()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         QVERIFY(c.setShaderOverride(QStringLiteral("popup"), QStringLiteral("dissolve"), {}));
         QVERIFY(c.setShaderOverride(QStringLiteral("popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+        // A FILE-backed pending change too: a tree-only discard completes
+        // synchronously (no worker, no in-flight window), so the refusal
+        // this slot pins requires a snapshot for the worker to restore.
+        QVERIFY(c.setOverride(QStringLiteral("popup"), QVariantMap{{QStringLiteral("duration"), 200}}));
 
         QSignalSpy done(&c, &AnimationsPageController::discardResult);
         QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
@@ -562,9 +566,19 @@ private Q_SLOTS:
             QRegularExpression(QStringLiteral("clearShaderOverrideDescendants: refusing while async discard")));
         QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("popup")), -1);
         QCOMPARE(toastSpy.count(), 1);
-        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+        // Not the "Cannot reset" wording: this entry point's only caller is the
+        // event card's "Clear shadowing children" button, which the user did
+        // not experience as a reset. `clearAllOverrides`, which IS reset-only,
+        // keeps that wording (see test_animations_motion_sets.cpp).
+        QCOMPARE(toastSpy.first().first().toString(),
+                 PhosphorI18n::tr("Cannot change this while a discard is in progress."));
 
-        QVERIFY(done.wait(5000));
+        // QTRY, not `done.wait()`: `asyncRevertPending` emits `discardResult`
+        // SYNCHRONOUSLY on two early-return branches, and `QSignalSpy::wait()`
+        // ignores an emission already recorded before it was called — so on
+        // either branch `wait()` would block the full timeout and then fail for
+        // the wrong reason. Every sibling slot in this file uses QTRY for this.
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
     }
 
     /// The leaf-isolated interactive-drag path (window.movement.move) is a
@@ -577,10 +591,8 @@ private Q_SLOTS:
     void shaderOverrideDescendants_skipLeafIsolatedMovePath()
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         // Drag-leaf override + one genuine shadowing sibling for contrast.
         QVERIFY(c.setShaderOverride(PP::WindowMove, QStringLiteral("wobble"), {}));
@@ -603,10 +615,8 @@ private Q_SLOTS:
     /// refresh → re-emit) would dirty the page on every reload.
     void setShaderOverride_noOpWhenTreeAlreadyMatches()
     {
-        IsolatedConfigGuard guard;
-        Settings settings;
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        AnimationsPageController c(&registry, &settings);
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
 
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
 
@@ -614,6 +624,259 @@ private Q_SLOTS:
         // Same effectId + same (empty) parameters — must early-return.
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
         QCOMPARE(pendingSpy.count(), 0);
+    }
+
+    // ─── Shader-leg group writers ─────────────────────────────────────────
+    //
+    // The timing-side group writers are covered in
+    // test_animations_group_writes.cpp, which constructs a bare controller.
+    // These three need a real ISettings, because without one the shader tree is
+    // unreachable and every one of them is a no-op that proves nothing.
+
+    /// Writes land on every path in the group, not just the primary. A card
+    /// that wrote only its own path would leave its mirror out of step and the
+    /// divergence banner would report a difference the user never caused.
+    void setShaderOverrideOnPaths_writesEveryPathInTheGroup()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        const QStringList group{QStringLiteral("window.appearance.open"), QStringLiteral("window.appearance.close")};
+
+        QCOMPARE(c.setShaderOverrideOnPaths(group, QStringLiteral("pixelate"), {}), 2);
+
+        QStringList wrong;
+        for (const QString& path : group) {
+            if (c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString() != QStringLiteral("pixelate"))
+                wrong.append(path);
+        }
+        QVERIFY2(wrong.isEmpty(), qPrintable(wrong.join(QStringLiteral(", "))));
+        QVERIFY(c.allPathsHoldShaderEffect(group, QStringLiteral("pixelate")));
+    }
+
+    /// A path that cannot host a shader leg is SKIPPED, not attempted. The
+    /// count reflects that, and the supporting sibling in the same group is
+    /// still written — a group mixing the two must not be all-or-nothing.
+    void setShaderOverrideOnPaths_skipsPathsWithNoShaderLeg()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        const QString supported = QStringLiteral("window.appearance.open");
+        const QString unsupported = QStringLiteral("editor.snapIn");
+        QVERIFY(c.supportsShaderLeg(supported));
+        QVERIFY(!c.supportsShaderLeg(unsupported));
+
+        QCOMPARE(c.setShaderOverrideOnPaths(QStringList{supported, unsupported}, QStringLiteral("pixelate"), {}), 1);
+
+        QCOMPARE(c.rawShaderProfile(supported).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("pixelate"));
+        QVERIFY(c.rawShaderProfile(unsupported).isEmpty());
+    }
+
+    /// Clearing returns the group to inheritance and reports how many paths
+    /// actually held an override. A path that held none is not counted, so the
+    /// return distinguishes "cleared two" from "there was nothing to clear".
+    void clearShaderOverrideOnPaths_countsOnlyPathsThatHeldOne()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        const QString primary = QStringLiteral("window.appearance.open");
+        const QString mirror = QStringLiteral("window.appearance.close");
+        QVERIFY(c.setShaderOverride(primary, QStringLiteral("pixelate"), {}));
+
+        QCOMPARE(c.clearShaderOverrideOnPaths(QStringList{primary, mirror}), 1);
+        QVERIFY(c.rawShaderProfile(primary).isEmpty());
+        QVERIFY(c.rawShaderProfile(mirror).isEmpty());
+        // Cleared is not the engaged-empty "None" sentinel: a path with no
+        // override does not hold the empty string either.
+        QVERIFY(!c.allPathsHoldShaderEffect(QStringList{primary}, QString()));
+    }
+
+    /// The engaged-empty sentinel IS a stored value, distinct from having no
+    /// override at all. `allPathsHoldShaderEffect` has to tell them apart or
+    /// the card's picker renders "None" as an unset row.
+    void allPathsHoldShaderEffect_distinguishesTheNoneSentinelFromNoOverride()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        const QString primary = QStringLiteral("window.appearance.open");
+        const QString mirror = QStringLiteral("window.appearance.close");
+        const QStringList group{primary, mirror};
+
+        QVERIFY(!c.allPathsHoldShaderEffect(group, QString()));
+        QCOMPARE(c.setShaderOverrideOnPaths(group, QString(), {}), 2);
+        QVERIFY(c.allPathsHoldShaderEffect(group, QString()));
+        QVERIFY(!c.allPathsHoldShaderEffect(group, QStringLiteral("pixelate")));
+    }
+
+    /// Descendant clears sum across the group. Pinned alongside the refusal
+    /// case below, which is the half that actually needs the sentinel.
+    void clearShaderOverrideDescendantsOnPaths_sumsAcrossTheGroup()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        QVERIFY(c.setShaderOverride(QStringLiteral("popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+        QVERIFY(c.setShaderOverride(QStringLiteral("popup.zoneSelector.show"), QStringLiteral("pixelate"), {}));
+
+        // One shadowing descendant under each parent, so the group total is 2
+        // rather than either parent's 1.
+        QCOMPARE(c.clearShaderOverrideDescendantsOnPaths(
+                     QStringList{QStringLiteral("popup.layoutPicker"), QStringLiteral("popup.zoneSelector")}),
+                 2);
+        QVERIFY(c.rawShaderProfile(QStringLiteral("popup.layoutPicker.show")).isEmpty());
+        QVERIFY(c.rawShaderProfile(QStringLiteral("popup.zoneSelector.show")).isEmpty());
+    }
+
+    /// A refusal returns -1 for the whole call and stops at the first refused
+    /// path. Summing it in would make a refusal read as a smaller successful
+    /// clear, and the card gates its feedback on telling the two apart.
+    void clearShaderOverrideDescendantsOnPaths_reportsARefusalRatherThanASmallerCount()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        QVERIFY(c.setShaderOverride(QStringLiteral("popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+        QVERIFY(c.setShaderOverride(QStringLiteral("popup.zoneSelector.show"), QStringLiteral("pixelate"), {}));
+        // A FILE-backed pending change too: a tree-only discard completes
+        // synchronously (no worker, no in-flight window), so the refusal
+        // this slot pins requires a snapshot for the worker to restore.
+        QVERIFY(c.setOverride(QStringLiteral("popup"), QVariantMap{{QStringLiteral("duration"), 200}}));
+
+        // TWO paths, and that is the point. With one path, `cleared += -1` and
+        // an early `return -1` are indistinguishable — both yield -1 — so a
+        // single-path fixture cannot pin either the "never summed in" rule or
+        // the "stops at the first refusal" one. The gate is global, so both
+        // paths refuse: summing would give -2.
+        const QStringList group{QStringLiteral("popup.layoutPicker"), QStringLiteral("popup.zoneSelector")};
+
+        // An async discard owning the tree is what the -1 sentinel reports.
+        // The gate is cleared only in the watcher's `finished` handler, and no
+        // event loop spins between here and the call below, so it is still up.
+        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
+        QSignalSpy done(&c, &AnimationsPageController::discardResult);
+        c.asyncRevertPending();
+
+        // The refusal is reported by the method's own top-level async gate,
+        // which short-circuits before any per-path work — so this is the
+        // *OnPaths wrapper's message, not the per-path singular's.
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral(
+                                 "clearShaderOverrideDescendantsOnPaths: refusing while an async discard")));
+        // Spy attached before the refused call, for the same reason as its
+        // timing-side twin in test_animations_group_writes: a refusal must
+        // mutate nothing, and the tree's contents here would race the discard
+        // worker's restore. The worker cannot emit without an event-loop spin,
+        // and none happens between the call and these assertions.
+        QSignalSpy dirtied(&c, &AnimationsPageController::pendingChangesChanged);
+
+        QCOMPARE(c.clearShaderOverrideDescendantsOnPaths(group), -1);
+        // Stopped at the FIRST refusal: the second path was never attempted, so
+        // exactly one toast, not one per path.
+        QCOMPARE(toasts.count(), 1);
+        QCOMPARE(dirtied.count(), 0);
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
+    }
+
+    /// The GROUP write path — the only one QML uses — applies the SAME
+    /// effect-id boundary check as the per-path setter. Before this slot,
+    /// deleting the acceptableShaderEffectId gate in setShaderOverrideOnPaths
+    /// left the suite green while a typo'd id flowed into the persisted tree.
+    void setShaderOverrideOnPaths_rejectsUnknownEffectIdWithPopulatedRegistry()
+    {
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
+        if (!QDir(dataDir).exists())
+            QSKIP("data/animations not found — running outside source tree");
+
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY2(!registry.effectIds().isEmpty(), "precondition: registry populated so the gate is armed");
+        AnimationsPageController c(&registry, &settings);
+
+        const QStringList group{QStringLiteral("popup.layoutPicker.show"), QStringLiteral("popup.zoneSelector.show")};
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QCOMPARE(c.setShaderOverrideOnPaths(group, QStringLiteral("no-such-effect"), {}), -1);
+        QCOMPARE(spy.count(), 0);
+        for (const QString& path : group)
+            QVERIFY2(c.rawShaderProfile(path).isEmpty(), "refused group write must not touch the tree");
+
+        QVERIFY(registry.hasEffect(QStringLiteral("pixelate")));
+        QCOMPARE(c.setShaderOverrideOnPaths(group, QStringLiteral("pixelate"), {}), 2);
+    }
+
+    /// Async-refusal parity for the group setter, matching the family's
+    /// per-path and descendants twins: -1, one toast, no tree write.
+    void setShaderOverrideOnPaths_refusesWhileAsyncDiscardIsInFlight()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+        QVERIFY(c.setOverride(QStringLiteral("popup"), QVariantMap{{QStringLiteral("duration"), 200}}));
+
+        QSignalSpy done(&c, &AnimationsPageController::discardResult);
+        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
+        c.asyncRevertPending();
+        QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression(QStringLiteral("setShaderOverrideOnPaths: refusing while an async discard")));
+        QCOMPARE(
+            c.setShaderOverrideOnPaths({QStringLiteral("popup.layoutPicker.show")}, QStringLiteral("dissolve"), {}),
+            -1);
+        QCOMPARE(toasts.count(), 1);
+        QVERIFY(c.rawShaderProfile(QStringLiteral("popup.layoutPicker.show")).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
+    }
+
+    /// And the group clearer's refusal.
+    void clearShaderOverrideOnPaths_refusesWhileAsyncDiscardIsInFlight()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+        QVERIFY(c.setShaderOverride(QStringLiteral("popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+        QVERIFY(c.setOverride(QStringLiteral("popup"), QVariantMap{{QStringLiteral("duration"), 200}}));
+
+        QSignalSpy done(&c, &AnimationsPageController::discardResult);
+        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
+        c.asyncRevertPending();
+        QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression(QStringLiteral("clearShaderOverrideOnPaths: refusing while an async discard")));
+        QCOMPARE(c.clearShaderOverrideOnPaths({QStringLiteral("popup.layoutPicker.show")}), -1);
+        QCOMPARE(toasts.count(), 1);
+        QVERIFY2(!c.rawShaderProfile(QStringLiteral("popup.layoutPicker.show")).isEmpty(),
+                 "refused clear must leave the stored override in place");
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
+    }
+
+    /// The non-empty parameters branch of the group setter, plus its
+    /// compare-and-skip: params land in the persisted tree for every path,
+    /// and re-sending the identical group still REPORTS every path (the
+    /// requested end state holds, so each is counted as written) while
+    /// performing zero settings writes — which is what keeps a param slider
+    /// resting on its value from paying a write per tick. The zero-write half
+    /// is observed through the absence of any dirty announcement.
+    void setShaderOverrideOnPaths_writesParametersAndSkipsIdenticalRewrite()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        const QStringList group{QStringLiteral("popup.layoutPicker.show"), QStringLiteral("popup.zoneSelector.show")};
+        const QVariantMap params{{QStringLiteral("strength"), 0.7}};
+        QCOMPARE(c.setShaderOverrideOnPaths(group, QStringLiteral("pixelate"), params), 2);
+        for (const QString& path : group) {
+            const QVariantMap stored = c.rawShaderProfile(path);
+            QCOMPARE(stored.value(QStringLiteral("effectId")).toString(), QStringLiteral("pixelate"));
+            QCOMPARE(stored.value(QStringLiteral("parameters")).toMap().value(QStringLiteral("strength")).toDouble(),
+                     0.7);
+        }
+
+        QSignalSpy dirtied(&c, &AnimationsPageController::pendingChangesChanged);
+        QCOMPARE(c.setShaderOverrideOnPaths(group, QStringLiteral("pixelate"), params), 2);
+        QCOMPARE(dirtied.count(), 0);
     }
 };
 

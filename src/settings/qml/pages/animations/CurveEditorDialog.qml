@@ -11,8 +11,9 @@ import org.kde.kirigami as Kirigami
  * @brief Popup dialog for full curve editing (drag-handle bezier or spring sliders).
  *
  * Spring axis uses (omega, zeta) per `PhosphorAnimation::Spring`. The
- * `Save as Preset…` footer is wired in Phase 5; until then it stays hidden
- * to keep the dialog functional without the preset CRUD controller.
+ * `Save as preset…` footer saves the working curve through
+ * `AnimationsPageController::addUserPreset`, plus the duration the host passes
+ * in — easing mode only, since a spring has no duration the user can see.
  */
 Kirigami.Dialog {
     id: root
@@ -23,6 +24,11 @@ Kirigami.Dialog {
     // (omega, zeta) — rad/s and damping ratio, per Spring.h
     property real springOmega: CurvePresets.defaultSpringOmega
     property real springZeta: CurvePresets.defaultSpringZeta
+    /// Duration in milliseconds of the event being edited, stamped into a saved
+    /// preset alongside the curve. Bound by the host so a preset saved from an
+    /// event with its own duration override records that duration, not the
+    /// global default the event does not use.
+    property int duration: CurvePresets.defaultDurationMs
     // Working state — seeded onOpened, cleared onClosed. Apply only
     // commits when `_dirty` flipped (i.e. the working state diverged
     // from the seed values). Without that check, a parent re-binding
@@ -31,19 +37,40 @@ Kirigami.Dialog {
     property string _workingCurve: ""
     property real _workingOmega: 0
     property real _workingZeta: 0
+    /// The timing AXIS this session opened on, snapshotted alongside the values.
+    ///
+    /// `timingMode` is bound to the host, and the host assigns its own
+    /// `currentTimingMode` imperatively on every refresh from the profile tree —
+    /// which a page Discard, a profile switch, or any ancestor-path override
+    /// broadcast can trigger while this dialog is open. Branching Apply on the
+    /// LIVE binding then commits the wrong axis: a user who dragged a bezier gets
+    /// a spring written from the values seeded at open, and the bezier is thrown
+    /// away. The `_dirty` guard cannot catch that, because it tracks the VALUES.
+    /// The editors below are gated on this too, so the dialog stays a stable
+    /// modal over the state it opened on.
+    property int _workingMode: CurvePresets.timingModeEasing
+    /// The duration snapshotted at open, for the same reason as _workingMode:
+    /// `duration` reaches this dialog through the same live host chain the
+    /// mode does (the card's _applyEffective reassigns currentDuration on
+    /// every refresh, including _reseedFromInherited at Global-slider drag
+    /// rate), so reading it live shifted the EasingPreview tempo mid-tuning
+    /// and changed the duration "Save as preset…" stamps.
+    property real _workingDuration: 0
     property bool _dirty: false
     property bool _savingPreset: false
 
     signal curveApplied(string curve)
     signal springApplied(real omega, real zeta)
 
-    title: i18n("Customize Curve: %1", eventLabel)
+    // Label-free when the host has no event to name (a rule action with no
+    // event selected yet), rather than trailing a dangling preposition.
+    title: eventLabel.length > 0 ? i18nc("@title:window", "Customize curve for %1", eventLabel) : i18nc("@title:window", "Customize curve")
     preferredWidth: Math.min(Kirigami.Units.gridUnit * 40, parent ? parent.width * 0.85 : Kirigami.Units.gridUnit * 40)
     preferredHeight: Math.min(Kirigami.Units.gridUnit * 32, parent ? parent.height * 0.8 : Kirigami.Units.gridUnit * 32)
     standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
     onApplied: {
         if (root._dirty) {
-            if (timingMode === CurvePresets.timingModeEasing)
+            if (root._workingMode === CurvePresets.timingModeEasing)
                 root.curveApplied(root._workingCurve);
             else
                 root.springApplied(_workingOmega, _workingZeta);
@@ -54,7 +81,10 @@ Kirigami.Dialog {
     onClosed: {
         // Clear working state so the next open() re-seeds from the
         // (possibly updated) parent bindings rather than reusing stale
-        // values from this session.
+        // values from this session. Mode and duration are not touched here —
+        // onOpened seeds both unconditionally, so clearing them would be dead
+        // work and the old close-time seed of duration was in fact the source
+        // of the first-open stamp bug.
         root._workingCurve = "";
         root._workingOmega = 0;
         root._workingZeta = 0;
@@ -71,6 +101,13 @@ Kirigami.Dialog {
         _workingCurve = easingCurve;
         _workingOmega = springOmega;
         _workingZeta = springZeta;
+        root._workingMode = root.timingMode;
+        // Seed the duration snapshot at OPEN, alongside _workingMode and for the
+        // same reason: read live it would shift the preview tempo mid-tuning and,
+        // worse, "Save as preset…" stamped whatever it happened to hold — 0 on a
+        // first open, which _usableDuration then discards, silently dropping the
+        // duration the user saved with the curve.
+        root._workingDuration = root.duration;
         root._dirty = false;
     }
 
@@ -81,11 +118,17 @@ Kirigami.Dialog {
         EasingPreview {
             id: easingPreviewInDialog
 
-            visible: root.timingMode === CurvePresets.timingModeEasing
+            visible: root._workingMode === CurvePresets.timingModeEasing
             Layout.fillWidth: true
             curve: root._workingCurve
-            animationDuration: settingsController.settings.animationDuration
-            previewEnabled: root.visible && root.timingMode === CurvePresets.timingModeEasing
+            // The edited event's duration AT OPEN, not the live host value.
+            // Replaying at a tempo the event never uses means the user tunes
+            // against the wrong feel, and it must agree with the duration
+            // "Save as preset…" stamps below — both go through the
+            // _workingDuration snapshot so an external refresh mid-session
+            // cannot shift either.
+            animationDuration: root._workingDuration
+            previewEnabled: root.visible && root._workingMode === CurvePresets.timingModeEasing
             onCurveEdited: function (newCurve) {
                 root._workingCurve = newCurve;
                 root._dirty = true;
@@ -94,11 +137,11 @@ Kirigami.Dialog {
 
         // ── Easing controls ─────────────────────────────────────────
         SettingsSeparator {
-            visible: root.timingMode === CurvePresets.timingModeEasing
+            visible: root._workingMode === CurvePresets.timingModeEasing
         }
 
         SettingsRow {
-            visible: root.timingMode === CurvePresets.timingModeEasing
+            visible: root._workingMode === CurvePresets.timingModeEasing
             title: i18n("Preset")
 
             WideComboBox {
@@ -122,11 +165,11 @@ Kirigami.Dialog {
         }
 
         SettingsSeparator {
-            visible: root.timingMode === CurvePresets.timingModeEasing
+            visible: root._workingMode === CurvePresets.timingModeEasing
         }
 
         SettingsRow {
-            visible: root.timingMode === CurvePresets.timingModeEasing
+            visible: root._workingMode === CurvePresets.timingModeEasing
             title: i18n("Direction")
             description: i18n("Ease In accelerates, Ease Out decelerates")
 
@@ -138,7 +181,14 @@ Kirigami.Dialog {
                 // combo would otherwise appear interactive while being a
                 // no-op. Disable when the style picker is on Linear so the
                 // dead control is visually grey rather than misleading.
-                enabled: dialogCurvePreset.currentIndex !== 0
+                //
+                // `> 0`, not `!== 0`: findIndices returns styleIndex -1 for a
+                // curve it does not recognise, which is what a hand-dragged
+                // bezier produces. At -1 the onActivated handler below
+                // early-returns on every selection, so the combo has to read as
+                // dead there too — `!== 0` left it enabled and silently inert,
+                // the exact failure this line exists to prevent.
+                enabled: dialogCurvePreset.currentIndex > 0
                 Accessible.name: i18n("Easing direction")
                 model: CurvePresets.easingDirections.map(d => {
                     return d.label;
@@ -158,20 +208,20 @@ Kirigami.Dialog {
         }
 
         SettingsSeparator {
-            visible: root.timingMode === CurvePresets.timingModeEasing && easingPreviewInDialog.curveType !== "bezier"
+            visible: root._workingMode === CurvePresets.timingModeEasing && easingPreviewInDialog.curveType !== "bezier"
         }
 
         // Amplitude (elastic + bounce)
         SettingsRow {
-            visible: root.timingMode === CurvePresets.timingModeEasing && (easingPreviewInDialog.curveType.indexOf("elastic") >= 0 || easingPreviewInDialog.curveType.indexOf("bounce") >= 0)
+            visible: root._workingMode === CurvePresets.timingModeEasing && (easingPreviewInDialog.curveType.indexOf("elastic") >= 0 || easingPreviewInDialog.curveType.indexOf("bounce") >= 0)
             title: easingPreviewInDialog.curveType.indexOf("elastic") >= 0 ? i18n("Overshoot") : i18n("Amplitude")
             description: easingPreviewInDialog.curveType.indexOf("elastic") >= 0 ? i18n("How far past the target it travels before settling back") : i18n("Height of bounce peaks")
 
             SettingsSlider {
                 readonly property bool isElastic: easingPreviewInDialog.curveType.indexOf("elastic") >= 0
 
-                Accessible.name: isElastic ? i18n("Overshoot") : i18n("Amplitude")
-                // Mirrors Easing::clampAmplitude — see EasingSettings.qml. Elastic's
+                accessibleName: isElastic ? i18n("Overshoot") : i18n("Amplitude")
+                // Mirrors Easing::clampAmplitude (js/EasingCurve.js). Elastic's
                 // value is its peak and its floor moves with the period.
                 from: isElastic ? Easing.minElasticPeak(easingPreviewInDialog.elasticPeriod) : 0.5
                 to: isElastic ? 2 : 3
@@ -196,12 +246,12 @@ Kirigami.Dialog {
 
         // Period (elastic only)
         SettingsRow {
-            visible: root.timingMode === CurvePresets.timingModeEasing && easingPreviewInDialog.curveType.indexOf("elastic") >= 0
+            visible: root._workingMode === CurvePresets.timingModeEasing && easingPreviewInDialog.curveType.indexOf("elastic") >= 0
             title: i18n("Period")
             description: i18n("Lower values wobble faster")
 
             SettingsSlider {
-                Accessible.name: i18n("Period")
+                accessibleName: i18n("Period")
                 from: 0.1
                 to: 1
                 stepSize: 0.05
@@ -212,7 +262,7 @@ Kirigami.Dialog {
                 onMoved: value => {
                     var ct = easingPreviewInDialog.curveType;
                     // Re-clamp against the NEW period — elastic's amplitude floor
-                    // moves with it (minElasticPeak); see EasingSettings.qml.
+                    // moves with it (minElasticPeak, js/EasingCurve.js).
                     var amp = Easing.clampAmplitude(true, easingPreviewInDialog.curveAmplitude, value).toFixed(2);
                     root._workingCurve = ct + ":" + amp + "," + value.toFixed(2);
                     root._dirty = true;
@@ -222,12 +272,12 @@ Kirigami.Dialog {
 
         // Bounces (bounce only)
         SettingsRow {
-            visible: root.timingMode === CurvePresets.timingModeEasing && easingPreviewInDialog.curveType.indexOf("bounce") >= 0
+            visible: root._workingMode === CurvePresets.timingModeEasing && easingPreviewInDialog.curveType.indexOf("bounce") >= 0
             title: i18n("Bounces")
             description: i18n("Number of bounce repetitions")
 
             SettingsSlider {
-                Accessible.name: i18n("Bounces")
+                accessibleName: i18n("Bounces")
                 from: 1
                 to: 8
                 stepSize: 1
@@ -244,19 +294,19 @@ Kirigami.Dialog {
 
         // ── Spring mode ─────────────────────────────────────────────
         SpringPreview {
-            visible: root.timingMode === CurvePresets.timingModeSpring
+            visible: root._workingMode === CurvePresets.timingModeSpring
             Layout.fillWidth: true
             omega: root._workingOmega
             zeta: root._workingZeta
-            previewEnabled: root.visible && root.timingMode === CurvePresets.timingModeSpring
+            previewEnabled: root.visible && root._workingMode === CurvePresets.timingModeSpring
         }
 
         SettingsSeparator {
-            visible: root.timingMode === CurvePresets.timingModeSpring
+            visible: root._workingMode === CurvePresets.timingModeSpring
         }
 
         SettingsRow {
-            visible: root.timingMode === CurvePresets.timingModeSpring
+            visible: root._workingMode === CurvePresets.timingModeSpring
             title: i18n("Preset")
             description: i18n("Quick-select spring behavior")
 
@@ -281,16 +331,16 @@ Kirigami.Dialog {
         }
 
         SettingsSeparator {
-            visible: root.timingMode === CurvePresets.timingModeSpring
+            visible: root._workingMode === CurvePresets.timingModeSpring
         }
 
         SettingsRow {
-            visible: root.timingMode === CurvePresets.timingModeSpring
+            visible: root._workingMode === CurvePresets.timingModeSpring
             title: i18n("Speed (ω)")
-            description: i18n("Higher = faster spring response")
+            description: i18n("Higher values make the spring respond faster")
 
             SettingsSlider {
-                Accessible.name: i18n("Speed")
+                accessibleName: i18n("Speed")
                 from: settingsController.animationsPage.springOmegaMin
                 to: settingsController.animationsPage.springOmegaMax
                 stepSize: 0.5
@@ -306,16 +356,16 @@ Kirigami.Dialog {
         }
 
         SettingsSeparator {
-            visible: root.timingMode === CurvePresets.timingModeSpring
+            visible: root._workingMode === CurvePresets.timingModeSpring
         }
 
         SettingsRow {
-            visible: root.timingMode === CurvePresets.timingModeSpring
+            visible: root._workingMode === CurvePresets.timingModeSpring
             title: i18n("Damping ratio (ζ)")
-            description: i18n("< 1 bouncy, = 1 critical, > 1 overdamped")
+            description: i18n("Values below 1 bounce before settling. At 1 and above the spring settles without bouncing, more slowly the higher it goes.")
 
             SettingsSlider {
-                Accessible.name: i18n("Damping ratio")
+                accessibleName: i18n("Damping ratio")
                 from: settingsController.animationsPage.springZetaMin
                 to: settingsController.animationsPage.springZetaMax
                 stepSize: 0.05
@@ -337,7 +387,7 @@ Kirigami.Dialog {
             spacing: Kirigami.Units.smallSpacing
 
             ToolButton {
-                text: i18n("Save as Preset…")
+                text: i18n("Save as preset…")
                 icon.name: "bookmark-new"
                 Accessible.name: i18n("Save current curve as preset")
                 visible: !root._savingPreset
@@ -366,13 +416,19 @@ Kirigami.Dialog {
                     // a single `curve` string (easing wire format or
                     // "spring:omega,zeta") plus duration. The controller
                     // stamps `name` automatically.
-                    var profile = {
-                        "duration": settingsController.settings.animationDuration
-                    };
-                    if (root.timingMode === CurvePresets.timingModeEasing)
+                    var profile = {};
+                    if (root._workingMode === CurvePresets.timingModeEasing) {
                         profile.curve = root._workingCurve;
-                    else
+                        profile.duration = root._workingDuration;
+                    } else {
+                        // No duration on a spring preset. A spring derives its
+                        // own settle time from omega and zeta, so the editor
+                        // hides the Duration row entirely in this mode — the
+                        // value here would be the easing-side duration the user
+                        // cannot see on this card, silently pinned onto
+                        // whatever event the preset is later applied to.
                         profile.curve = "spring:" + root._workingOmega.toFixed(2) + "," + root._workingZeta.toFixed(2);
+                    }
                     // addUserPreset rejects names that collide with a
                     // built-in event path (would shadow an override
                     // slot on disk). On rejection, leave the entry
@@ -383,7 +439,13 @@ Kirigami.Dialog {
                     if (settingsController.animationsPage.addUserPreset(trimmed, profile))
                         root._savingPreset = false;
                 }
-                Keys.onEscapePressed: root._savingPreset = false
+                Keys.onEscapePressed: function (event) {
+                    // Accept it: unaccepted, Escape propagates on to the
+                    // Kirigami.Dialog and closes the whole editor when the user
+                    // only meant to abandon the preset name.
+                    root._savingPreset = false;
+                    event.accepted = true;
+                }
             }
 
             ToolButton {

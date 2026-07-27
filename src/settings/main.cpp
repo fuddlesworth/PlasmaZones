@@ -13,6 +13,7 @@
 #include "phosphor_qml_i18n.h"
 #include "settings/search/searchcatalog.h"
 #include "settings/search/searchproviders.h"
+#include "settings/pages/animationspagecontroller.h"
 #include "settings/pages/profilepagecontroller.h"
 #include "settings/stores/profilestore.h"
 #include "settings/rules/rulecontroller.h"
@@ -25,6 +26,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <PhosphorAnimation/PhosphorCurve.h>
+#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
 #include <QApplication>
@@ -32,6 +34,7 @@
 #include <QDirIterator>
 #include <QCommandLineParser>
 #include <QIcon>
+#include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -69,7 +72,17 @@ bool activateRunningInstance(const QString& address)
         // The D-Bus method is still "setActivePage" (signature unchanged); the
         // running instance routes it through navigateTo(), so an address with a
         // trailing "#anchor" fragment deep-links to a specific setting.
-        PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {address});
+        //
+        // A running instance still exists (isRunning above), so we return true
+        // and exit either way — spawning a second window would defeat the
+        // single-instance contract. But forward() reporting false means the
+        // deep-link itself did not land (the peer errored or did not reply), so
+        // surface that instead of dropping it silently: the user asked for a
+        // specific page and it will not appear.
+        if (!PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {address})) {
+            qCWarning(PlasmaZones::lcCore)
+                << "A settings instance is running but did not accept the --page deep-link:" << address;
+        }
     }
     return true;
 }
@@ -134,6 +147,13 @@ int main(int argc, char* argv[])
     const QString requestedAddress = (!requestedPage.isEmpty() && !requestedAnchor.isEmpty())
         ? (requestedPage + QLatin1Char('#') + requestedAnchor)
         : requestedPage;
+    // Every other user-visible failure in this file logs; silently dropping
+    // the anchor here would make `--setting foo` (no --page) exit 0 against a
+    // running instance having done nothing at all.
+    if (!requestedAnchor.isEmpty() && requestedPage.isEmpty()) {
+        qWarning().noquote()
+            << QStringLiteral("Ignoring --setting/--section anchor \"%1\": it requires --page.").arg(requestedAnchor);
+    }
 
     // Single-instance: if another instance is running, forward the request and exit
     if (activateRunningInstance(requestedAddress)) {
@@ -180,6 +200,50 @@ int main(int argc, char* argv[])
 
     PlasmaZones::SettingsController controller;
 
+    // The animations page writes and deletes the very profile files the
+    // bootstrap loader watches, and that watch is debounced by 50 ms with no
+    // rescan signal reaching the open page. Hand the page a synchronous
+    // catch-up so a removal (the per-field revert links, a per-page
+    // Discard) is reflected the moment it happens instead of on the next
+    // launch.
+    //
+    // QPointer, not a raw pointer: declaration order already guarantees
+    // `animationBootstrap` outlives `controller` (and so the page holding this
+    // callable), but that is an invariant of this function's layout, not
+    // something the callable can check. The guard makes the lifetime rule
+    // enforce itself if either declaration ever moves.
+    //
+    // Null-checked like every other page accessor in this file and in
+    // SettingsController's own call sites. Construction is unconditional today,
+    // so this cannot fire — but one file carrying two contradictory nullability
+    // contracts for the same pointer is how the check that matters gets dropped.
+    if (auto* animationsPage = controller.animationsPage()) {
+        animationsPage->setProfileStoreRefresher(
+            [loader = QPointer<PhosphorAnimation::ProfileLoader>(animationBootstrap.profileLoader())]() {
+                if (!loader) {
+                    // Never silently: a null here means the loader outlived its
+                    // declared order and the page is back to reading a stale
+                    // registry, which is exactly the bug this wiring exists to
+                    // fix — it must not degrade quietly into it.
+                    qCWarning(PlasmaZones::lcCore)
+                        << "profile-store refresher fired after the animation bootstrap was destroyed";
+                    return;
+                }
+                loader->rescanNow();
+            });
+
+        // The other direction. The page memoises the override files it reads,
+        // and drops that memo itself on every edit IT makes — but the profiles
+        // directory is a filesystem boundary the user can also edit by hand
+        // (the page offers to open it). The bootstrap loader already watches
+        // that directory, so its change signal is the notification that
+        // somebody else wrote, and the page has to forget what it cached.
+        if (auto* loader = animationBootstrap.profileLoader()) {
+            QObject::connect(loader, &PhosphorAnimation::ProfileLoader::profilesChanged, animationsPage,
+                             &PlasmaZones::AnimationsPageController::forgetCachedOverrideFiles);
+        }
+    }
+
     // The launch controller owns the D-Bus single-instance lifecycle. Holds a
     // non-owning pointer to `controller`, which must outlive it (guaranteed by
     // reverse destruction order: `controller` is declared first and destroyed
@@ -204,33 +268,38 @@ int main(int argc, char* argv[])
     // shader browser — mirrors daemon/main.cpp + editor/main.cpp).
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
-    // Global settings search, set up BEFORE the engine so the provider locals
-    // below outlive ~QQmlApplicationEngine: a model change signal firing during
-    // engine teardown must not reach a destroyed provider via invalidate() →
-    // buildIndex(). Page entries derive from the page registry; seedSearchCatalog
-    // adds per-page synonyms + addressable anchors. searchController is parented
-    // to `controller` (destroyed last).
-    auto* searchController = new PhosphorControl::SearchController(controller.app(), &controller);
-    PlasmaZones::seedSearchCatalog(searchController);
-
-    // Dynamic content providers (layouts, rules, profiles). unique_ptr locals
-    // declared before the engine so they outlive it; SearchController holds them
-    // non-owning (ISearchProvider is not a QObject, so no parent applies).
+    // Global settings search, set up BEFORE the engine so everything here
+    // outlives ~QQmlApplicationEngine. Declaration order is the lifetime
+    // contract, in three layers:
+    //   1. The provider unique_ptr locals come FIRST so they outlive
+    //      searchController, which holds them non-owning with no removal
+    //      path (ISearchProvider is not a QObject, so no parent applies).
+    //   2. searchController is an UNPARENTED unique_ptr local declared after
+    //      them — parenting it to `controller` would destroy it inside
+    //      ~SettingsController's child teardown, AFTER these providers are
+    //      gone, and ~SettingsController's own body emits signals wired to
+    //      invalidate() (refreshLabels → dataChanged), which recomputes
+    //      synchronously when a query is pending and dereferences every
+    //      registered provider in buildIndex().
+    //   3. `engine` is declared later still, so the QML side drops its
+    //      references before any of this tears down.
     auto layoutsProvider = std::make_unique<PlasmaZones::LayoutsSearchProvider>(&controller);
     auto rulesProvider = std::make_unique<PlasmaZones::RulesSearchProvider>(&controller);
     auto profilesProvider = std::make_unique<PlasmaZones::ProfilesSearchProvider>(&controller);
+    auto searchController = std::make_unique<PhosphorControl::SearchController>(controller.app(), nullptr);
+    PlasmaZones::seedSearchCatalog(searchController.get());
     searchController->registerProvider(layoutsProvider.get());
     searchController->registerProvider(rulesProvider.get());
     searchController->registerProvider(profilesProvider.get());
-    QObject::connect(&controller, &PlasmaZones::SettingsController::layoutsChanged, searchController,
+    QObject::connect(&controller, &PlasmaZones::SettingsController::layoutsChanged, searchController.get(),
                      &PhosphorControl::SearchController::invalidate);
     if (controller.rulesPage() != nullptr && controller.rulesPage()->model() != nullptr) {
         // Both add/remove (countChanged) and any in-place edit (rename,
         // match-summary, … via dataChanged) must refresh the index. invalidate()
         // is lazy, so over-firing on unrelated role changes is cheap.
-        QObject::connect(controller.rulesPage()->model(), &PlasmaZones::RuleModel::countChanged, searchController,
+        QObject::connect(controller.rulesPage()->model(), &PlasmaZones::RuleModel::countChanged, searchController.get(),
                          &PhosphorControl::SearchController::invalidate);
-        QObject::connect(controller.rulesPage()->model(), &PlasmaZones::RuleModel::dataChanged, searchController,
+        QObject::connect(controller.rulesPage()->model(), &PlasmaZones::RuleModel::dataChanged, searchController.get(),
                          &PhosphorControl::SearchController::invalidate);
     }
 
@@ -238,7 +307,7 @@ int main(int argc, char* argv[])
         // One signal covers the lot: profilesChanged fires on create, rename,
         // duplicate, delete, import, reparent, and activation.
         QObject::connect(controller.profilesPage()->bridge(), &PlasmaZones::ProfileStore::profilesChanged,
-                         searchController, &PhosphorControl::SearchController::invalidate);
+                         searchController.get(), &PhosphorControl::SearchController::invalidate);
     }
 
     QQmlApplicationEngine engine;
@@ -248,7 +317,7 @@ int main(int argc, char* argv[])
 
     engine.rootContext()->setContextProperty(QStringLiteral("settingsController"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), controller.settings());
-    engine.rootContext()->setContextProperty(QStringLiteral("searchController"), searchController);
+    engine.rootContext()->setContextProperty(QStringLiteral("searchController"), searchController.get());
 
     if (!requestedAddress.isEmpty()) {
         controller.navigateTo(requestedAddress);

@@ -363,12 +363,18 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 window, targetFrame, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
             morphAnchor = visualPos;
             if (result == PhosphorAnimation::RetargetResult::DegenerateReap) {
-                // Retarget collapsed (current visual ≈ new target).
-                // Start a fresh animation from the displaced target
-                // (where the window was heading) to the new target.
-                // If that's also degenerate (same point), startAnimation
-                // returns false and no animation plays — correct, since
-                // there's no visual distance to cover.
+                // Retarget collapsed (current visual ≈ new target). The reap
+                // already dropped the displaced animation; start a fresh one
+                // from the displaced target (where the window was heading) to
+                // the new target. If that's also degenerate (same point),
+                // startAnimation returns false and no animation plays — correct,
+                // since there's no visual distance to cover. In that no-replay
+                // sub-case the `hasAnimation` block below is skipped, so no new
+                // shader morph is anchored; any morph from the reaped animation
+                // is left to the shader manager's own reconciliation, the same
+                // as the reap/replace paths in WindowAnimator. morphAnchor is
+                // still set so that, when a replacement DOES play, its iFromRect
+                // matches the animator's re-anchored departure point.
                 const QRectF animFrom = (displacedTarget != targetFrame) ? displacedTarget : visualPos;
                 m_windowAnimator->startAnimation(window, animFrom, targetFrame, motionOverridePtr);
                 morphAnchor = animFrom;
@@ -524,12 +530,17 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     }
 
     // No animation path (disabled, during drag, etc.): apply moveResize directly.
-    if (m_windowAnimator->hasAnimation(window)) {
-        m_windowAnimator->removeAnimation(window);
-    }
-
+    // The null check runs BEFORE the removeAnimation so the drop and the
+    // geometry commit share a branch: removeAnimation's contract requires the
+    // caller to commit geometry immediately after (it schedules no damage),
+    // and dropping the animation on the null-window path would strand the
+    // last animated frame. window() is never null in modern KWin, so the
+    // else-branch is defensive.
     KWin::Window* kwinWindow = window->window();
     if (kwinWindow) {
+        if (m_windowAnimator->hasAnimation(window)) {
+            m_windowAnimator->removeAnimation(window);
+        }
         // DEBUG: the resolved rect is already logged at INFO above ("Setting
         // window geometry from ... to ..."), which covers both the animated
         // and non-animated paths — keep this one at debug to avoid a

@@ -29,23 +29,24 @@ The library factors the work into:
 - **`DirectoryLoader`** is the flat `*.json` specialisation that pairs with
   an `IDirectoryLoaderSink` (the schema-specific parse + commit
   strategy). Used by curve and profile loaders.
-- **`MetadataPackScanStrategy<Payload>` + `MetadataPackRegistryBase`** form the
-  templated specialisation for "subdirectory-with-metadata-json" packs.
-  There is one pack per top-level subfolder, validated by a `metadata.json`,
-  with the payload type chosen by the registry. Used by
-  [`phosphor-shaders`](../phosphor-shaders/README.md)' `ShaderRegistry`
-  and [`phosphor-animation`](../phosphor-animation/README.md)'s
-  `AnimationShaderRegistry`.
+- **`MetadataPackScanStrategy<Payload>`** is the templated specialisation for
+  "subdirectory-with-metadata-json" packs. There is one pack per top-level
+  subfolder, validated by a `metadata.json`, with the payload type chosen by the
+  registry. Hosted by `PhosphorRegistry::MetadataPackLoader<T>`, which owns the
+  strategy and the watcher and adds the per-id fingerprint diff. Used by
+  [`phosphor-shaders`](../phosphor-shaders/README.md)' `ShaderRegistry`,
+  [`phosphor-animation`](../phosphor-animation/README.md)'s
+  `AnimationShaderRegistry`, and `PhosphorSurfaceShaders::SurfaceShaderRegistry`.
 - **`validateJsonEnvelope`** is the shared envelope validation. It parses the
   file, checks the `"name"` field is non-empty and matches the
   filename, and returns a `JsonEnvelope` carrying the rest of the JSON
   object for the sink's schema-specific `fromJson`.
 
-`MetadataPackRegistryBase` is the QObject base every metadata-pack
-registry inherits from. It owns the `WatchedDirectorySet` plus the
-strategy and provides the search-path management surface
-(`addSearchPath`, `setUserPath`, `refresh`) that every consumer was
-hand-rolling identically.
+A metadata-pack registry does not inherit anything from this library: it
+COMPOSES a `PhosphorRegistry::MetadataPackLoader<T>`, which owns the
+`WatchedDirectorySet` plus the strategy and provides the search-path management
+surface (`addSearchPath`, `setUserPath`, `refresh`) every consumer was otherwise
+hand-rolling.
 
 ## Key types
 
@@ -57,8 +58,10 @@ hand-rolling identically.
 | `PhosphorFsLoader::IDirectoryLoaderSink`          | Per-schema strategy: `parseFile()` + `commitBatch()` |
 | `PhosphorFsLoader::ParsedEntry`                   | Parse-result value type with source-path metadata and `std::any` payload |
 | `PhosphorFsLoader::MetadataPackScanStrategy<P>`   | Subdirectory-with-`metadata.json` strategy |
-| `PhosphorFsLoader::MetadataPackRegistryBase`      | QObject base that owns the strategy + watcher and provides the search-path surface |
 | `PhosphorFsLoader::validateJsonEnvelope`          | Shared `"name"`-field envelope validator returning a `JsonEnvelope` |
+| `PhosphorFsLoader::resolveWithinDirectory`        | Containment guard: resolves a declared path against a directory and refuses anything landing outside it |
+| `PhosphorFsLoader::AbsolutePathPolicy`            | Whether an already-absolute declared path is refused (pack-declared) or trusted (user-chosen at runtime) |
+| `PhosphorFsLoader::SchemaValidator`               | JSON-Schema gate applied to a pack's `metadata.json` before it is parsed |
 
 ## Typical use
 
@@ -83,17 +86,42 @@ class CurveLoaderSink : public IDirectoryLoaderSink {
 CurveLoaderSink sink{...};
 DirectoryLoader loader(sink);  // sink is borrowed for the loader's lifetime
 loader.loadFromDirectories({systemDir, userDir}, LiveReload::On);
-loader.requestRescan();
+// No requestRescan() needed: loadFromDirectories already ran a full
+// synchronous scan and dispatched commitBatch + entriesChanged.
 ```
 
 A metadata-pack registry (used by shader / animation-shader registries):
 
 ```cpp
-class MyPackRegistry : public PhosphorFsLoader::MetadataPackRegistryBase {
+// `MyPack` must derive PhosphorRegistry::IFactoryBase — the loader
+// static_asserts on it. The registry is OWNED by the consumer and BORROWED by
+// the loader, so declare it first.
+class MyPackRegistry : public QObject {
+    Q_OBJECT
 public:
     MyPackRegistry()
-        : MetadataPackRegistryBase(myLogCategory(), makeStrategy()) {}
-    // … expose payload-typed lookups
+        : m_loader(std::make_unique<PhosphorRegistry::MetadataPackLoader<MyPack>>(
+              &m_registry,
+              [](const QString& subdir, const QJsonObject& root, bool isUser)
+                  -> std::shared_ptr<MyPack> {
+                  return parseMyPack(subdir, root, isUser);
+              },
+              myLogCategory()))
+    {
+        m_loader->setOnCommitted([this] { Q_EMIT packsChanged(); });
+    }
+
+    void addSearchPath(const QString& dir) { m_loader->addSearchPath(dir); }
+    void setUserPath(const QString& dir) { m_loader->setUserPath(dir); }
+    void refresh() { m_loader->refresh(); }
+    // … expose payload-typed lookups over m_registry
+
+Q_SIGNALS:
+    void packsChanged();
+
+private:
+    PhosphorRegistry::Registry<MyPack> m_registry;
+    std::unique_ptr<PhosphorRegistry::MetadataPackLoader<MyPack>> m_loader;
 };
 // Composition root then wires:
 registry.addSearchPath(systemDir);
@@ -106,8 +134,18 @@ registry.refresh();
 - **Watcher is opt-in.** `LiveReload::On` installs a
   `QFileSystemWatcher` on every scanned directory (or its parent, if
   the target doesn't exist yet, so fresh installs that create the
-  user-data dir later still pick up edits without a restart). `LiveReload::Off`
-  disables it for tests.
+  user-data dir later still pick up edits without a restart). The enable is
+  a set-wide ONE-WAY latch: a later `LiveReload::Off` call never disarms an
+  already-armed set. A test that must not watch should never pass `On`, or
+  should destroy and rebuild the set.
+- **Path containment is one shared function.** Every pack parser that resolves a
+  declared path routes through `resolveWithinDirectory`. There is exactly one
+  correct way to write that check: `QDir::filePath` returns an absolute argument
+  unchanged and never normalises `..`, a lexical compare cannot see a symlinked
+  component, and canonicalisation returns empty for a leaf that does not exist
+  yet, which is the ordinary live-reload case. The guard canonicalises the
+  deepest EXISTING ancestor and re-appends the missing tail, so the two domains
+  are never mixed, and it fails closed when nothing on the chain exists.
 - **`commitBatch` is the one mutation point.** The sink only touches
   its target registry inside `commitBatch`, so bulk signals (e.g. a
   QML `reloadAll`) coalesce to one emit per scan.
@@ -123,8 +161,12 @@ registry.refresh();
 ## Dependencies
 
 - `QtCore`
+- valijson 1.1.3 (BSD-2-Clause) — vendored by default and compiled into the
+  library, with its licence text installed alongside the app licences so the
+  notice ships with any distribution. Opt out with
+  `-DPHOSPHORFSLOADER_USE_SYSTEM_VALIJSON=ON` to link a system copy instead.
 
 ## See also
 
 - [`phosphor-animation`](../phosphor-animation/README.md) — `ProfileLoader`, `CurveLoader`, and `AnimationShaderRegistry` are clients.
-- [`phosphor-shaders`](../phosphor-shaders/README.md) — `ShaderRegistry` inherits `MetadataPackRegistryBase`.
+- [`phosphor-shaders`](../phosphor-shaders/README.md) — `ShaderRegistry` composes a `MetadataPackLoader` over this library's strategy.

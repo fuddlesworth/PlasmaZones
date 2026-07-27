@@ -7,12 +7,18 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+
+#include <algorithm>
+#include <any>
+#include <memory>
+#include <string>
 
 using namespace PhosphorFsLoader;
 
@@ -25,6 +31,7 @@ class RecordingSink : public IDirectoryLoaderSink
 public:
     std::optional<ParsedEntry> parseFile(const QString& filePath) override
     {
+        ++parseCalls;
         QFile f(filePath);
         if (!f.open(QIODevice::ReadOnly)) {
             return std::nullopt;
@@ -61,6 +68,10 @@ public:
     }
 
     int commitCount = 0;
+    /// Number of times the loader asked this sink to parse a file. The
+    /// entry-count cap exists to bound exactly this, so a test that only
+    /// counted registered keys could not tell a working cap from a broken one.
+    int parseCalls = 0;
     QStringList lastRemoved;
     QList<ParsedEntry> lastCurrent;
     QHash<QString, std::string> registry;
@@ -94,15 +105,43 @@ public:
     }
 };
 
-void writeJson(const QString& path, const QString& name, const QString& value)
+/// `[[nodiscard]] bool`, not a void helper containing QVERIFY: QVERIFY expands
+/// to `if (!qVerify(...)) return;`, so a void fixture helper marks the test
+/// failed and then hands control back to a caller that carries on against a
+/// missing or empty file, turning one clear failure into a pile of misleading
+/// secondary ones. Returning the outcome lets the call site QVERIFY and stop.
+/// The write result is checked too, so a short or failed write is not silently
+/// accepted. Same shape as `test_profileloader.cpp`'s helper.
+[[nodiscard]] bool writeJson(const QString& path, const QString& name, const QString& value)
 {
     QJsonObject obj;
     obj[QLatin1String("name")] = name;
     obj[QLatin1String("value")] = value;
     QFile f(path);
-    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    f.write(QJsonDocument(obj).toJson());
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    const QByteArray bytes = QJsonDocument(obj).toJson();
+    return f.write(bytes) == bytes.size();
 }
+
+/// Sink variant whose parse ACCEPTS the file but returns an entry with an
+/// EMPTY key — the shape the loader's own empty-key guard exists for.
+/// RecordingSink cannot exercise that branch: it returns nullopt for an
+/// empty name, which takes the refused-file path instead. File scope for
+/// the same -Wsubobject-linkage reason as RacyRecordingSink.
+class EmptyKeySink : public RecordingSink
+{
+public:
+    std::optional<ParsedEntry> parseFile(const QString& filePath) override
+    {
+        auto parsed = RecordingSink::parseFile(filePath);
+        if (parsed && parsed->key == QLatin1String("anon")) {
+            parsed->key.clear();
+        }
+        return parsed;
+    }
+};
 
 } // namespace
 
@@ -134,7 +173,7 @@ private Q_SLOTS:
     void testScan_singleFile()
     {
         const QString f = m_tmp->filePath(QStringLiteral("a.json"));
-        writeJson(f, QStringLiteral("alpha"), QStringLiteral("v1"));
+        QVERIFY(writeJson(f, QStringLiteral("alpha"), QStringLiteral("v1")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -147,7 +186,8 @@ private Q_SLOTS:
     void testScan_skipsMalformedFile()
     {
         // Good file + bad file — the good one must still load.
-        writeJson(m_tmp->filePath(QStringLiteral("good.json")), QStringLiteral("good-key"), QStringLiteral("ok"));
+        QVERIFY(
+            writeJson(m_tmp->filePath(QStringLiteral("good.json")), QStringLiteral("good-key"), QStringLiteral("ok")));
         QFile bad(m_tmp->filePath(QStringLiteral("bad.json")));
         QVERIFY(bad.open(QIODevice::WriteOnly));
         bad.write("{ not valid json ");
@@ -159,12 +199,49 @@ private Q_SLOTS:
         QVERIFY(sink.registry.contains(QStringLiteral("good-key")));
     }
 
+    /// A file the scan REFUSED still gets a per-file watch, so repairing it in
+    /// place wakes the loader. This is the only route: a directory watch does
+    /// not fire on a content change to a file that already exists, so without
+    /// the refused-path watch the fixed entry stays invisible until something
+    /// unrelated triggers a rescan.
+    ///
+    /// Deleting `desiredFileWatches.append(refusedPaths)` makes this hang for
+    /// the full timeout and fail.
+    void testInPlaceRepairOfRefusedFileRefiresRescan()
+    {
+        const QString badPath = m_tmp->filePath(QStringLiteral("bad.json"));
+        QFile bad(badPath);
+        QVERIFY(bad.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        bad.write("{ not valid json ");
+        bad.close();
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setDebounceIntervalForTest(1);
+        QCOMPARE(loader.loadFromDirectory(m_tmp->path(), LiveReload::On), 0);
+
+        // Spy BEFORE the trigger. Several slots below attach theirs after, and
+        // are safe because no event loop spins in between so the queued
+        // directoryChanged cannot be delivered early. Here the debounce is 1 ms
+        // and the trigger is a real file write, so the margin is not worth
+        // relying on.
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+
+        // Rewrite the SAME path as valid JSON. No directory entry is created or
+        // removed, so only a per-file watch on the refused path can notice.
+        QVERIFY(writeJson(badPath, QStringLiteral("repaired"), QStringLiteral("v")));
+
+        QVERIFY2(spy.wait(4000), "repairing a refused file in place did not re-fire the rescan");
+        QTRY_COMPARE_WITH_TIMEOUT(loader.registeredCount(), 1, 2000);
+        QVERIFY(sink.registry.contains(QStringLiteral("repaired")));
+    }
+
     // ── Stale-entry purge (the blocker from the review) ─────────────────
 
     void testRescan_purgesDeletedEntries()
     {
-        writeJson(m_tmp->filePath(QStringLiteral("a.json")), QStringLiteral("alpha"), QStringLiteral("v1"));
-        writeJson(m_tmp->filePath(QStringLiteral("b.json")), QStringLiteral("beta"), QStringLiteral("v2"));
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("a.json")), QStringLiteral("alpha"), QStringLiteral("v1")));
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("b.json")), QStringLiteral("beta"), QStringLiteral("v2")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -191,9 +268,10 @@ private Q_SLOTS:
         QVERIFY(systemDir.isValid() && userDir.isValid());
 
         // Both files have the same key "shared" — user version wins.
-        writeJson(systemDir.filePath(QStringLiteral("x.json")), QStringLiteral("shared"),
-                  QStringLiteral("from-system"));
-        writeJson(userDir.filePath(QStringLiteral("x.json")), QStringLiteral("shared"), QStringLiteral("from-user"));
+        QVERIFY(writeJson(systemDir.filePath(QStringLiteral("x.json")), QStringLiteral("shared"),
+                          QStringLiteral("from-system")));
+        QVERIFY(writeJson(userDir.filePath(QStringLiteral("x.json")), QStringLiteral("shared"),
+                          QStringLiteral("from-user")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -223,8 +301,8 @@ private Q_SLOTS:
 
         const QString systemPath = systemDir.filePath(QStringLiteral("x.json"));
         const QString userPath = userDir.filePath(QStringLiteral("x.json"));
-        writeJson(systemPath, QStringLiteral("shared"), QStringLiteral("from-system"));
-        writeJson(userPath, QStringLiteral("shared"), QStringLiteral("from-user"));
+        QVERIFY(writeJson(systemPath, QStringLiteral("shared"), QStringLiteral("from-system")));
+        QVERIFY(writeJson(userPath, QStringLiteral("shared"), QStringLiteral("from-user")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -266,7 +344,8 @@ private Q_SLOTS:
 
         // Drop a file — watcher fires directoryChanged, debounce
         // timer expires, rescan happens.
-        writeJson(m_tmp->filePath(QStringLiteral("new.json")), QStringLiteral("new-key"), QStringLiteral("hot"));
+        QVERIFY(
+            writeJson(m_tmp->filePath(QStringLiteral("new.json")), QStringLiteral("new-key"), QStringLiteral("hot")));
 
         QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
         QVERIFY(spy.wait(500));
@@ -279,19 +358,31 @@ private Q_SLOTS:
     {
         RecordingSink sink;
         DirectoryLoader loader(sink);
-        loader.setDebounceIntervalForTest(1);
+        // 50 ms, and the writes are SPACED with an event-loop spin between
+        // them. Both halves matter. Written back to back with no spin, all
+        // three land before QFileSystemWatcher reads the directory even once,
+        // so it delivers a single directoryChanged and the burst is coalesced
+        // by the watcher rather than by the debounce — the slot then passes
+        // identically with the debounce removed entirely, which is what it is
+        // supposed to detect. Spinning between the writes forces three separate
+        // deliveries, so only the debounce can collapse them, and 50 ms is wide
+        // enough to still cover all three.
+        loader.setDebounceIntervalForTest(50);
         loader.loadFromDirectory(m_tmp->path(), LiveReload::On);
         const int baseline = sink.commitCount;
 
-        // Rapid file drops in the same debounce window — should
-        // produce ONE commit, not N.
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+
+        // Three drops inside one debounce window — ONE commit, not three.
         for (int i = 0; i < 3; ++i) {
-            writeJson(m_tmp->filePath(QStringLiteral("burst-%1.json").arg(i)), QStringLiteral("burst-%1").arg(i),
-                      QStringLiteral("v"));
+            QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("burst-%1.json").arg(i)),
+                              QStringLiteral("burst-%1").arg(i), QStringLiteral("v")));
+            // Short relative to the 50 ms window, long enough for the watcher
+            // to notice each write separately.
+            QTest::qWait(5);
         }
 
-        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
-        QVERIFY(spy.wait(500));
+        QVERIFY(spy.wait(2000));
 
         QCOMPARE(sink.commitCount, baseline + 1);
         QCOMPARE(loader.registeredCount(), 3);
@@ -313,11 +404,20 @@ private Q_SLOTS:
         loader.loadFromDirectory(target, LiveReload::On);
         QCOMPARE(loader.registeredCount(), 0);
 
+        // Captured NOW, while the target still does not exist. The end-state
+        // assertion below is "no ancestor watch remains", which is also true
+        // when no ancestor watch was ever recorded — i.e. exactly when the
+        // watch-the-missing-dir-via-its-parent feature is broken. Pinning the
+        // ancestor here is what makes that end-state assertion mean something.
+        const QString ancestor = loader.watchedAncestorForTest(target);
+        QVERIFY2(!ancestor.isEmpty(), "no ancestor watch was recorded for the missing target directory");
+        QVERIFY(loader.hasParentWatchForTest(ancestor));
+
         // Create the target + drop a file. Parent-watch fires on the
         // directory creation; the rescan+promote logic attaches a
         // direct watch and subsequent file edits work normally.
         QVERIFY(QDir(m_tmp->path()).mkdir(QStringLiteral("profiles")));
-        writeJson(target + QStringLiteral("/first.json"), QStringLiteral("first"), QStringLiteral("v"));
+        QVERIFY(writeJson(target + QStringLiteral("/first.json"), QStringLiteral("first"), QStringLiteral("v")));
 
         QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
         // Parent-dir change fires on the mkdir; the loader promotes
@@ -327,7 +427,13 @@ private Q_SLOTS:
         // ~1 ms debounce — the watcher can take several hundred ms to
         // deliver the parent-dir-changed event on some kernels / CI
         // loads.
-        const bool watcherFired = spy.wait(2000);
+        // The outcome is deliberately NOT asserted: inotify delivery is not
+        // guaranteed on every kernel or sandboxed CI, which is why the
+        // fallback rescan below exists. What IS asserted, unconditionally, is
+        // the promotion post-condition at the end of the slot — that holds
+        // whichever of the two routes got us there, and unlike the entry count
+        // it cannot be produced by a plain rescan of an already-attached dir.
+        spy.wait(2000);
 
         // Known race: on some filesystems the parent-watch fires for
         // the mkdir BEFORE the file-create inotify event, so the first
@@ -344,11 +450,15 @@ private Q_SLOTS:
         }
         QCOMPARE(loader.registeredCount(), 1);
         QVERIFY(sink.registry.contains(QStringLiteral("first")));
-        // Silence unused-variable warning while keeping the wait
-        // outcome introspectable for debugging. If the watcher never
-        // fires AND the explicit rescan didn't succeed, the test
-        // would have already failed above.
-        Q_UNUSED(watcherFired);
+
+        // The entry count alone does not test what this slot is named for: the
+        // fallback rescan above produces it whether or not the parent watch was
+        // ever promoted. Assert the promotion directly. The ancestor pinned at
+        // the top of the slot must now be released, because the target exists
+        // and carries a direct watch of its own.
+        QVERIFY2(loader.watchedAncestorForTest(target).isEmpty(),
+                 "parent watch was never promoted — the loader is still watching the ancestor");
+        QVERIFY2(!loader.hasParentWatchForTest(ancestor), "the ancestor parent-watch outlived the promotion");
     }
 
     /// Regression guard for the grandparent-watch leak. When the
@@ -451,7 +561,7 @@ private Q_SLOTS:
     /// event is silently dropped.
     void testRescanRace_requestDuringRescan()
     {
-        writeJson(m_tmp->filePath(QStringLiteral("a.json")), QStringLiteral("alpha"), QStringLiteral("v1"));
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("a.json")), QStringLiteral("alpha"), QStringLiteral("v1")));
 
         RacyRecordingSink sink;
         DirectoryLoader loader(sink);
@@ -493,7 +603,7 @@ private Q_SLOTS:
 
         // A small valid sibling must still load — the size guard must
         // not short-circuit the entire scan.
-        writeJson(m_tmp->filePath(QStringLiteral("small.json")), QStringLiteral("small"), QStringLiteral("v"));
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("small.json")), QStringLiteral("small"), QStringLiteral("v")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -505,16 +615,21 @@ private Q_SLOTS:
         // Ensure the oversized file didn't end up in the tracked set
         // under any key.
         const auto entries = loader.entries();
+        // Collected, not asserted per row: QVERIFY2 returns from the slot on
+        // the first hit, so a second leaked entry would never be reported.
+        QStringList leaked;
         for (const auto& entry : entries) {
-            QVERIFY2(entry.sourcePath != bigPath,
-                     qPrintable(QStringLiteral("oversized file %1 leaked into tracked set").arg(bigPath)));
+            if (entry.sourcePath == bigPath)
+                leaked.append(entry.sourcePath);
         }
+        QVERIFY2(leaked.isEmpty(),
+                 qPrintable(QStringLiteral("oversized file %1 leaked into tracked set").arg(bigPath)));
     }
 
     /// Regression guard for the GUI-thread DoS — a directory sprayed
     /// with too many JSON files must stop short at the configured cap
     /// rather than parsing them all. Uses the test-only
-    /// `setMaxEntriesForTest` to trip the guard at a 3-digit file count
+    /// `setMaxEntriesForTest` to trip the guard at a handful of files
     /// instead of the 10'000 production default (which would balloon
     /// the CI filesystem footprint for no test value).
     void testEntryCountCapShortCircuitsScan()
@@ -525,8 +640,8 @@ private Q_SLOTS:
         for (int i = 0; i < totalFiles; ++i) {
             // Zero-padded names so alphabetic sort is deterministic and
             // the surviving set is always the first kTestCap files.
-            writeJson(m_tmp->filePath(QStringLiteral("entry-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
-                      QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0')), QStringLiteral("v"));
+            QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("entry-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                              QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0')), QStringLiteral("v")));
         }
 
         RecordingSink sink;
@@ -539,12 +654,141 @@ private Q_SLOTS:
         // First kTestCap (alphabetically) made it through, the rest were
         // silently dropped — the aggregate qCWarning in the library
         // surfaces the cap in the log once per trip.
+        // Collected, not asserted per row: QVERIFY returns from the slot on the
+        // first failure, so a cap that admitted the wrong SET would report one
+        // key and hide the rest of the picture.
+        QStringList wrong;
         for (int i = 0; i < kTestCap; ++i) {
-            QVERIFY(sink.registry.contains(QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0'))));
+            const QString key = QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0'));
+            if (!sink.registry.contains(key))
+                wrong.append(QStringLiteral("missing ") + key);
         }
         for (int i = kTestCap; i < totalFiles; ++i) {
-            QVERIFY(!sink.registry.contains(QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0'))));
+            const QString key = QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0'));
+            if (sink.registry.contains(key))
+                wrong.append(QStringLiteral("admitted past the cap: ") + key);
         }
+        QVERIFY2(wrong.isEmpty(), qPrintable(wrong.join(QStringLiteral("; "))));
+    }
+
+    /// The cap must bound files PARSED, not keys registered. A spray of files
+    /// that each parse and then register nothing — malformed JSON, or a
+    /// thousand files all claiming one key — is precisely the GUI-thread
+    /// stall the guard names, and a registered-key count never reaches the cap
+    /// for any of them, so the guard let its own stated attack straight
+    /// through. Both shapes are covered here.
+    void testEntryCountCapBoundsParsingNotRegistration()
+    {
+        constexpr int kTestCap = 5;
+        const int totalFiles = kTestCap * 4;
+
+        // Shape 1: every file is unparseable, so nothing ever registers.
+        for (int i = 0; i < totalFiles; ++i) {
+            QFile f(m_tmp->filePath(QStringLiteral("junk-%1.json").arg(i, 3, 10, QLatin1Char('0'))));
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QVERIFY(f.write(QByteArrayLiteral("{ this is not json")) > 0);
+        }
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setMaxEntriesForTest(kTestCap);
+        loader.loadFromDirectory(m_tmp->path(), LiveReload::Off);
+
+        QCOMPARE(loader.registeredCount(), 0);
+        // `==`, not `<=`: paired with registeredCount() == 0 above, a `<=` bound
+        // is satisfied by parseCalls == 0, i.e. by a loader that scanned nothing
+        // at all. The exact count is deterministic — the cap charges one per
+        // file considered and trips on the (cap+1)-th.
+        QCOMPARE(sink.parseCalls, kTestCap);
+
+        // Shape 2: every file parses but they all claim the same key, so at
+        // most one ever registers.
+        QTemporaryDir sameKeyDir;
+        QVERIFY(sameKeyDir.isValid());
+        for (int i = 0; i < totalFiles; ++i) {
+            QVERIFY(writeJson(sameKeyDir.filePath(QStringLiteral("dup-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                              QStringLiteral("one-key"), QStringLiteral("v")));
+        }
+
+        RecordingSink dupSink;
+        DirectoryLoader dupLoader(dupSink);
+        dupLoader.setMaxEntriesForTest(kTestCap);
+        dupLoader.loadFromDirectory(sameKeyDir.path(), LiveReload::Off);
+
+        QCOMPARE(dupLoader.registeredCount(), 1);
+        QVERIFY2(dupSink.parseCalls == kTestCap,
+                 qPrintable(QStringLiteral("cap let %1 same-key files through with a cap of %2")
+                                .arg(dupSink.parseCalls)
+                                .arg(kTestCap)));
+    }
+
+    /// The counter change has a deliberate cost in ORDINARY scans, not just
+    /// under attack: files that are skipped now consume budget where they
+    /// previously did not, so a directory whose junk sorts before its valid
+    /// files can exhaust the cap before reaching them. That is the accepted
+    /// trade — charging for work actually done — and it is pinned here so a
+    /// future reader does not "fix" it back to counting registrations.
+    void testSkippedFilesConsumeCapBudget()
+    {
+        constexpr int kTestCap = 5;
+        // Alphabetically first, so they are reached first.
+        for (int i = 0; i < kTestCap; ++i) {
+            QFile f(m_tmp->filePath(QStringLiteral("aaa-%1.json").arg(i, 3, 10, QLatin1Char('0'))));
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QVERIFY(f.write(QByteArrayLiteral("{ this is not json")) > 0);
+        }
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("zzz.json")), QStringLiteral("good"), QStringLiteral("v")));
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setMaxEntriesForTest(kTestCap);
+        loader.loadFromDirectory(m_tmp->path(), LiveReload::Off);
+
+        // The five junk files spend the whole budget, so `good` is never
+        // reached. Under the old registration-counting cap it would have been.
+        QCOMPARE(loader.registeredCount(), 0);
+        QVERIFY(!sink.registry.contains(QStringLiteral("good")));
+        QCOMPARE(sink.parseCalls, kTestCap);
+    }
+
+    /// Budget is consumed in strictly descending priority order, so a system
+    /// directory cannot starve the user directory however it is filled —
+    /// shadowed duplicates, junk and oversize files all cost the same and are
+    /// all read AFTER the user pass. Guards the reverse iteration in
+    /// performScan against a later "simplification" back to forward order.
+    void testCapCannotStarveUserDirWithShadowedSystemSpray()
+    {
+        constexpr int kTestCap = 5;
+        QTemporaryDir systemDir;
+        QTemporaryDir userDir;
+        QVERIFY(systemDir.isValid());
+        QVERIFY(userDir.isValid());
+
+        // 50 system files, every one of them shadowed by a user key.
+        for (int i = 0; i < 50; ++i) {
+            QVERIFY(writeJson(systemDir.filePath(QStringLiteral("sys-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                              QStringLiteral("k-%1").arg(i % 3), QStringLiteral("from-system")));
+        }
+        for (int i = 0; i < 3; ++i) {
+            QVERIFY(writeJson(userDir.filePath(QStringLiteral("u-%1.json").arg(i)), QStringLiteral("k-%1").arg(i),
+                              QStringLiteral("from-user")));
+        }
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setMaxEntriesForTest(kTestCap);
+        loader.loadFromDirectories({systemDir.path(), userDir.path()}, LiveReload::Off);
+
+        QCOMPARE(loader.registeredCount(), 3);
+        QStringList notFromUser;
+        for (int i = 0; i < 3; ++i) {
+            const QString key = QStringLiteral("k-%1").arg(i);
+            const QString value = QString::fromStdString(sink.registry.value(key));
+            if (value != QStringLiteral("from-user"))
+                notFromUser.append(key + QStringLiteral("=") + value);
+        }
+        QVERIFY2(notFromUser.isEmpty(), qPrintable(notFromUser.join(QStringLiteral("; "))));
+        QCOMPARE(sink.parseCalls, kTestCap);
     }
 
     /// Regression guard for the Phase-1g reverse-scan + first-wins fix.
@@ -567,23 +811,26 @@ private Q_SLOTS:
         // alphabetic ordering is deterministic on every platform.
         const int systemTotal = kTestCap + 5;
         for (int i = 0; i < systemTotal; ++i) {
-            writeJson(systemDir.filePath(QStringLiteral("sys-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
-                      QStringLiteral("sys-key-%1").arg(i, 3, 10, QLatin1Char('0')),
-                      QStringLiteral("from-system-%1").arg(i));
+            QVERIFY(writeJson(systemDir.filePath(QStringLiteral("sys-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                              QStringLiteral("sys-key-%1").arg(i, 3, 10, QLatin1Char('0')),
+                              QStringLiteral("from-system-%1").arg(i)));
         }
-        // One of the system files uses a key the user dir will collide
-        // with — pick a low-index name so it definitely isn't dropped
-        // by the cap on the system side. Index "001" sorts early.
-        writeJson(systemDir.filePath(QStringLiteral("sys-collide.json")), QStringLiteral("collide"),
-                  QStringLiteral("from-system"));
+        // One of the system files uses a key the user dir will collide with.
+        // Named `sys-000-collide.json` so it sorts INSIDE the surviving budget:
+        // reverse iteration spends the cap as 3 user files + 2 system files, so
+        // the cap trips ON `sys-001.json` and anything from there onward is
+        // never parsed. Without this name the collision below would resolve by
+        // never happening rather than by user-wins.
+        QVERIFY(writeJson(systemDir.filePath(QStringLiteral("sys-000-collide.json")), QStringLiteral("collide"),
+                          QStringLiteral("from-system")));
 
         // User dir holds 3 files: two unique keys plus the colliding key.
-        writeJson(userDir.filePath(QStringLiteral("user-a.json")), QStringLiteral("user-only-a"),
-                  QStringLiteral("from-user-a"));
-        writeJson(userDir.filePath(QStringLiteral("user-b.json")), QStringLiteral("user-only-b"),
-                  QStringLiteral("from-user-b"));
-        writeJson(userDir.filePath(QStringLiteral("collide.json")), QStringLiteral("collide"),
-                  QStringLiteral("from-user"));
+        QVERIFY(writeJson(userDir.filePath(QStringLiteral("user-a.json")), QStringLiteral("user-only-a"),
+                          QStringLiteral("from-user-a")));
+        QVERIFY(writeJson(userDir.filePath(QStringLiteral("user-b.json")), QStringLiteral("user-only-b"),
+                          QStringLiteral("from-user-b")));
+        QVERIFY(writeJson(userDir.filePath(QStringLiteral("collide.json")), QStringLiteral("collide"),
+                          QStringLiteral("from-user")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -603,13 +850,19 @@ private Q_SLOTS:
         QVERIFY2(sink.registry.contains(QStringLiteral("user-only-b")),
                  "user file 'user-only-b' was dropped — cap evicted user overrides");
 
-        // Collision resolves to user content, not system.
+        // Collision resolves to user content, not system. The system file
+        // declaring the same key sorts inside the surviving budget, so this
+        // really is decided by first-wins rather than by the system file never
+        // being reached.
         QVERIFY(sink.registry.contains(QStringLiteral("collide")));
         QCOMPARE(sink.registry.value(QStringLiteral("collide")), std::string("from-user"));
 
-        // Cap honoured at exactly kTestCap entries total (the 3 user
-        // files + 2 system files = 5).
-        QCOMPARE(loader.registeredCount(), kTestCap);
+        // kTestCap files CONSIDERED (3 user + 2 system), which is what the cap
+        // counts, but only 4 distinct keys registered: the FIRST system file
+        // reached is `sys-000-collide.json` ('-' sorts before '.'), the shadowed
+        // `collide` duplicate, which takes budget without adding a key.
+        // Asserting kTestCap here would be asserting the collision never happened.
+        QCOMPARE(loader.registeredCount(), kTestCap - 1);
     }
 
     /// When the entry-count cap trips during the user-dir pass, the
@@ -632,8 +885,8 @@ private Q_SLOTS:
         // same key. Cap is generous enough for both passes.
         const QString systemFile = systemDir.filePath(QStringLiteral("collide.json"));
         const QString userFile = userDir.filePath(QStringLiteral("collide.json"));
-        writeJson(systemFile, QStringLiteral("collide"), QStringLiteral("from-system"));
-        writeJson(userFile, QStringLiteral("collide"), QStringLiteral("from-user"));
+        QVERIFY(writeJson(systemFile, QStringLiteral("collide"), QStringLiteral("from-system")));
+        QVERIFY(writeJson(userFile, QStringLiteral("collide"), QStringLiteral("from-user")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -648,30 +901,34 @@ private Q_SLOTS:
         // Reverse-iteration scans user first; with kTestCap=3 and 5
         // user files, the cap trips before system is touched.
         for (int i = 0; i < 5; ++i) {
-            writeJson(userDir.filePath(QStringLiteral("flood-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
-                      QStringLiteral("flood-key-%1").arg(i, 3, 10, QLatin1Char('0')),
-                      QStringLiteral("from-user-flood-%1").arg(i));
+            QVERIFY(writeJson(userDir.filePath(QStringLiteral("flood-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                              QStringLiteral("flood-key-%1").arg(i, 3, 10, QLatin1Char('0')),
+                              QStringLiteral("from-user-flood-%1").arg(i)));
         }
         loader.setMaxEntriesForTest(kTestCap);
-        loader.requestRescan();
+        // Spy attached BEFORE the trigger, per the convention the sibling file
+        // documents: a rescan that fires early cannot slip past it.
         QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
-        QVERIFY(spy.wait(2000));
+        loader.setDebounceIntervalForTest(1);
+        loader.requestRescan();
+        QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 2000);
 
         // The collide entry survived (alphabetic sort puts `collide`
         // before `flood-*`). Its systemSourcePath must be preserved
         // even though the system dir was never reached on this scan.
+        // Found first, asserted outside the loop. Asserting inside would abort
+        // the slot before the `foundCollide` check below, so "the entry has the
+        // wrong sourcePath" and "the entry is missing entirely" would produce
+        // indistinguishable reports.
         const auto afterEntries = loader.entries();
-        bool foundCollide = false;
-        for (const auto& e : afterEntries) {
-            if (e.key == QLatin1String("collide")) {
-                foundCollide = true;
-                QCOMPARE(e.sourcePath, userFile);
-                QVERIFY2(!e.systemSourcePath.isEmpty(),
-                         "systemSourcePath was cleared on cap-trip — would cause spurious metadata-diff signal");
-                QCOMPARE(e.systemSourcePath, systemFile);
-            }
-        }
-        QVERIFY(foundCollide);
+        const auto collideIt = std::find_if(afterEntries.cbegin(), afterEntries.cend(), [](const auto& e) {
+            return e.key == QLatin1String("collide");
+        });
+        QVERIFY2(collideIt != afterEntries.cend(), "the collide entry did not survive the cap trip at all");
+        QCOMPARE(collideIt->sourcePath, userFile);
+        QVERIFY2(!collideIt->systemSourcePath.isEmpty(),
+                 "systemSourcePath was cleared on cap-trip — would cause spurious metadata-diff signal");
+        QCOMPARE(collideIt->systemSourcePath, systemFile);
     }
 
     /// Regression guard for the shared-ancestor preservation on
@@ -740,7 +997,7 @@ private Q_SLOTS:
     void testAtomicRenameSaveDetected()
     {
         const QString target = m_tmp->filePath(QStringLiteral("doc.json"));
-        writeJson(target, QStringLiteral("doc"), QStringLiteral("v1"));
+        QVERIFY(writeJson(target, QStringLiteral("doc"), QStringLiteral("v1")));
 
         RecordingSink sink;
         DirectoryLoader loader(sink);
@@ -755,7 +1012,7 @@ private Q_SLOTS:
         // on the new inode during the next rescan so subsequent edits
         // fire entriesChanged.
         const QString tmpPath = m_tmp->filePath(QStringLiteral("doc.json.tmp"));
-        writeJson(tmpPath, QStringLiteral("doc"), QStringLiteral("v2"));
+        QVERIFY(writeJson(tmpPath, QStringLiteral("doc"), QStringLiteral("v2")));
         QVERIFY2(QFile::remove(target), "could not remove pre-rename target");
         QVERIFY2(QFile::rename(tmpPath, target), "atomic rename failed");
 
@@ -776,11 +1033,92 @@ private Q_SLOTS:
         // the assertion is on the post-condition: a single rescan must
         // reflect the v3 content).
         QVERIFY(QFile::remove(target));
-        writeJson(target, QStringLiteral("doc"), QStringLiteral("v3"));
+        QVERIFY(writeJson(target, QStringLiteral("doc"), QStringLiteral("v3")));
 
         QSignalSpy spy2(&loader, &DirectoryLoader::entriesChanged);
         QVERIFY(spy2.wait(2000));
         QCOMPARE(sink.registry.value(QStringLiteral("doc")), std::string("v3"));
+    }
+
+    /// The per-file watch, pinned by the ONE shape a directory watch cannot
+    /// produce: an IN-PLACE content rewrite.
+    ///
+    /// `testAtomicRenameSaveDetected` above cannot do this job. Both of its legs
+    /// change a directory ENTRY (a rename, then a remove-and-create), which the
+    /// directory watch reports on its own — so deleting `syncFileWatches`'
+    /// re-add for accepted paths leaves that slot green. Rewriting a file in
+    /// place changes neither the directory's entries nor its mtime, and Qt's
+    /// inotify directory watch does not subscribe to IN_MODIFY for contained
+    /// files, so `entriesChanged` here can only have come from the file watch.
+    ///
+    /// This is also the behaviour the changelog claims: editing a profile file
+    /// by hand is picked up.
+    void testInPlaceRewriteDetectedByTheFileWatch()
+    {
+        const QString target = m_tmp->filePath(QStringLiteral("doc.json"));
+        QVERIFY(writeJson(target, QStringLiteral("doc"), QStringLiteral("v1")));
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setDebounceIntervalForTest(1);
+        loader.loadFromDirectory(m_tmp->path(), LiveReload::On);
+        QCOMPARE(loader.registeredCount(), 1);
+        QCOMPARE(sink.registry.value(QStringLiteral("doc")), std::string("v1"));
+
+        // In place: same inode, same directory entry, directory mtime untouched.
+        QVERIFY(writeJson(target, QStringLiteral("doc"), QStringLiteral("v2")));
+
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+        QVERIFY2(spy.wait(2000), "an in-place rewrite fired no rescan — the per-file watch is not armed");
+        QCOMPARE(loader.registeredCount(), 1);
+        QCOMPARE(sink.registry.value(QStringLiteral("doc")), std::string("v2"));
+    }
+
+    /// A sink returning a ParsedEntry with an EMPTY key is refused with a
+    /// warning rather than registered: deleting the guard inserts an
+    /// empty-string key into the entry map and every downstream keyed lookup.
+    void testEmptyKeyEntryIsRefused()
+    {
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("good.json")), QStringLiteral("good"), QStringLiteral("v")));
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("anon.json")), QStringLiteral("anon"), QStringLiteral("v")));
+        EmptyKeySink sink;
+        DirectoryLoader loader(sink);
+        const int n = loader.loadFromDirectory(m_tmp->path(), LiveReload::Off);
+        QCOMPARE(n, 1);
+        QVERIFY(sink.registry.contains(QStringLiteral("good")));
+        QVERIFY(!sink.registry.contains(QString()));
+    }
+
+    /// The documented empty-list contract: no scan runs, nothing is emitted,
+    /// and the return value is the count from PRIOR registrations, not zero.
+    void testLoadFromDirectoriesEmptyListIsANoOp()
+    {
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("doc.json")), QStringLiteral("doc"), QStringLiteral("v")));
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        QCOMPARE(loader.loadFromDirectory(m_tmp->path(), LiveReload::Off), 1);
+        const int commitsBefore = sink.commitCount;
+
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+        const int n = loader.loadFromDirectories({}, LiveReload::Off);
+        QCOMPARE(n, 1); // prior registration count, not zero
+        QCOMPARE(sink.commitCount, commitsBefore);
+        QCOMPARE(spy.count(), 0);
+    }
+
+    /// Cap 0 is a legal boundary, mirroring the metadata scanner's twin slot:
+    /// nothing parses, nothing registers, and existing entries are purged on
+    /// the next scan rather than surviving a cap they no longer fit under.
+    void testEntryCapZeroParsesNothing()
+    {
+        QVERIFY(writeJson(m_tmp->filePath(QStringLiteral("doc.json")), QStringLiteral("doc"), QStringLiteral("v")));
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setMaxEntriesForTest(0);
+        const int n = loader.loadFromDirectory(m_tmp->path(), LiveReload::Off);
+        QCOMPARE(n, 0);
+        QCOMPARE(sink.parseCalls, 0);
+        QVERIFY(sink.registry.isEmpty());
     }
 
 private:

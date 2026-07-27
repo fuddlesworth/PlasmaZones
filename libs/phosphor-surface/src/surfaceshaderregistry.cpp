@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorFsLoader/PackPathGuard.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
@@ -83,35 +84,22 @@ bool pathHasNoTraversalSegments(const QString& rawPath)
 /// rejected. Pass an empty string for runtime overrides where the
 /// effect id is implicit in the call context.
 std::optional<QString> validateTexturePathWithinEffectDir(const QString& rawPath, const QString& effectDir,
-                                                          const QString& effectId)
+                                                          const QString& effectId,
+                                                          PhosphorFsLoader::AbsolutePathPolicy policy)
 {
-    if (rawPath.isEmpty() || effectDir.isEmpty())
-        return std::nullopt;
-    const QDir dir(effectDir);
-    const QFileInfo origInfo(rawPath);
-    const bool wasRelative = !origInfo.isAbsolute();
-    QString resolved = rawPath;
-    if (wasRelative) {
-        resolved = dir.filePath(resolved);
-    }
-    const QString lexicalRoot = QDir::cleanPath(dir.absolutePath()) + QLatin1Char('/');
-    const QString canonicalRootResolved = QFileInfo(dir.absolutePath()).canonicalFilePath();
-    const QString canonicalRoot =
-        canonicalRootResolved.isEmpty() ? QString() : canonicalRootResolved + QLatin1Char('/');
-    const QString canonicalSymResolved = QFileInfo(resolved).canonicalFilePath();
-    // Pick comparison domain: prefer canonical (catches symlink
-    // escapes) when BOTH sides resolved, otherwise fall back to
-    // lexical for both. Never mix the two.
-    const bool useCanonical = !canonicalSymResolved.isEmpty() && !canonicalRootResolved.isEmpty();
-    const QString canonical = useCanonical ? canonicalSymResolved : QDir::cleanPath(resolved);
-    const QString comparisonRoot = useCanonical ? canonicalRoot : lexicalRoot;
-    if (wasRelative && !canonical.startsWith(comparisonRoot)) {
-        qCWarning(lcRegistry).noquote() << "Surface effect" << effectId << "texture path" << rawPath << "resolves to"
-                                        << canonical << "outside source dir" << comparisonRoot
+    // Delegates to the shared guard rather than keeping a fourth hand-rolled
+    // copy. The copies had already drifted: this one trusted an absolute path
+    // unconditionally, which is right for a runtime override the user picked and
+    // wrong for a path a PACK FILE declares. `policy` is what separates the two,
+    // and the shared guard is where the canonical-vs-lexical subtleties live.
+    const auto resolved = PhosphorFsLoader::resolveWithinDirectory(rawPath, effectDir, policy);
+    if (!resolved) {
+        qCWarning(lcRegistry).noquote() << "Surface effect" << effectId << "path" << rawPath
+                                        << "resolves outside source dir" << effectDir
                                         << "— rejected (path traversal guard)";
         return std::nullopt;
     }
-    return canonical;
+    return *resolved;
 }
 
 /// Parse one already-validated metadata.json root into a
@@ -171,17 +159,19 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
     // mangling is avoided). A relative frag/vert/preview that escapes the
     // pack dir is cleared, which fail-closes the pack (an empty frag path
     // compiles nothing) rather than reading source from outside the pack.
-    const QDir dir(effectDir);
     if (!e.fragmentShaderPath.isEmpty()) {
-        const auto validated = validateTexturePathWithinEffectDir(e.fragmentShaderPath, effectDir, e.id);
+        const auto validated = validateTexturePathWithinEffectDir(e.fragmentShaderPath, effectDir, e.id,
+                                                                  PhosphorFsLoader::AbsolutePathPolicy::Reject);
         e.fragmentShaderPath = validated.value_or(QString());
     }
     if (!e.vertexShaderPath.isEmpty()) {
-        const auto validated = validateTexturePathWithinEffectDir(e.vertexShaderPath, effectDir, e.id);
+        const auto validated = validateTexturePathWithinEffectDir(e.vertexShaderPath, effectDir, e.id,
+                                                                  PhosphorFsLoader::AbsolutePathPolicy::Reject);
         e.vertexShaderPath = validated.value_or(QString());
     }
     if (!e.previewPath.isEmpty()) {
-        const auto validated = validateTexturePathWithinEffectDir(e.previewPath, effectDir, e.id);
+        const auto validated = validateTexturePathWithinEffectDir(e.previewPath, effectDir, e.id,
+                                                                  PhosphorFsLoader::AbsolutePathPolicy::Reject);
         e.previewPath = validated.value_or(QString());
     }
 
@@ -201,7 +191,8 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
     for (auto& tex : e.textures) {
         if (tex.path.isEmpty())
             continue;
-        const auto validated = validateTexturePathWithinEffectDir(tex.path, effectDir, e.id);
+        const auto validated =
+            validateTexturePathWithinEffectDir(tex.path, effectDir, e.id, PhosphorFsLoader::AbsolutePathPolicy::Reject);
         if (!validated) {
             // Clear BOTH path and wrap so the slot is internally
             // coherent — `translateSurfaceParams` skips empty-path
@@ -253,7 +244,8 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
                 // frag/vert/textures; a `..`-traversal path (nullopt) or a
                 // missing file both funnel to the fail-closed single-pass
                 // fallback below rather than reading source outside the pack.
-                const auto validated = validateTexturePathWithinEffectDir(bufPath, effectDir, e.id);
+                const auto validated = validateTexturePathWithinEffectDir(bufPath, effectDir, e.id,
+                                                                          PhosphorFsLoader::AbsolutePathPolicy::Reject);
                 if (validated && QFile::exists(*validated)) {
                     resolved.append(*validated);
                 } else if (!validated) {
@@ -348,8 +340,15 @@ void effectContentSignature(QCryptographicHash& hasher, const SurfaceShaderEffec
         }
         const QFileInfo fi(path);
         hasher.addData(path.toUtf8());
-        hasher.addData(QByteArray::number(fi.size()));
-        hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        if (fi.exists()) {
+            hasher.addData(QByteArray::number(fi.size()));
+            hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        } else {
+            // Stable sentinel for absent files: lastModified() on an invalid
+            // datetime is implementation-defined (same contract as
+            // MetadataPackScanStrategy's watch-set hash).
+            hasher.addData(QByteArrayView("missing"));
+        }
     };
     if (!e.sourceDir.isEmpty()) {
         mixFile(e.sourceDir + QStringLiteral("/metadata.json"));
@@ -378,6 +377,13 @@ SurfaceShaderRegistry::SurfaceShaderRegistry(QObject* parent)
           },
           lcRegistry()))
 {
+    // No setPerDirectoryWatchPaths for data/surface/shared includes,
+    // deliberately (the animation registry makes the same choice; the overlay
+    // registry is the outlier that watches its shared dir): per-entry watches
+    // cover atomic-rename saves of everything a pack references via the
+    // implicit directory watch, and an in-place edit of a shared include not
+    // re-firing until the next rescan is acceptable for a developer-only
+    // workflow.
     m_loader->setPerEntryWatchPaths([](const SurfacePack& p) {
         return effectWatchPaths(p.effect());
     });
@@ -620,12 +626,27 @@ QVariantMap SurfaceShaderRegistry::translateSurfaceParams(const SurfaceShaderEff
         if (slot < effect.textures.size()) {
             path = effect.textures[slot].path;
             wrap = effect.textures[slot].wrap;
+            // On-disk packs had their defaults resolved + traversal-checked at
+            // parseEffect scan time, but an IN-MEMORY pack's defaults arrive
+            // unvetted — apply the same traversal guard the override branch
+            // below applies, both-or-neither on rejection.
+            if (effect.sourceDir.isEmpty() && !path.isEmpty() && !pathHasNoTraversalSegments(path)) {
+                qCWarning(lcRegistry).noquote() << "Surface effect" << effect.id << "in-memory default texture path"
+                                                << path << "rejected (path traversal guard)";
+                path.clear();
+                wrap.clear();
+            }
         }
         const auto pathOverride = friendlyParams.constFind(pathKey);
         if (pathOverride != friendlyParams.constEnd()) {
             const QString candidate = pathOverride->toString();
             if (candidate.isEmpty()) {
-                // Empty-string override = explicit clear of the slot. Drop the
+                // Empty-string override = suppress the pack default for the slot.
+                // NOT an explicit clear: an empty path skips BOTH keys below, and the
+                // consumer's contract is "missing key = no change", so a slot the
+                // consumer has already bound keeps its existing texture across a params
+                // re-push. Clearing a bound slot needs the key PRESENT with an empty
+                // value, which this path deliberately does not emit. Drop the
                 // pack-default wrap too (meaningless without a bound texture),
                 // matching the both-or-neither coherence rule the rejection
                 // branches below apply; the empty path also skips emit at the
@@ -667,7 +688,8 @@ QVariantMap SurfaceShaderRegistry::translateSurfaceParams(const SurfaceShaderEff
                     path = candidate;
                 }
             } else {
-                const auto validated = validateTexturePathWithinEffectDir(candidate, effect.sourceDir, effect.id);
+                const auto validated = validateTexturePathWithinEffectDir(candidate, effect.sourceDir, effect.id,
+                                                                          PhosphorFsLoader::AbsolutePathPolicy::Trust);
                 if (!validated) {
                     // Rejected override clears BOTH path and wrap for this
                     // slot — same coherence rule parseEffect applies. Skip
@@ -685,14 +707,15 @@ QVariantMap SurfaceShaderRegistry::translateSurfaceParams(const SurfaceShaderEff
             const QString candidateWrap = wrapOverride->toString();
             // Mirror fromJson's wrap-vocabulary guard so a runtime override
             // can't smuggle an unvalidated wrap past the metadata-path check.
-            // An empty value clears to clamp; any non-{clamp,repeat,mirror}
-            // token is rejected and the wrap clears (clamp) rather than emitting
-            // garbage downstream.
+            // An empty or rejected value OMITS the wrap key. What that means is
+            // consumer-dependent: the kwin path binds clamp, while a daemon
+            // ShaderEffect keeps whatever wrap it last received, because it only
+            // reacts to a key that is present.
             if (candidateWrap.isEmpty() || SurfaceShaderContract::isValidWrapToken(candidateWrap)) {
                 wrap = candidateWrap;
             } else {
                 qCWarning(lcRegistry) << "Surface effect" << effect.id << "runtime override wrap value" << candidateWrap
-                                      << "rejected (not clamp/repeat/mirror) — falling back to clamp";
+                                      << "rejected (not clamp/repeat/mirror) — wrap key omitted";
                 wrap.clear();
             }
         }

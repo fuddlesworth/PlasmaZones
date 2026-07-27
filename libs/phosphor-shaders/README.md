@@ -21,7 +21,7 @@ Consumed by
 [`phosphor-rendering`](../phosphor-rendering/README.md) (writes the base
 UBO, calls `IUniformExtension::write()` for the remainder),
 [`phosphor-animation`](../phosphor-animation/README.md) (whose
-`AnimationShaderRegistry` reuses `MetadataPackRegistryBase`), and the
+`AnimationShaderRegistry` reuses the same strategy), and the
 Phosphor overlay (hosts `ShaderEffect` items in QML).
 
 ## Key types
@@ -30,12 +30,17 @@ Phosphor overlay (hosts `ShaderEffect` items in QML).
 |------|---------|
 | `PhosphorShaders::BaseUniforms`           | std140 base UBO layout. Shadertoy-compatible block + two `appField` ints for cheap consumer-defined state |
 | `PhosphorShaders::IUniformExtension`      | Contract for appending custom uniform data after `BaseUniforms`, where `extensionSize()` is fixed for the lifetime of the instance |
-| `PhosphorShaders::CustomParamsKey`        | Canonical key format (`customParams<N>_<x|y|z|w>`) for the per-effect parameter sub-slots in `BaseUniforms` |
+| `PhosphorShaders::CustomParams` / `CustomColors` | Canonical key formats (`customParams<N>_<x|y|z|w>`, `customColor<N>`) for the per-effect parameter sub-slots in `BaseUniforms` (namespaces in `CustomParamsKey.h`) |
 | `PhosphorShaders::ShaderRegistry`         | Discovers shader effects from search paths via metadata-pack scanning. Per-process instance, no singleton |
 | `PhosphorShaders::ShaderRegistry::ParameterInfo` | Parameter declaration: name, type, default, range, UBO uniform name |
 | `PhosphorShaders::ShaderIncludeResolver`  | `#include "path"` / `#include <path>` expansion with depth limit |
 | `PhosphorShaders::IWallpaperProvider`     | Abstract source for the active desktop wallpaper image path |
 | `PhosphorShaders::createWallpaperProvider`| Factory that auto-detects KDE / Hyprland / Sway / GNOME |
+| `PhosphorShaders::buildParamPreamble`     | Generates the per-effect `#define` preamble that maps declared parameter ids onto UBO lanes |
+| `PhosphorShaders::spliceAfterVersion`     | Inserts generated GLSL directly after a source's `#version` line |
+| `PhosphorShaders::BaseUniformProfile`     | Describes which base-UBO regions a consumer actually uploads |
+| `PhosphorShaders::IUboProfile`            | Contract for a bounded set of UBO upload regions (`kCapacity` of them) |
+| `PhosphorShaders::ShaderEntryPoint`       | Which entry point a pack's stage declares, so the loader can wrap it correctly |
 
 ## Typical use
 
@@ -88,20 +93,21 @@ private:
   (vec4), and removing them would break the layout. Repurpose them for
   small (≤2 ints) frequently-updated state that needs to live inside
   `BaseUniforms` rather than the extension region.
-- **GUI-thread only for reads and mutations.** The shader map lives
-  inside the strategy and is rebuilt on the GUI thread inside the
-  rescan. The public lookup methods (`availableShaders`, `shader`,
+- **GUI-thread only for reads and mutations.** The shader map is a
+  `Registry<ShaderPack>` inside `ShaderRegistry`, rebuilt on the GUI
+  thread inside the rescan. The public lookup methods (`availableShaders`, `shader`,
   `shaderInfo`, `shaderUrl`) read it without synchronisation.
   `searchPaths()` returns a by-value snapshot suitable for handing to
   worker threads (the shader-warming path).
-- **Inherits `MetadataPackRegistryBase`.** Search-path management is
+- **Composes a `PhosphorRegistry::MetadataPackLoader`.** Search-path management is
   in `phosphor-fsloader`, and `ShaderRegistry` adds only the
   shader-specific lookup surface.
 
 ## Dependencies
 
 - `QtCore`, `QtGui`
-- [`phosphor-fsloader`](../phosphor-fsloader/README.md) — `MetadataPackRegistryBase` + `MetadataPackScanStrategy`
+- [`phosphor-fsloader`](../phosphor-fsloader/README.md) — schema validation + path guards, reached via `phosphor-registry`'s `MetadataPackLoader`
+- [`phosphor-registry`](../phosphor-registry/README.md) — `Registry<T>` + `MetadataPackLoader<T>`, both reached through `ShaderRegistry`'s public headers, so this is a PUBLIC dependency
 
 ## See also
 

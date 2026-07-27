@@ -5,6 +5,8 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Test Quick)
 
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
+
 function(pa_add_test _name)
     set(_sources ${ARGN})
     add_executable(${_name} ${_sources})
@@ -20,10 +22,13 @@ function(pa_add_test _name)
             PhosphorAnimation::PhosphorAnimation
     )
     add_test(NAME ${_name} COMMAND ${_name})
-    set_tests_properties(${_name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphoranimation.debug=false"
-        LABELS "phosphoranimation"
-    )
+    phosphor_apply_test_isolation(${_name})
+    # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace the
+    # XDG sandbox phosphor_apply_test_isolation just installed.
+    phosphor_append_test_environment(${_name}
+        "QT_QPA_PLATFORM=offscreen"
+        "QT_LOGGING_RULES=phosphoranimation.*.debug=false")
+    set_tests_properties(${_name} PROPERTIES LABELS "phosphoranimation")
 endfunction()
 
 # ---- Core motion runtime tests ----
@@ -33,6 +38,9 @@ pa_add_test(pa_test_spring test_spring.cpp)
 pa_add_test(pa_test_curve test_curve.cpp)
 pa_add_test(pa_test_curveregistry test_curveregistry.cpp)
 pa_add_test(pa_test_profile test_profile.cpp)
+# Own binary: the warn-once limiter it exhausts is process-wide static state
+# and would poison test_profile.cpp's rate-limit assertions.
+pa_add_test(pa_test_profile_warncap test_profile_warncap.cpp)
 pa_add_test(pa_test_profiletree test_profiletree.cpp)
 pa_add_test(pa_test_imotionclock test_imotionclock.cpp)
 pa_add_test(pa_test_animatedvalue_scalar test_animatedvalue_scalar.cpp)
@@ -69,10 +77,13 @@ function(paq_add_test _name)
             PhosphorAnimation::PhosphorAnimationQml
     )
     add_test(NAME ${_name} COMMAND ${_name})
-    set_tests_properties(${_name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphoranimation.debug=false"
-        LABELS "phosphoranimation;phosphoranimation-qml"
-    )
+    phosphor_apply_test_isolation(${_name})
+    # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace the
+    # XDG sandbox phosphor_apply_test_isolation just installed.
+    phosphor_append_test_environment(${_name}
+        "QT_QPA_PLATFORM=offscreen"
+        "QT_LOGGING_RULES=phosphoranimation.*.debug=false")
+    set_tests_properties(${_name} PROPERTIES LABELS "phosphoranimation;phosphoranimationqml")
 endfunction()
 
 paq_add_test(paq_test_phosphoreasing test_phosphoreasing.cpp)
@@ -103,10 +114,13 @@ function(pas_add_test _name)
             PhosphorFsLoader::PhosphorFsLoader
     )
     add_test(NAME ${_name} COMMAND ${_name})
-    set_tests_properties(${_name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphoranimation.debug=false"
-        LABELS "phosphoranimation;phosphoranimationshaders"
-    )
+    phosphor_apply_test_isolation(${_name})
+    # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace the
+    # XDG sandbox phosphor_apply_test_isolation just installed.
+    phosphor_append_test_environment(${_name}
+        "QT_QPA_PLATFORM=offscreen"
+        "QT_LOGGING_RULES=phosphoranimation.*.debug=false;phosphoranimationshaders.*.debug=false")
+    set_tests_properties(${_name} PROPERTIES LABELS "phosphoranimation;phosphoranimationshaders")
 endfunction()
 
 pas_add_test(pas_test_animationshadereffect test_animationshadereffect.cpp)
@@ -118,6 +132,12 @@ pas_add_test(pas_test_animationshaderregistry test_animationshaderregistry.cpp)
 # above. Pure translateAnimationParams / slot-key logic with no filesystem
 # scan, so it uses the core pa_add_test harness (no PhosphorFsLoader link).
 pa_add_test(pa_test_shaderparamtranslation test_shaderparamtranslation.cpp)
+# The pa_ harness was chosen for the missing PhosphorFsLoader link (see
+# above), but that choice also dropped the phosphoranimationshaders label
+# every other shader-pipeline test carries; restore it so
+# `ctest -L phosphoranimationshaders` runs the whole pipeline.
+set_tests_properties(pa_test_shaderparamtranslation PROPERTIES
+    LABELS "phosphoranimation;phosphoranimationshaders")
 
 # Integration test against the actual data/animations/ packs.
 pas_add_test(pas_test_builtin_effects test_builtin_effects.cpp)
@@ -147,10 +167,13 @@ function(pal_add_test _name)
             PhosphorShellPatterns::PhosphorShellPatterns
     )
     add_test(NAME ${_name} COMMAND ${_name})
-    set_tests_properties(${_name} PROPERTIES
-        LABELS "phosphoranimation;phosphoranimationlayer"
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=*.debug=false"
-    )
+    phosphor_apply_test_isolation(${_name})
+    # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace the XDG
+    # sandbox phosphor_apply_test_isolation just installed.
+    phosphor_append_test_environment(${_name}
+        "QT_QPA_PLATFORM=offscreen"
+        "QT_LOGGING_RULES=*.debug=false")
+    set_tests_properties(${_name} PROPERTIES LABELS "phosphoranimation;phosphoranimationlayer")
 endfunction()
 
 pal_add_test(pal_test_surface_animator test_surface_animator.cpp)

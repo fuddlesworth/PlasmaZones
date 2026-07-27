@@ -6,6 +6,10 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/Spring.h>
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QRegularExpression>
 #include <QTest>
 
 #include <limits>
@@ -309,6 +313,39 @@ private Q_SLOTS:
         QVERIFY(!p.duration.has_value());
     }
 
+    /// The ACCEPTED side of the duration boundary, matching the minDistance
+    /// and staggerInterval at-cap twins: without it, flipping the validator's
+    /// `>` to `>=` would reject exactly MaxDurationMs and every test would
+    /// still pass.
+    void testFromJsonAcceptsDurationAtTheCap()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("duration"), double(Profile::MaxDurationMs));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.duration.has_value());
+        QCOMPARE(*p.duration, Profile::MaxDurationMs);
+    }
+
+    /// The unresolved-curve branch: a spec `tryCreate` cannot resolve leaves
+    /// `curve` UNSET (so it inherits) rather than substituting anything, and
+    /// warns with the original spec. The sibling fields still parse. Deleting
+    /// the tryCreate routing (falling back to create()'s silent default
+    /// cubic-bezier) reddens the null check; deleting the diagnostic reddens
+    /// ignoreMessage. NOTE for future editors: the rate limiter is
+    /// process-wide, so this slot must stay the only one in this binary
+    /// feeding this exact spec.
+    void testFromJsonLeavesUnresolvableCurveUnsetAndWarns()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("curve"), QStringLiteral("srping:14,0.6"));
+        obj.insert(QLatin1String("duration"), 250.0);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("did not resolve")));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(!p.curve);
+        QVERIFY(p.duration.has_value());
+        QCOMPARE(*p.duration, 250.0);
+    }
+
     void testFromJsonAcceptsLargeButReasonableDuration()
     {
         QJsonObject obj;
@@ -327,6 +364,74 @@ private Q_SLOTS:
         QCOMPARE(p.effectiveMinDistance(), Profile::DefaultMinDistance);
     }
 
+    /// The bound is checked BEFORE the round. `qRound` on a value outside the
+    /// int range is undefined behaviour, and this value comes from a file a user
+    /// can hand-edit, so the old post-round check only worked by accident — on
+    /// the platform where the UB conversion happens to pin to INT_MIN, which the
+    /// negative test then caught. Deleting the range clause makes this row hit
+    /// that UB again.
+    void testFromJsonRejectsOutOfRangeMinDistance_data()
+    {
+        QTest::addColumn<double>("raw");
+        QTest::newRow("astronomical") << 1e300;
+        QTest::newRow("just over the domain cap") << double(Profile::MaxMinDistancePx) + 1.0;
+        QTest::newRow("infinity") << std::numeric_limits<double>::infinity();
+        QTest::newRow("nan") << std::numeric_limits<double>::quiet_NaN();
+    }
+
+    void testFromJsonRejectsOutOfRangeMinDistance()
+    {
+        QFETCH(double, raw);
+        QJsonObject obj;
+        obj.insert(QLatin1String("minDistance"), raw);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(!p.minDistance.has_value());
+        QCOMPARE(p.effectiveMinDistance(), Profile::DefaultMinDistance);
+    }
+
+    /// The ACCEPTED side of the same boundary. Without it, flipping the
+    /// validator's `>` to `>=` would reject exactly MaxMinDistancePx and every
+    /// test would still pass.
+    void testFromJsonAcceptsMinDistanceAtTheCap()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("minDistance"), double(Profile::MaxMinDistancePx));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.minDistance.has_value());
+        QCOMPARE(*p.minDistance, Profile::MaxMinDistancePx);
+    }
+
+    /// Same shape for sequenceMode, which is finiteness-checked AND
+    /// range-checked. Unlike minDistance it lands on the library default
+    /// ENGAGED rather than being left unset, so it blocks inheritance instead
+    /// of allowing it. That asymmetry is `Profile::fromJson`'s, and
+    /// `sanitizedProfileMap` mirrors it.
+    void testFromJsonSubstitutesDefaultForOutOfRangeSequenceMode()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("sequenceMode"), 1e300);
+        // The DIAGNOSTIC is the load-bearing assertion, and it has to be the
+        // out-of-range one specifically. Deleting the range guard sends 1e300
+        // into `qRound` as undefined behaviour; in a Release build (where Qt's
+        // own Q_ASSERT is compiled out) that yields INT_MIN, which reaches the
+        // unknown-enumerator branch and produces this same sequenceMode. So
+        // matching on "unknown sequenceMode" would pass either way. Only
+        // "rejecting sequenceMode" is a string the unguarded path can never
+        // produce.
+        //
+        // One note for whoever mutation-tests ANY of the four range guards in
+        // this file (duration, minDistance, sequenceMode, staggerInterval): in
+        // a DEBUG build a guard-deleted path aborts on Qt's own Q_ASSERT inside
+        // qCheckedFPConversionToInteger rather than failing cleanly, which
+        // kills the whole binary and takes every slot after it with it. The
+        // truncated run is collateral, not N more broken slots.
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("rejecting sequenceMode .*out of int range")));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.sequenceMode.has_value());
+        QCOMPARE(*p.sequenceMode, Profile::DefaultSequenceMode);
+    }
+
     void testFromJsonAcceptsZeroMinDistance()
     {
         // Zero = "no skip threshold" — the documented default. Must
@@ -339,13 +444,11 @@ private Q_SLOTS:
         QCOMPARE(*p.minDistance, 0);
     }
 
-    /// `QJsonValue::toInt(default)` returns `default` verbatim when
-    /// the value is a JSON Number-with-fractional-zero like `5.0`,
-    /// so a file written by a non-C++ serializer that emits the
-    /// integer as a double silently fell back to the library
-    /// default. The fix routes through `toDouble()` + `qRound()`.
-    /// Regression guard: a JSON double `5.0` must produce
-    /// `minDistance = 5`, not the library default.
+    /// `QJsonValue::toInt(default)` substitutes `default` for a FRACTIONAL
+    /// double and rejects rather than rounds (on a whole-number double like
+    /// `5.0` Qt 6 does return 5). The parser routes through `toDouble()` +
+    /// `qRound()` so `5`, `5.0` and a fractional `5.4` all resolve. Regression
+    /// guard: a JSON double `5.0` must produce `minDistance = 5`.
     void testFromJsonMinDistanceAcceptsWholeDouble()
     {
         QJsonObject obj;
@@ -399,6 +502,154 @@ private Q_SLOTS:
         const Profile pEmpty = Profile::fromJson(objEmpty, CurveRegistry{});
         QVERIFY(pEmpty.presetName.has_value());
         QVERIFY(pEmpty.presetName->isEmpty());
+    }
+    // ─── Type rejection (the isDouble guard) ──────────────────────────────
+
+    /// A field holding something that is not a JSON NUMBER must be left UNSET,
+    /// so the value is inherited from the parent profile.
+    ///
+    /// This is the whole point of the type guard, and it is invisible to a
+    /// range test. `QJsonValue::toDouble(default)` hands back the DEFAULT for
+    /// any non-number, and every library default passes every range check — so
+    /// without the guard the field lands ENGAGED at that default, which BLOCKS
+    /// inheritance. `minDistance` and `staggerInterval` are the witnesses that
+    /// matter: their defaults are in range, so only the type check can reject
+    /// them. (`duration`'s default would also pass, but a string coerces to 0,
+    /// which its `> 0` bound rejects anyway — so a duration row alone would not
+    /// pin the guard.)
+    void testFromJsonLeavesNonNumericFieldsUnset_data()
+    {
+        QTest::addColumn<QByteArray>("json");
+        QTest::addColumn<QByteArray>("field");
+
+        QTest::newRow("minDistance string")
+            << QByteArrayLiteral(R"({"minDistance":"5"})") << QByteArrayLiteral("minDistance");
+        QTest::newRow("minDistance bool")
+            << QByteArrayLiteral(R"({"minDistance":true})") << QByteArrayLiteral("minDistance");
+        QTest::newRow("minDistance null")
+            << QByteArrayLiteral(R"({"minDistance":null})") << QByteArrayLiteral("minDistance");
+        QTest::newRow("minDistance object")
+            << QByteArrayLiteral(R"({"minDistance":{"a":1}})") << QByteArrayLiteral("minDistance");
+        QTest::newRow("staggerInterval string")
+            << QByteArrayLiteral(R"({"staggerInterval":"20"})") << QByteArrayLiteral("staggerInterval");
+        QTest::newRow("staggerInterval bool")
+            << QByteArrayLiteral(R"({"staggerInterval":false})") << QByteArrayLiteral("staggerInterval");
+        QTest::newRow("duration string") << QByteArrayLiteral(R"({"duration":"900"})") << QByteArrayLiteral("duration");
+        QTest::newRow("duration bool") << QByteArrayLiteral(R"({"duration":true})") << QByteArrayLiteral("duration");
+    }
+
+    void testFromJsonLeavesNonNumericFieldsUnset()
+    {
+        QFETCH(QByteArray, json);
+        QFETCH(QByteArray, field);
+
+        const QJsonObject obj = QJsonDocument::fromJson(json).object();
+        QVERIFY(!obj.isEmpty());
+
+        // The type rejection is reported once per (field, type) per process, so
+        // an ignoreMessage here would fail on the second row that shares a pair.
+        // The assertion below is what pins the behaviour; the diagnostic is
+        // covered by testFromJsonReportsANonNumericFieldOnce.
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+
+        if (field == QByteArrayLiteral("minDistance")) {
+            QVERIFY2(!p.minDistance.has_value(), "a non-numeric minDistance was engaged and now blocks inheritance");
+        } else if (field == QByteArrayLiteral("staggerInterval")) {
+            QVERIFY2(!p.staggerInterval.has_value(),
+                     "a non-numeric staggerInterval was engaged and now blocks inheritance");
+        } else {
+            QVERIFY2(!p.duration.has_value(), "a non-numeric duration was engaged and now blocks inheritance");
+        }
+    }
+
+    /// sequenceMode is the ONE field that substitutes an ENGAGED default rather
+    /// than staying unset, and a non-numeric value must take that path too —
+    /// leaving it unset would let a parent's Cascade through on a leaf whose own
+    /// file says otherwise.
+    void testFromJsonSubstitutesDefaultForNonNumericSequenceMode()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("sequenceMode"), QStringLiteral("cascade"));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.sequenceMode.has_value());
+        QCOMPARE(*p.sequenceMode, Profile::DefaultSequenceMode);
+    }
+
+    /// The type rejection is diagnosed, and diagnosed ONCE per (field, type) per
+    /// process. Profiles are re-read on every settings change and the daemon
+    /// republishes on the slider's drag path, so an unrated warning would emit
+    /// tens of times a second for one hand-edited value.
+    ///
+    /// A field/type pair no other slot in this file uses, so the rate limiter's
+    /// process-wide state cannot have been consumed already.
+    void testFromJsonReportsANonNumericFieldOnce()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("duration"), QJsonArray{});
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("ignoring non-numeric duration")));
+        const Profile first = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(!first.duration.has_value());
+
+        // Second read of the same field/type emits nothing. An unrated warning
+        // would surface here as an unexpected QWARN.
+        const Profile second = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(!second.duration.has_value());
+    }
+
+    // ─── staggerInterval range ────────────────────────────────────────────
+
+    /// staggerInterval carried a full validator with no coverage at all: every
+    /// sibling field has a rejects-out-of-range plus accepts-at-the-cap pair.
+    void testFromJsonRejectsOutOfRangeStaggerInterval_data()
+    {
+        QTest::addColumn<double>("raw");
+        QTest::newRow("negative") << -1.0;
+        QTest::newRow("just over the cap") << double(Profile::MaxStaggerIntervalMs) + 1.0;
+        QTest::newRow("astronomical") << 1e300;
+        QTest::newRow("infinity") << std::numeric_limits<double>::infinity();
+        QTest::newRow("nan") << std::numeric_limits<double>::quiet_NaN();
+    }
+
+    void testFromJsonRejectsOutOfRangeStaggerInterval()
+    {
+        QFETCH(double, raw);
+        QJsonObject obj;
+        obj.insert(QLatin1String("staggerInterval"), raw);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(!p.staggerInterval.has_value());
+        QCOMPARE(p.effectiveStaggerInterval(), Profile::DefaultStaggerInterval);
+    }
+
+    /// The accepted side of the same boundary, so flipping the validator's `>`
+    /// to `>=` cannot pass unnoticed.
+    void testFromJsonAcceptsStaggerIntervalAtTheCap()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("staggerInterval"), double(Profile::MaxStaggerIntervalMs));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.staggerInterval.has_value());
+        QCOMPARE(*p.staggerInterval, Profile::MaxStaggerIntervalMs);
+    }
+
+    /// Zero is a legal explicit "no stagger", distinct from unset.
+    void testFromJsonAcceptsZeroStaggerInterval()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("staggerInterval"), 0);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.staggerInterval.has_value());
+        QCOMPARE(*p.staggerInterval, 0);
+    }
+
+    /// A whole-number DOUBLE round-trips to the same int, like minDistance.
+    void testFromJsonStaggerIntervalAcceptsWholeDouble()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("staggerInterval"), 30.0);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.staggerInterval.has_value());
+        QCOMPARE(*p.staggerInterval, 30);
     }
 };
 

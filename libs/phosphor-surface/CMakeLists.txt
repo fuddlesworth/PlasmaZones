@@ -42,8 +42,9 @@ include(GenerateExportHeader)
 # Dependencies
 # ===============================================================================
 
-# Pin to 6.6 to match sibling phosphor-* libraries.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
+# Pin to 6.10 to match phosphor-shaders, whose headers this library consumes
+# (a lower floor here would be fiction — the dependency already demands 6.10).
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
 
 # phosphor-fsloader -- filesystem-backed loader scaffolding (LiveReload /
 # RegistrationOrder enums + MetadataPackLoader machinery via PhosphorRegistry).
@@ -150,6 +151,10 @@ set_target_properties(PhosphorSurface PROPERTIES
     SOVERSION 0
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
+    # Match phosphor-shaders: this lib's sources carry anonymous-namespace
+    # helpers whose "defined but not used" GCC diagnostics a unity merge can
+    # surface spuriously, and the TUs are small enough that unity buys nothing.
+    UNITY_BUILD OFF
 )
 
 # ===============================================================================

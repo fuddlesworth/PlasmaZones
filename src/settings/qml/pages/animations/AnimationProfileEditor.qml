@@ -23,8 +23,8 @@ import org.plasmazones.common as PZCommon
  * touched; the consumer commits live. Properties are fully read-write
  * so the consumer can seed the editor from disk before showing it. The
  * picker model and parameter schema are fed in by the consumer
- * (@c availableShaders / @c shaderParamSchema) so the editor doesn't
- * reach a global context itself.
+ * (@c availableShaders / @c shaderParamSchema) rather than read from a
+ * global context, so shader-registry reactivity stays the consumer's.
  *
  * The shader-parameter sub-editor exposes reset / locking / randomize /
  * colour-picker affordances via the @c enableReset / @c enableLocking /
@@ -32,6 +32,13 @@ import org.plasmazones.common as PZCommon
  */
 ColumnLayout {
     id: root
+
+    // Collapse outright when every child is hidden (shader-unsupported leaf
+    // with the timing editor closed) — an all-hidden ColumnLayout still
+    // occupies a spacing slot in the hosting card's column. Same guard the
+    // sibling AnimationEventCardBanners documents; the disjunction below is
+    // exactly what gates every child.
+    visible: root.showTimingSection || root.shaderLegSupported
 
     // ── Working state — full read-write surface ─────────────────────
     /// Easing or spring discriminator. `CurvePresets.timingModeEasing`
@@ -64,7 +71,7 @@ ColumnLayout {
     /// reset-on-shader-change) writes straight through.
     property alias lockedShaderParams: paramEditor.lockedParams
     // ── Configuration inputs ────────────────────────────────────────
-    /// Title for the curve dialog ("Customize Curve: <eventLabel>").
+    /// Title for the curve dialog ("Customize curve for <eventLabel>").
     property string eventLabel: ""
     /// Whether the shader section is rendered at all. The per-event
     /// card sets this false for events whose runtime path doesn't
@@ -81,9 +88,9 @@ ColumnLayout {
     property bool simpleTiming: false
     /// Show the per-axis inheritance status captions (with their revert
     /// links) under the curve summary and the Duration row. The per-event
-    /// card turns this on so a user can see WHICH of the two timing
-    /// fields a direct override actually pins; the Global defaults card
-    /// has no inheritance to describe and leaves it off.
+    /// card turns this on so a user can see WHICH of the two timing fields
+    /// a direct override actually pins; GlobalTimingDefaultsCard, the other
+    /// consumer, has no inheritance to describe and leaves it off.
     property bool showOverrideStatus: false
     /// Whether the edited event owns a DIRECT curve override (as opposed
     /// to following an ancestor or the Global default). Only rendered
@@ -103,12 +110,13 @@ ColumnLayout {
     /// so the editor doesn't reach a global context for it.
     property var shaderParamSchema: []
     // ── Shader-param editor feature toggles ─────────────────────────
-    /// Locking is per-event-card-only — the global-defaults page doesn't need it.
+    /// Locking is per-event-card-only. A host with no per-event overrides
+    /// to protect leaves it off.
     property bool enableLocking: false
     /// Randomize same.
     property bool enableRandomize: false
-    /// Reset-all-to-defaults, defaulting to `enableRandomize` so it tracks
-    /// the same contexts (per-event card on, global-defaults page off).
+    /// Reset-all-to-defaults, defaulting to `enableRandomize` so the two
+    /// track the same contexts (per-event card on).
     property bool enableReset: enableRandomize
     /// Image picker is reserved for shader textures (overlay packs);
     /// animation packs don't use it.
@@ -124,7 +132,7 @@ ColumnLayout {
     /// rows' `expandable` gate: no picked shader, or a picked shader
     /// with neither text nor params, keeps the row-click inert and
     /// the chevron hidden.
-    readonly property bool shaderSectionExpandable: shaderEffectId.length > 0 && (shaderDescription.length > 0 || shaderParamSchema.length > 0)
+    readonly property bool shaderSectionExpandable: shaderEffectId.length > 0 && (shaderDescription.length > 0 || (shaderParamSchema || []).length > 0)
     /// Registry entry for the currently-picked shader, resolved from the
     /// consumer-fed picker model. Null when nothing is picked or the id
     /// has no match (a pack uninstalled while its override survives).
@@ -133,8 +141,13 @@ ColumnLayout {
         if (shaderEffectId.length === 0)
             return null;
 
-        for (var i = 0; i < availableShaders.length; ++i) {
-            var e = availableShaders[i];
+        // Same untyped-`availableShaders` hazard `_anyPackAvailable` guards
+        // below: dereferencing `.length` on an undefined model throws, and the
+        // throw takes shaderName, shaderDescription and shaderSectionExpandable
+        // down with this binding.
+        const list = availableShaders || [];
+        for (var i = 0; i < list.length; ++i) {
+            var e = list[i];
             if (e && e.id === shaderEffectId)
                 return e;
         }
@@ -164,7 +177,10 @@ ColumnLayout {
     /// slot and the setter caption BOTH have to agree about: telling the
     /// user to set a pack below while the picker holds only "None" is an
     /// instruction they cannot follow.
-    readonly property bool _anyPackAvailable: availableShaders && availableShaders.length > 0
+    // Boolean-coerced: `availableShaders` is untyped, and the `&&` chain
+    // returns the first falsy operand, which for an undefined model is
+    // `undefined` — a typed bool property rejects that outright.
+    readonly property bool _anyPackAvailable: Boolean(availableShaders && availableShaders.length > 0)
     /// Wire-format curve string the rule / profile schema expects.
     readonly property string curveString: {
         if (timingMode === CurvePresets.timingModeSpring)
@@ -180,21 +196,23 @@ ColumnLayout {
     /// `shaderParamWriteRequested` signals instead, so consumers can
     /// distinguish a curve edit from a shader switch (which carries
     /// side-effects like dropping the previous effect's params).
-    /// The per-event card and the global-defaults page (AnimationsGeneralPage)
-    /// each connect this to their own commit path.
+    /// `GlobalTimingDefaultsCard` is this aggregate's only consumer: it
+    /// commits the whole timing state in one go. The per-event card does NOT
+    /// connect it — it listens to the per-axis signals below instead, which
+    /// is what keeps its writes per field.
     signal valueChanged
     /// Per-axis refinements of `valueChanged`, emitted alongside it (the
     /// specific signal first, then the aggregate). A consumer that
     /// persists per-field overrides (the per-event card) listens to
     /// these so a duration drag writes only the duration field and a
     /// curve edit writes only the curve field, leaving the other field
-    /// inheriting. Consumers that commit the whole timing state (the
-    /// Global defaults card) keep using `valueChanged`. The timing-mode
+    /// inheriting. Consumers that commit the whole timing state
+    /// (GlobalTimingDefaultsCard) keep using `valueChanged`. The timing-mode
     /// combo and the spring editor count as CURVE edits: the mode and
     /// the spring parameters are encoded in the curve wire string.
     signal durationEdited
     signal curveEdited
-    /// Revert requests from the per-axis "Revert to inherited" links —
+    /// Revert requests from the per-axis revert links —
     /// only reachable when `showOverrideStatus` is on. The consumer
     /// clears the corresponding field from the stored override so the
     /// event follows its ancestors (and the Global defaults) again.
@@ -215,8 +233,7 @@ ColumnLayout {
     /// and assigns it to `shaderParams` BEFORE emitting. The signal
     /// payload carries the rolled map so a consumer that wants to
     /// persist (per-event card → controller) doesn't have to re-read
-    /// the editor's state — a consumer with randomize disabled (the
-    /// global-defaults page) never emits it.
+    /// the editor's state. A host with randomize disabled never emits it.
     signal randomizeRequested(var rolled)
     /// Reset all shader params to their schema defaults. Same self-update
     /// contract as `randomizeRequested`: the editor stages the defaults map
@@ -236,7 +253,7 @@ ColumnLayout {
         }
         var idx = CurvePresets.findIndices(easingCurve);
         if (idx.styleIndex >= 0)
-            return CurvePresets.easingStyles[idx.styleIndex].label + " · " + CurvePresets.easingDirections[idx.dirIndex].label;
+            return i18nc("easing style, then direction", "%1 · %2", CurvePresets.easingStyles[idx.styleIndex].label, CurvePresets.easingDirections[idx.dirIndex].label);
 
         return i18n("Easing · Custom");
     }
@@ -308,23 +325,45 @@ ColumnLayout {
                     visible: root.showOverrideStatus
                     spacing: Kirigami.Units.smallSpacing
 
-                    // fillWidth so the elide actually engages on a long
-                    // translation; the revert link then sits at the row's
-                    // trailing edge.
+                    // maximumWidth pins the caption to its natural width so
+                    // the link sits directly after it, the way the duration
+                    // twin below reads. Without the cap the caption took the
+                    // whole row and stranded the link against the Customize
+                    // button. A long translation still shrinks and elides
+                    // rather than pushing the link out of the card, because
+                    // Layout.minimumWidth defaults to 0 and the layout is
+                    // free to squeeze below the preferred width; fillWidth
+                    // plays no part in that and is deliberately not set.
                     Label {
-                        Layout.fillWidth: true
+                        Layout.maximumWidth: implicitWidth
                         text: root.curveOverridden ? i18n("Overridden for this event") : i18n("Following the inherited value")
                         font: Kirigami.Theme.smallFont
                         color: Kirigami.Theme.disabledTextColor
                         elide: Text.ElideRight
                     }
 
+                    // Named for its axis, like the duration twin below: the
+                    // two links sit a few rows apart and a bare "Revert to
+                    // inherited" beside "Revert duration to inherited" reads
+                    // as though it reverted everything.
                     Kirigami.LinkButton {
+                        // Never squeezed: with no minimum the layout spreads
+                        // an overflow across both items, and the actionable
+                        // half can elide before the informational half does.
+                        // The caption is the one that gives way, and it
+                        // already elides.
+                        Layout.minimumWidth: implicitWidth
                         visible: root.curveOverridden
-                        text: i18n("Revert to inherited")
+                        text: i18n("Revert curve to inherited")
                         font: Kirigami.Theme.smallFont
                         Accessible.name: i18n("Revert curve to inherited")
                         onClicked: root.curveRevertRequested()
+                    }
+
+                    // Soaks up the remainder so the pair above stays
+                    // left-aligned under the curve summary.
+                    Item {
+                        Layout.fillWidth: true
                     }
                 }
             }
@@ -402,11 +441,18 @@ ColumnLayout {
                 // as CONSTANT props) rather than the literal 50 / 2000 — those
                 // are PhosphorAnimation::Limits::Min/MaxAnimationDurationMs and
                 // must not be re-typed here where they can silently drift.
+                // These are GLOBAL app limits, not per-profile or per-scope
+                // state, so the app-wide settingsController.generalPage is the
+                // correct source — there is no context-local controller to
+                // prefer, unlike the per-scope appSettings cards elsewhere.
                 from: settingsController.generalPage.animationDurationMin
                 to: settingsController.generalPage.animationDurationMax
                 stepSize: 10
-                valueSuffix: " ms"
-                Accessible.name: i18n("Animation duration")
+                // The separating space is deliberately OUTSIDE the translatable
+                // string: a leading space is invisible in every CAT tool, so a
+                // translator trimming it would silently render "150ms".
+                valueSuffix: " " + i18nc("milliseconds, unit appended to a slider value", "ms")
+                accessibleName: i18n("Animation duration")
                 labelWidth: Kirigami.Units.gridUnit * 4
                 value: root.duration
                 onMoved: function (value) {
@@ -425,6 +471,15 @@ ColumnLayout {
         // re-applies the moment the spring goes away upstream, so the
         // way out has to stay reachable while the Duration row itself
         // is hidden.
+        //
+        // Nor is it hidden in simple mode, which is what living outside the
+        // curve-summary block buys: simple mode CAN pin a duration (the
+        // slider above is its only timing control), so it needs the way
+        // back. It cannot pin a curve: the timing-mode combo sits inside the
+        // hidden block, and so do the only two ways into the curve dialog
+        // (the thumbnail and Customize…), and an invisible item takes no
+        // clicks. So the curve link stays in there with them, in Advanced,
+        // where such an override can only have been made.
         RowLayout {
             visible: root.showOverrideStatus && root.durationOverridden
             Layout.fillWidth: true
@@ -433,6 +488,10 @@ ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
 
             Kirigami.LinkButton {
+                // Matches the curve twin's floor: nothing shares this row that
+                // could be squeezed instead, but the two links are read side by
+                // side and an asymmetry here reads as an oversight.
+                Layout.minimumWidth: implicitWidth
                 text: i18n("Revert duration to inherited")
                 font: Kirigami.Theme.smallFont
                 Accessible.name: i18n("Revert duration to inherited")
@@ -460,7 +519,7 @@ ColumnLayout {
         // Points at the setter only when the setter can actually serve.
         text: root._anyPackAvailable ? i18n("No shader pack. Set one below.") : i18n("No shader pack.")
         wrapMode: Text.WordWrap
-        opacity: 0.7
+        color: Kirigami.Theme.disabledTextColor
     }
 
     // Selected-shader row — the same collapsed-row model as a decoration
@@ -509,7 +568,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     visible: root.shaderDescription.length > 0 && !root.shaderSectionExpanded
                     text: root.shaderDescription
-                    opacity: 0.7
+                    color: Kirigami.Theme.disabledTextColor
                     elide: Text.ElideRight
                 }
             }
@@ -556,6 +615,10 @@ ColumnLayout {
         clip: true
         opacity: effectiveExpanded ? 1 : 0
         visible: Layout.preferredHeight > 0 || opacity > 0
+        // Non-interactive the instant it starts collapsing, not when the ramp
+        // finishes: without this a click lands on the fading body during the
+        // collapse animation while it is still visible but on its way out.
+        enabled: effectiveExpanded
 
         Behavior on Layout.preferredHeight {
             PhosphorMotionAnimation {
@@ -587,7 +650,7 @@ ColumnLayout {
                 visible: root.shaderDescription.length > 0
                 text: root.shaderDescription
                 wrapMode: Text.WordWrap
-                opacity: 0.7
+                color: Kirigami.Theme.disabledTextColor
             }
 
             // Inline parameter editor surfaces only when an effect is
@@ -601,7 +664,7 @@ ColumnLayout {
                 readonly property var _paramSchema: root.shaderParamSchema
 
                 Layout.fillWidth: true
-                visible: root.shaderEffectId.length > 0 && _paramSchema.length > 0
+                visible: root.shaderEffectId.length > 0 && (_paramSchema || []).length > 0
                 parameters: _paramSchema
                 currentValues: root.shaderParams
                 effectId: root.shaderEffectId
@@ -692,6 +755,10 @@ ColumnLayout {
             currentId: root.shaderEffectId
             noneId: ""
             includeNoneEntry: true
+            // Context marker left as @action:button deliberately. It is arguably the
+            // wrong register for a placeholder, but the marker is translator-facing
+            // only, and changing it invalidates the approved translation of this
+            // string in six languages for no user-visible gain.
             placeholderText: i18nc("@action:button", "Select a pack…")
             Accessible.description: i18n("Set the shader pack this event uses")
             onSelected: function (id) {
@@ -718,6 +785,7 @@ ColumnLayout {
         easingCurve: root.easingCurve
         springOmega: root.springOmega
         springZeta: root.springZeta
+        duration: root.duration
         onCurveApplied: function (curve) {
             root.easingCurve = curve;
             root.timingMode = CurvePresets.timingModeEasing;

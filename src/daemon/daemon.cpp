@@ -4,25 +4,9 @@
 #include "daemon.h"
 
 #include <QGuiApplication>
-#include <QFutureWatcher>
-#include <QPointer>
 #include <QStandardPaths>
-#include <QtConcurrent>
-#include <QScreen>
 #include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusObjectPath>
-#include <QDBusPendingCall>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
-#include <QDBusError>
-#include <QDir>
 #include <QFile>
-#include <QFileInfo>
-#include <QPluginLoader>
-#include <QRegularExpression>
-#include <QSet>
-#include <QThread>
 
 #include <PhosphorServiceIdle/IdleService.h>
 
@@ -37,8 +21,6 @@
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
-
-#include <array>
 
 #include "overlayservice.h"
 #include "controllers/unifiedlayoutcontroller.h"
@@ -162,8 +144,11 @@ Daemon::Daemon(QObject* parent)
     // pattern above. Standalone settings / editor processes that have no
     // daemon-owned store pass nullptr and Settings falls back to owning
     // its own.
-    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_ruleStore.get(), nullptr))
+    // m_zoneDetector before m_settings: see the declaration-order note in
+    // daemon.h — reverse-order destruction must outlive the m_settings->this
+    // adjacentThresholdChanged lambda that derefs it.
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
+    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_ruleStore.get(), nullptr))
     , m_windowRegistry(std::make_unique<PhosphorEngine::WindowRegistry>(nullptr))
     , m_panelSource(std::make_unique<PhosphorScreens::PlasmaPanelSource>())
     , m_virtualScreenStore(std::make_unique<SettingsConfigStore>(m_settings.get()))
@@ -293,7 +278,8 @@ bool Daemon::init()
     // Settings constructor already calls load(); avoid duplicate load
 
     // init() decomposes into ordered phase methods (definitions split across
-    // daemon/shader_warmup.cpp, daemon/init_services.cpp, daemon/init_adaptors.cpp,
+    // daemon/shader_warmup.cpp, daemon/animation_profiles.cpp,
+    // daemon/init_services.cpp, daemon/init_adaptors.cpp,
     // daemon/init_engines.cpp). The call order below is byte-order faithful to the
     // former monolithic init() and MUST NOT be reordered — later phases borrow
     // members the earlier phases construct and wire.

@@ -615,7 +615,9 @@ PhosphorAnimation::Profile PlasmaZonesEffect::resolveEventMotionProfile(const QS
     // resolveTransitionLifetimeMs. The animator calls that helper too, but only
     // for the spring maxLifetimeMs cap — its PARAMETRIC duration goes from
     // applyWindowGeometry straight into WindowAnimator::startAnimation, whose
-    // own clampProfile bounds to [0, 10000] ms, a different, looser envelope.
+    // own clampProfile bounds to (0, 10000] ms (non-positive durations are RESET
+    // to the library default rather than clamped to 0), a different, looser
+    // envelope.
     // Without this a `"duration": 5000` node would run a 2 s shader leg on
     // window.open but a 5 s animator leg on a snap, with its durationMs == 0
     // shader riding along and pinning per-frame repaints for the full 5 s.
@@ -678,11 +680,16 @@ void PlasmaZonesEffect::loadShaderRegistryFromDbus()
                                     }
                                     if (!paths.isEmpty()) {
                                         m_shaderManager.m_animationShaderRegistry.addSearchPaths(paths);
+                                        // paths.size() is the REQUESTED count, pre-dedupe:
+                                        // addSearchPaths silently drops already-registered
+                                        // paths, so the number actually registered may be
+                                        // lower. Logged inside the guard so an empty reply
+                                        // doesn't print a misleading "requested 0".
+                                        qCDebug(lcEffect)
+                                            << "loadShaderRegistryFromDbus: requested" << paths.size()
+                                            << "search paths (pre-dedupe) — registry effect count="
+                                            << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
                                     }
-                                    qCDebug(lcEffect)
-                                        << "loadShaderRegistryFromDbus: added" << paths.size()
-                                        << "search paths — registry effect count="
-                                        << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
                                 });
         });
 }

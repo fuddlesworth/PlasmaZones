@@ -19,3 +19,11 @@ static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTexture
                   == PhosphorRendering::kMaxUserTextures,
               "AnimationShaderContract::kMaxUserTextureSlots must match "
               "PhosphorRendering::kMaxUserTextures - 1 (slot 0 reserved for surface)");
+
+// Compile-time pin: the animation contract's declared buffer-pass cap must
+// match the daemon RHI's binding budget. Both are 4 today; the contract header
+// claims this pin exists but had no static_assert, so bumping one alone would
+// silently drop the tail of a pack's buffer passes at load with no build break.
+static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxBufferPasses
+                  == PhosphorRendering::kMaxBufferPasses,
+              "AnimationShaderContract::kMaxBufferPasses must match PhosphorRendering::kMaxBufferPasses");

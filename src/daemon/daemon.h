@@ -279,29 +279,33 @@ private:
      *        so QML `PhosphorMotionAnimation { profile: "<path>" }` resolves
      *        to the user's active animation settings and live-updates on edit.
      *
-     * Phase 4 sub-commit 7. Scans the XDG `plasmazones/curves` and
-     * `plasmazones/profiles` directories for user-authored definitions
-     * (per decision U's consumer-namespace pattern) and installs
-     * live-reload watchers. Registers the daemon's active animation
-     * Profile under every well-known `ProfilePaths` shell path that
-     * maps to PlasmaZones's single-Profile settings surface so QML
-     * consumers can reference specific paths (`widget.zoneHighlight`,
-     * `osd.show`, etc.) without the daemon carrying per-event
-     * sub-profiles — future sub-commits can diverge paths when
-     * per-event customisation is actually exposed to users.
+     * Scans the XDG `plasmazones/curves` and `plasmazones/profiles`
+     * directories for user-authored definitions and installs live-reload
+     * watchers (via constructAnimationLoaders); seeds the shell animation
+     * family defaults (`seedShellAnimationFamilies`) and installs their
+     * owner tag as the registry's low-precedence tag so seed entries never
+     * ship in the published motion tree; publishes the three QML statics
+     * (`PhosphorCurve::setDefaultRegistry`,
+     * `PhosphorProfileRegistry::setDefaultRegistry`,
+     * `QtQuickClockManager::setDefaultManager`) that `stop()` clears; and
+     * registers the daemon's active animation Profile under the
+     * settings-driven path set — `ProfilePaths::Global` today
+     * (kSettingsDrivenProfilePaths) — with every other path resolving
+     * through inheritance.
      *
-     * Reconnects to `Settings::animationProfileChanged` for live
-     * updates; each emit re-registers the active Profile against the
-     * same path set, firing `PhosphorProfileRegistry::profileChanged`
-     * on each — bound `PhosphorMotionAnimation` consumers re-resolve
-     * transparently.
+     * Live updates route through the coalescing 0 ms trampoline
+     * `requestAnimationProfilePublish`: `Settings::animationProfileChanged`,
+     * `ProfileLoader::profilesChanged`, and `CurveLoader::curvesChanged` all
+     * arm it, and the publish re-registers only when the registry observes a
+     * value-or-owner change.
      */
     void setupAnimationProfiles();
     void setupAnimationShaderEffects();
     void setupSurfaceShaderEffects();
 
     // init() phase methods, run in order from the thin init() (daemon.cpp); the
-    // order is load-bearing. Defined across daemon/init_*.cpp + shader_warmup.cpp.
+    // order is load-bearing. Defined across daemon/init_*.cpp, shader_warmup.cpp
+    // and animation_profiles.cpp.
     void setupShaderWarmBakes();
     void initLayoutAndSettingsWiring();
     void initCoreAdaptors();
@@ -345,7 +349,8 @@ private:
     /// client that just (re)connected and knows nothing of it.
     void publishSessionIdle(bool idle, bool force = false);
     /// Push the current `Settings::animationProfile()` into the registry
-    /// under the shell's well-known paths. Called from
+    /// under the settings-driven paths (`ProfilePaths::Global` today,
+    /// kSettingsDrivenProfilePaths). Called from
     /// `setupAnimationProfiles()` at startup and from the coalescing
     /// trampoline `requestAnimationProfilePublish` on every
     /// `animationProfileChanged` / `profilesChanged` /
@@ -752,8 +757,14 @@ private:
     /// destroy-time `setDefaultManager(nullptr)` call in `stop()` drops
     /// the published handle before the unique_ptr destructs.
     std::unique_ptr<PhosphorAnimation::QtQuickClockManager> m_clockManager;
-    std::unique_ptr<Settings> m_settings;
+    // Declared BEFORE m_settings so reverse-order destruction frees it AFTER
+    // m_settings: the ctor's adjacentThresholdChanged lambda (a m_settings->this
+    // connection stop() deliberately does not sever) dereferences m_zoneDetector,
+    // and if m_zoneDetector died first a signal emitted during m_settings
+    // teardown would deref freed memory. Constructed from nullptr, so it has no
+    // dependency on m_settings and the order flip is safe.
     std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;
+    std::unique_ptr<Settings> m_settings;
     // Single source of truth for live-window instance identity + metadata.
     // Populated by the kwin-effect bridge. Consumers query appIdFor() etc.
     // instead of parsing composite windowId strings.
@@ -952,10 +963,11 @@ private:
     std::unique_ptr<PhosphorAnimation::ProfileLoader> m_profileLoader;
 
     /// Coalescing trampoline for the publish path — see
-    /// `requestAnimationProfilePublish`. Single-shot, parented to the
-    /// daemon so destruction is automatic; only its `pending` flag is
-    /// used (the timeout slot fires at 0 ms regardless of when the
-    /// trampoline was first armed during the current event-loop tick).
+    /// `requestAnimationProfilePublish`. Single-shot, and a VALUE member (no
+    /// QObject parent), so destruction is automatic. Paired with the separate
+    /// `m_animationPublishPending` flag declared below (the timeout slot
+    /// fires at 0 ms regardless of when the trampoline was first armed
+    /// during the current event-loop tick).
     QTimer m_animationPublishTimer;
     bool m_animationPublishPending = false;
 
@@ -1129,6 +1141,19 @@ private:
     // Single-threaded pool for shader baking — QShaderBaker/glslang is not
     // thread-safe for concurrent compilation (SIGSEGV in QSpirvCompiler).
     QThreadPool m_shaderBakePool;
+    /// Zone-path shadersChanged → warm-bake wiring, held so a stop() → init()
+    /// cycle disconnects the prior handler instead of stacking a second one
+    /// (m_shaderRegistry is ctor-owned and survives stop(), unlike the
+    /// animation/surface registries which are recreated each init).
+    QMetaObject::Connection m_zoneWarmBakeConnection;
+    /// Skip-unchanged gate for the warm bakes: "<category>:<id>" → last
+    /// scheduled fingerprint (vert path + vert mtime + frag path + frag mtime +
+    /// param preamble). The fingerprint is built as a SUPERSET of the real bake
+    /// cache key (ShaderNodeRhi::shaderCacheKey, which also folds the file
+    /// mtimes in), so an unchanged pack is skipped on a whole-catalog registry
+    /// emit while a pack whose .frag/.vert body was edited re-warms — the paths
+    /// alone would stay identical across such an edit and wrongly suppress it.
+    QHash<QString, QString> m_scheduledBakeFingerprints;
 
     // Geometry update debouncing to prevent cascade of redundant recalculations
     QTimer m_geometryUpdateTimer;

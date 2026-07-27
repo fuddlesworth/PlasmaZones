@@ -40,6 +40,13 @@ public:
     // Upper bounds — anything beyond 1 hour is clearly malformed.
     static constexpr qreal MaxDurationMs = 60.0 * 60.0 * 1000.0;
     static constexpr int MaxStaggerIntervalMs = 60 * 60 * 1000;
+    /// Upper bound on `minDistance`, in pixels. Sized well past any real display
+    /// diagonal, so it never rejects a value a user could mean, while giving the
+    /// validator a DOMAIN bound like its two siblings above rather than the
+    /// int range: a minDistance of two billion pixels is not a large threshold,
+    /// it is "never animate anything", which is exactly what these caps exist
+    /// to refuse.
+    static constexpr int MaxMinDistancePx = 100000;
 
     Profile() = default;
 
@@ -102,7 +109,33 @@ public:
     QJsonObject toJson() const;
 
     /// Parse from JSON. Missing keys produce unset fields. Curve resolved
-    /// via @p registry. Out-of-range values are rejected (logged, left unset).
+    /// via @p registry. `duration` / `minDistance` / `staggerInterval` that
+    /// are out of range, OR that hold something which is not a JSON number,
+    /// are rejected: logged and left unset, so the field inherits from a parent
+    /// profile or falls back to the library default. The type check is not
+    /// redundant — `QJsonValue::toDouble(default)` hands back the default for
+    /// any non-number, and every library default passes the range checks, so
+    /// without it a malformed value would land ENGAGED and block inheritance.
+    ///
+    /// `curve` resolves through @p registry and is left NULL when the key is
+    /// absent or names no registered curve, so an unknown curve inherits rather
+    /// than pinning the library default. `presetName` takes any string as-is (it
+    /// is decorative, so there is nothing to range-check), but a NON-string value
+    /// is rejected, warned about, and leaves the field unset like the others.
+    ///
+    /// Every diagnostic mentioned here is RATE-LIMITED to once per (field,
+    /// reason) per process. `Settings::animationProfile()` parses through here
+    /// with no cache and the daemon republishes on a settings slider's drag path,
+    /// so an unlimited warning would emit tens of times a second for the length
+    /// of a drag. A user debugging a hand-edited profile therefore sees the
+    /// warning on the first parse only.
+    ///
+    /// `sequenceMode` is the one exception. A value that is out of range or
+    /// not a known enumerator is logged and replaced with
+    /// `DefaultSequenceMode` ENGAGED, which blocks inheritance rather than
+    /// allowing it. Leaving it unset would let a parent's Cascade through on
+    /// a leaf whose own file says otherwise, which reads as the override
+    /// having silently done nothing.
     static Profile fromJson(const QJsonObject& obj, const CurveRegistry& registry);
 
     bool operator==(const Profile& other) const;

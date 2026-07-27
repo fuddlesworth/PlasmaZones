@@ -16,8 +16,10 @@ import org.kde.kirigami as Kirigami
  * keeps following the parent chain and the Global defaults. Flipping the
  * Override toggle ON just opens the timing editor (nothing is written
  * until a control is actually edited); flipping it OFF deletes the
- * override file. The daemon's existing `ProfileLoader` watches that dir
- * and live-reloads the registry.
+ * override file. The daemon's `ProfileLoader` watches that dir and live-reloads
+ * the registry, and the settings app runs one of its own over the same dir, so
+ * an edit made outside this page reaches every card as a tree-wide
+ * `overrideChanged("")` broadcast.
  *
  * Controls: timing-mode (Easing/Spring), curve thumbnail with
  * "Customize…" dialog, duration slider, inheritance breadcrumb, and — on
@@ -32,23 +34,22 @@ import org.kde.kirigami as Kirigami
  * Optional properties:
  *   - isParentNode: bool — flips the inheritance banner copy
  *   - collapsible: bool — header click collapses the body
- * Internal state (`overrideEnabled`, the `current*` and `locked*` aliases) is
- * public only so the aliases resolve, and must not be assigned by consumers:
- * the card seeds it from the profile tree and commits it back, so an outside
- * write is either overwritten on the next refresh or persisted as a user edit.
- *
  *   - simpleTiming: bool — hides the timing-mode combo and the curve editor
  *     (the per-field write rule already keeps a duration-only edit from
  *     pinning the inherited curve; simple mode just trims the chrome)
  *   - mirrorPaths: list<string> — extra event paths every write is echoed to,
  *     so one card can front several events (open mirrored onto close)
+ *
+ * The `current*` and `locked*` aliases, and `overrideEnabled`, are public only
+ * because the aliases have to resolve and the toggle state is derived. Do not
+ * assign them from outside: the card seeds them from the profile tree and
+ * commits them back, so an outside write is either overwritten on the next
+ * refresh or persisted as a user edit.
  */
 Item {
-    // Both the curve editor and the colour picker now live inside the
-    // shared `AnimationProfileEditor`. Removing them from this file
-    // keeps the dialog ownership in one place — when the editor is
-    // hidden (override toggle off + shader leg unsupported) so are
-    // its dialogs. The card no longer hosts any dialogs of its own.
+    // The curve editor and colour picker live in the shared
+    // `AnimationProfileEditor`, so when the editor is hidden so are its dialogs.
+    // This card hosts none of its own.
 
     id: root
 
@@ -66,43 +67,16 @@ Item {
     /// are write-only followers.
     ///
     /// Mirroring is intrinsic to the write, deliberately NOT implemented by
-    /// observing profile-change signals: the shader signal is a
-    /// path-agnostic broadcast, so an observer cannot tell a user edit on
-    /// this card from an unrelated card's edit, a Discard, or a profile
-    /// switch, and would clobber divergent mirror values (or re-dirty the
-    /// config immediately after a Discard). Writing through the same call
-    /// the user's action triggers has none of those failure modes.
+    /// observing profile-change signals: the shader signal is a path-agnostic
+    /// broadcast, so an observer cannot tell a user edit on this card from an
+    /// unrelated card's edit, a Discard, or a profile switch, and would clobber
+    /// divergent mirror values. Writing through the call the user's action
+    /// triggers has none of those failure modes.
     /// Deliberately `var` (a JS array), not `list<string>`: _writePaths does
     /// `[eventPath].concat(mirrorPaths)`, and Array.prototype.concat SPREADS
     /// only true JS arrays. A QML list proxy would be appended as one element,
     /// silently turning every mirror write into a write to a bogus path.
     property var mirrorPaths: []
-
-    /// Raw stored TIMING profile per write path, refreshed by refreshFromTree.
-    /// _setOverrideMerged and _storedStateKey read it to merge over, and to
-    /// compare against, each path's own stored fields; _clearFieldOnAll and
-    /// the _primaryRaw ownership captions read it too. It exists to avoid DISK
-    /// I/O: the first two run from the duration slider's durationEdited, i.e. every tick
-    /// of a drag, and reading each path's stored profile there meant a
-    /// synchronous file open per path per reader per tick. With the cache the
-    /// only timing reads left on a tick are refreshFromTree's own, which seeds
-    /// it at exactly one open per path (the primary reuses the read
-    /// refreshFromTree already performs). Re-entrancy is _committing's job,
-    /// not this cache's.
-    property var _pathProfiles: ({})
-
-    /// The shader-axis counterpart, seeded on the same pass and read by
-    /// _storedStateKey. rawShaderProfile is not a file open but it is not cheap
-    /// either: every call re-reads the whole tree through
-    /// Settings::shaderProfileTree(), which does QJsonObject::fromVariantMap
-    /// plus ShaderProfileTree::fromJson plus a full prune walk. _storedStateKey
-    /// runs once per write path per divergence pass, so an uncached read there
-    /// made a mirrored card's drag tick cost one full tree parse per path on
-    /// top of the timing reads. With both snapshots seeded together, the reads
-    /// left on a tick are refreshFromTree's own on BOTH axes: one timing open
-    /// and one tree parse per path, with the primary reusing the reads
-    /// refreshFromTree already performs for its own toggle state.
-    property var _pathShaderProfiles: ({})
 
     /// True while _setOverrideMerged is writing, so the overrideChanged each
     /// write emits does not re-enter refreshFromTree mid-loop.
@@ -150,11 +124,32 @@ Item {
     /// to commit a snapshot of the inherited values just to stay visually on
     /// (overrideEnabled is derived from stored state), which silently pinned
     /// a copy of the Global curve and duration the moment it was flipped.
-    /// Cleared by the toggle's OFF path; not persisted.
+    /// Set by the toggle's ON path AND by a successful per-field revert (which
+    /// would otherwise collapse the editor the user is working in, once the
+    /// last stored field goes). Cleared by the toggle's OFF path, and by
+    /// `refreshFromTree` when an EXTERNAL clear moves `overrideEnabled` from
+    /// true to false — a transition, not just a false reading, because the
+    /// broadcasts every card accepts would otherwise close an editor another
+    /// card's edit had nothing to do with. Not persisted.
     property bool _editingTiming: false
-    /// The primary path's stored profile, from the cache refreshFromTree
-    /// seeds (so no extra file open). Drives the per-field status captions.
-    readonly property var _primaryRaw: root._pathProfiles[root.eventPath] || ({})
+    /// "The timing editor is open." Spelled once, because it drives the toggle,
+    /// the section's visibility AND both edit guards — a fifth site that
+    /// remembered only one half would write while the section was hidden.
+    readonly property bool _timingEditorOpen: root.overrideEnabled || root._editingTiming
+    /// This path's own stored TIMING profile, assigned by refreshFromTree from
+    /// the read it already performs (so no extra file open). Drives the
+    /// per-field status captions and the ownership tests below.
+    ///
+    /// Only the PRIMARY path's, not a map over the whole write group. The group
+    /// writers used to need every path's stored profile to merge over, and
+    /// cached them here to stay off the file-open path on a drag tick; that
+    /// merge now happens C++-side against its own memoised reads, so the cache
+    /// and its per-path read loop are gone with it.
+    ///
+    /// Not `readonly` because it is assigned rather than derived, but
+    /// `refreshFromTree` is its only writer — an outside assignment is
+    /// overwritten on the next refresh, like every other derived value here.
+    property var _primaryRaw: ({})
     /// Whether this event DIRECTLY owns each timing field. Matches the
     /// presence tests the resolver uses: any engaged duration counts, and a
     /// curve counts only as a non-empty string.
@@ -220,10 +215,11 @@ Item {
     /// too: a card that pins only the duration still has to track Global
     /// curve changes. Only a card owning BOTH fields short-circuits before
     /// the walk — Global cannot reach any of its controls. The overlay of the
-    /// card's own stored fields uses the _pathProfiles cache, so the cost
-    /// stays one chain walk and no file open. The walk is registry-served in
-    /// the app, though resolvedProfile does fall back to a per-ancestor file
-    /// read when a level has no registry entry.
+    /// card's own stored fields reads `_primaryRaw`, already in hand, so the
+    /// cost stays one chain walk with no file open on THIS side. resolvedProfile
+    /// itself reads a per-ancestor override file first and consults the
+    /// registry only where no user file exists, which is what keeps the walk
+    /// honest immediately after a mutation.
     function _reseedFromInherited() {
         root._inheritRev = root._inheritRev + 1;
         if (root._ownsCurveOverride && root._ownsDurationOverride)
@@ -250,7 +246,10 @@ Item {
     // "All Panel Events" parent or `panel.slideIn`) and silently
     // persist a dead override that the daemon resolver would shadow
     // any user-intended setting with via deeper-leaf-wins overlay.
-    // Source-of-truth list: `src/core/animationshadersupportedpaths.h`.
+    // Source-of-truth list: `src/core/types/animationshadersupportedpaths.h`.
+    // On the card ROOT, not in the editor: the card reaches settingsController
+    // and hands the answer down as `shaderLegSupported`, which keeps the editor
+    // reusable by hosts with no event path (GlobalTimingDefaultsCard).
     readonly property bool _shaderLegSupported: settingsController.animationsPage.supportsShaderLeg(root.eventPath)
     // Number of shader overrides on paths strictly DEEPER than this card's
     // eventPath. Only meaningful for parent-node cards: a stale leaf
@@ -299,7 +298,7 @@ Item {
             const s = CurvePresets.parseSpring(curve);
             return i18n("Spring · ω=%1 · ζ=%2", s.omega.toFixed(1), s.zeta.toFixed(2));
         }
-        return i18n("%1 · %2 ms", CurvePresets.curveDisplayName(curve), Math.round(dur));
+        return i18nc("curve, then duration in milliseconds", "%1 · %2 ms", CurvePresets.curveDisplayName(curve), Math.round(dur));
     }
 
     function parentChainText() {
@@ -335,301 +334,6 @@ Item {
         root._setShaderOverrideOnAll(effectId, next);
     }
 
-    // ── Group writers ───────────────────────────────────────────────
-    // Every controller write this card performs goes through one of
-    // these so `mirrorPaths` cannot be silently bypassed by a future
-    // call site.
-    /// Suppressed the same way the timing writer is: each setShaderOverride
-    /// relays a path-agnostic shaderProfileChanged(QString()) broadcast, so an
-    /// N-path write costs N full refreshes here (and every OTHER card on the
-    /// page refreshes N times too — that part is inherent to the broadcast and
-    /// out of this card's hands). Reached from the param sliders, so this runs
-    /// at drag rate.
-    function _setShaderOverrideOnAll(effectId, params) {
-        root._committingShader = true;
-        try {
-            const paths = root._writePaths;
-            for (var i = 0; i < paths.length; ++i) {
-                // Skip paths with no shader leg, mirroring the toggle-off guard
-                // (_anyWritePathSupportsShaderLeg). setShaderOverride already
-                // rejects such a path, so this only avoids a known no-op call and
-                // its qCWarning. The divergence-latch it would otherwise cause on
-                // a mixed mirror set is prevented in _storedStateKey, which omits
-                // the shader axis for non-supporting paths — the two guards
-                // together keep the banner off for a set mixing supporting and
-                // non-supporting paths. A no-op for the current mirror set (both
-                // window.appearance legs support shaders).
-                if (!settingsController.animationsPage.supportsShaderLeg(paths[i]))
-                    continue;
-                settingsController.animationsPage.setShaderOverride(paths[i], effectId, params);
-            }
-        } finally {
-            // Same try/finally reasoning as _setOverrideMerged: QML has no
-            // RAII, and a latched flag here would stop the card tracking
-            // external shader edits for the rest of the session.
-            root._committingShader = false;
-            root.refreshShaderFromTree();
-            root.refreshFromTree();
-        }
-    }
-
-    /// Writes `profile` to every path this card controls, merged over each
-    /// path's OWN stored profile so fields this card does not edit
-    /// (minDistance, sequenceMode, staggerInterval, presetName) survive
-    /// instead of being truncated. A motion set can write those to a leaf
-    /// (see motionsetdomain.cpp), and a card that overwrote the whole map
-    /// would silently drop them the moment the user nudged Duration.
-    ///
-    /// `curveFromCommit` is a curve the user has actually edited, so it
-    /// travels to every path. Pass `undefined` whenever the user did not
-    /// edit the curve (a duration commit, or simple mode where no curve
-    /// control exists): each path then keeps its OWN curve, so a path that
-    /// owns one has it preserved and a path that inherits stays inheriting.
-    /// The card must not decide a curve on the user's behalf.
-    function _setOverrideMerged(profile, curveFromCommit) {
-        // Suppress the per-write refresh: setOverride emits overrideChanged
-        // synchronously, so without this an N-path card pays N refreshes per
-        // tick of a duration drag, each re-reading every path. One refresh
-        // after the loop sees the same end state. For the common N=1 card this
-        // is a wash (one emit, one refresh, either way) — the saving is real
-        // only for a mirrored card, which is why the flag's REAL job is the
-        // consistency of the loop rather than the saving.
-        // try/finally, not a straight-line set/clear pair: QML has no RAII, and
-        // anything that throws inside the loop (a Q_INVOKABLE argument
-        // conversion, or settingsController resolving undefined during a page
-        // teardown) would otherwise leave this latched TRUE. That is not
-        // transient — onOverrideChanged would early-return for the rest of the
-        // session, so the card would stop tracking Discard, profile switches
-        // and external edits while still writing on every slider tick, and the
-        // list's Loaders latch built and never unload, so it is never
-        // reconstructed to recover.
-        root._committing = true;
-        try {
-            root._setOverrideMergedLoop(profile, curveFromCommit);
-        } finally {
-            // Both the flag AND the refresh are in the finally. Every
-            // overrideChanged the loop emitted was deliberately swallowed on
-            // the promise that one refresh follows it, so a throw that skipped
-            // the refresh would break exactly the invariant the flag exists to
-            // defend: the writes that DID land would never reach the card, and
-            // _pathProfiles / overrideEnabled / the divergence banner would
-            // stay stale until some unrelated signal arrived.
-            root._committing = false;
-            root._inheritRev++;
-            root.refreshFromTree();
-        }
-    }
-
-    /// The write loop itself. Split out so _setOverrideMerged's try/finally
-    /// reads as one statement and the flag's lifetime is obvious.
-    function _setOverrideMergedLoop(profile, curveFromCommit) {
-        const paths = root._writePaths;
-        for (var i = 0; i < paths.length; ++i) {
-            var raw = root._pathProfiles[paths[i]] || ({});
-            var perPath = Object.assign({}, raw);
-            Object.assign(perPath, profile);
-            if (curveFromCommit !== undefined)
-                perPath.curve = curveFromCommit;
-            else if (typeof raw.curve === "string" && raw.curve.length > 0)
-                perPath.curve = raw.curve;
-            else
-                delete perPath.curve;
-            settingsController.animationsPage.setOverride(paths[i], perPath);
-        }
-    }
-
-    /// True when ANY write path takes a shader leg. _shaderLegSupported answers
-    /// for the PRIMARY only, so gating a group mutation on it would skip a
-    /// mirror that does support one: that mirror's shader override would
-    /// survive the toggle, and _storedStateKey compares the shader map
-    /// unconditionally, so the divergence banner would latch on with no control
-    /// able to clear it. Matches the group-writer shape of every other mutation
-    /// on this card.
-    function _anyWritePathSupportsShaderLeg() {
-        const paths = root._writePaths;
-        for (var i = 0; i < paths.length; ++i) {
-            if (settingsController.animationsPage.supportsShaderLeg(paths[i]))
-                return true;
-        }
-        return false;
-    }
-
-    /// Clears the shader override on every write path, returning the event to
-    /// inheritance. Distinct from writing the engaged-empty sentinel, which is
-    /// an explicit "None" that BLOCKS inheritance — that is the picker's job,
-    /// not the toggle's.
-    function _clearShaderOverrideOnAll() {
-        root._committingShader = true;
-        try {
-            const paths = root._writePaths;
-            for (var i = 0; i < paths.length; ++i)
-                settingsController.animationsPage.clearShaderOverride(paths[i]);
-        } finally {
-            root._committingShader = false;
-            root.refreshShaderFromTree();
-            root.refreshFromTree();
-        }
-    }
-
-    /// Suppressed like the write path: each clearOverride emits
-    /// overrideChanged synchronously, so an unguarded loop pays one full
-    /// refresh per path (each re-reading EVERY path) and recomputes the
-    /// divergence banner against a half-cleared group, flickering it on
-    /// mid-loop.
-    function _clearOverrideOnAll() {
-        root._committing = true;
-        try {
-            const paths = root._writePaths;
-            for (var i = 0; i < paths.length; ++i)
-                settingsController.animationsPage.clearOverride(paths[i]);
-        } finally {
-            root._committing = false;
-            root._inheritRev++;
-            root.refreshFromTree();
-        }
-    }
-
-    /// Removes ONE timing field (`"curve"` or `"duration"`) from every write
-    /// path's stored override, returning that field to inheritance while the
-    /// other field (and the motion-set fields) stay put. A path whose
-    /// override becomes empty has its file deleted outright — an empty
-    /// override file and no override resolve identically, but the toggle and
-    /// the pending-changes walk both key on file existence. Suppressed and
-    /// group-written like every other mutation on this card.
-    function _clearFieldOnAll(field) {
-        root._committing = true;
-        try {
-            const paths = root._writePaths;
-            for (var i = 0; i < paths.length; ++i) {
-                var raw = Object.assign({}, root._pathProfiles[paths[i]] || settingsController.animationsPage.rawProfile(paths[i]) || ({}));
-                if (raw[field] === undefined)
-                    continue;
-                delete raw[field];
-                if (Object.keys(raw).length === 0)
-                    settingsController.animationsPage.clearOverride(paths[i]);
-                else
-                    settingsController.animationsPage.setOverride(paths[i], raw);
-            }
-        } finally {
-            root._committing = false;
-            root._inheritRev++;
-            root.refreshFromTree();
-        }
-    }
-
-    // Returns the number cleared, or -1 if ANY path refused (the
-    // controller's "async discard in flight" sentinel). Summing a -1 into
-    // the count would make a refusal indistinguishable from a smaller
-    // successful clear.
-    function _clearShaderOverrideDescendantsOnAll() {
-        const paths = root._writePaths;
-        var cleared = 0;
-        var refused = false;
-        for (var i = 0; i < paths.length; ++i) {
-            const n = settingsController.animationsPage.clearShaderOverrideDescendants(paths[i]);
-            if (n < 0)
-                refused = true;
-            else
-                cleared += n;
-        }
-        return refused ? -1 : cleared;
-    }
-
-    /// True iff every write path already carries @p effectId as its DIRECT
-    /// shader override (the empty string being the engaged-empty sentinel,
-    /// which is distinct from "no override at all").
-    function _allWritePathsHold(effectId) {
-        const paths = root._writePaths;
-        for (var i = 0; i < paths.length; ++i) {
-            const raw = settingsController.animationsPage.rawShaderProfile(paths[i]);
-            const direct = (raw && typeof raw.effectId === "string") ? raw.effectId : undefined;
-            if (direct !== effectId)
-                return false;
-        }
-        return true;
-    }
-
-    /// Canonical form of one path's stored state: its direct timing profile
-    /// and its direct shader profile, both coerced to {} when absent so a
-    /// missing override and an empty one compare equal. Both come back as
-    /// QVariantMaps, whose JS key order is the map's own sorted order, so two
-    /// paths holding the same values always stringify identically.
-    /// Prefers the _pathProfiles / _pathShaderProfiles snapshots when they hold
-    /// this path: both are refreshed on the same pass that calls this, and both
-    /// underlying reads are expensive per call (a synchronous file open, and a
-    /// full shader-tree parse), so reading either here defeated the caches'
-    /// whole purpose on every drag tick. The uncached reads remain as the
-    /// fallback for a path the snapshots have not seen.
-    function _storedStateKey(path) {
-        const cached = root._pathProfiles[path];
-        const profile = cached || settingsController.animationsPage.rawProfile(path) || ({});
-        // Shader axis only for paths that can actually host a shader leg. A
-        // non-supporting path always stores {} (the controller rejects a shader
-        // write to it, and _setShaderOverrideOnAll skips it), so comparing its
-        // permanently-empty shader against a supporting path's real one would
-        // latch the divergence banner over an axis no control could ever
-        // converge. For the current all-supporting mirror set this is a no-op;
-        // it only matters for a future set mixing supporting and non-supporting
-        // paths. Non-supporting paths contribute a constant {} so they never
-        // diverge on this axis.
-        const shaderComparable = settingsController.animationsPage.supportsShaderLeg(path);
-        const cachedShader = shaderComparable ? root._pathShaderProfiles[path] : undefined;
-        const shader = shaderComparable ? (cachedShader || settingsController.animationsPage.rawShaderProfile(path) || ({})) : ({});
-        // Divergence is measured on exactly what this card CAN converge with a
-        // single edit: duration (commitDurationOverride), the curve
-        // (commitCurveOverride) and the whole shader leg
-        // (_setShaderOverrideOnAll, reached from the picker, the param
-        // sliders, randomize and reset). Every group writer loops
-        // _writePaths, so a divergence on any counted axis really is
-        // converged by the next edit on that axis, which is what the banner
-        // promises. Writes are per field now, so converging the duration no
-        // longer converges the curve as a side effect — a curve-only
-        // divergence stays (and stays reported) until the user edits the
-        // curve itself.
-        //
-        // The curve is conditional on !simpleTiming because simple mode has
-        // no curve control at all: no edit there can converge a divergent
-        // mirror curve, and counting it would latch the banner ON permanently
-        // over an axis nothing on the card can clear. Advanced mode counts it
-        // because commitCurveOverride and the curve revert link both loop
-        // every write path.
-        //
-        // The motion-set fields (minDistance, sequenceMode, staggerInterval,
-        // presetName) are left out for the same reason: the merged writer
-        // preserves each path's own, so counting them latched the banner with
-        // no control able to clear it. An allowlist, so a new stored-profile
-        // field cannot latch it again unless the card writes it.
-        const compared = {};
-        if (profile.duration !== undefined)
-            compared.duration = profile.duration;
-        if (!root.simpleTiming && profile.curve !== undefined)
-            compared.curve = profile.curve;
-        return JSON.stringify([compared, shader]);
-    }
-
-    /// Recompute _mirrorsDiverged. Called from refreshFromTree (which every
-    /// shader-side refresh chains into), so it tracks every signal that can move
-    /// either tree.
-    function _refreshMirrorDivergence() {
-        const mirrors = root._validMirrorPaths;
-        if (mirrors.length === 0) {
-            root._mirrorsDiverged = false;
-            root._divergentPathCount = 0;
-            return;
-        }
-        const primary = root._storedStateKey(root.eventPath);
-        var diverged = 0;
-        for (var i = 0; i < mirrors.length; ++i) {
-            if (root._storedStateKey(mirrors[i]) !== primary)
-                ++diverged;
-        }
-        root._mirrorsDiverged = diverged > 0;
-        // Plus one for the primary, which every diverging mirror differs FROM
-        // and which the converging edit also rewrites. Zero when nothing
-        // diverges, so the banner never renders a stale count.
-        root._divergentPathCount = diverged > 0 ? diverged + 1 : 0;
-    }
-
     /// Batch write — randomize rolls N values that should land as one
     /// `setShaderOverride` round-trip. Same stale-effect guard as
     /// `_writeShaderParam`.
@@ -639,6 +343,49 @@ Item {
 
         root.currentShaderParams = allParams;
         root._setShaderOverrideOnAll(effectId, allParams);
+    }
+
+    // ── Group writers ───────────────────────────────────────────────
+    // The bodies live in AnimationEventCardWriters so this file stays under the
+    // size ceiling. These forwarders keep every `root._foo(...)` call site —
+    // handlers, bindings and the QML-contract scrape — reading exactly as
+    // before. `arguments` forwarding rather than named parameters so a
+    // signature change needs no edit here.
+    function _setShaderOverrideOnAll() {
+        return writers._setShaderOverrideOnAll.apply(writers, arguments);
+    }
+    function _setOverrideMerged() {
+        return writers._setOverrideMerged.apply(writers, arguments);
+    }
+    function _anyWritePathSupportsShaderLeg() {
+        return writers._anyWritePathSupportsShaderLeg.apply(writers, arguments);
+    }
+    function _clearShaderOverrideOnAll() {
+        return writers._clearShaderOverrideOnAll.apply(writers, arguments);
+    }
+    function _clearOverrideOnAll() {
+        return writers._clearOverrideOnAll.apply(writers, arguments);
+    }
+    function _clearFieldOnAll() {
+        return writers._clearFieldOnAll.apply(writers, arguments);
+    }
+    function _clearShaderOverrideDescendantsOnAll() {
+        return writers._clearShaderOverrideDescendantsOnAll.apply(writers, arguments);
+    }
+    function _allWritePathsHold() {
+        return writers._allWritePathsHold.apply(writers, arguments);
+    }
+    function _refreshMirrorDivergence() {
+        return writers._refreshMirrorDivergence.apply(writers, arguments);
+    }
+
+    // Never read by name — the forwarders above go through the `writers` id.
+    // The property exists to give the object an owner so it lives as long as
+    // the card. Deleting it as "unused" takes every group writer with it.
+    readonly property AnimationEventCardWriters _writers: AnimationEventCardWriters {
+        id: writers
+
+        card: root
     }
 
     function refreshShaderFromTree() {
@@ -669,11 +416,13 @@ Item {
         root._shadowingChildrenCount = shadowing;
         // Divergence is deliberately NOT recomputed here. refreshFromTree owns
         // it, and every call site of this function calls refreshFromTree
-        // immediately after (the two group writers' finally blocks,
-        // onShaderProfileChanged, and Component.onCompleted), so the banner
-        // still tracks the shader tree. Recomputing on both would walk every
-        // write path twice per shader-param slider tick, which is drag rate.
-        // A future caller that runs this ALONE must call refreshFromTree too,
+        // alongside it (the three shader group writers' finally blocks and
+        // onShaderProfileChanged call it immediately after; Component.onCompleted
+        // runs refreshFromTree FIRST and this function second, which is
+        // equally fine because refreshFromTree recomputes the divergence
+        // itself from live reads, so the order between the two is moot).
+        //
+        // A future caller that runs this ALONE must call refreshFromTree too
         // or the banner goes stale.
     }
 
@@ -698,22 +447,35 @@ Item {
             root.currentSpringZeta = s.zeta;
         } else {
             root.currentTimingMode = CurvePresets.timingModeEasing;
-            if (typeof curve === "string" && curve.length > 0)
-                root.currentEasingCurve = curve;
+            // With a default fallback, matching the duration line below and
+            // inheritSummaryText's read of the same value: without the else,
+            // an absent curve (mid-warmup {} resolution, or resolvedProfile's
+            // empty-path early return) kept the property's PREVIOUS value —
+            // which after a revert is exactly the just-reverted curve, the
+            // stale-view class this card's fix exists to close — while the
+            // italic "Current:" line already showed the default.
+            root.currentEasingCurve = (typeof curve === "string" && curve.length > 0) ? curve : CurvePresets.defaultEasingCurve;
         }
         root.currentDuration = effective.duration !== undefined ? effective.duration : CurvePresets.defaultDurationMs;
     }
 
-    function refreshFromTree() {
+    /// @param selfDriven true when the caller is one of this card's own group
+    /// writers, refreshing after a write it just made. Only the `_editingTiming`
+    /// latch reads it: an EXTERNAL clear must close the timing editor, while our
+    /// own per-field revert must not close it under the user mid-edit. Every
+    /// other caller (Component.onCompleted, the two signal handlers) leaves it
+    /// undefined, which reads as external.
+    function refreshFromTree(selfDriven) {
         var raw = settingsController.animationsPage.rawProfile(root.eventPath);
-        // Every caller that can MOVE the timing chain bumps _inheritRev first
-        // (_setOverrideMerged, onOverrideChanged), so the cached walk is
-        // current here and a second C++ chain walk would be redundant. The two
-        // that do not bump cannot move it: Component.onCompleted runs before
-        // the binding has ever evaluated, and both shader-side callers
-        // (onShaderProfileChanged and _setShaderOverrideOnAll's finally) move
-        // the shader tree, which the timing chain does not read. A fifth caller
-        // that can move the chain MUST bump before calling.
+        // Every caller that can MOVE the timing chain bumps _inheritRev before
+        // calling — the three timing group writers and onOverrideChanged — so
+        // the cached walk is current here and a second C++ chain walk would be
+        // redundant. The callers that do not bump cannot move it:
+        // Component.onCompleted runs before the binding has ever evaluated, and
+        // the shader-side ones (onShaderProfileChanged and the three shader
+        // group writers' finally blocks) move the shader tree, which the timing
+        // chain does not read. Any NEW caller that can move the chain MUST bump
+        // before calling.
         var resolved = root._inheritResolved;
         var hasRaw = raw && Object.keys(raw).length > 0;
         // The card's "Override" toggle reflects ANY direct override at
@@ -744,7 +506,29 @@ Item {
         var hasShaderEffect = Boolean(rawShader && typeof rawShader.effectId === "string" && rawShader.effectId.length > 0);
         var hasShaderParams = Boolean(rawShader && rawShader.parameters && Object.keys(rawShader.parameters).length > 0);
         var hasShader = hasShaderEffect || hasShaderParams;
+        const wasEnabled = root.overrideEnabled;
         root.overrideEnabled = Boolean(hasRaw) || hasShader;
+        // A clear that did not come through the toggle's OFF arm — a page
+        // Discard, a profile switch, another surface writing this path — drops
+        // overrideEnabled without touching the latch, leaving the toggle
+        // reading ON and the timing section open over a card that stores
+        // nothing.
+        //
+        // Gated on a true→false TRANSITION, not on the current value. Both
+        // signal handlers refresh far more often than this card changes: the
+        // shader signal is a path-agnostic broadcast every card accepts, and
+        // onOverrideChanged accepts any ancestor path. Testing
+        // `!overrideEnabled` alone therefore closed the timing editor of a card
+        // the user had just latched open whenever ANY other card on the page
+        // was edited.
+        //
+        // Own writes are excluded via `selfDriven` on top of that: a per-field
+        // revert that happens to clear the last field must not close the editor
+        // under the user mid-edit. The `_committing` latches cannot stand in
+        // for it — every writer clears them before it refreshes, so they are
+        // always false by the time this runs.
+        if (wasEnabled && !root.overrideEnabled && !selfDriven)
+            root._editingTiming = false;
         // Effective values feed the controls. With no direct override the
         // controls preview the resolved profile from the parent chain.
         // Overrides are per field, so a direct override decides only the
@@ -759,25 +543,9 @@ Item {
         // curve that is present-yet-empty would survive the merge, and
         // _applyEffective's non-empty check then needs somewhere to fall.
         root._applyEffective(effective, resolved.curve);
-        // Cache each write path's stored profile on both axes, for
-        // _setOverrideMerged and _storedStateKey. This runs on every
-        // overrideChanged and on every shader-side refresh, which is exactly
-        // when a path's stored state can have moved.
-        var cache = {};
-        var shaderCache = {};
-        for (var pi = 0; pi < root._writePaths.length; ++pi) {
-            const wp = root._writePaths[pi];
-            // The primary reuses `raw` and `rawShader`, both read at the top of
-            // this function, rather than repeating the same file open and the
-            // same tree parse on the same tick. That is what makes the caches'
-            // "one read per path per tick" claim true on both axes instead of
-            // merely halving the reads.
-            const isPrimary = wp === root.eventPath;
-            cache[wp] = isPrimary ? (raw || ({})) : (settingsController.animationsPage.rawProfile(wp) || ({}));
-            shaderCache[wp] = isPrimary ? (rawShader || ({})) : (settingsController.animationsPage.rawShaderProfile(wp) || ({}));
-        }
-        root._pathProfiles = cache;
-        root._pathShaderProfiles = shaderCache;
+        // The stored profile this card's own captions read, taken from the
+        // `raw` read at the top of this function rather than repeated.
+        root._primaryRaw = raw || ({});
         root._refreshMirrorDivergence();
     }
 
@@ -808,12 +576,12 @@ Item {
         root._setOverrideMerged({}, root.currentCurveString);
     }
 
-    // Current emitters that pass empty-path: `shaderProfileChanged`
-    // ONLY (fires with `QString()` on full-tree reload). Every other
-    // emitter (e.g. `overrideChanged`) always passes a real path.
-    // The empty-path carve-out is forward-defense for any future
-    // global-broadcast emitter so signal handlers don't silently miss
-    // a tree-wide reload.
+    // Two emitters pass an empty path, and both mean "reload everything":
+    // `shaderProfileChanged` on a full-tree reload, and `overrideChanged` from
+    // the controller's `forgetCachedOverrideFiles`, which fires when somebody
+    // OUTSIDE the settings app writes to the profiles directory. The controller
+    // suppresses that broadcast for its own writes, which carry precise
+    // per-path signals instead.
     function _pathAffectsThisCard(path) {
         if (path === "")
             return true;
@@ -823,6 +591,18 @@ Item {
         // edit landing on a mirror alone (the same event's own card on the
         // advanced page) has to re-run this card's refresh or the banner goes
         // stale. Refreshing costs a re-read of the unchanged primary.
+        // "global" is the tree ROOT, and ProfilePaths::parentPath maps every
+        // category root to it as a bare literal, so a startsWith(path + ".")
+        // test never matches it. Every other ancestor IS spelled as a dotted
+        // prefix, so the loop below covers them; the root is the only gap.
+        // The case this closes is a `global.json` override FILE (a motion-set
+        // import writes one, and a Discard / Reset / scoped revert emits
+        // overrideChanged("global") for it). Edits to the Global CARD are a
+        // different path — that writes ISettings, handled by the Connections
+        // block above.
+        if (path === "global")
+            return true;
+
         const paths = root._writePaths;
         for (var i = 0; i < paths.length; ++i) {
             if (path === paths[i] || paths[i].startsWith(path + "."))
@@ -907,36 +687,13 @@ Item {
     }
 
     SettingsCard {
-        // ── Shader effect picker (independent of timing override) ─
-        // Independent of timing override — users can drop a shader on
-        // an event without touching its timing. The visibility gate
-        // `root._shaderLegSupported` is declared on the card root so
-        // it's reachable from every nested binding below; declaring
-        // it here would scope it to this ColumnLayout and the outer
-        // `root.<id>` references would silently resolve to undefined
-        // (defaulting `visible:` to true and showing the picker on
-        // every event regardless of daemon support).
-        // Toggle OFF semantic: clear timing override AND write
-        // an inheritance-blocking shader override. Plain
-        // `clearShaderOverride` only removes the entry at this
-        // path, leaving inheritance from an ancestor (e.g.
-        // `panel` -> "dissolve") to cascade down — exactly the
-        // user-reported "I disabled all popups but dissolve
-        // still plays" bug. `setShaderOverride(path, "", {})`
-        // writes an engaged-empty effectId that
-        // `ShaderProfile::overlay` treats as "explicitly no
-        // shader", winning over the parent's effectId and
-        // blocking the cascade. Same call works for parent
-        // cards (popup, window, osd, etc.) so a single
-        // OFF toggle on the parent disables every descendant
-        // that doesn't have its own override.
         // ── Shared timing + shader editor body ────────────────────
         // All the inline timing controls (curve thumbnail,
         // Customize… button, timing-mode combo, duration slider)
         // and shader controls (picker + parameter editor + color
         // dialog + curve dialog) used to live here. They've been
         // hoisted into the reusable `AnimationProfileEditor` so
-        // both this card and the App Rules page can share one
+        // this card and `GlobalTimingDefaultsCard` share one
         // implementation. See `AnimationProfileEditor.qml`.
         // The editor's working-state properties (timingMode,
         // duration, easingCurve, springOmega, springZeta,
@@ -957,7 +714,7 @@ Item {
         // _editingTiming latch). The latch half keeps the toggle honest about
         // what flipping it ON now does: it opens the editor and writes
         // nothing.
-        toggleChecked: root.overrideEnabled || root._editingTiming
+        toggleChecked: root._timingEditorOpen
         // The toggle REPORTS whether this event has any direct override; it is
         // not a precondition for making one. Gating the body on it would
         // disable and hide every row including the shader picker, so a user
@@ -999,8 +756,13 @@ Item {
                 if (root._anyWritePathSupportsShaderLeg())
                     root._clearShaderOverrideOnAll();
 
-                root._clearOverrideOnAll();
-                root._editingTiming = false;
+                // Gated: the controller refuses (and toasts) during an async
+                // discard, and on a partial failure — closing the editor anyway
+                // left the toggle visibly off beside a message saying it could
+                // not be changed. refreshFromTree has already run inside the
+                // call, so the toggle re-derives from the tree either way.
+                if (root._clearOverrideOnAll())
+                    root._editingTiming = false;
             }
         }
 
@@ -1016,13 +778,19 @@ Item {
                 Layout.fillWidth: true
                 isParentNode: root.isParentNode
                 overrideActive: root.overrideEnabled
-                editingTiming: root._editingTiming
+                timingEditorOpen: root._timingEditorOpen
                 shadowingChildrenCount: root._shadowingChildrenCount
                 mirrorsDiverged: root._mirrorsDiverged
                 divergentPathCount: root._divergentPathCount
                 writePathCount: root._writePaths.length
                 parentChain: root.parentChainText()
                 inheritSummary: root.inheritSummaryText()
+                // The return is deliberately not read. Both branches are
+                // self-correcting: the writer's `finally` runs
+                // refreshShaderFromTree() + refreshFromTree() whether the clear
+                // landed or was refused, so the shadowing count and the banner
+                // are current either way, and the controller owns the refusal
+                // toast. Reading the -1 here would only duplicate that.
                 onClearShadowingRequested: root._clearShaderOverrideDescendantsOnAll()
             }
 
@@ -1040,7 +808,7 @@ Item {
                 Layout.fillWidth: true
                 eventLabel: root.eventLabel
                 shaderLegSupported: root._shaderLegSupported
-                showTimingSection: root.overrideEnabled || root._editingTiming
+                showTimingSection: root._timingEditorOpen
                 simpleTiming: root.simpleTiming
                 showOverrideStatus: true
                 curveOverridden: root._ownsCurveOverride
@@ -1056,17 +824,38 @@ Item {
                 // programmatic emit can never write while the editor is
                 // hidden.
                 onDurationEdited: {
-                    if (root.overrideEnabled || root._editingTiming)
+                    if (root._timingEditorOpen)
                         root.commitDurationOverride();
                 }
                 onCurveEdited: {
-                    if (root.overrideEnabled || root._editingTiming)
+                    if (root._timingEditorOpen)
                         root.commitCurveOverride();
                 }
                 // The per-field revert links restore inheritance for one
                 // field without touching the other or the shader leg.
-                onCurveRevertRequested: root._clearFieldOnAll("curve")
-                onDurationRevertRequested: root._clearFieldOnAll("duration")
+                //
+                // The latch is set on SUCCESS so the timing editor stays open
+                // afterwards. `selfDriven` alone is not enough: it only helps a
+                // card whose latch is already set, and the common case is an
+                // override that predates the session, where the section is open
+                // via `overrideEnabled` and the latch is false. Reverting the
+                // last remaining field then drops overrideEnabled and collapses
+                // the editor under the cursor of the user who just clicked
+                // inside it. Gated on the return, which is false ONLY when the
+                // controller refused the call outright and attempted nothing (an
+                // async discard owns the tree, and it toasts). A PARTIAL failure
+                // reports the count that did land and so still latches the editor
+                // open, because the primary path really was cleared and
+                // collapsing the card under the user is the regression this whole
+                // interaction exists to prevent.
+                onCurveRevertRequested: {
+                    if (root._clearFieldOnAll("curve"))
+                        root._editingTiming = true;
+                }
+                onDurationRevertRequested: {
+                    if (root._clearFieldOnAll("duration"))
+                        root._editingTiming = true;
+                }
                 // Picker model fed via the registry-tick dependency
                 // so the binding re-evaluates on
                 // `shaderEffectsChanged`.

@@ -4,12 +4,15 @@
 #pragma once
 
 #include <phosphortiles_export.h>
+
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
+
 #include <QByteArray>
 #include <QHash>
 #include <QObject>
 #include <QSet>
 #include <QString>
+#include <QStringList>
 
 #include <memory>
 
@@ -36,8 +39,10 @@ class ITileAlgorithmRegistry;
  * brand-agnostic. For Phosphor this is `"plasmazones/algorithms"`.
  *
  * User scripts under `writableLocation/<subdirectory>/` override system
- * scripts with the same filename (system dirs come from every XDG
- * GenericDataLocation entry, in order). A script may only ever shadow another
+ * scripts declaring the same script ID (which defaults to `script:<basename>`
+ * but is overridden by the script's own `id` metadata, so it is not simply the
+ * filename). System dirs come from every XDG GenericDataLocation entry, in
+ * order. A script may only ever shadow another
  * script by that XDG priority, never a C++ built-in: a script whose id collides
  * with a built-in is refused outright.
  */
@@ -46,6 +51,22 @@ class PHOSPHORTILES_EXPORT ScriptedAlgorithmLoader : public QObject
     Q_OBJECT
 
 public:
+    /// Per-directory cap on `.luau` files considered by one scan.
+    ///
+    /// Public so a test can pin its spray fixture to the REAL value instead of a
+    /// hardcoded copy. A copy is worse than it looks: raising the cap would leave
+    /// the fixture below the new bound, so its loop would iterate over ids the cap
+    /// never reached, assert nothing, and still pass its non-vacuity check.
+    static constexpr int MaxWatchedFilesPerDir = 100;
+
+    /// Hard cap on scripts REGISTERED per rescan, summed across every
+    /// registered directory. Header-visible for the same reason as
+    /// MaxWatchedFilesPerDir: a test pinning the cap must read the real
+    /// constant so a bump cannot silently disarm it. The registration count
+    /// is a safe basis only because the considered-count is already bounded
+    /// per directory by MaxWatchedFilesPerDir (see the .cpp comment).
+    static constexpr int MaxScripts = 10'000;
+
     /**
      * @brief Construct a loader for @p subdirectory under XDG data dirs.
      *
@@ -64,9 +85,16 @@ public:
     /**
      * @brief Discover and load all .luau algorithms from system + user dirs
      *
-     * Clears existing scripted algorithms from the registry, then rescans
-     * all algorithm directories. System directories are loaded first so that
-     * user directories can override by filename.
+     * Rescans every algorithm directory and diffs the result against the
+     * previous scan: unchanged files keep their existing registry entry, new
+     * and edited ones are (re)built, and entries whose file disappeared are
+     * unregistered. No registry entry is dropped up front — the loader's own
+     * tracking maps are rebuilt from scratch each scan and the stale sweep runs
+     * at the end.
+     *
+     * Directories are iterated USER-FIRST with first-registration-wins on
+     * script ID, which is what produces `user > sys-highest > … > sys-lowest`.
+     * (The list handed in is system-first; `performScan` reverse-iterates it.)
      *
      * @p liveReload defaults to `On` so production callers (daemon,
      * editor, settings) get hot-reload by default. Pass `Off` from
@@ -109,7 +137,25 @@ private:
     class LuauScanStrategy;
     QStringList performScan(const QStringList& directoriesInScanOrder);
 
-    void loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir);
+    /// Identity of a script file that registered successfully on some scan.
+    /// `size` + `mtimeMs` are the same (size, mtime) pair the change signature
+    /// uses, so "unchanged on disk" means exactly the same thing in both places.
+    struct ScriptStamp
+    {
+        QString id; ///< Registry id the file registered under
+        qint64 size = -1;
+        qint64 mtimeMs = -1;
+        /// User/system classification at stamp time. Part of the reuse key:
+        /// the classification decides both the trust flag on the algorithm
+        /// AND which VM the script runs in (shared bundled VM vs isolated
+        /// per-user-script VM), so a path whose classification flips between
+        /// scans (XDG_DATA_HOME repointed, the user dir starting to resolve)
+        /// must be rebuilt rather than reused with the stale trust level.
+        bool isUser = false;
+    };
+
+    void loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir,
+                           const QHash<QString, ScriptStamp>& prevStamps);
     QStringList algorithmDirectories() const;
     QStringList validatedLuauFiles(const QString& dirPath, int maxFiles) const;
 
@@ -148,8 +194,17 @@ private:
     /// a broken script still triggers a rescan; these files own no
     /// registry entry, so they never appear in m_scriptIdToPath.
     QSet<QString> m_refusedFilePaths;
+    /// Canonical file path -> identity of the algorithm that path registered,
+    /// for every file that actually took a registry entry on the last scan.
+    /// A file whose stamp still matches disk and whose id still holds a live
+    /// scripted registry entry is left alone: without this, every inotify wake
+    /// rebuilt a sandboxed Luau VM and re-parsed the source for every script in
+    /// the corpus, on the GUI thread, even when the signature diff went on to
+    /// prove nothing had changed. Refused files (invalid, duplicate id,
+    /// built-in collision) own no registry entry and so are never stamped.
+    QHash<QString, ScriptStamp> m_scriptStamps;
     /// Signature of the last registered script set — sorted (id, path,
-    /// size, mtime) digest. Used by scanAndRegister() to suppress
+    /// size, mtime) digest. Used by performScan() to suppress
     /// redundant algorithmsChanged() emissions on filesystem pokes that
     /// touched no actual content (editor-save of an unrelated file in the
     /// watched dir, lstat-only events, etc.), so downstream D-Bus fan-out

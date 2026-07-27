@@ -6,14 +6,24 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 
+#include <PhosphorFsLoader/JsonEnvelopeValidator.h>
+
 #include <QDir>
 #include <QFile>
+#include <QLoggingCategory>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTextStream>
 
 using namespace PhosphorAnimation;
+
+namespace {
+/// Own category so the helper's diagnostics do not have to borrow the
+/// production loader's, which this slot does not go through.
+Q_LOGGING_CATEGORY(lcEnvelopeTest, "phosphoranimation.test.envelope")
+} // namespace
 
 class TestProfileLoader : public QObject
 {
@@ -26,12 +36,13 @@ private:
     /// composition roots and tests own their own registries. Each test
     /// method gets a freshly cleared registry via init() / cleanup().
     PhosphorProfileRegistry m_profileRegistry;
-    /// Returns false instead of QVERIFY-ing, so a failed write fails the
-    /// TEST rather than just returning from this helper. QVERIFY expands to
-    /// `if (!...) return;`, which in a void helper is silent: the fixture
-    /// carried on with an empty directory, and every rejection test then
-    /// "passed" because loadFromDirectory found nothing to reject. Call sites
-    /// must wrap this in QVERIFY.
+    /// Returns false instead of QVERIFY-ing, so the failure stops the caller.
+    /// QVERIFY expands to `if (!...) return;`, which in a void helper does mark
+    /// the test failed (qVerify routes to QTestResult::addFailure) but then
+    /// hands control back to a fixture that carries on against an empty
+    /// directory — turning one clear failure into a pile of misleading
+    /// secondary ones from tests that found nothing to reject. Call sites must
+    /// wrap this in QVERIFY.
     [[nodiscard]] bool writeFile(const QString& path, const QString& contents) const
     {
         QFile f(path);
@@ -50,10 +61,12 @@ private Q_SLOTS:
         m_profileRegistry.clear();
     }
 
-    /// Guarantees no registry state leaks between test methods even
+    /// Guarantees no PROFILE-registry state leaks between test methods even
     /// when a test forgets to clean up after itself. `init()` already
     /// clears on entry, but pairing with `cleanup()` keeps the
-    /// guarantee end-to-end rather than entry-only.
+    /// guarantee end-to-end rather than entry-only. The curve registry is
+    /// deliberately not cleared: no test here registers a user curve, and
+    /// the builtin specs the profiles reference are resolved by value.
     void cleanup()
     {
         m_profileRegistry.clear();
@@ -146,8 +159,19 @@ private Q_SLOTS:
         QCOMPARE(entries.first().systemSourcePath, systemDir.filePath(QStringLiteral("x.json")));
     }
 
-    /// `name` field becomes the registry path; it must NOT leak into
-    /// the Profile's presetName (two distinct concepts).
+    /// The `name` field becomes the registry path and `presetName` is a
+    /// user-assigned label. Two distinct concepts, and neither may stand in
+    /// for the other.
+    ///
+    /// The second file is the load-bearing half: it carries a `name` and NO
+    /// `presetName`, so a parser that ever started treating the routing key as
+    /// a preset label would engage the optional here and fail the assertion.
+    /// The first file only pins that an explicit label survives the envelope
+    /// strip.
+    ///
+    /// This does NOT cover the strip itself — `Profile::fromJson` never reads a
+    /// `name` key, so removing the strip is unobservable from here. The strip
+    /// has its own slot below.
     void testNameDoesNotLeakIntoPresetName()
     {
         QTemporaryDir dir;
@@ -157,12 +181,21 @@ private Q_SLOTS:
             "presetName": "My Overlay Preset",
             "duration": 150
         })")));
+        QVERIFY(writeFile(dir.filePath(QStringLiteral("overlay.slide.json")), QStringLiteral(R"({
+            "name": "overlay.slide",
+            "duration": 150
+        })")));
 
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
         auto resolved = m_profileRegistry.resolve(QStringLiteral("overlay.fade"));
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->presetName.value_or(QString()), QStringLiteral("My Overlay Preset"));
+
+        auto unlabelled = m_profileRegistry.resolve(QStringLiteral("overlay.slide"));
+        QVERIFY(unlabelled.has_value());
+        QVERIFY2(!unlabelled->presetName.has_value(),
+                 "a profile with no presetName came back labelled — the registry path leaked into it");
     }
 
     /// `profilesChanged` fires on a rescan that sees content change on
@@ -205,6 +238,131 @@ private Q_SLOTS:
         QVERIFY(reResolved.has_value());
         QCOMPARE(reResolved->duration.value_or(-1.0), 456.0);
         QCOMPARE(reResolved->minDistance.value_or(-1), 9);
+    }
+
+    /// `rescanNow()` must commit before it returns — no event loop, no
+    /// QTRY_. That is the whole reason it exists next to the debounced
+    /// `requestRescan()`: a consumer that writes a profile file and reads
+    /// the registry back in the same call cannot wait for a timer.
+    void testRescanNowCommitsSynchronously()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("sync.json"));
+        QVERIFY(writeFile(path, QStringLiteral(R"({
+            "name": "sync",
+            "duration": 111
+        })")));
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
+        loader.loadFromDirectory(dir.path(), LiveReload::On);
+
+        QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
+
+        QVERIFY(QFile::remove(path));
+        QVERIFY(writeFile(path, QStringLiteral(R"({
+            "name": "sync",
+            "duration": 222
+        })")));
+
+        loader.rescanNow();
+        // Both assertions run on the same stack as the call above.
+        QCOMPARE(spy.count(), 1);
+        const auto resolved = m_profileRegistry.resolve(QStringLiteral("sync"));
+        QVERIFY(resolved.has_value());
+        QCOMPARE(resolved->duration.value_or(-1.0), 222.0);
+
+        // A removal is visible just as immediately — the case the settings
+        // app's per-field revert links depend on — and it is a change, so the
+        // consumer signal is owed for it too.
+        QVERIFY(QFile::remove(path));
+        loader.rescanNow();
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(!m_profileRegistry.resolve(QStringLiteral("sync")).has_value());
+    }
+
+    /// `rescanNow()` on a loader with nothing registered still COMMITS —
+    /// an empty set, under its own owner tag. That is the dangerous shape,
+    /// so pin what it may and may not touch: a pre-existing entry under the
+    /// loader's OWN tag is the loader's to drop, while another owner's entry
+    /// must survive untouched. And with nothing tracked to begin with, no
+    /// consumer signal is owed.
+    void testRescanNowWithNoDirectoriesCommitsOnlyItsOwnPartition()
+    {
+        m_profileRegistry.registerProfile(QStringLiteral("mine"), Profile{}, QStringLiteral("test"));
+        m_profileRegistry.registerProfile(QStringLiteral("theirs"), Profile{}, QStringLiteral("someone-else"));
+
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
+        QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
+        loader.rescanNow();
+
+        QCOMPARE(loader.registeredCount(), 0);
+        // Same tag, so the empty commit owns it and takes it.
+        QVERIFY(!m_profileRegistry.resolve(QStringLiteral("mine")).has_value());
+        // Different owner, so it is not this loader's to remove.
+        QVERIFY(m_profileRegistry.resolve(QStringLiteral("theirs")).has_value());
+        // The loader tracked nothing before and tracks nothing now.
+        QCOMPARE(spy.count(), 0);
+    }
+
+    /// The re-entrancy guard in `ProfileLoader::Sink::commitBatch`: a
+    /// consumer that calls `rescanNow()` from a registry `profileChanged`
+    /// handler re-enters the commit, and the nested batch must NOT clear the
+    /// evidence the outer one gathered. Without the depth guard the outer
+    /// `entriesChanged` reads a cleared flag and swallows `profilesChanged`
+    /// for a change that really happened.
+    void testNestedRescanDoesNotSwallowTheOuterChangeSignal()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        // `reentered` is declared BEFORE `loader` on purpose. The lambda below
+        // captures it by reference and stays connected until the scope guard
+        // fires; ~ProfileLoader ends in clearOwner, which emits profileChanged
+        // synchronously while the destructor body runs, so a lambda outliving
+        // `reentered` would read a dead stack slot. Reverse-declaration-order
+        // destruction is what keeps that impossible.
+        bool reentered = false;
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
+        loader.loadFromDirectory(dir.path());
+
+        QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
+
+        // One-shot: re-enter exactly once, or the recursion is unbounded
+        // (rescanNow deliberately does not defer — see its header docs).
+        const auto conn =
+            connect(&m_profileRegistry, &PhosphorProfileRegistry::profileChanged, &loader, [&loader, &reentered]() {
+                if (reentered) {
+                    return;
+                }
+                reentered = true;
+                loader.rescanNow();
+            });
+
+        // Torn down UNCONDITIONALLY, on every exit from this slot.
+        // ~ProfileLoader ends in clearOwner, which emits profileChanged
+        // synchronously while the destructor body runs; a connection still live
+        // there would re-enter a half-destroyed loader and re-register the very
+        // entries clearOwner just removed. A plain `disconnect()` after the
+        // assertions is not enough, and neither is one placed before them —
+        // every QVERIFY in this slot returns early, including the fixture write
+        // below, so only a scope guard covers all of them.
+        const auto disconnector = qScopeGuard([&conn]() {
+            QObject::disconnect(conn);
+        });
+
+        QVERIFY(writeFile(dir.filePath(QStringLiteral("nested.json")), QStringLiteral(R"({
+            "name": "nested",
+            "duration": 321
+        })")));
+        loader.rescanNow();
+
+        QVERIFY2(reentered, "the nested path never ran, so this test proves nothing");
+        // Exactly two: the nested commit's entriesChanged reads the flag while
+        // it still carries the outer batch's evidence, then the outer one
+        // fires as well. That duplicate is the documented accepted cost of the
+        // depth guard (see Sink::lastBatchChanged) — pinned here so a change
+        // that collapses it cannot leave that comment silently stale.
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(m_profileRegistry.resolve(QStringLiteral("nested")).has_value());
     }
 
     /// `profilesChanged` must NOT fire on a no-op rescan — the
@@ -304,6 +462,116 @@ private Q_SLOTS:
         resolved = reg.resolve(QStringLiteral("shared"));
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->duration.value_or(0.0), 100.0);
+    }
+
+    /// sourcesChanged as the SOLE trigger: byte-identical user and system
+    /// copies, so deleting the user file shifts only the winning entry's
+    /// SOURCE PATH while the payload stays equal. Deleting the
+    /// sourcesChanged clause in Sink::commitBatch leaves lastBatchChanged
+    /// false here and the QTRY reddens — the payload-diff siblings cannot
+    /// catch that regression because their fixtures always differ in value.
+    void testRescanFiresSignal_whenOnlyTheWinningSourcePathMoves()
+    {
+        auto& reg = m_profileRegistry;
+
+        QTemporaryDir systemDir;
+        QTemporaryDir userDir;
+        QVERIFY(systemDir.isValid());
+        QVERIFY(userDir.isValid());
+        const QString body = QStringLiteral(R"({"name": "twin", "duration": 300})");
+        QVERIFY(writeFile(systemDir.filePath(QStringLiteral("twin.json")), body));
+        QVERIFY(writeFile(userDir.filePath(QStringLiteral("twin.json")), body));
+
+        ProfileLoader loader(reg, m_curveRegistry, QStringLiteral("test-source-shift"));
+        loader.loadFromDirectories({systemDir.path(), userDir.path()});
+
+        QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
+        QVERIFY(QFile::remove(userDir.filePath(QStringLiteral("twin.json"))));
+        loader.requestRescan();
+        QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 500);
+
+        // The winning entry now reads from the system copy.
+        bool found = false;
+        const auto all = loader.entries();
+        for (const auto& entry : all) {
+            if (entry.path == QStringLiteral("twin")) {
+                found = true;
+                QVERIFY2(entry.sourcePath.startsWith(systemDir.path()),
+                         qPrintable(QStringLiteral("expected system path, got ") + entry.sourcePath));
+            }
+        }
+        QVERIFY(found);
+    }
+    /// The shared envelope helper STRIPS `name` from the root it hands back.
+    ///
+    /// Asserted directly on `validateJsonEnvelope`, because it cannot be seen
+    /// through `ProfileLoader`: `Profile::fromJson` never reads a `name` key,
+    /// so deleting the strip changes nothing a profile-level test can observe.
+    /// The strip is still real contract — `name` is this layer's routing key,
+    /// not schema data, and a sink that preserves unknown fields would
+    /// otherwise round-trip it back out.
+    void testEnvelopeValidatorStripsTheRoutingKeyFromTheRoot()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("overlay.fade.json"));
+        QVERIFY(writeFile(path, QStringLiteral(R"({
+            "name": "overlay.fade",
+            "presetName": "My Overlay Preset"
+        })")));
+
+        const auto envelope = PhosphorFsLoader::validateJsonEnvelope(path, lcEnvelopeTest());
+        QVERIFY(envelope.has_value());
+        QCOMPARE(envelope->name, QStringLiteral("overlay.fade"));
+        QVERIFY2(!envelope->root.contains(QLatin1String("name")),
+                 "the routing key survived into the schema root the sink parses");
+        QCOMPARE(envelope->root.value(QLatin1String("presetName")).toString(), QStringLiteral("My Overlay Preset"));
+    }
+
+    /// Pins the destructor's observable teardown contract, which the
+    /// re-entrancy tests above do not: they exercise the LIVE re-entrancy guard
+    /// via rescanNow, but none proves that destroying a loader removes its
+    /// registry entries, nor that a consumer re-registering DURING that teardown
+    /// cannot resurrect them. Deleting `clearOwner` from the destructor leaves
+    /// "gone" resolvable after destruction; dropping the m_destroying gate off
+    /// the load entry points lets the re-entrant reload below put it back. Both
+    /// regressions flip the final assert.
+    void testDestructorClearsOwnedEntriesEvenUnderReentrantReload()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFile(dir.filePath(QStringLiteral("gone.json")), QStringLiteral(R"({
+            "name": "gone",
+            "duration": 200
+        })")));
+
+        bool reentered = false;
+        {
+            ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
+            loader.loadFromDirectory(dir.path());
+            QVERIFY(m_profileRegistry.resolve(QStringLiteral("gone")).has_value());
+
+            // A consumer that reacts to the teardown's synchronous
+            // profileChanged by trying to reload. One-shot so it cannot recurse.
+            // The connection's receiver is `loader`, so it is still live while
+            // the destructor body runs clearOwner (Qt severs receiver
+            // connections later, in ~QObject). If teardown left the door open,
+            // this call re-registers "gone" on a half-destroyed loader.
+            connect(&m_profileRegistry, &PhosphorProfileRegistry::profileChanged, &loader,
+                    [&loader, &reentered, &dir]() {
+                        if (reentered) {
+                            return;
+                        }
+                        reentered = true;
+                        loader.loadFromDirectory(dir.path());
+                    });
+            // loader goes out of scope here → ~ProfileLoader → clearOwner emits.
+        }
+
+        QVERIFY2(reentered, "teardown never reached the consumer handler, so this proves nothing");
+        QVERIFY2(!m_profileRegistry.resolve(QStringLiteral("gone")).has_value(),
+                 "an owned profile outlived its loader: clearOwner was dropped, or a re-entrant reload "
+                 "during teardown resurrected it");
     }
 };
 

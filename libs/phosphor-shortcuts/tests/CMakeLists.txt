@@ -3,6 +3,11 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
+# Shared test isolation: a private D-Bus session (so a test that touches D-Bus
+# cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
+# open and hangs ctest after the test itself passed) plus a per-target XDG
+# sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 function(phosphorshortcuts_add_test name)
     add_executable(${name} ${name}.cpp)
     target_link_libraries(${name}
@@ -13,14 +18,24 @@ function(phosphorshortcuts_add_test name)
             Qt6::Test
     )
     add_test(NAME ${name} COMMAND ${name})
+    phosphor_apply_test_isolation(${name})
+    set_property(TEST ${name} APPEND PROPERTY LABELS "phosphorshortcuts")
     # Tests use a signals-only IBackend fake — no D-Bus, no display needed,
     # but Qt still wants a platform plugin at QGuiApplication startup. Use
     # offscreen so headless CI doesn't break.
-    set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    phosphor_append_test_environment(${name} "QT_QPA_PLATFORM=offscreen")
 endfunction()
 
 phosphorshortcuts_add_test(test_registry)
 # Opt-in live-daemon test: QSKIPs unless PHOSPHORSHORTCUTS_KGLOBALACCEL_TESTS=1
 # (and again if no kglobalaccel answers). Uses only transient registrations so
 # an opted-in run leaves no kglobalshortcutsrc residue.
+#
+# NOTE: under ctest the opt-in can never reach a real kglobalaccel — the
+# standard isolation launches a PRIVATE bus with no service directories, so
+# the daemon neither exists there nor can activate, and the test QSKIPs even
+# with the variable set. Run it manually against the live session bus instead:
+#   PHOSPHORSHORTCUTS_KGLOBALACCEL_TESTS=1 ./test_kglobalaccel_backend
+# The isolation is kept anyway so an un-opted run can never touch the real
+# bus by accident.
 phosphorshortcuts_add_test(test_kglobalaccel_backend)

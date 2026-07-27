@@ -392,7 +392,7 @@ no new vocabulary.
 
 **(c) New scroll-specific rule actions to add (clone the autotile param family).** The autotile
 Context-param actions (`setInsertPosition`, `setOverflowBehavior`, `setSplitRatio`, `setMaxWindows`,
-`setAlgorithmParam` in `src/ruleaction_builtins_engine.cpp`) are the exact precedent. Add a parallel
+`setAlgorithmParam` in `libs/phosphor-rules/src/ruleaction_builtins_engine.cpp`) are the exact precedent. Add a parallel
 scrolling family so per-context and per-app scroll behavior is rule-authorable:
 - **Context-domain** (scoped to a screen/desktop/activity, resolved windowless): `setDefaultColumnWidth`
   (proportion/fixed — kind `percent`/`number`), `setCenterFocusedColumn` (enum never|always|on-overflow),
@@ -508,9 +508,10 @@ all three `center-focused-column` modes, edge behavior, minimize/restore slot me
 strip independence, and tabbed-column behavior (toggle normal↔tabbed, active-tile-only layout with
 others reported hidden, tab cycling via focus-window-up/down, tabbed columns still consuming/
 expelling/moving/resizing like normal ones). Tests needing D-Bus/Wayland are hand-rolled (the `p_add_test` macro deliberately
-omits Qt6::DBus) and every test runs under `dbus-run-session --config-file
-tests/unit/test-session-bus.conf` (via `TEST_LAUNCHER`) so the installed daemon can't auto-activate
-and hang ctest. Model engine/integration tests on `tests/unit/autotile/**`. **Run the full ctest
+omits Qt6::DBus) and tests run under `dbus-run-session --config-file
+cmake/test-session-bus.conf` (via `TEST_LAUNCHER`; the shader_validate trio applies only the
+XDG half by hand since the validator never touches D-Bus) so the installed daemon can't
+auto-activate and hang ctest. Model engine/integration tests on `tests/unit/autotile/**`. **Run the full ctest
 suite and verify both the unity and no-unity (`build-nounity`) builds succeed before finishing** —
 unity builds mask missing includes; src-rooted includes are the convention.
 
@@ -549,7 +550,7 @@ unity builds mask missing includes; src-rooted includes are the convention.
    switch/screen hotplug + aggressive window filtering; apply geometry via `move()` (no animation
    yet — snap into place).
 4. **Phase 3 — navigation & command vocabulary:** focus/move/consume/expel/center; interactive
-   drag (reuse `kwin-effect/dragtracker.cpp`); view-offset `fit`/`centered`; wire ShortcutManager
+   drag (reuse `kwin-effect/handlers/dragtracker.cpp`); view-offset `fit`/`centered`; wire ShortcutManager
    with KDE-safe defaults.
 5. **Phase 4 — widths/heights, tabbed columns & smooth scroll:** preset cycling, `set-column-width`,
    full-width, window-height presets; the `Column::display` normal/tabbed toggle with active-only

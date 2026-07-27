@@ -181,13 +181,11 @@ private Q_SLOTS:
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         const QByteArray meta =
-            R"({"name":"t","parameters":[{"id":"a-b","type":"float","slot":0},{"id":"good","type":"float"}]})";
-        QFile f(QDir(tmp.path()).filePath(QStringLiteral("metadata.json")));
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(meta);
-        f.close();
-
-        const ShaderRegistry::ShaderInfo info = ShaderRegistry::parsePackMetadata(tmp.path());
+            R"({"id":"t","name":"t","fragmentShader":"effect.frag","parameters":[{"id":"a-b","name":"a-b","group":"g","type":"float","default":0,"slot":0},{"id":"good","name":"good","group":"g","type":"float","default":0}]})";
+        // Through the checked parsePack helper, not a hand-rolled unchecked
+        // write, so a short/failed metadata write can't silently pass as an
+        // empty parse.
+        const ShaderRegistry::ShaderInfo info = parsePack(tmp, meta);
         int badSlot = -99, goodSlot = -99;
         for (const ShaderRegistry::ParameterInfo& p : info.parameters) {
             if (p.id == QLatin1String("a-b")) {
@@ -244,6 +242,162 @@ private Q_SLOTS:
         // uploads to (uniformName is the 1-based wire key for that lane).
         QCOMPARE(speed.uniformName(), QStringLiteral("customParams6_y")); // customParams[5].y
         QCOMPARE(tint.uniformName(), QStringLiteral("customColor3")); // customColors[2]
+    }
+    // ─── Pack-path containment ────────────────────────────────────────────
+    //
+    // A pack's `metadata.json` NAMES files that get compiled and run on the
+    // GPU or sampled as a texture, and `QDir::filePath` (what the parser used
+    // to use) returns an ABSOLUTE argument unchanged and never normalises
+    // `..`. These slots pin the containment guard on every declared-path site.
+    // Driven through `parsePackMetadata`, the public seam the offline
+    // validator also uses, so they exercise the same parser the live registry
+    // does.
+
+    /// Write a pack whose metadata.json is @p meta, and return its parse.
+    ///
+    /// `qFatal` rather than a silent `return {}`, because a QVERIFY in a static
+    /// helper cannot abort the CALLER: five slots below assert that a field came
+    /// back EMPTY, and every one of them would pass vacuously if the metadata was
+    /// never written at all. Failing loudly here is the difference between those
+    /// assertions pinning the refusal and pinning nothing.
+    static ShaderRegistry::ShaderInfo parsePack(const QTemporaryDir& tmp, const QByteArray& meta)
+    {
+        QFile f(tmp.filePath(QStringLiteral("metadata.json")));
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            qFatal("parsePack: could not open metadata.json for writing");
+        }
+        if (f.write(meta) != meta.size()) {
+            qFatal("parsePack: short write to metadata.json");
+        }
+        f.close();
+        return ShaderRegistry::parsePackMetadata(tmp.path());
+    }
+
+    void packMetadataRefusesAnAbsoluteFragmentShaderPath()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp, QByteArrayLiteral(R"({"id":"esc","name":"esc","fragmentShader":"/etc/passwd","parameters":[]})"));
+        QVERIFY2(info.sourcePath.isEmpty(), "an absolute declared fragmentShader escaped the pack directory");
+    }
+
+    void packMetadataRefusesAParentTraversalFragmentShaderPath()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp,
+            QByteArrayLiteral(R"({"id":"esc","name":"esc","fragmentShader":"../../../evil.frag","parameters":[]})"));
+        QVERIFY2(info.sourcePath.isEmpty(), "a `..` traversal in fragmentShader escaped the pack directory");
+        // A traversal that only LOOKS contained must be refused too: the check
+        // has to be on the resolved path, not on a leading-`..` test.
+        const ShaderRegistry::ShaderInfo sneaky =
+            parsePack(tmp,
+                      QByteArrayLiteral(
+                          R"({"id":"esc","name":"esc","fragmentShader":"shaders/../../evil.frag","parameters":[]})"));
+        QVERIFY(sneaky.sourcePath.isEmpty());
+    }
+
+    /// The row that stops an over-tightening "fix". Containment must be checked
+    /// on the resolved path, NOT by refusing path separators — a pack keeping
+    /// its shaders in a subdirectory is entirely legal.
+    void packMetadataAcceptsASubdirectoryInsideThePack()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("shaders")));
+        QFile frag(tmp.filePath(QStringLiteral("shaders/effect.frag")));
+        QVERIFY(frag.open(QIODevice::WriteOnly));
+        QVERIFY(frag.write(QByteArrayLiteral("// frag\n")) > 0);
+        frag.close();
+
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp,
+            QByteArrayLiteral(R"({"id":"ok","name":"ok","fragmentShader":"shaders/effect.frag","parameters":[]})"));
+        QVERIFY2(!info.sourcePath.isEmpty(), "a legitimate in-pack subdirectory was refused");
+        QVERIFY(info.sourcePath.endsWith(QStringLiteral("shaders/effect.frag")));
+    }
+
+    /// A symlink INSIDE the pack pointing outside it. This is what a lexical
+    /// (`QDir::cleanPath`) check misses and a canonical one catches.
+    void packMetadataRefusesAnInPackSymlinkPointingOutside()
+    {
+        QTemporaryDir outside;
+        QTemporaryDir tmp;
+        QVERIFY(outside.isValid() && tmp.isValid());
+        const QString target = outside.filePath(QStringLiteral("evil.frag"));
+        QFile t(target);
+        QVERIFY(t.open(QIODevice::WriteOnly));
+        QVERIFY(t.write(QByteArrayLiteral("// evil\n")) > 0);
+        t.close();
+        QVERIFY(QFile::link(target, tmp.filePath(QStringLiteral("effect.frag"))));
+
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp, QByteArrayLiteral(R"({"id":"esc","name":"esc","fragmentShader":"effect.frag","parameters":[]})"));
+        QVERIFY2(info.sourcePath.isEmpty(), "an in-pack symlink pointing outside the pack was followed");
+    }
+
+    void packMetadataRefusesAnEscapingVertexShaderPath()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp,
+            QByteArrayLiteral(
+                R"({"id":"esc","name":"esc","fragmentShader":"effect.frag","vertexShader":"/etc/passwd","parameters":[]})"));
+        QVERIFY(info.vertexShaderPath.isEmpty());
+    }
+
+    /// A refused buffer entry drops the WHOLE list and disables multipass,
+    /// rather than compacting: the entries are positionally aligned with the
+    /// per-buffer wrap/filter overrides, so removing one would shift the rest
+    /// onto the wrong buffer.
+    void packMetadataDropsTheWholeBufferListWhenOneEntryEscapes()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // The two LEGITIMATE entries must exist on disk, or this slot is
+        // half-vacuous: the multipass existence sweep clears a list whose files
+        // are missing, so mutating the refusal to "compact the escaping entry
+        // out" would still leave `bufferShaderPaths` empty and the assertion
+        // below would pass for the wrong reason.
+        for (const auto& name : {QStringLiteral("a.frag"), QStringLiteral("c.frag")}) {
+            QFile frag(tmp.filePath(name));
+            QVERIFY(frag.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QVERIFY(frag.write(QByteArrayLiteral("void main() {}\n")) > 0);
+        }
+        const ShaderRegistry::ShaderInfo info =
+            parsePack(tmp,
+                      QByteArrayLiteral(
+                          R"({"id":"esc","name":"esc","fragmentShader":"effect.frag","parameters":[],"multipass":true,)"
+                          R"("bufferShaders":["a.frag","/etc/passwd","c.frag"]})"));
+        QVERIFY2(info.bufferShaderPaths.isEmpty(), "an escaping buffer entry was compacted out, shifting the rest");
+        QVERIFY2(!info.isMultipass, "multipass survived a refused buffer list");
+    }
+
+    /// And a pack that declared a buffer list must NOT silently fall back to
+    /// the implicit `buffer.frag` when that list is refused — it would then run
+    /// a different shader than it asked for.
+    void packMetadataDoesNotSubstituteTheDefaultBufferAfterARefusal()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // A real buffer.frag on disk, so the existence-gated implicit fallback
+        // WOULD fire if the `!bufferShadersDeclared` guard were removed. Without
+        // this file the fallback is inert regardless of the guard and the
+        // assertion below passes vacuously — the guard could be deleted and the
+        // slot would stay green.
+        QFile buf(QDir(tmp.path()).filePath(QStringLiteral("buffer.frag")));
+        QVERIFY(buf.open(QIODevice::WriteOnly));
+        QVERIFY(buf.write(QByteArrayLiteral("// buffer\n")) > 0);
+        buf.close();
+
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp,
+            QByteArrayLiteral(
+                R"({"id":"esc","name":"esc","fragmentShader":"effect.frag","parameters":[],"bufferShaders":["/etc/passwd"]})"));
+        QVERIFY(info.bufferShaderPaths.isEmpty());
     }
 };
 

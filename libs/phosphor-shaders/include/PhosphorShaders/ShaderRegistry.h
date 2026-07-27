@@ -6,10 +6,10 @@
 #include <PhosphorShaders/phosphorshaders_export.h>
 
 #include <PhosphorRegistry/IFactoryBase.h>
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
 #include <PhosphorRegistry/MetadataPackLoader.h>
 #include <PhosphorRegistry/Registry.h>
 
-#include <QHash>
 #include <QImage>
 #include <QList>
 #include <QMap>
@@ -51,12 +51,17 @@ class IWallpaperProvider;
 /// rescan; the public lookup methods (`availableShaders`, `shader`,
 /// `shaderInfo`, `shaderUrl`) read it without synchronisation.
 ///
-/// `searchPaths()` is the one exception: it returns a by-value snapshot
-/// of an implicitly-shared QStringList, so a GUI-thread caller can
-/// snapshot it and propagate the result to worker threads (this is the
-/// shader-warming path's contract). Calling `searchPaths()` *from* a
-/// worker thread concurrently with a GUI-thread mutation is a data race;
-/// snapshot on the GUI thread first.
+/// Two exceptions:
+///
+/// `searchPaths()` returns a by-value snapshot of an implicitly-shared
+/// QStringList, so a GUI-thread caller can snapshot it and propagate the
+/// result to worker threads (this is the shader-warming path's contract).
+/// Calling `searchPaths()` *from* a worker thread concurrently with a
+/// GUI-thread mutation is a data race; snapshot on the GUI thread first.
+///
+/// The static wallpaper-path cache (`resolveWallpaperPath` and friends in
+/// shaderregistry_wallpaper.cpp) is guarded by its own process-wide mutex
+/// and is safe to call from any thread.
 class PHOSPHORSHADERS_EXPORT ShaderRegistry : public QObject
 {
     Q_OBJECT
@@ -89,6 +94,11 @@ public:
         QUrl shaderUrl;
         QString sourcePath;
         QString vertexShaderPath;
+        /// Absolute pack directory (where metadata.json lives). The frag may
+        /// sit in a subdirectory of the pack, so deriving the pack root from
+        /// `sourcePath` is wrong — consumers needing the pack root (watch
+        /// globs, content signature, image-param containment) read this.
+        QString packDir;
         QStringList bufferShaderPaths;
         QString previewPath;
         QString category;
@@ -107,7 +117,9 @@ public:
 
         bool isValid() const
         {
-            return !id.isEmpty() && (isNoneShader(id) || shaderUrl.isValid());
+            // isNoneShader(id) is just id.isEmpty(), which the first conjunct
+            // already excludes, so the "none" shader is never valid here.
+            return !id.isEmpty() && shaderUrl.isValid();
         }
     };
 
@@ -145,7 +157,7 @@ public:
 
     // ── Search paths (forwarded to the internal MetadataPackLoader) ───
     //
-    // Same surface the legacy MetadataPackRegistryBase provided. liveReload
+    // Same surface the since-removed MetadataPackRegistryBase provided. liveReload
     // defaults to On (production hot-reload); pass Off for one-shot scans.
     void addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
     void addSearchPaths(
@@ -191,10 +203,39 @@ public:
     /// parser the live registry uses (T1.1 auto-slot assignment included), so an
     /// offline validator (`phosphor-shader-validate`) and the daemon agree on
     /// what a pack is. Returns an invalid ShaderInfo and sets @p error on a
-    /// missing/unreadable file or non-object JSON root. Does NOT verify that the
-    /// frag/buffer files exist on disk — that's a validator lint, not a parse
-    /// failure — so `sourcePath`/`bufferShaderPaths` are returned as declared.
-    static ShaderInfo parsePackMetadata(const QString& packDir, QString* error = nullptr);
+    /// missing/unreadable/oversized file, non-object JSON root, or a root
+    /// failing the same structural schema gate the live scan applies. Two live
+    /// rejections are deliberately NOT reproduced here — a missing fragment
+    /// shader and a multipass pack with no surviving buffer shader — because
+    /// the offline validator reports those as its own lints with file context.
+    ///
+    /// Existence is checked unevenly, and a caller cannot infer "not declared"
+    /// from an empty field: the FRAGMENT path is returned whether or not the file
+    /// is there (that one is a validator lint), a declared-but-missing
+    /// `vertexShader` is DROPPED, and a missing buffer shader clears the whole
+    /// `bufferShaderPaths` list.
+    ///
+    /// Declared paths are containment-checked: a `fragmentShader`,
+    /// `vertexShader` or `bufferShaders` entry resolving outside the pack
+    /// directory is refused, because these name files that get compiled and run
+    /// on the GPU. A refused `sourcePath` comes back EMPTY, and a refused entry
+    /// drops the whole `bufferShaderPaths` list (they are positionally aligned
+    /// with the per-buffer wrap/filter overrides, so compacting one out would
+    /// shift the rest onto the wrong buffer). Image params are NOT part of this
+    /// parse — they are resolved, and containment-checked, in
+    /// `translateParamsToUniforms`.
+    /// Parse a pack's metadata.json into a ShaderInfo (id, paths, parameters
+    /// with auto-slot assignment).
+    ///
+    /// @param validateSchema when true (the default), the metadata is first run
+    /// through the shared shader-metadata JSON schema and REJECTED on any
+    /// violation — the same gate the daemon's live scan applies, so the offline
+    /// validator refuses exactly the packs the daemon refuses. The shader-render
+    /// preview tool passes false: it is a developer aid that tolerantly previews
+    /// whatever metadata it is handed (defaulting names, dropping out-of-range
+    /// slots) rather than gatekeeping, and its own parse defaults already mirror
+    /// the tolerant behaviour. Path-traversal confinement is applied either way.
+    static ShaderInfo parsePackMetadata(const QString& packDir, QString* error = nullptr, bool validateSchema = true);
 
     Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
     Q_INVOKABLE QStringList shaderPresetNames(const QString& shaderId) const;
@@ -275,6 +316,17 @@ private:
 
     static std::unique_ptr<IWallpaperProvider> s_wallpaperProvider;
     static QString s_cachedWallpaperPath;
+    /// Whether the provider has been asked since the last invalidation, and when.
+    ///
+    /// Distinguishes "not looked up yet" from "looked up, and there is no
+    /// wallpaper": without it the empty answer is indistinguishable from a cache
+    /// miss and every call re-queries a provider that may block for a second. The
+    /// timestamp bounds that negative answer, because `invalidateWallpaperCache()`
+    /// has no callers — a permanent latch would strand every wallpaper shader on
+    /// the transparent fallback for the whole session if the first resolve landed
+    /// before the desktop was ready.
+    static bool s_wallpaperPathResolved;
+    static qint64 s_wallpaperPathResolvedAtMs;
     static QImage s_cachedWallpaperImage;
     static qint64 s_cachedWallpaperMtime;
     static QMutex s_wallpaperCacheMutex;

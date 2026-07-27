@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
@@ -40,17 +41,20 @@ SettingsFlickable {
     /// — read by Main.qml's `_navShortcutsEnabled` guard so Ctrl+PgUp /
     /// Ctrl+PgDown can't drag the user off the page while they have an
     /// unsaved rule edit, picker selection, or force-save prompt open.
-    /// `forceSaveConfirm` lives below mainCol and binds back through
-    /// `_forceSaveConfirmOpen` to avoid a forward reference here. The
-    /// `onAnyModalOpenChanged` handler republishes the value into the
+    /// The `onAnyModalOpenChanged` handler republishes the value into the
     /// chrome-level `window._pageOwnedModalOpen` flag that Main.qml's
     /// nav-shortcut guard reads (the framework's PageHost Loader keeps
     /// the page item private, so a direct binding can't reach it).
-    readonly property bool anyModalOpen: addRuleWizard.opened || windowPickerDialog.opened || ruleEditorSheet.opened || page._forceSaveConfirmOpen
-    /// Internal bridge updated by `forceSaveConfirm.onVisibleChanged` so
-    /// `anyModalOpen` can read it without forward-referencing an id that
-    /// is declared further down in the file.
-    property bool _forceSaveConfirmOpen: false
+    // `.visible`, not `.opened`: opened turns true only when the ENTER
+    // transition finishes and false at the START of the exit transition, so
+    // the nav-shortcut guard had a live window at both edges of an animating
+    // modal. visible covers the whole popup lifetime (the spelling
+    // ConfirmDialogs.qml already uses for the same predicate). forceSaveConfirm
+    // is read directly: it is a plain nested id in this same component, so the
+    // reference resolves regardless of lexical order — no bridge needed, and
+    // reading .visible here (not the old onOpened/onClosed bridge) closes the
+    // same transition-edge gap the note above describes.
+    readonly property bool anyModalOpen: addRuleWizard.visible || windowPickerDialog.visible || ruleEditorSheet.visible || colorParamDialog.visible || curveParamDialog.visible || forceSaveConfirm.visible
 
     onAnyModalOpenChanged: {
         // Defensive truthy-check: this page can be hosted by consumers
@@ -78,6 +82,12 @@ SettingsFlickable {
         // to.
         if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
             window._pageOwnedModalOpen = false;
+        // Symmetric teardown for onCompleted's resolver install: the
+        // controller outlives this page (it hangs off settingsController),
+        // and a closure whose QML context is gone degrades every later
+        // refreshLabels() to raw wire strings while pinning the destroyed
+        // context alive. An invalid QJSValue is the documented clear.
+        page.controller.setCurveLabelResolver(null);
     }
     // Composite "appSettings" surface threaded into the rule editor so the
     // picker components (LayoutComboBox for snapping/tiling actions, and the
@@ -95,6 +105,11 @@ SettingsFlickable {
         // `availableShaderEffects()` for the animationEvent / shaderEffect
         // picker editors in ActionRow.
         readonly property var animationsController: settingsController.animationsPage
+        // The global default animation duration, read by the curve-editor
+        // dialog in ActionParamEditors to set its preview tempo. Threaded
+        // through here rather than read off the context directly so every
+        // editor body keeps to the injected surface.
+        readonly property int animationDuration: settingsController.settings.animationDuration
         // `SnappingShadersPageController` — exposes `availableShaderEffects()`
         // (the overlay/snapping shader catalog) for the overlayShader picker
         // editor (OverrideOverlayShader) and its read-only name resolution.
@@ -114,6 +129,12 @@ SettingsFlickable {
         // doesn't get the full vertical envelope), so the page-level
         // instance is the supported pattern here.
         readonly property var windowPicker: windowPickerDialog
+        // Page-level colour picker (see colorParamDialog above), exposed so
+        // ActionRow's colour-param swatch opens it without owning a
+        // delegate-scoped ColorDialog that a rule-list rebuild could tear down.
+        readonly property var colorPicker: colorParamDialog
+        // Page-level curve editor (see curveParamDialog above).
+        readonly property var curvePicker: curveParamDialog
         readonly property string defaultLayoutId: appSettings.defaultLayoutId
         readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
         readonly property bool autoAssignAllLayouts: appSettings.autoAssignAllLayouts === true
@@ -157,9 +178,17 @@ SettingsFlickable {
     /// Managed System rules pin to the bottom for free (their priority is
     /// INT_MIN). Reactive on searchText / excludedFilters / monitorFilter and
     /// `modelRevision`.
+    /// The snapshot is hoisted into its own revision-only binding: building it
+    /// is the expensive half (13 model reads per rule, and ActionSummaryRole
+    /// recomputes through the C++→JS curve-label resolver), and folding it
+    /// into filteredRules re-ran all of that on every search KEYSTROKE and
+    /// filter toggle. Filtering the cached array is the cheap half.
+    readonly property var _rulesSnapshot: {
+        void (page.modelRevision); // touch to re-run on every rebuild
+        return page.controller.rulesSnapshot();
+    }
     readonly property var filteredRules: {
-        var rev = page.modelRevision;
-        var snapshot = page.controller.rulesSnapshot();
+        var snapshot = page._rulesSnapshot;
         var search = page.searchText.toLowerCase();
         var excluded = page.excludedFilters;
         var out = [];
@@ -339,6 +368,44 @@ SettingsFlickable {
         controller: settingsController
     }
 
+    // Page-level colour picker for ActionRow's colour-param swatches, exposed
+    // through the appSettings bridge as `colorPicker`. Page-level (not inside
+    // the per-param Component) so a modelRevision-driven rule-list rebuild
+    // cannot destroy the delegate hosting it while it is open — the same
+    // popup-teardown hazard windowPickerDialog and AnimationsPresetsPage's
+    // deletePresetConfirm are page-level to avoid. The caller connects to
+    // `accepted` transiently, reads `selectedColor`, and disconnects on close.
+    ColorDialog {
+        id: colorParamDialog
+
+        options: ColorDialog.ShowAlphaChannel
+
+        // Seed imperatively at open: ColorDialog writes selectedColor itself as
+        // the user drags, and that JS-side write severs a declarative binding.
+        function openFor(c) {
+            colorParamDialog.selectedColor = c;
+            colorParamDialog.open();
+        }
+    }
+
+    // Page-level curve editor for ActionRow's curve-param slots, exposed via the
+    // bridge as `curvePicker`, page-level for the same popup-teardown reason as
+    // colorParamDialog. The caller reconfigures it per open through openFor()
+    // and connects transiently to curveApplied / springApplied.
+    CurveEditorDialog {
+        id: curveParamDialog
+
+        function openFor(cfg) {
+            curveParamDialog.eventLabel = cfg.eventLabel;
+            curveParamDialog.timingMode = cfg.timingMode;
+            curveParamDialog.easingCurve = cfg.easingCurve;
+            curveParamDialog.springOmega = cfg.springOmega;
+            curveParamDialog.springZeta = cfg.springZeta;
+            curveParamDialog.duration = cfg.duration;
+            curveParamDialog.open();
+        }
+    }
+
     RuleEditorSheet {
         id: ruleEditorSheet
 
@@ -391,14 +458,9 @@ SettingsFlickable {
         Kirigami.PromptDialog {
             id: forceSaveConfirm
 
-            // Bridge open-state to page-level `_forceSaveConfirmOpen` so
-            // Main.qml's `_navShortcutsEnabled` can include this dialog
-            // in its modal-open guard. Forward-reference avoidance: the
-            // `anyModalOpen` binding is declared at the top of the file
-            // and `forceSaveConfirm` is nested several scopes deep, so a
-            // direct id reference up there is brittle.
-            onOpened: page._forceSaveConfirmOpen = true
-            onClosed: page._forceSaveConfirmOpen = false
+            // Included in page.anyModalOpen (top of file) via a direct
+            // `forceSaveConfirm.visible` read — no open-state bridge, since the
+            // id resolves across plain nesting within this component.
             title: i18n("Overwrite daemon-side changes?")
             subtitle: i18n("Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.")
             standardButtons: Kirigami.Dialog.NoButton
@@ -438,7 +500,7 @@ SettingsFlickable {
             // counter. See the `Connections { target: settingsController }`
             // above for the bump points.
             tiles: {
-                let _rev = page.tilesRevision;
+                void (page.tilesRevision); // touch to re-run when the monitor lists change
                 return page.controller.monitorOverview(settingsController.screens);
             }
             selectedScreenId: page.monitorFilter

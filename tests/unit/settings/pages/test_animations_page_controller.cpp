@@ -4,23 +4,33 @@
 /**
  * @file test_animations_page_controller.cpp
  * @brief AnimationsPageController behaviour pins: path discovery,
- *        override CRUD, the shader-leg support gate, and the
- *        stock-animation suppression mirror.
+ *        override CRUD, the batch and scoped dirty-state announcements,
+ *        the path-traversal gate, the disk-read normalisation, and the
+ *        spring-slider bounds.
  *
  * Pins the file-per-path persistence model: setOverride writes one JSON
  * file under `<userProfilesDir>/<path>.json`, clearOverride deletes it,
  * resolvedProfile walks the parent chain and fills library defaults.
- * The suppression-mirror slots pin `stockSuppressedEvents` (the
- * settings-side twin of the compositor's syncStockEffectSuppression
- * ownership gate) and its NOTIFY inputs.
+ * How that walk stays honest against the process-wide
+ * PhosphorProfileRegistry is pinned by the companion
+ * test_animations_profile_store_sync.cpp. The stock-animation suppression
+ * mirror (`stockSuppressedEvents`) moved to its own companion,
+ * test_animations_suppression_mirror.cpp.
  *
  * Uses `setUserProfilesDirOverride()` to redirect override-file I/O into
  * a tmpdir, and `IsolatedConfigGuard` where a real Settings is needed, so
  * the test never touches the real user XDG dirs.
  *
  * Companion test files:
- *   - test_animations_motion_sets.cpp      — preset / motion-set / pending
+ *   - test_animations_qml_contracts.cpp    — QML↔controller contracts, scraped
+ *                                            from the QML source
+ *   - test_animations_profile_store_sync.cpp — registry/disk staleness
+ *   - test_animations_motion_sets.cpp      — motion-set CRUD and async discard
+ *   - test_animations_presets.cpp          — the user-preset library
  *   - test_animations_shader_overrides.cpp — shader-effect overrides
+ *   - test_animations_suppression_mirror.cpp — the stock-animation suppression mirror
+ *   - test_animations_group_writes.cpp     — the timing-side group writers
+ *   - test_animation_page_scope.cpp        — the page-scope root tables
  */
 
 #include <QSignalSpy>
@@ -30,23 +40,17 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
-#include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/ShaderProfile.h>
-#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAnimation/Spring.h>
 
-#include <QRegularExpression>
-
-#include "helpers/IsolatedConfigGuard.h"
 #include "config/settings.h"
-#include "settings/pages/animationpagescope.h"
+#include "helpers/IsolatedConfigGuard.h"
 #include "settings/pages/animationspagecontroller.h"
 
 using namespace PlasmaZones;
@@ -62,29 +66,6 @@ QString readFile(const QString& path)
     return QString::fromUtf8(f.readAll());
 }
 
-/// Author a minimal animation pack `<root>/<subdir>/metadata.json` plus an
-/// effect.frag stub so the registry's scan accepts it (mirrors the
-/// decoration-page test fixture). An empty @p appliesTo omits the field,
-/// which loads the pack as universal (applies to every single-surface
-/// class); a non-empty array constrains it to the listed event classes.
-bool writeAnimationPack(const QString& root, const QString& subdir, const QJsonArray& appliesTo)
-{
-    const QString packDir = root + QLatin1Char('/') + subdir;
-    if (!QDir().mkpath(packDir))
-        return false;
-    QJsonObject metadata{{QLatin1String("id"), subdir},
-                         {QLatin1String("name"), subdir},
-                         {QLatin1String("fragmentShader"), QStringLiteral("effect.frag")},
-                         {QLatin1String("parameters"), QJsonArray{}}};
-    if (!appliesTo.isEmpty())
-        metadata.insert(QLatin1String("appliesTo"), appliesTo);
-    QFile meta(packDir + QStringLiteral("/metadata.json"));
-    if (!meta.open(QIODevice::WriteOnly | QIODevice::Truncate) || meta.write(QJsonDocument(metadata).toJson()) < 0)
-        return false;
-    QFile frag(packDir + QStringLiteral("/effect.frag"));
-    return frag.open(QIODevice::WriteOnly | QIODevice::Truncate) && frag.write(QByteArrayLiteral("// stub\n")) > 0;
-}
-
 } // namespace
 
 class TestAnimationsPageController : public QObject
@@ -92,6 +73,18 @@ class TestAnimationsPageController : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+
+    /// No slot in THIS file publishes a stack-local registry as the
+    /// process-wide default any more (those slots moved to the shader-overrides
+    /// and suppression-mirror companions). This stays as a cross-test tripwire:
+    /// it catches a registry another test in the same binary leaked as the
+    /// default and failed to clear, surfacing it here at init() rather than as
+    /// a mystery failure in whichever slot runs next — the same guard
+    /// libs/phosphor-animation/tests/test_phosphorprofileregistry.cpp uses.
+    void init()
+    {
+        QCOMPARE(PhosphorAnimation::PhosphorProfileRegistry::defaultRegistry(), nullptr);
+    }
 
     // ─── Slider bounds ────────────────────────────────────────────────────
 
@@ -181,10 +174,19 @@ private Q_SLOTS:
         }
         QCOMPARE(totalListed, paths.size());
 
-        // Every listed path is a built-in path.
+        // Every listed path is a built-in path. Collected then asserted once,
+        // like the `outOfScope` and `unreachable` checks further down: QVERIFY
+        // aborts the whole slot, so asserting inside the loop would report only
+        // the first unknown path and hide the rest, making a taxonomy widening
+        // a one-at-a-time hunt.
+        QStringList unknown;
         for (const QString& p : allListed) {
-            QVERIFY2(paths.contains(p), qPrintable(QStringLiteral("unknown path in UI: ") + p));
+            if (!paths.contains(p)) {
+                unknown.append(p);
+            }
         }
+        QVERIFY2(unknown.isEmpty(),
+                 qPrintable(QStringLiteral("unknown paths in UI: ") + unknown.join(QStringLiteral(", "))));
     }
 
     void eventSections_categoryFlagSetForParents()
@@ -218,89 +220,6 @@ private Q_SLOTS:
         QVERIFY(foundEditorSnapIn);
         QVERIFY2(editorCategoryFlag, "'editor' should be flagged as a category: it has children");
         QVERIFY2(!editorSnapInCategoryFlag, "'editor.snapIn' is a leaf: not a category");
-    }
-
-    // ─── Simple-page scope contract ───────────────────────────────────────
-
-    /// Every event card on AnimationsSimplePage.qml must fall inside the
-    /// `animations-simple` scope in animationpagescope.cpp. That scope drives
-    /// the page's Reset, Discard and dirty walk, so a card whose path is not
-    /// under one of the scope's roots is silently exempt from all three: the
-    /// user edits it, the page reports itself clean, and Reset leaves it set.
-    ///
-    /// Mirror paths are held to the same contract. A mirror receives every
-    /// write the primary does (AnimationEventCard's group writers loop
-    /// `_writePaths`), so it is exactly as dependent on the scope's roots: a
-    /// mirror declared outside them would be edited by the page, reported clean
-    /// by it, and survive its Reset.
-    ///
-    /// The two lists were previously held together by a comment alone. This
-    /// reads the QML as TEXT (no Qt Quick engine, no page construction) and
-    /// pulls the eventPath and mirrorPaths literals straight out of the
-    /// eventModel, so adding a card or a mirror there without widening the
-    /// scope fails here.
-    ///
-    /// Scope limit, stated plainly: the parse sees `"eventPath": "…"` and
-    /// `"mirrorPaths": [ … ]` string literals only. A path that came from a JS
-    /// expression or a property reference would not be seen, and the page has
-    /// never used one. The count guards below are what stop a rewrite in that
-    /// style from turning this into a test that asserts nothing.
-    void simpleScopeCoversEverySimplePageCard()
-    {
-        const QString qmlPath =
-            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationsSimplePage.qml");
-        const QString src = readFile(qmlPath);
-        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
-
-        static const QRegularExpression re(QStringLiteral("\"eventPath\"\\s*:\\s*\"([^\"]+)\""));
-        QStringList cardPaths;
-        auto it = re.globalMatch(src);
-        while (it.hasNext())
-            cardPaths.append(it.next().captured(1));
-
-        // The page hosts five grouped cards today. A drop below that means the
-        // regex or the file stopped matching rather than that a card was
-        // removed, and the loop below would then pass vacuously.
-        QVERIFY2(cardPaths.size() >= 5,
-                 qPrintable(QStringLiteral("parsed only %1 eventPath literals from AnimationsSimplePage.qml")
-                                .arg(cardPaths.size())));
-
-        // Mirrors: pull each `"mirrorPaths": [...]` array body, then the string
-        // literals inside it. Checked against the same scope and reported
-        // through the same list as the primaries, since the consequence of an
-        // out-of-scope mirror is identical.
-        static const QRegularExpression mirrorArrayRe(QStringLiteral("\"mirrorPaths\"\\s*:\\s*\\[([^\\]]*)\\]"));
-        static const QRegularExpression mirrorEntryRe(QStringLiteral("\"([^\"]+)\""));
-        QStringList mirrorPaths;
-        auto arrayIt = mirrorArrayRe.globalMatch(src);
-        while (arrayIt.hasNext()) {
-            const QString body = arrayIt.next().captured(1);
-            auto entryIt = mirrorEntryRe.globalMatch(body);
-            while (entryIt.hasNext())
-                mirrorPaths.append(entryIt.next().captured(1));
-        }
-
-        // One mirror on the page today (the combined opened & closed card). Its
-        // own non-vacuity floor, so a rewrite that stopped matching mirrors
-        // fails here rather than silently checking the primaries alone.
-        QVERIFY2(mirrorPaths.size() >= 1,
-                 qPrintable(QStringLiteral("parsed only %1 mirrorPaths literals from AnimationsSimplePage.qml")
-                                .arg(mirrorPaths.size())));
-        cardPaths.append(mirrorPaths);
-
-        const AnimationPageScope scope = animationPageScope(QStringLiteral("animations-simple"));
-        QCOMPARE(scope.kind, AnimationPageScope::EventSubtree);
-        // Collected rather than QVERIFY'd per row: a QVERIFY failure aborts the
-        // slot, so the first out-of-scope card would hide every other one and
-        // widening the scope would turn into a one-at-a-time hunt.
-        QStringList outOfScope;
-        for (const QString& path : cardPaths) {
-            if (!animationPathInScope(path, scope))
-                outOfScope.append(path);
-        }
-        QVERIFY2(outOfScope.isEmpty(),
-                 qPrintable(QStringLiteral("simple-page cards outside the animations-simple scope: ")
-                            + outOfScope.join(QLatin1String(", "))));
     }
 
     // ─── Override CRUD ────────────────────────────────────────────────────
@@ -342,7 +261,7 @@ private Q_SLOTS:
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
-        c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 200}});
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 200}}));
         QVERIFY(c.hasOverride(QStringLiteral("editor.snapIn")));
     }
 
@@ -375,7 +294,7 @@ private Q_SLOTS:
         AnimationsPageController c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 200}});
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 200}}));
         QVERIFY(c.hasOverride(QStringLiteral("osd.show")));
 
         QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
@@ -483,6 +402,65 @@ private Q_SLOTS:
         QVERIFY(c.hasPendingChanges());
     }
 
+    /// A batch clear announces its NET dirty state, never an intermediate one.
+    ///
+    /// The trap: the first path's staged snapshot is a phantom ("was absent"),
+    /// so removing it empties the snapshot map and flips the page clean; a
+    /// later path in the same batch then stages a REAL snapshot and the page
+    /// ends dirty again. If the flip mid-loop is announced, the last thing the
+    /// page heard is "clean" while there is still an edit to discard — the
+    /// unsaved-changes footer disappears with restorable content behind it.
+    /// The endpoints are equal, so no terminal signal corrects it.
+    void batchClearAnnouncesTheNetDirtyStateNotAnIntermediateOne()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Staged this session, so its snapshot is "was absent" and removing it
+        // drops the entry.
+        QVERIFY(c.setOverride(QStringLiteral("global"), {{QStringLiteral("duration"), 300}}));
+        // Placed directly on disk: pre-existing, unstaged, so clearing it
+        // stages a real snapshot the user can still discard back.
+        QFile prior(tmp.path() + QStringLiteral("/editor.snapIn.json"));
+        QVERIFY(prior.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QVERIFY(prior.write(QByteArrayLiteral(R"({"name":"editor.snapIn","duration":250})")) > 0);
+        prior.close();
+
+        // pendingChangesChanged carries no payload, so record the state the
+        // page would read at each emission and check the LAST one.
+        QList<bool> announced;
+        connect(&c, &AnimationsPageController::pendingChangesChanged, &c, [&c, &announced]() {
+            announced.append(c.hasPendingChanges());
+        });
+
+        // Explicit path order: the phantom first, the real snapshot second.
+        QCOMPARE(c.clearOverridesUnder(QStringList{QStringLiteral("global"), QStringLiteral("editor.snapIn")}), 2);
+
+        QVERIFY(c.hasPendingChanges());
+        // Whatever was announced, the last of it must describe where the batch
+        // actually ended. Endpoints match here (dirty → dirty), so the correct
+        // behaviour is to say nothing at all.
+        QVERIFY2(announced.isEmpty(), "a batch that started and ended dirty announced an intermediate flip");
+
+        // Second scenario, endpoints DIFFERING, so a signal IS owed. Without
+        // this leg the assertion above would also pass if the batch stopped
+        // announcing anything at all. Start from clean: discard the staged
+        // edit above, then stage one fresh override whose snapshot is a
+        // phantom, so clearing it empties the map and ends the batch clean.
+        QVERIFY(c.revertPending());
+        QVERIFY(!c.hasPendingChanges());
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 400}}));
+        QVERIFY(c.hasPendingChanges());
+
+        announced.clear();
+        QCOMPARE(c.clearOverridesUnder(QStringList{QStringLiteral("osd.show")}), 1);
+        QVERIFY(!c.hasPendingChanges());
+        QCOMPARE(announced.size(), 1);
+        QCOMPARE(announced.last(), false);
+    }
+
     // hasScopedPendingFiles reports the file half of a per-page dirty check and
     // must ignore edits outside the queried scope.
     void hasScopedPendingFiles_reflectsOnlyScope()
@@ -556,12 +534,13 @@ private Q_SLOTS:
         // seed is LOWEST precedence, so mergeMissingFields must never
         // overwrite it. Each value differs from both the settings value above
         // and the library default.
-        c.setOverride(QStringLiteral("editor.snapIn"),
-                      QVariantMap{{QStringLiteral("duration"), 611},
-                                  {QStringLiteral("curve"), QStringLiteral("spring:14.0,0.6")},
-                                  {QStringLiteral("minDistance"), 7},
-                                  {QStringLiteral("sequenceMode"), int(PhosphorAnimation::SequenceMode::AllAtOnce)},
-                                  {QStringLiteral("staggerInterval"), 91}});
+        QVERIFY(
+            c.setOverride(QStringLiteral("editor.snapIn"),
+                          QVariantMap{{QStringLiteral("duration"), 611},
+                                      {QStringLiteral("curve"), QStringLiteral("spring:14.0,0.6")},
+                                      {QStringLiteral("minDistance"), 7},
+                                      {QStringLiteral("sequenceMode"), int(PhosphorAnimation::SequenceMode::AllAtOnce)},
+                                      {QStringLiteral("staggerInterval"), 91}}));
         const QVariantMap overridden = c.resolvedProfile(QStringLiteral("editor.snapIn"));
         QCOMPARE(overridden.value(QStringLiteral("duration")).toInt(), 611);
         QCOMPARE(overridden.value(QStringLiteral("curve")).toString(), QStringLiteral("spring:14.0,0.6"));
@@ -569,6 +548,188 @@ private Q_SLOTS:
         QCOMPARE(overridden.value(QStringLiteral("sequenceMode")).toInt(),
                  int(PhosphorAnimation::SequenceMode::AllAtOnce));
         QCOMPARE(overridden.value(QStringLiteral("staggerInterval")).toInt(), 91);
+    }
+
+    /// The profiles directory is a filesystem boundary a user can hand-place
+    /// anything at, and the disk-first resolve reads it without going through
+    /// `Profile::fromJson`. Every field that fromJson would reject has to be
+    /// resolved the same way HERE, or the settings app shows a value the daemon
+    /// will never animate.
+    ///
+    /// Drop-versus-substitute is the load-bearing distinction and is asserted
+    /// separately per field, because `mergeMissingFields` only fills keys that
+    /// are ABSENT: dropping a key lets the ancestor's value through, while
+    /// substituting the library default blocks inheritance at this level.
+    void resolvedProfile_rejectsFieldsProfileFromJsonWouldReject_data()
+    {
+        using P = PhosphorAnimation::Profile;
+        QTest::addColumn<QByteArray>("field");
+        QTest::addColumn<QByteArray>("leafJson");
+        QTest::addColumn<QVariant>("parentValue");
+        QTest::addColumn<QVariant>("expectedResolved");
+        QTest::addColumn<bool>("leafOwnsField");
+
+        const QByteArray kDur = QByteArrayLiteral("duration");
+        const QByteArray kMin = QByteArrayLiteral("minDistance");
+        const QByteArray kStag = QByteArrayLiteral("staggerInterval");
+        const QByteArray kCurve = QByteArrayLiteral("curve");
+        const QByteArray kPreset = QByteArrayLiteral("presetName");
+        const QVariant kParentCurve = QVariant(QStringLiteral("0.4,0,0.2,1"));
+
+        // ── duration: out-of-range NUMBERS are dropped, so the parent shows ──
+        QTest::newRow("duration negative")
+            << kDur << QByteArrayLiteral(R"({"duration":-50})") << QVariant(123) << QVariant(123) << false;
+        QTest::newRow("duration zero") << kDur << QByteArrayLiteral(R"({"duration":0})") << QVariant(123)
+                                       << QVariant(123) << false;
+        QTest::newRow("duration over max")
+            << kDur << QByteArrayLiteral(R"({"duration":1e9})") << QVariant(123) << QVariant(123) << false;
+        QTest::newRow("duration astronomical")
+            << kDur << QByteArrayLiteral(R"({"duration":1e300})") << QVariant(123) << QVariant(123) << false;
+
+        // A NON-NUMBER is dropped too, and both sides type-check to make that
+        // so.
+        //
+        // These two duration rows do NOT pin the type check, though — they ride
+        // the range check. A JSON string or bool coerces to 0, and 0 fails
+        // duration's `> 0` bound, so they resolve to the parent with or without
+        // the `isDouble()` guard. The rows that actually pin it in THIS
+        // translation unit are `minDistance string` and `stagger string`, whose
+        // bounds admit 0. The library-side guard has its own coverage in
+        // libs/phosphor-animation/tests/test_profile.cpp
+        // (testFromJsonLeavesNonNumericFieldsUnset). Keep these two rows: the
+        // behaviour they assert is still correct, only the rationale was wrong.
+        QTest::newRow("duration string") << kDur << QByteArrayLiteral(R"({"duration":"900"})") << QVariant(123)
+                                         << QVariant(123) << false;
+        QTest::newRow("duration bool") << kDur << QByteArrayLiteral(R"({"duration":true})") << QVariant(123)
+                                       << QVariant(123) << false;
+        QTest::newRow("duration valid") << kDur << QByteArrayLiteral(R"({"duration":900})") << QVariant(123)
+                                        << QVariant(900) << true;
+        // The accepted side of duration's shared bound, for the same reason as
+        // the minDistance cap row below.
+        QTest::newRow("duration at the domain cap") << kDur << QByteArrayLiteral(R"({"duration":3600000})")
+                                                    << QVariant(123) << QVariant(int(P::MaxDurationMs)) << true;
+
+        // ── minDistance: same split. The 1e300 row pins the bound-before-round
+        // guard — `qRound` on an unbounded finite double is undefined
+        // behaviour, so the value must be rejected by RANGE first.
+        QTest::newRow("minDistance negative")
+            << kMin << QByteArrayLiteral(R"({"minDistance":-5})") << QVariant(7) << QVariant(7) << false;
+        // The bound both sides share. Before this row the two disagreed: the
+        // library capped at MaxMinDistancePx while the settings mirror still
+        // capped at INT_MAX, so a hand-placed 200000 showed in the card and
+        // blocked inheritance while the daemon dropped it.
+        QTest::newRow("minDistance over the domain cap")
+            << kMin << QByteArrayLiteral(R"({"minDistance":200000})") << QVariant(7) << QVariant(7) << false;
+        QTest::newRow("minDistance astronomical")
+            << kMin << QByteArrayLiteral(R"({"minDistance":1e300})") << QVariant(7) << QVariant(7) << false;
+        QTest::newRow("minDistance string")
+            << kMin << QByteArrayLiteral(R"({"minDistance":"5"})") << QVariant(7) << QVariant(7) << false;
+        QTest::newRow("minDistance valid")
+            << kMin << QByteArrayLiteral(R"({"minDistance":5})") << QVariant(7) << QVariant(5) << true;
+        // The ACCEPTED side of the shared bound. Without it, flipping either
+        // implementation's `<=` to `<` rejects exactly MaxMinDistancePx on one
+        // side only, and every other row still passes.
+        QTest::newRow("minDistance at the domain cap") << kMin << QByteArrayLiteral(R"({"minDistance":100000})")
+                                                       << QVariant(7) << QVariant(int(P::MaxMinDistancePx)) << true;
+
+        // ── staggerInterval ─────────────────────────────────────────────────
+        QTest::newRow("stagger negative")
+            << kStag << QByteArrayLiteral(R"({"staggerInterval":-1})") << QVariant(40) << QVariant(40) << false;
+        QTest::newRow("stagger over max")
+            << kStag << QByteArrayLiteral(R"({"staggerInterval":1e9})") << QVariant(40) << QVariant(40) << false;
+        QTest::newRow("stagger string") << kStag << QByteArrayLiteral(R"({"staggerInterval":"20"})") << QVariant(40)
+                                        << QVariant(40) << false;
+        QTest::newRow("stagger valid") << kStag << QByteArrayLiteral(R"({"staggerInterval":20})") << QVariant(40)
+                                       << QVariant(20) << true;
+
+        // ── curve ───────────────────────────────────────────────────────────
+        // A non-string is dropped, matching fromJson (whose `toString()` yields
+        // empty and leaves the field unset).
+        QTest::newRow("curve non-string")
+            << kCurve << QByteArrayLiteral(R"({"curve":42})") << kParentCurve << kParentCurve << false;
+        // The one deliberate divergence from fromJson, pinned so nobody "fixes"
+        // it without reading why: an unresolvable-but-string spec is KEPT here,
+        // because resolving it needs a CurveRegistry this translation unit does
+        // not have, and dropping every unresolvable spec would drop legitimate
+        // user-authored curves too. See `sanitizedProfileMap`.
+        QTest::newRow("curve unresolvable string") << kCurve << QByteArrayLiteral(R"({"curve":"srping:14,0.6"})")
+                                                   << kParentCurve << QVariant(QStringLiteral("srping:14,0.6")) << true;
+        QTest::newRow("curve valid") << kCurve << QByteArrayLiteral(R"({"curve":"0.1,0,0.9,1"})") << kParentCurve
+                                     << QVariant(QStringLiteral("0.1,0,0.9,1")) << true;
+
+        // ── presetName ──────────────────────────────────────────────────────
+        // Guarded on isString() for fromJson's reason: `toString()` on a
+        // non-string engages the optional with an EMPTY value, and
+        // engaged-empty means "explicit empty override", not "inherit".
+        QTest::newRow("presetName non-string")
+            << kPreset << QByteArrayLiteral(R"({"presetName":42})") << QVariant(QStringLiteral("Snappy"))
+            << QVariant(QStringLiteral("Snappy")) << false;
+        QTest::newRow("presetName valid")
+            << kPreset << QByteArrayLiteral(R"({"presetName":"Gentle"})") << QVariant(QStringLiteral("Snappy"))
+            << QVariant(QStringLiteral("Gentle")) << true;
+    }
+
+    void resolvedProfile_rejectsFieldsProfileFromJsonWouldReject()
+    {
+        QFETCH(QByteArray, field);
+        QFETCH(QByteArray, leafJson);
+        QFETCH(QVariant, parentValue);
+        QFETCH(QVariant, expectedResolved);
+        QFETCH(bool, leafOwnsField);
+
+        const QString key = QString::fromUtf8(field);
+
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // The parent carries a value the leaf can fall back to, so "rejected"
+        // and "kept" produce visibly different results.
+        QVERIFY(c.setOverride(QStringLiteral("editor"), {{key, parentValue}}));
+
+        QFile leaf(tmp.path() + QStringLiteral("/editor.snapIn.json"));
+        QVERIFY(leaf.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(leaf.write(leafJson), qint64(leafJson.size()));
+        leaf.close();
+
+        const QVariant resolved = c.resolvedProfile(QStringLiteral("editor.snapIn")).value(key);
+        if (expectedResolved.typeId() == QMetaType::QString) {
+            QCOMPARE(resolved.toString(), expectedResolved.toString());
+        } else {
+            QCOMPARE(resolved.toInt(), expectedResolved.toInt());
+        }
+
+        // rawProfile is normalised on the same terms, so a card reports field
+        // ownership the same way the resolve does — no live revert link beside
+        // a value the event does not actually own.
+        QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).contains(key), leafOwnsField);
+    }
+
+    /// `sequenceMode` is the one field `Profile::fromJson` SUBSTITUTES rather
+    /// than leaves unset, so an unknown enumerator must block inheritance at the
+    /// library default instead of falling through to the parent's mode. Getting
+    /// this backwards is invisible until a cascade animation plays wrong.
+    void resolvedProfile_unknownSequenceModeSubstitutesRatherThanInherits()
+    {
+        using P = PhosphorAnimation::Profile;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Parent asks for Cascade; the leaf's mode is nonsense.
+        QVERIFY(c.setOverride(QStringLiteral("editor"),
+                              {{QStringLiteral("sequenceMode"), int(PhosphorAnimation::SequenceMode::Cascade)}}));
+        const QByteArray leafJson = QByteArrayLiteral(R"({"name":"editor.snapIn","sequenceMode":7})");
+        QFile leaf(tmp.path() + QStringLiteral("/editor.snapIn.json"));
+        QVERIFY(leaf.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(leaf.write(leafJson), qint64(leafJson.size()));
+        leaf.close();
+
+        QCOMPARE(c.resolvedProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("sequenceMode")).toInt(),
+                 int(P::DefaultSequenceMode));
+        QVERIFY(int(P::DefaultSequenceMode) != int(PhosphorAnimation::SequenceMode::Cascade));
     }
 
     void resolvedProfile_unsetReturnsLibraryDefaults()
@@ -717,7 +878,7 @@ private Q_SLOTS:
     /// Pin the shader-leg-support predicate against the call sites that
     /// actually consume a leg. `supportsShaderLeg` is the predicate the QML
     /// shader-picker visibility is bound to; if the surface set in
-    /// `src/core/animationshadersupportedpaths.h` drifts away from those call
+    /// `src/core/types/animationshadersupportedpaths.h` drifts away from those call
     /// sites, the QML would either expose pickers that do nothing (drift in one
     /// direction) or hide pickers for events that DO produce shader legs (drift
     /// in the other). Per that header, consumption runs through three
@@ -735,17 +896,38 @@ private Q_SLOTS:
     {
         AnimationsPageController c;
 
+        // Collected, not asserted one at a time. A taxonomy change can flip
+        // several paths at once, and a bare QVERIFY aborts the whole slot on
+        // the first, so the rest surface one rebuild apart. Same
+        // collect-then-assert-once shape the other broad checks in this file
+        // use.
+        QStringList wrong;
+        const auto expect = [&c, &wrong](const QString& path, bool supported) {
+            if (c.supportsShaderLeg(path) == supported)
+                return;
+            wrong.append(QStringLiteral("%1 (expected %2)")
+                             .arg(path.isEmpty() ? QStringLiteral("<empty>") : path,
+                                  supported ? QStringLiteral("supported") : QStringLiteral("unsupported")));
+        };
+
         // Genuine OSDs (consumed leaves).
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("osd.show")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("osd.hide")));
+        expect(QStringLiteral("osd.show"), true);
+        expect(QStringLiteral("osd.hide"), true);
 
         // Popup family — leg-leaf paths (consumed leaves).
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.layoutPicker.show")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.layoutPicker.hide")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.zoneSelector.show")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.zoneSelector.hide")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.show")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.hide")));
+        expect(QStringLiteral("popup.layoutPicker.show"), true);
+        expect(QStringLiteral("popup.layoutPicker.hide"), true);
+        expect(QStringLiteral("popup.zoneSelector.show"), true);
+        expect(QStringLiteral("popup.zoneSelector.hide"), true);
+        expect(QStringLiteral("popup.snapAssist.show"), true);
+        expect(QStringLiteral("popup.snapAssist.hide"), true);
+        // The cheatsheet family, consumed by buildCheatsheetConfig. Added
+        // after this slot was found to have drifted from its source of truth:
+        // because the list below is a hand-maintained allowlist, an ADDED
+        // supported path is structurally invisible to it, and the cheatsheet
+        // leaves are the proof that happens.
+        expect(QStringLiteral("popup.cheatsheet.show"), true);
+        expect(QStringLiteral("popup.cheatsheet.hide"), true);
 
         // Window family — consumed leaves driven by the KWin effect under
         // kwin-effect/plasmazoneseffect/. The lifecycle legs go through
@@ -755,181 +937,82 @@ private Q_SLOTS:
         // minimizedChanged), while the snap geometry legs resolve through
         // applyWindowGeometry in drag_snap.cpp. Both run the resolved shader
         // on the OffscreenEffect's redirected texture quad.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.open")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.close")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.minimize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.maximize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.move")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.snapIn")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.snapOut")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.layoutSwitch")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.focus")));
+        expect(QStringLiteral("window.appearance.open"), true);
+        expect(QStringLiteral("window.appearance.close"), true);
+        expect(QStringLiteral("window.appearance.minimize"), true);
+        expect(QStringLiteral("window.movement.maximize"), true);
+        expect(QStringLiteral("window.movement.move"), true);
+        expect(QStringLiteral("window.movement.snapIn"), true);
+        expect(QStringLiteral("window.movement.snapOut"), true);
+        expect(QStringLiteral("window.movement.layoutSwitch"), true);
+        expect(QStringLiteral("window.appearance.focus"), true);
         // The resize legs were dropped from the taxonomy: the interactive
         // edge-drag has no discrete before/after for a shader to play, and
         // snapResize never had a callsite. Stale config overrides on these
         // paths must prune, so they stay unsupported.
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.snapResize")));
+        expect(QStringLiteral("window.movement.resize"), false);
+        expect(QStringLiteral("window.movement.snapResize"), false);
         // Desktop family — the two-texture switch and the show-desktop peek
         // are consumed leaves too (the KWin effect's DesktopTransitionManager
         // resolves them in the desktopChanged / showingDesktopChanged handlers,
         // not per-window tryBeginShaderForEvent legs).
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.switch")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.peek")));
+        expect(QStringLiteral("desktop.switch"), true);
+        expect(QStringLiteral("desktop.peek"), true);
         // The "All Desktop Events" parent row is the desktop family root, and
         // an ancestor of the consumed switch and peek leaves. It is
         // shader-pickable too (its picker binds to this), and a pack set there
         // cascades to both legs — so it is supported for the same reason the
         // popup/osd parents below are, not merely as an ancestor of a consumed
         // leaf.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop")));
+        expect(QStringLiteral("desktop"), true);
 
         // Ancestors of consumed leaves — supported because the
         // resolver walks them on the way to the leaf, so a
         // shader override here cascades to every descendant. Without
         // this, the user would have to set the same shader on every
         // popup leaf individually instead of once at the parent.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("global")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("osd")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.layoutPicker")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.zoneSelector")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist")));
+        expect(QStringLiteral("global"), true);
+        expect(QStringLiteral("osd"), true);
+        expect(QStringLiteral("popup"), true);
+        expect(QStringLiteral("popup.layoutPicker"), true);
+        expect(QStringLiteral("popup.zoneSelector"), true);
+        expect(QStringLiteral("popup.snapAssist"), true);
+        expect(QStringLiteral("popup.cheatsheet"), true);
         // `panel` is no longer a popup ancestor — popups moved to their
         // own root, leaving `panel` with only slideIn/slideOut/fadeIn/
         // fadeOut which the daemon's overlay service never consumes.
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel")));
+        expect(QStringLiteral("panel"), false);
         // `window` itself is now a consumable ancestor — setting a
         // shader at the family root cascades to every leaf above.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window")));
+        expect(QStringLiteral("window"), true);
         // The intermediate cascade parents the parent-card UX relies on.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance")));
+        expect(QStringLiteral("window.movement"), true);
+        expect(QStringLiteral("window.appearance"), true);
 
         // Paths the resolver never walks through — any assignment would
         // be runtime-dead and silently shadow what the user thought
         // they set on a sibling. Must stay unsupported.
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("editor")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("editor.snapIn")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget.fadeIn")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("workspace")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("workspace.switchIn")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("cursor")));
+        expect(QStringLiteral("editor"), false);
+        expect(QStringLiteral("editor.snapIn"), false);
+        expect(QStringLiteral("widget"), false);
+        expect(QStringLiteral("widget.fadeIn"), false);
+        expect(QStringLiteral("workspace"), false);
+        expect(QStringLiteral("workspace.switchIn"), false);
+        expect(QStringLiteral("cursor"), false);
         // Sibling paths under `panel` and `osd` that aren't ancestors
         // of any consumed leaf.
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.slideIn")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.slideOut")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd.pop")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd.dim")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("popup.layoutPicker.popIn")));
+        expect(QStringLiteral("panel.slideIn"), false);
+        expect(QStringLiteral("panel.slideOut"), false);
+        expect(QStringLiteral("osd.pop"), false);
+        expect(QStringLiteral("osd.dim"), false);
+        expect(QStringLiteral("popup.layoutPicker.popIn"), false);
         // Empty path / nonsense path.
-        QVERIFY(!c.supportsShaderLeg(QString()));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("../etc/passwd")));
-    }
+        expect(QString(), false);
+        expect(QStringLiteral("../etc/passwd"), false);
 
-    // ─── Stock-animation suppression mirror ───────────────────────────────
-
-    /// `stockSuppressedEvents` is the settings-side mirror of the
-    /// compositor's syncStockEffectSuppression ownership gate; the rule
-    /// editor's stock-animation conflict chip hides for listed events. Pin
-    /// the gate's three inputs: tree assignment (a tree-resolved effectId
-    /// on the minimize/maximize path lists the event; with a null registry
-    /// the unknown id gets the warm-up grace and counts as owned), the
-    /// animations master toggle (off collapses the list to empty), and the
-    /// NOTIFY wiring (both inputs fire stockSuppressedEventsChanged so the
-    /// chip bindings re-evaluate).
-    void stockSuppressedEvents_reflectsTreeAndMasterToggle()
-    {
-        IsolatedConfigGuard guard;
-        Settings s;
-        s.setAnimationsEnabled(true);
-        AnimationsPageController c(nullptr, &s);
-
-        // No tree assignment: nothing suppressed, no conflict-free events.
-        QVERIFY(c.stockSuppressedEvents().isEmpty());
-
-        QSignalSpy spy(&c, &AnimationsPageController::stockSuppressedEventsChanged);
-
-        // Tree-assign a minimize pack. The controller was built with a null
-        // registry, so the effectId is unknown and the warm-up grace counts
-        // it as owned (mirroring resolvedShaderProfile's grace).
-        PhosphorAnimationShaders::ShaderProfileTree tree;
-        PhosphorAnimationShaders::ShaderProfile profile;
-        profile.effectId = QStringLiteral("genie");
-        tree.setOverride(PhosphorAnimation::ProfilePaths::WindowMinimize, profile);
-        s.setShaderProfileTree(tree);
-
-        QVERIFY2(spy.count() >= 1, "tree change must notify the chip bindings");
-        // Minimize is owned; maximize (unassigned) is not.
-        QCOMPARE(c.stockSuppressedEvents(), QStringList{PhosphorAnimation::ProfilePaths::WindowMinimize});
-
-        // Assigning the maximize path too lists both events.
-        tree.setOverride(PhosphorAnimation::ProfilePaths::WindowMaximize, profile);
-        s.setShaderProfileTree(tree);
-        QCOMPARE(c.stockSuppressedEvents(),
-                 (QStringList{PhosphorAnimation::ProfilePaths::WindowMinimize,
-                              PhosphorAnimation::ProfilePaths::WindowMaximize}));
-
-        // Master toggle off gates the whole predicate: nothing is owned and
-        // the change is notified, so every chip comes back.
-        const int beforeToggle = spy.count();
-        s.setAnimationsEnabled(false);
-        QVERIFY2(spy.count() > beforeToggle, "master-toggle flip must notify the chip bindings");
-        QVERIFY(c.stockSuppressedEvents().isEmpty());
-
-        // Toggle back on: ownership returns.
-        s.setAnimationsEnabled(true);
-        QCOMPARE(c.stockSuppressedEvents(),
-                 (QStringList{PhosphorAnimation::ProfilePaths::WindowMinimize,
-                              PhosphorAnimation::ProfilePaths::WindowMaximize}));
-    }
-
-    /// Registry-backed half of the gate: a KNOWN pack is owned only when its
-    /// contract class applies to the event (the compositor refuses to run a
-    /// mismatched pack, so the stock effect stays loaded and the conflict
-    /// chip must show), and a committed registry rescan fires the third
-    /// NOTIFY input so the chip bindings re-evaluate.
-    void stockSuppressedEvents_registryContractGateAndNotify()
-    {
-        IsolatedConfigGuard guard;
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        // Universal pack (no appliesTo) applies to the appearance-class
-        // minimize path; the desktop-only pack is a two-texture contract
-        // that never runs on a single-surface window event.
-        QVERIFY(writeAnimationPack(tmp.path(), QStringLiteral("universal-pack"), {}));
-        QVERIFY(writeAnimationPack(tmp.path(), QStringLiteral("desktop-pack"), QJsonArray{QStringLiteral("desktop")}));
-        PhosphorAnimationShaders::AnimationShaderRegistry registry;
-        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
-        QVERIFY(registry.hasEffect(QStringLiteral("universal-pack")));
-        QVERIFY(registry.hasEffect(QStringLiteral("desktop-pack")));
-
-        Settings s;
-        s.setAnimationsEnabled(true);
-        AnimationsPageController c(&registry, &s);
-        QSignalSpy spy(&c, &AnimationsPageController::stockSuppressedEventsChanged);
-
-        // Known, class-compatible pack: owned.
-        PhosphorAnimationShaders::ShaderProfileTree tree;
-        PhosphorAnimationShaders::ShaderProfile profile;
-        profile.effectId = QStringLiteral("universal-pack");
-        tree.setOverride(PhosphorAnimation::ProfilePaths::WindowMinimize, profile);
-        s.setShaderProfileTree(tree);
-        QCOMPARE(c.stockSuppressedEvents(), QStringList{PhosphorAnimation::ProfilePaths::WindowMinimize});
-
-        // Known, class-INCOMPATIBLE pack: not owned, chip stays visible.
-        profile.effectId = QStringLiteral("desktop-pack");
-        tree.setOverride(PhosphorAnimation::ProfilePaths::WindowMinimize, profile);
-        s.setShaderProfileTree(tree);
-        QVERIFY(c.stockSuppressedEvents().isEmpty());
-
-        // Third NOTIFY input: a committed rescan (a new pack changes the
-        // scan fingerprint) re-fires the chip rebind signal.
-        const int beforeRescan = spy.count();
-        QVERIFY(writeAnimationPack(tmp.path(), QStringLiteral("late-pack"), {}));
-        registry.refresh();
-        QTRY_VERIFY2(spy.count() > beforeRescan, "registry rescan must notify the chip bindings");
+        QVERIFY2(wrong.isEmpty(),
+                 qPrintable(QStringLiteral("supportsShaderLeg disagrees with the consumed-leg call sites for: %1")
+                                .arg(wrong.join(QStringLiteral(", ")))));
     }
 };
 

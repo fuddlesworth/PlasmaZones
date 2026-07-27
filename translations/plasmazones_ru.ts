@@ -296,47 +296,47 @@
         <translation>Поменять экран вниз</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="859"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="882"/>
         <source>Arrows</source>
         <translation>Стрелки</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="869"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="892"/>
         <source>Apply Layout 1-9</source>
         <translation>Применить раскладку 1-9</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="870"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="893"/>
         <source>Snap to Zone 1-9</source>
         <translation>Прилепить к зоне 1-9</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="874"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="897"/>
         <source>Move Window</source>
         <translation>Переместить окно</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="879"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="902"/>
         <source>Focus Zone</source>
         <translation>Фокус на зону</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="884"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="907"/>
         <source>Swap Window</source>
         <translation>Поменять окно местами</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="889"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="912"/>
         <source>Span Window</source>
         <translation>Растянуть окно</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="895"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="918"/>
         <source>Swap Screens</source>
         <translation>Поменять экраны местами</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1032"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1055"/>
         <source>Apply Layout %1</source>
         <translation>Применить раскладку %1</translation>
     </message>
@@ -731,7 +731,7 @@
         <translation>Службы не инициализированы</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1050"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1073"/>
         <source>Snap to Zone %1</source>
         <translation>Прилепить к зоне %1</translation>
     </message>
@@ -1009,23 +1009,23 @@
         <translation>Не удалось записать файл алгоритма. Проверьте наличие свободного места на диске и права доступа.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="131"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="102"/>
         <source>Cannot modify sets while a discard is in progress.</source>
         <translation>Невозможно изменить наборы, пока выполняется отмена изменений.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="341"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="391"/>
         <source>Cannot save while a discard is in progress.</source>
         <translation>Невозможно сохранить, пока выполняется отмена изменений.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="572"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="635"/>
         <location filename="../src/settings/rules/rulecontroller.cpp" line="150"/>
         <source>Discard already in flight.</source>
         <translation>Отмена изменений уже выполняется.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="642"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="722"/>
         <source>Could not restore %n profile file(s). They remain pending.</source>
         <translation>
             <numerusform>Не удалось восстановить %n файл профиля. Он остаётся в ожидании.</numerusform>
@@ -1034,8 +1034,8 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="776"/>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="786"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="858"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="868"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation>Невозможно изменить предустановки, пока выполняется отмена изменений.</translation>
     </message>
@@ -1140,23 +1140,23 @@
         <translation>В файле не найдено допустимых раскладок</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="110"/>
+        <location filename="../src/settings/main.cpp" line="113"/>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="224"/>
         <source>PlasmaZones Settings</source>
         <translation>Параметры PlasmaZones</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="115"/>
+        <location filename="../src/settings/main.cpp" line="118"/>
         <source>Open a specific settings page</source>
         <translation>Открыть определённую страницу параметров</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="118"/>
+        <location filename="../src/settings/main.cpp" line="121"/>
         <source>Reveal a specific setting on the page (deep link)</source>
         <translation>Показать определённый параметр на странице (прямая ссылка)</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="122"/>
+        <location filename="../src/settings/main.cpp" line="125"/>
         <source>Reveal a specific section on the page (deep link)</source>
         <translation>Показать определённый раздел на странице (прямая ссылка)</translation>
     </message>
@@ -2737,7 +2737,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="385"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="409"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="451"/>
         <source>Animation duration</source>
         <translation>Длительность анимации</translation>
     </message>
@@ -2800,7 +2800,7 @@
         <location filename="../src/settings/rules/rulemodel.cpp" line="439"/>
         <location filename="../src/settings/rules/rulemodel.cpp" line="467"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="237"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="215"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="223"/>
         <source>Accent</source>
         <translation>Акцент</translation>
     </message>
@@ -6221,13 +6221,13 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="786"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="89"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="139"/>
         <source>Easing Presets</source>
         <translation>Предустановки плавности</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="788"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="227"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="268"/>
         <source>Spring Presets</source>
         <translation>Предустановки пружины</translation>
     </message>
@@ -6936,17 +6936,29 @@
         <translation>Не удалось удалить предустановку &quot;%1&quot;.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="291"/>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="330"/>
-        <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="408"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="429"/>
         <source>Cannot reset while a discard is in progress.</source>
         <translation>Нельзя выполнить сброс, пока идёт отмена изменений.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="313"/>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="345"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="491"/>
         <source>Some animation overrides could not be reset.</source>
         <translation>Некоторые переопределения анимаций сбросить не удалось.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="101"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="182"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="364"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="426"/>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="511"/>
+        <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="431"/>
+        <source>Cannot change this while a discard is in progress.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="288"/>
+        <source>Some animation overrides could not be reverted.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_session.cpp" line="489"/>
@@ -7890,8 +7902,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="106"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="355"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="384"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="353"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="382"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="199"/>
         <source>Duplicate</source>
         <translation>Дублировать</translation>
@@ -10047,6 +10059,19 @@
         <source>Toggle advanced settings</source>
         <translation>Переключить дополнительные параметры</translation>
     </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="327"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="599"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="601"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="403"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="236"/>
+        <source>%n zone</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="342"/>
         <source>Move up</source>
@@ -10339,12 +10364,12 @@
         <translation>Нажмите, чтобы задать клавишу, модификатор или любую кнопку мыши</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="305"/>
+        <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="324"/>
         <source>Collapsed. Activate to expand.</source>
         <translation>Свёрнуто. Активируйте, чтобы развернуть.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="305"/>
+        <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="324"/>
         <source>Expanded. Activate to collapse.</source>
         <translation>Развёрнуто. Активируйте, чтобы свернуть.</translation>
     </message>
@@ -10421,10 +10446,10 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="77"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="111"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="161"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="404"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="459"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="408"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="432"/>
         <location filename=".qml-stubs/src/settings/qml/pages/wizard/WizardFooter.qml.cpp" line="85"/>
         <source>Cancel</source>
         <translation>Отмена</translation>
@@ -10527,7 +10552,6 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="206"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="175"/>
         <source>Style</source>
         <translation>Начертание</translation>
     </message>
@@ -10658,50 +10682,62 @@
         <translation>Дорожка предпросмотра анимации</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="300"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="299"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation>Пружина · ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="302"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="301"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="179"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="226"/>
         <source>%1 · %2 ms</source>
-        <translation>%1 · %2 мс</translation>
+        <comment>curve, then duration in milliseconds</comment>
+        <translation type="unfinished">%1 · %2 мс</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="66"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="68"/>
         <source>Settings here apply to all child events unless individually overridden.</source>
         <translation>Параметры здесь применяются ко всем дочерним событиям, если для них не задано отдельное переопределение.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="69"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="71"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="179"/>
         <source>Inheriting from: %1</source>
         <translation>Наследует от: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="71"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="73"/>
         <source>Using library defaults</source>
         <translation>Используются значения библиотеки по умолчанию</translation>
     </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="91"/>
+        <source>%n descendant event has a shader override that shadows this parent.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="92"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="94"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="198"/>
         <source>Clear shadowing children</source>
         <translation>Очистить переопределения дочерних элементов</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="124"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="126"/>
         <source>%1 of the events this card controls hold different values right now, and it shows only one of them. The next change you make to the timing or the shader here applies that setting to all %2 of them.</source>
         <translation>%1 из событий, которыми управляет эта карточка, сейчас содержат разные значения, и здесь показано только одно из них. Следующее изменение времени или шейдера применит этот параметр ко всем %2 из них.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="135"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="137"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="215"/>
         <source>Current: %1</source>
         <translation>Текущее: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="157"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="170"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="102"/>
         <location filename=".qml-stubs/src/shared/CategoryMenuButton.qml.cpp" line="280"/>
         <source>(missing: %1)</source>
@@ -10709,152 +10745,152 @@
         <translation>(отсутствует: %1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="233"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="250"/>
         <source>Spring · %1</source>
         <translation>Пружина · %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="235"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="252"/>
         <source>Spring · Custom</source>
         <translation>Пружина · Пользовательское</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="258"/>
         <source>Easing · Custom</source>
         <translation>Плавность · Пользовательское</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="247"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="263"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="312"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="264"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="304"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="353"/>
         <source>ω=%1 · ζ=%2</source>
         <translation>ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="266"/>
         <source>%1 ms</source>
         <translation>%1 мс</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="316"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="398"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="339"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="437"/>
         <source>Overridden for this event</source>
         <translation>Переопределено для этого события</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="316"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="398"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="339"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="437"/>
         <source>Following the inherited value</source>
         <translation>Следует унаследованному значению</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="324"/>
-        <source>Revert to inherited</source>
-        <translation>Вернуть унаследованное значение</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="326"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="357"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="359"/>
         <source>Revert curve to inherited</source>
         <translation>Вернуть унаследованную кривую</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="333"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="372"/>
         <source>Customize…</source>
         <translation>Настроить…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="335"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="374"/>
         <source>Customize curve for %1</source>
         <translation>Настроить кривую для %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="335"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="374"/>
         <source>Customize curve</source>
         <translation>Настроить кривую</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="347"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="350"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="386"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="389"/>
         <source>Timing mode</source>
         <translation>Режим времени</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="390"/>
         <source>Easing</source>
         <translation>Плавность</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="390"/>
         <source>Spring</source>
         <translation>Пружина</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="424"/>
         <source>A spring curve is set, so the duration has no effect. Change the curve in Global animation defaults, or switch to Advanced in the sidebar to change it for this event.</source>
         <translation>Задана кривая пружины, поэтому длительность не влияет. Измените кривую в «Глобальных параметрах анимации по умолчанию» или переключитесь в «Дополнительно» на боковой панели, чтобы изменить её для этого события.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="424"/>
         <source>A spring curve derives its own settle time from its parameters, so there is no duration to set. Switch the timing mode to Easing to use a duration.</source>
         <translation>Кривая пружины определяет собственное время затухания на основе своих параметров, поэтому длительность задавать не нужно. Переключите режим времени на «Плавность», чтобы использовать длительность.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="393"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="345"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="349"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="432"/>
         <source>Duration</source>
         <translation>Длительность</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="436"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="438"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="450"/>
+        <source>ms</source>
+        <comment>milliseconds, unit appended to a slider value</comment>
+        <translation>ms</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="491"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="493"/>
         <source>Revert duration to inherited</source>
         <translation>Вернуть унаследованную длительность</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="516"/>
         <source>No shader pack. Set one below.</source>
         <translation>Нет пакета шейдеров. Задайте его ниже.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="516"/>
         <source>No shader pack.</source>
         <translation>Нет пакета шейдеров.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="523"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="578"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="256"/>
         <source>Remove %1</source>
         <translation>Удалить %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="664"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="719"/>
         <source>Set shader pack</source>
         <translation>Задать пакет шейдеров</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="672"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="727"/>
         <source>Swap this event&apos;s pack for another, or clear it</source>
         <translation>Заменить пакет этого события на другой или очистить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="675"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="730"/>
         <source>No shader packs are available for this event</source>
         <translation>Для этого события нет доступных пакетов шейдеров</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="677"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="732"/>
         <source>Apply a shader pack to this event</source>
         <translation>Применить пакет шейдеров к этому событию</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="695"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="754"/>
         <source>Select a pack…</source>
         <comment>@action:button</comment>
         <translation>Выбрать пакет…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="696"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="755"/>
         <source>Set the shader pack this event uses</source>
         <translation>Задать пакет шейдеров, используемый этим событием</translation>
     </message>
@@ -11050,6 +11086,15 @@
         <comment>@label motion event group</comment>
         <translation>Панели</translation>
     </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="58"/>
+        <source>%n Override</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="61"/>
         <source>“%1” will overwrite every per-event override it covers.</source>
@@ -11086,71 +11131,71 @@
         <translation>Все наложения</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="113"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="157"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="163"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="213"/>
         <source>Curve preview for %1</source>
         <translation>Предпросмотр кривой для %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="129"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="173"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="269"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="318"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="185"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="232"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="310"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="359"/>
         <source>Use %1 as default</source>
         <translation>Использовать %1 по умолчанию</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="130"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="174"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="270"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="319"/>
-        <source>Use as Default</source>
-        <translation>Использовать по умолчанию</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="162"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="307"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="218"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="348"/>
         <source>★ %1</source>
         <translation>★ %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="179"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="324"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="238"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="369"/>
         <source>Delete preset %1</source>
         <translation>Удалить предустановку %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="182"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="327"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="372"/>
         <source>Delete preset</source>
         <translation>Удалить предустановку</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="191"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="114"/>
         <source>Delete preset?</source>
         <translation>Удалить предустановку?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="192"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="337"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="115"/>
         <source>&quot;%1&quot; will be permanently removed.</source>
         <translation>«%1» будет удалена без возможности восстановления.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="213"/>
-        <source>No custom easing presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</source>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="186"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="233"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="311"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="360"/>
+        <source>Use as default</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="254"/>
+        <source>No custom easing presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
+        <oldsource>No custom easing presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</oldsource>
         <translation>Пользовательских предустановок плавности пока нет. Используйте «Сохранить как предустановку…» в редакторе кривых, чтобы создать её.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="253"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="302"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="294"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="343"/>
         <source>Spring preview for %1</source>
         <translation>Предпросмотр пружины для %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="354"/>
-        <source>No custom spring presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</source>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="385"/>
+        <source>No custom spring presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
+        <oldsource>No custom spring presets yet. Use &quot;Save as Preset…&quot; in the curve editor to create one.</oldsource>
         <translation>Пользовательских предустановок пружины пока нет. Используйте «Сохранить как предустановку…» в редакторе кривых, чтобы создать её.</translation>
     </message>
     <message>
@@ -11276,172 +11321,165 @@
         <translation>Анимации для открытия и закрытия окон. Значение по умолчанию задаёт «Все окна». Каждое событие может его переопределить.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="40"/>
-        <source>Customize Curve: %1</source>
-        <translation>Настроить кривую: %1</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="67"/>
+        <source>Customize curve for %1</source>
+        <comment>@title:window</comment>
+        <translation>Настроить кривую для %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="102"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="260"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="67"/>
+        <source>Customize curve</source>
+        <comment>@title:window</comment>
+        <translation type="unfinished">Настроить кривую</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="138"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="303"/>
         <source>Preset</source>
         <translation>Предустановка</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="107"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="143"/>
         <source>Easing preset</source>
         <translation>Предустановка плавности</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="108"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="267"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="144"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="310"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="296"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="302"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="54"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="64"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="584"/>
         <source>Custom</source>
         <translation>Пользовательское</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="130"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="214"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="166"/>
         <source>Direction</source>
         <translation>Направление</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="131"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="167"/>
         <source>Ease In accelerates, Ease Out decelerates</source>
         <translation>«Ускорение» разгоняет, «Замедление» тормозит</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="142"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="223"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="185"/>
         <source>Easing direction</source>
         <translation>Направление плавности</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="167"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="173"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="257"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="261"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="210"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="216"/>
         <source>Overshoot</source>
         <translation>Перелёт</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="167"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="173"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="257"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="261"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="210"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="216"/>
         <source>Amplitude</source>
         <translation>Амплитуда</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="168"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="258"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="211"/>
         <source>How far past the target it travels before settling back</source>
         <translation>Насколько далеко за цель уходит движение, прежде чем вернуться обратно</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="168"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="258"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="211"/>
         <source>Height of bounce peaks</source>
         <translation>Высота пиков отскока</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="200"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="204"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="315"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="319"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="243"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="247"/>
         <source>Period</source>
         <translation>Период</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="201"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="244"/>
         <source>Lower values wobble faster</source>
         <translation>Более низкие значения колеблются быстрее</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="226"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="230"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="294"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="298"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="269"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="273"/>
         <source>Bounces</source>
         <translation>Отскоки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="227"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="295"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="270"/>
         <source>Number of bounce repetitions</source>
         <translation>Число повторений отскока</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="261"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="304"/>
         <source>Quick-select spring behavior</source>
         <translation>Быстрый выбор поведения пружины</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="266"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="309"/>
         <source>Spring preset</source>
         <translation>Предустановка пружины</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="289"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="332"/>
         <source>Speed (ω)</source>
         <translation>Скорость (ω)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="290"/>
-        <source>Higher = faster spring response</source>
-        <translation>Выше значение — быстрее реакция пружины</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="333"/>
+        <source>Higher values make the spring respond faster</source>
+        <oldsource>Higher values make the spring respond faster.</oldsource>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="293"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="358"/>
+        <source>Values below 1 bounce before settling. At 1 and above the spring settles without bouncing, more slowly the higher it goes.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="383"/>
+        <source>Save as preset…</source>
+        <translation>Сохранить как предустановку…</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="336"/>
         <source>Speed</source>
         <translation>Скорость</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="314"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="357"/>
         <source>Damping ratio (ζ)</source>
         <translation>Коэффициент затухания (ζ)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="315"/>
-        <source>&lt; 1 bouncy, = 1 critical, &gt; 1 overdamped</source>
-        <translation>&lt; 1 — пружинит, = 1 — критическое затухание, &gt; 1 — избыточное затухание</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="318"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="361"/>
         <source>Damping ratio</source>
         <translation>Коэффициент затухания</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="340"/>
-        <source>Save as Preset…</source>
-        <translation>Сохранить как предустановку…</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="342"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="385"/>
         <source>Save current curve as preset</source>
         <translation>Сохранить текущую кривую как предустановку</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="352"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="395"/>
         <source>Preset name</source>
         <translation>Имя предустановки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="353"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="396"/>
         <source>Preset name…</source>
         <translation>Имя предустановки…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="392"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="447"/>
         <source>Save preset</source>
         <translation>Сохранить предустановку</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="395"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="450"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="221"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="123"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="181"/>
@@ -11449,7 +11487,7 @@
         <translation>Сохранить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="402"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="457"/>
         <source>Cancel saving preset</source>
         <translation>Отменить сохранение предустановки</translation>
     </message>
@@ -11583,26 +11621,6 @@
         <translation>Перетащите, чтобы настроить контрольные точки кривой плавности</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="176"/>
-        <source>Controls how acceleration feels</source>
-        <translation>Управляет ощущением ускорения</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="183"/>
-        <source>Easing style</source>
-        <translation>Стиль плавности</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="215"/>
-        <source>Ease In accelerates, Ease Out decelerates, In-Out does both</source>
-        <translation>«Ускорение» разгоняет, «Замедление» тормозит, «Ускорение-замедление» делает и то и другое</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/EasingSettings.qml.cpp" line="346"/>
-        <source>Total animation time in milliseconds</source>
-        <translation>Общее время анимации в миллисекундах</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/SpringPreview.qml.cpp" line="86"/>
         <source>bouncy</source>
         <translation>пружинисто</translation>
@@ -11731,6 +11749,15 @@
         <comment>@label decoration surface group</comment>
         <translation>Всплывающие окна</translation>
     </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="46"/>
+        <source>%n Surface</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="49"/>
         <source>“%1” will replace the decoration on every surface it covers.</source>
@@ -11770,6 +11797,15 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="179"/>
         <source>Using global defaults</source>
         <translation>Используются глобальные значения по умолчанию</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="195"/>
+        <source>%n descendant surface has its own override that shadows this parent.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="16"/>
@@ -12079,7 +12115,7 @@
         <translation>→ %1 (%2)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="133"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="134"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="69"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="414"/>
         <source>Aspect Ratio</source>
@@ -12096,50 +12132,50 @@
         <translation>Изменить на %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="284"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="283"/>
         <source>Open in Text Editor</source>
         <translation>Открыть в текстовом редакторе</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="298"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="296"/>
         <source>Set as Default</source>
         <translation>Сделать значением по умолчанию</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="318"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="316"/>
         <source>Show in Zone Selector</source>
         <translation>Показывать в выборе зоны</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="318"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="316"/>
         <source>Hide from Zone Selector</source>
         <translation>Скрыть из выбора зоны</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="327"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="325"/>
         <source>Auto-assign forced on (global setting)</source>
         <translation>Автоназначение принудительно включено (глобальный параметр)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="327"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="325"/>
         <source>Disable Auto-assign</source>
         <translation>Отключить автоназначение</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="327"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="325"/>
         <source>Enable Auto-assign</source>
         <translation>Включить автоназначение</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="362"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="360"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="389"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="217"/>
         <source>Export</source>
         <translation>Экспорт</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="373"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="402"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="371"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="400"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="674"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="226"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="378"/>
@@ -12285,6 +12321,15 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="97"/>
         <source>Unnamed Layout</source>
         <translation>Раскладка без имени</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="98"/>
+        <source>Layout with %n zone</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="262"/>
@@ -12520,6 +12565,24 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="411"/>
         <source>Reset Filters</source>
         <translation>Сбросить фильтры</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="432"/>
+        <source>%n algorithm</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="432"/>
+        <source>%n layout</source>
+        <translation type="unfinished">
+            <numerusform>%n раскладка</numerusform>
+            <numerusform>%n раскладки</numerusform>
+            <numerusform>%n раскладок</numerusform>
+        </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="504"/>
@@ -12899,6 +12962,15 @@
         <comment>a structured setting holding nothing</comment>
         <translation>Нет</translation>
     </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="389"/>
+        <source>%n entry</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="415"/>
         <source>From</source>
@@ -13021,6 +13093,15 @@
         <comment>@info profile import failure</comment>
         <translation>Не удалось импортировать «%1». Файл должен быть профилем, экспортированным из PlasmaZones.</translation>
     </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="262"/>
+        <source>%n profile</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="269"/>
         <source>No profiles saved yet.</source>
@@ -13086,7 +13167,7 @@
         <translation>Один или несколько номеров зон (нумерация с 1), к которым прилепляются подходящие окна. Несколько зон охватывают их общую область.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="295"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="304"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="128"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="525"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="104"/>
@@ -13094,36 +13175,42 @@
         <translation>Основной</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="311"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="304"/>
+        <source>%1 · %2</source>
+        <comment>monitor name, then the primary-monitor marker</comment>
+        <translation type="unfinished">%1 · %2</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="320"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="545"/>
         <source>Choose a monitor…</source>
         <translation>Выберите экран…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="352"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="361"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="500"/>
         <source>Choose a desktop…</source>
         <translation>Выберите рабочий стол…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="442"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="451"/>
         <source>Choose an event…</source>
         <translation>Выберите событие…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="534"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="555"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="368"/>
         <source>Add a pack…</source>
         <comment>@action:button</comment>
         <translation>Добавить пакет…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="651"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="673"/>
         <source>Choose a shader…</source>
         <translation>Выберите шейдер…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="678"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="700"/>
         <source>Choose an overlay shader…</source>
         <translation>Выберите шейдер наложения…</translation>
     </message>
@@ -13176,7 +13263,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/AddRuleWizard.qml.cpp" line="294"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="504"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="528"/>
         <source>Add rule</source>
         <translation>Добавить правило</translation>
     </message>
@@ -13449,11 +13536,47 @@
         <source>Enable rule %1</source>
         <translation>Включить правило %1</translation>
     </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="127"/>
+        <source>%n validation issue</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="130"/>
+        <source>This rule has %n validation issue. Open the editor to see the details.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="201"/>
         <source>Composite</source>
         <comment>Badge shown when the rule&apos;s match is a composite expression</comment>
         <translation>Составное</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="220"/>
+        <source>%n Condition</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="239"/>
+        <source>%n Action</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="260"/>
@@ -13548,118 +13671,128 @@
         <translation>О чём должно быть это правило?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="340"/>
         <source>Failed to save rules.</source>
         <translation>Не удалось сохранить правила.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="362"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="386"/>
         <source>The PlasmaZones daemon is not running. Rules cannot be loaded or saved until it starts.</source>
         <translation>Служба PlasmaZones не запущена. Правила нельзя загрузить или сохранить, пока она не запущена.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="369"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="393"/>
         <source>The rules changed on disk while you were editing. Saving now will overwrite those changes. Review your edits before saving, or discard them to reload.</source>
         <translation>Правила на диске изменились, пока вы их редактировали. Сохранение сейчас перезапишет эти изменения. Просмотрите свои правки перед сохранением или отмените их, чтобы перезагрузить.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="380"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="404"/>
         <source>Save anyway</source>
         <translation>Всё равно сохранить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="409"/>
         <source>Discard and reload</source>
         <translation>Отменить и перезагрузить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="402"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="426"/>
         <source>Overwrite daemon-side changes?</source>
         <translation>Перезаписать изменения на стороне службы?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="403"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="427"/>
         <source>Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.</source>
         <translation>Сохранение заменит набор правил, который служба сейчас хранит на диске, вашими подготовленными правками. Все правила, изменившиеся там, пока вы редактировали, будут потеряны.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="413"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="437"/>
         <source>Overwrite</source>
         <translation>Перезаписать</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="457"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="481"/>
         <source>Search rules…</source>
         <translation>Поиск правил…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="458"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="482"/>
         <source>Search rules</source>
         <translation>Поиск правил</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="474"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="498"/>
         <source>Filter Rules</source>
         <comment>@title:menu</comment>
         <translation>Фильтр правил</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="478"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="502"/>
         <source>System</source>
         <comment>@option:check filter rules by source</comment>
         <translation>Системные</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="482"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="506"/>
         <source>User-created</source>
         <comment>@option:check filter rules by source</comment>
         <translation>Созданные пользователем</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="494"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="518"/>
         <source>Active</source>
         <comment>@option:check filter rules by status</comment>
         <translation>Активен</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="498"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="522"/>
         <source>Disabled</source>
         <comment>@option:check filter rules by status</comment>
         <translation>Отключено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="506"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="530"/>
         <source>Add a new rule</source>
         <translation>Добавить новое правило</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="524"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="548"/>
         <source>No rules yet</source>
         <translation>Пока нет правил</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="524"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="548"/>
         <source>No rules match the current filter</source>
         <translation>Нет правил, соответствующих текущему фильтру</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="525"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="549"/>
         <source>Add a rule to assign layouts to monitors, float application windows, or override animations.</source>
         <translation>Добавьте правило, чтобы назначать раскладки экранам, делать окна приложений плавающими или переопределять анимации.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="525"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="549"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="579"/>
         <source>Try a different filter or search term.</source>
         <translation>Попробуйте другой фильтр или условие поиска.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="536"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="560"/>
         <source>All rules</source>
         <translation>Все правила</translation>
     </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="562"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="149"/>
+        <source>%n rule</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="539"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="563"/>
         <source>%1 · drag to set precedence</source>
         <comment>Suffix in the rule list header showing the count and a reorder hint</comment>
         <translation>%1 · перетащите, чтобы задать старшинство</translation>
@@ -14099,6 +14232,16 @@
         <translation>Пользователь</translation>
     </message>
     <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="212"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="291"/>
+        <source>%n parameter</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="44"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="69"/>
         <source>Used in %n event</source>
@@ -14351,6 +14494,15 @@
         <source>No shaders match the current filter</source>
         <translation>Ни один шейдер не соответствует текущему фильтру</translation>
     </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="598"/>
+        <source>%n shader</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="58"/>
         <source>%1, active, %2</source>
@@ -14502,6 +14654,15 @@
         <source>Could not import “%1”. The file must be a set saved from this page.</source>
         <comment>@info set import failure</comment>
         <translation>Не удалось импортировать “%1”. Файл должен быть набором, сохранённым с этой страницы.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="234"/>
+        <source>%n set</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="277"/>
@@ -15116,6 +15277,15 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="519"/>
         <source>Create Algorithm</source>
         <translation>Создать алгоритм</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="181"/>
+        <source>Max %n window</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="220"/>
@@ -15855,6 +16025,15 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="261"/>
         <source>Failed</source>
         <translation>Ошибка</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="270"/>
+        <source>Rotated %n window</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="272"/>

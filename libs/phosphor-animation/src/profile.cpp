@@ -8,34 +8,68 @@
 
 #include <QJsonValue>
 #include <QLoggingCategory>
+#include <QByteArray>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSet>
 
 #include <cmath>
 #include <limits>
+#include <optional>
 
 namespace PhosphorAnimation {
 
 namespace {
 Q_LOGGING_CATEGORY(lcProfile, "phosphoranimation.profile")
 
-// Rate-limit the "unknown sequenceMode" warning to one message per distinct
-// raw value per process. Profiles are re-deserialised on every config
-// reload; without this guard a malformed settings file (or a newer client
-// writing an unknown enumerator) produces N warnings per reload, spamming
-// long-lived daemons. We still want the warning on first sight so schema
-// drift is visible.
-bool shouldWarnUnknownSequenceMode(int raw)
+// One rate limiter for every diagnostic in `fromJson`, keyed on a caller-built
+// string.
+//
+// One rather than three: this used to be three near-identical mutex+QSet pairs,
+// which triples the static-teardown surface and invites the next editor to fix
+// one and not the others. Every warning here is "this file is malformed in way
+// X", so one key space is the honest model.
+//
+// Why any of them: profiles are re-deserialised on every settings read with no
+// cache, and the daemon republishes the active profile on the settings slider's
+// drag path — so an unrated warning about one hand-edited value emits tens of
+// times a second for the length of a drag, in a long-lived process. We still
+// want the first sighting, so schema drift is visible.
+//
+// BOUNDED, because one key space includes a curve spec, which is an arbitrary
+// user- or script-supplied string reachable from QML through
+// `PhosphorProfile.fromJson`. Past the cap the limiter stops inserting and says
+// so once, rather than growing for the process lifetime.
+bool shouldWarnOnce(const QByteArray& key)
 {
+    // Generous next to the ~30 distinct field/type pairs plus a handful of bad
+    // curve specs a real corpus produces, and small enough that a script
+    // generating keys cannot grow this without bound.
+    constexpr int MaxTrackedKeys = 256;
     static QMutex mutex;
-    static QSet<int> seen;
+    static QSet<QByteArray> seen;
+    static bool announcedCap = false;
     QMutexLocker lock(&mutex);
-    if (seen.contains(raw)) {
+    if (seen.contains(key)) {
         return false;
     }
-    seen.insert(raw);
+    if (seen.size() >= MaxTrackedKeys) {
+        if (!announcedCap) {
+            announcedCap = true;
+            qCWarning(lcProfile) << "Profile::fromJson: more than" << MaxTrackedKeys
+                                 << "distinct malformed-profile diagnostics seen; further ones are suppressed";
+        }
+        return false;
+    }
+    seen.insert(key);
     return true;
+}
+
+/// Key for a field-shaped diagnostic. `reason` separates a type rejection from a
+/// range rejection for the same field, so one does not mask the other.
+QByteArray fieldWarnKey(const char* field, const char* reason)
+{
+    return QByteArray(field) + '/' + reason;
 }
 
 }
@@ -97,8 +131,53 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
 {
     Profile p;
 
+    // Reads a numeric field, or returns nullopt when the key holds something
+    // that is not a JSON number. Type-checked because `QJsonValue::toDouble(d)`
+    // hands back the DEFAULT for any non-number, and every library default
+    // passes the range checks below — so `{"duration": "fast"}` would land as
+    // an ENGAGED library default, which blocks inheritance instead of falling
+    // through to the parent. A malformed value must not quietly pin a node.
+    // `presetName` has always type-checked for the same reason; this makes the
+    // four numeric fields consistent with it.
+    const auto numericField = [&obj](const char* key) -> std::optional<qreal> {
+        const QJsonValue v = obj.value(QLatin1String(key));
+        if (!v.isDouble()) {
+            // Rate-limited for the same reason the unknown-sequenceMode warning
+            // is, and against a worse trigger rate: `Settings::animationProfile()`
+            // routes through here with no cache and the daemon republishes on the
+            // settings slider's drag path, so one hand-edited value would
+            // otherwise emit this tens of times a second for the length of a drag.
+            if (shouldWarnOnce(fieldWarnKey(key, "type") + QByteArray::number(int(v.type())))) {
+                // The consequence is per-field, not universal: three of the four
+                // numeric fields are left UNSET and inherit, but `sequenceMode`
+                // substitutes an engaged default and so BLOCKS inheritance (see
+                // Profile.h). Saying "will be inherited" for that one told the
+                // user the opposite of what the parse does.
+                qCWarning(lcProfile).nospace()
+                    << "Profile::fromJson: ignoring non-numeric " << key << " (type=" << v.type() << ") — "
+                    << (qstrcmp(key, JsonFieldSequenceMode) == 0 ? "the field will be pinned to the library default"
+                                                                 : "the field will be inherited");
+            }
+            return std::nullopt;
+        }
+        return v.toDouble();
+    };
+
     if (obj.contains(QLatin1String(JsonFieldCurve))) {
-        const QString spec = obj.value(QLatin1String(JsonFieldCurve)).toString();
+        const QJsonValue curveValue = obj.value(QLatin1String(JsonFieldCurve));
+        // Type-checked like every sibling field: a non-string (number, bool,
+        // object) would stringify to empty and skip the whole block, leaving
+        // the field correctly unset (inherit) but with NO diagnostic — the
+        // one malformed-field shape that was silent. Rate-limited like the
+        // numeric-field warnings.
+        if (!curveValue.isString()) {
+            if (shouldWarnOnce(fieldWarnKey(JsonFieldCurve, "type") + QByteArray::number(int(curveValue.type())))) {
+                qCWarning(lcProfile).nospace()
+                    << "Profile::fromJson: curve must be a string; got JSON type " << int(curveValue.type())
+                    << " — keeping profile without a curve (library default will apply at animation time)";
+            }
+        }
+        const QString spec = curveValue.toString();
         if (!spec.isEmpty()) {
             // Route through tryCreate (not create): a malformed spec
             // would otherwise silently fall through to the library
@@ -108,7 +187,26 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
             // will still substitute the library default) and warn loudly
             // with the original spec so the author can find the typo.
             p.curve = registry.tryCreate(spec);
-            if (!p.curve) {
+            // Keyed on a BOUNDED digest of the spec, not the spec itself. `spec`
+            // is an unbounded user/script-supplied string reachable from QML
+            // through PhosphorProfile::fromJson, so keying on it directly made
+            // the limiter's "BOUNDED" guarantee 256 x unbounded bytes — a script
+            // feeding megabyte curve names grows `seen` past any intended budget,
+            // which is the same "guard that funds its own attack" shape the cap
+            // exists to close. A 32-byte prefix keeps the warning readable-ish
+            // while the hash keeps distinct long specs distinct.
+            // Built only on the FAILURE branch: this parse runs uncached on
+            // the daemon's ~30 Hz settings republish path, and the common
+            // success case must not pay the allocation + full-string hash.
+            if (!p.curve
+                && shouldWarnOnce(QByteArrayLiteral("curve/unresolved/") + spec.left(32).toUtf8()
+                                  + QByteArray::number(qHash(spec), 16))) {
+                // Rate-limited like the numeric-field diagnostics, and for a
+                // sharper reason: a Global profile naming a user curve that is
+                // not registered YET is a documented normal state during
+                // startup (the curve loader runs before the profile loader),
+                // and a permanently typo'd name would otherwise warn once per
+                // parse — i.e. tens of times a second across a settings drag.
                 qCWarning(lcProfile).nospace() << "Profile::fromJson: curve spec '" << spec
                                                << "' did not resolve — keeping profile without a curve "
                                                   "(library default will apply at animation time)";
@@ -117,77 +215,146 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
     }
 
     if (obj.contains(QLatin1String(JsonFieldDuration))) {
-        const qreal raw = obj.value(QLatin1String(JsonFieldDuration)).toDouble(DefaultDuration);
-        // Reject NaN / infinity / non-positive / absurdly-large values.
-        // The downstream qRound() into int and QQuickPropertyAnimation::
-        // setDuration(int) have no tolerance for these — NaN rounds to
-        // UB, negatives are silently treated as 0, and large doubles
-        // overflow the int conversion. Leaving the field unset makes
-        // `effectiveDuration()` substitute the library default, which
-        // is the correct fallback for garbage input.
-        if (!std::isfinite(raw) || raw <= 0.0 || raw > Profile::MaxDurationMs) {
-            qCWarning(lcProfile).nospace()
-                << "Profile::fromJson: rejecting duration " << raw
-                << " (expected 0 < duration <= " << Profile::MaxDurationMs << " ms) — library default will apply";
-        } else {
-            p.duration = raw;
+        // A non-numeric value returns nullopt and has ALREADY been reported by
+        // numericField, so the range check below runs only for real numbers. A
+        // second "rejecting duration nan" line would name a value the file
+        // never contained.
+        if (const std::optional<qreal> value = numericField(JsonFieldDuration)) {
+            const qreal raw = *value;
+            // Reject NaN / infinity / non-positive / absurdly-large values.
+            // The downstream qRound() into int and QQuickPropertyAnimation::
+            // setDuration(int) have no tolerance for these — NaN rounds to
+            // UB, negatives are silently treated as 0, and large doubles
+            // overflow the int conversion. Leaving the field unset makes
+            // `effectiveDuration()` substitute the library default, which
+            // is the correct fallback for garbage input.
+            if (!std::isfinite(raw) || raw <= 0.0 || raw > Profile::MaxDurationMs) {
+                if (shouldWarnOnce(fieldWarnKey(JsonFieldDuration, "range"))) {
+                    qCWarning(lcProfile).nospace() << "Profile::fromJson: rejecting duration " << raw
+                                                   << " (expected 0 < duration <= " << Profile::MaxDurationMs
+                                                   << " ms) — library default will apply";
+                }
+            } else {
+                p.duration = raw;
+            }
         }
     }
     if (obj.contains(QLatin1String(JsonFieldMinDistance))) {
-        // `QJsonValue::toInt(default)` returns the default verbatim when
-        // the underlying value is a JSON double (even for whole-number-
-        // valued doubles like `5.0`), so a file written by a non-C++
-        // serializer that emitted the integer as a JSON Number would
-        // silently fall back to the library default. Route through
-        // toDouble() and round to int so `5.0` and `5` both produce 5.
-        const qreal rawDouble = obj.value(QLatin1String(JsonFieldMinDistance)).toDouble(DefaultMinDistance);
-        const int raw = qRound(rawDouble);
+        // `QJsonValue::toInt(default)` substitutes the default for a
+        // FRACTIONAL double and rejects rather than rounds; on a whole-number
+        // double like `5.0` Qt 6 does return 5. But a fractional value (`5.4`)
+        // would still fall back to the library default. Route through
+        // toDouble() + qRound so `5`, `5.0` and `5.4` all resolve sensibly.
+        const std::optional<qreal> minDistanceValue = numericField(JsonFieldMinDistance);
+        const qreal rawDouble = minDistanceValue.value_or(std::numeric_limits<qreal>::quiet_NaN());
         // Negative minDistance would make the distance-skip check
         // trivially true for every animation (no real distance is
         // less than a negative threshold), effectively disabling the
         // skip everywhere. Zero is the documented "no skip" value
         // and is accepted.
-        if (raw < 0) {
-            qCWarning(lcProfile).nospace()
-                << "Profile::fromJson: rejecting negative minDistance " << raw << " — library default will apply";
+        //
+        // Range-checked BEFORE the round, like the duration and
+        // staggerInterval branches: `qRound` on a non-finite or
+        // out-of-int-range double is undefined behaviour, and this
+        // value comes from a file a user can hand-edit. Checking the
+        // rounded result instead only worked by accident, on the
+        // platform where the UB conversion happens to pin to INT_MIN.
+        if (!minDistanceValue) {
+            // Already reported by numericField as non-numeric. Falling into the
+            // range branch would emit a SECOND, unrate-limited line naming
+            // `nan` — a value the file never contained — on the same ~30 Hz
+            // republish path the rate limiter exists to protect.
+        } else if (!std::isfinite(rawDouble) || rawDouble < 0.0 || rawDouble > qreal(MaxMinDistancePx)) {
+            if (shouldWarnOnce(fieldWarnKey(JsonFieldMinDistance, "range"))) {
+                qCWarning(lcProfile).nospace()
+                    << "Profile::fromJson: rejecting minDistance " << rawDouble
+                    << " (expected 0 <= minDistance <= " << MaxMinDistancePx << " px) — library default will apply";
+            }
         } else {
-            p.minDistance = raw;
+            p.minDistance = qRound(rawDouble);
         }
     }
     if (obj.contains(QLatin1String(JsonFieldSequenceMode))) {
         // toDouble + qRound (not toInt): handles `0.0` from non-C++
         // serializers without falling back to the toInt(default) path.
         // Same rationale as minDistance / staggerInterval.
-        const qreal rawDouble =
-            obj.value(QLatin1String(JsonFieldSequenceMode)).toDouble(static_cast<int>(DefaultSequenceMode));
-        const int raw = std::isfinite(rawDouble) ? qRound(rawDouble) : static_cast<int>(DefaultSequenceMode);
-        // Map valid enumerators; anything else falls back to the library
-        // default. This is NOT forward-compat with future enumerators
-        // written by a newer client — those would silently land on
-        // AllAtOnce, not on a behaviorally-similar mode. If new modes
-        // are added, bump the schema and route through migration code.
-        if (raw == static_cast<int>(SequenceMode::AllAtOnce) || raw == static_cast<int>(SequenceMode::Cascade)) {
-            p.sequenceMode = static_cast<SequenceMode>(raw);
-        } else {
-            // Log so schema drift doesn't silently paper over as "AllAtOnce"
-            // — a newer client writing an unknown enumerator is something a
-            // future-maintainer wants to see in logs, not discover via a
-            // mysterious animation-behaviour regression. Rate-limited to
-            // one message per distinct value per process (see
-            // shouldWarnUnknownSequenceMode).
-            if (shouldWarnUnknownSequenceMode(raw)) {
-                qCWarning(lcProfile) << "Profile::fromJson: unknown sequenceMode" << raw
-                                     << "— substituting DefaultSequenceMode (schema drift?)";
-            }
+        // A non-number lands on NaN, which fails the roundable test below and
+        // takes the substituting branch — sequenceMode keeps its documented
+        // engaged-default behaviour rather than being left unset. `wasNumeric`
+        // only suppresses the second diagnostic: numericField has already named
+        // the field, and "rejecting sequenceMode nan" would report a value the
+        // file never contained.
+        const std::optional<qreal> sequenceValue = numericField(JsonFieldSequenceMode);
+        const bool wasNumeric = sequenceValue.has_value();
+        const qreal rawDouble = sequenceValue.value_or(std::numeric_limits<qreal>::quiet_NaN());
+        // Range-checked as well as finiteness-checked, like the minDistance and
+        // staggerInterval branches: `std::isfinite` alone still admits 1e300,
+        // and `qRound` on a value outside the int range is undefined behaviour.
+        //
+        // The band is half a unit inside the int range on both ends, because
+        // Qt's `qRound(double)` is `int(d + 0.5)` for non-negative d and
+        // `int(d - 0.5)` otherwise. Testing against INT_MAX itself would admit
+        // 2147483647.0, whose `d + 0.5` is out of int range and so is UB in the
+        // conversion — the same off-by-a-rounding-step the minDistance branch
+        // was already fixed for.
+        const bool roundable = std::isfinite(rawDouble) && rawDouble > qreal(std::numeric_limits<int>::min()) + 0.5
+            && rawDouble < qreal(std::numeric_limits<int>::max()) - 0.5;
+        if (!roundable && !wasNumeric) {
+            // Non-numeric: numericField already reported it. Substitute the
+            // engaged default and move on without a second diagnostic.
             p.sequenceMode = DefaultSequenceMode;
+        } else if (!roundable) {
+            // Its own diagnostic, distinct from the unknown-enumerator one
+            // below, and shaped like the duration / minDistance / stagger
+            // rejections. Routing this case through the unknown-enumerator
+            // warning instead would report a rounded value that was never
+            // written, and would collapse every out-of-range input onto one
+            // rate-limiter key so only the first ever warned.
+            if (shouldWarnOnce(fieldWarnKey(JsonFieldSequenceMode, "range"))) {
+                qCWarning(lcProfile).nospace() << "Profile::fromJson: rejecting sequenceMode " << rawDouble
+                                               << " (out of int range) — substituting DefaultSequenceMode";
+            }
+            // Substituted ENGAGED rather than left unset, unlike the three
+            // scalar validators: see the note on this field in the header.
+            p.sequenceMode = DefaultSequenceMode;
+        } else {
+            const int raw = qRound(rawDouble);
+            // Map valid enumerators; anything else falls back to the library
+            // default. This is NOT forward-compat with future enumerators
+            // written by a newer client — those land on AllAtOnce rather than
+            // on a behaviorally-similar mode, which is why the warning below
+            // is not optional. If new modes are added, bump the schema and
+            // route through migration code.
+            if (raw == static_cast<int>(SequenceMode::AllAtOnce) || raw == static_cast<int>(SequenceMode::Cascade)) {
+                p.sequenceMode = static_cast<SequenceMode>(raw);
+            } else {
+                // Log so schema drift doesn't paper over as "AllAtOnce" — a
+                // newer client writing an unknown enumerator is something a
+                // future-maintainer wants to see in logs, not discover via a
+                // mysterious animation-behaviour regression. Rate-limited to
+                // one message per distinct value per process (see
+                // shouldWarnOnce). The key space is bounded by the
+                // number of DISTINCT in-range unknown enumerators a corpus
+                // contains, which in practice is a handful.
+                if (shouldWarnOnce(fieldWarnKey(JsonFieldSequenceMode, "unknown") + QByteArray::number(raw))) {
+                    qCWarning(lcProfile) << "Profile::fromJson: unknown sequenceMode" << raw
+                                         << "— substituting DefaultSequenceMode (schema drift?)";
+                }
+                p.sequenceMode = DefaultSequenceMode;
+            }
         }
     }
     if (obj.contains(QLatin1String(JsonFieldStaggerInterval))) {
         // toDouble + qRound (not toInt): a JSON Number written as `30.0`
         // by a non-C++ serializer round-trips as 30 instead of falling
         // back to the toInt(default) path. Same shape as minDistance.
-        const qreal rawDouble = obj.value(QLatin1String(JsonFieldStaggerInterval)).toDouble(DefaultStaggerInterval);
-        if (!std::isfinite(rawDouble) || rawDouble < 0.0 || rawDouble > static_cast<qreal>(MaxStaggerIntervalMs)) {
+        const std::optional<qreal> staggerValue = numericField(JsonFieldStaggerInterval);
+        const qreal rawDouble = staggerValue.value_or(std::numeric_limits<qreal>::quiet_NaN());
+        if (!staggerValue) {
+            // Same as minDistance above: already reported, and the range branch
+            // would name a `nan` the file never contained.
+        } else if (!std::isfinite(rawDouble) || rawDouble < 0.0
+                   || rawDouble > static_cast<qreal>(MaxStaggerIntervalMs)) {
             // Negative stagger would make every cascade element fire
             // immediately (its scheduled-start would already be in the
             // past), erasing the cascade visual. An hour-plus stagger
@@ -195,9 +362,11 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
             // Same shape and rationale as the duration / minDistance /
             // sequenceMode validators above — leaving the field unset
             // routes `effectiveStaggerInterval()` to the library default.
-            qCWarning(lcProfile).nospace()
-                << "Profile::fromJson: rejecting staggerInterval " << rawDouble
-                << " (expected 0 <= staggerInterval <= " << MaxStaggerIntervalMs << " ms) — library default will apply";
+            if (shouldWarnOnce(fieldWarnKey(JsonFieldStaggerInterval, "range"))) {
+                qCWarning(lcProfile).nospace() << "Profile::fromJson: rejecting staggerInterval " << rawDouble
+                                               << " (expected 0 <= staggerInterval <= " << MaxStaggerIntervalMs
+                                               << " ms) — library default will apply";
+            }
         } else {
             p.staggerInterval = qRound(rawDouble);
         }
@@ -216,8 +385,10 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         if (v.isString()) {
             p.presetName = v.toString();
         } else {
-            qCWarning(lcProfile).nospace()
-                << "Profile::fromJson: ignoring non-string presetName (type=" << v.type() << ")";
+            if (shouldWarnOnce(fieldWarnKey(JsonFieldPresetName, "type") + QByteArray::number(int(v.type())))) {
+                qCWarning(lcProfile).nospace()
+                    << "Profile::fromJson: ignoring non-string presetName (type=" << v.type() << ")";
+            }
         }
     }
 

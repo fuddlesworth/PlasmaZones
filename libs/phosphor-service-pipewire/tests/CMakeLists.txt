@@ -3,6 +3,11 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Test)
 
+# Shared test isolation: a private D-Bus session (so a test that touches D-Bus
+# cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
+# open and hangs ctest after the test itself passed) plus a per-target XDG
+# sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 function(_phosphorservicepipewire_test target source)
     add_executable(${target} ${source})
     target_link_libraries(${target}
@@ -11,9 +16,12 @@ function(_phosphorservicepipewire_test target source)
             PhosphorServicePipeWire::PhosphorServicePipeWire
     )
     add_test(NAME ${target} COMMAND ${target})
-    set_tests_properties(${target}
-        PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    phosphor_apply_test_isolation(${target})
+    # APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
+    # ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
+    # sandbox `phosphor_apply_test_isolation` just installed.
+    phosphor_append_test_environment(${target} "QT_QPA_PLATFORM=offscreen")
+    set_tests_properties(${target} PROPERTIES
             LABELS "phosphorservicepipewire"
     )
 endfunction()
@@ -42,9 +50,12 @@ endfunction()
 #   PHOSPHOR_PW_TESTS_ALLOW_WRITE  live-write runs unless set to literal `0`
 #                                  (the implementation treats any value
 #                                  except `0` — including unset — as
-#                                  enable, matching the dev-default
-#                                  "exercise the full write path on
-#                                  developer hosts" contract).
+#                                  enable). Under CTEST the variable is
+#                                  pinned to `0` below, so an unattended
+#                                  `ctest` sweep is always read-only; the
+#                                  dev-default "exercise the full write
+#                                  path" contract applies to running the
+#                                  binary directly.
 #
 # Headless / CI runners are unaffected — the live-write branch only
 # fires when a daemon is reachable AND a sink is present. The opt-out
@@ -57,3 +68,8 @@ endfunction()
 #   - the user wants to validate the no-daemon contract without
 #     touching real audio state
 _phosphorservicepipewire_test(test_phosphorservicepipewire_smoke test_smoke.cpp)
+# Default the ctest run to read-only: an unattended `ctest` sweep must never
+# toggle the host's real sink mute (the shared isolation module's "no downside"
+# claim holds only with this pin). Developers wanting the full write path run
+# the binary directly with PHOSPHOR_PW_TESTS_ALLOW_WRITE unset or =1.
+phosphor_append_test_environment(test_phosphorservicepipewire_smoke "PHOSPHOR_PW_TESTS_ALLOW_WRITE=0")

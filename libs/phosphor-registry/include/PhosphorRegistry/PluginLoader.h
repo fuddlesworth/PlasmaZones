@@ -128,18 +128,20 @@ public:
     // (additions / removals / .so changes processed identically).
     void rescanNow();
 
+    // Test seam for the per-cycle subdirectory cap, mirroring
+    // DirectoryLoader::setMaxEntriesForTest: the production default is far
+    // too large to exercise from a fixture, and the cap guards a
+    // load-bearing behaviour (a truncated cycle SKIPS the removal sweep so
+    // loaded plugins sorting past the cap are not unloaded). Negative or
+    // zero caps fall back to the default.
+    void setMaxSubdirsPerCycleForTest(int cap);
+
     // Currently-loaded plugin ids (the same ids registered with the
     // Registry). Useful for diagnostic UIs. Order is unspecified
     // (QHash iteration) and not stable across rescans or Qt versions;
     // sort if you need deterministic display, the way the BarController
     // example in the README does.
     [[nodiscard]] QStringList loadedPluginIds() const;
-
-    // Number of live widgets produced by the named plugin. Phase
-    // 1.3 returns -1 ("untracked") — the .so stays mapped for the
-    // process lifetime, so refcounted unload adds no safety yet.
-    // Phase 5's sandbox work will wire this to a real count.
-    [[nodiscard]] int liveWidgetCount(const QString& pluginId) const;
 
 Q_SIGNALS:
     // Fired after every rescan cycle, regardless of whether the
@@ -235,6 +237,9 @@ private:
     // assumption (and the qFatal that backs it) must be revisited.
     Registry<IBarWidgetFactory>* m_registry = nullptr;
     QString m_pluginRoot;
+    /// Per-cycle subdirectory cap; production value set in the .cpp,
+    /// overridable only through setMaxSubdirsPerCycleForTest.
+    int m_maxSubdirsPerCycle = 0;
     std::unique_ptr<ScanStrategyImpl> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
     // shared_ptr (not unique_ptr) because Qt 6's QHash still
@@ -265,7 +270,7 @@ private:
     // const ensurePluginRootExists via `mutable` since the logical
     // "did we already complain about this root?" state is not part
     // of the loader's observable contract — the public API
-    // (loadedPluginIds, liveWidgetCount, pluginRoot) returns the
+    // (loadedPluginIds, pluginRoot) returns the
     // same values whether or not we have logged. Plain bool (not a
     // per-path QSet): m_pluginRoot is set in the ctor and never
     // mutated, so a single bool tracks the only path that can ever

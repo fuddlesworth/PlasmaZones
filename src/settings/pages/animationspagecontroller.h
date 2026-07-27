@@ -16,6 +16,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <functional>
 #include <optional>
 
 namespace PhosphorAnimationShaders {
@@ -47,11 +48,16 @@ class ISettings;
 ///
 /// ## Effective-value resolution
 ///
-/// `resolvedProfile()` walks the path's parent chain through the
-/// process-wide `PhosphorProfileRegistry::defaultRegistry()` (covers
-/// shipped + user overrides) with library-default fill-in. When the
-/// registry isn't published (unit tests without bootstrap), it falls
-/// back to walking the user dir directly.
+/// `resolvedProfile()` walks the path's parent chain and, at each level,
+/// reads this controller's own override file FIRST, falling back to the
+/// process-wide `PhosphorProfileRegistry::defaultRegistry()` for levels
+/// with no user file (shipped profiles, and whatever the hosting process
+/// has registered), then fills in library defaults. Disk leads because
+/// the registry is fed by a watcher on the same directory this class
+/// writes, and that watcher is debounced — see
+/// `setProfileStoreRefresher()` for the other half of keeping the two in
+/// step. With no registry published (unit tests without a bootstrap) the
+/// walk is purely file-backed, which is self-consistent.
 ///
 /// ## Composition
 ///
@@ -129,7 +135,7 @@ public:
     /// Built-in event paths, grouped by section. Each entry:
     /// ```
     /// { "section": "window", "label": "Window",
-    ///   "paths": [ { "path": "window", "label": "Window (inherited)",
+    ///   "paths": [ { "path": "window", "label": "Window",
     ///                "parent": "global", "isCategory": true },
     ///              { "path": "window.appearance.open", "label": "Open",
     ///                "parent": "window.appearance", "isCategory": false }, ... ] }
@@ -137,8 +143,11 @@ public:
     /// All built-in paths from `ProfilePaths::allBuiltInPaths()` are included.
     Q_INVOKABLE QVariantList eventSections() const;
 
-    /// First dotted segment of @p path, or `"global"` when @p path is the
-    /// global root. Drives the sidebar grouping.
+    /// The UI section @p path groups under, driving the sidebar grouping.
+    /// Usually the first dotted segment (`"window.appearance.open"` →
+    /// `"window"`), and `"global"` for the global root, but three top-level
+    /// segments are remapped: `osd`, `popup`, and `panel` all collapse into
+    /// `"overlays"`, and `cursor` into `"widget"`. Empty for an empty path.
     Q_INVOKABLE QString sectionForPath(const QString& path) const;
 
     /// Title-cased label for @p path's last segment (e.g. `"editor.snapIn"`
@@ -157,9 +166,11 @@ public:
     /// profiles directory.
     ///
     /// Q_INVOKABLE so a card can validate its declared mirrorPaths at load.
-    /// The group writers discard setOverride's bool, so a typo'd mirror path
-    /// fails silently AND latches the divergence banner permanently (the
-    /// mirror's stored state can never match the primary's).
+    /// The group writers cannot report WHICH path failed (their return is a
+    /// single bool / count over the whole batch), so a typo'd mirror path
+    /// would surface only as a permanently latched divergence banner (the
+    /// mirror's stored state can never match the primary's) with nothing
+    /// naming the culprit.
     Q_INVOKABLE bool isValidEventPath(const QString& path) const;
 
     /// True iff a user override file exists for @p path. Returns false
@@ -167,15 +178,30 @@ public:
     /// traversal attempts).
     Q_INVOKABLE bool hasOverride(const QString& path) const;
 
-    /// Per-path override file content as a QVariantMap. Empty map when
-    /// no override exists. The `name` field is stripped — callers care
-    /// about the Profile fields only.
+    /// Per-path override file content as a QVariantMap, normalised exactly as
+    /// `resolvedProfile` normalises it — otherwise a card would show a live
+    /// revert link beside the INHERITED value it claims is overridden. The
+    /// `name` field is stripped.
+    ///
+    /// Normalised, NOT uniformly stripped: a field `Profile::fromJson` leaves
+    /// unset is dropped here (so the ancestor's value shows through), and a
+    /// field fromJson substitutes a default for is substituted here too (so it
+    /// keeps blocking inheritance, as the daemon's copy does). One documented
+    /// exception: an unresolvable `curve` SPEC is kept rather than dropped,
+    /// because resolving it needs a registry this layer has no access to. See
+    /// `animations_controller_detail::sanitizedProfileMap` for the per-field
+    /// table and the reasoning.
+    ///
+    /// An empty map therefore means EITHER no override file exists OR no field
+    /// in it survived. Callers that must tell those apart ask `hasOverride()`,
+    /// which tests the file itself.
     Q_INVOKABLE QVariantMap rawProfile(const QString& path) const;
 
-    /// Effective Profile for @p path: walks the parent chain through the
-    /// process-wide registry (or user dir as fallback) and fills any
+    /// Effective Profile for @p path: walks the parent chain reading this
+    /// controller's own override file at each level, falling back to the
+    /// process-wide registry where no user file exists, and fills any
     /// still-missing fields with `Profile::Default*` constants. Always
-    /// returns a populated map.
+    /// returns a populated map. See the class docs for why disk leads.
     Q_INVOKABLE QVariantMap resolvedProfile(const QString& path) const;
 
     /// Write @p profileJson as the user override at @p path. The map
@@ -206,12 +232,161 @@ public:
     /// in both cases. A caller must not treat -1 as "nothing to clear".
     int clearAllOverrides();
 
-    /// Scoped sibling of clearAllOverrides for the per-page kebab: clear only the
+    /// Scoped sibling of clearAllOverrides, called from the per-page kebab AND
+    /// from the event card's Override toggle (its OFF branch clears the card's
+    /// whole write-path group in one batch). Q_INVOKABLE for that second
+    /// caller: clear only the
     /// override files at @p eventPaths (one settings page's own event-path
     /// subtree), leaving every other page's overrides untouched. Same snapshot /
     /// return-code contract as clearAllOverrides (-1 = refused or partial). @p
     /// eventPaths must be built-in event paths; non-built-in entries are skipped.
-    int clearOverridesUnder(const QStringList& eventPaths);
+    Q_INVOKABLE int clearOverridesUnder(const QStringList& eventPaths);
+
+    // ─── Group writes ─────────────────────────────────────────────────────
+    //
+    // An event card writes to a GROUP of paths, not one: its own event path
+    // plus any `mirrorPaths` it declares (the two window.appearance legs, for
+    // instance). Every one of the calls below takes the whole group and applies
+    // one policy across it, so a card cannot write a group partially and cannot
+    // reach a per-path mutator directly and bypass its mirrors.
+    //
+    // These live here rather than as JS loops in the card for three reasons.
+    // The merge and field-removal rules are the same drop-versus-substitute
+    // semantics `rawProfile` already documents, and having them in two
+    // languages meant two places to keep in step. Each read is also taken once
+    // per call here rather than once per reader, which is what let the card
+    // drop its own per-path snapshot caches: `rawProfile` is memoised (see
+    // `cachedDiskProfile`), the merge reads every path before its first write
+    // so the memo is not invalidated out from under it, and
+    // `divergentPathCount` reads the shader tree once for the whole group. The
+    // shader tree itself is NOT memoised — `rawShaderProfile` rebuilds it on
+    // every call — which is precisely why anything here must read it once and
+    // pass it down rather than call that accessor in a loop. And each is now
+    // directly testable without driving QML.
+    //
+    // What deliberately stays in the card: the `_committing` /
+    // `_committingShader` re-entrancy latches and the refresh that follows a
+    // group write. Those are view state about which signals the card should
+    // ignore while its own write is in flight, and they mean nothing here.
+    //
+    // None of these caps `paths.size()`, and none needs to. Each DEDUPLICATES
+    // its list on entry (distinctPaths). Invalid entries differ per writer:
+    // clearFieldOnPaths and divergentPathCount SKIP a non-built-in path,
+    // while setOverrideMergedOnPaths forwards it to setOverride, which
+    // rejects it and makes the whole call report false — a caller bug
+    // surfaces instead of being silently dropped. Either way the WORK is
+    // bounded by `ProfilePaths::allBuiltInPaths()` rather than by the
+    // caller's list — a repeat costs nothing and an unrecognised entry costs
+    // one lookup, never a disk read or a shader-tree rebuild. The dedup
+    // matters because QML builds a group as `[eventPath].concat(mirrorPaths)`
+    // and does not dedupe. (The scoped reverts declared elsewhere in this
+    // header — clearOverridesUnder / clearOverridesForPaths — do NOT dedupe;
+    // they are safe against duplicates anyway because the second visit to a
+    // path classifies as Absent and is skipped.)
+
+    /// Merge @p fields into the stored override at every path in @p rawPaths and
+    /// write each result back.
+    ///
+    /// Merged over each path's OWN stored profile rather than replacing it, so
+    /// fields the caller does not mention (minDistance, sequenceMode,
+    /// staggerInterval, presetName) survive. A motion set can write those to a
+    /// leaf, and a caller that replaced the whole map would drop them the
+    /// moment the user nudged Duration.
+    ///
+    /// @p curveFromCommit distinguishes the two things a caller can mean about
+    /// the curve, which a plain map cannot express. An INVALID or NULL QVariant
+    /// (QML `undefined` or `null`) means "the user did not touch the curve":
+    /// each path keeps its own, so a path that owns one keeps it and a path that
+    /// inherits stays inheriting. A valid non-null string means the user edited
+    /// the curve and it travels to every path. Never decide a curve on the
+    /// user's behalf by passing the resolved one here.
+    ///
+    /// @return true when every path in @p rawPaths was written.
+    Q_INVOKABLE bool setOverrideMergedOnPaths(const QStringList& rawPaths, const QVariantMap& fields,
+                                              const QVariant& curveFromCommit);
+
+    /// Remove ONE field (`"curve"` or `"duration"`) from the stored override at
+    /// every path in @p rawPaths, returning that field to inheritance while the
+    /// other timing field and the motion-set fields stay put. A path whose
+    /// override becomes empty has its file DELETED rather than left as an empty
+    /// object: the two resolve identically, but the card's toggle and the
+    /// pending-changes walk both key on file existence.
+    /// @return the number of paths actually changed, or -1 on refusal. Paths
+    /// that did not carry the field are skipped, so 0 means the field was
+    /// already inherited everywhere and nothing needed doing. -1 is reserved
+    /// for "nothing was attempted": @p field is not one this owns, or an
+    /// async discard holds the snapshot map (which toasts). A PARTIAL write
+    /// failure toasts and returns the count that DID change — returning -1
+    /// there collapsed the editor under the cursor of the user who had just
+    /// clicked inside it. A caller must not read -1 as "there was nothing to
+    /// clear".
+    Q_INVOKABLE int clearFieldOnPaths(const QStringList& rawPaths, const QString& field);
+
+    /// True when ANY path in @p rawPaths takes a shader leg. A group mutation must
+    /// gate on this rather than on the primary path alone: a mirror that does
+    /// support a leg would otherwise keep its shader override across a toggle
+    /// off, and `divergentPathCount` would then report a divergence no control
+    /// on the card could clear.
+    Q_INVOKABLE bool anyPathSupportsShaderLeg(const QStringList& paths) const;
+
+    /// True iff every shader-capable path in @p rawPaths already carries
+    /// @p effectId as its DIRECT shader override. Non-supporting paths are
+    /// SKIPPED, mirroring setShaderOverrideOnPaths (which never writes to
+    /// them), so a mixed group can report true right after a successful group
+    /// write. The empty string is the engaged-empty "None" sentinel, which is
+    /// a real stored value and distinct from carrying no override at all.
+    Q_INVOKABLE bool allPathsHoldShaderEffect(const QStringList& paths, const QString& effectId) const;
+
+    /// Set @p effectId (with @p parameters) as the shader override on every
+    /// path in @p rawPaths that can host a shader leg. Non-supporting paths are
+    /// SKIPPED rather than attempted: `setShaderOverride` would reject them
+    /// anyway, and skipping keeps the warning out of the log for a call that
+    /// was never going to land.
+    /// The whole group is applied to ONE tree read and written back ONCE, so a
+    /// card cannot observe a half-written group, and a drag over a shader
+    /// parameter costs one settings write per tick rather than one per path.
+    /// @return the number of paths written, or -1 if the call was refused
+    /// because an async discard owns the tree (it toasts).
+    Q_INVOKABLE int setShaderOverrideOnPaths(const QStringList& rawPaths, const QString& effectId,
+                                             const QVariantMap& parameters);
+
+    /// Clear the shader override on every path in @p rawPaths, returning the event
+    /// to inheritance. Distinct from writing the engaged-empty sentinel, which
+    /// is an explicit "None" that BLOCKS inheritance.
+    /// One tree read and one write for the whole group, like its setter twin.
+    /// @return the number of paths whose override was removed, or -1 if the
+    /// call was refused because an async discard owns the tree (it toasts).
+    Q_INVOKABLE int clearShaderOverrideOnPaths(const QStringList& rawPaths);
+
+    /// Clear the shader overrides BELOW every path in @p rawPaths.
+    /// @return the total number cleared, or -1 if any path refused (the
+    /// "async discard in flight" sentinel). Stops at the first refusal: the
+    /// in-flight gate cannot change between iterations, and the controller
+    /// toasts per refused call. A -1 is never summed in, which would make a
+    /// refusal indistinguishable from a smaller successful clear, and the
+    /// caller gates its own feedback on telling the two apart.
+    Q_INVOKABLE int clearShaderOverrideDescendantsOnPaths(const QStringList& rawPaths);
+
+    /// How many paths in a card's write group have stored state differing from
+    /// @p primaryPath's, expressed the way the card's divergence banner needs
+    /// it: 0 when everything agrees, otherwise the number of diverging mirrors
+    /// PLUS ONE for the primary, which each of them differs from and which the
+    /// converging edit also rewrites.
+    ///
+    /// Comparison is on exactly what a single edit can converge, not on
+    /// everything stored. The duration and the whole shader leg always count.
+    /// The curve counts only when @p compareCurve is true, which the caller
+    /// sets false in simple mode: there is no curve control there, so no edit
+    /// could converge a divergent curve and counting it would latch the banner
+    /// on permanently. The motion-set fields never count, because the merged
+    /// writer preserves each path's own rather than converging them.
+    ///
+    /// The shader axis is compared only for paths that can host a shader leg. A
+    /// non-supporting path always stores nothing on that axis, so comparing its
+    /// permanently-empty leg against a supporting path's real one would report
+    /// a divergence over an axis nothing could converge.
+    Q_INVOKABLE int divergentPathCount(const QString& primaryPath, const QStringList& rawMirrorPaths,
+                                       bool compareCurve) const;
 
     /// Scoped sibling of revertPending: restore ONLY the snapshotted override
     /// files at @p eventPaths from their pre-edit content, leaving every other
@@ -269,7 +444,7 @@ public:
     /// shader leg — the QML picker hides itself on those rows so the
     /// user gets clear "this control does nothing here" feedback rather
     /// than picking a shader and seeing no change. Single source of
-    /// truth lives in @c src/core/animationshadersupportedpaths.h —
+    /// truth lives in @c src/core/types/animationshadersupportedpaths.h —
     /// adding a new shader-leg surface in the daemon means appending
     /// its leg paths there in lockstep.
     Q_INVOKABLE bool supportsShaderLeg(const QString& path) const;
@@ -392,8 +567,72 @@ public:
     /// callers must not redirect persistence.
     void setUserProfilesDirOverride(const QString& dir);
 
+    /// Injected by the composition root: brings the process's profile
+    /// registry back in line with this controller's directory
+    /// SYNCHRONOUSLY. Run on every path that can REMOVE an override file,
+    /// ahead of the matching `overrideChanged`, once per batch.
+    ///
+    /// The registry is fed by a `ProfileLoader` watching the same
+    /// directory through a 50 ms debounce. The registry itself does catch
+    /// up on its own once that debounce lands; what does not is the PAGE,
+    /// whose only re-read happens synchronously inside the
+    /// `overrideChanged` handler. Without this it samples the pre-delete
+    /// state and never re-samples, which is the per-field revert
+    /// link that appeared to do nothing until the app was reopened.
+    ///
+    /// Removals only. A write is already covered by `resolvedProfile`
+    /// reading the user files ahead of the registry, and writes arrive at
+    /// slider rate during a duration drag, where a synchronous directory
+    /// rescan per tick would be far too expensive. The batch revert paths
+    /// run it whenever their batch MAY have removed a file rather than
+    /// tracking removals individually: a pure-write batch pays one
+    /// redundant rescan per click, which is not worth threading a
+    /// per-file "was deleted" flag through the discard worker to avoid.
+    ///
+    /// Unset (the default, and every unit test) leaves the controller
+    /// purely file-backed, which is already self-consistent.
+    ///
+    /// Deliberately one-sided: no teardown path clears it. Safety rests on
+    /// the QPointer the composition root captures inside the callable, which
+    /// logs and no-ops once the loader is gone rather than degrading
+    /// silently.
+    void setProfileStoreRefresher(std::function<void()> refresher);
+
+    /// Forget the cached contents of every user override file.
+    ///
+    /// `resolvedProfile` reads those files off disk and memoises the result
+    /// (see `cachedDiskProfile`), and every mutation this controller performs
+    /// drops the cache itself. This is the entry point for the OTHER writer:
+    /// the profiles directory is a filesystem boundary a user can edit by hand,
+    /// and the page even offers to open it. The composition root connects
+    /// `ProfileLoader::profilesChanged` here so a hand-edited file is picked up
+    /// on the next read instead of serving the pre-edit value for the rest of
+    /// the session. Emits `overrideChanged(QString())` — the tree-wide reload
+    /// broadcast — so an OPEN page re-reads too, rather than only the next one.
+    ///
+    /// The broadcast is suppressed while this controller's own
+    /// `refreshProfileStore()` is on the stack, because the loader's rescan
+    /// re-enters here synchronously and the caller is already about to emit the
+    /// precise per-path signals. External writers are the case this exists for.
+    ///
+    /// One consequence of that suppression is worth knowing. `rescanNow()`
+    /// cancels the loader's pending debounce, so an external edit landing
+    /// inside the debounce window of one of our own writes is folded into the
+    /// same rescan and loses its broadcast. It never loses its invalidation
+    /// (the memo drop below happens before the early return), so no stale value
+    /// is ever served. An already-open card at an unrelated path just stays
+    /// visually stale until something else rebinds it.
+    ///
+    /// Cheap and idempotent: worst case the next read re-parses a few hundred
+    /// bytes per level.
+    void forgetCachedOverrideFiles();
+
 Q_SIGNALS:
-    /// Emitted on any successful set/clearOverride. @p path is the
+    /// Emitted on any successful set/clearOverride, and — with an EMPTY path —
+    /// from `forgetCachedOverrideFiles` as a tree-wide reload broadcast when
+    /// somebody outside this controller wrote to the profiles directory. A
+    /// consumer must therefore treat an empty path as "re-read everything"
+    /// rather than indexing into it. Otherwise @p path is the
     /// affected event path.
     void overrideChanged(const QString& path);
 
@@ -454,6 +693,13 @@ public:
     /// gates on an actual flip so a no-op refresh is free.
     void refreshDirtyState();
 
+    /// Flip-gated emitter for stockSuppressedEventsChanged: recomputes the
+    /// list and emits only when it actually changed. All three gate inputs
+    /// (registry rescan, tree assignment, animations master toggle) route
+    /// through here so tree edits that cannot affect the suppression set
+    /// stop re-running the conflict-chip bindings.
+    void maybeEmitStockSuppressedEventsChanged();
+
     /// Restore every file in the snapshot to its pre-edit state and
     /// clear the snapshot. Called from `SettingsController::load()`
     /// (Discard). Emits `overrideChanged`/`userPresetsChanged`/
@@ -463,10 +709,14 @@ public:
     /// own `Settings::load()`.)
     /// Failures (e.g. permission errors during file restore) are
     /// retained in the snapshot so a subsequent revert can retry.
-    /// @return true when the page is CLEAN afterwards. False has two causes, and
-    /// a caller that goes on to declare the state clean (an import, a defaults
-    /// reset) must honour both, or it strands pre-edit snapshots that a later
-    /// Discard writes back over the new state:
+    /// @return true when every snapshotted FILE was restored. This is NOT "the
+    /// page is clean": the shader TREE half of the dirty state is the caller's
+    /// job (see the CALLER CONTRACT block above), so a page whose only remaining
+    /// dirtiness is a diverged tree returns true here while `hasPendingChanges()`
+    /// is still true. False has two causes, and a caller that goes on to declare
+    /// the state clean (an import, a defaults reset) must honour both, or it
+    /// strands pre-edit snapshots that a later Discard writes back over the new
+    /// state:
     ///   * the revert was REFUSED outright, because an asyncRevertPending() worker
     ///     holds the snapshot map, or
     ///   * some file could not be restored (permission drift) and was RETAINED for
@@ -510,17 +760,131 @@ private:
     /// permanently lose pre-edit content — the controller's direct
     /// callers (setOverride / clearOverride) bail in that case.
     bool snapshotFileIfFirst(const QString& filePath);
+    /// Whether a snapshot drop announces the dirty-state flip it causes.
+    /// `Defer` is for a caller mutating several files in a row: an
+    /// intermediate flip is not the batch's outcome, and announcing it
+    /// leaves the page believing whatever the LAST intermediate state
+    /// happened to be. Such a caller owns one emit for the net flip.
+    enum class SnapshotDropSignal {
+        Emit,
+        Defer
+    };
+
     /// Undo a snapshotFileIfFirst() staging when the write it was taken for
     /// never landed. No-op unless the file on disk still matches the staged
     /// content exactly, so a snapshot guarding an earlier successful edit is
     /// left alone. Handed to the sub-services as a callable.
-    /// @return true when the entry was dropped (and pendingChangesChanged was
-    /// emitted if that flipped hasPendingChanges()).
-    bool dropFileSnapshotIfUnchanged(const QString& filePath);
+    /// @return true when the entry was dropped (and, under
+    /// `SnapshotDropSignal::Emit`, pendingChangesChanged was emitted if that
+    /// flipped hasPendingChanges()).
+    bool dropFileSnapshotIfUnchanged(const QString& filePath,
+                                     SnapshotDropSignal signalPolicy = SnapshotDropSignal::Emit);
+
+    /// Run the injected profile-store refresher, if any. No-op otherwise.
+    /// Not const: it exists to mutate process-global state (a directory
+    /// rescan that rewrites the registry partition and fans out signals).
+    void refreshProfileStore();
+
+    /// Outcome of removeOverrideFile(). `Absent` is not a failure: the
+    /// desired end state (no override file at this path) already holds,
+    /// which is what the pre-split code reported by re-testing existence
+    /// after a false return.
+    enum class OverrideFileRemoval {
+        Removed,
+        Absent,
+        Failed
+    };
+
+    /// The file half of clearOverride: snapshot, delete, settle the staged
+    /// entry. Emits NOTHING — the snapshot drop defers its dirty-state
+    /// signal to the caller — and does not refresh the profile store.
+    /// The caller owns the in-flight gate (`m_asyncRevertInFlight`), the
+    /// path validity gate, the refresh, and every signal.
+    ///
+    /// Split out so the bulk clears can delete every file, refresh ONCE,
+    /// and then emit — the batch shape revertPending already uses. Going
+    /// through clearOverride in a loop instead would rescan (and re-parse)
+    /// the whole profiles directory once per deleted file.
+    OverrideFileRemoval removeOverrideFile(const QString& path);
+
+    enum class OverrideFileWrite {
+        Written,
+        Unchanged,
+        Failed
+    };
+
+    /// The file half of setOverride: guard, snapshot, write, settle the staged
+    /// entry. Emits NOTHING and does NOT invalidate the disk memo — the caller
+    /// owns the invalidate and every signal. Split out so the group writer can
+    /// write every path, invalidate the memo ONCE, then emit — otherwise each
+    /// per-path setOverride dropped the whole memo and forced every sibling
+    /// card to re-walk resolvedProfile uncached, at drag rate. setOverride is a
+    /// thin wrapper: this core, then invalidate + drop + emit for the one path.
+    OverrideFileWrite writeOverrideFileOnly(const QString& path, const QVariantMap& profileJson);
+
+    /// Both boundary checks on a shader effect id: the length/character sanity
+    /// check and the registry-membership gate. Shared by `setShaderOverride` and
+    /// the group writer `setShaderOverrideOnPaths`, because the group writer is
+    /// the only path QML uses and had silently inherited neither.
+    /// @param context names the caller in the diagnostics.
+    bool acceptableShaderEffectId(const QString& effectId, QLatin1String context) const;
+
+    /// Shared body of clearAllOverrides / clearOverridesUnder: clears every
+    /// override file among @p eventPaths, refreshes the profile store once,
+    /// then emits. @p context names the caller for the failure log.
+    ///
+    /// The caller owns the `m_asyncRevertInFlight` gate and its refusal
+    /// toast, exactly as it does for removeOverrideFile above.
+    /// @return the number cleared, or -1 if any removal failed.
+    int clearOverridesForPaths(const QStringList& eventPaths, QLatin1String context);
+
+    /// Sanitised contents of the user override file at @p path, cached.
+    ///
+    /// `resolvedProfile` walks up to four ancestor levels and reads each
+    /// level's override file off disk. It backs a QML binding that every card
+    /// in scope re-evaluates on each `overrideChanged`, and `setOverride` emits
+    /// one of those per write path per slider tick, so without a cache a
+    /// duration drag costs (visible cards x chain depth) synchronous file opens
+    /// and JSON parses per tick on the GUI thread. One read per path per
+    /// mutation instead.
+    ///
+    /// Empty map for "no override file here", which is also what a file that
+    /// fails every validity check normalises to — both mean the same thing to
+    /// the caller (fall through to the registry), so they share a cache slot.
+    QVariantMap cachedDiskProfile(const QString& path) const;
+
+    /// Drop every `cachedDiskProfile` entry. Called from each path that writes,
+    /// deletes, or re-reads override files: `setOverride`, `removeOverrideFile`
+    /// (and so, transitively, every batch clear), `refreshProfileStore` (and so
+    /// every revert), the profiles-directory test override, and the public
+    /// `forgetCachedOverrideFiles` for external edits. Clearing wholesale
+    /// rather than per path is deliberate: the map holds at most one small
+    /// entry per event path, and a partial invalidation is one missed call site
+    /// away from serving a stale inherited value, which is the exact class of
+    /// bug this controller's disk-first read exists to fix.
+    void invalidateDiskProfileCache() const;
+
+    /// Non-zero while this controller's own `refreshProfileStore()` is running.
+    /// The loader's `rescanNow()` emits `profilesChanged` synchronously on that
+    /// stack, and `forgetCachedOverrideFiles` is wired to it — so without this
+    /// the controller would answer its own rescan with a tree-wide reload
+    /// broadcast, on top of the precise per-path signals the caller is already
+    /// about to send. A counter rather than a bool: no call site nests a
+    /// refresh inside another today (every call site is a single top-level call), but
+    /// a counter cannot be left stuck by a nesting one added later, and it
+    /// costs nothing over a bool.
+    int m_selfDrivenRescanDepth = 0;
+
+    /// Event path -> sanitised override-file contents. See `cachedDiskProfile`.
+    /// Mutated only from the GUI thread, like `m_pendingFileSnapshots`. It is
+    /// `mutable` and written from a `const` accessor, so that contract is worth
+    /// stating: the async discard worker must never reach it.
+    mutable QHash<QString, QVariantMap> m_diskProfileCache;
 
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;
     QString m_userProfilesDirOverride; ///< Empty = use XDG default
+    std::function<void()> m_profileStoreRefresher; ///< See setProfileStoreRefresher
 
     // Sub-services owned via QObject-parent: both are constructed with
     // `this` as parent so ~AnimationsPageController tears them down
@@ -552,6 +916,17 @@ private:
     /// forward on this cached state keeps the framework's dirty
     /// Q_PROPERTY NOTIFY contract honest.
     bool m_lastHadPendingChanges = false;
+    /// Memoised verdict of the value-based tree-dirty compare inside
+    /// hasPendingChanges() (each side is a store read + parse + prune, and
+    /// the predicate runs several times per mutation at drag rate). Reset by
+    /// the shaderProfileTreeChanged lambda (live tree moved) and by
+    /// refreshDirtyState() (committed baseline moved).
+    mutable std::optional<bool> m_treeDirtyCache;
+    /// Last emitted stockSuppressedEvents() value; maybeEmitStockSuppressedEventsChanged
+    /// gates the NOTIFY on an actual list change so tree edits that cannot
+    /// affect the suppression set stop re-running the rule editor's
+    /// conflict-chip bindings.
+    QStringList m_lastStockSuppressedEvents;
     /// Memoised eventSections() result — taxonomy is static for the
     /// process lifetime so subsequent QML rebinds reuse the same list.
     /// Populated lazily on first call. NOTE: if `ProfilePaths::

@@ -5,6 +5,11 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
+# Shared test isolation: a private D-Bus session (so a test that touches D-Bus
+# cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
+# open and hangs ctest after the test itself passed) plus a per-target XDG
+# sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 function(ps_add_test _name)
     set(_sources ${ARGN})
     add_executable(${_name} ${_sources})
@@ -28,9 +33,13 @@ function(ps_add_test _name)
             PhosphorScreens::Core
     )
     add_test(NAME ${_name} COMMAND ${_name})
+    phosphor_apply_test_isolation(${_name})
     # Offscreen QPA so QTimer-based tests work without a display server.
+    # APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
+    # ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
+    # sandbox `phosphor_apply_test_isolation` just installed.
+    phosphor_append_test_environment(${_name} "QT_QPA_PLATFORM=offscreen" "QT_LOGGING_RULES=phosphor.screens.debug=false")
     set_tests_properties(${_name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphor.screens.debug=false"
         LABELS "phosphorscreens"
     )
 endfunction()

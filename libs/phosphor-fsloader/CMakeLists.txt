@@ -11,10 +11,13 @@
 # their schema-specific enumeration / parsing / commit logic via
 # `IScanStrategy`.
 #
-# One specialisation ships with the library out of the box:
+# Two specialisations ship with the library out of the box:
 #   • `DirectoryLoader` — top-level `*.json` scan with user-wins layering,
 #                         dispatch to `IDirectoryLoaderSink`. Used by
 #                         CurveLoader, ProfileLoader, etc.
+#   • `MetadataPackScanStrategy<Payload>` — per-subdirectory `metadata.json`
+#                         scan with SHA-1 change detection. Used by the three
+#                         MetadataPackLoader-hosted pack registries.
 #
 # Loaders with different on-disk shapes (subdirectory layouts, non-JSON
 # extensions, custom filename validation) implement `IScanStrategy`
@@ -102,7 +105,6 @@ endif()
 
 set(phosphorfsloader_SRCS
     src/directoryloader.cpp
-    src/metadatapackregistrybase.cpp
     src/metadatapackscanstrategy.cpp
     src/schemavalidator.cpp
     src/watcheddirectoryset.cpp
@@ -110,10 +112,11 @@ set(phosphorfsloader_SRCS
 
 set(phosphorfsloader_public_HDRS
     include/PhosphorFsLoader/DirectoryLoader.h
+    include/PhosphorFsLoader/FileLimits.h
     include/PhosphorFsLoader/IDirectoryLoaderSink.h
     include/PhosphorFsLoader/IScanStrategy.h
     include/PhosphorFsLoader/JsonEnvelopeValidator.h
-    include/PhosphorFsLoader/MetadataPackRegistryBase.h
+    include/PhosphorFsLoader/PackPathGuard.h
     include/PhosphorFsLoader/MetadataPackScanStrategy.h
     include/PhosphorFsLoader/ParsedEntry.h
     include/PhosphorFsLoader/SchemaValidator.h
@@ -136,6 +139,10 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     include(GNUInstallDirs)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    # The install(TARGETS) below names a RUNTIME destination too; without this
+    # a standalone (non-ECM) configure expands it empty. Matches the sibling
+    # fallbacks in phosphor-registry and phosphor-tiles.
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
 
 target_include_directories(PhosphorFsLoader

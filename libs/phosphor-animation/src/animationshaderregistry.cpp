@@ -4,6 +4,7 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
+#include <PhosphorFsLoader/PackPathGuard.h>
 #include <PhosphorFsLoader/SchemaValidator.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
@@ -51,12 +52,20 @@ Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
 /// validateTexturePathWithinEffectDir docstring), and a path that
 /// cleanPath has reduced to absolute is no different from one the
 /// caller supplied as absolute directly.
+/// Function-local static so the pattern compiles once, not on every call —
+/// this guard runs per texture slot per runtime override translation.
+const QRegularExpression& traversalSeparators()
+{
+    static const QRegularExpression kSeparators(QStringLiteral("[/\\\\]"));
+    return kSeparators;
+}
+
 bool pathHasNoTraversalSegments(const QString& rawPath)
 {
     if (rawPath.isEmpty())
         return true;
     const QString cleaned = QDir::cleanPath(rawPath);
-    const QStringList segments = cleaned.split(QRegularExpression(QStringLiteral("[/\\\\]")), Qt::SkipEmptyParts);
+    const QStringList segments = cleaned.split(traversalSeparators(), Qt::SkipEmptyParts);
     for (const QString& seg : segments) {
         if (seg == QLatin1String("..")) {
             return false;
@@ -101,35 +110,22 @@ bool pathHasNoTraversalSegments(const QString& rawPath)
 /// rejected. Pass an empty string for runtime overrides where the
 /// effect id is implicit in the call context.
 std::optional<QString> validateTexturePathWithinEffectDir(const QString& rawPath, const QString& effectDir,
-                                                          const QString& effectId)
+                                                          const QString& effectId,
+                                                          PhosphorFsLoader::AbsolutePathPolicy policy)
 {
-    if (rawPath.isEmpty() || effectDir.isEmpty())
-        return std::nullopt;
-    const QDir dir(effectDir);
-    const QFileInfo origInfo(rawPath);
-    const bool wasRelative = !origInfo.isAbsolute();
-    QString resolved = rawPath;
-    if (wasRelative) {
-        resolved = dir.filePath(resolved);
-    }
-    const QString lexicalRoot = QDir::cleanPath(dir.absolutePath()) + QLatin1Char('/');
-    const QString canonicalRootResolved = QFileInfo(dir.absolutePath()).canonicalFilePath();
-    const QString canonicalRoot =
-        canonicalRootResolved.isEmpty() ? QString() : canonicalRootResolved + QLatin1Char('/');
-    const QString canonicalSymResolved = QFileInfo(resolved).canonicalFilePath();
-    // Pick comparison domain: prefer canonical (catches symlink
-    // escapes) when BOTH sides resolved, otherwise fall back to
-    // lexical for both. Never mix the two.
-    const bool useCanonical = !canonicalSymResolved.isEmpty() && !canonicalRootResolved.isEmpty();
-    const QString canonical = useCanonical ? canonicalSymResolved : QDir::cleanPath(resolved);
-    const QString comparisonRoot = useCanonical ? canonicalRoot : lexicalRoot;
-    if (wasRelative && !canonical.startsWith(comparisonRoot)) {
-        qCWarning(lcRegistry).noquote() << "Animation effect" << effectId << "texture path" << rawPath << "resolves to"
-                                        << canonical << "outside source dir" << comparisonRoot
+    // Delegates to the shared guard rather than keeping a fourth hand-rolled
+    // copy. The copies had already drifted: this one trusted an absolute path
+    // unconditionally, which is right for a runtime override the user picked and
+    // wrong for a path a PACK FILE declares. `policy` is what separates the two,
+    // and the shared guard is where the canonical-vs-lexical subtleties live.
+    const auto resolved = PhosphorFsLoader::resolveWithinDirectory(rawPath, effectDir, policy);
+    if (!resolved) {
+        qCWarning(lcRegistry).noquote() << "Animation effect" << effectId << "path" << rawPath
+                                        << "resolves outside source dir" << effectDir
                                         << "— rejected (path traversal guard)";
         return std::nullopt;
     }
-    return canonical;
+    return *resolved;
 }
 
 /// Parse one already-validated metadata.json root into an
@@ -203,20 +199,44 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         }
     }
 
-    // Resolve directory-relative paths via QDir::filePath, which returns
-    // absolute inputs unchanged — keeps schema tolerance symmetric with
-    // PhosphorShaders::ShaderRegistry's parser. Naive string concat
-    // would mangle absolute paths from a metadata.json into invalid
-    // double-rooted forms.
-    const QDir dir(effectDir);
-    if (!e.fragmentShaderPath.isEmpty()) {
-        e.fragmentShaderPath = dir.filePath(e.fragmentShaderPath);
-    }
-    if (!e.vertexShaderPath.isEmpty()) {
-        e.vertexShaderPath = dir.filePath(e.vertexShaderPath);
-    }
-    if (!e.previewPath.isEmpty()) {
-        e.previewPath = dir.filePath(e.previewPath);
+    // Resolve directory-relative paths, REFUSING anything that lands outside
+    // the effect's own directory. These name files that are compiled and run
+    // on the GPU, so `QDir::filePath` alone is not enough: it returns an
+    // absolute argument unchanged and never normalises `..`, so a pack
+    // declaring `"fragmentShader": "/etc/shadow"` or `"../../../x.frag"` would
+    // resolve straight out of the pack. Same guard the texture list below has
+    // always had, and the same one PhosphorShaders::ShaderRegistry applies to
+    // its own declared paths. A rejected field is CLEARED rather than left
+    // half-resolved, so the validity checks downstream see a coherent state.
+    const auto resolveDeclared = [&effectDir, &e](QString& field, const char* what) {
+        if (field.isEmpty()) {
+            return;
+        }
+        const auto resolved =
+            PhosphorFsLoader::resolveWithinDirectory(field, effectDir, PhosphorFsLoader::AbsolutePathPolicy::Reject);
+        if (!resolved) {
+            qCWarning(lcRegistry).noquote()
+                << "Animation effect" << e.id << what << "path" << field << "resolves outside its source dir"
+                << effectDir << "— rejected (path traversal guard)";
+            field.clear();
+            return;
+        }
+        field = *resolved;
+    };
+    const bool fragDeclared = !e.fragmentShaderPath.isEmpty();
+    resolveDeclared(e.fragmentShaderPath, "fragmentShader");
+    resolveDeclared(e.vertexShaderPath, "vertexShader");
+    resolveDeclared(e.previewPath, "preview");
+    // A REFUSED fragment path fails the whole pack, unlike a merely MISSING one.
+    // Tolerating a missing frag is a deliberate live-reload affordance (the
+    // author is mid-edit and the file will appear); a refused one is an attack
+    // signal, and the pack can never become valid without a metadata edit — so
+    // registering it would put a permanently-unrenderable entry in the settings
+    // catalogue with no way for the user to act on it.
+    if (fragDeclared && e.fragmentShaderPath.isEmpty()) {
+        qCWarning(lcRegistry).noquote() << "Animation effect" << e.id
+                                        << "declared a fragmentShader outside its own directory — refusing the pack";
+        return std::nullopt;
     }
 
     // Resolve user-texture paths to absolute form once at scan time —
@@ -250,7 +270,8 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         for (auto& tex : e.textures) {
             if (tex.path.isEmpty())
                 continue;
-            const auto validated = validateTexturePathWithinEffectDir(tex.path, effectDir, e.id);
+            const auto validated = validateTexturePathWithinEffectDir(tex.path, effectDir, e.id,
+                                                                      PhosphorFsLoader::AbsolutePathPolicy::Reject);
             if (!validated) {
                 // Clear BOTH path and wrap so the slot is internally
                 // coherent — `translateAnimationParams` skips empty-path
@@ -283,11 +304,19 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
             QStringList resolved;
             QStringList missing;
             for (const QString& bufPath : e.bufferShaderPaths) {
-                const QString abs = dir.filePath(bufPath);
-                if (QFile::exists(abs)) {
-                    resolved.append(abs);
+                const auto within = PhosphorFsLoader::resolveWithinDirectory(
+                    bufPath, effectDir, PhosphorFsLoader::AbsolutePathPolicy::Reject);
+                if (!within) {
+                    qCWarning(lcRegistry).noquote()
+                        << "Animation effect" << e.id << "buffer shader path" << bufPath
+                        << "resolves outside its source dir" << effectDir << "— rejected (path traversal guard)";
+                    missing.append(bufPath);
+                    continue;
+                }
+                if (QFile::exists(*within)) {
+                    resolved.append(*within);
                 } else {
-                    missing.append(abs);
+                    missing.append(*within);
                 }
             }
             if (missing.isEmpty()) {
@@ -315,6 +344,11 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     if (!e.isMultipass) {
         e.bufferWraps.clear();
         e.bufferFilters.clear();
+        // The SINGULAR pair is the all-buffers default and is equally
+        // orphaned on a zero-buffer effect — leaving it engaged survives
+        // toJson and operator== for a setting nothing can consume.
+        e.bufferWrap.clear();
+        e.bufferFilter.clear();
     }
 
     return e;
@@ -655,7 +689,17 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         if (pathOverride != friendlyParams.constEnd()) {
             const QString candidate = pathOverride->toString();
             if (candidate.isEmpty()) {
-                // Empty-string override = explicit clear of the slot.
+                // Empty-string override = suppress the pack default for the slot.
+                // NOT an explicit clear: an empty path skips BOTH keys below.
+                //
+                // What that means depends on the CONSUMER, and there are two with
+                // different rules. The daemon's ShaderEffect treats a missing key as
+                // "no change", so a slot it has already bound keeps its texture
+                // across a params re-push, and clearing it would need the key
+                // PRESENT with an empty value — which this path deliberately does not
+                // emit. The kwin transition path instead rebuilds slot state on every
+                // install and reads the key unconditionally, so for it an absent key
+                // means UNBOUND. Do not restate this as one universal contract.
                 // The pack-default wrap (if any) is intentionally
                 // dropped because wrap is meaningless without a bound
                 // texture — emitting a wrap-only key would attach a
@@ -698,7 +742,8 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
                     path = candidate;
                 }
             } else {
-                const auto validated = validateTexturePathWithinEffectDir(candidate, effect.sourceDir, effect.id);
+                const auto validated = validateTexturePathWithinEffectDir(candidate, effect.sourceDir, effect.id,
+                                                                          PhosphorFsLoader::AbsolutePathPolicy::Trust);
                 if (!validated) {
                     // Rejected override clears BOTH path and wrap for
                     // this slot — same coherence rule parseEffect
@@ -713,7 +758,24 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         }
         const auto wrapOverride = friendlyParams.constFind(wrapKey);
         if (wrapOverride != friendlyParams.constEnd()) {
-            wrap = wrapOverride->toString();
+            const QString candidateWrap = wrapOverride->toString();
+            // Mirror fromJson's wrap-vocabulary guard, like the surface sibling
+            // already does. `friendlyParams` is untrusted (settings UI, D-Bus, a
+            // shader-profile JSON), and taking the value verbatim meant a typo
+            // reached `wrapStringToEnum` and was silently coerced to clamp with no
+            // diagnostic — while the identical typo in metadata.json warned.
+            // Empty and rejected tokens both omit the wrap key. Consumer-dependent
+            // again: the kwin path then binds clamp, while a daemon ShaderEffect
+            // keeps whatever wrap it last received, because it only reacts to a key
+            // that is present. Not "falls back to clamp" unconditionally.
+            if (candidateWrap.isEmpty()
+                || PhosphorAnimationShaders::AnimationShaderContract::isValidWrapToken(candidateWrap)) {
+                wrap = candidateWrap;
+            } else {
+                qCWarning(lcRegistry) << "Animation effect" << effect.id << "runtime override wrap value"
+                                      << candidateWrap << "rejected (not clamp/repeat/mirror) — wrap key omitted";
+                wrap.clear();
+            }
         }
 
         if (path.isEmpty()) {

@@ -502,9 +502,11 @@ public:
     /// per-surface animation dirty check and per-page Discard compare the live
     /// tree against. The default returns the live tree, so a stub with no
     /// baseline notion reports "never diverged"; the concrete Settings overrides
-    /// it to read its committed baseline. Implementations MUST apply the same
+    /// it to read its committed baseline. Both sides MUST apply the same
     /// supported-path prune as shaderProfileTree() so live-vs-committed compares
-    /// prune-for-prune.
+    /// prune-for-prune. The default meets that by construction: it delegates to
+    /// shaderProfileTree(), which already prunes, so an OVERRIDE is the only
+    /// place the prune has to be re-applied by hand.
     virtual PhosphorAnimationShaders::ShaderProfileTree committedShaderProfileTree() const
     {
         return shaderProfileTree();

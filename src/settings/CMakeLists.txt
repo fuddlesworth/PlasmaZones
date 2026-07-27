@@ -66,7 +66,7 @@ set(plasmazones_settings_SRCS
     pages/animationspagecontroller.h
     pages/animationspagecontroller.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
-    # helpers shared across the four AnimationsPageController TUs. Inline
+    # helpers shared across the five AnimationsPageController TUs. Inline
     # definitions make cross-TU linkage independent of unity-build merging.
     pages/animations_controller_detail.h
     # AnimationsPageController shader-leg methods compile into the same
@@ -76,6 +76,10 @@ set(plasmazones_settings_SRCS
     # hasOverride / rawProfile / resolvedProfile / setOverride /
     # clearOverride).
     pages/animationspagecontroller_overrides.cpp
+    # AnimationsPageController group-write methods — the per-field merge, the
+    # per-field clear, the shader-leg group mutators and the divergence measure
+    # an event card applies across its whole write-path group.
+    pages/animationspagecontroller_groupwrites.cpp
     # AnimationsPageController path-discovery helpers, small per-Q_INVOKABLE
     # methods (sectionForPath / eventLabel / parentChain).
     pages/animationspagecontroller_paths.cpp
@@ -231,7 +235,11 @@ add_executable(plasmazones-settings ${plasmazones_settings_SRCS})
 # LTO so its functions are never re-analysed at link, and silence the same
 # false positive class in its own compile.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    set_source_files_properties(decorationpagecontroller_sets.cpp PROPERTIES
+    # pages/-qualified: source-file properties key on the resolved path, so the
+    # bare basename attached the property to a phantom file after the v3.3
+    # reorg moved the controllers under pages/ and this block was a silent
+    # no-op.
+    set_source_files_properties(pages/decorationpagecontroller_sets.cpp PROPERTIES
         COMPILE_OPTIONS "-fno-lto;-Wno-maybe-uninitialized")
 endif()
 
@@ -386,7 +394,6 @@ qt_add_qml_module(plasmazones-settings
         qml/js/FontUtils.js
         qml/pages/screens/ZoneSelectorSection.qml
         qml/pages/animations/EasingPreview.qml
-        qml/pages/animations/EasingSettings.qml
         # Animations page — Phase 1+2 salvage from PR #291. Standalone
         # widgets + JS helpers; sub-pages and per-event cards land in
         # later phases. Phase 2 widgets (CurveThumbnail, SpringPreview,
@@ -395,6 +402,7 @@ qt_add_qml_module(plasmazones-settings
         # consumed by every Animations sub-page and the editor dialog.
         qml/pages/animations/AnimatedBoxTrack.qml
         qml/pages/animations/AnimationEventCard.qml
+        qml/pages/animations/AnimationEventCardWriters.qml
         qml/pages/animations/AnimationEventCardBanners.qml
         qml/pages/animations/AnimationEventCardList.qml
         qml/pages/animations/AnimationProfileEditor.qml

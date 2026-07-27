@@ -62,7 +62,16 @@ auto clampInt(int minVal, int maxVal)
 auto clampDouble(double minVal, double maxVal)
 {
     return [minVal, maxVal](const QVariant& v) -> QVariant {
-        return qBound(minVal, v.toDouble(), maxVal);
+        const double d = v.toDouble();
+        // qBound on NaN is unspecified — it decays to qMin/qMax comparisons,
+        // all false for NaN, so a corrupt "nan" in the config would land on an
+        // arbitrary bound depending on argument order. NaN is not a value, so
+        // pin it deterministically to the minimum rather than leaving it to
+        // that pathology.
+        if (qIsNaN(d)) {
+            return minVal;
+        }
+        return qBound(minVal, d, maxVal);
     };
 }
 
@@ -348,8 +357,8 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
 // is preserved as projections over the Profile blob — see settings.cpp.
 //
 // Validation: the Profile JSON string is stored as-is. Clamping happens
-// at the library level (Profile::effective* + AnimationController's
-// clampProfile on the hot path) rather than in the schema, because the
+// at the library level (Profile::effective* + WindowAnimator::clampProfile
+// on the hot path) rather than in the schema, because the
 // schema's per-field QMetaType::Int validator can't see inside the
 // JSON. A malformed blob falls back to the library default via
 // Profile::fromJson's permissive parse — consistent with the "garbage

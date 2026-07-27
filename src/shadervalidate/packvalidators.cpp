@@ -15,6 +15,7 @@
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorShaders/ShaderRegistry.h>
@@ -29,6 +30,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QRegularExpression>
 #include <QString>
 #include <QStringList>
@@ -57,13 +59,28 @@ int validatePack(const QString& packDir, QTextStream& out)
         return 1;
     }
 
+    // Several lints below deliberately read the RAW metadata rather than the
+    // parsed ShaderInfo (parsePackMetadata clamps bufferScale, clears missing
+    // buffer paths, and only sets vertexShaderPath when the file exists, so a
+    // lint reading the parsed struct would silently pass the author error the
+    // runtime hid). Read and parse metadata.json ONCE here and share it, instead
+    // of reopening the same file per lint block.
+    QJsonObject rawRoot;
+    {
+        QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
+        if (metaFile.open(QIODevice::ReadOnly)) {
+            rawRoot = QJsonDocument::fromJson(metaFile.readAll()).object();
+        }
+    }
+
     // The `fragmentShader` / `bufferShaders` / `vertexShader` paths come from
-    // the user-editable metadata.json (parsePackMetadata resolves them against
-    // the pack dir without confinement), so confine each to the pack dir before
-    // it is opened and fed to glslang — the same guard the animation and
-    // surface validators apply. Zone packs have no `builtin:` buffer tokens
-    // (that resolver is surface-only), so every path must stay inside the pack.
-    // An empty path is left as-is (that stage is simply absent).
+    // the user-editable metadata.json. parsePackMetadata already confines them
+    // to the pack dir (resolveWithinPack), so this re-check is belt-and-braces
+    // defense in depth before each path is opened and fed to glslang — the
+    // same guard the animation and surface validators apply. Zone packs have
+    // no `builtin:` buffer tokens (that resolver is surface-only), so every
+    // path must stay inside the pack. An empty path is left as-is (that stage
+    // is simply absent).
     const auto confineToPack = [&packDir](QString& path) {
         return confinePackPathInPlace(packDir, path);
     };
@@ -117,17 +134,61 @@ int validatePack(const QString& packDir, QTextStream& out)
         } else {
             claimedLane.insert(laneKey, p.id);
         }
+        // Mirror the pool budgets the runtime binds against: a slot past its
+        // pool's ceiling gets no p_ define and no upload, so the shader
+        // compiles against an undefined identifier.
+        const int budget = p.type == QLatin1String("color") ? PhosphorShaders::CustomColors::kColorCount
+            : p.type == QLatin1String("image")              ? PhosphorShaders::kMaxImageSlots
+                                                            : PhosphorShaders::CustomParams::kFlatSlotCount;
+        if (p.slot >= budget) {
+            lints << QStringLiteral("slot %1 past the %2-pool budget of %3 for '%4' (will not bind)")
+                         .arg(p.slot)
+                         .arg(poolName(p.type))
+                         .arg(budget)
+                         .arg(p.id);
+        }
+    }
+    // Per-pool count overflow, independent of how slots were assigned. The
+    // per-param `slot >= budget` lint above only fires for params that LAND on
+    // an out-of-range lane; it misses the case where more params request a pool
+    // than it has lanes but they pile onto in-budget slots (explicit collisions,
+    // or a future change to the auto-assigner). Count the lane-consuming params
+    // per pool (valid id, that pool's type) and flag a pool that is oversubscribed
+    // as a whole, so the author sees the real cause rather than only the symptom.
+    {
+        int scalarCount = 0, colorCount = 0, imageCount = 0;
+        for (const ShaderRegistry::ParameterInfo& p : info.parameters) {
+            if (!PhosphorShaders::isValidParamId(p.id) || !kValidParamTypes.contains(p.type)) {
+                continue;
+            }
+            if (p.type == QLatin1String("color")) {
+                ++colorCount;
+            } else if (p.type == QLatin1String("image")) {
+                ++imageCount;
+            } else {
+                ++scalarCount;
+            }
+        }
+        const auto flagPool = [&lints](const QString& pool, int count, int budget) {
+            if (count > budget) {
+                lints << QStringLiteral(
+                             "%1 pool oversubscribed: %2 parameters for %3 lanes (the last %4 will not bind)")
+                             .arg(pool)
+                             .arg(count)
+                             .arg(budget)
+                             .arg(count - budget);
+            }
+        };
+        flagPool(poolName(QStringLiteral("float")), scalarCount, PhosphorShaders::CustomParams::kFlatSlotCount);
+        flagPool(poolName(QStringLiteral("color")), colorCount, PhosphorShaders::CustomColors::kColorCount);
+        flagPool(poolName(QStringLiteral("image")), imageCount, PhosphorShaders::kMaxImageSlots);
     }
     // Buffer-pass + bufferScale lints check the RAW metadata, not the parsed
     // ShaderInfo: parseShaderMetadata clamps bufferScale into [0.125, 1.0] and
     // clears bufferShaderPaths when a declared buffer is missing, so a lint reading
     // the parsed values would silently pass an author error the runtime hid.
     if (info.isMultipass) {
-        QJsonObject root;
-        QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-        if (metaFile.open(QIODevice::ReadOnly)) {
-            root = QJsonDocument::fromJson(metaFile.readAll()).object();
-        }
+        const QJsonObject& root = rawRoot;
 
         QStringList bufferNames;
         const QJsonArray declared = root.value(QLatin1String("bufferShaders")).toArray();
@@ -152,33 +213,60 @@ int validatePack(const QString& packDir, QTextStream& out)
         // drops the surplus with only a journal warning — exactly the
         // "runtime hid the author error" class this block lints for.
         // Compare the RAW declared array against the cap, not the non-empty
-        // subset: parseShaderMetadata iterates qMin(rawSize, 4) and only then
-        // skips empties, so ["", "a", "b", "c", "d"] silently loses "d".
-        if (declared.size() > 4) {
-            lints << QStringLiteral("too many buffer shaders: %1 declared, cap is 4 (surplus dropped at load)")
-                         .arg(static_cast<int>(declared.size()));
+        // subset: parseShaderMetadata iterates qMin(rawSize, kMaxBufferPasses)
+        // and only then skips empties, so ["", "a", "b", "c", "d"] silently
+        // loses "d".
+        if (declared.size() > PhosphorShaders::kMaxBufferPasses) {
+            lints << QStringLiteral("too many buffer shaders: %1 declared, cap is %2 (surplus dropped at load)")
+                         .arg(static_cast<int>(declared.size()))
+                         .arg(PhosphorShaders::kMaxBufferPasses);
         }
 
         const double rawScale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
-        if (rawScale < 0.125 || rawScale > 1.0) {
-            lints << QStringLiteral("bufferScale out of range [0.125, 1.0]: %1 (clamped at load)").arg(rawScale);
+        if (rawScale < PhosphorShaders::kMinBufferScale || rawScale > PhosphorShaders::kMaxBufferScale) {
+            lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")
+                         .arg(PhosphorShaders::kMinBufferScale)
+                         .arg(PhosphorShaders::kMaxBufferScale)
+                         .arg(rawScale);
         }
     }
     if (!QFile::exists(info.sourcePath)) {
         lints << QStringLiteral("fragment shader missing: %1").arg(QFileInfo(info.sourcePath).fileName());
     }
     // A declared-but-absent vertexShader silently falls back to the shared
-    // zone.vert below, hiding the author's typo. Read the RAW metadata: unlike
-    // the animation and surface parsers, ShaderRegistry::parsePackMetadata
-    // only assigns vertexShaderPath when the file EXISTS, so linting the
-    // parsed struct could never fire.
+    // zone.vert below, hiding the author's typo. Read the RAW metadata (shared
+    // rawRoot above): unlike the animation and surface parsers,
+    // ShaderRegistry::parsePackMetadata only assigns vertexShaderPath when the
+    // file EXISTS, so linting the parsed struct could never fire.
     {
-        QFile rawMeta(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-        if (rawMeta.open(QIODevice::ReadOnly)) {
-            const QString declaredVert =
-                QJsonDocument::fromJson(rawMeta.readAll()).object().value(QLatin1String("vertexShader")).toString();
-            if (!declaredVert.isEmpty() && !QFile::exists(QDir(packDir).filePath(declaredVert))) {
-                lints << QStringLiteral("vertex shader missing: %1").arg(declaredVert);
+        const QString declaredVert = rawRoot.value(QLatin1String("vertexShader")).toString();
+        if (!declaredVert.isEmpty() && !QFile::exists(QDir(packDir).filePath(declaredVert))) {
+            lints << QStringLiteral("vertex shader missing: %1").arg(declaredVert);
+        }
+        // A custom-named vertexShader is silently ignored by the zone
+        // runtime, which only ever loads a file named `zone.vert` (see the
+        // vertex-resolution note below). Warn so the author is not misled by
+        // a green validator into thinking their custom vertex stage runs.
+        if (!declaredVert.isEmpty() && QFileInfo(declaredVert).fileName() != QLatin1String("zone.vert")) {
+            lints << QStringLiteral(
+                         "vertexShader '%1' is ignored at load: the zone runtime only uses a file named "
+                         "zone.vert (sibling, else shared). Rename it to zone.vert or drop the declaration.")
+                         .arg(declaredVert);
+        }
+        // Duplicate ids must be linted from the RAW array: the parser
+        // dedupes (first declaration wins), so the parsed struct can
+        // never show the author their repeated id.
+        QSet<QString> rawIds;
+        const QJsonArray rawParams = rawRoot.value(QLatin1String("parameters")).toArray();
+        for (const QJsonValue& v : rawParams) {
+            const QString rawId = v.toObject().value(QLatin1String("id")).toString();
+            if (rawId.isEmpty()) {
+                continue;
+            }
+            if (rawIds.contains(rawId)) {
+                lints << QStringLiteral("duplicate parameter id '%1' (first declaration wins at load)").arg(rawId);
+            } else {
+                rawIds.insert(rawId);
             }
         }
     }
@@ -205,9 +293,11 @@ int validatePack(const QString& packDir, QTextStream& out)
         errors += compileStage(out, QFileInfo(info.sourcePath).fileName(), info.sourcePath, QShader::FragmentStage,
                                includePaths, /*useScaffold=*/true, preamble, info);
     }
-    // Only multipass packs bake buffer passes — parseShaderMetadata seeds a
-    // default buffer.frag path for every pack, but the runtime (bakeBufferShaders)
-    // ignores it unless isMultipass, so the validator must gate identically.
+    // Only multipass packs bake buffer passes — parseShaderMetadata clears
+    // buffer state for single-pass packs and only keeps an implicit
+    // buffer.frag that exists on disk, and the runtime (bakeBufferShaders)
+    // ignores buffer paths unless isMultipass, so the validator gates
+    // identically.
     if (info.isMultipass) {
         for (const QString& buf : info.bufferShaderPaths) {
             if (QFile::exists(buf)) {
@@ -216,10 +306,17 @@ int validatePack(const QString& packDir, QTextStream& out)
             }
         }
     }
-    // Vertex: per-pack zone.vert if present, else the shared zone.vert the runtime
-    // falls back to.
-    QString vertPath = info.vertexShaderPath;
-    if (vertPath.isEmpty()) {
+    // Vertex: resolve EXACTLY as the zone runtime does (resolveZoneVertexPath in
+    // zoneshadernoderhi.h) rather than honouring `info.vertexShaderPath`. The
+    // zone runtime — both ZoneShaderItem and the daemon warm bake — only ever
+    // looks for a file literally named `zone.vert` (the pack's sibling, else the
+    // shared copy) and NEVER compiles a custom-named `vertexShader` declaration,
+    // unlike the animation and surface runtimes. Baking `info.vertexShaderPath`
+    // here would compile a stage the runtime never touches, so a pack with a
+    // broken custom vert would pass CI while its real (shared) vertex stage went
+    // unchecked. So resolve the sibling zone.vert, else the shared zone.vert.
+    QString vertPath = QFileInfo(info.sourcePath).absolutePath() + QStringLiteral("/zone.vert");
+    if (!QFile::exists(vertPath)) {
         vertPath = packsRoot + QStringLiteral("/shared/zone.vert");
     }
     if (QFile::exists(vertPath)) {
@@ -423,6 +520,71 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     for (const QJsonValue& v : declaredTextures) {
         if (v.toObject().value(QLatin1String("path")).toString().isEmpty()) {
             lints << QStringLiteral("texture entry with empty `path` (dropped at load)");
+        }
+        // Wrap vocabulary lint — read RAW metadata: AnimationShaderEffect::fromJson
+        // silently clears an invalid texture wrap to empty, so a lint over the
+        // parsed struct could never surface an author's typo. Mirrors the
+        // surface validator.
+        const QString wrap = v.toObject().value(QLatin1String("wrap")).toString();
+        if (!wrap.isEmpty() && !PhosphorAnimationShaders::AnimationShaderContract::isValidWrapToken(wrap)) {
+            lints
+                << QStringLiteral("texture wrap not in {clamp,repeat,mirror}: %1 (cleared to clamp at load)").arg(wrap);
+        }
+    }
+    // Multipass buffer lints — read RAW metadata, not the parsed struct:
+    // AnimationShaderEffect::fromJson clamps bufferScale, drops missing buffers,
+    // and silently coerces invalid buffer wrap/filter tokens, so a lint over the
+    // parsed values would hide the exact author errors this block exists to
+    // surface. The animation validator had none of these, unlike its two
+    // siblings, even though the animation parser silently rewrites all of them.
+    if (eff.isMultipass) {
+        const QJsonObject animRoot = doc.object();
+        const QJsonArray declaredBuffers = animRoot.value(QLatin1String("bufferShaders")).toArray();
+        for (const QJsonValue& v : declaredBuffers) {
+            const QString bufName = v.toString();
+            if (bufName.isEmpty()) {
+                continue;
+            }
+            const auto confined = confinedPackPath(packDir, bufName);
+            if (!confined) {
+                lints << QStringLiteral("multipass buffer shader path escapes the pack directory: %1").arg(bufName);
+            } else if (!QFile::exists(*confined)) {
+                lints << QStringLiteral("multipass buffer shader missing: %1").arg(bufName);
+            }
+        }
+        if (declaredBuffers.size() > PhosphorAnimationShaders::AnimationShaderContract::kMaxBufferPasses) {
+            lints << QStringLiteral("too many buffer shaders: %1 declared, cap is %2 (surplus dropped at load)")
+                         .arg(static_cast<int>(declaredBuffers.size()))
+                         .arg(PhosphorAnimationShaders::AnimationShaderContract::kMaxBufferPasses);
+        }
+        const double rawScale = animRoot.value(QLatin1String("bufferScale")).toDouble(1.0);
+        if (rawScale < PhosphorAnimationShaders::AnimationShaderEffect::kMinBufferScale
+            || rawScale > PhosphorAnimationShaders::AnimationShaderEffect::kMaxBufferScale) {
+            lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")
+                         .arg(PhosphorAnimationShaders::AnimationShaderEffect::kMinBufferScale)
+                         .arg(PhosphorAnimationShaders::AnimationShaderEffect::kMaxBufferScale)
+                         .arg(rawScale);
+        }
+        const auto lintTokens = [&lints](const QJsonArray& arr, const QString& field, bool wrap) {
+            for (const QJsonValue& v : arr) {
+                const QString tok = v.toString();
+                const bool ok = wrap ? PhosphorAnimationShaders::AnimationShaderContract::isValidWrapToken(tok)
+                                     : PhosphorAnimationShaders::AnimationShaderContract::isValidFilterToken(tok);
+                if (!tok.isEmpty() && !ok) {
+                    lints << QStringLiteral("%1 value '%2' not in vocabulary (coerced at load)").arg(field, tok);
+                }
+            }
+        };
+        lintTokens(animRoot.value(QLatin1String("bufferWraps")).toArray(), QStringLiteral("bufferWraps"), true);
+        lintTokens(animRoot.value(QLatin1String("bufferFilters")).toArray(), QStringLiteral("bufferFilters"), false);
+        const QString singleWrap = animRoot.value(QLatin1String("bufferWrap")).toString();
+        if (!singleWrap.isEmpty() && !PhosphorAnimationShaders::AnimationShaderContract::isValidWrapToken(singleWrap)) {
+            lints << QStringLiteral("bufferWrap value '%1' not in vocabulary (coerced at load)").arg(singleWrap);
+        }
+        const QString singleFilter = animRoot.value(QLatin1String("bufferFilter")).toString();
+        if (!singleFilter.isEmpty()
+            && !PhosphorAnimationShaders::AnimationShaderContract::isValidFilterToken(singleFilter)) {
+            lints << QStringLiteral("bufferFilter value '%1' not in vocabulary (coerced at load)").arg(singleFilter);
         }
     }
     if (!QFile::exists(eff.fragmentShaderPath)) {
@@ -690,9 +852,9 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             }
         }
         // bufferWraps / bufferFilters are positionally aligned to bufferShaders;
-        // surplus entries beyond the buffer count are silently ignored at load
-        // (surfaceshaderregistry.cpp), so flag a length mismatch the author
-        // likely did not intend.
+        // surplus entries beyond the buffer count are never indexed by the
+        // consumer at load (the runtime reads only up to the buffer count), so
+        // flag a length mismatch the author likely did not intend.
         const auto lintBufferArrayLen = [&](QLatin1String key) {
             const int extra = doc.object().value(key).toArray().size() - declaredBuffers.size();
             if (extra > 0) {
@@ -705,8 +867,11 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         lintBufferArrayLen(QLatin1String("bufferWraps"));
         lintBufferArrayLen(QLatin1String("bufferFilters"));
         const double rawScale = doc.object().value(QLatin1String("bufferScale")).toDouble(1.0);
-        if (rawScale < 0.125 || rawScale > 1.0) {
-            lints << QStringLiteral("bufferScale out of range [0.125, 1.0]: %1 (clamped at load)").arg(rawScale);
+        if (rawScale < PhosphorShaders::kMinBufferScale || rawScale > PhosphorShaders::kMaxBufferScale) {
+            lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")
+                         .arg(PhosphorShaders::kMinBufferScale)
+                         .arg(PhosphorShaders::kMaxBufferScale)
+                         .arg(rawScale);
         }
     }
     if (!QFile::exists(eff.fragmentShaderPath)) {

@@ -25,9 +25,12 @@ ColumnLayout {
     /// Whether the event holds ANY direct override (either timing field or
     /// the shader leg) — the card's derived `overrideEnabled`.
     required property bool overrideActive
-    /// The card's session-local "timing editor opened, nothing written yet"
-    /// latch. Parent nodes show the fan-out note while it is set.
-    required property bool editingTiming
+    /// The card's single "the timing editor is showing" predicate
+    /// (`_timingEditorOpen` = an override exists, or the editor was just
+    /// latched open with nothing written yet). Taken WHOLE rather than
+    /// respelled from its two inputs, because the card gates four other things
+    /// on it and a copy here would drift.
+    required property bool timingEditorOpen
     /// Descendant shader overrides that shadow a parent-node card.
     required property int shadowingChildrenCount
     /// Mirror-divergence state, precomputed by the card.
@@ -42,10 +45,9 @@ ColumnLayout {
     /// The shadowing warning's one-click remediation.
     signal clearShadowingRequested
 
-    // Parent nodes show the fan-out note whenever the timing editor is
-    // open (override present or just latched for editing); leaves show
-    // the inheritance breadcrumb until a direct override exists.
-    readonly property bool _infoVisible: isParentNode ? (overrideActive || editingTiming) : !overrideActive
+    // Parent nodes show the fan-out note whenever the timing editor is open;
+    // leaves show the inheritance breadcrumb until a direct override exists.
+    readonly property bool _infoVisible: isParentNode ? timingEditorOpen : !overrideActive
     readonly property bool _shadowingVisible: isParentNode && shadowingChildrenCount > 0
     readonly property bool _currentVisible: !overrideActive
 
@@ -109,7 +111,7 @@ ColumnLayout {
         Layout.rightMargin: Kirigami.Units.largeSpacing
         type: Kirigami.MessageType.Warning
         visible: root.mirrorsDiverged
-        // Names both axes the card's _storedStateKey compares, because
+        // Names both axes `divergentPathCount` compares, because
         // both have a group writer. Writes are per setting: editing the
         // duration converges the duration everywhere but leaves a
         // divergent curve alone, so the sentence promises convergence

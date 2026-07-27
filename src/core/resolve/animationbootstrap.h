@@ -32,11 +32,11 @@ extern PLASMAZONES_EXPORT const QLatin1StringView kShellAnimationFamilySeedsOwne
 
 /// XDG-discovered curve and profile directories — `plasmazones/curves`
 /// and `plasmazones/profiles` resolved against `XDG_DATA_DIRS` (lowest-
-/// priority first), with the user-writable dir appended last so
-/// last-writer-wins layering produces `sys-lowest, ..., sys-highest,
-/// user`. The user dirs are materialised on disk so live-reload
-/// watchers attach via `WatchedDirectorySet`'s parent-watch climb on
-/// fresh installs.
+/// priority first), with the user-writable dir appended last, giving
+/// `sys-lowest, ..., sys-highest, user`. The scan reverse-iterates that and
+/// applies first-registration-wins, so the user dir claims its keys
+/// first. The user dirs are materialised on disk so live-reload watchers
+/// attach via `WatchedDirectorySet`'s parent-watch climb on fresh installs.
 ///
 /// Returned alongside the loader pair from
 /// `constructAnimationLoaders` so callers that wire additional signals
@@ -144,6 +144,14 @@ PLASMAZONES_EXPORT void seedShellAnimationFamilies(PhosphorAnimation::PhosphorPr
 /// `${XDG_DATA_DIRS}/plasmazones/{curves,profiles}` and the user-writable
 /// equivalents, mirroring the daemon. Library-level loaders stay
 /// consumer-agnostic per Phase-4 decision U.
+///
+/// Note the trade this makes: the ctor runs the full three-step load itself,
+/// so there is no seam between loader construction and the initial scan. A
+/// consumer that has to OBSERVE that first scan (`curvesChanged` /
+/// `profilesChanged` fire synchronously from registration, through the
+/// underlying DirectoryLoader) must use `constructAnimationLoaders` plus
+/// the `runInitial*Load` helpers directly, as the daemon does. Neither the
+/// settings app nor the editor needs to, which is why they get the one-liner.
 class PLASMAZONES_EXPORT AnimationBootstrap
 {
 public:
@@ -165,6 +173,19 @@ public:
     PhosphorAnimation::CurveRegistry* curveRegistry()
     {
         return m_curveRegistry.get();
+    }
+    /// The profile loader feeding `profileRegistry()`. Borrowed by a
+    /// composition root that also WRITES profile files, so it can force
+    /// the loader's debounced watch to catch up before reading the
+    /// registry back (`ProfileLoader::rescanNow`). Handed out whole,
+    /// matching the two accessors above, rather than as a narrower
+    /// `refreshProfiles()` forward: the loader is a QObject, so a caller
+    /// wiring a long-lived callable can hold it in a `QPointer` and get
+    /// a lifetime guarantee that a forwarding method on this non-QObject
+    /// class could not offer.
+    PhosphorAnimation::ProfileLoader* profileLoader()
+    {
+        return m_profileLoader.get();
     }
 
 private:

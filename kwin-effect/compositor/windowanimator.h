@@ -93,28 +93,40 @@ public:
     // ─── Configuration ───
 
     void setClock(PhosphorAnimation::IMotionClock* clock);
-    PhosphorAnimation::IMotionClock* clock() const;
 
     void setEnabled(bool enabled);
     bool isEnabled() const;
 
-    void setProfile(const PhosphorAnimation::Profile& profile);
     const PhosphorAnimation::Profile& profile() const;
 
     void setCurve(std::shared_ptr<const PhosphorAnimation::Curve> curve);
-    std::shared_ptr<const PhosphorAnimation::Curve> curve() const;
 
+    // Deliberately tighter than the library's domain bounds
+    // (`Profile::MaxDurationMs` = 3600000, `Profile::MaxMinDistancePx` =
+    // 100000). These clamp a profile that arrived over D-Bus, on the
+    // compositor's paint path, where a legal-but-absurd value costs frames
+    // rather than a rejected file. A minDistance past either bound means the
+    // same thing ("never animate").
+    //
+    // `kMaxDurationMs` is a BACKSTOP, not the operative bound: every producer
+    // already clamps into the transition-lifetime envelope [50, 2000] before a
+    // value can reach here (the global path in daemon_settings.cpp, the
+    // per-window override in shader_config_dbus.cpp), so no value in
+    // (2000, 10000] is currently reachable. It is kept deliberately, because a
+    // future producer that skipped its own clamp should hit something here
+    // rather than nothing — but if one ever does, this bound and the 2000 ms
+    // lifetime envelope will disagree, and the envelope is the one that matters.
+    //
+    // `sequenceMode` and `staggerInterval` are deliberately NOT clamped: neither
+    // is read on this path (the effect's cascade uses applyStaggeredOrImmediate),
+    // so there is nothing for a bad value to corrupt. Add a clamp here the moment
+    // one of them gains a consumer.
     static constexpr qreal kMaxDurationMs = 10000.0;
     static constexpr int kMaxMinDistancePx = 10000;
 
     void setDuration(qreal ms);
-    qreal duration() const;
 
     void setMinDistance(int pixels);
-    int minDistance() const;
-
-    void setRetargetPolicy(PhosphorAnimation::RetargetPolicy policy);
-    PhosphorAnimation::RetargetPolicy retargetPolicy() const;
 
     // ─── Lifecycle ───
 
@@ -128,21 +140,26 @@ public:
     /// profile. Used by the per-window animation rule cascade to apply a
     /// per-window-class motion override without mutating shared animator
     /// state.
+    ///
+    /// The override is used WHOLE: a field it leaves unset, or one the animator's
+    /// own clamp rejects, falls back to the LIBRARY default rather than to
+    /// `m_profile`. Callers build the override from the animator's base profile
+    /// (see the rule cascade), which is what makes that acceptable.
     bool startAnimation(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame,
                         const PhosphorAnimation::Profile* profileOverride = nullptr);
-    PhosphorAnimation::StartResult
-    startAnimationWithResult(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame,
-                             const PhosphorAnimation::Profile* profileOverride = nullptr);
-
-    bool retarget(KWin::EffectWindow* handle, const QRectF& newFrame, PhosphorAnimation::RetargetPolicy policy);
-    bool retarget(KWin::EffectWindow* handle, const QRectF& newFrame);
-
     PhosphorAnimation::RetargetResult retargetWithResult(KWin::EffectWindow* handle, const QRectF& newFrame,
                                                          PhosphorAnimation::RetargetPolicy policy);
     PhosphorAnimation::RetargetResult retargetWithResult(KWin::EffectWindow* handle, const QRectF& newFrame);
 
+    /// Drop a live animation without scheduling any damage.
+    ///
+    /// Asymmetric with `reapAnimationsForClock` and the completion path, which
+    /// both repaint. That makes this safe ONLY for a caller that either
+    /// commits geometry immediately afterwards (KWin damages old+new on
+    /// moveResize) or is tearing the window down. Every caller does one or the
+    /// other today; a new one that does neither will leave the last animated
+    /// frame on screen until something else repaints.
     void removeAnimation(KWin::EffectWindow* handle);
-    void clear();
     int reapAnimationsForClock(const PhosphorAnimation::IMotionClock* clock);
 
     // ─── State queries ───
@@ -150,7 +167,6 @@ public:
     bool isAnimatingToTarget(KWin::EffectWindow* handle, const QRectF& target) const;
     QRectF currentValue(KWin::EffectWindow* handle, const QRectF& fallback) const;
     const PhosphorAnimation::AnimatedValue<QRectF>* animationFor(KWin::EffectWindow* handle) const;
-    QRectF animationBounds(KWin::EffectWindow* handle) const;
 
     // ─── Per-frame ───
 
@@ -162,6 +178,13 @@ public:
     void applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const;
 
 private:
+    /// Implementation of startAnimation; private because no external caller
+    /// consumes the typed StartResult today (the audit's repo-wide census
+    /// found zero) — re-publish if one appears.
+    PhosphorAnimation::StartResult
+    startAnimationWithResult(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame,
+                             const PhosphorAnimation::Profile* profileOverride = nullptr);
+
     // ─── Hook methods (formerly virtual overrides) ───
 
     void onAnimationStarted(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim);
@@ -186,7 +209,6 @@ private:
     std::unordered_map<KWin::EffectWindow*, PhosphorAnimation::AnimatedValue<QRectF>> m_animations;
     PhosphorAnimation::IMotionClock* m_clock = nullptr;
     PhosphorAnimation::Profile m_profile;
-    PhosphorAnimation::RetargetPolicy m_retargetPolicy = PhosphorAnimation::RetargetPolicy::PreserveVelocity;
     bool m_enabled = true;
 
     OutputClockResolver m_outputClockResolver;

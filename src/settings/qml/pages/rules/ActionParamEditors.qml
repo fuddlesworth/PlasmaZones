@@ -206,7 +206,30 @@ QtObject {
 
                 color: parent._isAccent ? parent._accentColor : parent._hex
                 Accessible.name: _param.label
-                onClicked: colorDialog.open()
+                onClicked: {
+                    // Open the PAGE-LEVEL colour picker (via the appSettings
+                    // bridge) rather than a delegate-scoped ColorDialog: a
+                    // rule-list rebuild while the dialog is open would destroy
+                    // this delegate and tear the popup down under the user. The
+                    // target param key is captured in the transient accepted
+                    // handler, which self-disconnects on close.
+                    var picker = row.appSettings ? row.appSettings.colorPicker : null;
+                    if (!picker)
+                        return;
+                    var key = _param.key;
+                    function acceptedHandler() {
+                        picker.accepted.disconnect(acceptedHandler);
+                        picker.rejected.disconnect(rejectedHandler);
+                        row.actionEdited(row._withParam(key, row._toHexArgb(picker.selectedColor)));
+                    }
+                    function rejectedHandler() {
+                        picker.accepted.disconnect(acceptedHandler);
+                        picker.rejected.disconnect(rejectedHandler);
+                    }
+                    picker.accepted.connect(acceptedHandler);
+                    picker.rejected.connect(rejectedHandler);
+                    picker.openFor(swatch.color);
+                }
             }
 
             Label {
@@ -218,14 +241,6 @@ QtObject {
 
             Item {
                 Layout.fillWidth: true
-            }
-
-            ColorDialog {
-                id: colorDialog
-
-                options: ColorDialog.ShowAlphaChannel
-                selectedColor: swatch.color
-                onAccepted: row.actionEdited(row._withParam(_param.key, row._toHexArgb(selectedColor)))
             }
         }
     }
@@ -288,11 +303,13 @@ QtObject {
             id: screenCombo
 
             readonly property var _param: parent.modelData
-            readonly property var _screens: row.appSettings ? row.appSettings.screens : []
+            readonly property var _screens: (row.appSettings && row.appSettings.screens) || []
             model: _screens.map(function (s) {
                 var label = s.displayLabel || s.name || "";
                 if (s.isPrimary)
-                    label += " · " + i18n("Primary");
+                    // Composed inside one i18nc so translators control the
+                    // order and the separator survives RTL bidi runs.
+                    label = i18nc("monitor name, then the primary-monitor marker", "%1 · %2", label, i18n("Primary"));
                 return {
                     "label": label,
                     "name": s.name
@@ -327,7 +344,7 @@ QtObject {
 
             readonly property var _param: parent.modelData
             readonly property int _count: row.appSettings && row.appSettings.virtualDesktopCount > 0 ? row.appSettings.virtualDesktopCount : 1
-            readonly property var _names: row.appSettings ? row.appSettings.virtualDesktopNames : []
+            readonly property var _names: (row.appSettings && row.appSettings.virtualDesktopNames) || []
             model: {
                 var items = [];
                 for (var i = 1; i <= desktopCombo._count; ++i) {
@@ -483,24 +500,44 @@ QtObject {
                 anchors.fill: parent
                 text: curveSlot._displayName
                 Accessible.name: curveSlot._param.label
-                onClicked: curveDialog.open()
-            }
-
-            CurveEditorDialog {
-                id: curveDialog
-
-                parent: curveSlot.Window.window ? curveSlot.Window.window.contentItem : curveSlot
-                eventLabel: row.action.event || ""
-                timingMode: curveSlot._isSpring ? CurvePresets.timingModeSpring : CurvePresets.timingModeEasing
-                easingCurve: curveSlot._easingCurve
-                springOmega: curveSlot._springOmega
-                springZeta: curveSlot._springZeta
-                onCurveApplied: function (curve) {
-                    row.actionEdited(row._withParam(curveSlot._param.key, curve));
-                }
-                onSpringApplied: function (omega, zeta) {
-                    var encoded = "spring:" + omega.toFixed(2) + "," + zeta.toFixed(2);
-                    row.actionEdited(row._withParam(curveSlot._param.key, encoded));
+                onClicked: {
+                    // Open the PAGE-LEVEL curve editor (via the appSettings
+                    // bridge) rather than a delegate-scoped one, so a rule-list
+                    // rebuild while it is open cannot tear the popup down under
+                    // the user. The target param key is captured in the
+                    // transient handlers, which self-disconnect on close.
+                    var picker = row.appSettings ? row.appSettings.curvePicker : null;
+                    if (!picker)
+                        return;
+                    var key = curveSlot._param.key;
+                    function cleanup() {
+                        picker.curveApplied.disconnect(curveHandler);
+                        picker.springApplied.disconnect(springHandler);
+                        picker.closed.disconnect(cleanup);
+                    }
+                    function curveHandler(curve) {
+                        cleanup();
+                        row.actionEdited(row._withParam(key, curve));
+                    }
+                    function springHandler(omega, zeta) {
+                        cleanup();
+                        row.actionEdited(row._withParam(key, "spring:" + omega.toFixed(2) + "," + zeta.toFixed(2)));
+                    }
+                    picker.curveApplied.connect(curveHandler);
+                    picker.springApplied.connect(springHandler);
+                    picker.closed.connect(cleanup);
+                    // Through the controller's humaniser rather than the raw
+                    // dotted path (eventLabel() returns the English form by
+                    // contract, so this one word is untranslated — a rule's
+                    // free-form event field has no i18n literal to pass).
+                    picker.openFor({
+                        "eventLabel": (row.action.event && row.appSettings && row.appSettings.animationsController) ? row.appSettings.animationsController.eventLabel(row.action.event) : "",
+                        "timingMode": curveSlot._isSpring ? CurvePresets.timingModeSpring : CurvePresets.timingModeEasing,
+                        "easingCurve": curveSlot._easingCurve,
+                        "springOmega": curveSlot._springOmega,
+                        "springZeta": curveSlot._springZeta,
+                        "duration": row.appSettings ? row.appSettings.animationDuration : CurvePresets.defaultDurationMs
+                    });
                 }
             }
         }
@@ -623,8 +660,9 @@ QtObject {
     // ones incompatible with the action's target event render dimmed. Wire
     // value is the effect id.
     property Component _shaderEffectEditor: Component {
-        // Cascading category menu (same widget as the action-type picker above
-        // and the animations page's shader picker) instead of a flat combo, so
+        // Cascading category menu (the same widget ActionRow.qml uses for its
+        // action-type picker, and the animations page for its shader picker)
+        // instead of a flat combo, so
         // shaders group by category. The list is path-aware: it is pre-filtered
         // to the shaders that can drive this action's target event, so a
         // geometry-only shader (window-morph) is omitted on a show/hide event,
@@ -706,7 +744,8 @@ QtObject {
             compact: true
             // The shared editor owns the session-only lock map and hosts the
             // colour dialog; the rule only persists values. Locks reset on
-            // effect switch via the Loader (see the Connections handler above).
+            // effect switch via the hosting Loader in ActionRow.qml (its
+            // Connections handler lives there, not in this Component file).
             onValueChanged: function (effectId, paramId, value) {
                 // Clone the current param map and stamp the new value so the
                 // binding re-evaluates (mutating in place wouldn't trigger).
@@ -743,7 +782,6 @@ QtObject {
         PZCommon.ParameterEditor {
             id: algorithmParamEditor
 
-            Layout.fillWidth: true
             parameters: row._adaptedAlgorithmParamSchema
             currentValues: row._algorithmParamValues
             compact: true

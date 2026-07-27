@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-find_package(Qt6 REQUIRED COMPONENTS Test Quick)
+find_package(Qt6 REQUIRED COMPONENTS Test Quick Gui Qml)
 
 # ─── Fake plugin fixture helper ────────────────────────────────────────────────
 #
@@ -20,6 +20,12 @@ find_package(Qt6 REQUIRED COMPONENTS Test Quick)
 #             "MINIMAL" for fixtures that only need Q_DECL_EXPORT
 #             from QtCore (e.g. the noentry fixture that exports a
 #             dummy symbol with no factory machinery)
+
+# Shared test isolation: a private D-Bus session (so a test that touches D-Bus
+# cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
+# open and hangs ctest after the test itself passed) plus a per-target XDG
+# sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 function(phosphorregistry_add_fake_plugin target sourceDir source linkQt)
     add_library(${target} MODULE ${sourceDir}/${source})
     # All fixtures need at least Qt6::Core for Q_DECL_EXPORT.
@@ -108,7 +114,9 @@ function(phosphorregistry_add_test name)
             Qt6::Quick
     )
     add_test(NAME ${name} COMMAND ${name})
-    set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    phosphor_apply_test_isolation(${name})
+    set_property(TEST ${name} APPEND PROPERTY LABELS "phosphorregistry")
+    phosphor_append_test_environment(${name} "QT_QPA_PLATFORM=offscreen")
 endfunction()
 
 phosphorregistry_add_test(test_phosphor_registry)

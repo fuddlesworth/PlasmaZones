@@ -15,6 +15,15 @@ namespace {
 Q_LOGGING_CATEGORY(lcSurfaceShader, "phosphorsurfaceshaders.effect")
 } // namespace
 
+// Serializes the IN-MEMORY effect for two consumers: fromJson round-trips (the
+// registry test suite) and embedding inside a DecorationProfileTree. It is NOT
+// a pack-metadata authoring format. fragmentShaderPath/vertexShaderPath here are
+// the POST-LOAD resolved forms (absolute, produced by resolveWithinDirectory),
+// so feeding this object back through the pack loader would hit its
+// AbsolutePathPolicy::Reject and drop the paths. That is fine because nothing
+// does: fromJson takes the paths verbatim without the Reject gate, and a pack's
+// own metadata.json is author-written with paths RELATIVE to the effect dir.
+// The Reject policy guards untrusted author input, not this trusted re-emit.
 QJsonObject SurfaceShaderEffect::toJson() const
 {
     QJsonObject obj;
@@ -195,8 +204,7 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
         return wrap;
     };
     const auto validatedFilter = [](QString filter, const char* field) -> QString {
-        if (!filter.isEmpty() && filter != QLatin1String("linear") && filter != QLatin1String("nearest")
-            && filter != QLatin1String("mipmap")) {
+        if (!filter.isEmpty() && !SurfaceShaderContract::isValidFilterToken(filter)) {
             qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: unknown" << field << "value" << filter
                                        << ", reset to runtime default";
             filter.clear();
@@ -211,15 +219,32 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     // marker. Dropping either kind would shift every later buffer's override —
     // and since toJson re-emits empties, a dropped empty would break alignment
     // on the very next load of a saved pack.
+    // Capped at kMaxBufferPasses like bufferShaderPaths itself: entries past
+    // the pass budget can never align with a real pass, so surplus is dropped
+    // with a warning rather than carried through toJson round-trips forever.
     const QJsonArray wrapsArr = obj.value(QLatin1String("bufferWraps")).toArray();
-    for (const QJsonValue& v : wrapsArr) {
-        e.bufferWraps.append(validatedWrap(v.toString(), "bufferWraps"));
+    for (qsizetype i = 0; i < qMin<qsizetype>(wrapsArr.size(), kMaxBufferPasses); ++i) {
+        e.bufferWraps.append(validatedWrap(wrapsArr.at(i).toString(), "bufferWraps"));
+    }
+    if (wrapsArr.size() > kMaxBufferPasses) {
+        qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: bufferWraps has" << wrapsArr.size()
+                                   << "entries, cap is" << kMaxBufferPasses << "- surplus dropped";
     }
     e.bufferFilter = validatedFilter(obj.value(QLatin1String("bufferFilter")).toString(), "bufferFilter");
     const QJsonArray filtersArr = obj.value(QLatin1String("bufferFilters")).toArray();
-    for (const QJsonValue& v : filtersArr) {
-        e.bufferFilters.append(validatedFilter(v.toString(), "bufferFilters"));
+    for (qsizetype i = 0; i < qMin<qsizetype>(filtersArr.size(), kMaxBufferPasses); ++i) {
+        e.bufferFilters.append(validatedFilter(filtersArr.at(i).toString(), "bufferFilters"));
     }
+    if (filtersArr.size() > kMaxBufferPasses) {
+        qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: bufferFilters has" << filtersArr.size()
+                                   << "entries, cap is" << kMaxBufferPasses << "- surplus dropped";
+    }
+    // Deliberately NOT truncated to bufferShaderPaths.size() (unlike the overlay
+    // parser): the surface tree keeps every wrap/filter entry in its declared
+    // position so a round trip through toJson is byte-stable and operator==
+    // stays meaningful, and the consumer simply never indexes past the buffer
+    // count. Truncating here would break fromJson's documented in-place
+    // positional contract (pinned by the surface registry tests).
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
 
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();

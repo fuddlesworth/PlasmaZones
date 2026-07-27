@@ -6,6 +6,8 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
+
 function(pfl_add_test _name)
     set(_sources ${ARGN})
     add_executable(${_name} ${_sources})
@@ -20,12 +22,16 @@ function(pfl_add_test _name)
             PhosphorFsLoader::PhosphorFsLoader
     )
     add_test(NAME ${_name} COMMAND ${_name})
-    set_tests_properties(${_name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphorfsloader.debug=false"
-        LABELS "phosphorfsloader"
-    )
+    phosphor_apply_test_isolation(${_name})
+    # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace the
+    # XDG sandbox phosphor_apply_test_isolation just installed.
+    phosphor_append_test_environment(${_name}
+        "QT_QPA_PLATFORM=offscreen"
+        "QT_LOGGING_RULES=phosphorfsloader.debug=false")
+    set_tests_properties(${_name} PROPERTIES LABELS "phosphorfsloader")
 endfunction()
 
+pfl_add_test(pfl_test_packpathguard test_packpathguard.cpp)
 pfl_add_test(pfl_test_directoryloader test_directoryloader.cpp)
 pfl_add_test(pfl_test_metadatapackscanstrategy test_metadatapackscanstrategy.cpp)
 pfl_add_test(pfl_test_schemavalidator test_schemavalidator.cpp)

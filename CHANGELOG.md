@@ -5,6 +5,26 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The curve revert link names the field it reverts**: it now reads "Revert curve to inherited", matching the duration link beside it ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **The curve editor is titled after the event it edits**: it reads `Customize curve for <event>`, or just `Customize curve` where there is no single event to name ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **The spring Speed and Damping ratio hints read as sentences** instead of comparison operators ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **The editor's save action is spelled "Save as preset…" everywhere**, and a built-in preset row gained a "Use as default" action ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **The settings app explains a refused edit**: it shows a short notice when an edit is refused during a discard, or when some overrides could not be reverted ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+
+### Fixed
+
+- **Reverting an animation's duration or curve shows the inherited value right away**: the per-field revert links cleared the override but left the control showing the value you had just removed, and it only caught up the next time you opened the settings app. Turning an event's Override toggle off and resetting an animations page had the same problem and are fixed too ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **Clearing an override on the Global animation card now updates the events below it**: every event inheriting from Global kept showing the old value until the page was rebuilt ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **Editing a profile file by hand while the settings app is open is picked up**: the page cached what it had read and never re-read it, so your edit did not show until you reopened the app ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **A curve or profile file you fix in place is noticed**: a file that failed to load was not watched, so repairing the typo did nothing until the next restart. The same applies to a shader or animation pack folder copied in whole, which could be missed if its `metadata.json` landed a moment after the folder ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **A curve preset now carries the duration of the event you saved it from**: it recorded the global default instead, so a preset saved from a 400 ms event played at whatever the global value was. Using the preset applies that duration too, and the curve preview inside the editor runs at it. A spring preset records no duration at all, because a spring settles on its own physics ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **An animation event card's body is no longer greyed out**: the card drew its contents dimmed while its controls stayed fully clickable ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+- **A malformed value in a profile file is inherited instead of silently pinning the event**: writing something that is not a number for a duration, minimum distance or stagger interval used to record the built-in default as an explicit override, so the event stopped following its parent and the settings app showed a value nobody chose. It now falls through to the parent like any other unset field, and the daemon logs what it ignored ([#850](https://github.com/fuddlesworth/PlasmaZones/pull/850)).
+
 ## [3.3.0] - 2026-07-23
 
 ### Added
@@ -1541,7 +1561,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Active layout always bypasses filters to prevent empty selector state
   - Undo/redo support for visibility changes in the editor
   - Filter badge on KCM layout cards when Tier 2 restrictions are active
-- Layout cycling (Meta+[/]) now respects per-screen visibility filtering
+- Layout cycling (`Meta+[/]`) now respects per-screen visibility filtering
 
 ### Changed
 - OSD style defaults to visual preview instead of text for new installs
@@ -1735,6 +1755,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.0...HEAD
 [3.3.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.7...v3.3.0
 [3.2.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.6...v3.2.7
 [3.2.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.5...v3.2.6

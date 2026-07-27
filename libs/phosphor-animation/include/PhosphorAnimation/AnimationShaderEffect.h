@@ -5,6 +5,8 @@
 
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
+#include <PhosphorShaders/CustomParamsKey.h>
+
 #include <QJsonObject>
 #include <QList>
 #include <QString>
@@ -202,17 +204,23 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     int geometryGridSubdivisions = 0;
 
     /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
-    /// factor). 0.125 means a 1/8 downscale on each axis (1/64 area —
-    /// the lowest cost-floor that still gives Shadertoy-style buffer
-    /// effects something to work with). 1.0 means full-resolution
-    /// FBOs (no downscale). Hosted here as the source-of-truth that
-    /// `fromJson`'s clamp + the round-trip stability comment in
-    /// `toJson` reference; a future runtime that consumes bufferScale
-    /// from a non-JSON source can read these constants directly.
-    static constexpr qreal kMinBufferScale = 0.125;
-    static constexpr qreal kMaxBufferScale = 1.0;
+    /// factor) — forwarders onto the cross-library canonical constants in
+    /// <PhosphorShaders/CustomParamsKey.h> (see there for the 0.125 cost-floor
+    /// rationale), matching how SurfaceShaderEffect forwards. Kept as names on
+    /// this class because `fromJson`'s clamp and the round-trip stability
+    /// comment in `toJson` reference them.
+    static constexpr qreal kMinBufferScale = PhosphorShaders::kMinBufferScale;
+    static constexpr qreal kMaxBufferScale = PhosphorShaders::kMaxBufferScale;
     static_assert(kMinBufferScale > 0.0 && kMinBufferScale < kMaxBufferScale,
                   "kMinBufferScale must be positive and strictly less than kMaxBufferScale");
+
+    /// Upper bound for `geometryGridSubdivisions`. The value lands on a
+    /// PER-FRAME compositor allocation as n²: the effect's capture path
+    /// reserves and fills n×n WindowQuads every painted frame of the
+    /// transition, so an unbounded pack value is a compositor hang (and
+    /// n*n overflows signed int past ~46341). 128 is 2.5x the largest
+    /// shipping pack (48); the parse warns and clamps past it.
+    static constexpr int kMaxGeometryGridSubdivisions = 128;
 
     /// Declared shader inputs beyond the standard set (iTime, iFrame, etc.).
     /// Each entry maps `parameterId → { type, default, min, max, ... }`.

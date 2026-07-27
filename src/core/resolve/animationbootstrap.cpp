@@ -28,14 +28,20 @@ namespace {
 // process — today they don't, but the narrower contract is correct.
 constexpr QLatin1StringView kSecondaryProfilesOwnerTag{"plasmazones-secondary-profiles"};
 
+QString writableUserDir(QLatin1StringView xdgRelative)
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+        + QString(xdgRelative);
+}
+
 QStringList discoverDataDirs(QLatin1StringView xdgRelative)
 {
     // `QStandardPaths::locateAll` returns directories in priority order —
-    // the writable user location FIRST, system dirs AFTER. The loader
-    // iterates in caller-supplied order and lets later entries override
-    // earlier on key collision, so we reverse to achieve the standard
-    // "system first, user wins last" layering. Matches
-    // LayoutManager::loadLayouts.
+    // the writable user location FIRST, system dirs AFTER. Reverse it so the
+    // list reads `sys-lowest, ..., sys-highest, user`, which is the shape the
+    // loader documents as its input: it reverse-iterates that and applies
+    // FIRST-registration-wins, so the user dir claims its keys before any
+    // system dir gets to. Matches LayoutManager::loadLayouts.
     QStringList dirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QString(xdgRelative),
                                                  QStandardPaths::LocateDirectory);
     std::reverse(dirs.begin(), dirs.end());
@@ -45,18 +51,23 @@ QStringList discoverDataDirs(QLatin1StringView xdgRelative)
     // location so the loader can watch it via the parent-directory
     // fallback — once the user drops a file there, the watcher fires
     // and the loader picks it up without a daemon restart.
-    const QString userDir =
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + QString(xdgRelative);
-    if (!dirs.contains(userDir)) {
-        dirs.append(userDir);
+    // cleanPath on both sides of the dedupe: locateAll output is already
+    // clean, but a trailing slash in XDG_DATA_HOME would make the hand-built
+    // spelling miss the contains() and append the user dir twice (benign
+    // under first-registration-wins, but a double scan per rescan). A
+    // symlinked user data root can still evade this — accepted; canonical
+    // resolution would stat on every discovery call for a case with no
+    // in-tree occurrence.
+    const QString userDir = QDir::cleanPath(writableUserDir(xdgRelative));
+    QStringList cleaned;
+    cleaned.reserve(dirs.size());
+    for (const QString& dir : std::as_const(dirs)) {
+        cleaned.append(QDir::cleanPath(dir));
     }
-    return dirs;
-}
-
-QString writableUserDir(QLatin1StringView xdgRelative)
-{
-    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
-        + QString(xdgRelative);
+    if (!cleaned.contains(userDir)) {
+        cleaned.append(userDir);
+    }
+    return cleaned;
 }
 } // namespace
 
@@ -240,20 +251,19 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // highlight family root inherits the widget OutCubic feel.
         {QLatin1StringView{"widget.zoneHighlight"}, QLatin1StringView{"widget-out"}, 200.0},
 
-        // No `desktop.*` motion seeds — and NOT because a seed here would be
-        // unread. It would be read: the daemon runs this same function on its
-        // own registry (daemon.cpp), and settingsadaptor's `motionProfileTree`
-        // getter flattens that registry's snapshot into the tree the
-        // kwin-effect fetches over D-Bus, where every non-`Global` path becomes
-        // an OVERRIDE. An override beats the caller's base in overlayChainOnto,
-        // so a `desktop` seed would shadow the user's global animation duration
-        // and curve for both desktop legs — and the desktop transitions are
-        // specifically designed to INHERIT them, so that the global slider
-        // retimes them (see the desktopChanged and showingDesktopChanged
-        // handlers in lifecycle.cpp). Unseeded, they fall through to the
-        // animator's global profile, which is the contract. Seeds also exist to
-        // preserve prior bundled-JSON character, and these transitions are new:
-        // there is no prior tuning to preserve.
+        // No `desktop.*` motion seeds. A seed here would no longer shadow the
+        // user's global slider on the effect side — settingsadaptor's
+        // `motionProfileTree` getter uses `snapshotExcludingLowPrecedence()`,
+        // and both composition roots install this function's owner tag as the
+        // registry's low-precedence tag, so seed-owned entries are excluded
+        // from the published tree by construction (that filter is exactly why
+        // the `window` and `window.appearance.close` seeds above are safe).
+        // The surviving reasons are simpler: the desktop transitions are
+        // designed to INHERIT the animator's global profile so the global
+        // slider retimes them (see the desktopChanged and
+        // showingDesktopChanged handlers in lifecycle_wiring.cpp), and seeds
+        // exist to preserve prior bundled-JSON character — these transitions
+        // are new, so there is no prior tuning to preserve.
     }};
 
     for (const auto& seed : seeds) {

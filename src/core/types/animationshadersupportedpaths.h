@@ -14,18 +14,25 @@ namespace PlasmaZones {
 
 /// Leaf event paths the daemon's overlay service AND the KWin effect
 /// actually resolve a shader effect for, by one of three mechanisms:
-/// a @c resolveShaderEffect(tree, ...) call inside one of
-/// @c OverlayService::buildOsdConfig / @c buildLayoutPickerConfig /
-/// @c buildZoneSelectorConfig / @c buildSnapAssistConfig; a
+/// a @c resolveShaderLeg(tree, ...) call inside one of
+/// the @c build*Config factories in @c src/daemon/overlayservice/animation_config.cpp
+/// (@c buildOsdConfig / @c buildLayoutPickerConfig /
+/// @c buildZoneSelectorConfig / @c buildSnapAssistConfig /
+/// @c buildCheatsheetConfig; a
 /// @c tryBeginShaderForEvent(...) call under
-/// @c kwin-effect/plasmazoneseffect/ (window_lifecycle for the
-/// open/close/move/maximize/focus legs, daemon_apply for minimize); or a
-/// @c resolveShaderWithDefault(tree, ...) call, which drives both the
+/// @c kwin-effect/plasmazoneseffect/ (window_lifecycle for the open, close and
+/// focus legs, window_connections for move and maximize, daemon_apply for
+/// minimize); or a
+/// @c resolveShaderWithDefault(tree, ...) call, which drives the
 /// screen-level desktop legs from
-/// @c kwin-effect/plasmazoneseffect/lifecycle.cpp and the snap geometry
+/// @c kwin-effect/plasmazoneseffect/lifecycle_wiring.cpp, the snap geometry
 /// legs through @c applyWindowGeometry in
-/// @c kwin-effect/plasmazoneseffect/drag_snap.cpp. When a future
-/// surface adds a shader leg, append its leg paths here in lockstep.
+/// @c kwin-effect/plasmazoneseffect/drag_snap.cpp, and the read-only
+/// @c packOwnsEvent predicate inside @c syncStockEffectSuppression
+/// (@c kwin-effect/plasmazoneseffect/lifecycle.cpp), which resolves the
+/// DesktopPeek / WindowMinimize / WindowMaximize paths already listed
+/// below. When a future surface adds a shader leg, append its leg paths
+/// here in lockstep.
 inline QStringList shaderConsumedLeafEventPaths()
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
@@ -78,12 +85,12 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::WindowLayoutSwitch,
         // Full-screen virtual-desktop switch — consumed by the kwin-effect's
         // DesktopTransitionManager (resolveShaderWithDefault(tree,
-        // DesktopSwitch) in the desktopChanged handler, lifecycle.cpp), NOT a
+        // DesktopSwitch) in the desktopChanged handler, lifecycle_wiring.cpp), NOT a
         // per-window tryBeginShaderForEvent leg. Its shaders are the two-texture
         // desktop class (appliesTo ["desktop"]).
         PP::DesktopSwitch,
         // Show-desktop peek — same manager, resolved in the
-        // showingDesktopChanged handler (lifecycle.cpp). One node drives both
+        // showingDesktopChanged handler (lifecycle_wiring.cpp). One node drives both
         // legs: the hide leg blends the windows scene into the bare desktop,
         // and the show-back leg replays that same blend with time reversed
         // (its bare-desktop endpoint comes from the hide leg's cache).
@@ -106,29 +113,39 @@ inline QStringList shaderConsumedLeafEventPaths()
 /// any assignment would be runtime-dead and silently shadow what the
 /// user thought they set on a sibling. The settings UI hides the
 /// shader picker on those rows; @c Settings::shaderProfileTree's prune
-/// drops any persisted entry on those paths to self-heal configs from
-/// earlier app revisions.
-inline QStringList shaderSupportedEventPaths()
+/// drops any persisted entry on those paths, so a config from an earlier app
+/// revision can never SERVE one (the entry may still sit in the file until an
+/// unrelated edit rewrites it).
+inline const QStringList& shaderSupportedEventPaths()
 {
-    namespace PP = PhosphorAnimation::ProfilePaths;
-    QStringList out;
-    QSet<QString> seen;
-    const QStringList leaves = shaderConsumedLeafEventPaths();
-    for (const QString& leaf : leaves) {
-        QString cursor = leaf;
-        while (!cursor.isEmpty()) {
-            if (!seen.contains(cursor)) {
-                seen.insert(cursor);
-                out.append(cursor);
+    // Function-local static, mirroring supportedShaderPathSet() below: the
+    // taxonomy is process-constant, and the pruner calls this on EVERY
+    // Settings tree read and write (several per mutation at slider-drag
+    // rate), so rebuilding the list plus the dedup set per call was pure
+    // waste. Range-for callers bind to the reference unchanged.
+    static const QStringList kPaths = []() {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        QStringList out;
+        QSet<QString> seen;
+        const QStringList leaves = shaderConsumedLeafEventPaths();
+        for (const QString& leaf : leaves) {
+            QString cursor = leaf;
+            while (!cursor.isEmpty()) {
+                if (!seen.contains(cursor)) {
+                    seen.insert(cursor);
+                    out.append(cursor);
+                }
+                cursor = PP::parentPath(cursor);
             }
-            cursor = PP::parentPath(cursor);
         }
-    }
-    return out;
+        return out;
+    }();
+    return kPaths;
 }
 
-/// The supported-path set as a QSet, built once. Shared by the predicate and
-/// the pruner below so their membership source cannot drift.
+/// The supported-path set as a QSet, built once. Backs the predicate below;
+/// built from the same SSOT list the pruner iterates, so the two membership
+/// sources cannot drift.
 inline const QSet<QString>& supportedShaderPathSet()
 {
     static const QSet<QString> kSupported = []() {
@@ -138,8 +155,9 @@ inline const QSet<QString>& supportedShaderPathSet()
     return kSupported;
 }
 
-/// Convenience predicate used by the settings UI (Q_INVOKABLE-bridged)
-/// and the daemon's optional verification path.
+/// Convenience predicate used by the settings UI (Q_INVOKABLE-bridged).
+/// The only callers today are the two in
+/// `animationspagecontroller_shaders.cpp`.
 inline bool eventPathSupportsShaderLeg(const QString& path)
 {
     return supportedShaderPathSet().contains(path);
@@ -158,20 +176,42 @@ inline bool eventPathSupportsShaderLeg(const QString& path)
 /// let the user clear them — making the bug sticky.
 ///
 /// Calling this pruner on every read AND every write at the Settings
-/// layer means an affected config self-heals on the next save, and a
+/// layer means an affected config can never SERVE a stale entry (the read prunes
+/// it), though the entry itself lingers in the file until an unrelated edit
+/// forces a write — the write-side compare happens after pruning on both
+/// sides, so a prune-only delta is not itself a reason to write. And a
 /// fresh write coming from a Q_INVOKABLE that bypasses the UI gate
 /// (e.g. a future scripting hook) still cannot stamp unsupported-path
 /// entries onto disk.
 inline PhosphorAnimationShaders::ShaderProfileTree
 pruneShaderProfileTreeToSupportedPaths(const PhosphorAnimationShaders::ShaderProfileTree& src)
 {
-    const QSet<QString>& supported = supportedShaderPathSet();
-
+    // No membership SET needed: iterating the (memoised) SSOT list is itself
+    // the filter, and `supportedShaderPathSet()` is built from that same
+    // list, so the two cannot disagree.
     PhosphorAnimationShaders::ShaderProfileTree pruned;
+    // The baseline is a single global ShaderProfile (the "global" root default),
+    // not one of the path-keyed overrides this filter operates on, so it is
+    // copied through verbatim by design. The supported-path prune decides which
+    // OVERRIDE PATHS survive; the root default always applies and has no path to
+    // filter against.
     pruned.setBaseline(src.baseline());
-    const QStringList overriddenPaths = src.overriddenPaths();
-    for (const QString& path : overriddenPaths) {
-        if (supported.contains(path)) {
+    // Emitted in the SSOT's own order, not the source tree's insertion order, so
+    // this pruner CANONICALISES as well as filters.
+    //
+    // `ShaderProfileTree::operator==` compares insertion order, but order carries
+    // no meaning for this property — `resolve()` ignores it entirely. Preserving
+    // the caller's order therefore made two value-identical trees compare unequal
+    // whenever a user toggled an override off and back on, because the re-added
+    // path appends rather than returning to its old position. The consequences were
+    // all user-visible: `hasPendingChanges()` stayed true forever, the per-page
+    // Discard could not clear it (it is value-based, finds every value already
+    // equal, and never writes), and the no-op write guard fired a tree-changed
+    // signal for an order-only delta. Since this runs on BOTH the read and the
+    // write side, canonicalising here fixes the dirty check, the no-op guard, and
+    // the persisted JSON in one place.
+    for (const QString& path : shaderSupportedEventPaths()) {
+        if (src.hasOverride(path)) {
             pruned.setOverride(path, src.directOverride(path));
         }
     }

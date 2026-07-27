@@ -112,7 +112,9 @@ Item {
     /// duration before measuring the card can measure it half-open. The reveal
     /// path in SettingsFlickable sizes its settle timer from this.
     readonly property int expandDurationMs: expandMotion.duration
-    /// Opacity applied to the card body when the master toggle is off. Kept
+    /// Opacity applied to the card body when the master toggle is off AND
+    /// `gateBodyOnToggle` is set. A card that opts out of toggle-gating keeps
+    /// its body at full opacity, because its controls stay clickable. Kept
     /// high enough that muted content stays legible — the disabled palette
     /// already greys the text, so a low opacity on top compounds into an
     /// unreadable wash. Note SettingsRows and SettingsSeparators hide themselves
@@ -201,14 +203,31 @@ Item {
     Layout.fillWidth: true
     implicitHeight: cardBg.height
     implicitWidth: cardBg.width
+    // The current content item, held so a REPLACEMENT can detach the
+    // previous one — mirroring the _customHeader dance below. Without the
+    // detach, reassigning contentItem left the old item parented, painting,
+    // and in the a11y tree while implicitHeight measured only the new one.
+    property Item _currentContent: null
     // Reparent contentItem into our content area with top padding
     onContentItemChanged: {
+        if (_currentContent && _currentContent !== contentItem) {
+            // The caller created it, so unparent rather than destroy an item
+            // this card does not own.
+            _currentContent.parent = null;
+            _currentContent = null;
+        }
         if (contentItem) {
             contentItem.parent = contentColumn;
-            contentItem.y = Kirigami.Units.largeSpacing;
+            // Qt.binding like the width line, so a runtime Units/DPI change
+            // refreshes the inset instead of freezing the construction-time
+            // value.
+            contentItem.y = Qt.binding(function () {
+                return Kirigami.Units.largeSpacing;
+            });
             contentItem.width = Qt.binding(function () {
                 return contentColumn.width;
             });
+            _currentContent = contentItem;
         }
     }
     // The custom header currently reparented under headerLoader, so a
@@ -355,8 +374,11 @@ Item {
                         // rows (SettingsRow insets by largeSpacing) and the
                         // trailing chevron (also largeSpacing), so the header is
                         // uniformly inset rather than hugging the left while the
-                        // right controls sit further in.
-                        leftPadding: Kirigami.Units.largeSpacing
+                        // right controls sit further in. Mirrored for RTL:
+                        // RowLayout mirrors item order under LayoutMirroring
+                        // but leftPadding does not, so the inset must follow.
+                        leftPadding: LayoutMirroring.enabled ? padding : Kirigami.Units.largeSpacing
+                        rightPadding: LayoutMirroring.enabled ? Kirigami.Units.largeSpacing : padding
                     }
 
                     // Per-monitor scope chip, title-adjacent. Kept clear of the
@@ -390,7 +412,10 @@ Item {
                     Label {
                         visible: root.headerTrailingText.length > 0
                         text: root.headerTrailingText
-                        opacity: 0.6
+                        // Theme colour, not an opacity fade: matches the
+                        // muted-text conversion applied across the animations
+                        // pages, and stays legible on tinted card backgrounds.
+                        color: Kirigami.Theme.disabledTextColor
                         font.italic: true
                         Layout.rightMargin: Kirigami.Units.largeSpacing
                         Layout.alignment: Qt.AlignVCenter
@@ -445,7 +470,11 @@ Item {
             // property animation does not drop the binding, so an imperative fade
             // was re-evaluated out from under itself whenever the master toggle
             // changed while the card was shut.
-            opacity: (root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1) * root._expandProgress
+            // `gateBodyOnToggle` gates the dim as well as the `enabled:` below.
+            // Without it here, a card that opted out still rendered its body
+            // greyed while every control in it stayed clickable, which reads as
+            // "this is disabled" about controls that work.
+            opacity: (root.showToggle && root.gateBodyOnToggle && !root.toggleChecked ? root.disabledContentOpacity : 1) * root._expandProgress
             // Clipping a shut card to nothing still leaves its controls in the
             // tab order, so tabbing through the page walks fields nobody can see.
             // Disabling the body takes them out of the focus chain, and the header

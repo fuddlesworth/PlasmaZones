@@ -428,6 +428,39 @@ void Daemon::stop()
     PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
     PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
 
+    // Animation-loader teardown, ALSO above the m_running gate for the same
+    // ctor-origin reason as the statics it pairs with: setupAnimationProfiles
+    // runs from the ctor, so an init-without-start teardown reaches the
+    // member destructors with both loaders (and their QFileSystemWatchers)
+    // still live — exactly the construct-without-start fixture the reset
+    // comment below names. NOTE the deliberate asymmetry this creates for a
+    // stop() → start() cycle: nothing rebuilds the loaders (they are
+    // ctor-only), so live reload of `plasmazones/{curves,profiles}` does not
+    // survive the cycle — the seeds and the low-precedence tag DO survive,
+    // so inheritance keeps resolving, and a restarted daemon has no bus
+    // presence anyway (see the partition-shedding rationale above).
+    m_rawJsonProfiles.clear();
+
+    // Stop the publish coalescing trampoline before resetting the
+    // loaders — the timer is a member QTimer, so its `timeout` slot
+    // would otherwise still fire on the next event-loop tick after
+    // m_settings (its data source) has been destroyed.
+    m_animationPublishTimer.stop();
+    m_animationPublishPending = false;
+
+    // Reset the loaders explicitly so the QFileSystemWatcher inside
+    // each is torn down NOW, before any other shutdown step has a
+    // chance to spin the event loop. Without this, the unique_ptrs
+    // would only destruct at the end of the ~Daemon body, leaving a
+    // window where stale path-change signals could fire into a
+    // half-destroyed object — visible in tests that re-construct the
+    // daemon, and theoretically observable in production on a
+    // configure-reload cycle. ProfileLoader's destructor issues its
+    // own `clearOwner(kPlasmaZonesUserProfilesOwnerTag)` so the
+    // per-daemon `m_profileRegistry` value member sheds those entries here.
+    m_profileLoader.reset();
+    m_curveLoader.reset();
+
     // Idle wiring, ALSO before the m_running gate, for the same reason as the two
     // blocks above: setupIdleService() runs from init(), which precedes start(), so
     // an init-without-start teardown (test fixtures, early-fail init, double-stop)
@@ -476,6 +509,106 @@ void Daemon::stop()
     // says so in three places) would come back up with them silently gone.
     teardownIdleConnections();
 
+    // Unregister D-Bus object path and service to prevent late calls during shutdown
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    bus.unregisterObject(QString(PhosphorProtocol::Service::ObjectPath));
+    bus.unregisterService(QString(PhosphorProtocol::Service::Name));
+
+    // Sever the remaining raw-pointer adaptors from the unique_ptr members
+    // they borrow. ~QObject destroys these adaptors AFTER all unique_ptr
+    // members have already run their destructors, so without detach the
+    // adaptors would see dangling pointers during the destruction window —
+    // and the SettingsAdaptor dtor's save-on-teardown would deref a freed
+    // Settings object. Each adaptor's detach() is null-safe + idempotent.
+    //
+    // WHY ONLY THESE FOUR: SettingsAdaptor has the confirmed dtor-UAF
+    // (debounced save timer flush). ShaderAdaptor + ControlAdaptor have
+    // non-trivial signal wiring + cached state that benefits from
+    // explicit teardown for the same "queued D-Bus call lands during
+    // destruction window" defense-in-depth. RuleAdaptor borrows
+    // m_ruleStore (a unique_ptr) and m_settings; without detach
+    // its slot bodies could deref freed memory during the window after
+    // ~Daemon's body returns — that is when the unique_ptr members
+    // (including m_ruleStore) run their destructors, and the
+    // raw-Qt-parented RuleAdaptor only runs its own destructor
+    // *after* that, as part of QObject child cleanup.
+    //
+    // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
+    // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
+    // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
+    // SnapAdaptor, AutotileAdaptor) all ship destructors that don't
+    // deref any borrowed pointer — most are `= default` / empty-body
+    // (no member access), and the two outliers do only self-cleanup
+    // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-
+    // line body, and WindowTrackingAdaptor's `~WindowTrackingAdaptor`
+    // calls `m_service->setShouldTrackPredicate({})` on its Qt-child
+    // m_service to clear a captured-this lambda before the child
+    // tears down (see Pass-3 commit c4e3c5125). The substantive
+    // safety claim is "no borrowed-pointer deref runs in any of their
+    // destructors" — confirmed by inspecting each header + cpp pair,
+    // not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
+    // method dispatch to them before we begin tearing down, and Qt's
+    // sender-destruction auto-disconnect cleans up signal wiring when the
+    // borrowed sender (m_layoutManager, etc.) is destroyed during member
+    // destruction. Adding detach() to those nine would require null-guarding
+    // every slot body (they currently rely on the "borrowed pointer is
+    // always valid" invariant), which is a larger refactor than the
+    // defense-in-depth buys. If a future adaptor grows a dtor body that
+    // derefs a borrowed member, add detach() to it AND wire the call here
+    // — same pattern as these four.
+    if (m_settingsAdaptor) {
+        m_settingsAdaptor->detach();
+    }
+    if (m_shaderAdaptor) {
+        m_shaderAdaptor->detach();
+    }
+    if (m_controlAdaptor) {
+        m_controlAdaptor->detach();
+    }
+    if (m_ruleAdaptor) {
+        m_ruleAdaptor->detach();
+    }
+
+    // Shader registries + warm-bake pool: torn down ABOVE the !m_running gate
+    // because they are ctor/init-origin (setupAnimationShaderEffects /
+    // setupSurfaceShaderEffects / setupShaderWarmBakes all run from init(),
+    // before start() sets m_running). An init-without-start teardown (a failed
+    // init, or a double-stop) must still null the OverlayService's borrows and
+    // run the registries' destructors, or ~OverlayService is left holding two
+    // dangling registry pointers — the same reverse-destruction hazard the
+    // adaptor detaches above guard against.
+    m_shaderBakePool.clear();
+    m_shaderBakePool.waitForDone(500);
+    if (m_overlayService) {
+        m_overlayService->setAnimationShaderRegistry(nullptr);
+    }
+    m_animationShaderRegistry.reset();
+    // Reset the surface registry here too so its QFileSystemWatcher and the
+    // effectsChanged → warm-bake connection (captured by value into the init()
+    // lambda, targeting `this`) are torn down before the event loop can spin
+    // during shutdown. Null the overlay service's borrow FIRST (Stage d wired
+    // the OSD decoration consumer), mirroring the animation registry above.
+    if (m_overlayService) {
+        m_overlayService->setSurfaceShaderRegistry(nullptr);
+    }
+    m_surfaceShaderRegistry.reset();
+    // Clear the warm-bake dedup so a stop() -> init() cycle re-warms every
+    // pack (the registries are rebuilt, so a remembered fingerprint would
+    // wrongly suppress the fresh bake), and the hash does not grow unbounded
+    // across cycles.
+    m_scheduledBakeFingerprints.clear();
+
+    // Everything ABOVE this gate is init/ctor-origin teardown that must run on
+    // an init-without-start path (a failed init, a double-stop): the adaptor
+    // detaches, the D-Bus unregister, the loader resets, the QML-static
+    // null-outs, and the shader-registry teardown — all of which either sever a
+    // BORROWED pointer a member destructor would otherwise deref, or are
+    // idempotent no-ops. Everything BELOW is start()-origin (the persistent
+    // sender reconnects and the engine/resolver/rule-store borrows established
+    // during a running session); those members' destructors deref no borrowed
+    // pointer, so skipping their explicit clears on the init-failure path is
+    // safe (verified per-adaptor), and running them without a prior start()
+    // could touch half-wired state. Hence the gate sits here.
     if (!m_running) {
         return;
     }
@@ -551,7 +684,8 @@ void Daemon::stop()
     //
     // The one partition stop() still sheds is the loader-owned user-JSON
     // partition (tagged `kPlasmaZonesUserProfilesOwnerTag`), and only as a side
-    // effect of the loader teardown below: `m_profileLoader` / `m_curveLoader`
+    // effect of the loader teardown ABOVE (the loader resets are hoisted above
+    // the m_running gate): `m_profileLoader` / `m_curveLoader`
     // are reset so their destructors run NOW (issuing their own
     // `clearOwner(ownerTag)` and tearing down the QFileSystemWatchers) rather
     // than in the `~Daemon` body, where they would fire path-change signals
@@ -560,43 +694,9 @@ void Daemon::stop()
     // the user's authored tweaks, not the shell's ability to resolve — and the
     // seeds that remain keep inheritance working. The raw-JSON snapshot is
     // cleared with them, since it mirrors exactly the entries those destructors
-    // drop.
-    m_rawJsonProfiles.clear();
-
-    // Stop the publish coalescing trampoline before resetting the
-    // loaders — the timer is a member QTimer, so its `timeout` slot
-    // would otherwise still fire on the next event-loop tick after
-    // m_settings (its data source) has been destroyed.
-    m_animationPublishTimer.stop();
-    m_animationPublishPending = false;
-
-    // Reset the loaders explicitly so the QFileSystemWatcher inside
-    // each is torn down NOW, before any other shutdown step has a
-    // chance to spin the event loop. Without this, the unique_ptrs
-    // would only destruct at the end of the ~Daemon body, leaving a
-    // window where stale path-change signals could fire into a
-    // half-destroyed object — visible in tests that re-construct the
-    // daemon, and theoretically observable in production on a
-    // configure-reload cycle. ProfileLoader's destructor issues its
-    // own `clearOwner(kPlasmaZonesUserProfilesOwnerTag)` so the
-    // per-daemon `m_profileRegistry` value member sheds those entries here.
-    m_profileLoader.reset();
-    m_curveLoader.reset();
-    m_shaderBakePool.clear();
-    m_shaderBakePool.waitForDone(500);
-    if (m_overlayService) {
-        m_overlayService->setAnimationShaderRegistry(nullptr);
-    }
-    m_animationShaderRegistry.reset();
-    // Reset the surface registry here too so its QFileSystemWatcher and the
-    // effectsChanged → warm-bake connection (captured by value into the init()
-    // lambda, targeting `this`) are torn down before the event loop can spin
-    // during shutdown. Null the overlay service's borrow FIRST (Stage d wired
-    // the OSD decoration consumer), mirroring the animation registry above.
-    if (m_overlayService) {
-        m_overlayService->setSurfaceShaderRegistry(nullptr);
-    }
-    m_surfaceShaderRegistry.reset();
+    // drop. (The clears and resets themselves run ABOVE the m_running gate,
+    // hoisted next to the QML-static null-outs they pair with — the loaders
+    // are ctor-origin, so an init-without-start teardown needs them too.)
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();
@@ -755,66 +855,6 @@ void Daemon::stop()
     // severing above — and survives a future member-declaration reorder.
     m_crossSurfaceResolver.reset();
 
-    // Unregister D-Bus object path and service to prevent late calls during shutdown
-    QDBusConnection bus = QDBusConnection::sessionBus();
-    bus.unregisterObject(QString(PhosphorProtocol::Service::ObjectPath));
-    bus.unregisterService(QString(PhosphorProtocol::Service::Name));
-
-    // Sever the remaining raw-pointer adaptors from the unique_ptr members
-    // they borrow. ~QObject destroys these adaptors AFTER all unique_ptr
-    // members have already run their destructors, so without detach the
-    // adaptors would see dangling pointers during the destruction window —
-    // and the SettingsAdaptor dtor's save-on-teardown would deref a freed
-    // Settings object. Each adaptor's detach() is null-safe + idempotent.
-    //
-    // WHY ONLY THESE FOUR: SettingsAdaptor has the confirmed dtor-UAF
-    // (debounced save timer flush). ShaderAdaptor + ControlAdaptor have
-    // non-trivial signal wiring + cached state that benefits from
-    // explicit teardown for the same "queued D-Bus call lands during
-    // destruction window" defense-in-depth. RuleAdaptor borrows
-    // m_ruleStore (a unique_ptr) and m_settings; without detach
-    // its slot bodies could deref freed memory during the window after
-    // ~Daemon's body returns — that is when the unique_ptr members
-    // (including m_ruleStore) run their destructors, and the
-    // raw-Qt-parented RuleAdaptor only runs its own destructor
-    // *after* that, as part of QObject child cleanup.
-    //
-    // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
-    // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
-    // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
-    // SnapAdaptor, AutotileAdaptor) all ship destructors that don't
-    // deref any borrowed pointer — most are `= default` / empty-body
-    // (no member access), and the two outliers do only self-cleanup
-    // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-
-    // line body, and WindowTrackingAdaptor's `~WindowTrackingAdaptor`
-    // calls `m_service->setShouldTrackPredicate({})` on its Qt-child
-    // m_service to clear a captured-this lambda before the child
-    // tears down (see Pass-3 commit c4e3c5125). The substantive
-    // safety claim is "no borrowed-pointer deref runs in any of their
-    // destructors" — confirmed by inspecting each header + cpp pair,
-    // not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
-    // method dispatch to them before we begin tearing down, and Qt's
-    // sender-destruction auto-disconnect cleans up signal wiring when the
-    // borrowed sender (m_layoutManager, etc.) is destroyed during member
-    // destruction. Adding detach() to those nine would require null-guarding
-    // every slot body (they currently rely on the "borrowed pointer is
-    // always valid" invariant), which is a larger refactor than the
-    // defense-in-depth buys. If a future adaptor grows a dtor body that
-    // derefs a borrowed member, add detach() to it AND wire the call here
-    // — same pattern as these four.
-    if (m_settingsAdaptor) {
-        m_settingsAdaptor->detach();
-    }
-    if (m_shaderAdaptor) {
-        m_shaderAdaptor->detach();
-    }
-    if (m_controlAdaptor) {
-        m_controlAdaptor->detach();
-    }
-    if (m_ruleAdaptor) {
-        m_ruleAdaptor->detach();
-    }
-
     // Provider lambdas already cleared at the top of stop() (before the
     // m_running gate) so this point requires no further teardown.
 
@@ -868,6 +908,12 @@ void Daemon::queryPlasmaWorkspaceState()
     auto* getUnitWatcher = new QDBusPendingCallWatcher(sessionBus.asyncCall(getUnitMsg), this);
     connect(getUnitWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        // A stop() may have landed between the async call and this reply; do not
+        // continue into fetchPlasmaWorkspaceActiveState (which installs the
+        // PropertiesChanged subscription) after shutdown began.
+        if (m_shuttingDown) {
+            return;
+        }
         QDBusPendingReply<QDBusObjectPath> reply = *w;
         if (reply.isError()) {
             qCInfo(lcDaemon) << "queryPlasmaWorkspaceState: GetUnit('plasma-workspace.target') failed:"
@@ -892,6 +938,9 @@ void Daemon::fetchPlasmaWorkspaceActiveState()
     auto* watcher = new QDBusPendingCallWatcher(sessionBus.asyncCall(msg), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        if (m_shuttingDown) {
+            return;
+        }
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isError()) {
             qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: ActiveState Get failed:" << reply.error().message();
@@ -904,6 +953,13 @@ void Daemon::fetchPlasmaWorkspaceActiveState()
                          << "path=" << m_plasmaWorkspaceTargetPath;
 
         QDBusConnection bus = QDBusConnection::sessionBus();
+        // Disconnect first: a stop() -> start() cycle re-runs this whole query,
+        // and QDBusConnectionPrivate appends identical signal hooks without
+        // deduping, so without this the slot would fire once per registration
+        // per signal. Harmless (the handler is idempotent) but wasteful.
+        bus.disconnect(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
+                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
+                       SLOT(onPlasmaWorkspaceTargetPropertiesChanged(QString, QVariantMap, QStringList)));
         const bool ok =
             bus.connect(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
                         QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,

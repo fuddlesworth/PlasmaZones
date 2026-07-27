@@ -11,7 +11,7 @@
 #include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
-#include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
@@ -21,7 +21,9 @@
 #include <QSet>
 #include <QStringList>
 
+namespace {
 Q_LOGGING_CATEGORY(lcSniHost, "phosphor.service.sni.host")
+} // namespace
 
 namespace PhosphorServiceSni {
 
@@ -29,15 +31,15 @@ namespace {
 // Inline helpers: each call returns a QStringLiteral-backed QString.
 // CLAUDE.md forbids raw "..." with QString APIs; inline-function form
 // keeps the call sites clean while honouring the rule.
-inline QString kWatcherService()
+inline QString watcherService()
 {
     return QStringLiteral("org.kde.StatusNotifierWatcher");
 }
-inline QString kWatcherPath()
+inline QString watcherPath()
 {
     return QStringLiteral("/StatusNotifierWatcher");
 }
-inline QString kWatcherInterface()
+inline QString watcherInterface()
 {
     return QStringLiteral("org.kde.StatusNotifierWatcher");
 }
@@ -55,15 +57,6 @@ public:
     StatusNotifierWatcher* watcher = nullptr;
     QString hostServiceName; ///< "org.kde.StatusNotifierHost-1234"
     QDBusServiceWatcher* nameWatcher = nullptr;
-    /// Set true when our passive watcher gets promoted to canonical
-    /// owner. The next `seedExistingItems` reply will see an empty
-    /// authoritative list (items registered with the prior owner, not
-    /// with us), so the zombie reconciliation must be SKIPPED for that
-    /// one cycle: tray apps generally do not re-register on ownership
-    /// change, and reaping their canonicals would empty the tray. The
-    /// flag is cleared on the seed call so subsequent same-watcher
-    /// recovery cycles still get reconciled.
-    bool skipNextZombieReap = false;
 
     // Items in registration order. The model maps row → item by
     // index, so the storage MUST be ordered: earlier rev used a
@@ -79,7 +72,15 @@ public:
 
     void connectToWatcher();
     void registerHost();
-    void seedExistingItems();
+    /// @p skipZombieReap is true only for the seed issued by a passive→active
+    /// promotion: that seed's authoritative list is empty (items registered
+    /// with the prior owner, not with us) and tray apps do not re-register on
+    /// ownership change, so reaping would empty the tray. Passing it per call
+    /// instead of latching a member flag ties the skip to exactly the one seed
+    /// it belongs to: a latch either survived into a later legitimate recovery
+    /// cycle (when no seed followed the promotion) or was consumed early by a
+    /// pre-promotion seed still in flight.
+    void seedExistingItems(bool skipZombieReap);
     void onItemRegistered(const QString& canonical);
     void onItemUnregistered(const QString& canonical);
 };
@@ -110,10 +111,19 @@ void StatusNotifierHost::Private::connectToWatcher()
             onItemUnregistered(c);
         });
     } else {
-        bus.connect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
-                    QStringLiteral("StatusNotifierItemRegistered"), q, SLOT(_q_remoteItemRegistered(QString)));
-        bus.connect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
-                    QStringLiteral("StatusNotifierItemUnregistered"), q, SLOT(_q_remoteItemUnregistered(QString)));
+        // A failed subscription here means the host never learns about a
+        // single tray item, and the only symptom would be an empty tray with
+        // a clean log. Both returns are checked so that failure mode is
+        // visible at default log levels.
+        if (!bus.connect(watcherService(), watcherPath(), watcherInterface(),
+                         QStringLiteral("StatusNotifierItemRegistered"), q, SLOT(_q_remoteItemRegistered(QString)))) {
+            qCWarning(lcSniHost) << "failed to subscribe to StatusNotifierItemRegistered; tray will not populate";
+        }
+        if (!bus.connect(watcherService(), watcherPath(), watcherInterface(),
+                         QStringLiteral("StatusNotifierItemUnregistered"), q,
+                         SLOT(_q_remoteItemUnregistered(QString)))) {
+            qCWarning(lcSniHost) << "failed to subscribe to StatusNotifierItemUnregistered; stale items will linger";
+        }
         // If our passive watcher is later promoted to canonical owner
         // (the prior owner exited and `tryClaimOwnership` succeeded),
         // tear down the bus subscriptions and switch to local-signal
@@ -123,9 +133,9 @@ void StatusNotifierHost::Private::connectToWatcher()
         // pays an extra DBus round-trip and a duplicate log line.
         QObject::connect(watcher, &StatusNotifierWatcher::promotedToOwner, q, [this]() {
             auto bus = QDBusConnection::sessionBus();
-            bus.disconnect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
+            bus.disconnect(watcherService(), watcherPath(), watcherInterface(),
                            QStringLiteral("StatusNotifierItemRegistered"), q, SLOT(_q_remoteItemRegistered(QString)));
-            bus.disconnect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
+            bus.disconnect(watcherService(), watcherPath(), watcherInterface(),
                            QStringLiteral("StatusNotifierItemUnregistered"), q,
                            SLOT(_q_remoteItemUnregistered(QString)));
             // Qt::UniqueConnection on both wires for parity with the
@@ -143,11 +153,13 @@ void StatusNotifierHost::Private::connectToWatcher()
                     onItemUnregistered(c);
                 },
                 Qt::UniqueConnection);
-            // The next seedExistingItems will see an empty authoritative
-            // list (items registered with the prior owner, not with us).
-            // Skip the zombie reaper for that one cycle so tray apps that
-            // do not re-register on ownership change keep their slots.
-            skipNextZombieReap = true;
+            // Issue the promotion's own seed HERE, tagged to skip the zombie
+            // reaper: its authoritative list is empty (items registered with
+            // the prior owner, not with us) and tray apps do not re-register
+            // on ownership change. Issuing seed and skip as one step ties the
+            // skip to exactly this seed instead of arming a latch for
+            // whichever seed happens to run next.
+            seedExistingItems(true);
         });
     }
 }
@@ -155,6 +167,14 @@ void StatusNotifierHost::Private::connectToWatcher()
 void StatusNotifierHost::Private::registerHost()
 {
     auto bus = QDBusConnection::sessionBus();
+    // interface() is null on an unconnected bus (no DBUS_SESSION_BUS_ADDRESS:
+    // headless CI, stripped container). Every deref below goes through this
+    // local, so a bus-less start degrades with a warning instead of a crash.
+    QDBusConnectionInterface* iface = bus.interface();
+    if (!iface) {
+        qCWarning(lcSniHost) << "no session bus connection; SNI host disabled";
+        return;
+    }
     // applicationPid() is process-stable, so the host name is too;
     // recompute once and reuse. Subsequent calls (after the watcher
     // respawned) only need to re-issue the RegisterStatusNotifierHost
@@ -162,8 +182,7 @@ void StatusNotifierHost::Private::registerHost()
     bool isFirstRegistration = false;
     if (hostServiceName.isEmpty()) {
         hostServiceName = QStringLiteral("org.kde.StatusNotifierHost-%1").arg(QCoreApplication::applicationPid());
-        const auto reply =
-            bus.interface()->registerService(hostServiceName, QDBusConnectionInterface::DontQueueService);
+        const auto reply = iface->registerService(hostServiceName, QDBusConnectionInterface::DontQueueService);
         if (!reply.isValid() || reply.value() != QDBusConnectionInterface::ServiceRegistered) {
             qCWarning(lcSniHost) << "failed to register host service" << hostServiceName << ":"
                                  << (reply.isValid() ? QStringLiteral("not registered") : reply.error().message());
@@ -176,14 +195,35 @@ void StatusNotifierHost::Private::registerHost()
     // Tell whichever process owns the Watcher service that we're a
     // host. Async; if the Watcher isn't up yet, the NameOwnerChanged
     // wire (below) will retry once it appears.
-    QDBusInterface watcherIface(kWatcherService(), kWatcherPath(), kWatcherInterface(), bus);
+    //
+    // Presence is checked against the BUS DAEMON, not by constructing a
+    // QDBusInterface. `QDBusInterface`'s constructor performs a BLOCKING
+    // introspection call to the target service, so when the watcher is absent it
+    // stalls this thread for the full D-Bus reply timeout (25 s) before
+    // `isValid()` can report false — on the GUI thread of whatever hosts the
+    // tray. That is reachable on a real desktop every time the watcher is
+    // briefly gone (a Plasma restart), not just under test. `isServiceRegistered`
+    // asks the bus daemon, which is always present and answers immediately, and
+    // the call below is built as a plain message so nothing introspects at all.
+    const bool watcherPresent = iface->isServiceRegistered(watcherService()).value();
     if (isFirstRegistration) {
-        qCInfo(lcSniHost) << "host name registered:" << hostServiceName << "watcher iface valid?"
-                          << watcherIface.isValid();
+        qCInfo(lcSniHost) << "host name registered:" << hostServiceName << "watcher present?" << watcherPresent;
     }
-    if (watcherIface.isValid()) {
-        watcherIface.asyncCall(QStringLiteral("RegisterStatusNotifierHost"), hostServiceName);
-        seedExistingItems();
+    if (watcherPresent) {
+        QDBusMessage registerCall = QDBusMessage::createMethodCall(watcherService(), watcherPath(), watcherInterface(),
+                                                                   QStringLiteral("RegisterStatusNotifierHost"));
+        registerCall << hostServiceName;
+        // Surface a rejected host registration: silently dropping the reply
+        // would leave IsStatusNotifierHostRegistered false with a clean log.
+        auto* registerWatcher = new QDBusPendingCallWatcher(bus.asyncCall(registerCall), q);
+        QObject::connect(registerWatcher, &QDBusPendingCallWatcher::finished, q, [](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            const QDBusPendingReply<> reply = *w;
+            if (reply.isError()) {
+                qCWarning(lcSniHost) << "RegisterStatusNotifierHost rejected:" << reply.error().message();
+            }
+        });
+        seedExistingItems(false);
     } else if (!isFirstRegistration) {
         // Deferred-retry path: the watcher disappeared between our
         // initial registration and this re-registration call. The
@@ -193,17 +233,24 @@ void StatusNotifierHost::Private::registerHost()
     }
 }
 
-void StatusNotifierHost::Private::seedExistingItems()
+void StatusNotifierHost::Private::seedExistingItems(bool skipZombieReap)
 {
     // Read the property: items that registered before we started
     // need to be backfilled. Async to keep the constructor cheap.
     auto bus = QDBusConnection::sessionBus();
     QDBusMessage msg = QDBusMessage::createMethodCall(
-        kWatcherService(), kWatcherPath(), QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
-    msg << kWatcherInterface() << QStringLiteral("RegisteredStatusNotifierItems");
+        watcherService(), watcherPath(), QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+    msg << watcherInterface() << QStringLiteral("RegisteredStatusNotifierItems");
     auto pending = bus.asyncCall(msg);
+    // Parenting the watcher to `q` is what makes the raw `this` (Private*)
+    // capture below safe: Private is owned by q (it is q's pimpl), so if q is
+    // destroyed the watcher is destroyed in the same teardown, which severs
+    // this connection before the captured `this` can dangle. The connection is
+    // also bound to `q` as the context object, so a queued `finished` delivery
+    // is dropped once q is gone. Do not reparent the watcher off q without
+    // switching the capture to a QPointer.
     auto* watcher = new QDBusPendingCallWatcher(pending, q);
-    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, q, [this, watcher] {
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, q, [this, watcher, skipZombieReap] {
         watcher->deleteLater();
         QDBusPendingReply<QVariant> reply = *watcher;
         if (reply.isError()) {
@@ -221,9 +268,9 @@ void StatusNotifierHost::Private::seedExistingItems()
         // (Plasma), the freshly-queried list dispatches to our own
         // watcher whose m_items is empty, and tray apps do not
         // re-register on ownership change. Reaping under that
-        // condition would empty the tray. The promotedToOwner handler
-        // sets skipNextZombieReap; honour it once.
-        if (!skipNextZombieReap) {
+        // condition would empty the tray. The promotion handler issues
+        // its seed with skipZombieReap set; only that seed skips.
+        if (!skipZombieReap) {
             const QSet<QString> incoming(list.cbegin(), list.cend());
             QStringList zombies;
             for (auto it = itemsByCanonical.cbegin(); it != itemsByCanonical.cend(); ++it) {
@@ -236,7 +283,6 @@ void StatusNotifierHost::Private::seedExistingItems()
             }
         } else {
             qCInfo(lcSniHost) << "skipping zombie reconciliation: this is a passive→active promotion seed";
-            skipNextZombieReap = false;
         }
         for (const auto& canonical : list) {
             onItemRegistered(canonical);
@@ -256,6 +302,18 @@ void StatusNotifierHost::Private::onItemRegistered(const QString& canonical)
         return;
     const QString service = canonical.left(slash);
     const QString path = canonical.mid(slash);
+    // System boundary: the canonical arrives from an untrusted D-Bus peer
+    // (any session process can call RegisterStatusNotifierItem). An empty
+    // service (canonical beginning with '/') would construct an item that
+    // issues calls against nothing; refuse loudly. The `path.startsWith('/')`
+    // term is belt-and-braces only: `path` is `canonical.mid(slash)` where
+    // `slash` is the first '/', so it already begins with '/' by construction
+    // (the `slash < 0` return above guarantees one exists). Kept so a future
+    // change to the derivation cannot silently admit a slashless path.
+    if (service.isEmpty() || !path.startsWith(QLatin1Char('/'))) {
+        qCWarning(lcSniHost) << "refusing malformed item canonical from bus:" << canonical;
+        return;
+    }
 
     auto* item = new StatusNotifierItem(service, path, q);
     itemsList.append(item);
@@ -292,18 +350,37 @@ StatusNotifierHost::StatusNotifierHost(QObject* parent)
 {
     registerDBusTypes();
     d->connectToWatcher();
-    d->registerHost();
 
-    // Re-register if the Watcher comes back later (e.g., it crashed
-    // and respawned, or we started before any host).
-    d->nameWatcher = new QDBusServiceWatcher(kWatcherService(), QDBusConnection::sessionBus(),
+    // Install the re-registration watcher BEFORE the first registerHost(): if
+    // the Watcher service registered in the window between registerHost()'s
+    // isServiceRegistered probe and this connect, the serviceRegistered signal
+    // would be missed and (with no periodic retry) the host would stay
+    // unregistered for the process lifetime. Wiring it first closes that race —
+    // a Watcher that appears during registerHost() now fires the retry.
+    d->nameWatcher = new QDBusServiceWatcher(watcherService(), QDBusConnection::sessionBus(),
                                              QDBusServiceWatcher::WatchForRegistration, this);
     connect(d->nameWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this](const QString&) {
         d->registerHost();
     });
+
+    d->registerHost();
 }
 
-StatusNotifierHost::~StatusNotifierHost() = default;
+StatusNotifierHost::~StatusNotifierHost()
+{
+    // Release the claimed host bus name so a watcher tracking hosts via
+    // NameOwnerChanged stops reporting IsStatusNotifierHostRegistered for a
+    // host that no longer exists. The sibling watcher does the symmetric
+    // teardown for its own name; without this, in-process construct/destroy
+    // cycles (tests, a shell rebuilding its tray) leave the name owned for
+    // the process lifetime.
+    if (!d->hostServiceName.isEmpty()) {
+        auto bus = QDBusConnection::sessionBus();
+        if (QDBusConnectionInterface* iface = bus.interface()) {
+            iface->unregisterService(d->hostServiceName);
+        }
+    }
+}
 
 QList<StatusNotifierItem*> StatusNotifierHost::items() const
 {

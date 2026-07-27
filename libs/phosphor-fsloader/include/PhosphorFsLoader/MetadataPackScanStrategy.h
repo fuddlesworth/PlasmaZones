@@ -5,9 +5,11 @@
 
 #include <PhosphorFsLoader/DirectoryLoader.h>
 #include <PhosphorFsLoader/IScanStrategy.h>
+#include <PhosphorFsLoader/phosphorfsloader_export.h>
 
 #include <QtCore/QByteArray>
 #include <QtCore/QCryptographicHash>
+#include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -17,6 +19,7 @@
 #include <QtCore/QJsonParseError>
 #include <QtCore/QList>
 #include <QtCore/QLoggingCategory>
+#include <QtCore/QSet>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 
@@ -32,9 +35,9 @@ namespace PhosphorFsLoader {
 /**
  * @brief Reusable scan strategy for `metadata.json`-driven subdirectory pack registries.
  *
- * Owns the cross-cutting scaffolding both `PhosphorShaders::ShaderRegistry`
- * and `PhosphorAnimationShaders::AnimationShaderRegistry` were duplicating
- * verbatim:
+ * Owns the cross-cutting scaffolding all three pack registries
+ * (`PhosphorShaders::ShaderRegistry`, `PhosphorAnimationShaders::AnimationShaderRegistry`
+ * and `PhosphorSurfaceShaders::SurfaceShaderRegistry`) were duplicating verbatim:
  *
  *   1. Reverse-iterate `directoriesInScanOrder` (the canonical
  *      `[lowest-priority, ..., highest-priority]` shape from
@@ -75,7 +78,11 @@ namespace PhosphorFsLoader {
  *
  *      One known wrinkle: `metadata.json` files that fail validation
  *      (parse error, oversized, empty `id`, parser declined) are still
- *      added to the watch set so a fix-up edit re-fires the rescan.
+ *      added to the watch set so a fix-up edit re-fires the rescan. So
+ *      is the DIRECTORY of a pack that has no `metadata.json` yet, and
+ *      a directory's mtime moves whenever any child appears — so
+ *      dropping an unrelated file into a metadata-less pack dir also
+ *      shifts the fingerprint.
  *      That means an in-place edit of a still-broken file shifts the
  *      watch-set fingerprint and trips `OnCommit` even though no
  *      *visible* state changed. Consumers gating their public signal
@@ -126,36 +133,41 @@ namespace PhosphorFsLoader {
  *   - `OnCommit` — invoked synchronously inside `performScan` after the
  *     fresh map has replaced the prior one, AND ONLY WHEN the SHA-1
  *     signature differs. The consumer wires its content-changed signal
- *     in here. NOT invoked when the scan is empty AND the previous
- *     scan was also empty (the no-content baseline doesn't fire on
- *     repeated empty scans).
+ *     in here. `changed` is `isFirstScan ? !fresh.isEmpty() : signature !=
+ *     m_lastSignature`, so: a FIRST scan that found nothing never fires (the
+ *     no-content baseline, and note this comes from the isFirstScan branch,
+ *     not from signature equality — the SHA-1 of nothing does differ from the
+ *     empty seed); a later scan fires whenever the signature moved, including
+ *     one that drops to an empty result, and including one whose result set is
+ *     unchanged but whose WATCH set moved — see the known wrinkle above.
  *
  * ## API choice — why a class template over a virtual interface
  *
- * Both real consumers (`ShaderInfo` in `phosphor-shaders`, `AnimationShaderEffect`
- * in `phosphor-animation-shaders`) parse into concrete struct types they
- * already own. A virtual `IMetadataPackPayload` interface would force
+ * The real consumers (`ShaderPack`, `AnimationPack` and `SurfacePack`, each
+ * hosted by its registry through `PhosphorRegistry::MetadataPackLoader`) parse
+ * into concrete struct types they already own. A virtual `IMetadataPackPayload` interface would force
  * each registry to box its parse output (heap allocation per pack) and
  * hide its public payload type behind a base — making `packs()` /
  * `pack(id)` lookup callers downcast on every access. A class template
  * lets each registry keep its concrete payload type and share the
  * per-rescan map via direct strongly-typed accessors. The template is
  * also header-only, which keeps `phosphor-fsloader` itself free of
- * dependencies on either consumer's payload schema.
+ * dependencies on any consumer's payload schema.
  *
  * The policy callables themselves are stored as `std::function` (one
  * level of type-erasure indirection per call). Inlining-via-callable-
  * type-template-params would shave that, but at this workload (one
- * `stat` syscall + JSON parse per entry per rescan) the indirection
+ * `stat` syscall + JSON parse per entry per rescan) that indirection
  * cost is unmeasurable — keeping the policy types out of the template
  * signature is the better readability tradeoff. The price is one set of
  * compiler instantiations per consumer payload — negligible given there
- * are exactly two of them.
+ * are three of them.
  *
  * ## Lifetime
  *
- * The strategy is constructed by the consumer registry, held by
- * reference inside its `WatchedDirectorySet`, and destroyed when the
+ * The strategy is constructed and OWNED by the hosting
+ * `PhosphorRegistry::MetadataPackLoader` (via `unique_ptr`), and borrowed by
+ * reference by its `WatchedDirectorySet`, and destroyed when the
  * registry is. `Parser` / watch-extractor callables are stored by value
  * (typically `std::function`); they may capture state by pointer/reference
  * if the captured state outlives the registry.
@@ -177,9 +189,10 @@ namespace PhosphorFsLoader {
  * `performScan` runs on the same thread the registry was constructed on.
  *
  * @tparam Payload  POD-ish struct exposing a public `QString id` member.
- *                  Must be default-constructible and movable. Both real
- *                  consumers (`ShaderInfo`, `AnimationShaderEffect`) satisfy
- *                  this. Bespoke payloads without an `id` field can wrap
+ *                  Must be default-constructible and movable. Every real
+ *                  consumer satisfies this: in production the argument is
+ *                  `PhosphorRegistry::MetadataPackLoader<T>::Entry`, wrapping
+ *                  `ShaderPack`, `AnimationPack` or `SurfacePack`. Bespoke payloads without an `id` field can wrap
  *                  their data in a thin POD that adds one.
  */
 template<typename Payload>
@@ -187,8 +200,8 @@ class MetadataPackScanStrategy : public IScanStrategy
 {
     // The strategy hashes `id` into the per-rescan signature and uses it
     // as the QHash key for first-wins layering — neither works without
-    // a public QString id member. ShaderInfo and AnimationShaderEffect
-    // both satisfy this; bespoke payloads must too.
+    // a public QString id member. Every production Entry type satisfies
+    // this; bespoke payloads must too.
     //
     // `decltype(... .id)` on an lvalue Payload yields `QString&`; strip
     // the reference before comparing so the assertion fires only when
@@ -197,22 +210,27 @@ class MetadataPackScanStrategy : public IScanStrategy
                   "MetadataPackScanStrategy<Payload> requires Payload to expose a public 'QString id' member.");
 
 public:
-    /// Hard cap on **successfully parsed** entries discovered per rescan,
-    /// summed across every registered search path. Mirrors
-    /// `DirectoryLoader::kMaxEntries` — every fsloader-backed registry
-    /// caps at the same scale. Typical pack counts are single digits; the
-    /// cap is purely a DoS guard against pathological user dirs with
-    /// thousands of metadata.json-bearing subdirs.
+    /// Hard cap on subdirs CONSIDERED per rescan, summed across every
+    /// registered search path — not on the entries that survive to
+    /// registration. Mirrors `DirectoryLoader::kMaxEntries`, which counts
+    /// the same way; every fsloader-backed registry caps at the same scale.
+    /// Typical pack counts are single digits, so the cap is purely a DoS
+    /// guard against pathological user dirs.
     ///
-    /// Note: the cap does **not** bound the number of subdirs iterated.
-    /// A search path with N subdirs that all lack a valid `metadata.json`
-    /// will still loop through all N (each one stat'd, then skipped) —
-    /// the cap protects against parsed-payload blowup, not directory-
-    /// walk blowup. The bounded-iteration guarantee comes from
-    /// `WatchedDirectorySet`'s forbidden-root check (which prevents
-    /// `$HOME` and friends from being registered) and from caller-side
-    /// path discipline. If a future caller registers an
-    /// untrusted-tree-of-subdirs they must apply their own iteration cap.
+    /// Counting registrations instead would have missed the whole attack:
+    /// a subdir whose metadata.json is missing, oversize, unparseable or
+    /// id-colliding registers nothing, so a spray of thousands of broken
+    /// packs never advanced the counter while still costing a stat, an
+    /// open, a readAll and a parse EACH, on the GUI thread, on every
+    /// watcher fire — and growing the returned watch set without bound
+    /// along the way.
+    ///
+    /// What it still does not bound is the `entryList` call that
+    /// materialises and sorts the subdir names before the loop begins.
+    /// `WatchedDirectorySet`'s forbidden-root check (which keeps `$HOME`
+    /// and friends from being registered) plus caller-side path discipline
+    /// are what keep that input small. A future caller registering an
+    /// untrusted tree of subdirs needs its own enumeration cap.
     static constexpr int kDefaultMaxEntries = 10'000;
 
     /// Parse one `metadata.json` into a payload. The strategy already
@@ -281,7 +299,7 @@ public:
     {
         // An empty `Parser` would silently skip every entry on every
         // rescan and look like a configuration bug from the outside ("my
-        // packs all disappeared"). Both real consumers always pass a
+        // packs all disappeared"). Every real consumer always passes a
         // real parser; assert in debug builds so a future caller doesn't
         // have to debug an empty registry from a default-constructed
         // `std::function`. `OnCommit` is allowed to be empty (a consumer
@@ -332,11 +350,12 @@ public:
      * Setting this directly on the strategy does **not** trigger a
      * rescan — the new value takes effect on the next scan, whenever
      * that fires. Production consumers reach the strategy through
-     * `MetadataPackRegistryBase::setUserPath`, which orchestrates a
-     * synchronous `rescanNow()` after forwarding the value, so existing
-     * pack classifications refresh immediately. Direct strategy access
-     * (e.g. tests using `static_cast<ScanStrategy*>(strategy())`)
-     * bypasses that orchestration; pair the call with an explicit
+     * `PhosphorRegistry::MetadataPackLoader::setUserPath`, which forwards the
+     * value and then runs a synchronous `rescanNow()` — but only when the value
+     * actually changed AND at least one search path is registered, so setting
+     * the user path before any registration does not rescan either. Direct strategy access (e.g. tests
+     * using `static_cast<ScanStrategy*>(strategy())`) bypasses that
+     * orchestration; pair the call with an explicit
      * `WatchedDirectorySet::rescanNow()` if immediate reclassification
      * is required.
      */
@@ -347,14 +366,28 @@ public:
 
     /// Per-rescan entry cap. Default: `kDefaultMaxEntries`.
     ///
-    /// Negative values are a programming error — the cap loop casts to
-    /// `size_t` for the comparison, and a negative cast wraps to
-    /// `SIZE_MAX` and silently disables the guard. Asserted in debug
-    /// builds and clamped to zero in release so the wrap can't happen.
+    /// Negative values are a programming error. The cap comparison is
+    /// `subdirsConsidered >= m_maxEntries` with both sides `int`, so a negative
+    /// cap does not wrap — it trips on the very first subdir of every scan,
+    /// which purges every previously registered pack. Asserted in debug builds
+    /// and, in release, ignored in favour of `kDefaultMaxEntries` so a bad cap
+    /// costs the caller its setting rather than the registry its contents.
+    ///
+    /// Zero is a DIFFERENT case and is honoured, matching
+    /// `DirectoryLoader::JsonScanStrategy::setMaxEntries`: "admit nothing" is a
+    /// coherent thing for a caller to ask for, where "admit fewer than nothing"
+    /// is a bug. The two sibling scanners must not diverge on this.
     void setMaxEntries(int cap)
     {
         Q_ASSERT_X(cap >= 0, "MetadataPackScanStrategy::setMaxEntries", "cap must be non-negative");
-        m_maxEntries = std::max(0, cap);
+        // Release fallback for a NEGATIVE cap is the DEFAULT, not zero.
+        // Clamping to zero would make the assert's release counterpart
+        // destructive in exactly the way the assert exists to prevent: the cap
+        // trips on the first subdir, `m_packs` rebuilds empty, and `OnCommit`
+        // fires as though every pack had been uninstalled. Falling back to the
+        // default degrades to "the caller's cap was ignored", which is
+        // recoverable and obvious. An explicit zero is honoured — see above.
+        m_maxEntries = cap >= 0 ? cap : kDefaultMaxEntries;
     }
 
     /// Override the logging category used for the strategy's own
@@ -367,7 +400,7 @@ public:
     /// The standard caller pattern — `setLoggingCategory(lcMyRegistry())`
     /// where `lcMyRegistry` is defined via `Q_LOGGING_CATEGORY` — gives
     /// a static-lifetime category and trivially satisfies this. Reference
-    /// (not pointer) parameter mirrors `MetadataPackRegistryBase`'s
+    /// (not pointer) parameter mirrors `MetadataPackLoader`'s
     /// ctor and makes "always non-null" a compile-time guarantee.
     void setLoggingCategory(const QLoggingCategory& cat)
     {
@@ -384,9 +417,14 @@ public:
      * rebuilt map; the next signature comparison reports the change
      * and `OnCommit` fires.
      *
-     * @return Per-rescan watch paths: every iterated subdir's
-     *         `metadata.json`, plus everything `PerEntryWatchPaths`
-     *         and `PerDirectoryWatchPaths` returned. Lex-sorted and
+     * @return Per-rescan watch paths: each accepted subdir's
+     *         `metadata.json`, the SUBDIRECTORY itself for any subdir
+     *         that has no `metadata.json` yet (the file cannot be
+     *         watched before it exists, so the directory stands in for
+     *         it — a subdir rejected by `PerSubdirSkip` is charged to
+     *         the cap but contributes no watch), plus everything
+     *         `PerEntryWatchPaths` and
+     *         `PerDirectoryWatchPaths` returned. Lex-sorted and
      *         deduplicated (the same canonical form already used
      *         internally for the signature pass) so callers can rely
      *         on stable ordering across rescans regardless of which
@@ -476,6 +514,24 @@ PHOSPHORFSLOADER_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcMetadataPackScan)
 template<typename Payload>
 QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& directoriesInScanOrder)
 {
+    // Release-build counterpart to the ctor's `Q_ASSERT_X(m_parser)`. An empty
+    // `std::function` would throw `std::bad_function_call` out of the parse
+    // loop below, on the GUI thread, from inside a filesystem-watch callback.
+    // Refusing the whole scan instead leaves the previously registered packs
+    // in place and logs something an operator can grep for.
+    if (!m_parser) {
+        // NOTE the second-order consequence of the empty return: the caller
+        // (`WatchedDirectorySet::rescanAll`) feeds it straight into
+        // `syncFileWatches`, which removes every per-file watch not in the
+        // returned list — so a parserless strategy not only keeps the
+        // previously registered packs frozen, it silently disarms live
+        // reload for them, permanently (there is no parser setter, so the
+        // condition never clears for the strategy's lifetime).
+        qCWarning(m_loggingCat ? *m_loggingCat : detail::lcMetadataPackScan())
+            << "MetadataPackScanStrategy: no parser configured, skipping scan";
+        return {};
+    }
+
     // Per-entry filesystem fingerprint (`metadata.json` size+mtime +
     // `isUser`) captured during the parse loop and mixed into the SHA-1
     // signature below. Decoupled from `Payload` so the strategy can
@@ -517,6 +573,15 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
     const QString canonicalUserPath = m_userPath.isEmpty() ? QString() : QFileInfo(m_userPath).canonicalFilePath();
 
     bool capTripped = false;
+    /// Subdirs CONSIDERED this rescan, summed across every search path. The
+    /// cap counts these rather than the entries that survive to registration:
+    /// a subdir whose metadata.json is missing, oversize, unopenable,
+    /// unparseable, non-object, or id-colliding has still cost a stat (and
+    /// for everything past the existence check an open, a readAll and a JSON parse) on the GUI thread, which
+    /// is the work the cap exists to bound. Counting registrations instead
+    /// let a spray of broken packs through the guard untouched — the exact
+    /// attack it names. Mirrors `JsonScanStrategy`'s `filesConsidered`.
+    int subdirsConsidered = 0;
 
     // Reverse-iterate: highest-priority dirs first, first-wins on id
     // collision. The base normalises caller input into the canonical
@@ -536,22 +601,55 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             !canonicalUserPath.isEmpty() && QFileInfo(searchPath).canonicalFilePath() == canonicalUserPath;
 
         // Per-search-path watch additions (top-level shared files —
-        // shader-pack registry watches `*.glsl` includes here).
+        // shader-pack registry watches `*.glsl` includes here). These sit
+        // OUTSIDE the entry cap: the cap charges per-subdir work, and a
+        // per-directory extractor returning an unbounded glob grows the
+        // watch list with nothing bounding it. Acceptable because the
+        // extractor is trusted first-party code (unlike the pack subdirs,
+        // which are user-writable data), but an extractor author adding a
+        // recursive glob here should know the cap does not cover it.
         if (m_perDirWatch) {
             desiredWatches.append(m_perDirWatch(searchPath));
         }
 
+        // Symlinked pack directories are FOLLOWED, with no canonical-
+        // containment check. Symlinking a pack directory out of a dotfiles repo
+        // or a shared drive is the normal way people manage them, and the
+        // threat model here is same-user: anything a symlink reaches, the user
+        // could have copied in.
+        //
+        // This is NOT the claim that a pack is inert. Every production consumer
+        // is a shader registry, and a pack's metadata NAMES source files that
+        // are compiled and run on the GPU — so the containment that matters is
+        // on the paths a pack DECLARES, not on the directory it was found
+        // through, and it belongs in the parser that resolves them.
+        // PluginLoader is the counter-example in this library and uses
+        // QDir::NoSymLinks, because a plugin subdir leads to a dlopen.
         const QStringList subdirs = dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QString& subdir : subdirs) {
-            if (m_subdirSkip && m_subdirSkip(subdir)) {
-                continue;
-            }
-            // Per-rescan entry-count DoS guard. Reverse-iteration scans
-            // user-first / system-last, so cap-trip drops *system*
-            // overflow rather than user overrides.
-            if (entries.size() >= static_cast<std::size_t>(m_maxEntries)) {
+            // Per-rescan DoS guard, counting subdirs considered rather than
+            // entries registered. Reverse-iteration scans user-first /
+            // system-last, so cap-trip drops *system* overflow rather than
+            // user overrides.
+            //
+            // Checked BEFORE the watch is armed below, not after: the watch
+            // list is the other unbounded quantity here, and a spray of
+            // broken packs that never register would otherwise grow it until
+            // the inotify per-user watch limit is exhausted.
+            //
+            // Also before the skip predicate, so a skipped subdir is still
+            // CHARGED. Every sibling scanner charges before its own first
+            // filter, for the same reason: a caller-supplied predicate that
+            // inspects the name is work a spray can buy, and "considered" has
+            // to mean every entry the loop reaches or the cap bounds something
+            // other than what its docs claim.
+            if (subdirsConsidered >= m_maxEntries) {
                 capTripped = true;
                 break;
+            }
+            ++subdirsConsidered;
+            if (m_subdirSkip && m_subdirSkip(subdir)) {
+                continue;
             }
 
             const QString subdirPath = dirObj.filePath(subdir);
@@ -564,7 +662,25 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             desiredWatches.append(metadataPath);
 
             const QFileInfo metadataInfo(metadataPath);
-            if (!metadataInfo.exists()) {
+            // `isFile()`, not `exists()`. A FIFO in a user-writable pack dir
+            // satisfies exists(), and `QFile::open(ReadOnly)` on a FIFO BLOCKS
+            // until a writer appears — indefinitely, on the GUI thread, and the
+            // size cap cannot help because a FIFO reports size 0. The two sibling
+            // scanners are immune only incidentally: they enumerate with
+            // QDir::Files, which excludes a FIFO, whereas this one constructs the
+            // path. A directory named metadata.json is refused by the same check.
+            if (!metadataInfo.isFile()) {
+                // Watch the SUBDIRECTORY instead. `QFileSystemWatcher` cannot
+                // watch a path that does not exist, so the metadata.json entry
+                // appended above arms nothing here — and only the registered
+                // SEARCH paths are directory-watched, not the pack dirs under
+                // them. Without this, `cp -r mypack <packs>/` races: the mkdir
+                // wakes the debounced rescan, the rescan finds an empty (or
+                // half-copied) subdir, and the metadata.json landing afterwards
+                // fires no event at all, so the pack stays invisible until
+                // something unrelated triggers a rescan. Watching the subdir
+                // makes the file's creation the wake-up.
+                desiredWatches.append(subdirPath);
                 qCDebug(log) << "MetadataPackScanStrategy: skipping subdir, no metadata.json:" << subdirPath;
                 continue;
             }
@@ -585,6 +701,22 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
                 qCWarning(log) << "MetadataPackScanStrategy: failed to open metadata.json:" << metadataPath;
                 continue;
             }
+            // Re-checked on the OPEN descriptor. The pre-open stat above can be
+            // beaten by a rewrite between the stat and the open, which leaves
+            // `readAll()` below unbounded — the same TOCTOU that was closed in
+            // `validateJsonEnvelope`, and this was the one remaining site that
+            // still enforced the cap on the path rather than the descriptor.
+            //
+            // Deliberately untested: hitting this branch requires losing the
+            // stat/open race on purpose, and a test cannot schedule a
+            // same-process rewrite into that window deterministically. The
+            // pre-open cap two blocks up carries the observable coverage; this
+            // recheck is the race-closing twin and is kept correct by review.
+            if (file.size() > DirectoryLoader::kMaxFileBytes) {
+                qCWarning(log) << "MetadataPackScanStrategy: skipping oversized metadata.json:" << metadataPath << "("
+                               << file.size() << "bytes, cap" << DirectoryLoader::kMaxFileBytes << ")";
+                continue;
+            }
 
             QJsonParseError parseError{};
             const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
@@ -598,9 +730,10 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
                 continue;
             }
 
-            // Schema-specific parse. The ctor asserts `m_parser` is
-            // non-null and there is no setter to clear it, so it is
-            // safe to invoke unconditionally.
+            // Schema-specific parse. `m_parser` is guarded once at the top of
+            // this function rather than here, so the ctor's debug assert has a
+            // release-build counterpart and this call cannot throw
+            // `std::bad_function_call` out of a GUI-thread rescan.
             std::optional<Payload> parsed = m_parser(subdirPath, doc.object(), isUserDir);
             if (!parsed.has_value()) {
                 qCDebug(log) << "MetadataPackScanStrategy: parser declined" << metadataPath;
@@ -627,12 +760,16 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
 
             // Capture the metadata.json fingerprint BEFORE the move so
             // we can mix it into the per-rescan signature below. Any
-            // parser-consumed field's edit shifts the file's mtime
-            // (POSIX guarantees this on a content-change write — the
-            // editors used in our tests and the production save paths
-            // rely on it), so a single mtime+size mix-in covers every
-            // schema field without forcing per-field enumeration in
-            // SignatureContrib.
+            // parser-consumed field's edit shifts the file's mtime (POSIX
+            // guarantees the mtime is UPDATED on a content-change write;
+            // the value mixed here is truncated to milliseconds, so a
+            // same-size rewrite landing in the same millisecond as the
+            // prior stat is theoretically invisible — accepted, because
+            // the alternative is content-hashing every file on every
+            // rescan, and every production save path here goes through an
+            // atomic rename which also changes the inode), so a single
+            // mtime+size mix-in covers every schema field without forcing
+            // per-field enumeration in SignatureContrib.
             QString id = parsed->id;
             seenIds.insert(id);
             entries.push_back(
@@ -646,6 +783,15 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
         qCWarning(log).nospace() << "MetadataPackScanStrategy: reached entry cap (" << m_maxEntries
                                  << ") — later entries skipped to protect the GUI thread. Prune the watched search "
                                     "paths or raise the cap.";
+        // The truncated set IS still committed, so `MetadataPackLoader::
+        // reconcile` unregisters every pack that sorted past the cap even
+        // though it is still on disk. That is deliberate here and differs from
+        // PluginLoader, which skips its removal sweep on a cap trip: a pack
+        // registry's accessors are queried by id from QML on every frame, and
+        // leaving entries registered that this scan never validated would serve
+        // stale payloads indefinitely. Dropping them is visible and recoverable
+        // (prune the search path, or raise the cap, and the next scan restores
+        // them); serving a stale pack is neither.
     }
 
     // Sort by id once. Stable hash + stable accessor ordering both fall
@@ -693,8 +839,13 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
     }
     // Watch-set pass. Sorted + deduped for deterministic ordering across
     // rescans regardless of the order paths were appended during the
-    // outer / inner loops above. `removeDuplicates` is O(n log n) and
-    // entry counts are bounded by `m_maxEntries`, so cost is negligible.
+    // outer / inner loops above. The sort/dedup itself is cheap, but note the
+    // list length is NOT bounded by m_maxEntries: the per-directory and
+    // per-entry watch extractors return arbitrary-length globs (see the
+    // "sit OUTSIDE the entry cap" note earlier in this file). The real
+    // per-rescan cost is the QFileInfo stat (exists/size/lastModified) in the
+    // loop below, one per watch path, on the GUI thread on every debounced
+    // fire — accepted as the dominant syscall cost of a rescan.
     QStringList sortedWatches = desiredWatches;
     sortedWatches.removeDuplicates();
     std::sort(sortedWatches.begin(), sortedWatches.end());
@@ -739,9 +890,11 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
     // dedupes again internally via `QSet<QString> m_watchedFiles`, so
     // this isn't a correctness fix — but the strategy already paid for
     // dedup + sort during the signature pass, so handing the cleaned
-    // list back saves the watcher its own dedup pass and removes a
-    // class of "watcher diagnostics in nondeterministic order" from
-    // the system. Costs nothing.
+    // list back saves the watcher its own dedup pass, gives the signature
+    // pass a deterministic input, and lets a test assert on the returned
+    // list directly. (It does NOT make the watcher's own diagnostics
+    // deterministic — syncFileWatches copies into a QSet and iterates that.)
+    // Costs nothing.
     return sortedWatches;
 }
 

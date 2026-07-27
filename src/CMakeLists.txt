@@ -25,6 +25,7 @@ add_subdirectory(shared)
 # Core library sources
 set(plasmazones_core_SRCS
     phosphor_qml_i18n.h
+    phosphor_qml_i18n.cpp
     core/types/constants.h
     core/types/baselinecleanup.h
     core/platform/logging.h
@@ -43,6 +44,7 @@ set(plasmazones_core_SRCS
     core/interfaces/ioverlayservice.h
     core/interfaces/isettings.h
     core/interfaces/settings_interfaces.h
+    core/types/animationshadersupportedpaths.h
     core/types/types.h
     core/utils/utils.h
     core/utils/utils.cpp
@@ -189,7 +191,6 @@ set(plasmazones_core_SRCS
 # Create core library
 add_library(plasmazones_core SHARED ${plasmazones_core_SRCS})
 
-target_sources(plasmazones_core PRIVATE phosphor_qml_i18n.cpp)
 
 # Generate export header
 generate_export_header(plasmazones_core
@@ -477,6 +478,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/autotile_init.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/shader_warmup.cpp
+    daemon/daemon/animation_profiles.cpp
     daemon/daemon/init_services.cpp
     daemon/daemon/init_adaptors.cpp
     daemon/daemon/init_engines.cpp
@@ -928,6 +930,39 @@ if(BUILD_TESTING)
              COMMAND plasmazones-shader-validate --animation ${PROJECT_SOURCE_DIR}/data/animations)
     add_test(NAME shader_validate_surface
              COMMAND plasmazones-shader-validate --surface ${PROJECT_SOURCE_DIR}/data/surface)
+
+    # The XDG half of the standard isolation, applied by hand — NOT a stray copy
+    # that should have used the shared helper. These three tests have no target of
+    # their own (they all invoke the one `plasmazones-shader-validate` command), and
+    # `phosphor_apply_test_isolation` keys its sandbox on a TARGET name, so it
+    # cannot apply here. Giving the module a sandbox key independent of the
+    # target name is the only way to fold this in.
+    #
+    # The validator's pack ENUMERATION never touches QStandardPaths — it walks
+    # the explicit --overlay/--animation/--surface directory arguments and
+    # derives include paths from them (packvalidators.cpp). The one host
+    # exposure this sandbox closes is narrower: SurfaceShaderRegistry's
+    # `builtin:` buffer fallback resolves through QStandardPaths when a pack
+    # names a builtin buffer whose sibling `../shared/` copy is missing —
+    # never the case for the bundled packs today, so this is a
+    # belt-and-braces pin rather than a live-failure fix.
+    # The bus half is not needed: the validator never touches D-Bus.
+    set(_pz_shader_validate_xdg "${CMAKE_BINARY_DIR}/test-xdg/shader_validate")
+    file(MAKE_DIRECTORY "${_pz_shader_validate_xdg}/config" "${_pz_shader_validate_xdg}/data"
+                        "${_pz_shader_validate_xdg}/state" "${_pz_shader_validate_xdg}/cache")
+    foreach(_pz_sv shader_validate_bundled shader_validate_animations shader_validate_surface)
+        set_property(TEST ${_pz_sv} APPEND PROPERTY ENVIRONMENT
+            "XDG_CONFIG_HOME=${_pz_shader_validate_xdg}/config"
+            "XDG_DATA_HOME=${_pz_shader_validate_xdg}/data"
+            "XDG_STATE_HOME=${_pz_shader_validate_xdg}/state"
+            "XDG_CACHE_HOME=${_pz_shader_validate_xdg}/cache"
+            "XDG_DATA_DIRS=${_pz_shader_validate_xdg}/data")
+        # These bypass phosphor_apply_test_isolation (target-keyed, can't apply
+        # to a shared command), so they'd otherwise be the only isolated tests
+        # with no default timeout. Pin the same 120s a hung glslang invocation
+        # would need to wedge the run.
+        set_tests_properties(${_pz_sv} PROPERTIES TIMEOUT 120)
+    endforeach()
 endif()
 
 # Standalone settings app (no KDE Frameworks required)
