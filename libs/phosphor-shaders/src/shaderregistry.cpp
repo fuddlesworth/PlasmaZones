@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorShaders/ShaderRegistry.h>
+#include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include "shaderutils.h"
 
+#include <PhosphorFsLoader/DirectoryLoader.h>
 #include <PhosphorFsLoader/PackPathGuard.h>
 #include <PhosphorFsLoader/SchemaValidator.h>
 
@@ -28,17 +30,24 @@ namespace PhosphorShaders {
 
 Q_LOGGING_CATEGORY(lcShaderRegistry, "phosphorshaders.shaderregistry")
 
-// Namespace UUID for generating deterministic shader IDs (UUID v5)
-static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d}"));
+// Namespace UUID for generating deterministic shader IDs (UUID v5).
+// Function-local static rather than a namespace-scope QUuid: fromString is
+// not constexpr, and a dynamic-initialised global would be subject to
+// cross-TU static-init ordering.
+static const QUuid& shaderNamespaceUuid()
+{
+    static const QUuid uuid = QUuid::fromString(QStringLiteral("{a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d}"));
+    return uuid;
+}
 
 // Uniform name components for slot mapping
-static const char* const UniformVecNames[] = {"customParams1", "customParams2", "customParams3", "customParams4",
-                                              "customParams5", "customParams6", "customParams7", "customParams8"};
-static const char* const UniformComponents[] = {"_x", "_y", "_z", "_w"};
-static const char* const UniformColorNames[] = {"customColor1",  "customColor2",  "customColor3",  "customColor4",
-                                                "customColor5",  "customColor6",  "customColor7",  "customColor8",
-                                                "customColor9",  "customColor10", "customColor11", "customColor12",
-                                                "customColor13", "customColor14", "customColor15", "customColor16"};
+static const char* const UNIFORM_VEC_NAMES[] = {"customParams1", "customParams2", "customParams3", "customParams4",
+                                                "customParams5", "customParams6", "customParams7", "customParams8"};
+static const char* const UNIFORM_COMPONENTS[] = {"_x", "_y", "_z", "_w"};
+static const char* const UNIFORM_COLOR_NAMES[] = {"customColor1",  "customColor2",  "customColor3",  "customColor4",
+                                                  "customColor5",  "customColor6",  "customColor7",  "customColor8",
+                                                  "customColor9",  "customColor10", "customColor11", "customColor12",
+                                                  "customColor13", "customColor14", "customColor15", "customColor16"};
 
 QString ShaderRegistry::ParameterInfo::uniformName() const
 {
@@ -49,7 +58,7 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
     if (type == QLatin1String("color")) {
         // Color slots 0-15 -> customColor1-16
         if (slot >= 0 && slot < 16) {
-            return QString::fromLatin1(UniformColorNames[slot]);
+            return QString::fromLatin1(UNIFORM_COLOR_NAMES[slot]);
         }
         return QString();
     }
@@ -66,7 +75,7 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
     if (slot >= 0 && slot < 32) {
         const int vecIndex = slot / 4;
         const int compIndex = slot % 4;
-        return QString::fromLatin1(UniformVecNames[vecIndex]) + QString::fromLatin1(UniformComponents[compIndex]);
+        return QString::fromLatin1(UNIFORM_VEC_NAMES[vecIndex]) + QString::fromLatin1(UNIFORM_COMPONENTS[compIndex]);
     }
 
     return QString();
@@ -109,8 +118,8 @@ QString resolveWithinPack(const QDir& dir, const QString& declaredName,
     // back an explicit `""` rather than the default (an empty string IS a
     // string), so without this the guard refused it and warned "declared a path
     // outside its own directory: ''", which points the pack author at the wrong
-    // problem. Unreachable via the live scan (the schema sets minLength 1) but
-    // reachable through parsePackMetadata, which has no schema gate.
+    // problem. Both callers now schema-gate first (minLength 1), so this is
+    // pure belt-and-braces for any future gate-free caller.
     if (declaredName.isEmpty()) {
         return {};
     }
@@ -130,13 +139,14 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
 {
     ShaderRegistry::ShaderInfo info;
     QDir dir(shaderDir);
+    info.packDir = dir.absolutePath();
 
     // Default name from directory name; the metadata `id` field overrides
     // the UUID source if present, the `name` field overrides display
     // only.
     const QString shaderName = dir.dirName();
     const QString metadataId = root.value(QLatin1String("id")).toString(shaderName);
-    info.id = QUuid::createUuidV5(ShaderNamespaceUuid, metadataId).toString();
+    info.id = QUuid::createUuidV5(shaderNamespaceUuid(), metadataId).toString();
     info.name = root.value(QLatin1String("name")).toString(shaderName);
     info.description = root.value(QLatin1String("description")).toString();
     info.author = root.value(QLatin1String("author")).toString();
@@ -158,8 +168,12 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
                                         << dir.absolutePath();
         }
     } else {
-        const QString localVert = dir.filePath(QStringLiteral("zone.vert"));
-        if (QFile::exists(localVert)) {
+        // Through resolveWithinPack like every other compiled path: the
+        // filename is fixed, but `zone.vert` shipped as a symlink pointing
+        // out of the pack would otherwise be compiled and run on the GPU —
+        // exactly the case the guard exists for.
+        const QString localVert = resolveWithinPack(dir, QStringLiteral("zone.vert"));
+        if (!localVert.isEmpty() && QFile::exists(localVert)) {
             info.vertexShaderPath = localVert;
         }
     }
@@ -201,7 +215,13 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
         const QString bufferShaderName =
             root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
         const QString resolvedBuffer = resolveWithinPack(dir, bufferShaderName);
-        if (!resolvedBuffer.isEmpty()) {
+        // Existence-checked, unlike resolveWithinPack itself (its contract
+        // deliberately skips the check): this IMPLICIT fallback used to
+        // publish `<pack>/buffer.frag` for every single-pass pack (22 of the
+        // bundled 27 ship no such file), and the runtime's only multipass
+        // gate is a non-empty buffer path — so each of those packs paid 3
+        // failed disk loads plus two warnings per render-node attach.
+        if (!resolvedBuffer.isEmpty() && QFile::exists(resolvedBuffer)) {
             info.bufferShaderPaths.append(resolvedBuffer);
         }
     }
@@ -222,7 +242,7 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     info.useWallpaper = root.value(QLatin1String("wallpaper")).toBool(false);
     info.bufferFeedback = root.value(QLatin1String("bufferFeedback")).toBool(false);
     const qreal scale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
-    info.bufferScale = qBound(0.125, scale, 1.0);
+    info.bufferScale = qBound(kMinBufferScale, scale, kMaxBufferScale);
     info.bufferWrap = normalizeWrapMode(root.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp")));
     info.useDepthBuffer = root.value(QLatin1String("depthBuffer")).toBool(false);
 
@@ -257,12 +277,35 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
         }
     }
 
+    // Single-pass coherence, ported from SurfaceShaderRegistry::parseEffect:
+    // a pack that set buffer-only fields WITHOUT multipass (or whose
+    // multipass fail-closed above) must not carry orphan buffer state — it
+    // would flow through shaderInfoToVariantMap onto D-Bus/QML and into the
+    // content signature for a pipeline that never runs.
+    if (!info.isMultipass) {
+        info.bufferShaderPaths.clear();
+        info.bufferWraps.clear();
+        info.bufferFilters.clear();
+        info.bufferFeedback = false;
+        info.useDepthBuffer = false;
+    }
+
     // Parameters
     const QJsonArray paramsArray = root.value(QLatin1String("parameters")).toArray();
+    QSet<QString> seenParamIds;
+    QStringList duplicateParamIds;
     for (const QJsonValue& paramValue : paramsArray) {
         QJsonObject paramObj = paramValue.toObject();
         ShaderRegistry::ParameterInfo param;
         param.id = paramObj.value(QLatin1String("id")).toString();
+        // First declaration wins: a repeated id would claim a second lane AND
+        // emit a second `#define p_<id>` — glslang rejects the macro
+        // redefinition and the whole pack fails to compile.
+        if (!param.id.isEmpty() && seenParamIds.contains(param.id)) {
+            duplicateParamIds.append(param.id);
+            continue;
+        }
+        seenParamIds.insert(param.id);
         param.name = paramObj.value(QLatin1String("name")).toString(param.id);
         param.group = paramObj.value(QLatin1String("group")).toString();
         param.type = paramObj.value(QLatin1String("type")).toString(QStringLiteral("float"));
@@ -340,6 +383,38 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
             used.insert(next);
             ++next;
         }
+
+        // One summary warning per failure class (mirrors the surface
+        // registry's overflow reporting): a slot past its pool budget —
+        // explicit or overflowed auto-fill — is skipped identically by
+        // buildParamPreamble ("slot out of range" comment) and by
+        // uniformName() (empty key, no upload), so the shader compiles
+        // against an undefined `p_<id>` and the author gets no signal
+        // without this.
+        QStringList overBudget;
+        for (const ShaderRegistry::ParameterInfo& p : std::as_const(info.parameters)) {
+            if (p.slot < 0) {
+                continue;
+            }
+            const int budget = poolOf(p.type) == 1 ? CustomColors::kColorCount
+                : poolOf(p.type) == 2              ? kMaxImageSlots
+                                                   : CustomParams::kFlatSlotCount;
+            if (p.slot >= budget) {
+                overBudget.append(p.id);
+            }
+        }
+        if (!overBudget.isEmpty()) {
+            qCWarning(lcShaderRegistry).noquote()
+                << "Shader pack" << dir.dirName() << "has" << overBudget.size()
+                << "parameter(s) past their pool slot budget (scalar" << CustomParams::kFlatSlotCount << "/ color"
+                << CustomColors::kColorCount << "/ image" << kMaxImageSlots
+                << "); they will not bind:" << overBudget.join(QLatin1String(", "));
+        }
+    }
+    if (!duplicateParamIds.isEmpty()) {
+        qCWarning(lcShaderRegistry).noquote()
+            << "Shader pack" << dir.dirName() << "declares" << duplicateParamIds.size()
+            << "duplicate parameter id(s); first declaration wins:" << duplicateParamIds.join(QLatin1String(", "));
     }
 
     // Presets
@@ -399,7 +474,10 @@ std::optional<ShaderRegistry::ShaderInfo> parseShader(const QString& shaderDir, 
     // Construct the URL pointing at the fragment shader.
     info.shaderUrl = QUrl::fromLocalFile(info.sourcePath);
 
-    // Optional preview image.
+    // Optional preview image. Deliberately excluded from the watch set and
+    // the content signature: the preview never feeds the GPU pipeline, so an
+    // edited preview.png re-registering (and re-baking) the pack would be
+    // pure churn; a stale thumbnail until the next rescan is acceptable.
     QDir dir(shaderDir);
     const QString previewPath = dir.filePath(QStringLiteral("preview.png"));
     if (QFile::exists(previewPath)) {
@@ -417,10 +495,11 @@ std::optional<ShaderRegistry::ShaderInfo> parseShader(const QString& shaderDir, 
 /// rename saves on any of them re-fire the rescan.
 QStringList shaderEntryWatchPaths(const ShaderRegistry::ShaderInfo& info)
 {
-    // `parseShader` rejects entries whose `sourcePath` doesn't exist, so
-    // every payload reaching this callback has a valid frag path — no
-    // empty-check needed.
-    QDir dir(QFileInfo(info.sourcePath).absolutePath());
+    // The pack root, not the frag's directory — a custom `fragmentShader`
+    // may sit in a pack subdirectory, and the watch glob must cover the
+    // directory metadata.json lives in. Fallback for hand-built ShaderInfo
+    // (tests) that set only sourcePath.
+    QDir dir(info.packDir.isEmpty() ? QFileInfo(info.sourcePath).absolutePath() : info.packDir);
     const QStringList shaderFiles = dir.entryList(
         {QStringLiteral("*.frag"), QStringLiteral("*.vert"), QStringLiteral("*.glsl"), QStringLiteral("*.json")},
         QDir::Files);
@@ -484,12 +563,23 @@ void shaderContentSignature(QCryptographicHash& hasher, const ShaderRegistry::Sh
         }
         const QFileInfo fi(path);
         hasher.addData(path.toUtf8());
-        hasher.addData(QByteArray::number(fi.size()));
-        hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        if (fi.exists()) {
+            hasher.addData(QByteArray::number(fi.size()));
+            hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        } else {
+            // Stable sentinel for absent files: lastModified() on an invalid
+            // datetime is implementation-defined (same contract as
+            // MetadataPackScanStrategy's watch-set hash).
+            hasher.addData(QByteArrayView("missing"));
+        }
     };
-    // metadata.json sits in the same directory as the frag source.
-    if (!info.sourcePath.isEmpty()) {
-        mixFile(QFileInfo(info.sourcePath).absolutePath() + QStringLiteral("/metadata.json"));
+    // metadata.json lives at the pack root, which is NOT necessarily the
+    // frag's directory (a custom `fragmentShader` may sit in a subdirectory).
+    const QString metaBase = !info.packDir.isEmpty() ? info.packDir
+        : !info.sourcePath.isEmpty()                 ? QFileInfo(info.sourcePath).absolutePath()
+                                                     : QString();
+    if (!metaBase.isEmpty()) {
+        mixFile(metaBase + QStringLiteral("/metadata.json"));
     }
     mixFile(info.sourcePath);
     mixFile(info.vertexShaderPath);
@@ -604,8 +694,10 @@ void ShaderRegistry::reportShaderBakeFinished(const QString& shaderId, bool succ
 
 QList<ShaderRegistry::ShaderInfo> ShaderRegistry::availableShaders() const
 {
-    // Registry iteration is insertion order; sort by id for alphabetical
-    // output (the legacy strategy returned sorted).
+    // Registry iteration is insertion order; sort by id for deterministic
+    // output across rescans (the ids are UUIDv5 strings, so the order is
+    // stable but not humanly alphabetical; the legacy strategy returned
+    // sorted too).
     QList<ShaderInfo> result;
     result.reserve(m_registry.size());
     m_registry.forEach([&result](const std::shared_ptr<ShaderPack>& pack) {
@@ -683,6 +775,7 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
     }
 
     // Multipass shader metadata
+    map[QStringLiteral("multipass")] = info.isMultipass;
     map[QStringLiteral("bufferShaderPaths")] = info.bufferShaderPaths;
     map[QStringLiteral("bufferFeedback")] = info.bufferFeedback;
     map[QStringLiteral("bufferScale")] = info.bufferScale;
@@ -826,14 +919,28 @@ bool ShaderRegistry::validateParameterValue(const ParameterInfo& param, const QV
         if (param.maxValue.isValid() && v > param.maxValue.toInt())
             return false;
     } else if (param.type == QLatin1String("color")) {
-        QColor c(value.toString());
-        if (!c.isValid())
-            return false;
+        // Metatype-first, matching the surface registry's coercion: a QColor
+        // variant stringifies to "" via toString(), so the string-constructor
+        // path alone silently failed genuine QColor values.
+        if (value.metaType().id() == QMetaType::QColor) {
+            if (!value.value<QColor>().isValid())
+                return false;
+        } else {
+            QColor c(value.toString());
+            if (!c.isValid())
+                return false;
+        }
     } else if (param.type == QLatin1String("bool")) {
-        if (!value.canConvert<bool>())
+        // canConvert<bool> is true for nearly every metatype (any QString
+        // converts), so restrict to the types that carry a real truth value.
+        const int mt = value.metaType().id();
+        if (mt != QMetaType::Bool && mt != QMetaType::Int && mt != QMetaType::UInt && mt != QMetaType::LongLong
+            && mt != QMetaType::ULongLong && mt != QMetaType::Double)
             return false;
     } else if (param.type == QLatin1String("image")) {
-        if (!value.canConvert<QString>())
+        // An image value is a path (or empty for "no texture"); accept only
+        // genuine strings — canConvert<QString> is true for numbers too.
+        if (value.metaType().id() != QMetaType::QString)
             return false;
     } else {
         // Unknown type: fail CLOSED.
@@ -962,7 +1069,11 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
             // gets — so one user-picked file could reach watch keys and path-keyed
             // caches in two spellings.
             if (!imgPath.isEmpty()) {
-                const QDir shaderDir = QFileInfo(info.sourcePath).absoluteDir();
+                // Containment is against the PACK root: a subdir-frag pack's
+                // image defaults are declared relative to metadata.json, not
+                // the frag's directory.
+                const QDir shaderDir =
+                    info.packDir.isEmpty() ? QFileInfo(info.sourcePath).absoluteDir() : QDir(info.packDir);
                 const QString resolved = resolveWithinPack(shaderDir, imgPath,
                                                            fromUser ? PhosphorFsLoader::AbsolutePathPolicy::Trust
                                                                     : PhosphorFsLoader::AbsolutePathPolicy::Reject);
@@ -984,16 +1095,25 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
                 result[uName] = QString();
             }
             // Both-or-neither, matching the two sibling registries: a wrap mode
-            // on an unbound sampler is meaningless, and the same consumer reads
-            // all three maps.
+            // (and an SVG render size) on an unbound sampler is meaningless,
+            // and the same consumer reads all three maps.
             if (!result.value(uName).toString().isEmpty()) {
-                result[uName + QStringLiteral("_wrap")] = param.wrap.isEmpty() ? QStringLiteral("clamp") : param.wrap;
-            }
+                QString wrap = param.wrap;
+                if (!wrap.isEmpty() && !isValidWrapToken(wrap)) {
+                    // Same JSON-boundary vocabulary check the surface parser
+                    // applies: warn and fall back rather than forwarding an
+                    // unknown token for the runtime to coerce silently.
+                    qCWarning(lcShaderRegistry) << "Shader" << info.id << "param" << param.id
+                                                << "declares unknown wrap mode" << wrap << "- using clamp";
+                    wrap.clear();
+                }
+                result[uName + QStringLiteral("_wrap")] = wrap.isEmpty() ? QStringLiteral("clamp") : wrap;
 
-            // Pass through SVG render size if present in stored params
-            const QString svgSizeKey = param.id + QStringLiteral("_svgSize");
-            if (storedParams.contains(svgSizeKey)) {
-                result[uName + QStringLiteral("_svgSize")] = storedParams.value(svgSizeKey);
+                // Pass through SVG render size if present in stored params
+                const QString svgSizeKey = param.id + QStringLiteral("_svgSize");
+                if (storedParams.contains(svgSizeKey)) {
+                    result[uName + QStringLiteral("_svgSize")] = storedParams.value(svgSizeKey);
+                }
             }
         }
     }
@@ -1042,6 +1162,16 @@ ShaderRegistry::ShaderInfo ShaderRegistry::parsePackMetadata(const QString& pack
         }
         return {};
     }
+    // Same per-file size cap the live scan inherits from DirectoryLoader, so
+    // the offline path cannot be fed an unbounded metadata file.
+    if (file.size() > PhosphorFsLoader::DirectoryLoader::kMaxFileBytes) {
+        if (error) {
+            *error = QStringLiteral("metadata file too large (%1 bytes, limit %2)")
+                         .arg(file.size())
+                         .arg(PhosphorFsLoader::DirectoryLoader::kMaxFileBytes);
+        }
+        return {};
+    }
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError) {
@@ -1056,10 +1186,24 @@ ShaderRegistry::ShaderInfo ShaderRegistry::parsePackMetadata(const QString& pack
         }
         return {};
     }
+    // Same structural schema gate the live scan applies (parseShader), so the
+    // offline validator refuses exactly the packs the daemon refuses.
+    const QJsonObject rootObj = doc.object();
+    if (const auto errors = shaderMetadataValidator().validate(rootObj)) {
+        if (error) {
+            QStringList lines;
+            lines.reserve(errors->size());
+            for (const auto& e : *errors) {
+                lines.append((e.path.isEmpty() ? QStringLiteral("(root)") : e.path) + QStringLiteral(": ") + e.message);
+            }
+            *error = QStringLiteral("metadata fails schema validation: %1").arg(lines.join(QStringLiteral("; ")));
+        }
+        return {};
+    }
     // parseShaderMetadata lives in this TU's anonymous namespace; it sets
     // sourcePath / vertexShaderPath / bufferShaderPaths from packDir and applies
     // the same auto-slot assignment the live scan does.
-    return parseShaderMetadata(packDir, doc.object());
+    return parseShaderMetadata(packDir, rootObj);
 }
 
 } // namespace PhosphorShaders

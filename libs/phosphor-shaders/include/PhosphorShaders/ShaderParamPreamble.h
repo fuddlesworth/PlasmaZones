@@ -15,6 +15,13 @@ namespace PhosphorShaders {
 /// `#define p_<id> <glsl-accessor>` block both shader runtimes inject so an
 /// author reads a parameter by name (`p_speed`) instead of hand-decoding a
 /// `customParams[N].xyzw` lane.
+/// Image-pool budget: overlay/zone image params bind to `uTexture0..3`.
+/// Animation packs never use the Image pool (their textures are a separate
+/// top-level list bound to `uTexture1..3`), so this cap only governs the
+/// zone path. Public so the metadata parser can warn on over-budget slots
+/// with the same figure the preamble generator skips at.
+inline constexpr int kMaxImageSlots = 4;
+
 struct PreambleParam
 {
     /// Which UBO region the parameter occupies. The three pools number

@@ -210,14 +210,25 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     // marker. Dropping either kind would shift every later buffer's override —
     // and since toJson re-emits empties, a dropped empty would break alignment
     // on the very next load of a saved pack.
+    // Capped at kMaxBufferPasses like bufferShaderPaths itself: entries past
+    // the pass budget can never align with a real pass, so surplus is dropped
+    // with a warning rather than carried through toJson round-trips forever.
     const QJsonArray wrapsArr = obj.value(QLatin1String("bufferWraps")).toArray();
-    for (const QJsonValue& v : wrapsArr) {
-        e.bufferWraps.append(validatedWrap(v.toString(), "bufferWraps"));
+    for (qsizetype i = 0; i < qMin<qsizetype>(wrapsArr.size(), kMaxBufferPasses); ++i) {
+        e.bufferWraps.append(validatedWrap(wrapsArr.at(i).toString(), "bufferWraps"));
+    }
+    if (wrapsArr.size() > kMaxBufferPasses) {
+        qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: bufferWraps has" << wrapsArr.size()
+                                   << "entries, cap is" << kMaxBufferPasses << "- surplus dropped";
     }
     e.bufferFilter = validatedFilter(obj.value(QLatin1String("bufferFilter")).toString(), "bufferFilter");
     const QJsonArray filtersArr = obj.value(QLatin1String("bufferFilters")).toArray();
-    for (const QJsonValue& v : filtersArr) {
-        e.bufferFilters.append(validatedFilter(v.toString(), "bufferFilters"));
+    for (qsizetype i = 0; i < qMin<qsizetype>(filtersArr.size(), kMaxBufferPasses); ++i) {
+        e.bufferFilters.append(validatedFilter(filtersArr.at(i).toString(), "bufferFilters"));
+    }
+    if (filtersArr.size() > kMaxBufferPasses) {
+        qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: bufferFilters has" << filtersArr.size()
+                                   << "entries, cap is" << kMaxBufferPasses << "- surplus dropped";
     }
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
 

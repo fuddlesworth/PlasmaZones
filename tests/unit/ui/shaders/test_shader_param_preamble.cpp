@@ -181,7 +181,7 @@ private Q_SLOTS:
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         const QByteArray meta =
-            R"({"name":"t","parameters":[{"id":"a-b","type":"float","slot":0},{"id":"good","type":"float"}]})";
+            R"({"id":"t","name":"t","fragmentShader":"effect.frag","parameters":[{"id":"a-b","name":"a-b","group":"g","type":"float","default":0,"slot":0},{"id":"good","name":"good","group":"g","type":"float","default":0}]})";
         QFile f(QDir(tmp.path()).filePath(QStringLiteral("metadata.json")));
         QVERIFY(f.open(QIODevice::WriteOnly));
         f.write(meta);
@@ -279,8 +279,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        const ShaderRegistry::ShaderInfo info =
-            parsePack(tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"/etc/passwd"})"));
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp, QByteArrayLiteral(R"({"id":"esc","name":"esc","fragmentShader":"/etc/passwd","parameters":[]})"));
         QVERIFY2(info.sourcePath.isEmpty(), "an absolute declared fragmentShader escaped the pack directory");
     }
 
@@ -288,13 +288,16 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        const ShaderRegistry::ShaderInfo info =
-            parsePack(tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"../../../evil.frag"})"));
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp,
+            QByteArrayLiteral(R"({"id":"esc","name":"esc","fragmentShader":"../../../evil.frag","parameters":[]})"));
         QVERIFY2(info.sourcePath.isEmpty(), "a `..` traversal in fragmentShader escaped the pack directory");
         // A traversal that only LOOKS contained must be refused too: the check
         // has to be on the resolved path, not on a leading-`..` test.
         const ShaderRegistry::ShaderInfo sneaky =
-            parsePack(tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"shaders/../../evil.frag"})"));
+            parsePack(tmp,
+                      QByteArrayLiteral(
+                          R"({"id":"esc","name":"esc","fragmentShader":"shaders/../../evil.frag","parameters":[]})"));
         QVERIFY(sneaky.sourcePath.isEmpty());
     }
 
@@ -311,8 +314,9 @@ private Q_SLOTS:
         frag.write(QByteArrayLiteral("// frag\n"));
         frag.close();
 
-        const ShaderRegistry::ShaderInfo info =
-            parsePack(tmp, QByteArrayLiteral(R"({"id":"ok","fragmentShader":"shaders/effect.frag"})"));
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp,
+            QByteArrayLiteral(R"({"id":"ok","name":"ok","fragmentShader":"shaders/effect.frag","parameters":[]})"));
         QVERIFY2(!info.sourcePath.isEmpty(), "a legitimate in-pack subdirectory was refused");
         QVERIFY(info.sourcePath.endsWith(QStringLiteral("shaders/effect.frag")));
     }
@@ -331,8 +335,8 @@ private Q_SLOTS:
         t.close();
         QVERIFY(QFile::link(target, tmp.filePath(QStringLiteral("effect.frag"))));
 
-        const ShaderRegistry::ShaderInfo info =
-            parsePack(tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"effect.frag"})"));
+        const ShaderRegistry::ShaderInfo info = parsePack(
+            tmp, QByteArrayLiteral(R"({"id":"esc","name":"esc","fragmentShader":"effect.frag","parameters":[]})"));
         QVERIFY2(info.sourcePath.isEmpty(), "an in-pack symlink pointing outside the pack was followed");
     }
 
@@ -341,7 +345,9 @@ private Q_SLOTS:
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         const ShaderRegistry::ShaderInfo info = parsePack(
-            tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"effect.frag","vertexShader":"/etc/passwd"})"));
+            tmp,
+            QByteArrayLiteral(
+                R"({"id":"esc","name":"esc","fragmentShader":"effect.frag","vertexShader":"/etc/passwd","parameters":[]})"));
         QVERIFY(info.vertexShaderPath.isEmpty());
     }
 
@@ -365,8 +371,9 @@ private Q_SLOTS:
         }
         const ShaderRegistry::ShaderInfo info =
             parsePack(tmp,
-                      QByteArrayLiteral(R"({"id":"esc","fragmentShader":"effect.frag","multipass":true,)"
-                                        R"("bufferShaders":["a.frag","/etc/passwd","c.frag"]})"));
+                      QByteArrayLiteral(
+                          R"({"id":"esc","name":"esc","fragmentShader":"effect.frag","parameters":[],"multipass":true,)"
+                          R"("bufferShaders":["a.frag","/etc/passwd","c.frag"]})"));
         QVERIFY2(info.bufferShaderPaths.isEmpty(), "an escaping buffer entry was compacted out, shifting the rest");
         QVERIFY2(!info.isMultipass, "multipass survived a refused buffer list");
     }
@@ -379,7 +386,9 @@ private Q_SLOTS:
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         const ShaderRegistry::ShaderInfo info = parsePack(
-            tmp, QByteArrayLiteral(R"({"id":"esc","fragmentShader":"effect.frag","bufferShaders":["/etc/passwd"]})"));
+            tmp,
+            QByteArrayLiteral(
+                R"({"id":"esc","name":"esc","fragmentShader":"effect.frag","parameters":[],"bufferShaders":["/etc/passwd"]})"));
         QVERIFY(info.bufferShaderPaths.isEmpty());
     }
 };

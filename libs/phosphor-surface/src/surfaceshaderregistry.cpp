@@ -159,7 +159,6 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
     // mangling is avoided). A relative frag/vert/preview that escapes the
     // pack dir is cleared, which fail-closes the pack (an empty frag path
     // compiles nothing) rather than reading source from outside the pack.
-    const QDir dir(effectDir);
     if (!e.fragmentShaderPath.isEmpty()) {
         const auto validated = validateTexturePathWithinEffectDir(e.fragmentShaderPath, effectDir, e.id,
                                                                   PhosphorFsLoader::AbsolutePathPolicy::Reject);
@@ -341,8 +340,15 @@ void effectContentSignature(QCryptographicHash& hasher, const SurfaceShaderEffec
         }
         const QFileInfo fi(path);
         hasher.addData(path.toUtf8());
-        hasher.addData(QByteArray::number(fi.size()));
-        hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        if (fi.exists()) {
+            hasher.addData(QByteArray::number(fi.size()));
+            hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        } else {
+            // Stable sentinel for absent files: lastModified() on an invalid
+            // datetime is implementation-defined (same contract as
+            // MetadataPackScanStrategy's watch-set hash).
+            hasher.addData(QByteArrayView("missing"));
+        }
     };
     if (!e.sourceDir.isEmpty()) {
         mixFile(e.sourceDir + QStringLiteral("/metadata.json"));
@@ -371,6 +377,13 @@ SurfaceShaderRegistry::SurfaceShaderRegistry(QObject* parent)
           },
           lcRegistry()))
 {
+    // No setPerDirectoryWatchPaths for data/surface/shared includes,
+    // deliberately (the animation registry makes the same choice; the overlay
+    // registry is the outlier that watches its shared dir): per-entry watches
+    // cover atomic-rename saves of everything a pack references via the
+    // implicit directory watch, and an in-place edit of a shared include not
+    // re-firing until the next rescan is acceptable for a developer-only
+    // workflow.
     m_loader->setPerEntryWatchPaths([](const SurfacePack& p) {
         return effectWatchPaths(p.effect());
     });
@@ -613,6 +626,16 @@ QVariantMap SurfaceShaderRegistry::translateSurfaceParams(const SurfaceShaderEff
         if (slot < effect.textures.size()) {
             path = effect.textures[slot].path;
             wrap = effect.textures[slot].wrap;
+            // On-disk packs had their defaults resolved + traversal-checked at
+            // parseEffect scan time, but an IN-MEMORY pack's defaults arrive
+            // unvetted — apply the same traversal guard the override branch
+            // below applies, both-or-neither on rejection.
+            if (effect.sourceDir.isEmpty() && !path.isEmpty() && !pathHasNoTraversalSegments(path)) {
+                qCWarning(lcRegistry).noquote() << "Surface effect" << effect.id << "in-memory default texture path"
+                                                << path << "rejected (path traversal guard)";
+                path.clear();
+                wrap.clear();
+            }
         }
         const auto pathOverride = friendlyParams.constFind(pathKey);
         if (pathOverride != friendlyParams.constEnd()) {
