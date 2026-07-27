@@ -433,6 +433,39 @@ void Daemon::stop()
     PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
     PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
 
+    // Animation-loader teardown, ALSO above the m_running gate for the same
+    // ctor-origin reason as the statics it pairs with: setupAnimationProfiles
+    // runs from the ctor, so an init-without-start teardown reaches the
+    // member destructors with both loaders (and their QFileSystemWatchers)
+    // still live — exactly the construct-without-start fixture the reset
+    // comment below names. NOTE the deliberate asymmetry this creates for a
+    // stop() → start() cycle: nothing rebuilds the loaders (they are
+    // ctor-only), so live reload of `plasmazones/{curves,profiles}` does not
+    // survive the cycle — the seeds and the low-precedence tag DO survive,
+    // so inheritance keeps resolving, and a restarted daemon has no bus
+    // presence anyway (see the partition-shedding rationale above).
+    m_rawJsonProfiles.clear();
+
+    // Stop the publish coalescing trampoline before resetting the
+    // loaders — the timer is a member QTimer, so its `timeout` slot
+    // would otherwise still fire on the next event-loop tick after
+    // m_settings (its data source) has been destroyed.
+    m_animationPublishTimer.stop();
+    m_animationPublishPending = false;
+
+    // Reset the loaders explicitly so the QFileSystemWatcher inside
+    // each is torn down NOW, before any other shutdown step has a
+    // chance to spin the event loop. Without this, the unique_ptrs
+    // would only destruct at the end of the ~Daemon body, leaving a
+    // window where stale path-change signals could fire into a
+    // half-destroyed object — visible in tests that re-construct the
+    // daemon, and theoretically observable in production on a
+    // configure-reload cycle. ProfileLoader's destructor issues its
+    // own `clearOwner(kPlasmaZonesUserProfilesOwnerTag)` so the
+    // per-daemon `m_profileRegistry` value member sheds those entries here.
+    m_profileLoader.reset();
+    m_curveLoader.reset();
+
     // Idle wiring, ALSO before the m_running gate, for the same reason as the two
     // blocks above: setupIdleService() runs from init(), which precedes start(), so
     // an init-without-start teardown (test fixtures, early-fail init, double-stop)
@@ -565,28 +598,9 @@ void Daemon::stop()
     // the user's authored tweaks, not the shell's ability to resolve — and the
     // seeds that remain keep inheritance working. The raw-JSON snapshot is
     // cleared with them, since it mirrors exactly the entries those destructors
-    // drop.
-    m_rawJsonProfiles.clear();
-
-    // Stop the publish coalescing trampoline before resetting the
-    // loaders — the timer is a member QTimer, so its `timeout` slot
-    // would otherwise still fire on the next event-loop tick after
-    // m_settings (its data source) has been destroyed.
-    m_animationPublishTimer.stop();
-    m_animationPublishPending = false;
-
-    // Reset the loaders explicitly so the QFileSystemWatcher inside
-    // each is torn down NOW, before any other shutdown step has a
-    // chance to spin the event loop. Without this, the unique_ptrs
-    // would only destruct at the end of the ~Daemon body, leaving a
-    // window where stale path-change signals could fire into a
-    // half-destroyed object — visible in tests that re-construct the
-    // daemon, and theoretically observable in production on a
-    // configure-reload cycle. ProfileLoader's destructor issues its
-    // own `clearOwner(kPlasmaZonesUserProfilesOwnerTag)` so the
-    // per-daemon `m_profileRegistry` value member sheds those entries here.
-    m_profileLoader.reset();
-    m_curveLoader.reset();
+    // drop. (The clears and resets themselves run ABOVE the m_running gate,
+    // hoisted next to the QML-static null-outs they pair with — the loaders
+    // are ctor-origin, so an init-without-start teardown needs them too.)
     m_shaderBakePool.clear();
     m_shaderBakePool.waitForDone(500);
     if (m_overlayService) {

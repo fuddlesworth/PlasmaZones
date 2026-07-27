@@ -43,6 +43,7 @@ set(plasmazones_core_SRCS
     core/interfaces/ioverlayservice.h
     core/interfaces/isettings.h
     core/interfaces/settings_interfaces.h
+    core/types/animationshadersupportedpaths.h
     core/types/types.h
     core/utils/utils.h
     core/utils/utils.cpp
@@ -951,10 +952,14 @@ if(BUILD_TESTING)
     # their sandbox on a TARGET name, so neither applies here. Giving the module a
     # sandbox key independent of the target name is the only way to fold this in.
     #
-    # Without it the validator resolves pack search paths through QStandardPaths and
-    # picks up whatever packs are installed in the developer's real XDG_DATA_DIRS,
-    # so "are the BUNDLED packs valid?" silently becomes "are the bundled packs plus
-    # everything installed locally valid?" — a test whose result depends on the host.
+    # The validator's pack ENUMERATION never touches QStandardPaths — it walks
+    # the explicit --overlay/--animation/--surface directory arguments and
+    # derives include paths from them (packvalidators.cpp). The one host
+    # exposure this sandbox closes is narrower: SurfaceShaderRegistry's
+    # `builtin:` buffer fallback resolves through QStandardPaths when a pack
+    # names a builtin buffer whose sibling `../shared/` copy is missing —
+    # never the case for the bundled packs today, so this is a
+    # belt-and-braces pin rather than a live-failure fix.
     # The bus half is not needed: the validator never touches D-Bus.
     set(_pz_shader_validate_xdg "${CMAKE_BINARY_DIR}/test-xdg/shader_validate")
     file(MAKE_DIRECTORY "${_pz_shader_validate_xdg}/config" "${_pz_shader_validate_xdg}/data"
