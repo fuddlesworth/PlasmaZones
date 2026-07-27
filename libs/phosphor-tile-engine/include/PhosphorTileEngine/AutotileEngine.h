@@ -1444,6 +1444,14 @@ private:
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
     bool m_algorithmEverSet = false; ///< True after first successful setAlgorithm() call
+    /// True only while refreshConfigFromSettings() drives setAlgorithm(). In
+    /// that window savedAlgorithmSettings was just reloaded from disk, so the
+    /// outgoing algorithm's freshly-loaded slot is authoritative and must NOT
+    /// be re-stamped from the engine's live scalars — the global SYNC_FIELDs
+    /// earlier in the refresh already overwrote those scalars, and stamping
+    /// them back destroyed per-algorithm values the settings app had just
+    /// saved (discussion #853).
+    bool m_refreshingFromSettings = false;
     QString m_activeScreen; // Last-focused screen (updated by onWindowFocused)
 
     // Per-screen tiling states + the windowId→owning-key reverse map. States are
