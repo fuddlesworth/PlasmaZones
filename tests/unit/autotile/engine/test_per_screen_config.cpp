@@ -102,6 +102,44 @@ private Q_SLOTS:
         QCOMPARE(effective, engine.config()->maxWindows);
     }
 
+    // Regression (BullHorn report, July 2026): a saved per-algorithm slot is
+    // the user's explicit tuning for the screen's algorithm and must beat the
+    // screen algorithm's built-in default when the screen is pinned to a
+    // different algorithm than the global one. Before the fix this path only
+    // ever returned the built-in default, so a screen running a layout-picked
+    // algorithm ignored the user's saved max-windows entirely.
+    void testPerScreen_effectiveMaxWindows_savedSlotBeatsScreenAlgoDefault()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("HDMI-1");
+        engine.setAutotileScreens({screen});
+
+        engine.setAlgorithm(QLatin1String("master-stack"));
+
+        QVariantMap overrides;
+        overrides[QStringLiteral("Algorithm")] = QLatin1String("bsp");
+        engine.applyPerScreenConfig(screen, overrides);
+
+        auto* bspAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("bsp"));
+        auto* msAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("master-stack"));
+        QVERIFY(bspAlgo);
+        QVERIFY(msAlgo);
+
+        const int saved = bspAlgo->defaultMaxWindows() + 3;
+        AlgorithmSettings slot;
+        slot.maxWindows = saved;
+        engine.config()->savedAlgorithmSettings.insert(QStringLiteral("bsp"), slot);
+
+        // Global at the global algo's default: the slot, not bsp's built-in
+        // default, must win.
+        engine.config()->maxWindows = msAlgo->defaultMaxWindows();
+        QCOMPARE(engine.effectiveMaxWindows(screen), saved);
+
+        // The slot is more specific than a user-customized global too.
+        engine.config()->maxWindows = msAlgo->defaultMaxWindows() + 2;
+        QCOMPARE(engine.effectiveMaxWindows(screen), saved);
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // Unlimited overflow mode returns the named sentinel so std::min clamps
     // become idempotent and onWindowAdded's gate is wide open. The constant

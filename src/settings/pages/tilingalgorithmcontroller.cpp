@@ -14,6 +14,7 @@
 #include <QLatin1String>
 #include <QLoggingCategory>
 #include <algorithm>
+#include <array>
 #include <cmath> // std::isfinite — guards the NaN/inf clamp in setCustomParam
 
 namespace PlasmaZones {
@@ -253,10 +254,21 @@ void TilingAlgorithmController::setCustomParam(const QString& algorithmId, const
 
     customParams[paramName] = coerced;
     algoEntry[PhosphorTiles::AutotileJsonKeys::CustomParams] = customParams;
-    // Persist only the key the user actually set. A missing splitRatio /
-    // masterCount is defaulted by perAlgoFromVariantMap on read, so injecting
-    // them here would just bake a redundant (and potentially-stale) per-algorithm
-    // override into the entry for a value the user never touched.
+    // Materialize the untouched numeric fields with the ALGORITHM'S own
+    // defaults, same as writeAlgorithmField: the Settings sanitize pass
+    // refills missing fields with the GENERIC schema defaults, so a thin
+    // {customParams} slot for an algorithm whose own defaults differ would
+    // read back with the wrong values (grid's max windows 9 would come back
+    // as the generic 5, silently re-capping the algorithm the moment any
+    // custom param is touched).
+    constexpr std::array numericFields{PhosphorTiles::AutotileJsonKeys::SplitRatio,
+                                       PhosphorTiles::AutotileJsonKeys::MasterCount,
+                                       PhosphorTiles::AutotileJsonKeys::MaxWindows};
+    for (const QLatin1String field : numericFields) {
+        if (!algoEntry.contains(field)) {
+            algoEntry[field] = algorithmFieldDefault(algorithmId, field);
+        }
+    }
 
     perAlgo[algorithmId] = algoEntry;
     m_settings->setAutotilePerAlgorithmSettings(perAlgo);
@@ -312,27 +324,33 @@ QVariantMap TilingAlgorithmController::algorithmSettingsFor(const QString& algor
     return result;
 }
 
+QVariant TilingAlgorithmController::algorithmFieldDefault(const QString& algorithmId, QLatin1String key) const
+{
+    // Mirror the default derivation in algorithmSettingsFor() exactly (clamped
+    // algorithm defaults, DefaultMasterCount for master count) so "at default"
+    // here means the same value the page would show when no slot exists.
+    PhosphorTiles::TilingAlgorithm* algo = m_registry->algorithm(algorithmId);
+    if (key == PhosphorTiles::AutotileJsonKeys::MaxWindows) {
+        return algo ? std::clamp(algo->defaultMaxWindows(), ConfigDefaults::autotileMaxWindowsMin(),
+                                 ConfigDefaults::autotileMaxWindowsMax())
+                    : PhosphorTiles::AutotileDefaults::DefaultMaxWindows;
+    }
+    if (key == PhosphorTiles::AutotileJsonKeys::MasterCount) {
+        return PhosphorTiles::AutotileDefaults::DefaultMasterCount;
+    }
+    return algo ? std::clamp(algo->defaultSplitRatio(), ConfigDefaults::autotileSplitRatioMin(),
+                             ConfigDefaults::autotileSplitRatioMax())
+                : PhosphorTiles::AutotileDefaults::DefaultSplitRatio;
+}
+
 bool TilingAlgorithmController::fieldMatchesAlgorithmDefault(const QString& algorithmId, QLatin1String key,
                                                              const QVariant& value) const
 {
-    // Mirror the default derivation in algorithmSettingsFor() exactly (clamped
-    // algorithm defaults, DefaultMasterCount for master count) so "reset to
-    // default" here means the same value the page would show when no slot exists.
-    PhosphorTiles::TilingAlgorithm* algo = m_registry->algorithm(algorithmId);
-    if (key == PhosphorTiles::AutotileJsonKeys::MaxWindows) {
-        const int def = algo ? std::clamp(algo->defaultMaxWindows(), ConfigDefaults::autotileMaxWindowsMin(),
-                                          ConfigDefaults::autotileMaxWindowsMax())
-                             : PhosphorTiles::AutotileDefaults::DefaultMaxWindows;
-        return value.toInt() == def;
-    }
-    if (key == PhosphorTiles::AutotileJsonKeys::MasterCount) {
-        return value.toInt() == PhosphorTiles::AutotileDefaults::DefaultMasterCount;
-    }
     if (key == PhosphorTiles::AutotileJsonKeys::SplitRatio) {
-        const qreal def = algo ? std::clamp(algo->defaultSplitRatio(), ConfigDefaults::autotileSplitRatioMin(),
-                                            ConfigDefaults::autotileSplitRatioMax())
-                               : PhosphorTiles::AutotileDefaults::DefaultSplitRatio;
-        return qFuzzyCompare(1.0 + value.toDouble(), 1.0 + def);
+        return qFuzzyCompare(1.0 + value.toDouble(), 1.0 + algorithmFieldDefault(algorithmId, key).toDouble());
+    }
+    if (key == PhosphorTiles::AutotileJsonKeys::MaxWindows || key == PhosphorTiles::AutotileJsonKeys::MasterCount) {
+        return value.toInt() == algorithmFieldDefault(algorithmId, key).toInt();
     }
     return false;
 }
@@ -343,27 +361,41 @@ bool TilingAlgorithmController::writeAlgorithmField(const QString& algorithmId, 
     if (algorithmId.isEmpty())
         return false;
     QVariantMap perAlgo = m_settings->autotilePerAlgorithmSettings();
+    const bool hadSlot = perAlgo.contains(algorithmId);
     QVariantMap entry = perAlgo.value(algorithmId).toMap();
 
-    if (fieldMatchesAlgorithmDefault(algorithmId, key, value)) {
-        // Setting a field back to the algorithm's own default is not a
-        // customization: persisting it would leave a slot the profile diff
-        // reports as a change the user never made. Drop the field instead, and
-        // prune the whole entry when nothing customized (including customParams)
-        // remains. A field that was never stored means there is nothing to undo.
-        if (!entry.contains(key))
-            return false;
-        entry.remove(key);
-    } else {
-        if (entry.contains(key) && entry.value(key) == value)
-            return false;
-        entry[key] = value;
+    if (entry.contains(key) && entry.value(key) == value)
+        return false;
+
+    // Persistence cannot represent a thin slot: the sanitize pass in
+    // Settings::setAutotilePerAlgorithmSettings() materializes every missing
+    // numeric field with the GENERIC schema defaults, so a dropped field read
+    // back as the wrong value for any algorithm whose own default differs
+    // (centered-master's max windows 7 came back as 5, collapsing the write
+    // into a silent no-op that never reached the daemon). Store fully
+    // materialized slots instead, filling untouched fields with the
+    // algorithm's own defaults, and express "no customization" as whole-slot
+    // absence — the one state the sanitizer preserves, and the one every
+    // reader (engine restore, refresh fallback, this page) already resolves
+    // to the algorithm's own defaults.
+    entry[key] = value;
+    constexpr std::array fields{PhosphorTiles::AutotileJsonKeys::SplitRatio,
+                                PhosphorTiles::AutotileJsonKeys::MasterCount,
+                                PhosphorTiles::AutotileJsonKeys::MaxWindows};
+    bool allDefault = entry.value(PhosphorTiles::AutotileJsonKeys::CustomParams).toMap().isEmpty();
+    for (const QLatin1String field : fields) {
+        if (!entry.contains(field))
+            entry[field] = algorithmFieldDefault(algorithmId, field);
+        allDefault = allDefault && fieldMatchesAlgorithmDefault(algorithmId, field, entry.value(field));
     }
 
-    if (entry.isEmpty())
+    if (allDefault) {
+        if (!hadSlot)
+            return false; // a slot that would only echo the defaults is never authored
         perAlgo.remove(algorithmId);
-    else
+    } else {
         perAlgo[algorithmId] = entry;
+    }
     m_settings->setAutotilePerAlgorithmSettings(perAlgo);
     return true;
 }

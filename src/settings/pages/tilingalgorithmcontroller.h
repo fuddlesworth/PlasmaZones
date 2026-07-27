@@ -109,15 +109,21 @@ Q_SIGNALS:
 
 private:
     QVariantMap savedCustomParams(const QString& algorithmId) const;
-    /// True when @p value equals the algorithm's own default for @p key
-    /// (split ratio / master count / max windows), using the same clamped
-    /// defaults algorithmSettingsFor() seeds. Unknown keys are never defaults.
+    /// The algorithm's own default for @p key (split ratio / master count /
+    /// max windows), clamped exactly as algorithmSettingsFor() seeds it.
+    QVariant algorithmFieldDefault(const QString& algorithmId, QLatin1String key) const;
+    /// True when @p value equals algorithmFieldDefault() for @p key.
+    /// Unknown keys are never defaults.
     bool fieldMatchesAlgorithmDefault(const QString& algorithmId, QLatin1String key, const QVariant& value) const;
     /// Read-modify-write a single key in the per-algorithm settings entry,
-    /// preserving the other keys (incl. customParams). Writing a value equal to
-    /// the algorithm's default instead drops the key (and prunes the entry when
-    /// nothing customized remains) so a default never persists as a spurious
-    /// profile-diff row. Returns false (no-op) when nothing changed on disk.
+    /// preserving the other keys (incl. customParams). Always stores a fully
+    /// materialized slot (untouched fields filled with the algorithm's own
+    /// defaults) because the Settings sanitize pass refills missing fields
+    /// with the generic schema defaults, which are wrong for algorithms whose
+    /// own defaults differ. A slot whose every field matches the algorithm's
+    /// defaults (and has no customParams) is pruned instead, so an
+    /// uncustomized algorithm never surfaces as a spurious profile-diff row.
+    /// Returns false (no-op) when nothing changed on disk.
     bool writeAlgorithmField(const QString& algorithmId, QLatin1String key, const QVariant& value);
 
     ISettings* m_settings = nullptr;
