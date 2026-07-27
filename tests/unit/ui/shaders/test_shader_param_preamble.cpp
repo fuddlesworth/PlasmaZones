@@ -182,12 +182,10 @@ private Q_SLOTS:
         QVERIFY(tmp.isValid());
         const QByteArray meta =
             R"({"id":"t","name":"t","fragmentShader":"effect.frag","parameters":[{"id":"a-b","name":"a-b","group":"g","type":"float","default":0,"slot":0},{"id":"good","name":"good","group":"g","type":"float","default":0}]})";
-        QFile f(QDir(tmp.path()).filePath(QStringLiteral("metadata.json")));
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(meta);
-        f.close();
-
-        const ShaderRegistry::ShaderInfo info = ShaderRegistry::parsePackMetadata(tmp.path());
+        // Through the checked parsePack helper, not a hand-rolled unchecked
+        // write, so a short/failed metadata write can't silently pass as an
+        // empty parse.
+        const ShaderRegistry::ShaderInfo info = parsePack(tmp, meta);
         int badSlot = -99, goodSlot = -99;
         for (const ShaderRegistry::ParameterInfo& p : info.parameters) {
             if (p.id == QLatin1String("a-b")) {
@@ -311,7 +309,7 @@ private Q_SLOTS:
         QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("shaders")));
         QFile frag(tmp.filePath(QStringLiteral("shaders/effect.frag")));
         QVERIFY(frag.open(QIODevice::WriteOnly));
-        frag.write(QByteArrayLiteral("// frag\n"));
+        QVERIFY(frag.write(QByteArrayLiteral("// frag\n")) > 0);
         frag.close();
 
         const ShaderRegistry::ShaderInfo info = parsePack(
@@ -331,7 +329,7 @@ private Q_SLOTS:
         const QString target = outside.filePath(QStringLiteral("evil.frag"));
         QFile t(target);
         QVERIFY(t.open(QIODevice::WriteOnly));
-        t.write(QByteArrayLiteral("// evil\n"));
+        QVERIFY(t.write(QByteArrayLiteral("// evil\n")) > 0);
         t.close();
         QVERIFY(QFile::link(target, tmp.filePath(QStringLiteral("effect.frag"))));
 

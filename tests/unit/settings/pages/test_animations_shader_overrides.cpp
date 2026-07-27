@@ -47,6 +47,7 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 /// (a slot forgetting IsolatedConfigGuard writes real user config). Slots
 /// unpack it with a structured binding so their bodies keep the plain
 /// `c` / `registry` / `settings` names.
+namespace {
 struct ControllerFixture
 {
     PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
@@ -54,6 +55,7 @@ struct ControllerFixture
     PhosphorAnimationShaders::AnimationShaderRegistry registry;
     PlasmaZones::AnimationsPageController c{&registry, &settings};
 };
+} // namespace
 
 class TestAnimationsShaderOverrides : public QObject
 {
@@ -183,7 +185,7 @@ private Q_SLOTS:
     /// succeeds.
     void setShaderOverride_rejectsUnknownEffectIdWithPopulatedRegistry()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
         if (!QDir(dataDir).exists())
             QSKIP("data/animations not found — running outside source tree");
 
@@ -219,7 +221,7 @@ private Q_SLOTS:
     /// hasEffect is false for every id.
     void resolvedShaderProfile_blanksInapplicablePersistedEffect()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
         if (!QDir(dataDir).exists())
             QSKIP("data/animations not found — running outside source tree");
 
@@ -311,7 +313,7 @@ private Q_SLOTS:
     /// appearance-leg case above.
     void resolvedShaderProfile_blanksStaleGeometryPackOnMoveLeaf()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
         if (!QDir(dataDir).exists())
             QSKIP("data/animations not found — running outside source tree");
 
@@ -343,7 +345,7 @@ private Q_SLOTS:
     /// crossfade leg does not offer the move pack.
     void availableShaderEffectsForPath_moveLeafOffersOnlyDragShaders()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
         if (!QDir(dataDir).exists())
             QSKIP("data/animations not found — running outside source tree");
 
@@ -785,7 +787,7 @@ private Q_SLOTS:
     /// left the suite green while a typo'd id flowed into the persisted tree.
     void setShaderOverrideOnPaths_rejectsUnknownEffectIdWithPopulatedRegistry()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
         if (!QDir(dataDir).exists())
             QSKIP("data/animations not found — running outside source tree");
 

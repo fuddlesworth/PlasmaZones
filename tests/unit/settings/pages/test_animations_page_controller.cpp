@@ -5,19 +5,17 @@
  * @file test_animations_page_controller.cpp
  * @brief AnimationsPageController behaviour pins: path discovery,
  *        override CRUD, the batch and scoped dirty-state announcements,
- *        the path-traversal gate, the disk-read normalisation, the
- *        shader-leg support gate, the stock-animation suppression mirror,
- *        and the spring-slider bounds.
+ *        the path-traversal gate, the disk-read normalisation, and the
+ *        spring-slider bounds.
  *
  * Pins the file-per-path persistence model: setOverride writes one JSON
  * file under `<userProfilesDir>/<path>.json`, clearOverride deletes it,
  * resolvedProfile walks the parent chain and fills library defaults.
  * How that walk stays honest against the process-wide
  * PhosphorProfileRegistry is pinned by the companion
- * test_animations_profile_store_sync.cpp.
- * The suppression-mirror slots pin `stockSuppressedEvents` (the
- * settings-side twin of the compositor's syncStockEffectSuppression
- * ownership gate) and its NOTIFY inputs.
+ * test_animations_profile_store_sync.cpp. The stock-animation suppression
+ * mirror (`stockSuppressedEvents`) moved to its own companion,
+ * test_animations_suppression_mirror.cpp.
  *
  * Uses `setUserProfilesDirOverride()` to redirect override-file I/O into
  * a tmpdir, and `IsolatedConfigGuard` where a real Settings is needed, so
@@ -30,6 +28,8 @@
  *   - test_animations_motion_sets.cpp      — motion-set CRUD and async discard
  *   - test_animations_presets.cpp          — the user-preset library
  *   - test_animations_shader_overrides.cpp — shader-effect overrides
+ *   - test_animations_suppression_mirror.cpp — the stock-animation suppression mirror
+ *   - test_animations_group_writes.cpp     — the timing-side group writers
  *   - test_animation_page_scope.cpp        — the page-scope root tables
  */
 
@@ -40,17 +40,13 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
-#include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/ShaderProfile.h>
-#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAnimation/Spring.h>
 
 #include "config/settings.h"
@@ -78,11 +74,13 @@ class TestAnimationsPageController : public QObject
 
 private Q_SLOTS:
 
-    /// The registry-backed slots below publish a stack-local registry as the
-    /// PROCESS-WIDE default. Catch a leaked publish at its source rather than
-    /// as a mystery failure in whichever slot happens to run next — the same
-    /// guard libs/phosphor-animation/tests/test_phosphorprofileregistry.cpp
-    /// uses.
+    /// No slot in THIS file publishes a stack-local registry as the
+    /// process-wide default any more (those slots moved to the shader-overrides
+    /// and suppression-mirror companions). This stays as a cross-test tripwire:
+    /// it catches a registry another test in the same binary leaked as the
+    /// default and failed to clear, surfacing it here at init() rather than as
+    /// a mystery failure in whichever slot runs next — the same guard
+    /// libs/phosphor-animation/tests/test_phosphorprofileregistry.cpp uses.
     void init()
     {
         QCOMPARE(PhosphorAnimation::PhosphorProfileRegistry::defaultRegistry(), nullptr);

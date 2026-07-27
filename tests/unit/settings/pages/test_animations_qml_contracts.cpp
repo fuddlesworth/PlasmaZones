@@ -84,7 +84,7 @@ private Q_SLOTS:
                            "\\s*settingsController\\.animationsPage\\s*(?![.A-Za-z0-9_])"));
 
         QSet<QString> used;
-        int aliasesResolved = 0;
+        QSet<QString> aliasNames;
         for (const QString& rootDir : kQmlRoots) {
             QDirIterator dirIt(rootDir, QStringList{QStringLiteral("*.qml")}, QDir::Files,
                                QDirIterator::Subdirectories);
@@ -109,8 +109,7 @@ private Q_SLOTS:
                 used.unite(namesUsedOn(src, QStringLiteral("animationsController")));
                 auto aliasIt = aliasRe.globalMatch(src);
                 while (aliasIt.hasNext()) {
-                    aliasIt.next();
-                    ++aliasesResolved;
+                    aliasNames.insert(aliasIt.next().captured(1));
                 }
             }
         }
@@ -120,13 +119,21 @@ private Q_SLOTS:
         // means the scrape broke, not that the call sites went away.
         QVERIFY2(used.size() >= 15,
                  qPrintable(QStringLiteral("scraped only %1 animationsPage names from the QML tree").arg(used.size())));
-        // At-least-one, not the observed count: a non-vacuity floor on the alias
-        // DECLARATION scrape, not a pin on how many aliases the tree has. The
-        // names reached through an alias are covered by the tree-wide
-        // `animationsController` receiver above; this counter only proves the
-        // alias regex still matches something, so that a rename of the alias
-        // property reddens the build instead of silently dropping the receiver.
-        QVERIFY2(aliasesResolved >= 1, "the alias regex matched nothing — the alias receiver name may have changed");
+        // The names reached through an alias are covered by the tree-wide
+        // `animationsController` receiver scraped above — but ONLY because every
+        // alias to animationsPage is in fact named `animationsController`. Use
+        // the captured alias names to hold that assumption honest: a new alias
+        // under a different name would slip past the hardcoded receiver above and
+        // leave its call sites unchecked, so assert every captured name is the
+        // one the scrape covers. This also floors non-vacuity — an empty set
+        // means the alias regex matched nothing.
+        QVERIFY2(!aliasNames.isEmpty(), "the alias regex matched nothing — the alias receiver name may have changed");
+        for (const QString& alias : aliasNames) {
+            QVERIFY2(alias == QLatin1String("animationsController"),
+                     qPrintable(QStringLiteral("a new alias '%1' targets animationsPage, but the tree-wide scrape "
+                                               "above only covers 'animationsController' — add it there")
+                                    .arg(alias)));
+        }
 
         AnimationsPageController c;
         const QMetaObject* meta = c.metaObject();
@@ -361,10 +368,33 @@ private Q_SLOTS:
         // but is a DIFFERENT route with a set-capable bridge the animations
         // controller never provides, so sweeping the whole directory would
         // demand its API of the wrong controller.
-        const QStringList routeFiles{
-            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserPage.qml"),
-            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserCard.qml"),
-            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml")};
+        const QString shadersDir = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders");
+        const QStringList routeFiles{shadersDir + QStringLiteral("/ShaderBrowserPage.qml"),
+                                     shadersDir + QStringLiteral("/ShaderBrowserCard.qml"),
+                                     shadersDir + QStringLiteral("/ShaderBrowserDetailDialog.qml")};
+        // Completeness guard against the hardcoded list drifting: any OTHER
+        // *.qml in this directory that talks to `bridge.` is a browser-route
+        // file the list forgot, and its calls would go unchecked. The
+        // ShaderSetsPage route is the documented exception — a different route
+        // whose set-capable bridge (applySet/removeSet/updateSet/…) the
+        // animations controller never provides. ShaderSetsPage.qml and its
+        // ShaderSetCard delegate both belong to it.
+        const QSet<QString> setsRouteExclusions{QStringLiteral("ShaderSetsPage.qml"),
+                                                QStringLiteral("ShaderSetCard.qml")};
+        {
+            static const QRegularExpression bridgeUseRe(QStringLiteral("\\bbridge\\."));
+            QDirIterator sweep(shadersDir, QStringList{QStringLiteral("*.qml")}, QDir::Files);
+            while (sweep.hasNext()) {
+                const QString path = sweep.next();
+                if (routeFiles.contains(path) || setsRouteExclusions.contains(QFileInfo(path).fileName())) {
+                    continue;
+                }
+                QVERIFY2(!readFile(path).contains(bridgeUseRe),
+                         qPrintable(QStringLiteral("%1 uses bridge.* but is not in routeFiles — add it or exclude it "
+                                                   "like the ShaderSetsPage route")
+                                        .arg(QFileInfo(path).fileName())));
+            }
+        }
         QSet<QString> used;
         static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
         static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
