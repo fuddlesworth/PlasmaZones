@@ -174,11 +174,12 @@ public:
     /// belongs to the other mode; see m_pendingUnminimizeUnfloat.
     void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                bool minimized);
+    void retryVisibleMinimizeFloats();
 
     /// Whether snap owns a temporary minimize-float for @p windowId.
     bool isMinimizeFloated(const QString& windowId) const
     {
-        return m_minimizeFloatedWindows.contains(windowId);
+        return m_minimizeFloatedWindows.contains(windowId) || m_unfloatInFlight.contains(windowId);
     }
 
     /// Drop @p windowId from the minimize-float set and cancel either deferred
@@ -188,6 +189,7 @@ public:
     {
         cancelPendingMinimizeFloat(windowId);
         cancelPendingUnminimizeUnfloat(windowId);
+        m_unfloatRetryAttempts.remove(windowId);
         const bool owned = m_minimizeFloatedWindows.remove(windowId);
         return m_unfloatInFlight.remove(windowId) > 0 || owned;
     }
@@ -195,6 +197,11 @@ public:
     bool hasPendingUnminimizeUnfloat(const QString& windowId) const
     {
         return m_pendingUnminimizeUnfloat.contains(windowId);
+    }
+
+    bool hasUnfloatInFlight(const QString& windowId) const
+    {
+        return m_unfloatInFlight.contains(windowId);
     }
 
     /// Cancel a pending deferred unminimize→unfloat commit. No-op if no timer
@@ -239,6 +246,7 @@ private:
     /// immediately when cross-mode adoption must replace the other mode's
     /// geometry at the unminimize edge.
     void commitUnminimizeUnfloat(KWin::EffectWindow* window, const QString& windowId, const QString& screenId);
+    void scheduleUnminimizeUnfloatRetry(const QString& windowId);
 
     PlasmaZonesEffect* m_effect;
     // Snapping focus-follows-mouse (Snapping.Behavior.FocusFollowsMouse). When
@@ -273,6 +281,7 @@ private:
     QSet<QString> m_minimizeFloatedWindows;
     QHash<QString, quint64> m_unfloatInFlight;
     quint64 m_unfloatRequestGeneration = 0;
+    QHash<QString, int> m_unfloatRetryAttempts;
     // Snap membership retained only as minimize provenance while daemon-owned
     // visual placement state is unavailable.
     QSet<QString> m_restartSnapCandidates;

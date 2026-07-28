@@ -323,6 +323,22 @@ void AutotileEngine::removeWindow(const QString& windowId)
 {
     m_windowMinSizes.remove(windowId);
     m_overflow.clearOverflow(windowId);
+
+    // Purge a closed window from pending initial orders even when it was a
+    // minimized placeholder and therefore never received an engine key.
+    for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end();) {
+        pit.value().removeAll(windowId);
+        if (pit.value().isEmpty()) {
+            m_pendingOrderGeneration.remove(pit.key());
+            m_strictInitialOrderScreens.remove(pit.key());
+            pit = m_pendingInitialOrders.erase(pit);
+        } else {
+            const QString screen = pit.key();
+            ++pit; // advance before potential erase by helper
+            cleanupPendingOrderIfResolved(screen);
+        }
+    }
+
     const TilingStateKey key = m_states.takeWindow(windowId);
     if (key.screenId.isEmpty()) {
         return;
@@ -336,22 +352,6 @@ void AutotileEngine::removeWindow(const QString& windowId)
         // removal runs, and by the save-time snapshot for still-open windows. The
         // reopen consumes that record in insertWindow().
         state->removeWindow(windowId);
-    }
-
-    // Purge closed window from pending initial orders.
-    // If a pre-seeded window closes before arriving at the autotile engine,
-    // the pending order would leak indefinitely without this cleanup.
-    for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end();) {
-        pit.value().removeAll(windowId);
-        if (pit.value().isEmpty()) {
-            m_pendingOrderGeneration.remove(pit.key());
-            m_strictInitialOrderScreens.remove(pit.key());
-            pit = m_pendingInitialOrders.erase(pit);
-        } else {
-            const QString screen = pit.key();
-            ++pit; // advance before potential erase by helper
-            cleanupPendingOrderIfResolved(screen);
-        }
     }
 }
 

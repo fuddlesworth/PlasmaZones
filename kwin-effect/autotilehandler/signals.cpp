@@ -34,6 +34,9 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
+static constexpr int kAutotileUnfloatRetryDelayMs = 250;
+static constexpr int kAutotileMaxUnfloatRetries = 3;
+
 // Debounce window for minimize→float commits. KWin can transiently flip a
 // tiled window's isMinimized() state to true and back within a few
 // milliseconds when a plasmashell notification popup rearranges stacking.
@@ -121,8 +124,72 @@ void AutotileHandler::dispatchUnminimizeUnfloat(const QString& windowId, const Q
                     m_minimizeFloatedWindows.insert(windowId);
                     qCWarning(lcEffect) << "Autotile: unfloat request failed for" << windowId << ':'
                                         << w->error().message();
+                    scheduleUnminimizeUnfloatRetry(windowId);
+                    return;
                 }
+
+                auto* stateWatcher = new QDBusPendingCallWatcher(
+                    PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                               QStringLiteral("queryWindowFloating"), {windowId}),
+                    this);
+                connect(stateWatcher, &QDBusPendingCallWatcher::finished, this,
+                        [this, windowId, requestGeneration](QDBusPendingCallWatcher* stateCall) {
+                            stateCall->deleteLater();
+                            const auto current = m_unfloatInFlight.constFind(windowId);
+                            if (current == m_unfloatInFlight.constEnd() || current.value() != requestGeneration) {
+                                return;
+                            }
+                            QDBusPendingReply<bool> reply = *stateCall;
+                            if (!reply.isValid()) {
+                                m_unfloatInFlight.remove(windowId);
+                                m_minimizeFloatedWindows.insert(windowId);
+                                scheduleUnminimizeUnfloatRetry(windowId);
+                                return;
+                            }
+                            if (reply.value()) {
+                                m_unfloatInFlight.remove(windowId);
+                                m_minimizeFloatedWindows.insert(windowId);
+                                scheduleUnminimizeUnfloatRetry(windowId);
+                                return;
+                            }
+                            m_unfloatInFlight.remove(windowId);
+                            m_minimizeFloatedWindows.remove(windowId);
+                            m_untiledMinimizeFloats.remove(windowId);
+                            m_unfloatRetryAttempts.remove(windowId);
+                            m_effect->slotWindowFloatingChanged(windowId, false, QString());
+                        });
             });
+}
+
+void AutotileHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
+{
+    if (!m_effect->m_daemonGate.serviceRegistered || m_pendingUnminimizeUnfloat.contains(windowId)
+        || m_unfloatRetryAttempts.value(windowId) >= kAutotileMaxUnfloatRetries) {
+        return;
+    }
+    KWin::EffectWindow* window = m_effect->findWindowById(windowId);
+    if (!window || window->isDeleted() || window->isMinimized()) {
+        return;
+    }
+    QPointer<KWin::EffectWindow> safeWindow = window;
+    ++m_unfloatRetryAttempts[windowId];
+    m_pendingUnminimizeUnfloat.schedule(windowId, kAutotileUnfloatRetryDelayMs, [this, windowId, safeWindow]() {
+        if (!safeWindow || safeWindow->isDeleted() || safeWindow->isMinimized()) {
+            return;
+        }
+        const QString screenId = m_effect->getWindowScreenId(safeWindow.data());
+        if (!m_minimizeFloatedWindows.contains(windowId)) {
+            return;
+        }
+        if (!m_autotileScreens.contains(screenId)) {
+            if (SnapHandler* snap = m_effect->snapHandler()) {
+                snap->handleMinimizeChanged(safeWindow.data(), windowId, screenId, false);
+            }
+            return;
+        }
+        dispatchUnminimizeUnfloat(windowId, screenId);
+        notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/false);
+    });
 }
 
 void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
@@ -402,6 +469,13 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
     }
 
     m_autotileScreens = newScreens;
+    QSet<QString> completedDeferredRoutes;
+    bool completedInitialQuery = false;
+    if (m_initialScreenQueryPending) {
+        m_initialScreenQueryPending = false;
+        completedDeferredRoutes = completeDeferredWindowRoutes();
+        completedInitialQuery = true;
+    }
 
     // A desktop switch enters even with empty `added`: when both desktops'
     // autotile sets are IDENTICAL the engine re-emits the unchanged set with
@@ -556,7 +630,14 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // Batch-notify all windows on newly-added autotile screens in one D-Bus
             // call (windowsOpenedBatch) instead of per-window windowOpened round-trips.
             // saveAndRecordPreAutotileGeometry is called inside notifyWindowsAddedBatch.
-            notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true,
+            QList<KWin::EffectWindow*> batchWindows;
+            batchWindows.reserve(windows.size());
+            for (KWin::EffectWindow* window : windows) {
+                if (window && !completedDeferredRoutes.contains(m_effect->getWindowId(window))) {
+                    batchWindows.append(window);
+                }
+            }
+            notifyWindowsAddedBatch(batchWindows, added, /*resetNotified=*/true,
                                     /*enteringAutotile=*/true);
             qCInfo(lcEffect) << "Saved pre-autotile geometries for screens:" << added;
 
@@ -586,12 +667,20 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                             return;
                         }
                         const PhosphorProtocol::PreTileGeometryList entries = reply.value();
+                        QHash<QString, QHash<QString, int>> entryCounts;
+                        for (const auto& entry : entries) {
+                            if (added.contains(entry.screenId) && entry.width > 0 && entry.height > 0) {
+                                ++entryCounts[entry.appId][entry.screenId];
+                            }
+                        }
                         const auto allWindows = KWin::effects->stackingOrder();
                         for (const auto& entry : entries) {
                             const QString stableId = entry.appId;
                             QRectF geom = QRectF(entry.toRect());
-                            if (geom.width() <= 0 || geom.height() <= 0)
+                            if (geom.width() <= 0 || geom.height() <= 0 || !added.contains(entry.screenId)
+                                || entryCounts.value(stableId).value(entry.screenId) != 1) {
                                 continue;
+                            }
                             // Find all windows on added screens matching this stableId.
                             // If multiple windows share the same stableId (e.g., 3 Dolphin instances),
                             // the daemon's single geometry is ambiguous — skip the override entirely.
@@ -605,7 +694,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                                     continue;
                                 if (::PhosphorIdentity::WindowId::extractAppId(m_effect->getWindowId(ew)) != stableId)
                                     continue;
-                                if (!added.contains(m_effect->getWindowScreenId(ew)))
+                                if (m_effect->getWindowScreenId(ew) != entry.screenId)
                                     continue;
                                 if (matchedWindow) {
                                     ambiguous = true;
@@ -647,6 +736,9 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
         } // else (genuine user toggle)
     }
 
+    if (completedInitialQuery) {
+        m_effect->snapHandler()->retryVisibleMinimizeFloats();
+    }
     qCInfo(lcEffect) << "Autotile screens changed:" << m_autotileScreens;
 }
 
@@ -703,10 +795,19 @@ void AutotileHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, cons
     // (user float, or another mode's minimize-float record) keeps its float
     // and its owner — claiming it would make our unminimize path force-tile
     // a window whose float we did not create.
-    if (m_effect->isWindowFloating(windowId)) {
+    if (m_minimizeFloatedWindows.contains(windowId)) {
+        if (enteringAutotile) {
+            m_untiledMinimizeFloats.insert(windowId);
+            if (m_effect->m_daemonGate.serviceRegistered) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
+                    QStringLiteral("setWindowFloatingForScreen"));
+            }
+        }
         return;
     }
-    if (m_minimizeFloatedWindows.contains(windowId)) {
+    if (m_effect->isWindowFloating(windowId)) {
         return;
     }
     m_minimizeFloatedWindows.insert(windowId);
@@ -744,6 +845,7 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         // commit: the window never unfloated, so it is still minimize-floated
         // and the isWindowFloating skip below covers the rest.
         cancelPendingUnminimizeUnfloat(windowId);
+        m_unfloatRetryAttempts.remove(windowId);
         if (m_unfloatInFlight.remove(windowId)) {
             m_minimizeFloatedWindows.insert(windowId);
             qCInfo(lcEffect) << "Autotile: re-minimize countermanding in-flight unfloat:" << windowId;

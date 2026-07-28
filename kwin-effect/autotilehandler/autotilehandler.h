@@ -113,12 +113,17 @@ public:
     {
         cancelPendingUnminimizeUnfloat(windowId);
         m_untiledMinimizeFloats.remove(windowId);
+        m_unfloatRetryAttempts.remove(windowId);
         const bool owned = m_minimizeFloatedWindows.remove(windowId);
         return m_unfloatInFlight.remove(windowId) > 0 || owned;
     }
     bool hasPendingUnminimizeUnfloat(const QString& windowId) const
     {
         return m_pendingUnminimizeUnfloat.contains(windowId);
+    }
+    bool hasUnfloatInFlight(const QString& windowId) const
+    {
+        return m_unfloatInFlight.contains(windowId);
     }
     /// Drop a destroyed window's desktop-move geometry stash. Separate from
     /// onWindowClosed because the desktop-MOVE path calls onWindowClosed
@@ -128,6 +133,11 @@ public:
     {
         m_savedPreAutotileForDesktopMove.remove(windowId);
     }
+    bool isScreenQueryPending() const
+    {
+        return m_initialScreenQueryPending;
+    }
+    void deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore);
     void onDaemonReady();
 
     /**
@@ -333,6 +343,8 @@ private:
     /// Returns whether the daemon request may be dispatched.
     bool beginUnminimizeUnfloat(const QString& windowId);
     void dispatchUnminimizeUnfloat(const QString& windowId, const QString& screenId);
+    void scheduleUnminimizeUnfloatRetry(const QString& windowId);
+    QSet<QString> completeDeferredWindowRoutes();
 
     /**
      * @brief Save the pre-autotile free-float geometry for @p windowId.
@@ -414,6 +426,12 @@ private:
     quint64 m_screenQueryGeneration = 0;
     bool m_initialScreenQueryPending = false;
     QSet<QString> m_pendingFreshWindows;
+    struct DeferredWindowRoute
+    {
+        QPointer<KWin::EffectWindow> window;
+        bool canSnapRestore = false;
+    };
+    QHash<QString, DeferredWindowRoute> m_deferredWindowRoutes;
     /// Pre-autotile frame geometry, keyed [screenId][windowId].
     ///
     /// Ownership: this is a local cache. The daemon's unified
@@ -459,6 +477,7 @@ private:
     /// A re-minimize countermand moves the window back to the active set.
     QHash<QString, quint64> m_unfloatInFlight;
     quint64 m_unfloatRequestGeneration = 0;
+    QHash<QString, int> m_unfloatRetryAttempts;
     /// Subset of m_minimizeFloatedWindows claimed at batch-announce time
     /// (already minimized when the screen entered autotile). These windows
     /// still carry geometry from the prior mode, so their unminimize commits

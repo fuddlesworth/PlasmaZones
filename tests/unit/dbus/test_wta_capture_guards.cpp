@@ -372,6 +372,59 @@ private Q_SLOTS:
         wta->setWindowRegistry(nullptr);
     }
 
+    void testMinimizedCloseRebindsChangedAppPrefixWithoutLosingPlacement()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        PhosphorEngine::WindowRegistry registry;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        wta->setWindowRegistry(&registry);
+
+        const QString instanceId = QStringLiteral("renamed-minimized-instance");
+        const QString oldWindowId = QStringLiteral("oldclass|renamed-minimized-instance");
+        const QString currentWindowId = QStringLiteral("newclass|renamed-minimized-instance");
+        const QString screenId = QStringLiteral("DP-1");
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("newclass");
+        metadata.virtualDesktop = 3;
+        metadata.activity = QStringLiteral("activity-a");
+        metadata.isMinimized = true;
+        registry.upsert(instanceId, metadata);
+
+        PhosphorEngine::WindowPlacement placement;
+        placement.windowId = oldWindowId;
+        placement.appId = QStringLiteral("oldclass");
+        placement.screenId = screenId;
+        placement.virtualDesktop = 1;
+        placement.activity = QStringLiteral("old-activity");
+        placement.freeGeometryByScreen.insert(screenId, QRect(100, 120, 900, 700));
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        slot.zoneIds = QStringList{QUuid::createUuid().toString()};
+        placement.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        QVERIFY(wta->service()->placementStore().record(placement));
+
+        wta->captureWindowPlacement(currentWindowId, screenId);
+
+        QCOMPARE(wta->service()->placementStore().size(), 1);
+        const auto stored = wta->service()->placementStore().peekExact(currentWindowId);
+        QVERIFY(stored.has_value());
+        QCOMPARE(stored->windowId, currentWindowId);
+        QCOMPARE(stored->appId, QStringLiteral("newclass"));
+        QCOMPARE(stored->virtualDesktop, 3);
+        QCOMPARE(stored->activity, QStringLiteral("activity-a"));
+        QCOMPARE(stored->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()), slot);
+        QCOMPARE(stored->freeGeometryFor(screenId), placement.freeGeometryFor(screenId));
+
+        wta->setWindowRegistry(nullptr);
+    }
+
     // The engine-miss CLOSE fallback carries the same tile-rect poison guard
     // as the primary capture path: a window tiled by autotile, handed off
     // (the tiled bit clears; the engine's last-applied rect memory

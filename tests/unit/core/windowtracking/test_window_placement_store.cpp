@@ -171,12 +171,12 @@ private Q_SLOTS:
     void testClearAndRemoveIf()
     {
         WindowPlacementStore store;
-        store.record(make(QStringLiteral("a|1"), QStringLiteral("a"), WindowPlacement::stateSnapped(),
+        store.record(make(QStringLiteral("a|a-instance"), QStringLiteral("a"), WindowPlacement::stateSnapped(),
                           WindowPlacement::snapEngineId(), QStringLiteral("DP-1")));
-        store.record(make(QStringLiteral("b|1"), QStringLiteral("b"), WindowPlacement::stateSnapped(),
+        store.record(make(QStringLiteral("b|b-instance"), QStringLiteral("b"), WindowPlacement::stateSnapped(),
                           WindowPlacement::snapEngineId(), QStringLiteral("DP-2")));
-        store.clear(QStringLiteral("a|1"));
-        QVERIFY(!store.contains(QStringLiteral("a|1"), QStringLiteral("a")));
+        store.clear(QStringLiteral("a|a-instance"));
+        QVERIFY(!store.contains(QStringLiteral("a|a-instance"), QStringLiteral("a")));
         QCOMPARE(store.size(), 1);
 
         const int removed = store.removeIf([](const WindowPlacement& p) {
@@ -217,9 +217,9 @@ private Q_SLOTS:
     void testSerializeHonorsKeepPredicate()
     {
         WindowPlacementStore store;
-        store.record(make(QStringLiteral("a|1"), QStringLiteral("a"), WindowPlacement::stateSnapped(),
+        store.record(make(QStringLiteral("a|a-instance"), QStringLiteral("a"), WindowPlacement::stateSnapped(),
                           WindowPlacement::snapEngineId(), QStringLiteral("DP-1")));
-        store.record(make(QStringLiteral("b|1"), QStringLiteral("b"), WindowPlacement::stateSnapped(),
+        store.record(make(QStringLiteral("b|b-instance"), QStringLiteral("b"), WindowPlacement::stateSnapped(),
                           WindowPlacement::snapEngineId(), QStringLiteral("DP-2")));
         // keep only DP-1 (mirrors the disabled-context gate).
         const QJsonObject json = store.serialize([](const WindowPlacement& p) {
@@ -469,10 +469,10 @@ private Q_SLOTS:
         // something to restore and drop bare {free, no geometry} residue, so it never
         // reaches disk to crowd the next session's FIFO.
         WindowPlacementStore store;
-        store.record(make(QStringLiteral("good|1"), QStringLiteral("good"), WindowPlacement::stateFloating(),
-                          WindowPlacement::snapEngineId(), QStringLiteral("DP-1")));
+        store.record(make(QStringLiteral("good|good-instance"), QStringLiteral("good"),
+                          WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(), QStringLiteral("DP-1")));
         WindowPlacement residue;
-        residue.windowId = QStringLiteral("noise|1");
+        residue.windowId = QStringLiteral("noise|noise-instance");
         residue.appId = QStringLiteral("noise");
         EngineSlot freeSlot;
         freeSlot.state = WindowPlacement::stateFree();
@@ -502,21 +502,41 @@ private Q_SLOTS:
 
     void testRecord_appIdRenameMovesRecord()
     {
-        // Re-recording the SAME windowId under a NEW appId drops the stale entry from
-        // the old bucket and appends to the new one (mid-session class rename).
+        // Re-recording the SAME live instance under a NEW appId and composite
+        // prefix drops the stale entry from the old bucket and moves it to the
+        // new one (mid-session class rename).
         WindowPlacementStore store;
-        store.record(make(QStringLiteral("x|1"), QStringLiteral("oldapp"), WindowPlacement::stateSnapped(),
+        store.record(make(QStringLiteral("oldapp|1"), QStringLiteral("oldapp"), WindowPlacement::stateSnapped(),
                           WindowPlacement::snapEngineId()));
-        store.record(make(QStringLiteral("x|1"), QStringLiteral("newapp"), WindowPlacement::stateFloating(),
+        store.record(make(QStringLiteral("newapp|1"), QStringLiteral("newapp"), WindowPlacement::stateFloating(),
                           WindowPlacement::snapEngineId()));
 
         QCOMPARE(store.size(), 1); // not duplicated across buckets
         QCOMPARE(store.records().size(), 1); // exactly one record total (old bucket erased)
         // The old appId bucket is gone (empty appId arg = bucket-only check).
         QVERIFY(!store.contains(QString(), QStringLiteral("oldapp")));
-        auto p = store.take(QStringLiteral("x|1"), QStringLiteral("newapp"));
+        auto p = store.take(QStringLiteral("newapp|1"), QStringLiteral("newapp"));
         QVERIFY(p.has_value());
+        QCOMPARE(p->windowId, QStringLiteral("newapp|1"));
         QCOMPARE(p->slotFor(WindowPlacement::snapEngineId()).state, QString(WindowPlacement::stateFloating()));
+    }
+
+    void testTake_prefixMutationUsesOwnInstanceBeforeSiblingFifo()
+    {
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("oldclass|own-instance"), QStringLiteral("oldclass"),
+                          WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId()));
+        store.record(make(QStringLiteral("newclass|sibling"), QStringLiteral("newclass"),
+                          WindowPlacement::stateFloating(), WindowPlacement::snapEngineId()));
+
+        const auto own = store.take(QStringLiteral("newclass|own-instance"), QStringLiteral("newclass"));
+        QVERIFY(own.has_value());
+        QCOMPARE(own->windowId, QStringLiteral("oldclass|own-instance"));
+        QCOMPARE(own->slotFor(WindowPlacement::snapEngineId()).state, QString(WindowPlacement::stateSnapped()));
+
+        const auto sibling = store.take(QStringLiteral("newclass|new-instance"), QStringLiteral("newclass"));
+        QVERIFY(sibling.has_value());
+        QCOMPARE(sibling->windowId, QStringLiteral("newclass|sibling"));
     }
 
     void testRecord_appIdRenameWithOtherBucketsIntact()
@@ -527,7 +547,7 @@ private Q_SLOTS:
         // the emptied bucket is not necessarily the last in hash order.
         WindowPlacementStore store;
         for (int i = 0; i < 5; ++i) {
-            store.record(make(QStringLiteral("keep%1|u").arg(i), QStringLiteral("keep%1").arg(i),
+            store.record(make(QStringLiteral("keep%1|keep-instance-%1").arg(i), QStringLiteral("keep%1").arg(i),
                               WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId()));
         }
         store.record(make(QStringLiteral("w|1"), QStringLiteral("renamefrom"), WindowPlacement::stateTiled(),
@@ -541,7 +561,7 @@ private Q_SLOTS:
         QVERIFY(!store.contains(QString(), QStringLiteral("renamefrom"))); // old bucket erased
         QVERIFY(store.contains(QStringLiteral("w|1"), QStringLiteral("renameto")));
         for (int i = 0; i < 5; ++i) {
-            QVERIFY(store.contains(QStringLiteral("keep%1|u").arg(i))); // unrelated records intact
+            QVERIFY(store.contains(QStringLiteral("keep%1|keep-instance-%1").arg(i))); // unrelated records intact
         }
     }
 
@@ -567,6 +587,32 @@ private Q_SLOTS:
         QVERIFY(store.contains(QStringLiteral("vesktop|u")));
         QVERIFY(store.contains(QStringLiteral("oldclass|u2"))); // drift preserved
         QVERIFY(!store.contains(QStringLiteral("nosep")));
+    }
+
+    void testDeserialize_mergesDuplicateInstanceAcrossPrefixes()
+    {
+        WindowPlacement older = make(QStringLiteral("oldclass|same-instance"), QStringLiteral("oldclass"),
+                                     WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
+        older.sequence = 4;
+        WindowPlacement newer = make(QStringLiteral("newclass|same-instance"), QStringLiteral("newclass"),
+                                     WindowPlacement::stateTiled(), WindowPlacement::autotileEngineId());
+        newer.sequence = 9;
+
+        QJsonObject root;
+        root[QStringLiteral("oldclass")] = QJsonArray{older.toJson()};
+        root[QStringLiteral("newclass")] = QJsonArray{newer.toJson()};
+
+        WindowPlacementStore store;
+        store.deserialize(root);
+
+        QCOMPARE(store.size(), 1);
+        QVERIFY(!store.contains(QString(), QStringLiteral("oldclass")));
+        const auto merged = store.peekExact(QStringLiteral("newclass|same-instance"));
+        QVERIFY(merged.has_value());
+        QCOMPARE(merged->windowId, QStringLiteral("newclass|same-instance"));
+        QCOMPARE(merged->appId, QStringLiteral("newclass"));
+        QCOMPARE(merged->slotFor(WindowPlacement::snapEngineId()).state, QString(WindowPlacement::stateSnapped()));
+        QCOMPARE(merged->slotFor(WindowPlacement::autotileEngineId()).state, QString(WindowPlacement::stateTiled()));
     }
 
     void testTiledRecord_roundTripPreservesOrder()

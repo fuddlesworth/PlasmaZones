@@ -1339,6 +1339,7 @@ private:
      * @return true if the pending order was fully resolved and removed
      */
     bool cleanupPendingOrderIfResolved(const QString& screenId);
+    void schedulePendingOrderTimeout(const QString& screenId, uint64_t generation);
 
     /**
      * @brief Validate that a windowId is not empty, logging a warning if it is

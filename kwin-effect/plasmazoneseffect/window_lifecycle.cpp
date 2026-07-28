@@ -85,7 +85,8 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // shader — that gates on the animation filter (see the window.open block),
     // so the user's "exclude transient windows" animation setting stays
     // authoritative for which windows animate on open.
-    const bool tileableAppWindow = shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized();
+    const bool tileableWindow = shouldHandleWindow(w) && isTileableWindow(w);
+    const bool tileableAppWindow = tileableWindow && !w->isMinimized();
 
     // Whether this window is a snap-restore candidate — it may be
     // teleported into a saved zone moments after opening (instantly from
@@ -147,6 +148,14 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // re-reconcile when the async float/zone syncs land, via the
     // placement-state flush.
     reconcileRuleWindowLayer(windowId, w);
+
+    if (tileableWindow && m_autotileHandler->isScreenQueryPending()) {
+        if (tileableAppWindow) {
+            beginRestoreSuppression(w);
+        }
+        m_autotileHandler->deferWindowRouting(w, canSnapRestore);
+        return;
+    }
 
     bool onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
 

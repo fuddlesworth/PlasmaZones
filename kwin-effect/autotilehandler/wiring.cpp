@@ -8,6 +8,7 @@
 
 #include "autotilehandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "handlers/snaphandler.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -101,7 +102,7 @@ void AutotileHandler::loadSettings()
                 // with the older snapshot.
                 if (m_screensSignalGeneration != generationAtDispatch) {
                     qCDebug(lcEffect) << "Autotile screens: property reply superseded by a live signal, discarding";
-                    m_pendingFreshWindows.clear();
+                    completeDeferredWindowRoutes();
                     return;
                 }
                 QDBusPendingReply<QDBusVariant> reply = *w;
@@ -110,19 +111,27 @@ void AutotileHandler::loadSettings()
                     const QSet<QString> added(screens.begin(), screens.end());
                     m_autotileScreens = added;
                     qCInfo(lcEffect) << "Loaded autotile screens:" << m_autotileScreens;
+                    const QSet<QString> completedDeferredRoutes = completeDeferredWindowRoutes();
 
                     if (!added.isEmpty()) {
                         const auto windows = KWin::effects->stackingOrder();
+                        QList<KWin::EffectWindow*> batchWindows;
+                        batchWindows.reserve(windows.size());
+                        for (KWin::EffectWindow* window : windows) {
+                            if (window && !completedDeferredRoutes.contains(m_effect->getWindowId(window))) {
+                                batchWindows.append(window);
+                            }
+                        }
                         // Batch-notify all windows on autotile screens in one D-Bus call
                         // instead of per-window windowOpened round-trips.
-                        notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true,
+                        notifyWindowsAddedBatch(batchWindows, added, /*resetNotified=*/true,
                                                 /*enteringAutotile=*/false);
                     }
                 } else {
                     qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";
-                    return;
+                    completeDeferredWindowRoutes();
                 }
-                m_pendingFreshWindows.clear();
+                m_effect->snapHandler()->retryVisibleMinimizeFloats();
             });
 }
 

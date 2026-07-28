@@ -36,6 +36,8 @@ namespace PlasmaZones {
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 static constexpr int kSnapMinimizeFloatDebounceMs = kSpuriousMinimizePairMs;
+static constexpr int kSnapUnfloatRetryDelayMs = 250;
+static constexpr int kSnapMaxUnfloatRetries = 3;
 
 SnapHandler::SnapHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
@@ -344,7 +346,8 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
 {
     // Snap-mode-only: the autotile handler runs its own snap-state / float-state
     // machine for autotile screens.
-    if (m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+    const bool autotileScreen = m_effect->autotileHandler()->isAutotileScreen(screenId);
+    if (!minimized && autotileScreen) {
         return;
     }
 
@@ -353,6 +356,7 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
         // commit: the window never unfloated, so it is still minimize-floated
         // and the isWindowFloating skip below covers the rest.
         cancelPendingUnminimizeUnfloat(windowId);
+        m_unfloatRetryAttempts.remove(windowId);
         if (m_unfloatInFlight.remove(windowId)) {
             m_minimizeFloatedWindows.insert(windowId);
             qCInfo(lcEffect) << "Snap: re-minimize countermanding in-flight unfloat:" << windowId;
@@ -362,6 +366,9 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                     QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
                     QStringLiteral("setWindowFloatingForScreen"));
             }
+            return;
+        }
+        if (autotileScreen) {
             return;
         }
         if (m_effect->isWindowFloating(windowId)) {
@@ -535,8 +542,11 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
         };
         auto join = std::make_shared<QueryJoin>();
         QPointer<KWin::EffectWindow> safeWindow = window;
-        const auto onReplyDone = [this, join, safeWindow, windowId]() {
+        const auto onReplyDone = [this, join, safeWindow, windowId, requestGeneration]() {
             if (--join->pending > 0 || join->trackedOrFailed) {
+                return;
+            }
+            if (m_unfloatInFlight.value(windowId) != requestGeneration) {
                 return;
             }
             // Same eligibility guards as slotPendingRestoresAvailable's
@@ -598,8 +608,86 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
                     m_minimizeFloatedWindows.insert(windowId);
                     qCWarning(lcEffect) << "Snap: unfloat request failed for" << windowId << ':'
                                         << w->error().message();
+                    scheduleUnminimizeUnfloatRetry(windowId);
+                    return;
                 }
+
+                auto* stateWatcher = new QDBusPendingCallWatcher(
+                    PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                               QStringLiteral("queryWindowFloating"), {windowId}),
+                    this);
+                connect(stateWatcher, &QDBusPendingCallWatcher::finished, this,
+                        [this, windowId, requestGeneration](QDBusPendingCallWatcher* stateCall) {
+                            stateCall->deleteLater();
+                            const auto current = m_unfloatInFlight.constFind(windowId);
+                            if (current == m_unfloatInFlight.constEnd() || current.value() != requestGeneration) {
+                                return;
+                            }
+                            QDBusPendingReply<bool> reply = *stateCall;
+                            if (!reply.isValid()) {
+                                m_unfloatInFlight.remove(windowId);
+                                m_minimizeFloatedWindows.insert(windowId);
+                                scheduleUnminimizeUnfloatRetry(windowId);
+                                return;
+                            }
+                            if (reply.value()) {
+                                m_unfloatInFlight.remove(windowId);
+                                m_minimizeFloatedWindows.insert(windowId);
+                                scheduleUnminimizeUnfloatRetry(windowId);
+                                return;
+                            }
+                            m_unfloatInFlight.remove(windowId);
+                            m_minimizeFloatedWindows.remove(windowId);
+                            m_unfloatRetryAttempts.remove(windowId);
+                            m_effect->slotWindowFloatingChanged(windowId, false, QString());
+                        });
             });
+}
+
+void SnapHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
+{
+    if (!m_effect->m_daemonGate.serviceRegistered || m_pendingUnminimizeUnfloat.contains(windowId)
+        || m_unfloatRetryAttempts.value(windowId) >= kSnapMaxUnfloatRetries) {
+        return;
+    }
+    KWin::EffectWindow* window = m_effect->findWindowById(windowId);
+    if (!window || window->isDeleted() || window->isMinimized()) {
+        return;
+    }
+    QPointer<KWin::EffectWindow> safeWindow = window;
+    ++m_unfloatRetryAttempts[windowId];
+    m_pendingUnminimizeUnfloat.schedule(windowId, kSnapUnfloatRetryDelayMs, [this, windowId, safeWindow]() {
+        if (!safeWindow || safeWindow->isDeleted() || safeWindow->isMinimized()) {
+            return;
+        }
+        const QString screenId = m_effect->getWindowScreenId(safeWindow.data());
+        if (!m_minimizeFloatedWindows.contains(windowId)) {
+            return;
+        }
+        if (m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+            m_effect->autotileHandler()->slotWindowMinimizedChanged(safeWindow.data());
+            return;
+        }
+        commitUnminimizeUnfloat(safeWindow.data(), windowId, screenId);
+    });
+}
+
+void SnapHandler::retryVisibleMinimizeFloats()
+{
+    const auto windowIds = m_minimizeFloatedWindows.values();
+    for (const QString& windowId : windowIds) {
+        m_unfloatRetryAttempts.remove(windowId);
+        KWin::EffectWindow* window = m_effect->findWindowById(windowId);
+        if (!window || window->isDeleted() || window->isMinimized()) {
+            continue;
+        }
+        const QString screenId = m_effect->getWindowScreenId(window);
+        if (m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+            m_effect->autotileHandler()->slotWindowMinimizedChanged(window);
+            continue;
+        }
+        commitUnminimizeUnfloat(window, windowId, screenId);
+    }
 }
 
 void SnapHandler::slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,

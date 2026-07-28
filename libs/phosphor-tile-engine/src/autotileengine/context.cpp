@@ -27,6 +27,7 @@
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorEngine/PerScreenKeys.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -375,13 +376,17 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // when the windows actually do open. Leave the advisory order in
         // pendingInitialOrders for insertWindow() to consult on arrival.
         if (m_pendingInitialOrders.contains(screenId) && m_strictInitialOrderScreens.contains(screenId)) {
-            const QStringList order = m_pendingInitialOrders.take(screenId);
-            m_pendingOrderGeneration.remove(screenId);
-            m_strictInitialOrderScreens.remove(screenId);
+            const QStringList order = m_pendingInitialOrders.value(screenId);
+            const auto* registry = dynamic_cast<const PhosphorEngine::WindowRegistry*>(m_windowRegistry);
+            bool hasDeferredMinimizedWindow = false;
             PhosphorTiles::TilingState* ts = tilingStateForScreen(screenId);
             if (ts) {
                 const TilingStateKey stateKey = currentKeyForScreen(screenId);
                 for (const QString& windowId : order) {
+                    if (registry && registry->isMinimized(windowId)) {
+                        hasDeferredMinimizedWindow = true;
+                        continue;
+                    }
                     if (!ts->containsWindow(windowId)) {
                         ts->addWindow(windowId);
                         // Register engine tracking immediately — without the
@@ -394,7 +399,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         // of truth). Without this, windows added from pending orders lose
                         // their floating state because windowOpened's floating restore is
                         // skipped when the window already exists in the PhosphorTiles::TilingState.
-                        // Exact record only: pending orders are built from LIVE session
+                        // Same-instance record only: pending orders are built from LIVE session
                         // ids, so a same-app sibling's floating record must not float
                         // this window (relogin restores go through insertWindow's take()).
                         if (m_windowTracker) {
@@ -416,6 +421,11 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         emitInsertFloatStateSync(windowId, screenId);
                     }
                 }
+            }
+            if (!hasDeferredMinimizedWindow) {
+                m_pendingInitialOrders.remove(screenId);
+                m_pendingOrderGeneration.remove(screenId);
+                m_strictInitialOrderScreens.remove(screenId);
             }
         }
         scheduleRetileForScreen(screenId);

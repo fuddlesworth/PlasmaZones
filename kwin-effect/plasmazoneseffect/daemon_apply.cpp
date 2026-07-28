@@ -490,15 +490,11 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
     // because m_dragActivation.floatedWindowIds still has the entry from the original drag.
     if (!isFloating) {
         m_dragActivation.floatedWindowIds.remove(windowId);
-        // An authoritative external unfloat moots any deferred
-        // unminimize→unfloat commit in either engine: the daemon has already
-        // unfloated (and re-snapped/retiled) the window — a user float toggle
-        // or rule action landing inside the animation grace — so the pending
-        // commit's unfloat would be redundant and snap's restore net would
-        // misread the post-unfloat daemon state as an orphaned window. Both
-        // Pending timers consume themselves before dispatch. Minimize-float
-        // ownership remains until this authoritative visible echo so a
-        // re-minimize racing the asynchronous write cannot lose its owner.
+        // A visible external unfloat normally moots any deferred recovery in
+        // either engine. The daemon signal has no request generation, though,
+        // so an older hidden-unfloat echo can arrive after the window becomes
+        // visible. Preserve ownership while a recovery timer or confirmation
+        // query is active; that query provides the terminal daemon state.
         // Mode teardown and a hidden snap-zone commit can legitimately clear
         // the daemon's live float while the window is still minimized. The
         // float is only the daemon-side occupancy mechanism; the effect-side
@@ -512,10 +508,11 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
                 && ::PhosphorIdentity::WindowId::extractInstanceId(getWindowId(live))
                     == ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
         }
-        const bool unminimizePending = m_autotileHandler->hasPendingUnminimizeUnfloat(windowId)
-            || m_snapHandler->hasPendingUnminimizeUnfloat(windowId);
-        if (stillMinimized || unminimizePending) {
-            qCDebug(lcEffect) << "Preserving minimize-float ownership across hidden unfloat:" << windowId;
+        const bool recoveryPending = m_autotileHandler->hasPendingUnminimizeUnfloat(windowId)
+            || m_snapHandler->hasPendingUnminimizeUnfloat(windowId) || m_autotileHandler->hasUnfloatInFlight(windowId)
+            || m_snapHandler->hasUnfloatInFlight(windowId);
+        if (stillMinimized || recoveryPending) {
+            qCDebug(lcEffect) << "Preserving minimize-float ownership across non-terminal unfloat:" << windowId;
         } else {
             m_autotileHandler->removeMinimizeFloated(windowId);
             m_snapHandler->removeMinimizeFloated(windowId);

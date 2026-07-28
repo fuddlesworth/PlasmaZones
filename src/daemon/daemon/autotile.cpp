@@ -650,20 +650,17 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
         //   tiled — the strict seed in setAutotileScreens only restores
         //   floating from the AUTOTILE placement slot, so a float recorded by
         //   another mode would be tiled over.
-        // - Minimized: checked via the registry's live metadata, because the
-        //   floating check resolves through the screen's CURRENT mode slot.
-        //   The seed runs twice per toggle (mode-toggle handler, then
-        //   updateAutotileScreens after the assignment flip), and the second
-        //   pass reads the autotile slot where a snap-mode minimize-float is
-        //   invisible — the minimize check is mode-independent and holds on
-        //   both passes.
+        // Minimized windows remain in the order as placeholders. The engine's
+        // strict-seed path defers adding them until their windowOpened arrives,
+        // preserving position without making a hidden window occupy a tile.
         const PhosphorEngine::WindowRegistry* registry = wts->windowRegistry();
         order.removeIf([wts, registry](const QString& windowId) {
-            if (wts->isWindowFloating(windowId)) {
+            const bool minimized = registry && registry->isMinimized(windowId);
+            if (!minimized && wts->isWindowFloating(windowId)) {
                 return true;
             }
             // The mode flips before the second seed, so the live floating
-            // resolver then reads the empty autotile slot. The exact durable
+            // resolver then reads the empty autotile slot. The instance-exact durable
             // snap slot preserves the source-mode user float across that flip.
             const auto record = wts->placementStore().peekExact(windowId);
             if (record
@@ -671,7 +668,7 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
                     == PhosphorEngine::WindowPlacement::stateFloating()) {
                 return true;
             }
-            return registry && registry->isMinimized(windowId);
+            return false;
         });
     }
 
@@ -698,14 +695,14 @@ void Daemon::processPendingGeometryUpdates()
     const QString activity = currentActivity();
     const QStringList screenIds = m_screenManager->effectiveScreenIds();
 
-    auto pending = std::make_shared<QSet<QString>>();
+    auto pending = std::make_shared<QHash<QString, uint64_t>>();
 
     auto requestFor = [this, pending](PhosphorZones::Layout* layout, const QString& screenId, const QRectF& geom) {
         if (!layout) {
             return;
         }
         if (m_layoutComputeService->requestRecalculate(layout, screenId, geom)) {
-            pending->insert(screenId);
+            pending->insert(screenId, m_layoutComputeService->currentGeneration(screenId));
         }
     };
 
@@ -736,29 +733,31 @@ void Daemon::processPendingGeometryUpdates()
         return;
     }
 
-    // Completion barrier: a superseded result carries layout==nullptr while
-    // its layout still exists, so it cannot complete the screen. A successful
-    // newer result for the same screen may name a different layout after an
-    // assignment change and still correctly completes that screen. A destroyed
-    // layout is terminal and drains its screen.
+    // Completion barrier: only the service's current generation can complete a
+    // screen. If another request supersedes ours, advance the expected generation
+    // and wait for that result. A null result at the current generation is terminal
+    // because it means the associated layout was destroyed.
     auto conn = std::make_shared<QMetaObject::Connection>();
-    *conn =
-        connect(m_layoutComputeService.get(), &PhosphorZones::LayoutComputeService::geometriesComputed, this,
-                [this, pending, conn](const QString& screenId, const QUuid& layoutId, PhosphorZones::Layout* layout) {
-                    if (!pending->contains(screenId)) {
-                        return;
-                    }
-                    if (!layout && m_layoutManager && m_layoutManager->layoutById(layoutId)) {
-                        return; // superseded; wait for the current generation
-                    }
-                    pending->remove(screenId);
-                    if (pending->isEmpty()) {
-                        QObject::disconnect(*conn);
-                        m_overlayService->updateGeometries();
-                        m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
-                        m_reapplyGeometriesTimer.start();
-                    }
-                });
+    *conn = connect(
+        m_layoutComputeService.get(), &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration, this,
+        [this, pending, conn](const QString& screenId, const QUuid&, PhosphorZones::Layout*, uint64_t generation) {
+            auto expected = pending->find(screenId);
+            if (expected == pending->end() || generation < expected.value()) {
+                return;
+            }
+            const uint64_t currentGeneration = m_layoutComputeService->currentGeneration(screenId);
+            if (generation < currentGeneration) {
+                expected.value() = currentGeneration;
+                return;
+            }
+            pending->remove(screenId);
+            if (pending->isEmpty()) {
+                QObject::disconnect(*conn);
+                m_overlayService->updateGeometries();
+                m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
+                m_reapplyGeometriesTimer.start();
+            }
+        });
 
     // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
     // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.

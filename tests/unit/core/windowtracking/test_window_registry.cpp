@@ -18,6 +18,7 @@
  */
 
 #include <PhosphorEngine/WindowRegistry.h>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -242,6 +243,7 @@ private Q_SLOTS:
         reg.canonicalizeWindowId(canonical);
         QString resolvedDuringSignal;
         connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString&) {
+            reg.releaseCanonical(QStringLiteral("renamed|canonical-only"));
             resolvedDuringSignal = reg.canonicalizeForLookup(QStringLiteral("renamed|canonical-only"));
         });
         QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
@@ -301,6 +303,43 @@ private Q_SLOTS:
         QCOMPARE(disappeared.size(), 2);
         QVERIFY(!reg.contains(instanceId));
         QVERIFY(reg.instancesWithAppId(QStringLiteral("new-app")).isEmpty());
+    }
+
+    void remove_reentrantUpsertRunsAfterDisappearance()
+    {
+        WindowRegistry reg;
+        const QString instanceId = QStringLiteral("reappearing-instance");
+        reg.upsert(instanceId, make(QStringLiteral("old-app")));
+        QStringList events;
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
+            events.append(QStringLiteral("disappeared"));
+            reg.upsert(removedId, make(QStringLiteral("new-app")));
+        });
+        connect(&reg, &WindowRegistry::windowAppeared, &reg, [&](const QString&) {
+            events.append(QStringLiteral("appeared"));
+        });
+
+        reg.remove(instanceId);
+
+        QCOMPARE(events, (QStringList{QStringLiteral("disappeared"), QStringLiteral("appeared")}));
+        QVERIFY(reg.contains(instanceId));
+        QCOMPARE(reg.appIdFor(instanceId), QStringLiteral("new-app"));
+        QVERIFY(reg.instancesWithAppId(QStringLiteral("old-app")).isEmpty());
+        QCOMPARE(reg.instancesWithAppId(QStringLiteral("new-app")), QStringList{instanceId});
+    }
+
+    void clear_receiverMayDeleteRegistry()
+    {
+        QPointer<WindowRegistry> reg = new WindowRegistry;
+        reg->upsert(QStringLiteral("u1"), make(QStringLiteral("firefox")));
+        reg->upsert(QStringLiteral("u2"), make(QStringLiteral("kate")));
+        connect(reg.data(), &WindowRegistry::windowDisappeared, this, [&reg](const QString&) {
+            delete reg.data();
+        });
+
+        reg->clear();
+
+        QVERIFY(reg.isNull());
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -477,6 +516,20 @@ private Q_SLOTS:
         QCOMPARE(disappeared.size(), 1);
         QCOMPARE(disappeared.first().at(0).toString(), QStringLiteral("orphan-1"));
         QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("ghost-2|orphan-1")), QStringLiteral("ghost-2|orphan-1"));
+    }
+
+    void pruneStaleInstances_receiverMayDeleteRegistry()
+    {
+        QPointer<WindowRegistry> reg = new WindowRegistry;
+        reg->upsert(QStringLiteral("dead-1"), make(QStringLiteral("konsole")));
+        reg->upsert(QStringLiteral("dead-2"), make(QStringLiteral("dolphin")));
+        connect(reg.data(), &WindowRegistry::windowDisappeared, this, [&reg](const QString&) {
+            delete reg.data();
+        });
+
+        reg->pruneStaleInstances({});
+
+        QVERIFY(reg.isNull());
     }
 };
 

@@ -2,11 +2,29 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorIdentity/WindowId.h>
 
 #include <QJsonArray>
 #include <QLatin1Char>
 
+#include <algorithm>
+#include <utility>
+
 namespace PhosphorEngine {
+
+namespace {
+bool sameWindowInstance(const QString& lhs, const QString& rhs)
+{
+    if (lhs == rhs) {
+        return true;
+    }
+    if (!lhs.contains(QLatin1Char('|')) || !rhs.contains(QLatin1Char('|'))) {
+        return false;
+    }
+    const QString lhsInstance = PhosphorIdentity::WindowId::extractInstanceId(lhs);
+    return !lhsInstance.isEmpty() && lhsInstance == PhosphorIdentity::WindowId::extractInstanceId(rhs);
+}
+} // namespace
 
 bool WindowPlacementStore::record(WindowPlacement incoming)
 {
@@ -23,13 +41,14 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
     // slot, and updating the float position on one screen never drops another
     // screen's remembered free spot.
     //
-    // Locate the existing record for the EXACT windowId, wherever it lives. windowId
-    // is unique across buckets, so once found we stop — WITHOUT running the loop's
+    // Locate the existing record for the same live instance, wherever it lives.
+    // The instance is unique across buckets, so once found we stop — WITHOUT running the loop's
     // `++it` after a possible erase(it) (would increment an invalidated iterator).
     for (auto it = m_byApp.begin(); it != m_byApp.end();) {
         QList<WindowPlacement>& bucket = it.value();
         for (int i = 0; i < bucket.size(); ++i) {
-            if (bucket.at(i).windowId != incoming.windowId) {
+            const WindowPlacement& stored = bucket.at(i);
+            if (!sameWindowInstance(stored.windowId, incoming.windowId)) {
                 continue;
             }
             // Merge incoming into a copy of the existing record. Context (screen /
@@ -37,6 +56,7 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
             // real engine capture updates it — a geometry-only write (no engine slot,
             // e.g. recordFreeGeometry) must NOT clobber the managed-context fields.
             WindowPlacement merged = bucket.at(i);
+            merged.windowId = incoming.windowId;
             if (!incoming.engines.isEmpty()) {
                 merged.screenId = incoming.screenId;
                 merged.virtualDesktop = incoming.virtualDesktop;
@@ -203,16 +223,16 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
         return !accept || accept(p);
     };
 
-    // 1. Exact-windowId match first (daemon restart, uuid stable). A record
+    // 1. Same-instance match first (daemon restart, uuid stable). A record
     //    whose windowId matches but whose `accept` predicate rejects it is NOT
     //    consumed here; the loop falls through to the appId FIFO below (the
     //    semantics are "consume the oldest restorable record", not "fail if the
-    //    exact record is unrestorable").
+    //    same-instance record is unrestorable").
     if (!windowId.isEmpty()) {
         for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
             QList<WindowPlacement>& bucket = it.value();
             for (int i = 0; i < bucket.size(); ++i) {
-                if (bucket.at(i).windowId == windowId && matches(bucket.at(i))) {
+                if (sameWindowInstance(bucket.at(i).windowId, windowId) && matches(bucket.at(i))) {
                     WindowPlacement p = bucket.takeAt(i);
                     if (bucket.isEmpty()) {
                         m_byApp.erase(it);
@@ -263,11 +283,11 @@ WindowPlacementStore::peek(const QString& windowId, const QString& appId,
         return !accept || accept(p);
     };
 
-    // 1. Exact-windowId match first (same window, daemon restart).
+    // 1. Same-instance match first (same window, daemon restart).
     if (!windowId.isEmpty()) {
         for (auto it = m_byApp.constBegin(); it != m_byApp.constEnd(); ++it) {
             for (const WindowPlacement& p : it.value()) {
-                if (p.windowId == windowId && matches(p)) {
+                if (sameWindowInstance(p.windowId, windowId) && matches(p)) {
                     return p;
                 }
             }
@@ -306,7 +326,7 @@ bool WindowPlacementStore::contains(const QString& windowId, const QString& appI
     }
     for (auto it = m_byApp.constBegin(); it != m_byApp.constEnd(); ++it) {
         for (const WindowPlacement& p : it.value()) {
-            if (p.windowId == windowId) {
+            if (sameWindowInstance(p.windowId, windowId)) {
                 return true;
             }
         }
@@ -323,7 +343,7 @@ bool WindowPlacementStore::clear(const QString& windowId)
     for (auto it = m_byApp.begin(); it != m_byApp.end();) {
         QList<WindowPlacement>& bucket = it.value();
         for (int i = bucket.size() - 1; i >= 0; --i) {
-            if (bucket.at(i).windowId == windowId) {
+            if (sameWindowInstance(bucket.at(i).windowId, windowId)) {
                 bucket.removeAt(i);
                 removed = true;
             }
@@ -342,11 +362,11 @@ bool WindowPlacementStore::clearFreeGeometry(const QString& windowId)
     if (windowId.isEmpty()) {
         return false;
     }
-    // windowId is unique across buckets (record() enforces this), so the first
+    // A live instance is unique across buckets (record() enforces this), so the first
     // match is the only match — return as soon as it's cleared.
     for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
         for (WindowPlacement& p : it.value()) {
-            if (p.windowId == windowId && !p.freeGeometryByScreen.isEmpty()) {
+            if (sameWindowInstance(p.windowId, windowId) && !p.freeGeometryByScreen.isEmpty()) {
                 p.freeGeometryByScreen.clear();
                 return true;
             }
@@ -429,11 +449,12 @@ QJsonObject WindowPlacementStore::serialize(const std::function<bool(const Windo
 void WindowPlacementStore::deserialize(const QJsonObject& obj)
 {
     m_byApp.clear();
+    m_sequence = 0;
+    QList<WindowPlacement> loaded;
     for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
         if (it.key().isEmpty() || it.key().contains(QLatin1Char('|'))) {
             continue;
         }
-        QList<WindowPlacement> bucket;
         const QJsonArray arr = it->toArray();
         for (const QJsonValue& v : arr) {
             WindowPlacement p = WindowPlacement::fromJson(it.key(), v.toObject());
@@ -450,20 +471,18 @@ void WindowPlacementStore::deserialize(const QJsonObject& obj)
             if (!p.windowId.contains(QLatin1Char('|'))) {
                 continue;
             }
-            if (p.sequence > m_sequence) {
-                m_sequence = p.sequence;
-            }
-            bucket.append(p);
+            loaded.append(p);
         }
-        // Enforce the per-app cap by dropping the OLDEST (front) to keep the newest
-        // MaxPerApp — same direction as record()'s eviction (record() uses `>=`
-        // because it appends one afterward; here nothing is appended, so `>`).
-        while (bucket.size() > MaxPerApp) {
-            bucket.removeFirst();
-        }
-        if (!bucket.isEmpty()) {
-            m_byApp[it.key()] = bucket;
-        }
+    }
+
+    // Replay oldest to newest through record() so persisted duplicates from an
+    // appId-prefix mutation are merged into one live-instance record. This also
+    // applies the normal per-app cap in the same direction as runtime inserts.
+    std::stable_sort(loaded.begin(), loaded.end(), [](const WindowPlacement& lhs, const WindowPlacement& rhs) {
+        return lhs.sequence < rhs.sequence;
+    });
+    for (WindowPlacement& placement : loaded) {
+        record(std::move(placement));
     }
 }
 

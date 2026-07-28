@@ -492,7 +492,7 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     // non-empty engine map is what makes the store merge adopt the new screenId
     // (a geometry-only partial, like recordFreeGeometry, would leave the stale
     // managed screen in place — exactly the bug this fixes).
-    // Exact record only: inheriting a same-app SIBLING's engine slots would
+    // Same-instance record only: inheriting a same-app SIBLING's engine slots would
     // graft its snapped/tiled placement under THIS windowId — a reopen then
     // restores two windows into the sibling's zone and corrupts the per-app
     // FIFO distribution. A window with no record of its own takes the

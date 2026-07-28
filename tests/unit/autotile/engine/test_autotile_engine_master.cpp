@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QSignalSpy>
 
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "helpers/AutotileFakes.h"
 #include "helpers/AutotileTestHelpers.h"
@@ -712,6 +713,40 @@ private Q_SLOTS:
         QCOMPARE(tiledWindows.size(), 2);
         QCOMPARE(tiledWindows.at(0), QStringLiteral("win-A"));
         QCOMPARE(tiledWindows.at(1), QStringLiteral("win-C"));
+    }
+
+    void testRemoveWindow_cleansNeverInsertedMinimizedPlaceholder()
+    {
+        const QString screenName = QStringLiteral("DP-1");
+        const QString first = QStringLiteral("app|first");
+        const QString hidden = QStringLiteral("app|hidden");
+        const QString third = QStringLiteral("app|third");
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("app");
+        metadata.isMinimized = true;
+        registry.upsert(QStringLiteral("hidden"), metadata);
+
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setWindowRegistry(&registry);
+        engine.config()->insertPosition = AutotileConfig::InsertPosition::End;
+        engine.setInitialWindowOrder(screenName, {first, hidden, third});
+        engine.setAutotileScreens({screenName});
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state);
+        QCOMPARE(state->tiledWindows(), (QStringList{first, third}));
+        QVERIFY(!state->containsWindow(hidden));
+
+        // The placeholder has no engine key because it was deliberately not
+        // inserted. Closing it must still remove it from the pending order.
+        engine.windowClosed(hidden);
+        metadata.isMinimized = false;
+        registry.upsert(QStringLiteral("hidden"), metadata);
+        engine.windowOpened(hidden, screenName);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(state->tiledWindows(), (QStringList{first, third, hidden}));
     }
 
     void testSetInitialWindowOrder_guardChecksAllWindows()

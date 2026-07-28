@@ -486,6 +486,30 @@ private Q_SLOTS:
         QCOMPARE(rec->freeGeometryFor(screen), QRect(50, 60, 700, 500));
     }
 
+    void testRecordFreeGeometry_prefixMutationStillHonorsFirstCapture()
+    {
+        const QString oldId = QStringLiteral("oldclass|renamed-instance");
+        const QString newId = QStringLiteral("newclass|renamed-instance");
+        const QString screen = QStringLiteral("DP-1");
+        const QRect firstGeometry(10, 20, 500, 400);
+
+        m_service->recordFreeGeometry(oldId, screen, firstGeometry, /*overwrite=*/false);
+        m_service->recordFreeGeometry(newId, screen, QRect(90, 80, 900, 700), /*overwrite=*/false);
+
+        auto rec = m_service->placementStore().peekExact(newId);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->freeGeometryFor(screen), firstGeometry);
+        QCOMPARE(m_service->placementStore().size(), 1);
+
+        const QRect replacement(30, 40, 600, 450);
+        m_service->recordFreeGeometry(newId, screen, replacement, /*overwrite=*/true);
+        rec = m_service->placementStore().peekExact(newId);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->windowId, newId);
+        QCOMPARE(rec->appId, QStringLiteral("newclass"));
+        QCOMPARE(rec->freeGeometryFor(screen), replacement);
+    }
+
     void testRecordFloatingClose_neverInheritsSiblingEngineSlots()
     {
         // A record-less window closing floating must take recordFloatingClose's
@@ -514,6 +538,34 @@ private Q_SLOTS:
         QVERIFY(sibRec.has_value());
         QCOMPARE(sibRec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
                  QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+    }
+
+    void testRecordFloatingClose_prefixMutationKeepsOwnEngineSlots()
+    {
+        const QString oldId = QStringLiteral("oldclass|closing-instance");
+        const QString newId = QStringLiteral("newclass|closing-instance");
+        PhosphorEngine::WindowPlacement existing;
+        existing.windowId = oldId;
+        existing.appId = QStringLiteral("oldclass");
+        existing.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot snap;
+        snap.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        snap.zoneIds = QStringList{m_zoneIds[0]};
+        existing.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
+        QVERIFY(m_service->placementStore().record(existing));
+
+        const QRect closeGeometry(70, 80, 700, 500);
+        m_service->recordFloatingClose(newId, QStringLiteral("DP-1"), closeGeometry);
+
+        QCOMPARE(m_service->placementStore().size(), 1);
+        const auto rec = m_service->placementStore().peekExact(newId);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->windowId, newId);
+        QCOMPARE(rec->appId, QStringLiteral("newclass"));
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).zoneIds, QStringList{m_zoneIds[0]});
+        QCOMPARE(rec->freeGeometryFor(QStringLiteral("DP-1")), closeGeometry);
     }
 
     void testRecordedSnapZones_appIdFallbackAfterRelogin()

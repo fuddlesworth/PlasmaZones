@@ -66,7 +66,7 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
             this,
             [this, sid, lid, lp, gen]() {
                 const bool superseded = gen < m_screenGeneration.value(sid);
-                Q_EMIT geometriesComputed(sid, lid, superseded ? nullptr : lp.data());
+                publishResult(sid, lid, superseded ? nullptr : lp.data(), gen);
             },
             Qt::QueuedConnection);
         return true;
@@ -77,6 +77,11 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
     LayoutSnapshot snapshot = buildSnapshot(layout, screenId, screenGeometry);
     Q_EMIT requestCompute(snapshot, gen);
     return true;
+}
+
+uint64_t LayoutComputeService::currentGeneration(const QString& screenId) const
+{
+    return m_screenGeneration.value(screenId);
 }
 
 void LayoutComputeService::recalculateSync(Layout* layout, const QRectF& screenGeometry)
@@ -117,7 +122,7 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
         // Emit a null layout so screen-scoped async barriers know this result
         // was superseded and must wait for the newest generation. The current
         // result may belong to a different layout after an assignment change.
-        Q_EMIT geometriesComputed(result.screenId, result.layoutId, nullptr);
+        publishResult(result.screenId, result.layoutId, nullptr, result.generation);
         return;
     }
 
@@ -125,14 +130,14 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     if (layoutIt == m_trackedLayouts.constEnd() || layoutIt->isNull()) {
         qCDebug(lcLayoutLib) << "LayoutComputeService: dropping result for destroyed layout"
                              << result.layoutId.toString();
-        Q_EMIT geometriesComputed(result.screenId, result.layoutId, nullptr);
+        publishResult(result.screenId, result.layoutId, nullptr, result.generation);
         return;
     }
     Layout* layout = layoutIt->data();
 
     if (layout->lastRecalcGeometry() == result.screenGeometry) {
         qCDebug(lcLayoutLib) << "LayoutComputeService: sync path already applied for" << result.screenId;
-        Q_EMIT geometriesComputed(result.screenId, result.layoutId, layout);
+        publishResult(result.screenId, result.layoutId, layout, result.generation);
         return;
     }
 
@@ -146,7 +151,18 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     layout->setLastRecalcGeometry(result.screenGeometry);
     layout->endBatchModify();
 
-    Q_EMIT geometriesComputed(result.screenId, result.layoutId, layout);
+    publishResult(result.screenId, result.layoutId, layout, result.generation);
+}
+
+void LayoutComputeService::publishResult(const QString& screenId, const QUuid& layoutId, Layout* layout,
+                                         uint64_t generation)
+{
+    QPointer<LayoutComputeService> guard(this);
+    Q_EMIT geometriesComputed(screenId, layoutId, layout);
+    if (!guard) {
+        return;
+    }
+    Q_EMIT geometriesComputedForGeneration(screenId, layoutId, layout, generation);
 }
 
 void LayoutComputeService::onLayoutRemoved(const QUuid& layoutId)

@@ -311,14 +311,20 @@ private Q_SLOTS:
 
         PhosphorZones::LayoutComputeService service;
         QSignalSpy computed(&service, &PhosphorZones::LayoutComputeService::geometriesComputed);
+        QSignalSpy computedForGeneration(&service,
+                                         &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration);
         const QString screenId = QStringLiteral("DP-1");
         const QRectF firstGeometry(0, 0, 1920, 1080);
         const QRectF secondGeometry(0, 0, 2560, 1440);
 
         QVERIFY(service.requestRecalculate(&layout, screenId, firstGeometry));
         QTRY_COMPARE(computed.size(), 1);
+        QTRY_COMPARE(computedForGeneration.size(), 1);
+        QCOMPARE(computedForGeneration.first().at(3).toULongLong(), qulonglong(1));
+        QCOMPARE(service.currentGeneration(screenId), uint64_t(1));
         QCOMPARE(layout.lastRecalcGeometry(), firstGeometry);
         computed.clear();
+        computedForGeneration.clear();
 
         // The cached completion is queued. A newer request made before that
         // callback runs must turn the cached result into a superseded null
@@ -326,6 +332,7 @@ private Q_SLOTS:
         QVERIFY(service.requestRecalculate(&layout, screenId, firstGeometry));
         QVERIFY(service.requestRecalculate(&layout, screenId, secondGeometry));
         QTRY_VERIFY(computed.size() >= 2);
+        QTRY_VERIFY(computedForGeneration.size() >= 2);
 
         bool sawSuperseded = false;
         bool sawCurrent = false;
@@ -336,6 +343,17 @@ private Q_SLOTS:
         }
         QVERIFY(sawSuperseded);
         QVERIFY(sawCurrent);
+        bool sawSupersededGeneration = false;
+        bool sawCurrentGeneration = false;
+        for (const QList<QVariant>& args : computedForGeneration) {
+            auto* reported = qvariant_cast<PhosphorZones::Layout*>(args.at(2));
+            const qulonglong generation = args.at(3).toULongLong();
+            sawSupersededGeneration |= reported == nullptr && generation == 2;
+            sawCurrentGeneration |= reported == &layout && generation == 3;
+        }
+        QVERIFY(sawSupersededGeneration);
+        QVERIFY(sawCurrentGeneration);
+        QCOMPARE(service.currentGeneration(screenId), uint64_t(3));
         QCOMPARE(layout.lastRecalcGeometry(), secondGeometry);
     }
 };

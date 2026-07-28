@@ -15,6 +15,7 @@
 #include "persistenceworker.h"
 #include "dbus/zonedetectionadaptor.h"
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "config/configbackends.h"
@@ -54,8 +55,33 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // close, or mode-transition captures. A genuinely user-floated window was
     // already captured when it floated, so preserving its prior record is also
     // correct while it is minimized.
-    if (m_windowRegistry && m_windowRegistry->isMinimized(windowId)) {
+    if (m_windowRegistry && m_windowRegistry->isMinimized(windowId) && authoritativeScreen.isEmpty()) {
         qCDebug(lcDbusWindow) << "Skipping placement capture for minimized window" << windowId;
+        return;
+    }
+    if (m_windowRegistry && m_windowRegistry->isMinimized(windowId)) {
+        std::optional<PhosphorEngine::WindowPlacement> preserved = m_service->placementStore().peekExact(windowId);
+        if (!preserved && m_autotileEngine) {
+            preserved = m_autotileEngine->capturePlacement(windowId);
+        }
+        if (!preserved) {
+            return;
+        }
+
+        preserved->windowId = shadowWindowId(windowId);
+        preserved->appId = m_service->currentAppIdFor(windowId);
+        preserved->screenId = authoritativeScreen;
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+        if (const auto context = m_windowRegistry->windowContext(instanceId)) {
+            preserved->virtualDesktop = context->virtualDesktop;
+            preserved->activity = context->activity;
+        }
+        const bool recorded = m_service->placementStore().record(*preserved);
+        const bool collapsed =
+            m_service->placementStore().collapsePureFloatSiblings(preserved->appId, preserved->windowId);
+        if (recorded || collapsed) {
+            m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
+        }
         return;
     }
     // Capture from the engine that CURRENTLY OWNS this window, not merely the first

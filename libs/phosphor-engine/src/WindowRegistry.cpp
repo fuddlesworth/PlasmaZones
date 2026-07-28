@@ -8,9 +8,32 @@
 
 namespace PhosphorEngine {
 
+namespace {
+class WindowRegistryLifecycleState final : public QObject
+{
+public:
+    explicit WindowRegistryLifecycleState(QObject* parent)
+        : QObject(parent)
+    {
+        setObjectName(QStringLiteral("_plasmazones_window_registry_lifecycle"));
+    }
+
+    QSet<QString> disappearingInstances;
+    QHash<QString, WindowMetadata> pendingUpserts;
+};
+
+WindowRegistryLifecycleState* lifecycleState(const WindowRegistry* registry)
+{
+    QObject* state = registry->findChild<QObject*>(QStringLiteral("_plasmazones_window_registry_lifecycle"),
+                                                   Qt::FindDirectChildrenOnly);
+    return static_cast<WindowRegistryLifecycleState*>(state);
+}
+} // namespace
+
 WindowRegistry::WindowRegistry(QObject* parent)
     : QObject(parent)
 {
+    new WindowRegistryLifecycleState(this);
 }
 
 WindowRegistry::~WindowRegistry() = default;
@@ -19,6 +42,12 @@ void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& met
 {
     if (instanceId.isEmpty()) {
         qWarning("WindowRegistry::upsert: rejecting empty instance id");
+        return;
+    }
+
+    WindowRegistryLifecycleState* lifecycle = lifecycleState(this);
+    if (lifecycle->disappearingInstances.contains(instanceId)) {
+        lifecycle->pendingUpserts.insert(instanceId, metadata);
         return;
     }
 
@@ -45,10 +74,9 @@ void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& met
 
 void WindowRegistry::remove(const QString& instanceId)
 {
-    if (m_disappearingInstances.contains(instanceId)) {
-        if (m_records.contains(instanceId)) {
-            m_removeAfterDisappearance.insert(instanceId);
-        }
+    WindowRegistryLifecycleState* lifecycle = lifecycleState(this);
+    if (lifecycle->disappearingInstances.contains(instanceId)) {
+        lifecycle->pendingUpserts.remove(instanceId);
         return;
     }
 
@@ -64,19 +92,22 @@ void WindowRegistry::remove(const QString& instanceId)
     // Emit while the canonical mapping is still available to synchronous
     // subscribers, then retire it. Canonical-only instances still represent a
     // lifecycle entry and therefore receive the same exactly-once signal.
-    m_disappearingInstances.insert(instanceId);
+    const QString canonical = m_canonicalByInstance.value(instanceId);
+    lifecycle->disappearingInstances.insert(instanceId);
     QPointer<WindowRegistry> guard(this);
     Q_EMIT windowDisappeared(instanceId);
     if (!guard) {
         return;
     }
-    m_disappearingInstances.remove(instanceId);
-    if (m_removeAfterDisappearance.remove(instanceId)) {
-        remove(instanceId);
-        return;
-    }
-    if (!m_records.contains(instanceId)) {
-        m_canonicalByInstance.remove(instanceId);
+    lifecycle->disappearingInstances.remove(instanceId);
+    const bool hasPendingUpsert = lifecycle->pendingUpserts.contains(instanceId);
+    const WindowMetadata pendingMetadata = lifecycle->pendingUpserts.take(instanceId);
+    m_canonicalByInstance.remove(instanceId);
+    if (hasPendingUpsert) {
+        if (!canonical.isEmpty()) {
+            m_canonicalByInstance.insert(instanceId, canonical);
+        }
+        upsert(instanceId, pendingMetadata);
     }
 }
 
@@ -141,8 +172,12 @@ void WindowRegistry::clear()
     }
     QSet<QString> ids(m_records.keyBegin(), m_records.keyEnd());
     ids.unite(QSet<QString>(m_canonicalByInstance.keyBegin(), m_canonicalByInstance.keyEnd()));
+    QPointer<WindowRegistry> guard(this);
     for (const QString& id : ids) {
         remove(id);
+        if (!guard) {
+            return;
+        }
     }
 }
 
@@ -176,6 +211,9 @@ void WindowRegistry::releaseCanonical(const QString& anyWindowId)
         return;
     }
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(anyWindowId);
+    if (lifecycleState(this)->disappearingInstances.contains(instanceId)) {
+        return;
+    }
     m_canonicalByInstance.remove(instanceId);
 }
 
@@ -196,8 +234,12 @@ int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)
             stale.insert(it.key());
         }
     }
+    QPointer<WindowRegistry> guard(this);
     for (const QString& instanceId : std::as_const(stale)) {
         remove(instanceId);
+        if (!guard) {
+            break;
+        }
     }
     return stale.size();
 }

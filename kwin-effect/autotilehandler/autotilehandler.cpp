@@ -5,6 +5,7 @@
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/windowanimator.h"
 #include "handlers/navigationhandler.h"
+#include "handlers/snaphandler.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -187,7 +188,11 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFlo
 
     const QString windowId = m_effect->getWindowId(w);
 
-    if (!isEligibleForAutotileNotify(w)) {
+    bool minimizedOnly = false;
+    if (!isEligibleForAutotileNotify(w, &minimizedOnly)) {
+        if (knownFreeFloating && minimizedOnly && m_initialScreenQueryPending) {
+            m_pendingFreshWindows.insert(windowId);
+        }
         return false;
     }
 
@@ -306,7 +311,8 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
 
         // Existing windows use the guarded path. A window first observed while
         // the initial screen query was pending retains explicit spawn provenance.
-        const bool knownFreeFloating = m_pendingFreshWindows.remove(windowId);
+        const bool knownFreeFloating = m_pendingFreshWindows.remove(windowId)
+            || (enteringAutotile && !AutotileStateHelpers::isTiledWindow(m_border, windowId));
         saveAndRecordPreAutotileGeometry(windowId, screenId, w, w->frameGeometry(), knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
@@ -375,8 +381,8 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             // notifyWindowAdded below establishes the effect-side tracking the daemon
             // does not touch, and is a no-op daemon-side (insertWindow rejects an
             // already-tracked window).
-            m_expectedOutputMove.remove(windowId);
-            notifyWindowAdded(w, /*knownFreeFloating=*/false);
+            const bool expectedMove = m_expectedOutputMove.remove(windowId) > 0;
+            notifyWindowAdded(w, /*knownFreeFloating=*/!expectedMove);
             m_effect->updateAllDecorations();
         }
         return;
@@ -624,6 +630,7 @@ void AutotileHandler::cleanupAutotileTracking(const QString& windowId, const QSt
 void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenId)
 {
     m_pendingFreshWindows.remove(windowId);
+    m_deferredWindowRoutes.remove(windowId);
     cleanupAutotileTracking(windowId, screenId);
 
     // Notify autotile daemon
@@ -633,6 +640,81 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
                                                        QStringLiteral("windowClosed"));
         qCDebug(lcEffect) << "Notified autotile: windowClosed" << windowId << "on screen" << screenId;
     }
+}
+
+void AutotileHandler::deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore)
+{
+    if (!window || window->isDeleted()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(window);
+    m_pendingFreshWindows.insert(windowId);
+    m_deferredWindowRoutes.insert(windowId, DeferredWindowRoute{QPointer<KWin::EffectWindow>(window), canSnapRestore});
+}
+
+QSet<QString> AutotileHandler::completeDeferredWindowRoutes()
+{
+    const auto routes = m_deferredWindowRoutes;
+    m_deferredWindowRoutes.clear();
+    QSet<QString> routedWindowIds;
+    routedWindowIds.reserve(routes.size());
+    for (auto it = routes.constBegin(); it != routes.constEnd(); ++it) {
+        routedWindowIds.insert(it.key());
+        KWin::EffectWindow* window = it->window.data();
+        if (!window || window->isDeleted()) {
+            m_pendingFreshWindows.remove(it.key());
+            continue;
+        }
+        const QString windowId = m_effect->getWindowId(window);
+        routedWindowIds.insert(windowId);
+        const QString screenId = m_effect->getWindowScreenId(window);
+        if (m_autotileScreens.contains(screenId)) {
+            if (window->isMinimized()) {
+                continue;
+            }
+            if (it->canSnapRestore) {
+                QPointer<KWin::EffectWindow> safeWindow = window;
+                m_effect->snapHandler()->callResolveWindowRestore(
+                    window,
+                    [this, safeWindow, windowId]() {
+                        if (!safeWindow || safeWindow->isDeleted()) {
+                            return;
+                        }
+                        if (!m_autotileScreens.contains(m_effect->getWindowScreenId(safeWindow.data()))) {
+                            m_pendingFreshWindows.remove(windowId);
+                            m_effect->endRestoreSuppression(safeWindow.data());
+                            return;
+                        }
+                        if (!notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/true)
+                            && !m_notifiedWindows.contains(windowId)) {
+                            m_effect->endRestoreSuppression(safeWindow.data());
+                        }
+                    },
+                    /*releaseSuppressionOnMiss=*/false);
+            } else if (!notifyWindowAdded(window, /*knownFreeFloating=*/true)
+                       && !m_notifiedWindows.contains(windowId)) {
+                m_effect->endRestoreSuppression(window);
+            }
+            continue;
+        }
+
+        m_pendingFreshWindows.remove(it.key());
+        m_pendingFreshWindows.remove(windowId);
+        if (it->canSnapRestore && !window->isMinimized()) {
+            m_effect->snapHandler()->callResolveWindowRestore(window);
+        } else {
+            m_effect->endRestoreSuppression(window);
+        }
+    }
+
+    const auto pendingIds = m_pendingFreshWindows.values();
+    for (const QString& windowId : pendingIds) {
+        KWin::EffectWindow* window = m_effect->findWindowById(windowId);
+        if (!window || window->isDeleted() || !m_autotileScreens.contains(m_effect->getWindowScreenId(window))) {
+            m_pendingFreshWindows.remove(windowId);
+        }
+    }
+    return routedWindowIds;
 }
 
 void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate)
@@ -748,6 +830,7 @@ void AutotileHandler::onDaemonReady()
     clearAllPendingMinimizeFloats();
     m_minimizeFloatedWindows.clear();
     m_unfloatInFlight.clear();
+    m_unfloatRetryAttempts.clear();
     m_untiledMinimizeFloats.clear();
     for (auto connIt = m_pendingCrossScreenRestore.begin(); connIt != m_pendingCrossScreenRestore.end(); ++connIt) {
         QObject::disconnect(connIt.value());

@@ -596,6 +596,9 @@ QString AutotileEngine::removeTrackedWindowNoRetile(const QString& windowId)
 {
     const QString screenId = m_states.keyForWindow(windowId).screenId;
     if (screenId.isEmpty()) {
+        // A minimized strict-order placeholder is intentionally absent from
+        // m_states, but its close still has to remove the pending-order entry.
+        removeWindow(windowId);
         return {};
     }
 

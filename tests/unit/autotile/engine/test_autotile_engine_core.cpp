@@ -681,7 +681,7 @@ private Q_SLOTS:
     // Pending-order seed float restore: EXACT record only. Pending orders are
     // built from live-session ids, so a same-app SIBLING's floating record
     // must never float a record-less seeded window (relogin restores go
-    // through insertWindow's take(), not this path). The window's own exact
+    // through insertWindow's take(), not this path). The window's own instance-exact
     // floating record still restores its float.
     // =========================================================================
 
@@ -707,7 +707,7 @@ private Q_SLOTS:
         sib.engines.insert(engine.engineId(), floatSlot);
         QVERIFY(wts.placementStore().record(sib));
 
-        // The second seeded window's OWN exact floating record.
+        // The second seeded window's OWN instance-exact floating record.
         WindowPlacement own;
         own.windowId = QStringLiteral("app|own");
         own.appId = QStringLiteral("app");
@@ -723,7 +723,7 @@ private Q_SLOTS:
         QVERIFY2(!state->isFloating(QStringLiteral("app|fresh")),
                  "a same-app sibling's floating record must not float a record-less seeded window");
         QVERIFY2(state->isFloating(QStringLiteral("app|own")),
-                 "the window's own exact floating record still restores its float");
+                 "the window's own instance-exact floating record still restores its float");
     }
 
     void testMinimizedFloatDoesNotReplaceTiledPlacementOnTeardown()

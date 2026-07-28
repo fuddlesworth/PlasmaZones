@@ -279,8 +279,8 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         // restart dead-ends ("no pre-float zone, keeping floating") with no way
         // out short of re-snapping by hand.
         using PhosphorEngine::WindowPlacement;
-        // Exact-windowId records ONLY: a daemon restart keeps KWin uuids, so the
-        // window's own record always exact-matches. The appId-FIFO fallback
+        // Same-instance records ONLY: a daemon restart keeps KWin uuids, so the
+        // window's own record always matches. The appId-FIFO fallback
         // would hand a record-less floating window a SIBLING's home zone (same
         // app, different instance) and unfloat-snap it there — cross-window
         // zone bleed. Logout/login (new uuids) restores through

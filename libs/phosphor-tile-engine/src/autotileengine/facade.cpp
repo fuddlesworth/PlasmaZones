@@ -375,6 +375,11 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
         slot.order = state->windowOrder().indexOf(wid);
     } else if (state->isFloating(wid) && !m_overflow.isOverflow(wid)) {
         slot.state = WindowPlacement::stateFloating();
+        // Retain the live order as a stable slot reference even when the
+        // frame is still on its former tile and free geometry cannot yet be
+        // captured. This preserves genuine float intent through an immediate
+        // minimize/teardown without making geometry-less unmanaged residue.
+        slot.order = state->windowOrder().indexOf(wid);
     } else {
         slot.state = WindowPlacement::stateTiled();
         slot.order = state->windowOrder().indexOf(wid);

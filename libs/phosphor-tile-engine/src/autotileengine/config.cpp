@@ -27,6 +27,7 @@
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorEngine/PerScreenKeys.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -123,11 +124,27 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "Pre-seeded window order for screen=" << screenId << "windows=" << windowIds;
 
-    // Safety timeout: clean up if windows never arrive (e.g., app crash during startup).
-    // Use a generation counter so that stale timers from overwritten calls become no-ops.
-    QTimer::singleShot(PendingOrderTimeoutMs, this, [this, screenId, gen]() {
-        if (m_pendingOrderGeneration.value(screenId) != gen) {
-            return; // superseded by a newer setInitialWindowOrder call
+    schedulePendingOrderTimeout(screenId, gen);
+}
+
+void AutotileEngine::schedulePendingOrderTimeout(const QString& screenId, uint64_t generation)
+{
+    // Use a generation counter so stale timers from overwritten calls become no-ops.
+    QTimer::singleShot(PendingOrderTimeoutMs, this, [this, screenId, generation]() {
+        if (m_pendingOrderGeneration.value(screenId) != generation) {
+            return;
+        }
+        if (const auto* registry = dynamic_cast<const PhosphorEngine::WindowRegistry*>(m_windowRegistry)) {
+            const QStringList pending = m_pendingInitialOrders.value(screenId);
+            for (const QString& windowId : pending) {
+                if (registry->isMinimized(windowId)) {
+                    // A minimized live window can remain hidden indefinitely. Keep
+                    // its positional placeholder, but re-arm cleanup so a later
+                    // metadata change or missed close cannot leak the order forever.
+                    schedulePendingOrderTimeout(screenId, generation);
+                    return;
+                }
+            }
         }
         if (m_pendingInitialOrders.remove(screenId)) {
             m_pendingOrderGeneration.remove(screenId);
