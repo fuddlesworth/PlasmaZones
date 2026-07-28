@@ -598,6 +598,14 @@ void Daemon::stop()
     // across cycles.
     m_scheduledBakeFingerprints.clear();
 
+    // initEnginesAndWiring lends the resolver to OverlayService before
+    // start() marks the daemon running. Detach it above the running gate so a
+    // failed init cannot leave ~OverlayService pumping deferred deletes with a
+    // resolver that reverse member destruction has already freed.
+    if (m_overlayService) {
+        m_overlayService->setContextResolver(nullptr);
+    }
+
     // Everything ABOVE this gate is init/ctor-origin teardown that must run on
     // an init-without-start path (a failed init, a double-stop): the adaptor
     // detaches, the D-Bus unregister, the loader resets, the QML-static

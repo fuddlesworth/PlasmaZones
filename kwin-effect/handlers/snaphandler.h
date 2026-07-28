@@ -188,13 +188,13 @@ public:
     {
         cancelPendingMinimizeFloat(windowId);
         cancelPendingUnminimizeUnfloat(windowId);
-        return m_minimizeFloatedWindows.remove(windowId);
+        const bool owned = m_minimizeFloatedWindows.remove(windowId);
+        return m_unfloatInFlight.remove(windowId) > 0 || owned;
     }
 
-    /// Cancel a pending debounced minimize→float commit.
-    void cancelPendingMinimizeFloat(const QString& windowId)
+    bool hasPendingUnminimizeUnfloat(const QString& windowId) const
     {
-        m_pendingMinimizeFloat.cancel(windowId);
+        return m_pendingUnminimizeUnfloat.contains(windowId);
     }
 
     /// Cancel a pending deferred unminimize→unfloat commit. No-op if no timer
@@ -227,6 +227,11 @@ public Q_SLOTS:
                              const PhosphorProtocol::EmptyZoneList& emptyZones);
 
 private:
+    void cancelPendingMinimizeFloat(const QString& windowId)
+    {
+        m_pendingMinimizeFloat.cancel(windowId);
+    }
+
     /// Deferred-commit body of the unminimize→unfloat edge: the restore-net
     /// queries (dispatched before the unfloat enters the same D-Bus send
     /// queue, so the daemon answers against pre-unfloat state) plus the
@@ -266,6 +271,11 @@ private:
     // fires for windows still in this set — clearing on daemon-ready would
     // strand exactly the windows the net exists to recover.
     QSet<QString> m_minimizeFloatedWindows;
+    QHash<QString, quint64> m_unfloatInFlight;
+    quint64 m_unfloatRequestGeneration = 0;
+    // Snap membership retained only as minimize provenance while daemon-owned
+    // visual placement state is unavailable.
+    QSet<QString> m_restartSnapCandidates;
     // Pending debounced minimize→float commits. Shares the compositor's
     // spurious minimize-pair window with the shader and autotile paths.
     DeferredWindowCommits m_pendingMinimizeFloat{this};

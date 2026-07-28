@@ -70,6 +70,7 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     // (mirrors the autotile cross-screen-transfer cleanup in tiling.cpp).
     AutotileStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
     AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
+    m_restartSnapCandidates.remove(windowId);
 
     // Title-bar (borderless) state is driven entirely by rules through
     // the effect's reconcileRuleHiddenTitleBar → DecorationManager path; this
@@ -90,6 +91,7 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
         return;
     }
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+    m_restartSnapCandidates.remove(windowId);
     // A window that is no longer snap-managed occupies no zone. The zone cache
     // is the source of the IsSnapped / Zone rule-match fields, and several
     // unsnap paths (drag-out unsnap in particular) get their answer in the
@@ -119,6 +121,16 @@ void SnapHandler::clearSnapTracking()
     // DecorationManager's job — teardown callers pair this with
     // DecorationManager::restoreAll(). Callers also pair it with
     // clearAllDecorations() to release the per-window border shader redirect.
+    // Preserve unresolved candidates from an earlier daemon cycle. They are
+    // retired only by an authoritative snap, float, close, or restore miss.
+    for (auto it = m_border.tiledWindowsByScreen.cbegin(); it != m_border.tiledWindowsByScreen.cend(); ++it) {
+        m_restartSnapCandidates.unite(it.value());
+    }
+    m_pendingUnminimizeUnfloat.cancelAll();
+    for (auto it = m_unfloatInFlight.cbegin(); it != m_unfloatInFlight.cend(); ++it) {
+        m_minimizeFloatedWindows.insert(it.key());
+    }
+    m_unfloatInFlight.clear();
     m_border.tiledWindowsByScreen.clear();
 }
 
@@ -128,6 +140,7 @@ void SnapHandler::onWindowClosed(const QString& windowId)
     // removeWindowDecoration is needed (the effect's close path drops the border
     // entry / shader redirect and the title bar dies with the window).
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+    m_restartSnapCandidates.remove(windowId);
 }
 
 void SnapHandler::setFocusFollowsMouse(bool enabled)
@@ -166,14 +179,17 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     // suppression — unless the caller says another path will still
     // reposition the window (autotile-screen path), in which case the
     // suppression must hold until that reposition's geometry settles.
-    std::function<void()> onMiss;
-    if (releaseSuppressionOnMiss) {
-        onMiss = [this, safeWindow]() {
+    const auto releaseSuppression = [this, safeWindow, releaseSuppressionOnMiss]() {
+        if (releaseSuppressionOnMiss) {
             if (safeWindow) {
                 m_effect->endRestoreSuppression(safeWindow);
             }
-        };
-    }
+        }
+    };
+    const auto onMiss = [this, windowId, releaseSuppression]() {
+        m_restartSnapCandidates.remove(windowId);
+        releaseSuppression();
+    };
 
     // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain.
     //
@@ -192,7 +208,7 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     const int kindInt = static_cast<int>(m_effect->classifyWindowKind(window));
     m_effect->tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
                                {windowId, screenId, sticky, kindInt}, safeWindow, windowId, false, onMiss, nullptr,
-                               /*skipAnimation=*/true, onComplete);
+                               /*skipAnimation=*/true, onComplete, releaseSuppression);
 }
 
 void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
@@ -337,6 +353,17 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
         // commit: the window never unfloated, so it is still minimize-floated
         // and the isWindowFloating skip below covers the rest.
         cancelPendingUnminimizeUnfloat(windowId);
+        if (m_unfloatInFlight.remove(windowId)) {
+            m_minimizeFloatedWindows.insert(windowId);
+            qCInfo(lcEffect) << "Snap: re-minimize countermanding in-flight unfloat:" << windowId;
+            if (m_effect->isDaemonReady("snap re-minimize countermand")) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
+                    QStringLiteral("setWindowFloatingForScreen"));
+            }
+            return;
+        }
         if (m_effect->isWindowFloating(windowId)) {
             qCDebug(lcEffect) << "Snap: minimized already-floating window, skipping float:" << windowId;
             return;
@@ -344,7 +371,7 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
         // Only a snap-managed window owns a zone that minimizing should free.
         // A free window can reach this path with a cold floating cache after
         // daemon/effect bring-up and must remain unmanaged.
-        if (!isTiledWindow(windowId)) {
+        if (!isTiledWindow(windowId) && !m_restartSnapCandidates.contains(windowId)) {
             qCDebug(lcEffect) << "Snap: minimized unmanaged window, skipping float:" << windowId;
             return;
         }
@@ -368,6 +395,7 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             }
 
             m_minimizeFloatedWindows.insert(windowId);
+            m_restartSnapCandidates.remove(windowId);
             qCInfo(lcEffect) << "Snap: window minimized (after debounce), floating:" << windowId << "on" << screenId;
             if (m_effect->isDaemonReady("snap minimize float")) {
                 PhosphorProtocol::ClientHelpers::fireAndForget(
@@ -393,6 +421,7 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             // that handler's pending deferred commit for the window.
             AutotileHandler* autotile = m_effect->autotileHandler();
             if (autotile && autotile->removeMinimizeFloated(windowId)) {
+                m_minimizeFloatedWindows.insert(windowId);
                 // The window still carries its autotile rect, not its snap-zone
                 // rect. Do not leave that wrong frame visible for the normal
                 // animation grace: commit at the unminimize edge so KWin starts
@@ -417,10 +446,8 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
         // no cross-effect API to observe the animation, so the grace is
         // animationTime(400ms) — stock minimize animations are 250ms base
         // scaled by the user's global animation-speed factor, which
-        // animationTime applies too. All state mutation
-        // (m_minimizeFloatedWindows removal, queries, D-Bus) happens at
-        // COMMIT, so a cancelled commit (re-minimize, close) leaves the
-        // window minimize-floated exactly as it was.
+        // animationTime applies too. Ownership moves to the in-flight set at
+        // commit so a re-minimize can countermand the asynchronous unfloat.
         const int graceMs = int(KWin::Effect::animationTime(std::chrono::milliseconds(400)).count());
         QPointer<KWin::EffectWindow> wPtr(window);
         m_pendingUnminimizeUnfloat.schedule(windowId, graceMs, [this, windowId, wPtr]() {
@@ -464,6 +491,13 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
 
 void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QString& windowId, const QString& screenId)
 {
+    const bool daemonReady = m_effect->isDaemonReady("snap unminimize");
+    if (!daemonReady || !m_minimizeFloatedWindows.contains(windowId)) {
+        return;
+    }
+    m_minimizeFloatedWindows.remove(windowId);
+    const quint64 requestGeneration = ++m_unfloatRequestGeneration;
+    m_unfloatInFlight.insert(windowId, requestGeneration);
     // Restore net for a snap-tracked window minimized across a daemon
     // restart: every restore pass (slotDaemonReady's untracked sweep,
     // slotPendingRestoresAvailable) deliberately skips minimized windows,
@@ -493,7 +527,7 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
     // entry for the window's appId, and burning it on a window the daemon
     // still owns robs a sibling window's restore. A failed query counts
     // as tracked for the same reason.
-    if (window && m_effect->isDaemonReady("unminimize restore check")) {
+    if (window) {
         struct QueryJoin
         {
             int pending = 2;
@@ -547,12 +581,25 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
 
     qCInfo(lcEffect) << "Snap: window unminimized, unfloating:" << windowId << "on" << screenId;
 
-    if (m_effect->isDaemonReady("snap minimize float")) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                       QStringLiteral("setWindowFloatingForScreen"),
-                                                       {windowId, screenId, false},
-                                                       QStringLiteral("setWindowFloatingForScreen"));
-    }
+    auto* watcher =
+        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                        PhosphorProtocol::Service::Interface::WindowTracking,
+                                        QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false}),
+                                    this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, windowId, requestGeneration](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                const auto inFlight = m_unfloatInFlight.constFind(windowId);
+                if (inFlight == m_unfloatInFlight.constEnd() || inFlight.value() != requestGeneration) {
+                    return;
+                }
+                if (w->isError()) {
+                    m_unfloatInFlight.remove(windowId);
+                    m_minimizeFloatedWindows.insert(windowId);
+                    qCWarning(lcEffect) << "Snap: unfloat request failed for" << windowId << ':'
+                                        << w->error().message();
+                }
+            });
 }
 
 void SnapHandler::slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,

@@ -244,7 +244,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
                 }
                 // Snap restore either moved the window to a snap screen (no-op for
                 // autotile) or didn't apply (window genuinely belongs on autotile).
-                if (!m_autotileHandler->notifyWindowAdded(safeW)) {
+                if (!m_autotileHandler->notifyWindowAdded(safeW, /*knownFreeFloating=*/true)) {
                     endRestoreSuppression(safeW.data());
                 }
             },
@@ -257,7 +257,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // filter, already-notified, etc.), and snap-restore won't run either
     // (the !onAutotileScreen guard below), nothing will move the window —
     // release suppression so it doesn't wait out the deadline.
-    const bool autotileTookOver = m_autotileHandler->notifyWindowAdded(w);
+    const bool autotileTookOver = m_autotileHandler->notifyWindowAdded(w, /*knownFreeFloating=*/true);
     if (!autotileTookOver && onAutotileScreen) {
         endRestoreSuppression(w);
     }
@@ -340,10 +340,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_dragActivation.floatedWindowIds.remove(closedWindowId);
 
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus).
-    // Genuine destruction also drops any desktop-move geometry stash —
-    // onWindowClosed itself must not (the desktop-move path creates the
-    // stash immediately before calling it).
-    m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId, /*windowDestroyed=*/true);
+    m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId);
     m_autotileHandler->clearDesktopMoveStash(closedWindowId);
 
     // Mirror that cleanup for snapping's own border set. Pure bookkeeping —

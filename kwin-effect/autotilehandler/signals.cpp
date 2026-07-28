@@ -88,6 +88,43 @@ void AutotileHandler::clearAllPendingMinimizeFloats()
     m_pendingUnminimizeUnfloat.cancelAll();
 }
 
+bool AutotileHandler::beginUnminimizeUnfloat(const QString& windowId)
+{
+    if (!m_minimizeFloatedWindows.contains(windowId) || !m_effect->m_daemonGate.serviceRegistered) {
+        return false;
+    }
+    m_minimizeFloatedWindows.remove(windowId);
+    m_unfloatInFlight.insert(windowId, ++m_unfloatRequestGeneration);
+    return true;
+}
+
+void AutotileHandler::dispatchUnminimizeUnfloat(const QString& windowId, const QString& screenId)
+{
+    if (!beginUnminimizeUnfloat(windowId)) {
+        return;
+    }
+    const quint64 requestGeneration = m_unfloatInFlight.value(windowId);
+    auto* watcher =
+        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                        PhosphorProtocol::Service::Interface::WindowTracking,
+                                        QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false}),
+                                    this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, windowId, requestGeneration](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                const auto inFlight = m_unfloatInFlight.constFind(windowId);
+                if (inFlight == m_unfloatInFlight.constEnd() || inFlight.value() != requestGeneration) {
+                    return;
+                }
+                if (w->isError()) {
+                    m_unfloatInFlight.remove(windowId);
+                    m_minimizeFloatedWindows.insert(windowId);
+                    qCWarning(lcEffect) << "Autotile: unfloat request failed for" << windowId << ':'
+                                        << w->error().message();
+                }
+            });
+}
+
 void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
 {
     // Invalidate in-flight stagger timers from prior autotile operations.
@@ -397,7 +434,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                         } else {
                             // Genuinely new window opened while this desktop was
                             // not active — notify daemon so it's added to PhosphorTiles::TilingState
-                            notifyWindowAdded(w);
+                            notifyWindowAdded(w, /*knownFreeFloating=*/true);
                         }
                     }
                 }
@@ -707,6 +744,17 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         // commit: the window never unfloated, so it is still minimize-floated
         // and the isWindowFloating skip below covers the rest.
         cancelPendingUnminimizeUnfloat(windowId);
+        if (m_unfloatInFlight.remove(windowId)) {
+            m_minimizeFloatedWindows.insert(windowId);
+            qCInfo(lcEffect) << "Autotile: re-minimize countermanding in-flight unfloat:" << windowId;
+            if (m_effect->m_daemonGate.serviceRegistered) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
+                    QStringLiteral("setWindowFloatingForScreen"));
+            }
+            return;
+        }
         if (m_effect->isWindowFloating(windowId)) {
             qCDebug(lcEffect) << "Autotile: minimized already-floating window, skipping floatWindow:" << windowId;
             return;
@@ -779,7 +827,7 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     if (m_pendingMinimizeFloat.contains(windowId)) {
         cancelPendingMinimizeFloat(windowId);
         qCDebug(lcEffect) << "Autotile: coalesced spurious minimize/unminimize cycle for" << windowId;
-        notifyWindowAdded(w);
+        notifyWindowAdded(w, /*knownFreeFloating=*/false);
         return;
     }
 
@@ -804,20 +852,17 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         // (trading a cancelled restore animation for the correct position).
         SnapHandler* snap = m_effect->snapHandler();
         if (snap && snap->removeMinimizeFloated(windowId)) {
+            m_minimizeFloatedWindows.insert(windowId);
+            m_untiledMinimizeFloats.insert(windowId);
             qCInfo(lcEffect) << "Autotile: adopted snap-mode minimize-float, unfloating immediately:" << windowId
                              << "on" << screenId;
-            if (m_effect->m_daemonGate.serviceRegistered) {
-                PhosphorProtocol::ClientHelpers::fireAndForget(
-                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                    QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false},
-                    QStringLiteral("setWindowFloatingForScreen"));
-            }
+            dispatchUnminimizeUnfloat(windowId, screenId);
             notifyWindowAdded(w, /*knownFreeFloating=*/false);
             return;
         }
         qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:"
                           << windowId;
-        notifyWindowAdded(w);
+        notifyWindowAdded(w, /*knownFreeFloating=*/false);
         return;
     }
     // A window claimed at batch-announce time was never tiled by us — it
@@ -826,16 +871,11 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // its tile. Commit the unfloat immediately instead, same rationale as
     // the snap-mode adoption above: the tile decision lands while the
     // restore is still starting and the window goes straight to its tile.
-    if (m_untiledMinimizeFloats.remove(windowId)) {
+    if (m_untiledMinimizeFloats.contains(windowId)) {
         qCInfo(lcEffect) << "Autotile: window unminimized (claimed at announce), unfloating immediately:" << windowId
                          << "on" << screenId;
-        if (m_effect->m_daemonGate.serviceRegistered) {
-            PhosphorProtocol::ClientHelpers::fireAndForget(
-                m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false},
-                QStringLiteral("setWindowFloatingForScreen"));
-        }
-        notifyWindowAdded(w);
+        dispatchUnminimizeUnfloat(windowId, screenId);
+        notifyWindowAdded(w, /*knownFreeFloating=*/false);
         return;
     }
     // A commit is already scheduled for this window — nothing new to do.
@@ -859,10 +899,8 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // that same factor, so the deferral tracks the user's actual animation
     // length with margin. The window sits at its tiled rect meanwhile (it
     // could not move while minimized), so the deferral only shifts the
-    // retile timing. All state mutation (m_minimizeFloatedWindows removal,
-    // D-Bus, notifyWindowAdded) happens at COMMIT, mirroring the minimize
-    // debounce, so a cancelled commit leaves the window minimize-floated
-    // exactly as it was.
+    // retile timing. Ownership moves to m_unfloatInFlight at COMMIT, so a
+    // re-minimize can countermand the asynchronous unfloat before its echo.
     const int graceMs = int(KWin::Effect::animationTime(std::chrono::milliseconds(400)).count());
     QPointer<KWin::EffectWindow> wPtr(w);
     m_pendingUnminimizeUnfloat.schedule(windowId, graceMs, [this, windowId, wPtr]() {
@@ -903,14 +941,9 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         qCInfo(lcEffect) << "Autotile: window unminimized, unfloating (after animation grace):" << windowId << "on"
                          << currentScreenId;
 
-        if (m_effect->m_daemonGate.serviceRegistered) {
-            PhosphorProtocol::ClientHelpers::fireAndForget(
-                m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                QStringLiteral("setWindowFloatingForScreen"), {windowId, currentScreenId, false},
-                QStringLiteral("setWindowFloatingForScreen"));
-        }
+        dispatchUnminimizeUnfloat(windowId, currentScreenId);
 
-        notifyWindowAdded(fw);
+        notifyWindowAdded(fw, /*knownFreeFloating=*/false);
     });
 }
 
@@ -961,7 +994,7 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             // including the current desktop/activity).
             const QString currentScreen = m_effect->getWindowScreenId(w);
             if (m_autotileScreens.contains(currentScreen)) {
-                notifyWindowAdded(w);
+                notifyWindowAdded(w, /*knownFreeFloating=*/true);
             }
             return;
         }

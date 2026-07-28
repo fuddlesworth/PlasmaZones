@@ -83,18 +83,25 @@ void AutotileHandler::loadSettings()
                                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     msg << PhosphorProtocol::Service::Interface::Autotile << QStringLiteral("autotileScreens");
 
+    m_initialScreenQueryPending = true;
+    const quint64 queryGeneration = ++m_screenQueryGeneration;
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     const quint64 generationAtDispatch = m_screensSignalGeneration;
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, generationAtDispatch](QDBusPendingCallWatcher* w) {
+            [this, generationAtDispatch, queryGeneration](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
+                if (queryGeneration != m_screenQueryGeneration) {
+                    return;
+                }
+                m_initialScreenQueryPending = false;
                 // An autotileScreensChanged signal that landed while this query was
                 // in flight carried a NEWER set and already ran the full per-screen
                 // transition handling — the raw assignment below would clobber it
                 // with the older snapshot.
                 if (m_screensSignalGeneration != generationAtDispatch) {
                     qCDebug(lcEffect) << "Autotile screens: property reply superseded by a live signal, discarding";
+                    m_pendingFreshWindows.clear();
                     return;
                 }
                 QDBusPendingReply<QDBusVariant> reply = *w;
@@ -113,7 +120,9 @@ void AutotileHandler::loadSettings()
                     }
                 } else {
                     qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";
+                    return;
                 }
+                m_pendingFreshWindows.clear();
             });
 }
 

@@ -1,9 +1,31 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Qt headers
-#include <algorithm>
-#include <cmath>
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include "engine_internal.h"
+#include "tileenginelogging.h"
+
+#include <PhosphorEngine/PerScreenKeys.h>
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorGeometry/GeometryUtils.h>
+#include <PhosphorIdentity/WindowId.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorTileEngine/NavigationController.h>
+#include <PhosphorTileEngine/PerScreenConfigResolver.h>
+#include <PhosphorTiles/AlgorithmPreviewParams.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorTiles/SplitTree.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Zone.h>
+
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -13,31 +35,8 @@
 #include <QTimer>
 #include <QVarLengthArray>
 
-// Project headers
-#include <PhosphorTileEngine/AutotileEngine.h>
-#include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include <PhosphorGeometry/GeometryUtils.h>
-#include <PhosphorTileEngine/AutotileConfig.h>
-#include <PhosphorTileEngine/NavigationController.h>
-#include <PhosphorTileEngine/PerScreenConfigResolver.h>
-#include <PhosphorTiles/AlgorithmPreviewParams.h>
-#include <PhosphorTiles/TilingAlgorithm.h>
-// DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
-#include <PhosphorTiles/TilingState.h>
-#include <PhosphorTiles/SplitTree.h>
-#include <PhosphorEngine/PerScreenKeys.h>
-#include <PhosphorEngine/WindowRegistry.h>
-#include <PhosphorTiles/AutotileConstants.h>
-#include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutRegistry.h>
-#include "tileenginelogging.h"
-#include <PhosphorIdentity/WindowId.h>
-#include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/VirtualScreen.h>
-#include <PhosphorZones/Zone.h>
-#include <PhosphorScreens/ScreenIdentity.h>
-#include "engine_internal.h"
+#include <algorithm>
+#include <cmath>
 
 namespace PhosphorTileEngine {
 
@@ -56,8 +55,9 @@ void AutotileEngine::setWindowRegistry(QObject* registry)
     if (!m_windowRegistry) {
         return;
     }
-    auto resolver = [this](const QString& windowId) {
-        return currentAppIdFor(windowId);
+    const QPointer<AutotileEngine> self(this);
+    auto resolver = [self](const QString& windowId) {
+        return self ? self->currentAppIdFor(windowId) : QString();
     };
     auto* algoRegistry = m_algorithmRegistry;
     if (!algoRegistry) {
@@ -326,8 +326,22 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
         const auto existing = m_windowTracker->placementStore().peekExact(wid);
         if (existing && !existing->slotFor(engineId()).isEmpty()) {
             // A minimized window is temporarily represented as floating so it
-            // leaves tiledWindows(). Preserve an existing durable slot exactly.
-            return std::nullopt;
+            // leaves tiledWindows(). Preserve the durable state, but refresh
+            // its order and context from the retained live TilingState so a
+            // recent swap or migration is not reverted by a stale store entry.
+            PhosphorEngine::EngineSlot slot = existing->slotFor(engineId());
+            if (slot.state == WindowPlacement::stateTiled()) {
+                slot.order = state->windowOrder().indexOf(wid);
+            }
+            WindowPlacement preserved;
+            preserved.windowId = wid;
+            preserved.appId = currentAppIdFor(windowId);
+            preserved.screenId = key.screenId;
+            preserved.virtualDesktop = key.desktop;
+            preserved.activity = key.activity;
+            preserved.kind = existing->kind;
+            preserved.engines.insert(engineId(), slot);
+            return preserved;
         }
     }
 

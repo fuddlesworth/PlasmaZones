@@ -81,6 +81,9 @@ class DmabufTextureProvider;
 namespace PhosphorScreens {
 class ScreenManager;
 }
+namespace PhosphorContext {
+class IContextResolver;
+}
 class QQuickWindow;
 class QQuickItem;
 class QScreen;
@@ -160,6 +163,9 @@ public:
 
     void setSettings(ISettings* settings);
     void setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layoutManager);
+    /// Late-bound daemon context resolver. The daemon creates it after this
+    /// service and clears the borrow before resolver teardown.
+    void setContextResolver(PhosphorContext::IContextResolver* resolver);
 
     /// Inject the daemon-owned tile-algorithm registry. Required when
     /// autotile entries should appear in @ref visibleLayoutCount /
@@ -592,6 +598,7 @@ private:
     /// the two gates so every overlay / selector activation site treats a
     /// suppressed context exactly like a disabled one.
     bool isSnappingContextInactive(const QString& screenId) const;
+    bool isSnappingContextDisabled(const QString& screenId) const;
 
     // PhosphorLayer infrastructure - owns the wlr-layer-shell binding, screen
     // enumeration, and Surface factory for all overlay-style windows. Members
@@ -643,6 +650,8 @@ private:
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
+    /// Borrowed from Daemon. stop() detaches this even when init never reached start().
+    PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutManager =
         nullptr; ///< Borrowed; nullable (setLayoutManager(nullptr) detaches)
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service

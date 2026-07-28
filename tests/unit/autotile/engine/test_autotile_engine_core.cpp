@@ -756,6 +756,7 @@ private Q_SLOTS:
         PhosphorEngine::WindowPlacement baseline = *tiledPlacement;
         baseline.virtualDesktop = 3;
         baseline.activity = QStringLiteral("activity-a");
+        baseline.engines[engine.engineId()].order = 7;
         baseline.freeGeometryByScreen.insert(screenId, QRect(120, 90, 900, 700));
         PhosphorEngine::EngineSlot snapSlot;
         snapSlot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
@@ -769,15 +770,33 @@ private Q_SLOTS:
         registry.upsert(instanceId, metadata);
         engine.setWindowFloat(windowId, true, screenId);
         QVERIFY(engine.isWindowFloatingInAutotile(windowId));
+        const auto minimizedCapture = engine.capturePlacement(windowId);
+        QVERIFY(minimizedCapture);
+        QCOMPARE(minimizedCapture->slotFor(engine.engineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateTiled()));
+        QCOMPARE(minimizedCapture->slotFor(engine.engineId()).order, 0);
+        QCOMPARE(minimizedCapture->screenId, tiledPlacement->screenId);
+        QCOMPARE(minimizedCapture->virtualDesktop, tiledPlacement->virtualDesktop);
+        QCOMPARE(minimizedCapture->activity, tiledPlacement->activity);
+        QVERIFY(wts.placementStore().record(*minimizedCapture));
+        const auto normalizedBeforeTeardown = wts.placementStore().peekExact(windowId);
+        QVERIFY(normalizedBeforeTeardown);
 
         // Screen teardown captures directly through AutotileEngine, bypassing
         // WindowTrackingAdaptor. The minimized guard must still preserve the
         // pre-minimize tiled slot rather than persisting the temporary float.
+        // placementChanged describes the live occupancy release even when the
+        // durable record is already content-identical.
+        QSignalSpy placementChanged(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.setAutotileScreens({});
+        QVERIFY(placementChanged.size() > 0);
         const auto stored = wts.placementStore().peekExact(windowId);
         QVERIFY(stored);
-        QVERIFY(stored->sameContentAs(*before));
-        QCOMPARE(stored->sequence, before->sequence);
+        QVERIFY(stored->sameContentAs(*normalizedBeforeTeardown));
+        QCOMPARE(stored->sequence, normalizedBeforeTeardown->sequence);
+        QCOMPARE(stored->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()),
+                 before->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()));
+        QCOMPARE(stored->freeGeometryFor(screenId), before->freeGeometryFor(screenId));
     }
 
     void testMinimizedFirstCapturePersistsTiledPlacementOnTeardown()
@@ -807,7 +826,10 @@ private Q_SLOTS:
         metadata.isMinimized = true;
         registry.upsert(instanceId, metadata);
         engine.setWindowFloat(windowId, true, screenId);
+        QVERIFY(engine.isWindowFloatingInAutotile(windowId));
+        QSignalSpy placementChanged(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.setAutotileScreens({});
+        QVERIFY(placementChanged.size() > 0);
 
         const auto stored = wts.placementStore().peekExact(windowId);
         QVERIFY(stored);

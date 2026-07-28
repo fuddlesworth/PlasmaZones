@@ -1213,8 +1213,9 @@ private:
      *        desktop/activity context); the overflow bucket is keyed per
      *        screenId only, so the caller must drain once per screen AFTER
      *        all of that screen's states are captured.
+     * @return Whether the state released any managed windows.
      */
-    void releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
+    bool releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
                                        QStringList& releasedWindows, bool drainOverflow = true);
 
     /**

@@ -170,10 +170,11 @@ bool WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, 
     // doc: every emission channel must keep m_broadcastFloating equal to what
     // subscribers last heard, or the gate turns from a dedup into a
     // suppressor of genuine changes. setWindowFloating delegates here too.
-    if (m_broadcastFloating.value(windowId, false) == floating) {
+    const QString shadowId = shadowWindowId(windowId);
+    if (m_broadcastFloating.value(shadowId, false) == floating) {
         return false;
     }
-    m_broadcastFloating[windowId] = floating;
+    m_broadcastFloating[shadowId] = floating;
     Q_EMIT windowFloatingChanged(windowId, floating, screenId);
     return true;
 }
@@ -234,7 +235,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
             ctx.wasFloating = floating;
             if (sourceTracked) {
                 ctx.fromEngineId = source->engineId();
-                ctx.sourceGeometry = m_frameGeometry.value(windowId);
+                ctx.sourceGeometry = m_frameGeometry.value(shadowWindowId(windowId));
                 source->handoffRelease(windowId);
             }
             dest->handoffReceive(ctx);

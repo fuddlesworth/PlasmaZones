@@ -115,8 +115,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             if (!targetScreenId.isEmpty() && screenId != targetScreenId) {
                 continue;
             }
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
+            if (isSnappingContextDisabled(screenId)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -132,8 +131,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
+            if (isSnappingContextDisabled(screenId)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {

@@ -4,6 +4,8 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <QPointer>
+
 namespace PhosphorEngine {
 
 WindowRegistry::WindowRegistry(QObject* parent)
@@ -43,13 +45,39 @@ void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& met
 
 void WindowRegistry::remove(const QString& instanceId)
 {
-    auto it = m_records.find(instanceId);
-    if (it == m_records.end()) {
+    if (m_disappearingInstances.contains(instanceId)) {
+        if (m_records.contains(instanceId)) {
+            m_removeAfterDisappearance.insert(instanceId);
+        }
         return;
     }
-    indexRemove(instanceId, it.value().appId);
-    m_records.erase(it);
+
+    auto it = m_records.find(instanceId);
+    const bool hasCanonical = m_canonicalByInstance.contains(instanceId);
+    if (it == m_records.end() && !hasCanonical) {
+        return;
+    }
+    if (it != m_records.end()) {
+        indexRemove(instanceId, it.value().appId);
+        m_records.erase(it);
+    }
+    // Emit while the canonical mapping is still available to synchronous
+    // subscribers, then retire it. Canonical-only instances still represent a
+    // lifecycle entry and therefore receive the same exactly-once signal.
+    m_disappearingInstances.insert(instanceId);
+    QPointer<WindowRegistry> guard(this);
     Q_EMIT windowDisappeared(instanceId);
+    if (!guard) {
+        return;
+    }
+    m_disappearingInstances.remove(instanceId);
+    if (m_removeAfterDisappearance.remove(instanceId)) {
+        remove(instanceId);
+        return;
+    }
+    if (!m_records.contains(instanceId)) {
+        m_canonicalByInstance.remove(instanceId);
+    }
 }
 
 std::optional<WindowMetadata> WindowRegistry::metadata(const QString& instanceId) const
@@ -111,12 +139,10 @@ void WindowRegistry::clear()
     if (m_records.isEmpty() && m_canonicalByInstance.isEmpty()) {
         return;
     }
-    const QStringList ids = m_records.keys();
-    m_records.clear();
-    m_appIdIndex.clear();
-    m_canonicalByInstance.clear();
+    QSet<QString> ids(m_records.keyBegin(), m_records.keyEnd());
+    ids.unite(QSet<QString>(m_canonicalByInstance.keyBegin(), m_canonicalByInstance.keyEnd()));
     for (const QString& id : ids) {
-        Q_EMIT windowDisappeared(id);
+        remove(id);
     }
 }
 
@@ -171,14 +197,7 @@ int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)
         }
     }
     for (const QString& instanceId : std::as_const(stale)) {
-        const bool hadRecord = m_records.contains(instanceId);
-        remove(instanceId); // fires windowDisappeared + drops m_records / appId index
-        m_canonicalByInstance.remove(instanceId);
-        if (!hadRecord) {
-            // Canonical-only entries bypass remove()'s record-backed signal,
-            // but subscribers still need the stale instance notification.
-            Q_EMIT windowDisappeared(instanceId);
-        }
+        remove(instanceId);
     }
     return stale.size();
 }

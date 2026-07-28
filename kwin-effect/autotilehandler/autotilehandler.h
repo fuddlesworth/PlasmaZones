@@ -75,7 +75,7 @@ public:
     /// a tiled zone rect, so the floating guard MUST run and reject it,
     /// otherwise the tiled rect would be persisted as the window's
     /// free-floating geometry and clobber the daemon's real float-back.
-    bool notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating = true);
+    bool notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating);
 
     /**
      * @brief Batch-notify windows added to autotile screens
@@ -95,18 +95,8 @@ public:
     void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, const QSet<QString>& screenFilter = {},
                                  bool resetNotified = false, bool enteringAutotile = false);
 
-    /**
-     * @brief Remove a window from this handler's autotile tracking.
-     *
-     * @param windowDestroyed True ONLY from the genuine window-destruction
-     *        path (slotWindowClosed). The other callers (cross-screen
-     *        transfer, desktop move, drag-bypass) pass a LIVE window: for
-     *        those, recording an m_pendingCloses suppression entry would
-     *        poison the window's next notifyWindowAdded — the entry exists
-     *        solely to absorb the D-Bus ordering race where a real close
-     *        overtakes an in-flight windowOpened.
-     */
-    void onWindowClosed(const QString& windowId, const QString& screenId, bool windowDestroyed = false);
+    /// Remove a window from this handler's autotile tracking and notify the daemon.
+    void onWindowClosed(const QString& windowId, const QString& screenId);
     /// Tear down all effect-side autotile tracking for @p windowId (shared +
     /// KWin-specific state, incl. the pending cross-screen-restore connection)
     /// WITHOUT notifying the daemon. Shared by onWindowClosed (which adds the
@@ -123,7 +113,12 @@ public:
     {
         cancelPendingUnminimizeUnfloat(windowId);
         m_untiledMinimizeFloats.remove(windowId);
-        return m_minimizeFloatedWindows.remove(windowId);
+        const bool owned = m_minimizeFloatedWindows.remove(windowId);
+        return m_unfloatInFlight.remove(windowId) > 0 || owned;
+    }
+    bool hasPendingUnminimizeUnfloat(const QString& windowId) const
+    {
+        return m_pendingUnminimizeUnfloat.contains(windowId);
     }
     /// Drop a destroyed window's desktop-move geometry stash. Separate from
     /// onWindowClosed because the desktop-MOVE path calls onWindowClosed
@@ -334,6 +329,11 @@ private:
      */
     void clearAllPendingMinimizeFloats();
 
+    /// Move active minimize ownership into the asynchronous unfloat interval.
+    /// Returns whether the daemon request may be dispatched.
+    bool beginUnminimizeUnfloat(const QString& windowId);
+    void dispatchUnminimizeUnfloat(const QString& windowId, const QString& screenId);
+
     /**
      * @brief Save the pre-autotile free-float geometry for @p windowId.
      *
@@ -349,10 +349,9 @@ private:
      * @param w The window, used to read its maximize/fullscreen restore rect.
      * @param knownFreeFloating Bypass the isWindowFloating guard when the
      *        caller knows the frame is authoritatively a free-float rect.
-     *        Use true from the window-added paths (notifyWindowAdded and
-     *        notifyWindowsAddedBatch) — fresh windows are NOT tracked in
-     *        the FloatingCache yet, so isWindowFloating() returns false
-     *        and would incorrectly reject the one-shot initial capture.
+     *        Use true only for a genuine window-open event. Fresh windows are
+     *        not tracked in the FloatingCache yet, so isWindowFloating()
+     *        returns false and would incorrectly reject the initial capture.
      */
     void saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, KWin::EffectWindow* w,
                                           const QRectF& frameIn, bool knownFreeFloating = false);
@@ -412,6 +411,9 @@ private:
     /// set AND ran the full per-screen transition handling the raw reply
     /// assignment lacks.
     quint64 m_screensSignalGeneration = 0;
+    quint64 m_screenQueryGeneration = 0;
+    bool m_initialScreenQueryPending = false;
+    QSet<QString> m_pendingFreshWindows;
     /// Pre-autotile frame geometry, keyed [screenId][windowId].
     ///
     /// Ownership: this is a local cache. The daemon's unified
@@ -448,18 +450,19 @@ private:
     /// source screen's coordinate space and would land off-target on a
     /// different monitor).
     QHash<QString, QPair<QString, QRectF>> m_savedPreAutotileForDesktopMove;
-    QSet<QString> m_pendingCloses;
     bool m_inOutputChanged = false; ///< re-entrancy guard for handleWindowOutputChanged
     QHash<QString, QMetaObject::Connection>
         m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection
     QSet<QString> m_minimizeFloatedWindows;
+    /// Ownership after an unfloat dispatch and before its authoritative echo.
+    /// The generation rejects completions from a countermanded older request.
+    /// A re-minimize countermand moves the window back to the active set.
+    QHash<QString, quint64> m_unfloatInFlight;
+    quint64 m_unfloatRequestGeneration = 0;
     /// Subset of m_minimizeFloatedWindows claimed at batch-announce time
     /// (already minimized when the screen entered autotile). These windows
-    /// sit at their free-floating rect, NOT a tile rect, so their unminimize
-    /// commits the unfloat immediately instead of through the deferred
-    /// animation grace — the grace is invisible only for a window parked at
-    /// its tile; for these it parks the window at the free rect for the
-    /// whole animation and then visibly hops it into the tile.
+    /// still carry geometry from the prior mode, so their unminimize commits
+    /// immediately instead of through the deferred animation grace.
     QSet<QString> m_untiledMinimizeFloats;
     // NOTE: title-bar (borderless) state is owned by the effect's
     // DecorationManager; this handler only tracks tiled membership for

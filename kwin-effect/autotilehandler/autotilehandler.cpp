@@ -180,21 +180,12 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
 
 bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating)
 {
-    // Deleted windows bail before getWindowId (cache-pollution hazard);
-    // every other rejection comes after the pending-close consume below.
+    // Deleted windows bail before getWindowId (cache-pollution hazard).
     if (!w || w->isDeleted()) {
         return false;
     }
 
     const QString windowId = m_effect->getWindowId(w);
-
-    // Window was already closed before we could notify open — skip (D-Bus
-    // ordering race). Consumed BEFORE the eligibility check so an entry
-    // whose racing add arrives ineligible doesn't strand in the set until
-    // the next daemon restart.
-    if (m_pendingCloses.remove(windowId)) {
-        return false;
-    }
 
     if (!isEligibleForAutotileNotify(w)) {
         return false;
@@ -204,10 +195,16 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFlo
         return false;
     }
 
-    QString screenId = m_effect->getWindowScreenId(w);
+    const QString screenId = m_effect->getWindowScreenId(w);
+    if (knownFreeFloating && m_initialScreenQueryPending && !m_autotileScreens.contains(screenId)) {
+        // Retain spawn provenance until the initial screen query reveals
+        // whether this window belongs in its follow-up batch.
+        m_pendingFreshWindows.insert(windowId);
+    }
 
     // Only notify autotile daemon for windows on autotile screens
     if (m_autotileScreens.contains(screenId)) {
+        knownFreeFloating = knownFreeFloating || m_pendingFreshWindows.remove(windowId);
         m_notifiedWindows.insert(windowId);
         m_notifiedWindowScreens[windowId] = screenId;
         // Save pre-autotile geometry BEFORE the daemon tiles the window.
@@ -269,16 +266,12 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
     QStringList batchWindowIds; // for error rollback
 
     for (KWin::EffectWindow* w : windows) {
-        // Deleted windows bail before any id/screen lookup (cache-pollution
-        // hazard); the pending-close consume runs BEFORE the eligibility
-        // check — same ordering rationale as notifyWindowAdded.
+        // Deleted windows bail before any id/screen lookup (cache-pollution hazard).
         if (!w || w->isDeleted()) {
             continue;
         }
 
         const QString windowId = m_effect->getWindowId(w);
-        const bool suppressed = m_pendingCloses.remove(windowId);
-
         const QString screenId = m_effect->getWindowScreenId(w);
         if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
             continue;
@@ -295,12 +288,9 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
 
         bool minimizedOnly = false;
         if (!isEligibleForAutotileNotify(w, &minimizedOnly)) {
-            if (minimizedOnly && !suppressed) {
+            if (minimizedOnly) {
                 claimAlreadyMinimizedAsFloated(w, windowId, screenFilter, enteringAutotile);
             }
-            continue;
-        }
-        if (suppressed) {
             continue;
         }
 
@@ -314,13 +304,10 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         m_notifiedWindows.insert(windowId);
         m_notifiedWindowScreens[windowId] = screenId;
 
-        // A batch only contains already-existing windows (mode entry, screen
-        // change, or daemon re-announcement), never the genuine spawn path.
-        // Its current frame may therefore belong to snap or autotile even when
-        // local border tracking was cleared on daemon loss. Always run the
-        // floating/ownership guards and never overwrite durable free geometry.
-        saveAndRecordPreAutotileGeometry(windowId, screenId, w, w->frameGeometry(),
-                                         /*knownFreeFloating=*/false);
+        // Existing windows use the guarded path. A window first observed while
+        // the initial screen query was pending retains explicit spawn provenance.
+        const bool knownFreeFloating = m_pendingFreshWindows.remove(windowId);
+        saveAndRecordPreAutotileGeometry(windowId, screenId, w, w->frameGeometry(), knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
 
@@ -389,7 +376,7 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             // does not touch, and is a no-op daemon-side (insertWindow rejects an
             // already-tracked window).
             m_expectedOutputMove.remove(windowId);
-            notifyWindowAdded(w);
+            notifyWindowAdded(w, /*knownFreeFloating=*/false);
             m_effect->updateAllDecorations();
         }
         return;
@@ -614,6 +601,7 @@ void AutotileHandler::cleanupAutotileTracking(const QString& windowId, const QSt
         m_centeredWaylandZones, m_monocleMaximizedWindows, m_preAutotileGeometries};
     AutotileStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
     m_untiledMinimizeFloats.remove(windowId);
+    m_unfloatInFlight.remove(windowId);
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreAutotileForDesktopMove is NOT cleared
@@ -633,18 +621,9 @@ void AutotileHandler::cleanupAutotileTracking(const QString& windowId, const QSt
     }
 }
 
-void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenId, bool windowDestroyed)
+void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenId)
 {
-    // If we haven't notified the daemon about this window yet, record the
-    // close so we can suppress the open if it arrives late (D-Bus ordering
-    // race). Genuine destruction only: a LIVE window routed through here
-    // (transfer / desktop move / drag-bypass) that is untracked because it
-    // was eligibility-filtered would otherwise have its NEXT genuine add
-    // silently swallowed when it later becomes eligible.
-    if (windowDestroyed && !m_notifiedWindows.contains(windowId) && m_autotileScreens.contains(screenId)) {
-        m_pendingCloses.insert(windowId);
-    }
-
+    m_pendingFreshWindows.remove(windowId);
     cleanupAutotileTracking(windowId, screenId);
 
     // Notify autotile daemon
@@ -733,12 +712,12 @@ void AutotileHandler::onDaemonReady()
     // strictly sound — a signal lost pre-AddMatch implies the Get (served
     // after the change) already returns the new set.
     connectSignals();
+    m_initialScreenQueryPending = false;
     loadSettings();
     m_notifiedWindows.clear();
     m_notifiedWindowScreens.clear();
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreAutotileForDesktopMove.clear();
-    m_pendingCloses.clear();
     // Centering state is per-retile transient: the restarted daemon has no
     // memory of the zones these entries point at, and a stale
     // m_centeredWaylandZones entry that happens to equal the first
@@ -765,9 +744,10 @@ void AutotileHandler::onDaemonReady()
     // cross-screen size-restore connections are likewise per-session.
     // clearAllPendingMinimizeFloats() also cancels the pending deferred
     // unminimize→unfloat timers; an escapee's timeout would bail anyway when
-    // m_minimizeFloatedWindows.remove() misses after the clear below.
+    // ownership lookup misses after the clear below.
     clearAllPendingMinimizeFloats();
     m_minimizeFloatedWindows.clear();
+    m_unfloatInFlight.clear();
     m_untiledMinimizeFloats.clear();
     for (auto connIt = m_pendingCrossScreenRestore.begin(); connIt != m_pendingCrossScreenRestore.end(); ++connIt) {
         QObject::disconnect(connIt.value());

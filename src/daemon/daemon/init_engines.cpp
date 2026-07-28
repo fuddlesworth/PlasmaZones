@@ -169,8 +169,11 @@ void Daemon::initEnginesAndWiring()
     m_settingsGateAdapter = std::make_unique<DaemonSettingsGateAdapter>(m_settings.get(), m_layoutManager.get());
     m_contextResolver = std::make_unique<PhosphorContext::ContextResolver>(
         m_workspaceStateAdapter.get(), m_screenModeAdapter.get(), m_settingsGateAdapter.get());
+    if (m_overlayService) {
+        m_overlayService->setContextResolver(m_contextResolver.get());
+    }
 
-    // Late-bind the resolver into the D-Bus adaptors that gate their
+    // Late-bind the resolver into consumers that gate their
     // handlers on the disable/lock cascade. Each adaptor was constructed
     // earlier (before m_settings/m_screenModeRouter were ready); the
     // resolver only exists now. The setters mirror setAutotileEngine /

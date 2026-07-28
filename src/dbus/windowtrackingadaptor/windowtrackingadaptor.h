@@ -1128,6 +1128,9 @@ private:
     /// tiled close on the autotile screen itself. In each, the live frame
     /// has not yet moved off the tile rect.
     bool isFrameStillOnTileRect(const QString& windowId, const QRect& frame) const;
+    /// Canonical key for daemon-local per-window shadow maps. The compositor
+    /// may resend a changed appId prefix for the same stable instance.
+    QString shadowWindowId(const QString& windowId) const;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Screen tracking (from KWin effect's D-Bus calls)
@@ -1139,7 +1142,8 @@ private:
     // Frame-geometry shadow: populated via setFrameGeometry D-Bus pushes from
     // the compositor plugin. Entries are removed on windowClosed. Used by
     // daemon-local shortcut handlers (float toggle, etc.) so they can read
-    // fresh geometry without round-tripping through the effect.
+    // fresh geometry without round-tripping through the effect. Keys are
+    // canonical window IDs so app-class mutation cannot create aliases.
     QHash<QString, QRect> m_frameGeometry;
 
     // Last floating value broadcast via windowFloatingChanged, per window. The

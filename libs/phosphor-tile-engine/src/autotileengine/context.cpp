@@ -426,6 +426,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // (no window release/re-add). windowsReleasedFromTiling MUST NOT fire
     // for desktop/activity transitions — only for true autotile disable.
     QStringList releasedWindows;
+    QSet<QString> placementChangedScreens;
     // Only prune states that match the current desktop/activity AND whose screen
     // is no longer in the autotile set. States for other contexts are left
     // untouched here — by the time their desktop becomes current the screen is
@@ -445,7 +446,9 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             // toggle-off/on round trip keeps the user's manual tile adjustments
             // instead of laying out from scratch.
             stashScriptState(key, state);
-            releaseScreenStateForTeardown(key.screenId, state, releasedWindows);
+            if (releaseScreenStateForTeardown(key.screenId, state, releasedWindows)) {
+                placementChangedScreens.insert(key.screenId);
+            }
             // Toggle-off drops only the resolver's IN-MEMORY overrides (they are
             // re-derived from settings on re-enable); the persisted per-screen
             // settings deliberately survive — a user toggling autotile off must
@@ -530,6 +533,9 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     }
 
     Q_EMIT autotileScreensChanged(QStringList(m_autotileScreens.begin(), m_autotileScreens.end()), wasDesktopSwitch);
+    for (const QString& screenId : std::as_const(placementChangedScreens)) {
+        Q_EMIT placementChanged(screenId);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -15,6 +15,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
+#include <PhosphorContext/IContextResolver.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "common/layoutpreviewserialize.h"
 #include "core/utils/unifiedlayoutlist.h"
@@ -553,6 +554,21 @@ void OverlayService::setLayout(PhosphorZones::Layout* layout)
     }
 }
 
+void OverlayService::setContextResolver(PhosphorContext::IContextResolver* resolver)
+{
+    m_contextResolver = resolver;
+}
+
+bool OverlayService::isSnappingContextDisabled(const QString& screenId) const
+{
+    if (!m_contextResolver || screenId.isEmpty()) {
+        return false;
+    }
+    const auto handle =
+        m_contextResolver->handleForPersisted(screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
+    return m_contextResolver->isDisabled(handle);
+}
+
 PhosphorZones::Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
 {
     // Physical QScreen* overload: derives screenId and delegates.
@@ -566,8 +582,7 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(QScreen* screen) cons
 bool OverlayService::isSnappingContextInactive(const QString& screenId) const
 {
     const int virtualDesktop = currentVirtualDesktopForScreen(screenId);
-    if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId, virtualDesktop,
-                          m_currentActivity)) {
+    if (isSnappingContextDisabled(screenId)) {
         return true;
     }
     if (!m_layoutManager) {
@@ -637,8 +652,7 @@ void OverlayService::hideDisabledAndRefresh()
     if (m_settings) {
         const QStringList screenIds = m_screenStates.keys();
         for (const QString& screenId : screenIds) {
-            const bool disabled = isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                                    currentVirtualDesktopForScreen(screenId), m_currentActivity);
+            const bool disabled = isSnappingContextDisabled(screenId);
             if (disabled) {
                 destroyZoneSelectorWindow(screenId);
             }
@@ -651,8 +665,7 @@ void OverlayService::hideDisabledAndRefresh()
     // Update remaining zone selector (disabled-gated) and overlay (suppress-gated) windows.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         const QString& screenId = it.key();
-        const bool disabled = isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                                currentVirtualDesktopForScreen(screenId), m_currentActivity);
+        const bool disabled = isSnappingContextDisabled(screenId);
         if (!disabled && it.value().zoneSelectorSlot()) {
             updateZoneSelectorWindow(screenId);
         }

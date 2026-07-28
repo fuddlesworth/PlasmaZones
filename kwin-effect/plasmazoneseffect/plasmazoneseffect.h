@@ -688,11 +688,13 @@ private:
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
     // Uses QDBusMessage::createMethodCall (no QDBusInterface) to avoid synchronous introspection.
     // onSnapSuccess: optional callback when snap is applied, receives (windowId, screenId)
+    // onError: optional transport-error callback; valid no-snap replies still use fallback.
     void tryAsyncSnapCall(const QString& interface, const QString& method, const QList<QVariant>& args,
                           QPointer<KWin::EffectWindow> window, const QString& windowId, bool storePreSnap,
                           std::function<void()> fallback,
                           std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr,
-                          bool skipAnimation = false, std::function<void()> onComplete = nullptr);
+                          bool skipAnimation = false, std::function<void()> onComplete = nullptr,
+                          std::function<void()> onError = nullptr);
 
     // reserveScreenEdges() and unreserveScreenEdges() have been removed. The daemon
     // disables KWin Quick Tile via kwriteconfig6. Reserving edges would turn on the

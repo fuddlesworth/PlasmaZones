@@ -118,7 +118,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
             const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFloating())
                 && !m_service->isWindowAutotileTiled(windowId);
             if (unmanagedState) {
-                const QRect frame = m_frameGeometry.value(windowId);
+                const QRect frame = m_frameGeometry.value(shadowWindowId(windowId));
                 if (frame.isValid()) {
                     // Screen key for the shared free/float geometry. The owning engine
                     // normally reports the window's screen, but a FLOATING window whose
@@ -225,7 +225,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // Scoped to the engine-miss path so a normally-tracked close (an engine captured
     // above and returned) is never second-guessed.
     if (!authoritativeScreen.isEmpty() && m_service && !m_service->isWindowAutotileTiled(windowId)) {
-        const QRect frame = m_frameGeometry.value(windowId);
+        const QRect frame = m_frameGeometry.value(shadowWindowId(windowId));
         // Same tile-rect poison guard as the primary capture path (see the
         // helper doc): a window tiled by autotile, handed off, and closed
         // before ever being repositioned still sits on its tile rect —
@@ -251,6 +251,11 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
 bool WindowTrackingAdaptor::isFrameStillOnTileRect(const QString& windowId, const QRect& frame) const
 {
     return m_autotileEngine && m_autotileEngine->lastManagedRect(windowId) == frame;
+}
+
+QString WindowTrackingAdaptor::shadowWindowId(const QString& windowId) const
+{
+    return m_service ? m_service->canonicalizeForLookup(windowId) : windowId;
 }
 
 void WindowTrackingAdaptor::refreshOpenWindowPlacements()
@@ -349,7 +354,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         ctx.toScreenId = newScreenId;
         ctx.fromEngineId = source ? source->engineId() : QString();
         ctx.wasFloating = true;
-        ctx.sourceGeometry = m_frameGeometry.value(windowId);
+        ctx.sourceGeometry = m_frameGeometry.value(shadowWindowId(windowId));
         if (source && source != dest) {
             source->handoffRelease(windowId);
         }
@@ -440,7 +445,8 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // Clear active window tracking if the closed window was the active one.
     // Without this, navigation shortcuts after closing the active window would
     // operate on a stale ID, producing confusing OSD failure messages.
-    if (m_lastActiveWindowId == windowId) {
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    if (PhosphorIdentity::WindowId::extractInstanceId(m_lastActiveWindowId) == instanceId) {
         m_lastActiveWindowId.clear();
     }
 
@@ -461,9 +467,10 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     captureWindowPlacement(windowId, screenId);
 
     // Drop frame-geometry shadow entry for this window.
-    m_frameGeometry.remove(windowId);
+    const QString shadowId = shadowWindowId(windowId);
+    m_frameGeometry.remove(shadowId);
     // Drop the last-broadcast floating state for this window.
-    m_broadcastFloating.remove(windowId);
+    m_broadcastFloating.remove(shadowId);
 
     m_service->windowClosed(windowId, kind);
 
@@ -473,9 +480,7 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // disappear signal fires synchronously from remove() and subscribers may
     // still call canonicalizeForLookup on their way out.
     if (m_windowRegistry) {
-        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
         m_windowRegistry->remove(instanceId);
-        m_windowRegistry->releaseCanonical(instanceId);
     }
 
     // Drive in-process sibling-adaptor cleanup (WindowDragAdaptor) without
@@ -687,7 +692,7 @@ void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int
     if (windowId.isEmpty() || width <= 0 || height <= 0) {
         return;
     }
-    m_frameGeometry[windowId] = QRect(x, y, width, height);
+    m_frameGeometry[shadowWindowId(windowId)] = QRect(x, y, width, height);
 }
 
 void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth,
@@ -706,7 +711,7 @@ void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int old
 
     const QRect newFrame(newX, newY, newWidth, newHeight);
     // Keep the frame shadow in sync with the committed geometry.
-    m_frameGeometry[windowId] = newFrame;
+    m_frameGeometry[shadowWindowId(windowId)] = newFrame;
 
     if (!m_autotileEngine) {
         return;
@@ -729,7 +734,7 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     }
 
     // Track the active window for daemon-driven navigation (move/focus/swap/etc.)
-    m_lastActiveWindowId = windowId;
+    m_lastActiveWindowId = shadowWindowId(windowId);
 
     // Track the active window's screen as fallback for shortcut screen detection.
     // The primary source is now cursorScreenChanged (from KWin effect's mouseChanged).
@@ -817,7 +822,7 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     // case — extend the same alive-set filter to m_frameGeometry.
     int frameGeoPruned = 0;
     for (auto it = m_frameGeometry.begin(); it != m_frameGeometry.end();) {
-        if (!alive.contains(it.key())) {
+        if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
             it = m_frameGeometry.erase(it);
             ++frameGeoPruned;
         } else {
@@ -828,7 +833,7 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     // would otherwise leak if the window died without a windowClosed signal.
     // Not persisted, so it does not feed the save-scheduling decision below.
     for (auto it = m_broadcastFloating.begin(); it != m_broadcastFloating.end();) {
-        if (!alive.contains(it.key())) {
+        if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
             it = m_broadcastFloating.erase(it);
         } else {
             ++it;

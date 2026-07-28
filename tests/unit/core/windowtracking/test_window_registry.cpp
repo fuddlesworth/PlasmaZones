@@ -102,13 +102,29 @@ private Q_SLOTS:
     void appIdMutation_updatesRecord_emitsMetadataChangedOnly()
     {
         WindowRegistry reg;
-        reg.upsert(QStringLiteral("cef1ba31"), make(QStringLiteral("emby-beta")));
+        WindowMetadata oldValue =
+            make(QStringLiteral("emby-beta"), QStringLiteral("emby.desktop"), QStringLiteral("Library"));
+        oldValue.windowRole = QStringLiteral("browser");
+        oldValue.pid = 1001;
+        oldValue.virtualDesktop = 2;
+        oldValue.virtualDesktops = {2, 3};
+        oldValue.activity = QStringLiteral("activity-a");
+        oldValue.windowType = PhosphorProtocol::WindowType::Normal;
+        oldValue.isMinimized = false;
+        oldValue.width = 1280;
+        oldValue.height = 720;
+        reg.upsert(QStringLiteral("cef1ba31"), oldValue);
 
         QSignalSpy appeared(&reg, &WindowRegistry::windowAppeared);
         QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
         QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
 
-        reg.upsert(QStringLiteral("cef1ba31"), make(QStringLiteral("media.emby.client.beta")));
+        WindowMetadata newValue = oldValue;
+        newValue.appId = QStringLiteral("media.emby.client.beta");
+        newValue.title = QStringLiteral("Now Playing");
+        newValue.isMinimized = true;
+        newValue.width = 1920;
+        reg.upsert(QStringLiteral("cef1ba31"), newValue);
 
         QCOMPARE(appeared.size(), 0); // Same window — no appearance event
         QCOMPARE(disappeared.size(), 0); // Same window — no disappearance event
@@ -119,8 +135,8 @@ private Q_SLOTS:
         QCOMPARE(args.at(0).toString(), QStringLiteral("cef1ba31"));
         const auto oldMeta = args.at(1).value<WindowMetadata>();
         const auto newMeta = args.at(2).value<WindowMetadata>();
-        QCOMPARE(oldMeta.appId, QStringLiteral("emby-beta"));
-        QCOMPARE(newMeta.appId, QStringLiteral("media.emby.client.beta"));
+        QVERIFY(oldMeta == oldValue);
+        QVERIFY(newMeta == newValue);
 
         // Latest lookup reflects the new class.
         QCOMPARE(reg.appIdFor(QStringLiteral("cef1ba31")), QStringLiteral("media.emby.client.beta"));
@@ -204,13 +220,87 @@ private Q_SLOTS:
         WindowRegistry reg;
         reg.upsert(QStringLiteral("u1"), make(QStringLiteral("firefox")));
         reg.upsert(QStringLiteral("u2"), make(QStringLiteral("kate")));
+        reg.canonicalizeWindowId(QStringLiteral("ghost|canonical-only"));
         QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
 
         reg.clear();
 
-        QCOMPARE(disappeared.size(), 2);
+        QStringList ids;
+        for (const QList<QVariant>& args : disappeared) {
+            ids.append(args.at(0).toString());
+        }
+        ids.sort();
+        QCOMPARE(ids, (QStringList{QStringLiteral("canonical-only"), QStringLiteral("u1"), QStringLiteral("u2")}));
         QCOMPARE(reg.size(), 0);
         QVERIFY(reg.instancesWithAppId(QStringLiteral("firefox")).isEmpty());
+    }
+
+    void remove_canonicalOnly_emitsBeforeReleasingCanonical()
+    {
+        WindowRegistry reg;
+        const QString canonical = QStringLiteral("ghost|canonical-only");
+        reg.canonicalizeWindowId(canonical);
+        QString resolvedDuringSignal;
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString&) {
+            resolvedDuringSignal = reg.canonicalizeForLookup(QStringLiteral("renamed|canonical-only"));
+        });
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        reg.remove(QStringLiteral("canonical-only"));
+
+        QCOMPARE(disappeared.size(), 1);
+        QCOMPARE(resolvedDuringSignal, canonical);
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|canonical-only")),
+                 QStringLiteral("renamed|canonical-only"));
+    }
+
+    void remove_reentrantRemoval_emitsOnce()
+    {
+        WindowRegistry reg;
+        const QString instanceId = QStringLiteral("reentrant-instance");
+        const QString canonical = QStringLiteral("app|reentrant-instance");
+        reg.upsert(instanceId, make(QStringLiteral("app")));
+        reg.canonicalizeWindowId(canonical);
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
+            QCOMPARE(removedId, instanceId);
+            QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|reentrant-instance")), canonical);
+            reg.remove(instanceId);
+            reg.clear();
+        });
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        reg.remove(instanceId);
+
+        QCOMPARE(disappeared.size(), 1);
+        QVERIFY(!reg.contains(instanceId));
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|reentrant-instance")),
+                 QStringLiteral("renamed|reentrant-instance"));
+    }
+
+    void remove_reinsertedInstance_honorsNestedRemoval()
+    {
+        WindowRegistry reg;
+        const QString instanceId = QStringLiteral("reinserted-instance");
+        reg.upsert(instanceId, make(QStringLiteral("old-app")));
+        bool reinserted = false;
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
+            if (!reinserted) {
+                reinserted = true;
+                reg.upsert(removedId, make(QStringLiteral("new-app")));
+            }
+        });
+        connect(&reg, &WindowRegistry::windowAppeared, &reg, [&](const QString& appearedId) {
+            if (reinserted) {
+                reg.remove(appearedId);
+            }
+        });
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        reg.remove(instanceId);
+
+        QCOMPARE(disappeared.size(), 2);
+        QVERIFY(!reg.contains(instanceId));
+        QVERIFY(reg.instancesWithAppId(QStringLiteral("new-app")).isEmpty());
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -344,7 +434,12 @@ private Q_SLOTS:
         QVERIFY(!reg.contains(QStringLiteral("dead-2")));
         // windowDisappeared fired for each dead record so subscribers (e.g.
         // saved-autotile-order cleanup) drop their ghost state.
-        QCOMPARE(disappeared.size(), 2);
+        QStringList disappearedIds;
+        for (const QList<QVariant>& args : disappeared) {
+            disappearedIds.append(args.at(0).toString());
+        }
+        disappearedIds.sort();
+        QCOMPARE(disappearedIds, (QStringList{QStringLiteral("dead-1"), QStringLiteral("dead-2")}));
         // The dead window's canonical translation is gone — a re-observation
         // under a mutated appId no longer resolves to the stale canonical.
         QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("konsole-renamed|dead-1")),

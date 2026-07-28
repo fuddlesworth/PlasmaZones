@@ -220,6 +220,7 @@ void AutotileEngine::connectSignals()
                     // Find and release orphaned virtual screen states for this physical screen
                     QStringList releasedWindows;
                     QSet<QString> orphanedVsIds;
+                    QSet<QString> placementChangedScreens;
                     m_states.removeStatesIf(
                         [&](const TilingStateKey& key, PhosphorTiles::TilingState*) {
                             const QString& sid = key.screenId;
@@ -241,8 +242,10 @@ void AutotileEngine::connectSignals()
                             // would blind capturePlacement's overflow
                             // discriminator for the remaining contexts.
                             orphanedVsIds.insert(sid);
-                            releaseScreenStateForTeardown(sid, state, releasedWindows,
-                                                          /*drainOverflow=*/false);
+                            if (releaseScreenStateForTeardown(sid, state, releasedWindows,
+                                                              /*drainOverflow=*/false)) {
+                                placementChangedScreens.insert(sid);
+                            }
                             // forgetScreen, not removeOverridesForScreen: this id
                             // is never reused, so remembering the algorithm it
                             // was on would strand a string for the session.
@@ -300,6 +303,9 @@ void AutotileEngine::connectSignals()
                     // Retile the new virtual screens
                     for (const QString& vsId : newVsIds) {
                         onScreenGeometryChanged(vsId);
+                    }
+                    for (const QString& sid : std::as_const(placementChangedScreens)) {
+                        Q_EMIT placementChanged(sid);
                     }
                 });
 

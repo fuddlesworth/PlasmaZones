@@ -345,7 +345,7 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
     onWindowFocused(windowId);
 }
 
-void AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
+bool AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
                                                    QStringList& releasedWindows, bool drainOverflow)
 {
     // Snapshot each window's autotile slot into the unified record BEFORE the
@@ -356,6 +356,7 @@ void AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, Phos
     // rides from the engine's own float-back cache.
     const QStringList tiled = state->tiledWindows();
     const QStringList floated = state->floatingWindows();
+    const bool releasedAny = !tiled.isEmpty() || !floated.isEmpty();
     if (m_windowTracker) {
         // Two passes instead of `floated + tiled` — this runs once per
         // context in the orphaned-VS teardown loop and the concatenation
@@ -390,6 +391,7 @@ void AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, Phos
     m_pendingOrderGeneration.remove(screenId);
     m_strictInitialOrderScreens.remove(screenId);
     state->deleteLater();
+    return releasedAny;
 }
 
 void AutotileEngine::migrateWindowBetweenKeys(const QString& windowId, const TilingStateKey& oldKey,

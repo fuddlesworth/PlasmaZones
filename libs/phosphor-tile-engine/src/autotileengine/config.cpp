@@ -102,7 +102,14 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
                                                   << state->windowCount() << "windows, ignoring pre-seeded order";
         return;
     }
-    // Warn (but allow) if overwriting a pending order that hasn't been fully consumed
+    // The explicit mode-toggle path seeds before the assignment flips and
+    // updateAutotileScreens repeats the same seed after it flips. Keep that
+    // two-phase safety without warning, replacing generations, or scheduling
+    // another timeout when the effective order is unchanged.
+    if (m_pendingInitialOrders.value(screenId) == windowIds) {
+        return;
+    }
+    // Warn (but allow) if overwriting a genuinely different pending order.
     if (m_pendingInitialOrders.contains(screenId)) {
         qCWarning(PhosphorTileEngine::lcTileEngine)
             << "setInitialWindowOrder: overwriting existing pending order for" << screenId;

@@ -198,19 +198,13 @@ public:
      *
      * Borrowed by the three D-Bus adaptors (SnapAdaptor,
      * WindowTrackingAdaptor, WindowDragAdaptor) and the daemon's own
-     * navigation / OSD paths so the cascade
+     * navigation / OSD / overlay paths so the cascade
      * `(modeFor → currentDesktop → currentActivity → isContextDisabled
      * → isContextLocked)` resolves through one call instead of being
-     * hand-stitched at each site. OverlayService is NOT yet a consumer —
-     * its disabled-context gates still call the legacy
-     * `isContextDisabled(m_settings, ...)` directly; migrating it is
-     * follow-up work. The pointer is non-null after `init()` and stays
-     * non-null until `stop()` runs to completion (which calls
-     * `m_contextResolver.reset()` in the teardown order documented at
-     * @ref m_contextResolver). Note that `stop()` returns early when
-     * `m_running` is false — the init-without-start teardown path
-     * therefore skips the explicit reset, and the resolver is destroyed
-     * later by `~Daemon` via the unique_ptr member dtor. See
+     * hand-stitched at each site. The pointer is non-null after `init()` and stays
+     * non-null until `stop()` runs. The init-without-start path detaches the
+     * overlay's borrow before its early return, while normal running teardown
+     * also clears every adaptor borrow before resetting the resolver. See
      * @ref m_contextResolver for the declaration-order invariant.
      */
     PhosphorContext::ContextResolver* contextResolver() const

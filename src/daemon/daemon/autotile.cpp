@@ -118,9 +118,7 @@ void Daemon::updateAutotileScreens()
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
         const int desktop = currentDesktopForScreen(screenId);
         QStringList order = m_autotileEngine->managedWindowOrder(screenId);
-        if (!order.isEmpty()) {
-            m_lastAutotileOrders[TilingStateKey{screenId, desktop, activity}] = order;
-        }
+        m_lastAutotileOrders[TilingStateKey{screenId, desktop, activity}] = order;
     }
 
     // Seed window order for screens ENTERING autotile from saved state.

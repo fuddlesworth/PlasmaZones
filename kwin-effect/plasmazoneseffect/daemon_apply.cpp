@@ -109,7 +109,7 @@ void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, co
 
 // slotToggleWindowFloatRequested removed — the daemon now handles float-toggle
 // locally against its active-window + frame-geometry shadow and emits
-// applyGeometryRequested directly. See WindowTrackingAdaptor::toggleWindowFloat.
+// applyGeometryRequested directly. See SnapAdaptor::toggleFloatForWindow.
 
 void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int x, int y, int width, int height,
                                                    const QString& zoneId, const QString& screenId, bool sizeOnly)
@@ -512,7 +512,9 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
                 && ::PhosphorIdentity::WindowId::extractInstanceId(getWindowId(live))
                     == ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
         }
-        if (stillMinimized) {
+        const bool unminimizePending = m_autotileHandler->hasPendingUnminimizeUnfloat(windowId)
+            || m_snapHandler->hasPendingUnminimizeUnfloat(windowId);
+        if (stillMinimized || unminimizePending) {
             qCDebug(lcEffect) << "Preserving minimize-float ownership across hidden unfloat:" << windowId;
         } else {
             m_autotileHandler->removeMinimizeFloated(windowId);

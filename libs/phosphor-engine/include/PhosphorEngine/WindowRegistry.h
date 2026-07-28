@@ -96,6 +96,8 @@ public:
     ~WindowRegistry() override;
 
     void upsert(const QString& instanceId, const WindowMetadata& metadata);
+    /// Remove metadata and canonical state, emitting windowDisappeared exactly
+    /// once while the canonical mapping remains available to subscribers.
     void remove(const QString& instanceId);
 
     std::optional<WindowMetadata> metadata(const QString& instanceId) const;
@@ -159,8 +161,8 @@ public:
     /// (e.g. saved-autotile-order cleanup) drop their ghost state too. Returns
     /// the count removed. @p aliveInstanceIds are the uuid components
     /// (WindowId::extractInstanceId), matching this registry's keying. The
-    /// normal per-window path is remove() + releaseCanonical on windowClosed;
-    /// this is the batch backstop the WTA alive-ids report drives.
+    /// normal per-window path is remove() on windowClosed; this is the batch
+    /// backstop the WTA alive-ids report drives.
     int pruneStaleInstances(const QSet<QString>& aliveInstanceIds);
 
 Q_SIGNALS:
@@ -173,6 +175,8 @@ private:
     QHash<QString, WindowMetadata> m_records;
     QMultiHash<QString, QString> m_appIdIndex;
     QHash<QString, QString> m_canonicalByInstance;
+    QSet<QString> m_disappearingInstances;
+    QSet<QString> m_removeAfterDisappearance;
 
     void indexInsert(const QString& instanceId, const QString& appId);
     void indexRemove(const QString& instanceId, const QString& appId);

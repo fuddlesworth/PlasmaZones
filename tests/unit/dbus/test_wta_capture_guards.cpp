@@ -189,10 +189,10 @@ private Q_SLOTS:
         QObject parent;
         auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
                                               &parent);
-        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        auto snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
-        wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, &tileEngine);
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), &tileEngine);
 
         const QString windowId = QStringLiteral("ghostty|inst-tile");
         const QString screenId = QStringLiteral("DP-1");
@@ -226,10 +226,10 @@ private Q_SLOTS:
         QVERIFY(rec);
         QCOMPARE(rec->freeGeometryFor(screenId), movedFrame);
 
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap.get(), nullptr);
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
-        delete snap;
+        snap.reset();
     }
 
     // Regression (phantom snap-float after a mode round-trip): a snapped
@@ -254,10 +254,10 @@ private Q_SLOTS:
         QObject parent;
         auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
                                               &parent);
-        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        auto snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
-        wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, nullptr);
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), nullptr);
 
         const QString windowId = QStringLiteral("app|handoff");
         const QString appId = wta->service()->currentAppIdFor(windowId);
@@ -291,7 +291,7 @@ private Q_SLOTS:
 
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
-        delete snap;
+        snap.reset();
     }
 
     // Minimize-float is a live occupancy suspension, not a placement change.
@@ -310,10 +310,10 @@ private Q_SLOTS:
         auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
                                               &parent);
         wta->setWindowRegistry(&registry);
-        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        auto snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
-        wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, nullptr);
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), nullptr);
 
         const QString instanceId = QStringLiteral("minimized-instance");
         const QString windowId = QStringLiteral("app|minimized-instance");
@@ -365,10 +365,10 @@ private Q_SLOTS:
         QVERIFY(stored);
         QCOMPARE(stored->slotFor(snap->engineId()).state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
 
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap.get(), nullptr);
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
-        delete snap;
+        snap.reset();
         wta->setWindowRegistry(nullptr);
     }
 
@@ -392,10 +392,10 @@ private Q_SLOTS:
         QObject parent;
         auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
                                               &parent);
-        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        auto snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
-        wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, &tileEngine);
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), &tileEngine);
 
         const QString windowId = QStringLiteral("app|closed-on-tile");
         const QString screenId = QStringLiteral("DP-1");
@@ -420,10 +420,10 @@ private Q_SLOTS:
         QVERIFY(rec);
         QCOMPARE(rec->freeGeometryFor(screenId), freeFrame);
 
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap.get(), nullptr);
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
-        delete snap;
+        snap.reset();
     }
 };
 

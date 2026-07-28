@@ -51,18 +51,21 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                                          QPointer<KWin::EffectWindow> window, const QString& windowId,
                                          bool storePreSnap, std::function<void()> fallback,
                                          std::function<void(const QString&, const QString&)> onSnapSuccess,
-                                         bool skipAnimation, std::function<void()> onComplete)
+                                         bool skipAnimation, std::function<void()> onComplete,
+                                         std::function<void()> onError)
 {
     QDBusPendingCall call = PhosphorProtocol::ClientHelpers::asyncCall(interface, method, args);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation,
-             onComplete](QDBusPendingCallWatcher* w) {
+            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation, onComplete,
+             onError](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
                 QDBusPendingReply<int, int, int, int, bool> reply = *w;
                 if (reply.isError()) {
                     qCDebug(lcEffect) << method << "error:" << reply.error().message();
-                    if (fallback)
+                    if (onError)
+                        onError();
+                    else if (fallback)
                         fallback();
                     if (onComplete)
                         onComplete();

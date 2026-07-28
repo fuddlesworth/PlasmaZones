@@ -44,7 +44,7 @@ namespace PlasmaZones {
 
 QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
 {
-    return m_frameGeometry.value(windowId);
+    return m_frameGeometry.value(shadowWindowId(windowId));
 }
 
 QString WindowTrackingAdaptor::lastActiveScreenName() const
