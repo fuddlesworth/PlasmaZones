@@ -278,24 +278,35 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         const QString windowId = m_effect->getWindowId(w);
         const bool suppressed = m_pendingCloses.remove(windowId);
 
-        if (!isEligibleForAutotileNotify(w)) {
+        const QString screenId = m_effect->getWindowScreenId(w);
+        if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
+            continue;
+        }
+
+        // Reset BEFORE the eligibility check: a window that is currently
+        // ineligible (minimized, fullscreen) must still shed its stale
+        // m_notifiedWindows entry on a re-announce cycle, or its later
+        // notifyWindowAdded (unminimize, exit-fullscreen) hits the
+        // already-notified bail and silently never announces it.
+        if (resetNotified) {
+            m_notifiedWindows.remove(windowId);
+        }
+
+        bool minimizedOnly = false;
+        if (!isEligibleForAutotileNotify(w, &minimizedOnly)) {
+            if (minimizedOnly && !suppressed) {
+                claimAlreadyMinimizedAsFloated(w, windowId, screenFilter);
+            }
             continue;
         }
         if (suppressed) {
             continue;
         }
 
-        const QString screenId = m_effect->getWindowScreenId(w);
-        if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
-            continue;
-        }
         if (!m_autotileScreens.contains(screenId)) {
             continue;
         }
 
-        if (resetNotified) {
-            m_notifiedWindows.remove(windowId);
-        }
         if (m_notifiedWindows.contains(windowId)) {
             continue;
         }
@@ -607,6 +618,7 @@ void AutotileHandler::cleanupAutotileTracking(const QString& windowId, const QSt
         m_notifiedWindows,      m_notifiedWindowScreens,   m_minimizeFloatedWindows, m_autotileTargetZones,
         m_centeredWaylandZones, m_monocleMaximizedWindows, m_preAutotileGeometries};
     AutotileStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
+    m_untiledMinimizeFloats.remove(windowId);
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreAutotileForDesktopMove is NOT cleared
@@ -761,6 +773,7 @@ void AutotileHandler::onDaemonReady()
     // m_minimizeFloatedWindows.remove() misses after the clear below.
     clearAllPendingMinimizeFloats();
     m_minimizeFloatedWindows.clear();
+    m_untiledMinimizeFloats.clear();
     for (auto connIt = m_pendingCrossScreenRestore.begin(); connIt != m_pendingCrossScreenRestore.end(); ++connIt) {
         QObject::disconnect(connIt.value());
     }

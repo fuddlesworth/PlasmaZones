@@ -253,8 +253,11 @@ void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId)
     }
 }
 
-bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
+bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w, bool* rejectedOnlyBecauseMinimized) const
 {
+    if (rejectedOnlyBecauseMinimized) {
+        *rejectedOnlyBecauseMinimized = false;
+    }
     // Close-grabbed dying windows survive in the stacking order for the
     // close-animation duration; announcing one as opened would insert an
     // orphan into the tiling tree (shrinking live tiles) until a later
@@ -276,10 +279,6 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
     }
     if (!m_effect->isTileableWindow(w)) {
         qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (not tileable)" << m_effect->getWindowId(w);
-        return false;
-    }
-    if (w->isMinimized()) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (minimized)" << m_effect->getWindowId(w);
         return false;
     }
     // A window that is fullscreen at first contact (opened fullscreen, or
@@ -307,6 +306,19 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
         qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (too small)" << m_effect->getWindowId(w)
                           << "size=" << frame.size() << "threshold=" << m_effect->m_cachedMinWindowWidth << "x"
                           << m_effect->m_cachedMinWindowHeight;
+        return false;
+    }
+    // Checked LAST so the out-flag means "every other gate passed": the batch
+    // announce claims such a window as minimize-floated (minimizedChanged
+    // never fires for a window that was already minimized when its screen
+    // entered autotile, so the runtime minimize→float path cannot cover it).
+    // frameGeometry stays at the pre-minimize frame while minimized, so the
+    // min-size gate above evaluates real dimensions for this ordering.
+    if (w->isMinimized()) {
+        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (minimized)" << m_effect->getWindowId(w);
+        if (rejectedOnlyBecauseMinimized) {
+            *rejectedOnlyBecauseMinimized = true;
+        }
         return false;
     }
     qCDebug(lcEffect) << "isEligibleForAutotileNotify: accepted" << m_effect->getWindowId(w) << "size=" << frame.size()

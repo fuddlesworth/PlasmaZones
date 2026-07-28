@@ -637,11 +637,34 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
     // activation, or windows changed between toggles).
     TilingStateKey orderKey{screenId, currentDesktopForScreen(screenId), currentActivity()};
     QStringList order = m_lastAutotileOrders.value(orderKey);
-    if (order.isEmpty()) {
-        PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-        if (wts) {
-            order = wts->buildZoneOrderedWindowList(screenId);
-        }
+    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    if (order.isEmpty() && wts) {
+        order = wts->buildZoneOrderedWindowList(screenId);
+    }
+    if (!order.isEmpty() && wts) {
+        // Order sources describe past arrangements (the tiled order captured
+        // at toggle-off, or zone assignments) and know nothing about what
+        // happened to those windows since. Two live checks before seeding:
+        //
+        // - Floating: a window floating NOW (e.g. floated by the snap handler
+        //   while the screen was in a manual mode) must not be seeded back as
+        //   tiled — the strict seed in setAutotileScreens only restores
+        //   floating from the AUTOTILE placement slot, so a float recorded by
+        //   another mode would be tiled over.
+        // - Minimized: checked via the registry's live metadata, because the
+        //   floating check resolves through the screen's CURRENT mode slot.
+        //   The seed runs twice per toggle (mode-toggle handler, then
+        //   updateAutotileScreens after the assignment flip), and the second
+        //   pass reads the autotile slot where a snap-mode minimize-float is
+        //   invisible — the minimize check is mode-independent and holds on
+        //   both passes.
+        const PhosphorEngine::WindowRegistry* registry = wts->windowRegistry();
+        order.removeIf([wts, registry](const QString& windowId) {
+            if (wts->isWindowFloating(windowId)) {
+                return true;
+            }
+            return registry && registry->isMinimized(windowId);
+        });
     }
 
     if (!order.isEmpty()) {

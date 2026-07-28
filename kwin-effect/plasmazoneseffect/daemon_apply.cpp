@@ -499,8 +499,25 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // engines' own commits consume their pending entry and minimize-float
         // tracking BEFORE dispatching the unfloat, so this can never cancel
         // the commit whose echo delivered this signal.
-        m_autotileHandler->removeMinimizeFloated(windowId);
-        m_snapHandler->removeMinimizeFloated(windowId);
+        // Mode teardown and a hidden snap-zone commit can legitimately clear
+        // the daemon's live float while the window is still minimized. The
+        // float is only the daemon-side occupancy mechanism; the effect-side
+        // marker still owns the later unminimize transition. Dropping it here
+        // loses that edge and leaves KWin restoring whichever geometry was last
+        // applied by the old mode. Genuine visible unfloats still clear both
+        // handlers below.
+        bool stillMinimized = false;
+        if (KWin::EffectWindow* live = findWindowById(windowId)) {
+            stillMinimized = live->isMinimized()
+                && ::PhosphorIdentity::WindowId::extractInstanceId(getWindowId(live))
+                    == ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
+        }
+        if (stillMinimized) {
+            qCDebug(lcEffect) << "Preserving minimize-float ownership across hidden unfloat:" << windowId;
+        } else {
+            m_autotileHandler->removeMinimizeFloated(windowId);
+            m_snapHandler->removeMinimizeFloated(windowId);
+        }
     } else {
         // Backstop: a window that becomes floating is no longer snap-managed.
         // Covers float paths that don't emit applyGeometryRequested with an

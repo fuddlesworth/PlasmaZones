@@ -167,10 +167,11 @@ public:
     /// the net inert and the plain unfloat re-snaps as before. Called from
     /// PlasmaZonesEffect::slotWindowMinimizedChanged after the shared minimize
     /// shader event.
-    /// The unfloat side does NOT commit synchronously: it is deferred by an
-    /// Effect::animationTime-scaled grace so the re-snap's geometry apply
-    /// cannot land mid-flight and cancel KWin's own unminimize animation
-    /// (discussion #816); see m_pendingUnminimizeUnfloat.
+    /// The normal same-mode unfloat is deferred by an Effect::animationTime-
+    /// scaled grace so the re-snap's geometry apply cannot land mid-flight and
+    /// cancel KWin's own unminimize animation (discussion #816). A float adopted
+    /// across a mode boundary commits immediately because its current geometry
+    /// belongs to the other mode; see m_pendingUnminimizeUnfloat.
     void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                bool minimized);
 
@@ -221,7 +222,8 @@ private:
     /// queue, so the daemon answers against pre-unfloat state) plus the
     /// unfloat itself. Called only from the grace timer in
     /// handleMinimizeChanged after revalidation; @p window is alive,
-    /// unminimized, handleable, and on a snap-mode screen.
+    /// unminimized, handleable, and on a snap-mode screen. Cross-mode adoption
+    /// also calls it immediately at the unminimize edge.
     void commitUnminimizeUnfloat(KWin::EffectWindow* window, const QString& windowId, const QString& screenId);
 
     PlasmaZonesEffect* m_effect;

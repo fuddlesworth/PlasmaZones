@@ -119,6 +119,7 @@ public:
     bool removeMinimizeFloated(const QString& windowId)
     {
         cancelPendingUnminimizeUnfloat(windowId);
+        m_untiledMinimizeFloats.remove(windowId);
         return m_minimizeFloatedWindows.remove(windowId);
     }
     /// Drop a destroyed window's desktop-move geometry stash. Separate from
@@ -272,9 +273,33 @@ private:
      * Shared predicate used by both notifyWindowAdded and notifyWindowsAddedBatch
      * to keep filtering logic in sync.
      *
+     * @param rejectedOnlyBecauseMinimized When non-null, set to true if the
+     *        window passed every other gate and was rejected solely for being
+     *        minimized — the batch announce uses this to claim the window as
+     *        minimize-floated instead of silently dropping it (a daemon-side
+     *        mode-transition seed would otherwise tile it).
      * @return true if the window should be notified to the autotile daemon
      */
-    bool isEligibleForAutotileNotify(KWin::EffectWindow* w) const;
+    bool isEligibleForAutotileNotify(KWin::EffectWindow* w, bool* rejectedOnlyBecauseMinimized = nullptr) const;
+
+    /**
+     * @brief Claim a window that was already minimized at batch-announce time
+     *        as minimize-floated.
+     *
+     * A window minimized BEFORE its screen entered autotile never gets a
+     * minimizedChanged edge, so the runtime minimize→float path cannot float
+     * it — while the daemon's mode-transition seed (saved order / zone order)
+     * has no live minimize knowledge and would tile it. Marking it
+     * minimize-floated here keeps the invariant "minimized ⇒ not counted in
+     * the tiling geometry" and routes its later unminimize through the
+     * existing deferred unfloat → notifyWindowAdded commit, which tiles it.
+     *
+     * Skips windows the daemon already tracks as floating (a user float or
+     * another mode's minimize-float record) — mirroring the runtime minimize
+     * path, we never claim ownership of a float we did not create.
+     */
+    void claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const QString& windowId,
+                                        const QSet<QString>& screenFilter);
 
     /**
      * @brief Cancel a pending debounced minimize→float commit.
@@ -426,6 +451,14 @@ private:
     QHash<QString, QMetaObject::Connection>
         m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection
     QSet<QString> m_minimizeFloatedWindows;
+    /// Subset of m_minimizeFloatedWindows claimed at batch-announce time
+    /// (already minimized when the screen entered autotile). These windows
+    /// sit at their free-floating rect, NOT a tile rect, so their unminimize
+    /// commits the unfloat immediately instead of through the deferred
+    /// animation grace — the grace is invisible only for a window parked at
+    /// its tile; for these it parks the window at the free rect for the
+    /// whole animation and then visibly hops it into the tile.
+    QSet<QString> m_untiledMinimizeFloats;
     // NOTE: title-bar (borderless) state is owned by the effect's
     // DecorationManager; this handler only tracks tiled membership for
     // border RENDERING via m_border.tiledWindowsByScreen.

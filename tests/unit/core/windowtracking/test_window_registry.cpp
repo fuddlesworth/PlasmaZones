@@ -284,6 +284,18 @@ private Q_SLOTS:
         QCOMPARE(reg.appIdFor(QStringLiteral("unknown")), QString());
     }
 
+    void isMinimized_resolvesCompositeWindowId()
+    {
+        WindowRegistry reg;
+        WindowMetadata metadata = make(QStringLiteral("firefox"));
+        metadata.isMinimized = true;
+        reg.upsert(QStringLiteral("uuid-1"), metadata);
+
+        QVERIFY(reg.isMinimized(QStringLiteral("uuid-1")));
+        QVERIFY(reg.isMinimized(QStringLiteral("firefox|uuid-1")));
+        QVERIFY(!reg.isMinimized(QStringLiteral("firefox|unknown")));
+    }
+
     // ────────────────────────────────────────────────────────────────────
     // pruneStaleInstances — defensive batch cleanup for signal-less deaths
     // ────────────────────────────────────────────────────────────────────

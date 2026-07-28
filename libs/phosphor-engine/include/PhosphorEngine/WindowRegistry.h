@@ -38,7 +38,9 @@ struct WindowMetadata
     // compositor could not report it — e.g. no underlying KWin::Window) leaves the
     // corresponding WindowQuery field disengaged, keeping a predicate over it inert,
     // mirroring window_query.cpp's engage-only-when-known contract. ──
-    std::optional<bool> isMinimized{};
+    std::optional<bool> isMinimized{}; ///< LIVE, unlike isFocused: the effect re-pushes metadata on every
+                                       ///< minimizedChanged edge, so mode-swap seed/restore decisions can
+                                       ///< rely on it reflecting the window's current minimize state.
     std::optional<bool> isFullscreen{};
     std::optional<bool> isSticky{}; ///< on all virtual desktops
     std::optional<bool> isMaximized{}; ///< MaximizeFull (both axes)
@@ -137,6 +139,7 @@ public:
     };
     std::optional<WindowContext> windowContext(const QString& instanceId) const;
     Q_INVOKABLE QString appIdFor(const QString& instanceId) const override;
+    bool isMinimized(const QString& windowId) const override;
     QStringList instancesWithAppId(const QString& appId) const;
     bool contains(const QString& instanceId) const;
     QStringList allInstances() const;

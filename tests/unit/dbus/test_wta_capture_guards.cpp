@@ -25,6 +25,7 @@
 #include <PhosphorEngine/IPlacementState.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -291,6 +292,75 @@ private Q_SLOTS:
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
         delete snap;
+    }
+
+    // Minimize-float is a live occupancy suspension, not a placement change.
+    // Every capture source must preserve the pre-minimize snap slot while the
+    // compositor reports the window hidden.
+    void testMinimizedCapturePreservesPreMinimizePlacement()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        PhosphorEngine::WindowRegistry registry;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        wta->setWindowRegistry(&registry);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, nullptr);
+
+        const QString instanceId = QStringLiteral("minimized-instance");
+        const QString windowId = QStringLiteral("app|minimized-instance");
+        const QString screenId = QStringLiteral("DP-1");
+        const QString zoneId = QUuid::createUuid().toString();
+
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("app");
+        metadata.isMinimized = true;
+        registry.upsert(instanceId, metadata);
+
+        PhosphorEngine::WindowPlacement placement;
+        placement.windowId = windowId;
+        placement.appId = metadata.appId;
+        placement.screenId = screenId;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        slot.zoneIds = QStringList{zoneId};
+        placement.engines.insert(snap->engineId(), slot);
+        QVERIFY(wta->service()->placementStore().record(placement));
+
+        // Runtime post-minimize state is floating and carries a valid frame.
+        // Without the minimized guard, capture overwrites the frozen snapped
+        // slot with this temporary float.
+        snap->snapState()->setFloatingOnScreen(windowId, screenId, 1);
+        wta->setFrameGeometry(windowId, 620, 410, 1100, 760);
+        wta->captureWindowPlacement(windowId);
+
+        auto stored = wta->service()->placementStore().peekExact(windowId);
+        QVERIFY(stored);
+        QCOMPARE(stored->slotFor(snap->engineId()).state, QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+        QCOMPARE(stored->slotFor(snap->engineId()).zoneIds, QStringList{zoneId});
+
+        // Once visible, the same capture is allowed and proves the test's
+        // floating setup would have changed the record without the guard.
+        metadata.isMinimized = false;
+        registry.upsert(instanceId, metadata);
+        wta->captureWindowPlacement(windowId);
+        stored = wta->service()->placementStore().peekExact(windowId);
+        QVERIFY(stored);
+        QCOMPARE(stored->slotFor(snap->engineId()).state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
+
+        wta->setEngines(snap, nullptr);
+        wta->service()->setSnapState(nullptr);
+        wta->service()->setSnapEngine(nullptr);
+        delete snap;
+        wta->setWindowRegistry(nullptr);
     }
 
     // The engine-miss CLOSE fallback carries the same tile-rect poison guard

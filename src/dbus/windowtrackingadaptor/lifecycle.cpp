@@ -47,6 +47,17 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     if (windowId.isEmpty() || !m_service) {
         return;
     }
+    // Minimize uses floating as a live suspension mechanism so the hidden
+    // window stops occupying a snap zone or autotile slot. It is not placement
+    // intent. Preserve the record exactly as it was before minimization rather
+    // than persisting that temporary float through passive, presave, periodic,
+    // close, or mode-transition captures. A genuinely user-floated window was
+    // already captured when it floated, so preserving its prior record is also
+    // correct while it is minimized.
+    if (m_windowRegistry && m_windowRegistry->isMinimized(windowId)) {
+        qCDebug(lcDbusWindow) << "Skipping placement capture for minimized window" << windowId;
+        return;
+    }
     // Capture from the engine that CURRENTLY OWNS this window, not merely the first
     // engine that returns a placement. The engines keep INDEPENDENT state (snap:
     // snapped / floated; autotile: tiled / floated), so a window now managed by

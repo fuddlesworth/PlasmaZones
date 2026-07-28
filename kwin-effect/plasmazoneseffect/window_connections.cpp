@@ -763,6 +763,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 }
             });
 
+    // Refresh the daemon's registry metadata on every minimize edge, and
+    // BEFORE the handler connections below so the push is enqueued on the bus
+    // ahead of any float traffic from the same edge. The daemon's mode-swap
+    // seed/restore decisions consult WindowMetadata::isMinimized, which is
+    // otherwise only snapshotted at window-open — a stale value lets a
+    // mode-swap seed tile a window that is minimized right now (the per-slot
+    // floating check cannot cover this: it resolves via the screen's CURRENT
+    // mode, which flips mid-toggle).
+    connect(w, &KWin::EffectWindow::minimizedChanged, this, [this, w]() {
+        pushWindowMetadata(w);
+    });
+
     // Autotile: track minimize/unminimize to remove/re-add windows from tiling
     connect(w, &KWin::EffectWindow::minimizedChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowMinimizedChanged);

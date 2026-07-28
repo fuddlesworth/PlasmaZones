@@ -8,6 +8,7 @@
 #include <memory>
 
 #include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -722,6 +723,49 @@ private Q_SLOTS:
                  "a same-app sibling's floating record must not float a record-less seeded window");
         QVERIFY2(state->isFloating(QStringLiteral("app|own")),
                  "the window's own exact floating record still restores its float");
+    }
+
+    void testMinimizedFloatDoesNotReplaceTiledPlacementOnTeardown()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PlasmaZones::StubZoneDetector zoneDetector;
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setWindowRegistry(&registry);
+
+        const QString screenId = QStringLiteral("DP-1");
+        const QString instanceId = QStringLiteral("minimized-instance");
+        const QString windowId = QStringLiteral("app|minimized-instance");
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("app");
+        metadata.isMinimized = false;
+        registry.upsert(instanceId, metadata);
+
+        engine.setAutotileScreens({screenId});
+        engine.windowOpened(windowId, screenId);
+        QCoreApplication::processEvents();
+
+        const auto tiledPlacement = engine.capturePlacement(windowId);
+        QVERIFY(tiledPlacement);
+        QCOMPARE(tiledPlacement->slotFor(engine.engineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateTiled()));
+        QVERIFY(wts.placementStore().record(*tiledPlacement));
+
+        metadata.isMinimized = true;
+        registry.upsert(instanceId, metadata);
+        engine.setWindowFloat(windowId, true, screenId);
+        QVERIFY(engine.isWindowFloatingInAutotile(windowId));
+
+        // Screen teardown captures directly through AutotileEngine, bypassing
+        // WindowTrackingAdaptor. The minimized guard must still preserve the
+        // pre-minimize tiled slot rather than persisting the temporary float.
+        engine.setAutotileScreens({});
+        const auto stored = wts.placementStore().peekExact(windowId);
+        QVERIFY(stored);
+        QCOMPARE(stored->slotFor(engine.engineId()).state, QString(PhosphorEngine::WindowPlacement::stateTiled()));
     }
 };
 

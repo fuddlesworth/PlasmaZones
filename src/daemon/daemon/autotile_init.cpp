@@ -171,7 +171,25 @@ void Daemon::initializeAutotile()
                             const bool snapSnapped = wasAutotileFloated
                                 && snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()
                                 && !snapSlot.zoneIds.isEmpty();
-                            if (snapFloat) {
+                            // A window that was TILED at release (present in the
+                            // autotile order captured just before this signal) is
+                            // resnapped by the order-driven path, whose commitSnap
+                            // rewrites the snap slot. Its snap slot may still say
+                            // floating from a minimize-float taken the last time the
+                            // screen was in snapping and dissolved during the
+                            // autotile session (the unfloat ran in autotile mode and
+                            // never touched the snap slot). Restoring that stale
+                            // float would both resurrect it and knock the window out
+                            // of the order resnap, which skips floating windows.
+                            const bool tiledAtRelease = !windowScreen.isEmpty()
+                                && m_lastAutotileOrders
+                                       .value(TilingStateKey{windowScreen, currentDesktopForScreen(windowScreen),
+                                                             currentActivity()})
+                                       .contains(windowId);
+                            if (snapFloat && tiledAtRelease) {
+                                qCInfo(lcDaemon) << "windowsReleased: skipping stale snap-float for tiled window"
+                                                 << windowId << "(order resnap re-snaps it)";
+                            } else if (snapFloat) {
                                 qCInfo(lcDaemon) << "windowsReleased: restoring snap-float for" << windowId;
                                 m_windowTrackingAdaptor->setWindowFloating(windowId, true);
                                 const QString screen = wts->screenForWindow(windowId);

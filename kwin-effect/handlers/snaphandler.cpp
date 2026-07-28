@@ -342,8 +342,26 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
         m_minimizeFloatedWindows.insert(windowId);
     } else {
         if (!m_minimizeFloatedWindows.contains(windowId)) {
-            qCDebug(lcEffect) << "Snap: unminimized window was not minimize-floated, skipping unfloat:" << windowId;
-            return;
+            // Adopt a minimize-float created by the AUTOTILE handler before
+            // this screen swapped away from autotile — the mirror of the
+            // adoption in AutotileHandler::slotWindowMinimizedChanged, and
+            // for the same reason: ownership must follow the screen's
+            // current mode or the unminimize leaves the window floating
+            // until the next mode toggle. removeMinimizeFloated also cancels
+            // that handler's pending deferred commit for the window.
+            AutotileHandler* autotile = m_effect->autotileHandler();
+            if (autotile && autotile->removeMinimizeFloated(windowId)) {
+                // The window still carries its autotile rect, not its snap-zone
+                // rect. Do not leave that wrong frame visible for the normal
+                // animation grace: commit at the unminimize edge so KWin starts
+                // the restore against the saved snap placement.
+                qCInfo(lcEffect) << "Snap: adopted autotile-mode minimize-float, unfloating immediately:" << windowId;
+                commitUnminimizeUnfloat(window, windowId, screenId);
+                return;
+            } else {
+                qCDebug(lcEffect) << "Snap: unminimized window was not minimize-floated, skipping unfloat:" << windowId;
+                return;
+            }
         }
         // A commit is already scheduled for this window — nothing new to do.
         if (m_pendingUnminimizeUnfloat.contains(windowId)) {
@@ -385,13 +403,12 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             }
             const QString currentScreenId = m_effect->getWindowScreenId(fw);
             if (m_effect->autotileHandler()->isAutotileScreen(currentScreenId)) {
-                // The screen flipped to autotile during the grace; that
-                // engine's own minimize-float machine owns the window now.
-                // The m_minimizeFloatedWindows entry is deliberately LEFT in
-                // place (mirroring the autotile twin's symmetric bail): the
-                // window is still floating daemon-side, and the entry drains
-                // on close via removeMinimizeFloated.
-                qCDebug(lcEffect) << "Snap: deferred unfloat screen became autotile, skipping:" << windowId;
+                // The unminimize edge already happened, so waiting for another
+                // edge would strand the suspension permanently. Transfer the
+                // commit to the handler that owns the screen now; its adoption
+                // path removes our marker and tiles immediately.
+                qCInfo(lcEffect) << "Snap: deferred unfloat screen became autotile, transferring:" << windowId;
+                m_effect->autotileHandler()->slotWindowMinimizedChanged(fw);
                 return;
             }
             if (!m_minimizeFloatedWindows.remove(windowId)) {
@@ -496,7 +513,7 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
                 });
     }
 
-    qCInfo(lcEffect) << "Snap: window unminimized, unfloating (after animation grace):" << windowId << "on" << screenId;
+    qCInfo(lcEffect) << "Snap: window unminimized, unfloating:" << windowId << "on" << screenId;
 
     if (m_effect->isDaemonReady("snap minimize float")) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,

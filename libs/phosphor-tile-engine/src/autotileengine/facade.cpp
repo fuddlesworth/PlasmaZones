@@ -316,6 +316,14 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     if (!state) {
         return std::nullopt;
     }
+    // A minimized window is temporarily represented as floating so it leaves
+    // tiledWindows() and the remaining windows reflow. Do not turn that runtime
+    // suspension into durable user-float intent. This guard is required here,
+    // not only in WindowTrackingAdaptor's capture funnel, because screen
+    // teardown captures the autotile slot directly before destroying the state.
+    if (m_windowRegistry && m_windowRegistry->isMinimized(wid)) {
+        return std::nullopt;
+    }
 
     WindowPlacement p;
     // Canonical id, not the raw argument: every engine map is keyed on the

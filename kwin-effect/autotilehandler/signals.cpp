@@ -7,6 +7,7 @@
 #include "autotilehandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "handlers/navigationhandler.h"
+#include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorIdentity/WindowId.h>
@@ -650,6 +651,40 @@ void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool is
     }
 }
 
+void AutotileHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const QString& windowId,
+                                                     const QSet<QString>& screenFilter)
+{
+    const QString screenId = m_effect->getWindowScreenId(w);
+    if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
+        return;
+    }
+    if (!m_autotileScreens.contains(screenId)) {
+        return;
+    }
+    // Same skip as the runtime minimize path: an already-floating window
+    // (user float, or another mode's minimize-float record) keeps its float
+    // and its owner — claiming it would make our unminimize path force-tile
+    // a window whose float we did not create.
+    if (m_effect->isWindowFloating(windowId)) {
+        return;
+    }
+    if (m_minimizeFloatedWindows.contains(windowId)) {
+        return;
+    }
+    m_minimizeFloatedWindows.insert(windowId);
+    // The window was never tiled by us — it sits at its free-floating rect,
+    // so its unminimize must commit immediately (see m_untiledMinimizeFloats).
+    m_untiledMinimizeFloats.insert(windowId);
+    qCInfo(lcEffect) << "Autotile: window already minimized at announce, claiming as minimize-floated:" << windowId
+                     << "on" << screenId;
+    if (m_effect->m_daemonGate.serviceRegistered) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("setWindowFloatingForScreen"),
+                                                       {windowId, screenId, true},
+                                                       QStringLiteral("setWindowFloatingForScreen"));
+    }
+}
+
 void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 {
     if (!w || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)) {
@@ -746,8 +781,58 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     }
 
     if (!m_minimizeFloatedWindows.contains(windowId)) {
+        // Adopt a minimize-float created by the SNAP handler before this
+        // screen swapped to autotile. Ownership must follow the screen's
+        // current mode: the snap handler's own unminimize path bails on
+        // autotile screens (and its deferred commit bails when the screen
+        // flipped mid-grace), so without the adoption NOBODY unfloats the
+        // window — it unminimizes into a permanent floating limbo until the
+        // next mode toggle.
+        //
+        // Committed IMMEDIATELY, not through the deferred grace below. The
+        // grace exists so the retile's moveResize doesn't cancel the stock
+        // unminimize animation, and it is invisible in the normal cycle only
+        // because a window we minimize-floated ourselves still sits at its
+        // tiled rect — the deferral merely shifts retile timing. An adopted
+        // window sits at its snap-mode free-float rect: deferring parks it
+        // there for the whole animation and then visibly hops it into the
+        // tile. Unfloating at the edge lets the tile decision land while the
+        // restore is still starting, so the window goes straight to its tile
+        // (trading a cancelled restore animation for the correct position).
+        SnapHandler* snap = m_effect->snapHandler();
+        if (snap && snap->removeMinimizeFloated(windowId)) {
+            qCInfo(lcEffect) << "Autotile: adopted snap-mode minimize-float, unfloating immediately:" << windowId
+                             << "on" << screenId;
+            if (m_effect->m_daemonGate.serviceRegistered) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false},
+                    QStringLiteral("setWindowFloatingForScreen"));
+            }
+            notifyWindowAdded(w);
+            return;
+        }
         qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:"
                           << windowId;
+        notifyWindowAdded(w);
+        return;
+    }
+    // A window claimed at batch-announce time was never tiled by us — it
+    // sits at its free-floating rect, so the deferred grace below would park
+    // it there for the whole restore animation and then visibly hop it into
+    // its tile. Commit the unfloat immediately instead, same rationale as
+    // the snap-mode adoption above: the tile decision lands while the
+    // restore is still starting and the window goes straight to its tile.
+    if (m_untiledMinimizeFloats.remove(windowId)) {
+        m_minimizeFloatedWindows.remove(windowId);
+        qCInfo(lcEffect) << "Autotile: window unminimized (claimed at announce), unfloating immediately:" << windowId
+                         << "on" << screenId;
+        if (m_effect->m_daemonGate.serviceRegistered) {
+            PhosphorProtocol::ClientHelpers::fireAndForget(
+                m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false},
+                QStringLiteral("setWindowFloatingForScreen"));
+        }
         notifyWindowAdded(w);
         return;
     }
@@ -799,7 +884,14 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         }
         const QString currentScreenId = m_effect->getWindowScreenId(fw);
         if (!m_autotileScreens.contains(currentScreenId)) {
-            qCDebug(lcEffect) << "Autotile: deferred unfloat screen no longer autotiled, skipping:" << windowId;
+            // The unminimize edge already happened. Hand the pending commit to
+            // snap now instead of retaining ownership for an edge that will
+            // never be emitted again.
+            SnapHandler* snap = m_effect->snapHandler();
+            if (snap) {
+                qCInfo(lcEffect) << "Autotile: deferred unfloat screen became snap, transferring:" << windowId;
+                snap->handleMinimizeChanged(fw, windowId, currentScreenId, false);
+            }
             return;
         }
         if (!m_minimizeFloatedWindows.remove(windowId)) {
