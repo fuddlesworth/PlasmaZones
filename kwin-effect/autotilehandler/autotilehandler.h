@@ -88,9 +88,12 @@ public:
      * @param screenFilter If non-empty, only process windows on these screens
      * @param resetNotified If true, remove windowId from m_notifiedWindows before processing
      *        (for re-announce on daemon restart / screen change)
+     * @param enteringAutotile True when the screen has just changed from snap
+     *        mode. Already-minimized windows then need an immediate first
+     *        autotile placement when they become visible.
      */
     void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, const QSet<QString>& screenFilter = {},
-                                 bool resetNotified = false);
+                                 bool resetNotified = false, bool enteringAutotile = false);
 
     /**
      * @brief Remove a window from this handler's autotile tracking.
@@ -262,8 +265,8 @@ private:
      *
      * Updates the float cache, clears tiled tracking, removes the border
      * overlay, and unmaximizes monocle (title-bar restores flow through the
-     * rule path). Used by both slotWindowFloatingChanged (per-window D-Bus
-     * signal path) and slotWindowsTileRequested (batch float path).
+     * rule path). Used by the per-window D-Bus signal, batch float, and
+     * drag-to-float paths.
      */
     void applyFloatCleanup(const QString& windowId);
 
@@ -286,20 +289,19 @@ private:
      * @brief Claim a window that was already minimized at batch-announce time
      *        as minimize-floated.
      *
-     * A window minimized BEFORE its screen entered autotile never gets a
-     * minimizedChanged edge, so the runtime minimize→float path cannot float
-     * it — while the daemon's mode-transition seed (saved order / zone order)
-     * has no live minimize knowledge and would tile it. Marking it
-     * minimize-floated here keeps the invariant "minimized ⇒ not counted in
-     * the tiling geometry" and routes its later unminimize through the
-     * existing deferred unfloat → notifyWindowAdded commit, which tiles it.
+     * A window minimized BEFORE a batch announcement never gets a
+     * minimizedChanged edge for that transition. Marking it minimize-floated
+     * keeps it out of the live tiling geometry until its later unminimize.
+     * Mode-entry batches commit that first placement immediately, while daemon
+     * re-announcements retain the normal animation grace for windows already
+     * parked at an autotile rect.
      *
      * Skips windows the daemon already tracks as floating (a user float or
      * another mode's minimize-float record) — mirroring the runtime minimize
      * path, we never claim ownership of a float we did not create.
      */
     void claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const QString& windowId,
-                                        const QSet<QString>& screenFilter);
+                                        const QSet<QString>& screenFilter, bool enteringAutotile);
 
     /**
      * @brief Cancel a pending debounced minimize→float commit.
@@ -412,9 +414,9 @@ private:
     quint64 m_screensSignalGeneration = 0;
     /// Pre-autotile frame geometry, keyed [screenId][windowId].
     ///
-    /// Ownership: this is a local cache. The daemon's
-    /// `WindowTrackingService::m_preTileGeometries` is the authoritative
-    /// store and survives daemon restart. The effect populates this map on
+    /// Ownership: this is a local cache. The daemon's unified
+    /// `WindowPlacementStore` record is authoritative and survives daemon
+    /// restart. The effect populates this map on
     /// the first autotile transition for a window so it can restore the
     /// frame instantly when the window leaves autotile mode (untile, mode
     /// switch, screen change) without waiting on a D-Bus round-trip.

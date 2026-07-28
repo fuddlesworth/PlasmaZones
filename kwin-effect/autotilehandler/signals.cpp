@@ -519,7 +519,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // Batch-notify all windows on newly-added autotile screens in one D-Bus
             // call (windowsOpenedBatch) instead of per-window windowOpened round-trips.
             // saveAndRecordPreAutotileGeometry is called inside notifyWindowsAddedBatch.
-            notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true);
+            notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true,
+                                    /*enteringAutotile=*/true);
             qCInfo(lcEffect) << "Saved pre-autotile geometries for screens:" << added;
 
             // Async fetch of daemon's persisted pre-autotile geometries from previous session.
@@ -652,7 +653,7 @@ void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool is
 }
 
 void AutotileHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const QString& windowId,
-                                                     const QSet<QString>& screenFilter)
+                                                     const QSet<QString>& screenFilter, bool enteringAutotile)
 {
     const QString screenId = m_effect->getWindowScreenId(w);
     if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
@@ -672,9 +673,11 @@ void AutotileHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, cons
         return;
     }
     m_minimizeFloatedWindows.insert(windowId);
-    // The window was never tiled by us — it sits at its free-floating rect,
-    // so its unminimize must commit immediately (see m_untiledMinimizeFloats).
-    m_untiledMinimizeFloats.insert(windowId);
+    if (enteringAutotile) {
+        // The current rect belongs to the prior mode. Place it in autotile at
+        // the visibility edge instead of after the animation grace.
+        m_untiledMinimizeFloats.insert(windowId);
+    }
     qCInfo(lcEffect) << "Autotile: window already minimized at announce, claiming as minimize-floated:" << windowId
                      << "on" << screenId;
     if (m_effect->m_daemonGate.serviceRegistered) {
@@ -809,7 +812,7 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
                     QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false},
                     QStringLiteral("setWindowFloatingForScreen"));
             }
-            notifyWindowAdded(w);
+            notifyWindowAdded(w, /*knownFreeFloating=*/false);
             return;
         }
         qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:"
@@ -824,7 +827,6 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // the snap-mode adoption above: the tile decision lands while the
     // restore is still starting and the window goes straight to its tile.
     if (m_untiledMinimizeFloats.remove(windowId)) {
-        m_minimizeFloatedWindows.remove(windowId);
         qCInfo(lcEffect) << "Autotile: window unminimized (claimed at announce), unfloating immediately:" << windowId
                          << "on" << screenId;
         if (m_effect->m_daemonGate.serviceRegistered) {
@@ -894,7 +896,7 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
             }
             return;
         }
-        if (!m_minimizeFloatedWindows.remove(windowId)) {
+        if (!m_minimizeFloatedWindows.contains(windowId)) {
             return; // State moved under us (e.g. bulk cleanup); nothing to commit.
         }
 

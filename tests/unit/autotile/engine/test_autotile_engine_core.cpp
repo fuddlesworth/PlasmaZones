@@ -27,6 +27,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QUuid>
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
@@ -752,7 +753,17 @@ private Q_SLOTS:
         QVERIFY(tiledPlacement);
         QCOMPARE(tiledPlacement->slotFor(engine.engineId()).state,
                  QString(PhosphorEngine::WindowPlacement::stateTiled()));
-        QVERIFY(wts.placementStore().record(*tiledPlacement));
+        PhosphorEngine::WindowPlacement baseline = *tiledPlacement;
+        baseline.virtualDesktop = 3;
+        baseline.activity = QStringLiteral("activity-a");
+        baseline.freeGeometryByScreen.insert(screenId, QRect(120, 90, 900, 700));
+        PhosphorEngine::EngineSlot snapSlot;
+        snapSlot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        snapSlot.zoneIds = {QUuid::createUuid().toString()};
+        baseline.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snapSlot);
+        QVERIFY(wts.placementStore().record(baseline));
+        const auto before = wts.placementStore().peekExact(windowId);
+        QVERIFY(before);
 
         metadata.isMinimized = true;
         registry.upsert(instanceId, metadata);
@@ -765,7 +776,44 @@ private Q_SLOTS:
         engine.setAutotileScreens({});
         const auto stored = wts.placementStore().peekExact(windowId);
         QVERIFY(stored);
-        QCOMPARE(stored->slotFor(engine.engineId()).state, QString(PhosphorEngine::WindowPlacement::stateTiled()));
+        QVERIFY(stored->sameContentAs(*before));
+        QCOMPARE(stored->sequence, before->sequence);
+    }
+
+    void testMinimizedFirstCapturePersistsTiledPlacementOnTeardown()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PlasmaZones::StubZoneDetector zoneDetector;
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setWindowRegistry(&registry);
+
+        const QString screenId = QStringLiteral("DP-1");
+        const QString instanceId = QStringLiteral("first-capture-instance");
+        const QString windowId = QStringLiteral("app|first-capture-instance");
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("app");
+        metadata.isMinimized = false;
+        registry.upsert(instanceId, metadata);
+
+        engine.setAutotileScreens({screenId});
+        engine.windowOpened(windowId, screenId);
+        QCoreApplication::processEvents();
+        QVERIFY(!wts.placementStore().peekExact(windowId));
+
+        metadata.isMinimized = true;
+        registry.upsert(instanceId, metadata);
+        engine.setWindowFloat(windowId, true, screenId);
+        engine.setAutotileScreens({});
+
+        const auto stored = wts.placementStore().peekExact(windowId);
+        QVERIFY(stored);
+        const PhosphorEngine::EngineSlot slot = stored->slotFor(engine.engineId());
+        QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateTiled()));
+        QCOMPARE(slot.order, 0);
     }
 };
 

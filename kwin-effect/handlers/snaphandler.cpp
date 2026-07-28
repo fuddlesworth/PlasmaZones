@@ -35,6 +35,8 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
+static constexpr int kSnapMinimizeFloatDebounceMs = kSpuriousMinimizePairMs;
+
 SnapHandler::SnapHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
     , m_effect(effect)
@@ -339,8 +341,48 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             qCDebug(lcEffect) << "Snap: minimized already-floating window, skipping float:" << windowId;
             return;
         }
-        m_minimizeFloatedWindows.insert(windowId);
+        // Only a snap-managed window owns a zone that minimizing should free.
+        // A free window can reach this path with a cold floating cache after
+        // daemon/effect bring-up and must remain unmanaged.
+        if (!isTiledWindow(windowId)) {
+            qCDebug(lcEffect) << "Snap: minimized unmanaged window, skipping float:" << windowId;
+            return;
+        }
+        if (m_pendingMinimizeFloat.contains(windowId)) {
+            return;
+        }
+
+        QPointer<KWin::EffectWindow> wPtr(window);
+        m_pendingMinimizeFloat.schedule(windowId, kSnapMinimizeFloatDebounceMs, [this, windowId, screenId, wPtr]() {
+            if (!wPtr || wPtr->isDeleted()) {
+                return;
+            }
+            KWin::EffectWindow* live = wPtr.data();
+            if (!live->isMinimized() || !m_effect->shouldHandleWindow(live) || !m_effect->isTileableWindow(live)) {
+                return;
+            }
+            const QString currentScreenId = m_effect->getWindowScreenId(live);
+            if (currentScreenId != screenId || m_effect->autotileHandler()->isAutotileScreen(currentScreenId)
+                || m_effect->isWindowFloating(windowId)) {
+                return;
+            }
+
+            m_minimizeFloatedWindows.insert(windowId);
+            qCInfo(lcEffect) << "Snap: window minimized (after debounce), floating:" << windowId << "on" << screenId;
+            if (m_effect->isDaemonReady("snap minimize float")) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
+                    QStringLiteral("setWindowFloatingForScreen"));
+            }
+        });
+        return;
     } else {
+        if (m_pendingMinimizeFloat.contains(windowId)) {
+            cancelPendingMinimizeFloat(windowId);
+            qCDebug(lcEffect) << "Snap: coalesced spurious minimize/unminimize cycle for" << windowId;
+            return;
+        }
         if (!m_minimizeFloatedWindows.contains(windowId)) {
             // Adopt a minimize-float created by the AUTOTILE handler before
             // this screen swapped away from autotile — the mirror of the
@@ -411,21 +453,12 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 m_effect->autotileHandler()->slotWindowMinimizedChanged(fw);
                 return;
             }
-            if (!m_minimizeFloatedWindows.remove(windowId)) {
+            if (!m_minimizeFloatedWindows.contains(windowId)) {
                 return; // State moved under us (e.g. bulk cleanup); nothing to commit.
             }
             commitUnminimizeUnfloat(fw, windowId, currentScreenId);
         });
         return;
-    }
-
-    qCInfo(lcEffect) << "Snap: window minimized, floating:" << windowId << "on" << screenId;
-
-    if (m_effect->isDaemonReady("snap minimize float")) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                       QStringLiteral("setWindowFloatingForScreen"),
-                                                       {windowId, screenId, true},
-                                                       QStringLiteral("setWindowFloatingForScreen"));
     }
 }
 
@@ -448,9 +481,8 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
     // before the unfloat fireAndForget below enters the same D-Bus send
     // queue, so the daemon answers them against the pre-unfloat state.
     //
-    // The restore-on-orphan is deliberately scoped to windows this effect
-    // session minimize-floated (the caller removed the entry from
-    // m_minimizeFloatedWindows just before committing): an
+    // The restore-on-orphan is deliberately scoped to an owned or adopted
+    // minimize transition: an
     // unconditional net would fire resolveWindowRestore on every
     // unminimize of any never-tracked window, re-running its open-time
     // placement routing (RouteToDesktop) and churning the placement

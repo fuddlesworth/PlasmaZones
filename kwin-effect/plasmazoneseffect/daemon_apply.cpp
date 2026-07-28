@@ -496,9 +496,9 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // or rule action landing inside the animation grace — so the pending
         // commit's unfloat would be redundant and snap's restore net would
         // misread the post-unfloat daemon state as an orphaned window. Both
-        // engines' own commits consume their pending entry and minimize-float
-        // tracking BEFORE dispatching the unfloat, so this can never cancel
-        // the commit whose echo delivered this signal.
+        // Pending timers consume themselves before dispatch. Minimize-float
+        // ownership remains until this authoritative visible echo so a
+        // re-minimize racing the asynchronous write cannot lose its owner.
         // Mode teardown and a hidden snap-zone commit can legitimately clear
         // the daemon's live float while the window is still minimized. The
         // float is only the daemon-side occupancy mechanism; the effect-side

@@ -666,8 +666,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             &AutotileHandler::slotWindowFrameGeometryChanged);
 
     // Single windowFrameGeometryChanged lambda combining the effect-side
-    // per-tick work — first-frame open suppression release AND debounced
-    // daemon push — into one connection. Keeping these as two separate
+    // per-tick work: deferred maximize completion, first-frame suppression
+    // release, and debounced daemon push. Keeping the latter two as separate
     // connections (which they were originally) doubled the per-geometry-
     // tick lambda dispatch cost without functional benefit; the bodies
     // are independent so collapsing them just runs one capture+vtable
@@ -766,8 +766,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // Refresh the daemon's registry metadata on every minimize edge, and
     // BEFORE the handler connections below so the push is enqueued on the bus
     // ahead of any float traffic from the same edge. The daemon's mode-swap
-    // seed/restore decisions consult WindowMetadata::isMinimized, which is
-    // otherwise only snapshotted at window-open — a stale value lets a
+    // seed/restore decisions consult WindowMetadata::isMinimized, which can
+    // otherwise remain at its previous snapshot until an unrelated refresh. A stale value lets a
     // mode-swap seed tile a window that is minimized right now (the per-slot
     // floating check cannot cover this: it resolves via the screen's CURRENT
     // mode, which flips mid-toggle).

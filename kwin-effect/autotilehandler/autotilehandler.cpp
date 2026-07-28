@@ -203,13 +203,13 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFlo
     if (m_notifiedWindows.contains(windowId)) {
         return false;
     }
-    m_notifiedWindows.insert(windowId);
 
     QString screenId = m_effect->getWindowScreenId(w);
-    m_notifiedWindowScreens[windowId] = screenId;
 
     // Only notify autotile daemon for windows on autotile screens
     if (m_autotileScreens.contains(screenId)) {
+        m_notifiedWindows.insert(windowId);
+        m_notifiedWindowScreens[windowId] = screenId;
         // Save pre-autotile geometry BEFORE the daemon tiles the window.
         // Without this, a window launched directly into autotile has no saved
         // geometry — floating it would leave it at its tiled position instead
@@ -260,7 +260,8 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFlo
 }
 
 void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows,
-                                              const QSet<QString>& screenFilter, bool resetNotified)
+                                              const QSet<QString>& screenFilter, bool resetNotified,
+                                              bool enteringAutotile)
 {
     // Collect eligible windows using the same filtering as notifyWindowAdded,
     // then send one batch D-Bus call instead of per-window round-trips.
@@ -295,7 +296,7 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         bool minimizedOnly = false;
         if (!isEligibleForAutotileNotify(w, &minimizedOnly)) {
             if (minimizedOnly && !suppressed) {
-                claimAlreadyMinimizedAsFloated(w, windowId, screenFilter);
+                claimAlreadyMinimizedAsFloated(w, windowId, screenFilter, enteringAutotile);
             }
             continue;
         }
@@ -313,19 +314,13 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         m_notifiedWindows.insert(windowId);
         m_notifiedWindowScreens[windowId] = screenId;
 
-        // knownFreeFloating only for windows we do NOT track as tiled. The
-        // batch is also the RE-announce path (daemon restart, toggle-on,
-        // screen-add) where a window's current frame is its tiled zone rect —
-        // border tracking survives daemon restarts, so isTiledWindow is
-        // authoritative here. Passing true for a tiled window would push
-        // storePreTileGeometry with overwrite=true and destroy the daemon's
-        // persisted free geometry (a snap→autotile window has no local
-        // bucket entry, so the exact-match early-return cannot save it).
-        // Genuinely fresh windows (not yet tiled) keep the spawn-geometry
-        // overwrite semantics — see notifyWindowAdded() for that rationale.
-        const bool freshFrame = !AutotileStateHelpers::isTiledWindow(m_border, windowId);
+        // A batch only contains already-existing windows (mode entry, screen
+        // change, or daemon re-announcement), never the genuine spawn path.
+        // Its current frame may therefore belong to snap or autotile even when
+        // local border tracking was cleared on daemon loss. Always run the
+        // floating/ownership guards and never overwrite durable free geometry.
         saveAndRecordPreAutotileGeometry(windowId, screenId, w, w->frameGeometry(),
-                                         /*knownFreeFloating=*/freshFrame);
+                                         /*knownFreeFloating=*/false);
 
         const QSize minSize = declaredMinSize(w);
 
@@ -820,7 +815,7 @@ void AutotileHandler::onDaemonReady()
 }
 
 // handleAutotileFloatToggle removed: float toggle is now daemon-local via
-// WindowTrackingAdaptor::toggleWindowFloat (which emits applyGeometryRequested).
+// SnapAdaptor::toggleFloatForWindow (which emits applyGeometryRequested).
 
 // connectSignals() / loadSettings() live in autotilehandler/wiring.cpp.
 

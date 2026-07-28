@@ -579,28 +579,8 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
             // reports against, while the screen's mode stays live.
             DisabledReason why = DisabledReason::NotDisabled;
             if (m_contextResolver) {
-                // Map PhosphorContext::DisabledReason → PlasmaZones::DisabledReason.
-                // The two enums are value-identical by intent (the LGPL lib's
-                // DisabledReason.h documents it mirrors the GPL daemon's),
-                // but the conversion is written as a switch so a future enum
-                // value added on one side surfaces here as a compile-time
-                // -Wswitch warning rather than a silent value coercion.
-                const auto reason = m_contextResolver->disabledReason(
-                    m_contextResolver->handleForPersisted(screenId, desktop, activity));
-                switch (reason) {
-                case PhosphorContext::DisabledReason::NotDisabled:
-                    why = DisabledReason::NotDisabled;
-                    break;
-                case PhosphorContext::DisabledReason::MonitorDisabled:
-                    why = DisabledReason::MonitorDisabled;
-                    break;
-                case PhosphorContext::DisabledReason::DesktopDisabled:
-                    why = DisabledReason::DesktopDisabled;
-                    break;
-                case PhosphorContext::DisabledReason::ActivityDisabled:
-                    why = DisabledReason::ActivityDisabled;
-                    break;
-                }
+                why = toDaemonDisabledReason(m_contextResolver->disabledReason(
+                    m_contextResolver->handleForPersisted(screenId, desktop, activity)));
             }
             if (why != DisabledReason::NotDisabled) {
                 showContextDisabledOsd(screenId, desktop, activity, why);

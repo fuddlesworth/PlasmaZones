@@ -9,12 +9,30 @@
 
 #include <QScreen>
 #include "core/platform/logging.h"
+#include "core/interfaces/settings_interfaces.h"
 #include "core/utils/utils.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorContext/DisabledReason.h>
 
 namespace PlasmaZones {
+
+inline DisabledReason toDaemonDisabledReason(PhosphorContext::DisabledReason reason)
+{
+    switch (reason) {
+    case PhosphorContext::DisabledReason::NotDisabled:
+        return DisabledReason::NotDisabled;
+    case PhosphorContext::DisabledReason::MonitorDisabled:
+        return DisabledReason::MonitorDisabled;
+    case PhosphorContext::DisabledReason::DesktopDisabled:
+        return DisabledReason::DesktopDisabled;
+    case PhosphorContext::DisabledReason::ActivityDisabled:
+        return DisabledReason::ActivityDisabled;
+    }
+    Q_UNREACHABLE();
+    return DisabledReason::NotDisabled;
+}
 
 /**
  * @brief Resolve a physical screen ID to a virtual screen ID if subdivisions exist.

@@ -171,8 +171,14 @@ int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)
         }
     }
     for (const QString& instanceId : std::as_const(stale)) {
+        const bool hadRecord = m_records.contains(instanceId);
         remove(instanceId); // fires windowDisappeared + drops m_records / appId index
         m_canonicalByInstance.remove(instanceId);
+        if (!hadRecord) {
+            // Canonical-only entries bypass remove()'s record-backed signal,
+            // but subscribers still need the stale instance notification.
+            Q_EMIT windowDisappeared(instanceId);
+        }
     }
     return stale.size();
 }

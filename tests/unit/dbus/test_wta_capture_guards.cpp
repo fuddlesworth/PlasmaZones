@@ -329,11 +329,20 @@ private Q_SLOTS:
         placement.windowId = windowId;
         placement.appId = metadata.appId;
         placement.screenId = screenId;
+        placement.virtualDesktop = 4;
+        placement.activity = QStringLiteral("activity-a");
+        placement.freeGeometryByScreen.insert(screenId, QRect(140, 100, 1000, 720));
         PhosphorEngine::EngineSlot slot;
         slot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
         slot.zoneIds = QStringList{zoneId};
         placement.engines.insert(snap->engineId(), slot);
+        PhosphorEngine::EngineSlot autotileSlot;
+        autotileSlot.state = QString(PhosphorEngine::WindowPlacement::stateTiled());
+        autotileSlot.order = 2;
+        placement.engines.insert(PhosphorEngine::WindowPlacement::autotileEngineId(), autotileSlot);
         QVERIFY(wta->service()->placementStore().record(placement));
+        const auto before = wta->service()->placementStore().peekExact(windowId);
+        QVERIFY(before);
 
         // Runtime post-minimize state is floating and carries a valid frame.
         // Without the minimized guard, capture overwrites the frozen snapped
@@ -344,8 +353,8 @@ private Q_SLOTS:
 
         auto stored = wta->service()->placementStore().peekExact(windowId);
         QVERIFY(stored);
-        QCOMPARE(stored->slotFor(snap->engineId()).state, QString(PhosphorEngine::WindowPlacement::stateSnapped()));
-        QCOMPARE(stored->slotFor(snap->engineId()).zoneIds, QStringList{zoneId});
+        QVERIFY(stored->sameContentAs(*before));
+        QCOMPARE(stored->sequence, before->sequence);
 
         // Once visible, the same capture is allowed and proves the test's
         // floating setup would have changed the record without the guard.

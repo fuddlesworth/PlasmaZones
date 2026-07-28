@@ -175,16 +175,26 @@ public:
     void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                bool minimized);
 
-    /// Drop @p windowId from the minimize-float set and cancel any deferred
-    /// unfloat commit. Returns true if it was present. Two callers, two
-    /// reasons (mirrors AutotileHandler::removeMinimizeFloated): the close
-    /// path (a grace timer must never fire against a destroyed window) and
-    /// the daemon's windowFloatingChanged(false) echo (an authoritative
-    /// external unfloat moots the deferred commit).
+    /// Whether snap owns a temporary minimize-float for @p windowId.
+    bool isMinimizeFloated(const QString& windowId) const
+    {
+        return m_minimizeFloatedWindows.contains(windowId);
+    }
+
+    /// Drop @p windowId from the minimize-float set and cancel either deferred
+    /// edge. Returns true if it was present. Used by close cleanup,
+    /// authoritative visible unfloat, and cross-mode adoption.
     bool removeMinimizeFloated(const QString& windowId)
     {
+        cancelPendingMinimizeFloat(windowId);
         cancelPendingUnminimizeUnfloat(windowId);
         return m_minimizeFloatedWindows.remove(windowId);
+    }
+
+    /// Cancel a pending debounced minimize→float commit.
+    void cancelPendingMinimizeFloat(const QString& windowId)
+    {
+        m_pendingMinimizeFloat.cancel(windowId);
     }
 
     /// Cancel a pending deferred unminimize→unfloat commit. No-op if no timer
@@ -220,10 +230,9 @@ private:
     /// Deferred-commit body of the unminimize→unfloat edge: the restore-net
     /// queries (dispatched before the unfloat enters the same D-Bus send
     /// queue, so the daemon answers against pre-unfloat state) plus the
-    /// unfloat itself. Called only from the grace timer in
-    /// handleMinimizeChanged after revalidation; @p window is alive,
-    /// unminimized, handleable, and on a snap-mode screen. Cross-mode adoption
-    /// also calls it immediately at the unminimize edge.
+    /// unfloat itself. Called from the grace timer after revalidation, or
+    /// immediately when cross-mode adoption must replace the other mode's
+    /// geometry at the unminimize edge.
     void commitUnminimizeUnfloat(KWin::EffectWindow* window, const QString& windowId, const QString& screenId);
 
     PlasmaZonesEffect* m_effect;
@@ -257,6 +266,9 @@ private:
     // fires for windows still in this set — clearing on daemon-ready would
     // strand exactly the windows the net exists to recover.
     QSet<QString> m_minimizeFloatedWindows;
+    // Pending debounced minimize→float commits. Shares the compositor's
+    // spurious minimize-pair window with the shader and autotile paths.
+    DeferredWindowCommits m_pendingMinimizeFloat{this};
     // Pending deferred unminimize→unfloat commits, keyed by windowId — the
     // snap-mode mirror of AutotileHandler::m_pendingUnminimizeUnfloat, for the
     // same reason: the unfloat re-snaps the window (the daemon applies its

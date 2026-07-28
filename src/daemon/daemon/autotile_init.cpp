@@ -16,6 +16,7 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -125,6 +126,7 @@ void Daemon::initializeAutotile()
                     m_pendingSnapFloatRestores.clear();
                     if (m_windowTrackingAdaptor) {
                         PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+                        const QString activity = currentActivity();
                         for (const QString& windowId : windowIds) {
                             // Only process windows whose current WTS screen is one of the
                             // screens being released. A window that moved to a different
@@ -181,11 +183,15 @@ void Daemon::initializeAutotile()
                             // never touched the snap slot). Restoring that stale
                             // float would both resurrect it and knock the window out
                             // of the order resnap, which skips floating windows.
-                            const bool tiledAtRelease = !windowScreen.isEmpty()
-                                && m_lastAutotileOrders
-                                       .value(TilingStateKey{windowScreen, currentDesktopForScreen(windowScreen),
-                                                             currentActivity()})
-                                       .contains(windowId);
+                            bool tiledAtRelease = false;
+                            for (const QString& releasedScreenId : releasedScreenIds) {
+                                const TilingStateKey key{releasedScreenId, currentDesktopForScreen(releasedScreenId),
+                                                         activity};
+                                if (m_lastAutotileOrders.value(key).contains(windowId)) {
+                                    tiledAtRelease = true;
+                                    break;
+                                }
+                            }
                             if (snapFloat && tiledAtRelease) {
                                 qCInfo(lcDaemon) << "windowsReleased: skipping stale snap-float for tiled window"
                                                  << windowId << "(order resnap re-snaps it)";
@@ -274,14 +280,8 @@ void Daemon::initializeAutotile()
                 // Note: intentionally shown regardless of showOsdOnLayoutSwitch — this is
                 // direct feedback to an explicit user action, not a passive layout-switch OSD.
                 const auto currentMode = currentModeFor(screenId);
-                // Legacy direct settings check — kept inline because the OSD
-                // surface needs the rich PlasmaZones::DisabledReason enum
-                // (which carries axis info for the user-facing message);
-                // PhosphorContext::DisabledReason in the LGPL lib is a
-                // narrower projection. Migrating this site requires a richer
-                // resolver API and is tracked as a follow-up.
-                const DisabledReason why =
-                    contextDisabledReason(m_settings.get(), currentMode, screenId, desktop, activity);
+                const DisabledReason why = toDaemonDisabledReason(
+                    m_contextResolver->disabledReason(m_contextResolver->handleForMode(screenId, currentMode)));
                 if (why != DisabledReason::NotDisabled) {
                     showContextDisabledOsd(screenId, desktop, activity, why);
                     return;

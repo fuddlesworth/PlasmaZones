@@ -56,22 +56,23 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
         return false;
     }
 
+    const uint64_t gen = ++m_screenGeneration[screenId];
+
     if (screenGeometry == layout->lastRecalcGeometry()) {
         const QString sid = screenId;
         const QUuid lid = layout->id();
         QPointer<Layout> lp(layout);
         QMetaObject::invokeMethod(
             this,
-            [this, sid, lid, lp]() {
-                Q_EMIT geometriesComputed(sid, lid, lp.data());
+            [this, sid, lid, lp, gen]() {
+                const bool superseded = gen < m_screenGeneration.value(sid);
+                Q_EMIT geometriesComputed(sid, lid, superseded ? nullptr : lp.data());
             },
             Qt::QueuedConnection);
         return true;
     }
 
     m_trackedLayouts[layout->id()] = layout;
-
-    uint64_t gen = ++m_screenGeneration[screenId];
 
     LayoutSnapshot snapshot = buildSnapshot(layout, screenId, screenGeometry);
     Q_EMIT requestCompute(snapshot, gen);

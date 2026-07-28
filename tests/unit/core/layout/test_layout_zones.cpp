@@ -301,6 +301,43 @@ private Q_SLOTS:
         QCOMPARE(layout.lastRecalcGeometry(), newScreenGeom);
         QCOMPARE(zone->geometry(), QRectF(0, 0, 2560, 1440));
     }
+
+    void testLayout_asyncCachedResultReportsSupersession()
+    {
+        PhosphorZones::Layout layout(QStringLiteral("Async cache"));
+        auto* zone = new PhosphorZones::Zone();
+        zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
+        layout.addZone(zone);
+
+        PhosphorZones::LayoutComputeService service;
+        QSignalSpy computed(&service, &PhosphorZones::LayoutComputeService::geometriesComputed);
+        const QString screenId = QStringLiteral("DP-1");
+        const QRectF firstGeometry(0, 0, 1920, 1080);
+        const QRectF secondGeometry(0, 0, 2560, 1440);
+
+        QVERIFY(service.requestRecalculate(&layout, screenId, firstGeometry));
+        QTRY_COMPARE(computed.size(), 1);
+        QCOMPARE(layout.lastRecalcGeometry(), firstGeometry);
+        computed.clear();
+
+        // The cached completion is queued. A newer request made before that
+        // callback runs must turn the cached result into a superseded null
+        // notification, followed by the current applied result.
+        QVERIFY(service.requestRecalculate(&layout, screenId, firstGeometry));
+        QVERIFY(service.requestRecalculate(&layout, screenId, secondGeometry));
+        QTRY_VERIFY(computed.size() >= 2);
+
+        bool sawSuperseded = false;
+        bool sawCurrent = false;
+        for (const QList<QVariant>& args : computed) {
+            auto* reported = qvariant_cast<PhosphorZones::Layout*>(args.at(2));
+            sawSuperseded |= reported == nullptr;
+            sawCurrent |= reported == &layout;
+        }
+        QVERIFY(sawSuperseded);
+        QVERIFY(sawCurrent);
+        QCOMPARE(layout.lastRecalcGeometry(), secondGeometry);
+    }
 };
 
 QTEST_MAIN(TestLayoutZones)

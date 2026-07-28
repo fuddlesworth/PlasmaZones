@@ -139,7 +139,9 @@ public:
     };
     std::optional<WindowContext> windowContext(const QString& instanceId) const;
     Q_INVOKABLE QString appIdFor(const QString& instanceId) const override;
-    bool isMinimized(const QString& windowId) const override;
+    /// Live compositor minimize state. Accepts either a bare instance id or a
+    /// composite appId|instanceId window id.
+    bool isMinimized(const QString& windowId) const;
     QStringList instancesWithAppId(const QString& appId) const;
     bool contains(const QString& instanceId) const;
     QStringList allInstances() const;

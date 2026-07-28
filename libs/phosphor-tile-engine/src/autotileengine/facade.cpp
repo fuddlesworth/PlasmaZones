@@ -27,6 +27,7 @@
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorEngine/PerScreenKeys.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -316,13 +317,18 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     if (!state) {
         return std::nullopt;
     }
-    // A minimized window is temporarily represented as floating so it leaves
-    // tiledWindows() and the remaining windows reflow. Do not turn that runtime
-    // suspension into durable user-float intent. This guard is required here,
-    // not only in WindowTrackingAdaptor's capture funnel, because screen
-    // teardown captures the autotile slot directly before destroying the state.
-    if (m_windowRegistry && m_windowRegistry->isMinimized(wid)) {
-        return std::nullopt;
+    // Keep the canonicalization interface ABI-stable: live minimize metadata
+    // is an additive capability of the concrete production registry, not a new
+    // virtual in IWindowRegistry's exported vtable.
+    const auto* registry = dynamic_cast<const PhosphorEngine::WindowRegistry*>(m_windowRegistry);
+    const bool minimized = registry && registry->isMinimized(wid);
+    if (minimized && m_windowTracker) {
+        const auto existing = m_windowTracker->placementStore().peekExact(wid);
+        if (existing && !existing->slotFor(engineId()).isEmpty()) {
+            // A minimized window is temporarily represented as floating so it
+            // leaves tiledWindows(). Preserve an existing durable slot exactly.
+            return std::nullopt;
+        }
     }
 
     WindowPlacement p;
@@ -347,7 +353,13 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     // is recorded as tiled so it re-tiles — and overflows again if it still doesn't
     // fit — on restore, rather than sticking as a phantom user float.
     PhosphorEngine::EngineSlot slot;
-    if (state->isFloating(wid) && !m_overflow.isOverflow(wid)) {
+    if (minimized) {
+        // No prior autotile slot exists yet. The temporary minimize float was
+        // entered before the first persistence sweep, so reconstruct the
+        // durable pre-minimize state from the retained window order.
+        slot.state = WindowPlacement::stateTiled();
+        slot.order = state->windowOrder().indexOf(wid);
+    } else if (state->isFloating(wid) && !m_overflow.isOverflow(wid)) {
         slot.state = WindowPlacement::stateFloating();
     } else {
         slot.state = WindowPlacement::stateTiled();

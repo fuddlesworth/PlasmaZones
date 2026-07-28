@@ -26,6 +26,8 @@
 using PhosphorEngine::WindowMetadata;
 using PhosphorEngine::WindowRegistry;
 
+Q_DECLARE_METATYPE(PhosphorEngine::WindowMetadata)
+
 namespace {
 WindowMetadata make(const QString& appId, const QString& desktopFile = {}, const QString& title = {})
 {
@@ -42,6 +44,11 @@ class TestWindowRegistry : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void initTestCase()
+    {
+        qRegisterMetaType<PhosphorEngine::WindowMetadata>();
+    }
+
     // ────────────────────────────────────────────────────────────────────
     // upsert / lifecycle
     // ────────────────────────────────────────────────────────────────────
@@ -288,11 +295,27 @@ private Q_SLOTS:
     {
         WindowRegistry reg;
         WindowMetadata metadata = make(QStringLiteral("firefox"));
+        reg.upsert(QStringLiteral("uuid-1"), metadata);
+
+        QVERIFY(!reg.isMinimized(QStringLiteral("uuid-1")));
+        QVERIFY(!reg.isMinimized(QStringLiteral("firefox|uuid-1")));
+
+        QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
         metadata.isMinimized = true;
         reg.upsert(QStringLiteral("uuid-1"), metadata);
 
         QVERIFY(reg.isMinimized(QStringLiteral("uuid-1")));
         QVERIFY(reg.isMinimized(QStringLiteral("firefox|uuid-1")));
+        QCOMPARE(changed.size(), 1);
+
+        metadata.isMinimized = false;
+        reg.upsert(QStringLiteral("uuid-1"), metadata);
+        QVERIFY(!reg.isMinimized(QStringLiteral("uuid-1")));
+        QVERIFY(!reg.isMinimized(QStringLiteral("firefox|uuid-1")));
+        QCOMPARE(changed.size(), 2);
+
+        reg.upsert(QStringLiteral("uuid-1"), metadata);
+        QCOMPARE(changed.size(), 2);
         QVERIFY(!reg.isMinimized(QStringLiteral("firefox|unknown")));
     }
 
@@ -351,24 +374,16 @@ private Q_SLOTS:
         // removed). The sweep must still drop the orphan canonical entry.
         WindowRegistry reg;
         reg.canonicalizeWindowId(QStringLiteral("ghost|orphan-1"));
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
 
         const int pruned = reg.pruneStaleInstances({QStringLiteral("alive-1")});
 
         QCOMPARE(pruned, 1);
+        QCOMPARE(disappeared.size(), 1);
+        QCOMPARE(disappeared.first().at(0).toString(), QStringLiteral("orphan-1"));
         QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("ghost-2|orphan-1")), QStringLiteral("ghost-2|orphan-1"));
     }
 };
 
-// metadataChanged carries WindowMetadata by value in its signal payload;
-// QSignalSpy stores QVariants so the type must be registered to round-trip.
-Q_DECLARE_METATYPE(PhosphorEngine::WindowMetadata)
-
-int main(int argc, char** argv)
-{
-    qRegisterMetaType<PhosphorEngine::WindowMetadata>("PhosphorEngine::WindowMetadata");
-    QCoreApplication app(argc, argv);
-    TestWindowRegistry tc;
-    return QTest::qExec(&tc, argc, argv);
-}
-
+QTEST_MAIN(TestWindowRegistry)
 #include "test_window_registry.moc"

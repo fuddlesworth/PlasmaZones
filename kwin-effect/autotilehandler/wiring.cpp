@@ -108,7 +108,8 @@ void AutotileHandler::loadSettings()
                         const auto windows = KWin::effects->stackingOrder();
                         // Batch-notify all windows on autotile screens in one D-Bus call
                         // instead of per-window windowOpened round-trips.
-                        notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true);
+                        notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true,
+                                                /*enteringAutotile=*/false);
                     }
                 } else {
                     qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";

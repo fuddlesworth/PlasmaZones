@@ -778,6 +778,15 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
 void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
 {
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
+    QSet<QString> aliveInstances;
+    aliveInstances.reserve(aliveWindowIds.size());
+    for (const QString& id : aliveWindowIds) {
+        aliveInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(id));
+    }
+    if (!m_lastActiveWindowId.isEmpty()
+        && !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(m_lastActiveWindowId))) {
+        m_lastActiveWindowId.clear();
+    }
     int persistedPruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine) {
         // The autotile engine keys every internal map (m_states reverse map,
@@ -831,11 +840,6 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     // record + canonical entry for the session. The registry keys on instance
     // ids (uuid components), so build the alive set in that form.
     if (m_windowRegistry) {
-        QSet<QString> aliveInstances;
-        aliveInstances.reserve(aliveWindowIds.size());
-        for (const QString& id : aliveWindowIds) {
-            aliveInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(id));
-        }
         m_windowRegistry->pruneStaleInstances(aliveInstances);
     }
     const int totalPruned = persistedPruned + frameGeoPruned;

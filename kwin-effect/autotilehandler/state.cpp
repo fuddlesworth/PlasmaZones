@@ -3,6 +3,7 @@
 
 #include "autotilehandler.h"
 #include "handlers/navigationhandler.h"
+#include "handlers/snaphandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -127,8 +128,9 @@ void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     // genuine pre-snap free position. isWindowFloating() below misses this because
     // knownFreeFloating bypasses it, so check the snap-managed state explicitly and
     // unconditionally.
-    if (m_effect->isWindowMarkedSnapped(windowId)) {
-        qCDebug(lcEffect) << "Skipped pre-autotile geometry for snap-managed window (frame is zone rect)" << windowId
+    const SnapHandler* snap = m_effect->snapHandler();
+    if (m_effect->isWindowMarkedSnapped(windowId) || (snap && snap->isMinimizeFloated(windowId))) {
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry for snap-owned window (frame is zone rect)" << windowId
                           << "on" << screenId;
         return;
     }
