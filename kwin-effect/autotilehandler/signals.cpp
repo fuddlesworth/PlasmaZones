@@ -763,7 +763,10 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
     }
 
     if (completedInitialQuery) {
-        m_effect->snapHandler()->retryVisibleMinimizeFloats();
+        // Guarded: snap handler dies before this one during effect teardown.
+        if (SnapHandler* snap = m_effect->snapHandler()) {
+            snap->retryVisibleMinimizeFloats();
+        }
     }
     qCInfo(lcEffect) << "Autotile screens changed:" << m_autotileScreens;
 }
@@ -842,7 +845,10 @@ void AutotileHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, cons
     // daemon's freshly seeded state this window floats in THIS mode too.
     if (enteringAutotile) {
         if (SnapHandler* snap = m_effect->snapHandler(); snap && snap->isMinimizeFloated(windowId)) {
+            // Budget survives the hop (see seedUnfloatRetryBudget).
+            const int usedBudget = snap->unfloatRetryBudgetUsed(windowId);
             snap->removeMinimizeFloated(windowId);
+            seedUnfloatRetryBudget(windowId, usedBudget);
             qCInfo(lcEffect) << "Autotile: adopting snap-mode minimize-float at announce:" << windowId << "on"
                              << screenId;
             m_minimizeFloatedWindows.insert(windowId);
@@ -1012,9 +1018,12 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         // restore is still starting, so the window goes straight to its tile
         // (trading a cancelled restore animation for the correct position).
         SnapHandler* snap = m_effect->snapHandler();
+        const int snapBudgetUsed = snap ? snap->unfloatRetryBudgetUsed(windowId) : 0;
         if (snap && snap->removeMinimizeFloated(windowId)) {
             m_minimizeFloatedWindows.insert(windowId);
             m_untiledMinimizeFloats.insert(windowId);
+            // Budget survives the hop (see seedUnfloatRetryBudget).
+            seedUnfloatRetryBudget(windowId, snapBudgetUsed);
             qCInfo(lcEffect) << "Autotile: adopted snap-mode minimize-float, unfloating immediately:" << windowId
                              << "on" << screenId;
             if (dispatchUnminimizeUnfloat(windowId, screenId)) {

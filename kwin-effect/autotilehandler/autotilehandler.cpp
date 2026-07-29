@@ -373,6 +373,14 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     const QString windowId = m_effect->getWindowId(w);
     const QString newScreenId = m_effect->getWindowScreenId(w);
 
+    // Consume the one-shot cross-mode marker HERE, at the top, into a local:
+    // every branch below used to be responsible for erasing it and three
+    // early-return paths (untracked-guard miss, same-screen, neither-screen-
+    // autotile) leaked it — a stale marker then swallowed the NEXT genuine
+    // cross-monitor move by taking the bookkeeping-only path. Destination
+    // matching stays each consumer's job.
+    const QString expectedScreen = m_expectedOutputMove.take(windowId);
+
     if (!m_notifiedWindows.contains(windowId)) {
         // Window not tracked — but if it moved TO an autotile screen, add it
         if (m_autotileScreens.contains(newScreenId) && m_effect->shouldHandleWindow(w) && !w->isMinimized()
@@ -386,7 +394,12 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             // notifyWindowAdded below establishes the effect-side tracking the daemon
             // does not touch, and is a no-op daemon-side (insertWindow rejects an
             // already-tracked window).
-            const bool expectedMove = m_expectedOutputMove.remove(windowId) > 0;
+            // Destination match, mirroring the tracked branch: a stale marker
+            // armed for a DIFFERENT screen means a later genuine move
+            // superseded it, and treating that move as expected would flip
+            // knownFreeFloating and silently drop a fresh window's geometry
+            // capture.
+            const bool expectedMove = !expectedScreen.isEmpty() && expectedScreen == newScreenId;
             notifyWindowAdded(w, /*knownFreeFloating=*/!expectedMove);
             m_effect->updateAllDecorations();
         }
@@ -422,21 +435,17 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // and move the decoration claim, then stop. Consume the marker one-shot; honour
     // it only when the destination matches (a mismatch means a later genuine move
     // superseded it → fall through to the normal transfer).
-    if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
-        const QString expectedScreen = expIt.value();
-        m_expectedOutputMove.erase(expIt);
-        if (expectedScreen == newScreenId) {
-            if (newIsAutotile) {
-                m_notifiedWindowScreens[windowId] = newScreenId;
-            } else {
-                // Cross-MODE move: window left autotile for a SNAP screen. Drop
-                // effect-side autotile tracking (daemon already relinquished via
-                // handoffRelease) — else it lingers phantom.
-                cleanupAutotileTracking(windowId, oldScreenId);
-            }
-            m_effect->updateAllDecorations();
-            return;
+    if (!expectedScreen.isEmpty() && expectedScreen == newScreenId) {
+        if (newIsAutotile) {
+            m_notifiedWindowScreens[windowId] = newScreenId;
+        } else {
+            // Cross-MODE move: window left autotile for a SNAP screen. Drop
+            // effect-side autotile tracking (daemon already relinquished via
+            // handoffRelease) — else it lingers phantom.
+            cleanupAutotileTracking(windowId, oldScreenId);
         }
+        m_effect->updateAllDecorations();
+        return;
     }
 
     qCInfo(lcEffect) << "Window moved between monitors:" << windowId << oldScreenId << "->" << newScreenId;
@@ -641,6 +650,13 @@ void AutotileHandler::cleanupAutotileTracking(const QString& windowId, const QSt
     AutotileStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
     m_untiledMinimizeFloats.remove(windowId);
     m_unfloatInFlight.remove(windowId);
+    // Retry budget and route/provenance markers die with the tracking: a
+    // reused windowId must not inherit an exhausted budget, and every direct
+    // caller of this cleanup (not just onWindowClosed) must drop the
+    // spawn-provenance entries or they leak past cross-mode moves.
+    m_unfloatRetryAttempts.remove(windowId);
+    m_pendingFreshWindows.remove(windowId);
+    m_deferredWindowRoutes.remove(windowId);
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreAutotileForDesktopMove is NOT cleared
@@ -723,7 +739,7 @@ QSet<QString> AutotileHandler::completeDeferredWindowRoutes()
                 m_effect->endRestoreSuppression(window);
                 continue;
             }
-            if (it->canSnapRestore) {
+            if (it->canSnapRestore && m_effect->snapHandler()) {
                 QPointer<KWin::EffectWindow> safeWindow = window;
                 m_effect->snapHandler()->callResolveWindowRestore(
                     window,
@@ -751,7 +767,7 @@ QSet<QString> AutotileHandler::completeDeferredWindowRoutes()
 
         m_pendingFreshWindows.remove(it.key());
         m_pendingFreshWindows.remove(windowId);
-        if (it->canSnapRestore && !window->isMinimized()) {
+        if (it->canSnapRestore && !window->isMinimized() && m_effect->snapHandler()) {
             m_effect->snapHandler()->callResolveWindowRestore(window);
         } else {
             m_effect->endRestoreSuppression(window);
@@ -887,6 +903,12 @@ void AutotileHandler::onDaemonReady()
     m_unfloatInFlight.clear();
     m_unfloatRetryAttempts.clear();
     m_untiledMinimizeFloats.clear();
+    // Routes deferred against the dead daemon session and their provenance
+    // markers must not survive into the new one: a stale m_pendingFreshWindows
+    // entry silently upgrades a later re-add to knownFreeFloating=true, which
+    // is the free-geometry overwrite this contract exists to prevent.
+    m_pendingFreshWindows.clear();
+    m_deferredWindowRoutes.clear();
     for (auto connIt = m_pendingCrossScreenRestore.begin(); connIt != m_pendingCrossScreenRestore.end(); ++connIt) {
         QObject::disconnect(connIt.value());
     }

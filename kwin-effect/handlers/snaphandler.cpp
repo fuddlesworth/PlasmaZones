@@ -129,6 +129,15 @@ void SnapHandler::clearSnapTracking()
         m_restartSnapCandidates.unite(it.value());
     }
     m_pendingUnminimizeUnfloat.cancelAll();
+    // BOTH deferred queues, matching AutotileHandler's clearAllPendingMinimizeFloats:
+    // this also runs on daemon LOSS (not just teardown), and a minimize→float
+    // debounce armed just before the loss would otherwise still fire — its
+    // isDaemonReady gate suppresses the D-Bus call but the callback would
+    // fabricate m_minimizeFloatedWindows ownership of a float that was never
+    // issued and destroy the restart-candidate provenance the reconnect path
+    // depends on. The retry budget is per-session too.
+    m_pendingMinimizeFloat.cancelAll();
+    m_unfloatRetryAttempts.clear();
     for (auto it = m_unfloatInFlight.cbegin(); it != m_unfloatInFlight.cend(); ++it) {
         m_minimizeFloatedWindows.insert(it.key());
     }
@@ -356,9 +365,7 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
         // commit: the window never unfloated, so it is still minimize-floated
         // and the isWindowFloating skip below covers the rest.
         cancelPendingUnminimizeUnfloat(windowId);
-        m_unfloatRetryAttempts.remove(windowId);
         if (m_unfloatInFlight.remove(windowId)) {
-            m_minimizeFloatedWindows.insert(windowId);
             qCInfo(lcEffect) << "Snap: re-minimize countermanding in-flight unfloat:" << windowId;
             if (m_effect->isDaemonReady("snap re-minimize countermand")) {
                 PhosphorProtocol::ClientHelpers::fireAndForget(
@@ -366,11 +373,26 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                     QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
                     QStringLiteral("setWindowFloatingForScreen"));
             }
+            if (autotileScreen) {
+                // The screen's mode owns the window now: hand the countermanded
+                // float to autotile (single owner) instead of re-claiming a
+                // record snap has no release path for on this screen. The
+                // untiled marker routes the eventual unminimize through the
+                // immediate-commit path — the rect belongs to the other mode.
+                if (AutotileHandler* autotile = m_effect->autotileHandler()) {
+                    autotile->adoptMinimizeFloated(windowId, /*untiled=*/true);
+                }
+            } else {
+                m_minimizeFloatedWindows.insert(windowId);
+            }
             return;
         }
         if (autotileScreen) {
             return;
         }
+        // Refund below the autotile bail: a minimize on a screen snap refuses
+        // to handle must not reset snap's retry budget for that window.
+        m_unfloatRetryAttempts.remove(windowId);
         if (m_effect->isWindowFloating(windowId)) {
             qCDebug(lcEffect) << "Snap: minimized already-floating window, skipping float:" << windowId;
             return;
@@ -427,8 +449,11 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             // until the next mode toggle. removeMinimizeFloated also cancels
             // that handler's pending deferred commit for the window.
             AutotileHandler* autotile = m_effect->autotileHandler();
+            const int autotileBudgetUsed = autotile ? autotile->unfloatRetryBudgetUsed(windowId) : 0;
             if (autotile && autotile->removeMinimizeFloated(windowId)) {
                 m_minimizeFloatedWindows.insert(windowId);
+                // Budget survives the hop (see seedUnfloatRetryBudget).
+                seedUnfloatRetryBudget(windowId, autotileBudgetUsed);
                 // The window still carries its autotile rect, not its snap-zone
                 // rect. Committing at the edge dispatches the unfloat
                 // immediately, but the daemon's resnap geometry only lands
@@ -682,14 +707,24 @@ void SnapHandler::retryVisibleMinimizeFloats()
 {
     const auto windowIds = m_minimizeFloatedWindows.values();
     for (const QString& windowId : windowIds) {
-        m_unfloatRetryAttempts.remove(windowId);
-        KWin::EffectWindow* window = m_effect->findWindowById(windowId);
-        if (!window || window->isDeleted() || window->isMinimized()) {
+        // A window mid-grace keeps its scheduled commit: firing here too
+        // would land the moveResize mid-animation — the exact stutter the
+        // #816 grace exists to prevent — and leave the armed timer to fire
+        // against a consumed entry.
+        if (m_pendingUnminimizeUnfloat.contains(windowId)) {
             continue;
         }
+        KWin::EffectWindow* window = m_effect->findWindowById(windowId);
+        if (!window || window->isDeleted() || window->isMinimized()) {
+            // Budget stays: a still-minimized window's exhausted retries must
+            // not be silently refunded by an unrelated screen-set change.
+            continue;
+        }
+        m_unfloatRetryAttempts.remove(windowId);
         const QString screenId = m_effect->getWindowScreenId(window);
-        if (m_effect->autotileHandler()->isAutotileScreen(screenId)) {
-            m_effect->autotileHandler()->slotWindowMinimizedChanged(window);
+        AutotileHandler* autotile = m_effect->autotileHandler();
+        if (autotile && autotile->isAutotileScreen(screenId)) {
+            autotile->slotWindowMinimizedChanged(window);
             continue;
         }
         commitUnminimizeUnfloat(window, windowId, screenId);

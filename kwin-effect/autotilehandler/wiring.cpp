@@ -131,7 +131,11 @@ void AutotileHandler::loadSettings()
                     qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";
                     completeDeferredWindowRoutes();
                 }
-                m_effect->snapHandler()->retryVisibleMinimizeFloats();
+                // Guarded: m_snapHandler is declared after m_autotileHandler
+                // and destroyed first during effect teardown.
+                if (SnapHandler* snap = m_effect->snapHandler()) {
+                    snap->retryVisibleMinimizeFloats();
+                }
             });
 }
 

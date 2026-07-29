@@ -117,6 +117,34 @@ public:
         const bool owned = m_minimizeFloatedWindows.remove(windowId);
         return m_unfloatInFlight.remove(windowId) > 0 || owned;
     }
+
+    /// Take ownership of a minimize-float relinquished by the snap handler
+    /// (cross-mode countermand / hand-off on a screen autotile now owns).
+    /// @p untiled marks the window's rect as belonging to the prior mode so
+    /// its unminimize commits immediately instead of through the animation
+    /// grace.
+    void adoptMinimizeFloated(const QString& windowId, bool untiled)
+    {
+        m_minimizeFloatedWindows.insert(windowId);
+        if (untiled) {
+            m_untiledMinimizeFloats.insert(windowId);
+        }
+    }
+
+    /// Retry-budget hand-off for cross-mode adoptions: the budget is a
+    /// per-WINDOW cap on daemon unfloat attempts, and it must survive the
+    /// ownership hop or a persistently-refused unfloat ping-ponging between
+    /// handlers resets to a fresh budget on every bounce.
+    int unfloatRetryBudgetUsed(const QString& windowId) const
+    {
+        return m_unfloatRetryAttempts.value(windowId);
+    }
+    void seedUnfloatRetryBudget(const QString& windowId, int attemptsUsed)
+    {
+        if (attemptsUsed > m_unfloatRetryAttempts.value(windowId)) {
+            m_unfloatRetryAttempts.insert(windowId, attemptsUsed);
+        }
+    }
     bool hasPendingUnminimizeUnfloat(const QString& windowId) const
     {
         return m_pendingUnminimizeUnfloat.contains(windowId);

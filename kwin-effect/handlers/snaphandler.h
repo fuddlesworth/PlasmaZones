@@ -194,6 +194,18 @@ public:
         m_minimizeFloatedWindows.insert(windowId);
     }
 
+    /// Retry-budget hand-off — see AutotileHandler's twin for rationale.
+    int unfloatRetryBudgetUsed(const QString& windowId) const
+    {
+        return m_unfloatRetryAttempts.value(windowId);
+    }
+    void seedUnfloatRetryBudget(const QString& windowId, int attemptsUsed)
+    {
+        if (attemptsUsed > m_unfloatRetryAttempts.value(windowId)) {
+            m_unfloatRetryAttempts.insert(windowId, attemptsUsed);
+        }
+    }
+
     /// Drop @p windowId from the minimize-float set and cancel either deferred
     /// edge. Returns true if it was present. Used by close cleanup,
     /// authoritative visible unfloat, and cross-mode adoption.
