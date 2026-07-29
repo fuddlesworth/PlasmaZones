@@ -45,6 +45,20 @@ public:
     /// contract as the sibling adaptors' clearEngine).
     void clearEngine();
 
+public Q_SLOTS:
+    /**
+     * @brief Focus the adjacent column on a scrolling screen
+     *
+     * The KWin effect's Meta+wheel axis shortcut calls this with the
+     * cursor's screen. Gated on the engine actually owning @p screenId —
+     * the engine's own screen fallback would otherwise redirect a wheel
+     * event from a non-scrolling monitor onto the active scrolling one.
+     *
+     * @param screenId Screen whose strip should move (the cursor's screen)
+     * @param delta -1 focuses the column to the left, +1 to the right
+     */
+    void focusColumn(const QString& screenId, int delta);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when the set of screens using the scrolling engine changes

@@ -12,6 +12,7 @@
 #include <effect/effectwindow.h>
 #include <window.h>
 
+#include <QAction>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -330,6 +331,66 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet)
         qCInfo(lcEffect) << "Scrolling flip within managed union — re-announcing windows on" << flipped;
         notifyWindowsAddedBatch(KWin::effects->stackingOrder(), flipped, /*resetNotified=*/true);
     }
+    updateScrollWheelShortcuts();
+}
+
+void TilingHandler::updateScrollWheelShortcuts()
+{
+    const bool want = !m_scrollingScreens.isEmpty();
+    if (want == !m_scrollWheelActions.isEmpty()) {
+        return;
+    }
+    if (!want) {
+        // Destroying the QAction unregisters the axis shortcut (KWin's
+        // shortcut manager tracks action lifetime), releasing Meta+wheel
+        // back to other consumers (e.g. the zoom effect).
+        qDeleteAll(m_scrollWheelActions);
+        m_scrollWheelActions.clear();
+        qCInfo(lcEffect) << "Scroll wheel shortcuts unregistered (no scrolling screens)";
+        return;
+    }
+    // niri's default Mod+wheel bindings: wheel down / right focuses the
+    // next column to the right, wheel up / left the previous one. The
+    // horizontal pair covers tilted wheels and two-finger horizontal
+    // touchpad scrolls.
+    const auto add = [this](KWin::PointerAxisDirection axis, int delta, const char* name) {
+        auto* action = new QAction(this);
+        action->setObjectName(QLatin1String(name));
+        connect(action, &QAction::triggered, this, [this, delta]() {
+            wheelFocusColumn(delta);
+        });
+        KWin::effects->registerAxisShortcut(Qt::MetaModifier, axis, action);
+        m_scrollWheelActions.append(action);
+    };
+    add(KWin::PointerAxisDown, 1, "plasmazones-scroll-focus-column-right");
+    add(KWin::PointerAxisUp, -1, "plasmazones-scroll-focus-column-left");
+    add(KWin::PointerAxisRight, 1, "plasmazones-scroll-focus-column-right-h");
+    add(KWin::PointerAxisLeft, -1, "plasmazones-scroll-focus-column-left-h");
+    qCInfo(lcEffect) << "Scroll wheel shortcuts registered (Meta+wheel focuses columns)";
+}
+
+void TilingHandler::wheelFocusColumn(int delta)
+{
+    if (!m_effect->m_daemonGate.serviceRegistered) {
+        return;
+    }
+    // The strip that moves is the one under the CURSOR (Meta+wheel is a
+    // pointer gesture, not a focus verb): resolve the cursor's effective
+    // screen — virtual subdivisions included — and only forward when it
+    // actually runs the scrolling engine. On any other screen the chord is
+    // consumed but inert; registration is per-session, not per-screen.
+    const QPointF pos = KWin::effects->cursorPos();
+    const QPoint rounded(qRound(pos.x()), qRound(pos.y()));
+    const auto* output = KWin::effects->screenAt(rounded);
+    if (!output) {
+        return;
+    }
+    const QString screenId = m_effect->resolveEffectiveScreenId(rounded, output);
+    if (!m_scrollingScreens.contains(screenId)) {
+        return;
+    }
+    PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
+                                                   QStringLiteral("focusColumn"), {screenId, delta});
 }
 
 void TilingHandler::savePreTileForDesktopMove(const QString& windowId)

@@ -21,6 +21,7 @@
 
 #include <cstdint>
 
+class QAction;
 class QTimer;
 
 namespace KWin {
@@ -267,6 +268,10 @@ public:
     {
         ++m_scrollingScreensGeneration;
         m_scrollingScreens.clear();
+        // Release Meta+wheel with the dead session (no repaint interplay,
+        // unlike the border sweep this path deliberately skips): a consumed
+        // axis chord with no daemon to serve it would just eat input.
+        updateScrollWheelShortcuts();
     }
 
     /// True when @p screenId runs the SCROLLING engine. A subset of the
@@ -541,6 +546,15 @@ private:
     /// m_managedScreens, which carries the union.
     QSet<QString> m_scrollingScreens;
     void setScrollingScreens(const QSet<QString>& newSet);
+    /// Meta+wheel axis shortcuts for column focus (niri's Mod+wheel).
+    /// Registered while ANY screen runs the scrolling engine, unregistered
+    /// (by destroying the QActions — KWin drops an axis shortcut with its
+    /// action) when none does, so Meta+wheel is only consumed in sessions
+    /// that can actually use it. The trigger itself re-gates on the
+    /// CURSOR's screen being a scrolling screen.
+    void updateScrollWheelShortcuts();
+    void wheelFocusColumn(int delta);
+    QList<QAction*> m_scrollWheelActions;
     /// Bumped on every managedScreensChanged signal. loadSettings' async
     /// Properties.Get reply captures the value at dispatch and discards
     /// itself if a signal landed in between — the signal carried a newer

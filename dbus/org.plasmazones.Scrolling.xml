@@ -12,6 +12,16 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine. The KWin effect uses it to stamp Mode 'scrolling' in window rule queries."/>
         </property>
 
+        <method name="focusColumn">
+            <annotation name="org.gtk.GDBus.DocString" value="Focus the adjacent column on a scrolling screen. Called by the KWin effect's Meta+wheel axis shortcut with the cursor's screen; ignored when the screen is not running the scrolling engine."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip should move (the cursor's screen)."/>
+            </arg>
+            <arg name="delta" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="-1 focuses the column to the left, +1 to the right."/>
+            </arg>
+        </method>
+
         <signal name="scrollingScreensChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using the scrolling engine changes."/>
             <arg name="screenIds" type="as">

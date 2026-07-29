@@ -7,6 +7,7 @@
 
 #include <algorithm>
 
+#include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
 namespace PlasmaZones {
@@ -47,6 +48,22 @@ QStringList ScrollingAdaptor::scrollingScreens() const
     QStringList out(screens.cbegin(), screens.cend());
     std::sort(out.begin(), out.end());
     return out;
+}
+
+void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
+{
+    // Wire-boundary validation: only the two adjacent steps are meaningful,
+    // and the screen gate keeps a wheel event from a non-scrolling monitor
+    // from being redirected onto the active scrolling screen by
+    // resolveOperationScreen's fallback.
+    if (!m_engine || screenId.isEmpty() || (delta != -1 && delta != 1)) {
+        return;
+    }
+    if (!m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    m_engine->focusInDirection(delta < 0 ? QStringLiteral("left") : QStringLiteral("right"),
+                               PhosphorEngine::NavigationContext{QString(), screenId});
 }
 
 void ScrollingAdaptor::clearEngine()
