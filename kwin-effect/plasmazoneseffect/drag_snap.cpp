@@ -670,8 +670,6 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
 
     m_currentDragPolicy = newPolicy;
 
-    KWin::EffectWindow* dragW = m_dragTracker->draggedWindow();
-
     if (newReason == PhosphorProtocol::DragBypassReason::AutotileScreen) {
         // Snap → autotile (or context-disabled → autotile). Cancel any
         // active snap overlay, enter bypass mode. Mirrors the old
@@ -699,9 +697,10 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // Do NOT call handleDragToFloat here: the mid-drag schedule would
         // race against the zone snap at drop, making the window jump after
         // the user lets go. onWindowClosed alone clears the tracking state.
-        // Guarded on the ID, not dragW: the call is id-keyed bookkeeping that
-        // never derefs the window, and a died-mid-drag pointer must not skip
-        // the tracking cleanup for a still-valid id.
+        // Guarded on the ID, not the dragged-window pointer: the call is
+        // id-keyed bookkeeping that never derefs the window, and a
+        // died-mid-drag pointer must not skip the tracking cleanup for a
+        // still-valid id.
         if (!windowId.isEmpty()) {
             m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
         }
