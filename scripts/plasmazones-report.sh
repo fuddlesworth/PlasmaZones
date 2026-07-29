@@ -78,6 +78,15 @@ fi
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR=$(cd "$OUTPUT_DIR" && pwd)
 
+# python3 is required for JSON parsing and home-path redaction. Check up
+# front with a clear error: a missing interpreter failing mid-pipeline
+# would surface as the misleading "Could not connect to PlasmaZones
+# daemon." message (the exact failure mode the JSON::PP removal fixed).
+if ! command -v python3 &>/dev/null; then
+    echo "Error: python3 is required but was not found in PATH." >&2
+    exit 1
+fi
+
 # ─── D-Bus call ───────────────────────────────────────────────────────────────
 
 call_dbus() {
@@ -153,20 +162,24 @@ redact_home() {
         # Pass HOME via environment to avoid shell quoting issues (e.g., HOME
         # containing quotes); re.escape quotes it as a literal. Byte-oriented
         # (environb, "rb", buffer) so a non-UTF-8 HOME or stray bytes in a
-        # journal line pass through unmangled. re.M makes the $ anchor match
-        # at each line end, mirroring the old per-line perl -pe behaviour.
+        # journal line pass through unmangled. Processes line by line like
+        # the old perl -pe, so large inputs are never held fully in memory;
+        # $ in the lookahead matches at each (chomped or final) line end.
         # Handles both file arguments and piped stdin (no files given).
         HOME="$HOME" python3 -c '
 import os, re, sys
 pat = re.compile(re.escape(os.environb[b"HOME"]) + rb"(?=[/\s]|$)", re.M)
 out = sys.stdout.buffer
+def redact(stream):
+    for line in stream:
+        out.write(pat.sub(b"~", line))
 files = sys.argv[1:]
 if files:
     for f in files:
         with open(f, "rb") as fh:
-            out.write(pat.sub(b"~", fh.read()))
+            redact(fh)
 else:
-    out.write(pat.sub(b"~", sys.stdin.buffer.read()))' "$@"
+    redact(sys.stdin.buffer)' "$@"
     elif [[ $# -gt 0 ]]; then
         cat "$@"
     else
