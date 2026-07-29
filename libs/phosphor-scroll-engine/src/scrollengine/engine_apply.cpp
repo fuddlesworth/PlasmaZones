@@ -86,6 +86,34 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
     return params;
 }
 
+QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId) const
+{
+    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+    if (!state || state->strip().isEmpty()) {
+        return {};
+    }
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    if (!params.workArea.isValid()) {
+        return {};
+    }
+    const ResolvedStrip resolved = state->strip().relayout(params);
+    QVector<QRect> out;
+    for (const ResolvedColumn& column : resolved.columns) {
+        for (const ResolvedTile& tile : column.tiles) {
+            if (tile.hidden) {
+                continue;
+            }
+            // Clip rather than drop partially-visible columns: the cut-off
+            // edge is what tells the viewer the strip continues off-screen.
+            const QRect clipped = tile.rect.intersected(params.workArea);
+            if (!clipped.isEmpty()) {
+                out.append(clipped);
+            }
+        }
+    }
+    return out;
+}
+
 void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
 {
     ScrollState* state = stateForKey(currentKeyForScreen(screenId), false);

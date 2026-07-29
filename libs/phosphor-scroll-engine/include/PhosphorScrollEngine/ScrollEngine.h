@@ -192,6 +192,13 @@ public:
     QString screenForTrackedWindow(const QString& windowId) const override;
     QRect lastManagedRect(const QString& rawWindowId) const override;
     QStringList managedWindowOrder(const QString& screenId) const override;
+    /// Visible-tile rects of @p screenId's current-context strip in strip
+    /// order, clipped to the work area (hidden tabs and parked columns
+    /// excluded). The daemon's OSD preview seam: where a layout switch
+    /// shows the layout's zones, a scrolling screen shows what the strip
+    /// actually looks like right now. Empty when the screen has no state
+    /// or no visible tile.
+    QVector<QRect> visibleTileRects(const QString& screenId) const;
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 

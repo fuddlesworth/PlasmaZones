@@ -19,7 +19,9 @@
 #include <PhosphorEngine/IPlacementState.h>
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "helpers.h"
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
@@ -282,8 +284,10 @@ void Daemon::showNotAssignedOsd(const QString& screenId)
 
 void Daemon::showScrollingModeOsd(const QString& screenId)
 {
-    // The mode-switch announcement for a screen entering Scrolling: there is
-    // no layout entity or zone preview to show, so both styles collapse to a
+    // The mode-switch announcement for a screen entering Scrolling. Preview
+    // style renders what the strip actually looks like right now — the
+    // engine's visible tile rects stand in for the zone list a layout
+    // switch would show. An empty strip (or Text style) collapses to a
     // text card (mirrors showNotAssignedOsd's shape).
     if (shouldSuppressOsd()) {
         return;
@@ -294,6 +298,37 @@ void Daemon::showScrollingModeOsd(const QString& screenId)
     }
     const QString text = PhosphorI18n::tr("Scrolling", "tiling mode name");
     if (style == OsdStyle::Preview && m_overlayService) {
+        const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+        const QRect area = m_screenManager ? m_screenManager->screenAvailableGeometry(screenId) : QRect();
+        const QVector<QRect> tiles = scroll ? scroll->visibleTileRects(screenId) : QVector<QRect>();
+        if (!tiles.isEmpty() && area.width() > 0 && area.height() > 0) {
+            QVariantList zones;
+            zones.reserve(tiles.size());
+            for (int i = 0; i < tiles.size(); ++i) {
+                const QRect& r = tiles.at(i);
+                QVariantMap relGeo;
+                relGeo[QLatin1String("x")] = static_cast<qreal>(r.x() - area.x()) / area.width();
+                relGeo[QLatin1String("y")] = static_cast<qreal>(r.y() - area.y()) / area.height();
+                relGeo[QLatin1String("width")] = static_cast<qreal>(r.width()) / area.width();
+                relGeo[QLatin1String("height")] = static_cast<qreal>(r.height()) / area.height();
+                QVariantMap zoneMap;
+                zoneMap[QLatin1String("zoneNumber")] = i + 1;
+                zoneMap[QLatin1String("relativeGeometry")] = relGeo;
+                zoneMap[QLatin1String("id")] = QString::number(i);
+                zoneMap[QLatin1String("name")] = QString();
+                zoneMap[QLatin1String("useCustomColors")] = false;
+                zones.append(zoneMap);
+            }
+            // Autotile category: the renderer treats it as "generated, not
+            // editable", which is exactly what a live strip snapshot is.
+            // Zone numbers are suppressed — strip positions are transient.
+            m_overlayService->showLayoutOsd(QString(PhosphorLayout::LayoutId::ScrollingId), text, zones,
+                                            static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId,
+                                            false, false, QStringLiteral("none"), 1);
+            qCInfo(lcDaemon) << "Showing scrolling-mode strip preview OSD: screen=" << screenId
+                             << "tiles=" << tiles.size();
+            return;
+        }
         // Neutral icon: this is a successful mode switch, not a refusal —
         // the Text fallback below already uses the app icon for the same
         // reason.
