@@ -292,8 +292,25 @@ jobs:
         # Inlined because each step gets its own shell — no sourcing
         # across steps. The build-dep list is larger so it's also more
         # exposed to transient mirror flakes; the retry is load-bearing.
+        #
+        # The locks are separate from the retry and fix a different class of
+        # failure. openSUSE ships `-mini` flavors of the systemd stack purely
+        # to bootstrap systemd's own OBS build. They carry a
+        # `Requires: this-is-only-for-build-envs`, a capability that exists
+        # only inside an OBS build root, so installing one in a plain
+        # container can never succeed. Whenever the Oss and Update repos sit
+        # on different systemd versions (Oss had libsystemd0-mini 261.1 while
+        # Update had libsystemd0 261.2 when this bit us), the solver can pick
+        # a `-mini` package to satisfy an exact-version dependency and then
+        # fails hard with exit 4. Retrying does not help because the choice
+        # is deterministic for that snapshot. Locking the flavors states the
+        # thing that is actually true here, that this container is not a
+        # build env, and leaves the solver to take the normal packages.
         run: |
           set -euo pipefail
+          zypper -n addlock \
+            systemd-mini systemd-mini-devel libsystemd0-mini \
+            udev-mini libudev-mini1 libudev-mini-devel
           install_with_retry() {
               zypper -n --gpg-auto-import-keys refresh --force
               if ! zypper -n install "$@"; then
