@@ -185,6 +185,15 @@ public:
         return m_minimizeFloatedWindows.contains(windowId) || m_unfloatInFlight.contains(windowId);
     }
 
+    /// Take ownership of a minimize-float relinquished by the autotile
+    /// handler (cross-screen move of a still-minimized window onto a
+    /// snap-mode screen): the unminimize edge on that screen must find an
+    /// owner or the window stays floating until the next mode toggle.
+    void adoptMinimizeFloated(const QString& windowId)
+    {
+        m_minimizeFloatedWindows.insert(windowId);
+    }
+
     /// Drop @p windowId from the minimize-float set and cancel either deferred
     /// edge. Returns true if it was present. Used by close cleanup,
     /// authoritative visible unfloat, and cross-mode adoption.

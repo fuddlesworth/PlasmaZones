@@ -451,8 +451,36 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // The predicate mirrors the re-add condition below.
     const bool willReAdd = newIsAutotile && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
 
+    // Minimize-float ownership must SURVIVE the transfer: onWindowClosed's
+    // cleanup wipes it wholesale, the window is alive and still floated
+    // daemon-side, and willReAdd is false for a minimized window — without
+    // re-establishing the claim (or handing it to the snap handler for a
+    // snap destination) nobody ever unfloats the window and it stays
+    // floating until the next mode toggle. Reachable in bulk on monitor
+    // hotplug and VS reconfigure.
+    const bool ownedMinimizeFloat = m_minimizeFloatedWindows.contains(windowId);
+    const bool wasUntiledMinimizeFloat = m_untiledMinimizeFloats.contains(windowId);
+
     // Remove from old screen's autotile state
     onWindowClosed(windowId, oldScreenId);
+
+    if (ownedMinimizeFloat && w->isMinimized()) {
+        if (newIsAutotile) {
+            m_minimizeFloatedWindows.insert(windowId);
+            if (wasUntiledMinimizeFloat) {
+                m_untiledMinimizeFloats.insert(windowId);
+            }
+            qCInfo(lcEffect) << "Autotile: minimize-float ownership carried across screens:" << windowId << "->"
+                             << newScreenId;
+        } else if (SnapHandler* snap = m_effect->snapHandler()) {
+            // Snap destination: hand the record over so the unminimize edge
+            // on that screen finds an owner (mirrors the deferred-commit
+            // transfer in the unfloat grace path).
+            snap->adoptMinimizeFloated(windowId);
+            qCInfo(lcEffect) << "Autotile: minimize-float ownership handed to snap on screen change:" << windowId
+                             << "->" << newScreenId;
+        }
+    }
 
     if (willReAdd) {
         // Re-add on new autotile screen, carrying over pre-autotile geometry.
