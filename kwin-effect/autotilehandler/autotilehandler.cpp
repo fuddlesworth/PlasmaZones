@@ -723,7 +723,21 @@ QSet<QString> AutotileHandler::completeDeferredWindowRoutes()
         if (windowId != it.key()) {
             m_pendingFreshWindows.remove(it.key());
         }
-        const QString screenId = m_effect->getWindowScreenId(window);
+        // The defer-time first-frame suppression was armed with the standard
+        // deadline, but the screen query this dispatch waited on can outlast
+        // it — re-arm (deadline only, no-op for unsuppressed windows) so the
+        // window doesn't return to compositing at its centred spawn placement
+        // between deadline expiry and the reposition below.
+        m_effect->refreshRestoreSuppressionDeadline(window);
+        // Consume (and maybe apply) the instant snap-restore cache entry,
+        // exactly as the non-deferred open path does — a deferred window must
+        // not leave its entry alive for a later same-app sibling to claim.
+        // A teleport can move the window to another screen; re-resolve after.
+        QString screenId = m_effect->getWindowScreenId(window);
+        if (it->canSnapRestore && !window->isMinimized()
+            && m_effect->tryInstantSnapRestore(window, windowId, /*canSnapRestore=*/true)) {
+            screenId = m_effect->getWindowScreenId(window);
+        }
         if (m_autotileScreens.contains(screenId)) {
             if (window->isMinimized()) {
                 // A window that minimized while the screen query was pending
@@ -743,7 +757,7 @@ QSet<QString> AutotileHandler::completeDeferredWindowRoutes()
                 QPointer<KWin::EffectWindow> safeWindow = window;
                 m_effect->snapHandler()->callResolveWindowRestore(
                     window,
-                    [this, safeWindow, windowId]() {
+                    [this, safeWindow, windowId](bool snapApplied) {
                         if (!safeWindow || safeWindow->isDeleted()) {
                             return;
                         }
@@ -752,7 +766,10 @@ QSet<QString> AutotileHandler::completeDeferredWindowRoutes()
                             m_effect->endRestoreSuppression(safeWindow.data());
                             return;
                         }
-                        if (!notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/true)
+                        // knownFreeFloating only when the restore did NOT
+                        // apply — a zone-placed window's live frame is the
+                        // zone rect, not a genuine free frame.
+                        if (!notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/!snapApplied)
                             && !m_notifiedWindows.contains(windowId)) {
                             m_effect->endRestoreSuppression(safeWindow.data());
                         }

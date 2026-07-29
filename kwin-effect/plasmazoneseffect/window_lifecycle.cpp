@@ -68,6 +68,67 @@ void PlasmaZonesEffect::endRestoreSuppression(KWin::EffectWindow* window)
     }
 }
 
+bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId, bool canSnapRestore)
+{
+    if (!canSnapRestore || !w || w->isDeleted() || m_snapHandler->restoreCacheEmpty()) {
+        return false;
+    }
+    const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+    // Single-shot semantics: takeRestore erases the entry on lookup, so any
+    // entry seen here is consumed regardless of which branch below runs (the
+    // entry has been considered for routing whether or not it was applied,
+    // so the next open of the same appId won't re-evaluate a dead entry).
+    // Shared by slotWindowAdded and the deferred-routing dispatch
+    // (completeDeferredWindowRoutes) — before the deferred path consumed the
+    // cache too, a deferred window left its entry alive for a later same-app
+    // sibling to claim.
+    const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(appId);
+    if (!cached) {
+        return false;
+    }
+    const bool savedScreenNowAutotile =
+        !cached->screenId.isEmpty() && m_autotileHandler->isAutotileScreen(cached->screenId);
+    if (cached->geometry.isValid() && !savedScreenNowAutotile) {
+        qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached->geometry
+                         << "screen:" << cached->screenId;
+        // skipAnimation=true: teleport straight into the zone.
+        // First-frame open suppression (beginRestoreSuppression in
+        // slotWindowAdded) withholds the window from
+        // compositing until KWin's async moveResize commits, so
+        // by the time paintWindow runs the live frameGeometry()
+        // already reports the resolved zone — the surface-extent
+        // open shader (bounce, fly-in) plays into the zone from
+        // the first painted frame without any anchor pinning.
+        applyWindowGeometry(w, cached->geometry, false, /*skipAnimation=*/true);
+        return true;
+    }
+    if (savedScreenNowAutotile) {
+        qCDebug(lcEffect) << "Skipping instant snap restore for" << appId
+                          << "- saved screen now autotile:" << cached->screenId;
+    } else {
+        // Cached geometry is invalid (corrupt / zero-size persisted
+        // rect on a snap-mode screen).
+        qCDebug(lcEffect) << "Discarding instant snap restore entry for" << appId
+                          << "- geometry invalid:" << cached->geometry << "screen:" << cached->screenId;
+    }
+    return false;
+}
+
+void PlasmaZonesEffect::refreshRestoreSuppressionDeadline(KWin::EffectWindow* window)
+{
+    // Deadline-only re-arm for an ALREADY-suppressed window; never suppresses
+    // a visible one (that would read as a flash to invisible). Used by the
+    // deferred-routing dispatch: the defer-time suppression is armed with the
+    // standard deadline, but the screen query it waits on can outlast it, and
+    // an expired deadline returns the window to compositing at its centred
+    // spawn placement mid-route. spawnGeometry is left untouched so the
+    // settle detection keeps its original reference.
+    const auto it = m_restoreSuppress.find(window);
+    if (it != m_restoreSuppress.end()) {
+        it->deadlineMs = ShaderInternal::shaderClockNowMs() + kRestoreSuppressDeadlineMs;
+    }
+}
+
 void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 {
     // Full property + filter-verdict dump for every window as it opens. Silent
@@ -151,6 +212,13 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 
     if (tileableWindow && m_autotileHandler->isScreenQueryPending()) {
         if (tileableAppWindow) {
+            // DELIBERATELY broader than the post-query gate below
+            // (canSnapRestore || onAutotileScreen): the screen's mode is
+            // exactly what the pending query will tell us, so it cannot
+            // discriminate here. The dispatch releases non-repositioned
+            // windows promptly and re-arms the deadline for the rest
+            // (refreshRestoreSuppressionDeadline), so the over-suppression
+            // costs at most the query latency.
             beginRestoreSuppression(w);
         }
         m_autotileHandler->deferWindowRouting(w, canSnapRestore);
@@ -192,41 +260,11 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Rare race: the saved screen may have flipped from snap→autotile between
     // when the cache was populated and when the window opens. Re-check the
     // entry's screen mode via the autotile handler before applying.
-    if (canSnapRestore && !m_snapHandler->restoreCacheEmpty()) {
-        const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-        // Single-shot semantics: takeRestore erases the entry on lookup, so any
-        // entry seen here is consumed regardless of which branch below runs (the
-        // entry has been considered for routing whether or not it was applied,
-        // so the next open of the same appId won't re-evaluate a dead entry).
-        if (const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(appId)) {
-            const bool savedScreenNowAutotile =
-                !cached->screenId.isEmpty() && m_autotileHandler->isAutotileScreen(cached->screenId);
-            if (cached->geometry.isValid() && !savedScreenNowAutotile) {
-                qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached->geometry
-                                 << "screen:" << cached->screenId;
-                // skipAnimation=true: teleport straight into the zone.
-                // First-frame open suppression (beginRestoreSuppression
-                // above in slotWindowAdded) withholds the window from
-                // compositing until KWin's async moveResize commits, so
-                // by the time paintWindow runs the live frameGeometry()
-                // already reports the resolved zone — the surface-extent
-                // open shader (bounce, fly-in) plays into the zone from
-                // the first painted frame without any anchor pinning.
-                applyWindowGeometry(w, cached->geometry, false, /*skipAnimation=*/true);
-                // Re-evaluate screen after teleport — cross-VS/cross-monitor
-                // moveResize updates KWin's output assignment, so the window
-                // may no longer be on an autotile screen.
-                onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
-            } else if (savedScreenNowAutotile) {
-                qCDebug(lcEffect) << "Skipping instant snap restore for" << appId
-                                  << "- saved screen now autotile:" << cached->screenId;
-            } else {
-                // Cached geometry is invalid (corrupt / zero-size persisted
-                // rect on a snap-mode screen).
-                qCDebug(lcEffect) << "Discarding instant snap restore entry for" << appId
-                                  << "- geometry invalid:" << cached->geometry << "screen:" << cached->screenId;
-            }
-        }
+    if (tryInstantSnapRestore(w, windowId, canSnapRestore)) {
+        // Re-evaluate screen after teleport — cross-VS/cross-monitor
+        // moveResize updates KWin's output assignment, so the window
+        // may no longer be on an autotile screen.
+        onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
     }
 
     if (onAutotileScreen && canSnapRestore) {
@@ -247,13 +285,16 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // rather than waiting for the 250ms deadline.
         m_snapHandler->callResolveWindowRestore(
             w,
-            [this, safeW]() {
+            [this, safeW](bool snapApplied) {
                 if (!safeW || safeW->isDeleted()) {
                     return;
                 }
                 // Snap restore either moved the window to a snap screen (no-op for
                 // autotile) or didn't apply (window genuinely belongs on autotile).
-                if (!m_autotileHandler->notifyWindowAdded(safeW, /*knownFreeFloating=*/true)) {
+                // knownFreeFloating only when it did NOT apply: a zone-placed
+                // window's live frame is the zone rect, and reporting it as a
+                // known free frame would persist the zone rect as float-back.
+                if (!m_autotileHandler->notifyWindowAdded(safeW, /*knownFreeFloating=*/!snapApplied)) {
                     endRestoreSuppression(safeW.data());
                 }
             },

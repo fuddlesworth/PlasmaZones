@@ -1770,6 +1770,17 @@ private:
     // it opens; endRestoreSuppression releases it once it has settled into
     // its zone / tile (or on the hard deadline). See RestoreSuppression.
     void beginRestoreSuppression(KWin::EffectWindow* window);
+    /// Re-arm an already-suppressed window's deadline (no-op when the window
+    /// is not suppressed). Used when a routing decision is deferred past the
+    /// original deadline (screen-query wait) so the window does not flash at
+    /// its spawn placement mid-route.
+    void refreshRestoreSuppressionDeadline(KWin::EffectWindow* window);
+    /// Consume (single-shot) and, when valid for a snap-mode screen, apply the
+    /// instant snap-restore cache entry for this window's app. Returns true
+    /// when the window was teleported (caller should re-evaluate its screen).
+    /// Shared by slotWindowAdded and the deferred-routing dispatch so a
+    /// deferred window cannot leave a stale entry for a same-app sibling.
+    bool tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId, bool canSnapRestore);
     void endRestoreSuppression(KWin::EffectWindow* window);
 
     void loadShaderProfileFromDbus();

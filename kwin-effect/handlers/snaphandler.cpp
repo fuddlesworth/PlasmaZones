@@ -159,12 +159,12 @@ void SnapHandler::setFocusFollowsMouse(bool enabled)
     m_focusFollowsMouse = enabled;
 }
 
-void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete,
+void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::function<void(bool)> onComplete,
                                            bool releaseSuppressionOnMiss)
 {
     if (!window) {
         if (onComplete) {
-            onComplete();
+            onComplete(false);
         }
         return;
     }
@@ -176,7 +176,7 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
         // never come.
         m_effect->endRestoreSuppression(window);
         if (onComplete) {
-            onComplete();
+            onComplete(false);
         }
         return;
     }
@@ -217,9 +217,23 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
     // float toggle to restore to the zone geometry instead of the original free-floating position.
     const int kindInt = static_cast<int>(m_effect->classifyWindowKind(window));
+    // Thread the applied outcome to onComplete: onSnapSuccess fires only on
+    // the zone-applied branch of tryAsyncSnapCall, and every branch calls
+    // onComplete afterwards, so the flag is always settled when it runs.
+    auto snapApplied = std::make_shared<bool>(false);
+    std::function<void(const QString&, const QString&)> markApplied;
+    std::function<void()> completeWithOutcome;
+    if (onComplete) {
+        markApplied = [snapApplied](const QString&, const QString&) {
+            *snapApplied = true;
+        };
+        completeWithOutcome = [onComplete, snapApplied]() {
+            onComplete(*snapApplied);
+        };
+    }
     m_effect->tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
-                               {windowId, screenId, sticky, kindInt}, safeWindow, windowId, false, onMiss, nullptr,
-                               /*skipAnimation=*/true, onComplete, releaseSuppression);
+                               {windowId, screenId, sticky, kindInt}, safeWindow, windowId, false, onMiss, markApplied,
+                               /*skipAnimation=*/true, completeWithOutcome, releaseSuppression);
 }
 
 void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,

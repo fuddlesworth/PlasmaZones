@@ -139,11 +139,17 @@ public:
     // ── Snap restore-on-open orchestration ──
     /// Ask the daemon whether @p window has a saved zone and apply it (async) —
     /// the async counterpart of the instant restore-cache teleport.
+    /// onComplete receives snapApplied: true when the daemon resolved a zone
+    /// and the geometry was applied. Callers that go on to notify autotile
+    /// must thread !snapApplied into knownFreeFloating — a zone-placed
+    /// window's live frame is the zone rect, and reporting it as a known free
+    /// frame persists the zone rect as the float-back geometry.
     /// releaseSuppressionOnMiss: when the daemon resolves no zone, release the
     /// window's first-frame suppression. Pass false when something else will
     /// still reposition it on a miss (the autotile-screen path tiles it via
     /// onComplete) — there the suppression must hold through that reposition.
-    void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr,
+    void callResolveWindowRestore(KWin::EffectWindow* window,
+                                  std::function<void(bool snapApplied)> onComplete = nullptr,
                                   bool releaseSuppressionOnMiss = true);
     /// Store a window's pre-snap (free-float) geometry with the daemon before a
     /// snap commit, so a later float toggle restores the original position.
