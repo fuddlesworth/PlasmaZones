@@ -69,9 +69,12 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // record should hold. See the fromStateChange doc on the declaration.
     bool treatAsMinimized = false;
     if (m_windowRegistry) {
+        // Per-capture hot path: only pay the contains() lookup when the
+        // optional is actually disengaged.
         const std::optional<bool> minimized = m_windowRegistry->minimizedState(windowId);
-        treatAsMinimized =
-            minimized.value_or(m_windowRegistry->contains(PhosphorIdentity::WindowId::extractInstanceId(windowId)));
+        treatAsMinimized = minimized.has_value()
+            ? *minimized
+            : m_windowRegistry->contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     }
     // The suspension-float classification outlives the live minimize bit: on
     // the unminimize edge isMinimized flips false immediately while the
@@ -670,6 +673,13 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     // contract in window_query.cpp. Lenient QVariant conversions are the
     // boundary policy here, matching the pid / windowType clamping above (a
     // malformed caller cannot corrupt placement).
+    //
+    // Known sentinel ambiguity, accepted: a FULL push whose optionals are all
+    // disengaged would also arrive as an empty map and be read as a caption
+    // refresh. Unreachable from the effect today (geometry keys are always
+    // engaged for a live window), and the wire doc forbids senders using the
+    // empty shape to mean "nothing known" — an explicit refresh marker would
+    // be the upgrade path if a second bridge ever needs it.
     namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
     const bool captionOnlyRefresh =
         extended.isEmpty() || (extended.size() == 1 && extended.contains(QString(Key::CaptionNormal)));

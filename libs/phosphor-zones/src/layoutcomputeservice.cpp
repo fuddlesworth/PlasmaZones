@@ -43,6 +43,11 @@ LayoutComputeService::~LayoutComputeService()
         qCWarning(lcLayoutLib) << "LayoutComputeService: worker thread did not quit within 5s — terminating";
         m_thread->terminate();
         m_thread->wait();
+        // The worker's deleteLater is posted into the terminated thread's
+        // event loop, which never runs again — reclaim it directly. Safe: the
+        // thread is fully stopped after wait(), so nothing races the delete.
+        delete m_worker;
+        m_worker = nullptr;
     }
 }
 
@@ -82,6 +87,12 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
         // never computed, satisfying the caller's barrier with nothing
         // applied. Publishing under the current generation keeps both the
         // barrier and any in-flight compute honest.
+        // Contract note: because the no-op path deliberately does NOT bump the
+        // generation, this queued publish can share a generation number with an
+        // in-flight worker compute (geometry flipped back to lastRecalcGeometry
+        // while the intermediate compute is still running) — two results at the
+        // same generation, the worker's second. Barriers must therefore settle
+        // on the LATEST result for a generation, not the first.
         const uint64_t gen = m_screenGeneration.value(screenId);
         const QString sid = screenId;
         const QUuid lid = layout->id();

@@ -67,7 +67,9 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     // and not be auto-snapped when reopened.
     QStringList zoneIds = snapState ? snapState->zonesForWindow(windowId) : QStringList{};
     QString zoneId = zoneIds.isEmpty() ? QString() : zoneIds.first();
-    // Check floating with full windowId first, fallback to appId
+    // With the engine resolver wired (production) this is the engine's answer
+    // directly; the full-windowId-then-appId fallback applies only to the
+    // legacy unwired path inside isWindowFloating.
     bool isFloating = isWindowFloating(windowId);
     if (!zoneId.isEmpty() && !zoneId.startsWith(kZoneSelectorIdPrefix)
         && !isFloating
@@ -478,6 +480,15 @@ void WindowTrackingService::onLayoutChanged()
         unassignWindow(windowId);
     }
     for (auto it = toRewrite.constBegin(); it != toRewrite.constEnd(); ++it) {
+        // Skip floating windows: assignWindowToZones unconditionally strips
+        // the legacy float bit, and a floating-with-preserved-zone window must
+        // not lose it to a bookkeeping rewrite — matching the migration
+        // siblings in virtualscreenmigration.cpp, which skip floating windows
+        // in their prune passes. (Production float state lives in the engines;
+        // this protects the unwired/test fallback path.)
+        if (isWindowFloating(it.key())) {
+            continue;
+        }
         const RewriteTarget& target = it.value();
         assignWindowToZones(it.key(), target.zones, target.screenId, target.desktop);
     }

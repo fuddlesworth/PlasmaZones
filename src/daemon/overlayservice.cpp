@@ -460,7 +460,7 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
     QSize initialSize = screenGeom.isValid() ? screenGeom.size() : QSize(240, 70);
 
     // Virtual-screen-aware anchors / margins, same vocabulary popups use
-    // (see selector.cpp::createZoneSelectorWindow). Physical screen →
+    // (see the showOnScreen path in selector.cpp). Physical screen →
     // AnchorAll + zero margins so the compositor sizes the surface to the
     // full output. Virtual screen → Top|Left + offset margins pinning the
     // surface to the VS sub-rect's top-left within its physical screen.

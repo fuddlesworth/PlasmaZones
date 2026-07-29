@@ -239,9 +239,12 @@ void AutotileHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const Q
         // Suppress the VS-crossing detectors across the synchronous
         // frameGeometryChanged this apply emits — same rationale as the
         // local-bucket restore path in slotScreensChanged.
+        // Save/restore, not set/clear: a clearing guard nested inside an outer
+        // apply would hand the outer scope back an un-flagged window.
+        const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
         m_effect->m_daemonGate.inGeometryApply = true;
-        const auto geomGuard = qScopeGuard([this] {
-            m_effect->m_daemonGate.inGeometryApply = false;
+        const auto geomGuard = qScopeGuard([this, prevInApply] {
+            m_effect->m_daemonGate.inGeometryApply = prevInApply;
         });
         // Clear any lingering KWin maximize flag first or KWin re-asserts
         // the maximize-area rect and defeats the restore (discussion #461).

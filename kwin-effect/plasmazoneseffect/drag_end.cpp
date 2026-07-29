@@ -78,16 +78,21 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     auto handled = std::make_shared<bool>(false);
     QTimer* timeoutTimer = new QTimer(this);
     timeoutTimer->setSingleShot(true);
-    connect(timeoutTimer, &QTimer::timeout, this, [windowId, handled, watcher, timeoutTimer]() {
-        if (*handled) {
-            return;
-        }
-        *handled = true;
-        qCWarning(lcEffect) << "endDrag timed out after" << EndDragTimeoutMs
-                            << "ms; daemon unresponsive. Leaving window" << windowId << "at release position.";
-        watcher->deleteLater();
-        timeoutTimer->deleteLater();
-    });
+    // QPointer: the `handled` handshake already prevents a double-delete, but
+    // a raw watcher capture would still dangle if that invariant ever slips.
+    connect(timeoutTimer, &QTimer::timeout, this,
+            [windowId, handled, watcherGuard = QPointer<QDBusPendingCallWatcher>(watcher), timeoutTimer]() {
+                if (*handled) {
+                    return;
+                }
+                *handled = true;
+                qCWarning(lcEffect) << "endDrag timed out after" << EndDragTimeoutMs
+                                    << "ms; daemon unresponsive. Leaving window" << windowId << "at release position.";
+                if (watcherGuard) {
+                    watcherGuard->deleteLater();
+                }
+                timeoutTimer->deleteLater();
+            });
     timeoutTimer->start(EndDragTimeoutMs);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,

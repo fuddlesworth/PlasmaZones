@@ -481,9 +481,10 @@ void Daemon::syncModeFromAssignments()
                 }
             }
         }
-        // Per-output virtual desktops (#648): each screen resolves its own desktop.
-        const int desktop = currentDesktopForScreen(focusedScreenId);
         if (!focusedScreenId.isEmpty()) {
+            // Per-output virtual desktops (#648): each screen resolves its own
+            // desktop. Inside the guard — a lookup for an empty id is dead work.
+            const int desktop = currentDesktopForScreen(focusedScreenId);
             const QString focusedAssignmentId =
                 m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
             m_unifiedLayoutController->setCurrentScreenName(focusedScreenId);

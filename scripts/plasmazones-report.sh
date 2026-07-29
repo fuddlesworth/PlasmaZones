@@ -371,6 +371,9 @@ echo "Support report archive created:"
 echo "  $ARCHIVE_PATH"
 echo ""
 echo "Contents:"
-tar -tzf "$ARCHIVE_PATH" | sed 's|^./||' | grep -v '^$' | sed 's/^/  /'
+# `|| true`: under pipefail an all-blank listing would make grep -v exit
+# non-zero and abort AFTER the archive was already written, losing the
+# attach instruction below for a report that succeeded.
+tar -tzf "$ARCHIVE_PATH" | sed 's|^./||' | grep -v '^$' | sed 's/^/  /' || true
 echo ""
 echo "Attach this file to your GitHub Issue or Discussion."

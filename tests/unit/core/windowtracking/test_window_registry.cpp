@@ -28,6 +28,7 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <algorithm>
 #include <functional>
 
 using PhosphorEngine::WindowMetadata;

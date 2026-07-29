@@ -1,5 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// FILE-SIZE EXCEPTION (sanctioned): AutotileEngine is one class — the tiling
+// engine's whole public and internal surface — and C++ cannot split a class
+// declaration across headers. The IMPLEMENTATION is already partitioned by
+// concern under src/autotileengine/; shrinking this header means extracting
+// collaborator classes (drag preview, script-state stash, per-screen config),
+// which is a deliberate refactor, not a mechanical file split. Same rationale
+// as plasmazoneseffect.h / daemon.h / windowtrackingadaptor.h.
 
 #pragma once
 
@@ -1475,6 +1483,10 @@ private:
     /// layout boundary instead of crossing surfaces.
     PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
     PhosphorEngine::IWindowRegistry* m_windowRegistry = nullptr;
+    /// Handle for the algorithmRegistered → setAppIdResolver hook installed by
+    /// setWindowRegistry(). Stored so a re-wire replaces the hook instead of
+    /// stacking a duplicate (Qt::UniqueConnection does not apply to lambdas).
+    QMetaObject::Connection m_appIdResolverHook;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives engine
     std::unique_ptr<AutotileConfig> m_config;
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;

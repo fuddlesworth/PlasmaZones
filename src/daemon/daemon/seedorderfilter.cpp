@@ -16,7 +16,11 @@ void filterAutotileSeedOrder(QStringList& order, PhosphorPlacement::WindowTracki
         return;
     }
     order.removeIf([wts, registry](const QString& windowId) {
-        const bool minimized = registry && registry->isMinimized(windowId);
+        // minimizedState().value_or(false), not isMinimized(): keeps this
+        // filter's unknown-handling in lockstep with the resnap-order and
+        // restore-entry filters (autotile.cpp / autotile_init.cpp), which the
+        // registry doc steers toward the tri-state accessor.
+        const bool minimized = registry && registry->minimizedState(windowId).value_or(false);
         if (!minimized && wts->isWindowFloating(windowId)) {
             return true;
         }

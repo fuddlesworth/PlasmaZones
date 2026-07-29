@@ -159,6 +159,12 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         // on exactly the chatty-title path. A single cheap direct read, no
         // query walk; the daemon treats a CaptionNormal-only map as a caption
         // refresh (carry-forward plus this field), not a snapshot replace.
+        // Known limitation: a captionNormal that transitions TO empty cannot
+        // be cleared through this route — inserting an empty value would make
+        // the map empty-or-caption-only ambiguous with "carry everything
+        // forward" on the daemon side, so the stale value persists until the
+        // next full snapshot. Full pushes re-derive it, so the staleness is
+        // bounded by the next includeExtended=true push.
         const QString captionNormal = window->captionNormal();
         if (!captionNormal.isEmpty()) {
             extended.insert(PhosphorProtocol::Service::WindowMetadataKey::CaptionNormal, captionNormal);

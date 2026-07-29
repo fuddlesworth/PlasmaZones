@@ -303,9 +303,8 @@ QString LayoutAdaptor::getTilingAlgorithmForScreenDesktop(const QString& screenI
 
 QString LayoutAdaptor::getScreenStates()
 {
-    if (!m_layoutManager)
-        return QStringLiteral("[]");
-
+    // No m_layoutManager guard: both constructors qFatal on a null manager,
+    // and every other slot in this file dereferences it unguarded.
     QJsonArray result;
 
     const QString activity = m_layoutManager->currentActivity();
@@ -728,8 +727,17 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
         }
     }
 
+    // Reject an out-of-range mode like every other argument on this boundary
+    // (screenId / layout uuid / algorithm are validated-and-refused): a silent
+    // clamp would mis-map a caller's typo — or a future third mode — to
+    // Autotile.
+    if (mode < 0 || mode > 1) {
+        qCWarning(lcDbusLayout) << "setAssignmentEntry: mode out of range:" << mode;
+        return;
+    }
+
     PhosphorZones::AssignmentEntry entry;
-    entry.mode = static_cast<PhosphorZones::AssignmentEntry::Mode>(qBound(0, mode, 1));
+    entry.mode = static_cast<PhosphorZones::AssignmentEntry::Mode>(mode);
     entry.snappingLayout = snappingLayout;
     entry.tilingAlgorithm = tilingAlgorithm;
 

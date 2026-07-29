@@ -27,7 +27,6 @@
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorEngine/PerScreenKeys.h>
-#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>

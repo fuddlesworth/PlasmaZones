@@ -810,9 +810,12 @@ private Q_SLOTS:
         QCOMPARE(kept->freeGeometryFor(QStringLiteral("S1")), keepS1);
         QCOMPARE(kept->freeGeometryFor(QStringLiteral("S2")), bridgeS2);
 
-        // The other FIFO order — leaf recorded BEFORE the bridge — must collapse
-        // the same connected set (this is the order the fixpoint claim is about:
-        // the leaf is only reachable through a screen absorbed later).
+        // The other FIFO order — leaf recorded BEFORE the bridge. NOTE: with
+        // this ordering the backward prune scan reaches the bridge FIRST, so
+        // this is the EASY case; the ORIGINAL ordering above (leaf after
+        // bridge) is the one that exercises the fixpoint re-scan. The row is
+        // still not redundant — bucket positions and sequences differ — it
+        // just is not the discriminating permutation.
         WindowPlacementStore reversed;
         reversed.record(makePlacement(QStringLiteral("dolphin|leaf"), QStringLiteral("dolphin"),
                                       WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(),

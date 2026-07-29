@@ -138,8 +138,9 @@ struct WindowPlacement
     /// window to `floating`, so this geometry-less floated residue is exactly the
     /// case that must be rejected: it must NOT be persisted, and the snap restore's
     /// accept predicate must never CONSUME it from the per-app FIFO. At MaxPerApp
-    /// entries per app, such residue would otherwise starve and even evict
-    /// (removeFirst) the window's real placement, silently breaking geometry restore.
+    /// entries per app, such residue would otherwise starve and even evict the
+    /// window's real placement (evictForCapacity prefers a contentless victim
+    /// but falls back to the FIFO head), silently breaking geometry restore.
     bool hasRestorableContent() const
     {
         if (anyFreeGeometry().isValid()) {

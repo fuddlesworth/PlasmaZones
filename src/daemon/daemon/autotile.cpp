@@ -685,10 +685,20 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
     TilingStateKey orderKey{screenId, currentDesktopForScreen(screenId), currentActivity()};
     QStringList order = m_lastAutotileOrders.value(orderKey);
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-    if (order.isEmpty() && wts) {
+    if (!wts) {
+        // Fail CLOSED: without the WTS the seed filter cannot drop live user
+        // floats or durable snap-slot floats, and seeding a saved order
+        // UNFILTERED would violate the contract in seedorderfilter.h.
+        // Unreachable under the "service() is never null once the adaptor
+        // exists" invariant, but the contract must not depend on it silently.
+        qCWarning(lcDaemon) << "seedAutotileOrderForScreen: no WindowTrackingService — refusing unfiltered seed for"
+                            << screenId;
+        return;
+    }
+    if (order.isEmpty()) {
         order = wts->buildZoneOrderedWindowList(screenId);
     }
-    if (!order.isEmpty() && wts) {
+    if (!order.isEmpty()) {
         const PhosphorEngine::WindowRegistry* registry = wts->windowRegistry();
         if (!registry) {
             // Without the registry every minimized window reads as

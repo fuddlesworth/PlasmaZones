@@ -49,8 +49,11 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
     // screen's remembered free spot.
     //
     // Locate the existing record for the same live instance, wherever it lives.
-    // The instance is unique across buckets, so once found we stop — WITHOUT running the loop's
-    // `++it` after a possible erase(it) (would increment an invalidated iterator).
+    // Instance uniqueness holds for ids sameWindowInstance can relate (composite
+    // `app|uuid` forms) — two BARE-id entries under different buckets fall
+    // outside that guarantee (see clearFreeGeometry's all-bucket sweep) — so
+    // once found we stop, WITHOUT running the loop's `++it` after a possible
+    // erase(it) (would increment an invalidated iterator).
     for (auto it = m_byApp.begin(); it != m_byApp.end();) {
         QList<WindowPlacement>& bucket = it.value();
         for (int i = 0; i < bucket.size(); ++i) {
@@ -506,10 +509,20 @@ void WindowPlacementStore::deserialize(const QJsonObject& obj)
     m_byApp.clear();
     m_sequence = 0;
     QList<WindowPlacement> loaded;
+    // Persisted ARRAY positions, keyed per (bucket, instance) — NOT a global
+    // index into the flattened list: a renamed duplicate persisted under an
+    // old bucket would carry that bucket's low global index into its NEW
+    // bucket and sort ahead of the new bucket's genuinely older entries,
+    // inverting the FIFO head take() consumes. Per-bucket positions keep each
+    // bucket's order self-referential; a record merged in from ANOTHER bucket
+    // (rename with no entry in the destination) has no key here and sorts
+    // last, i.e. newest — matching the runtime rename-append behaviour.
+    QHash<QPair<QString, QString>, int> firstPersistedPos;
     for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
         if (it.key().isEmpty() || it.key().contains(QLatin1Char('|'))) {
             continue;
         }
+        int posInBucket = 0;
         const QJsonArray arr = it->toArray();
         for (const QJsonValue& v : arr) {
             WindowPlacement p = WindowPlacement::fromJson(it.key(), v.toObject());
@@ -526,23 +539,19 @@ void WindowPlacementStore::deserialize(const QJsonObject& obj)
             if (!p.windowId.contains(QLatin1Char('|'))) {
                 continue;
             }
+            const QPair<QString, QString> posKey{it.key(), PhosphorIdentity::WindowId::extractInstanceId(p.windowId)};
+            if (!firstPersistedPos.contains(posKey)) {
+                firstPersistedPos.insert(posKey, posInBucket);
+            }
+            ++posInBucket;
             loaded.append(p);
         }
     }
-
-    // Persisted ARRAY positions, first occurrence per instance: record()'s
-    // in-place merge keeps a record's bucket POSITION while restamping its
-    // sequence, so position order and sequence order legitimately diverge —
-    // replaying by sequence alone would reorder buckets across a reload,
-    // flipping take()'s oldest-first head and the eviction order the header
-    // documents as FIFO.
-    QHash<QString, int> firstPersistedPos;
-    for (int i = 0; i < loaded.size(); ++i) {
-        const QString instance = PhosphorIdentity::WindowId::extractInstanceId(loaded.at(i).windowId);
-        if (!firstPersistedPos.contains(instance)) {
-            firstPersistedPos.insert(instance, i);
-        }
-    }
+    // Positions exist because record()'s in-place merge keeps a record's
+    // bucket POSITION while restamping its sequence, so position order and
+    // sequence order legitimately diverge — replaying by sequence alone would
+    // reorder buckets across a reload, flipping take()'s oldest-first head and
+    // the eviction order the header documents as FIFO.
 
     // Replay oldest to newest through record() so persisted duplicates from an
     // appId-prefix mutation are merged into one live-instance record (sequence
@@ -556,16 +565,20 @@ void WindowPlacementStore::deserialize(const QJsonObject& obj)
     }
 
     // Restore each bucket to its persisted array order (merged duplicates sit
-    // at their earliest persisted position — FIFO semantics).
+    // at their earliest persisted position within THIS bucket — FIFO
+    // semantics; cross-bucket merge arrivals sort last, i.e. newest).
     for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
-        std::stable_sort(
-            it->begin(), it->end(), [&firstPersistedPos](const WindowPlacement& a, const WindowPlacement& b) {
-                const int pa = firstPersistedPos.value(PhosphorIdentity::WindowId::extractInstanceId(a.windowId),
-                                                       std::numeric_limits<int>::max());
-                const int pb = firstPersistedPos.value(PhosphorIdentity::WindowId::extractInstanceId(b.windowId),
-                                                       std::numeric_limits<int>::max());
-                return pa < pb;
-            });
+        const QString bucketKey = it.key();
+        std::stable_sort(it->begin(), it->end(),
+                         [&firstPersistedPos, &bucketKey](const WindowPlacement& a, const WindowPlacement& b) {
+                             const int pa = firstPersistedPos.value(
+                                 {bucketKey, PhosphorIdentity::WindowId::extractInstanceId(a.windowId)},
+                                 std::numeric_limits<int>::max());
+                             const int pb = firstPersistedPos.value(
+                                 {bucketKey, PhosphorIdentity::WindowId::extractInstanceId(b.windowId)},
+                                 std::numeric_limits<int>::max());
+                             return pa < pb;
+                         });
     }
 }
 

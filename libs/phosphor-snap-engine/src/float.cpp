@@ -358,9 +358,9 @@ UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId
     // caller's fallback. A tracked screen that no longer exists (output unplugged)
     // is discarded in favour of the caller's fallback. Zone geometry is resolved on
     // the resulting screen so the fallback lands where the window currently is.
-    const SnapState* trackedState = stateForWindow(windowId);
-    const QString screen =
-        resolveUnfloatScreen(trackedState ? trackedState->screenForWindow(windowId) : QString(), fallbackScreen);
+    // stateForWindow is never null; an untracked window yields an empty
+    // tracked screen and the caller's fallback wins.
+    const QString screen = resolveUnfloatScreen(stateForWindow(windowId)->screenForWindow(windowId), fallbackScreen);
     if (screen.isEmpty() || !m_layoutManager) {
         return result;
     }
@@ -532,31 +532,33 @@ void SnapEngine::handoffRelease(const QString& windowId)
     }
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::handoffRelease:" << windowId;
 
-    if (SnapState* state = stateForWindow(windowId)) {
-        if (state->isWindowSnapped(windowId)) {
-            const QStringList removedZones = state->zonesForWindow(windowId);
-            state->unassignWindow(windowId);
-            syncGlobalLastUsedForRemovedZones(removedZones);
-        }
-        if (state->isFloating(windowId)) {
-            state->setFloating(windowId, false);
-        }
-        // The destination engine now owns the window. unassignWindow / setFloating
-        // above cleared its zone/screen/desktop and floating bit — but NOT the
-        // pre-float capture, which is deliberately PRESERVED (see
-        // testHandoffRelease_preservesPreFloatCapture): a future return handoff may
-        // consult it for size restoration. Finally drop the reverse-map ownership
-        // record so this engine no longer claims the window.
-        forgetWindow(windowId);
+    // Plain statement, no conditional: stateForWindow is NEVER null (the
+    // globals holder is constructed in the ctor — see the accessor's
+    // contract), and every query below answers empty/false for an untracked
+    // window, so the operations no-op harmlessly.
+    SnapState* state = stateForWindow(windowId);
+    if (state->isWindowSnapped(windowId)) {
+        const QStringList removedZones = state->zonesForWindow(windowId);
+        state->unassignWindow(windowId);
+        syncGlobalLastUsedForRemovedZones(removedZones);
     }
+    if (state->isFloating(windowId)) {
+        state->setFloating(windowId, false);
+    }
+    // The destination engine now owns the window. unassignWindow / setFloating
+    // above cleared its zone/screen/desktop and floating bit — but NOT the
+    // pre-float capture, which is deliberately PRESERVED (see
+    // testHandoffRelease_preservesPreFloatCapture): a future return handoff may
+    // consult it for size restoration. Finally drop the reverse-map ownership
+    // record so this engine no longer claims the window.
+    forgetWindow(windowId);
 }
 
 QString SnapEngine::screenForTrackedWindow(const QString& windowId) const
 {
-    if (const SnapState* state = stateForWindow(windowId)) {
-        return state->screenForWindow(windowId);
-    }
-    return {};
+    // stateForWindow is never null (ctor-constructed globals holder); an
+    // untracked window resolves to an empty screen.
+    return stateForWindow(windowId)->screenForWindow(windowId);
 }
 
 bool SnapEngine::isWindowTracked(const QString& windowId) const

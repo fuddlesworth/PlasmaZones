@@ -40,11 +40,12 @@ public:
     /// record for the same live instance already exists (in any appId bucket) the
     /// incoming engine slot(s) and free-geometry screen(s) are merged in, leaving
     /// the other engine's slot and other screens' free geometry intact. Otherwise
-    /// the record is appended to its appId's FIFO. Stamps a fresh monotonic
-    /// `sequence`. No-op on an invalid record. Returns true if the store actually
-    /// changed — false when the merge produced a content-identical record (sequence
-    /// aside), so callers can skip marking state dirty and avoid a self-perpetuating
-    /// save loop.
+    /// the record is appended to its appId's FIFO. No-op on an invalid record.
+    /// Returns true if the store actually changed — false when the merge produced
+    /// a content-identical record, so callers can skip marking state dirty and
+    /// avoid a self-perpetuating save loop. Stamps a fresh monotonic `sequence`
+    /// whenever it changes anything (the content-identical short-circuit leaves
+    /// the existing record, sequence included, untouched).
     bool record(WindowPlacement placement);
 
     /// Restore lookup: the first record whose `accept` predicate passes, trying

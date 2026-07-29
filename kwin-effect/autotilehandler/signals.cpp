@@ -365,9 +365,11 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     // same-screen restore is not mistaken for a virtual-
                     // screen crossing — the genuine retile path guards the
                     // same way (tiling.cpp).
+                    // Save/restore, not set/clear (nesting-safe).
+                    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
                     m_effect->m_daemonGate.inGeometryApply = true;
-                    const auto geomGuard = qScopeGuard([this] {
-                        m_effect->m_daemonGate.inGeometryApply = false;
+                    const auto geomGuard = qScopeGuard([this, prevInApply] {
+                        m_effect->m_daemonGate.inGeometryApply = prevInApply;
                     });
                     // Clear any lingering KWin maximize flag before restoring
                     // the pre-autotile geometry: a still-maximized window

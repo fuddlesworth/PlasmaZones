@@ -123,6 +123,10 @@ void PlasmaZonesEffect::refreshRestoreSuppressionDeadline(KWin::EffectWindow* wi
     // an expired deadline returns the window to compositing at its centred
     // spawn placement mid-route. spawnGeometry is left untouched so the
     // settle detection keeps its original reference.
+    if (!window) {
+        // Null-guard symmetry with begin/endRestoreSuppression.
+        return;
+    }
     const auto it = m_restoreSuppress.find(window);
     if (it != m_restoreSuppress.end()) {
         it->deadlineMs = ShaderInternal::shaderClockNowMs() + kRestoreSuppressDeadlineMs;
@@ -436,8 +440,9 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // class), yielding a different or empty id — every lookup misses, the
     // fold never binds uSurfaceLayer, and the decoration vanishes at close
     // frame 1 even though its entries were deliberately preserved. Keep the
-    // frozen mapping for the animation's lifetime; endShaderTransition and
-    // the windowDeleted backstop both re-scrub on teardown.
+    // frozen mapping for the animation's lifetime; the windowDeleted backstop
+    // (lifecycle_wiring.cpp) is the re-scrub — windowDeleted always follows a
+    // close-grabbed window, so the mapping cannot outlive the animation.
     if (!m_shaderManager.hasTransition(w)) {
         m_idCaches.windowIdCache.remove(w);
         m_idCaches.windowIdReverse.remove(closedWindowId);

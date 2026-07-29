@@ -430,7 +430,10 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // capture refresh records the live dragged frame into the same
         // per-screen map this read consumes.
         std::optional<QRect> preSnapGeo;
-        if (m_windowTracking && m_windowTracking->shouldRestoreSizeOnUnsnap(windowId)) {
+        // Evaluated once (it routes through the rule evaluator) and reused by
+        // the restore gate below.
+        const bool restoreSizeOnUnsnap = m_windowTracking && m_windowTracking->shouldRestoreSizeOnUnsnap(windowId);
+        if (restoreSizeOnUnsnap) {
             preSnapGeo = m_windowTracking->service()->validatedUnmanagedGeometry(windowId, releaseScreenId);
         }
         if (m_windowTracking) {
@@ -446,7 +449,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // toggle path passes screenId to validatedUnmanagedGeometry; without it,
         // coordinates captured on another screen may fail the service's on-screen
         // visibility check and not restore).
-        if (m_windowTracking && m_windowTracking->shouldRestoreSizeOnUnsnap(windowId)) {
+        if (restoreSizeOnUnsnap) {
             auto* wts = m_windowTracking->service();
             const auto& geo = preSnapGeo;
             // Require strictly-positive dimensions: a degenerate stored

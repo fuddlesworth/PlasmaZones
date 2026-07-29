@@ -26,7 +26,6 @@
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorEngine/PerScreenKeys.h>
-#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -68,6 +67,11 @@ void AutotileEngine::setWindowRegistry(QObject* registry)
     };
     auto* algoRegistry = m_algorithmRegistry;
     if (!algoRegistry) {
+        // Symmetric loud degrade with the wrong-type branch above: without an
+        // algorithm registry neither the existing-algorithm resolver sweep nor
+        // the registered-hook can be installed.
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "setWindowRegistry: no algorithm registry attached — appId resolvers not installed";
         return;
     }
     for (PhosphorTiles::TilingAlgorithm* algo : algoRegistry->allAlgorithms()) {
@@ -75,16 +79,20 @@ void AutotileEngine::setWindowRegistry(QObject* registry)
             algo->setAppIdResolver(resolver);
         }
     }
-    connect(algoRegistry, &PhosphorTiles::ITileAlgorithmRegistry::algorithmRegistered, this,
-            [this, resolver](const QString& id) {
-                auto* reg = m_algorithmRegistry;
-                if (!reg) {
-                    return;
-                }
-                if (auto* algo = reg->algorithm(id)) {
-                    algo->setAppIdResolver(resolver);
-                }
-            });
+    // Drop the previous invocation's hook first: setWindowRegistry is a public
+    // re-wireable seam, and stacking a second identical lambda would call
+    // setAppIdResolver N times per hot-reloaded algorithm.
+    disconnect(m_appIdResolverHook);
+    m_appIdResolverHook = connect(algoRegistry, &PhosphorTiles::ITileAlgorithmRegistry::algorithmRegistered, this,
+                                  [this, resolver](const QString& id) {
+                                      auto* reg = m_algorithmRegistry;
+                                      if (!reg) {
+                                          return;
+                                      }
+                                      if (auto* algo = reg->algorithm(id)) {
+                                          algo->setAppIdResolver(resolver);
+                                      }
+                                  });
 }
 
 QString AutotileEngine::canonicalizeWindowId(const QString& rawWindowId)

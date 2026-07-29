@@ -24,11 +24,16 @@ public:
      *
      * Engaged true/false when the compositor has reported the window's
      * minimize state; std::nullopt when it is UNKNOWN (no record for the
-     * window, or the metadata push never carried the field). Consumers that
-     * gate destructive or layout-affecting behaviour on "not minimized" must
-     * treat nullopt conservatively rather than as false — collapsing unknown
-     * into "not minimized" is the fail-open that seeds hidden windows into
-     * tiling layouts and persists minimize-suspension floats.
+     * window, or the metadata push never carried the field). SEEDING and
+     * TILING consumers — anything that would place, move, or count a window
+     * in a layout — must treat nullopt conservatively rather than as false:
+     * collapsing unknown into "not minimized" is the fail-open that seeds
+     * hidden windows into tiling layouts and persists minimize-suspension
+     * floats. CAPTURE-side consumers may deliberately require engaged-true
+     * (`.value_or(false)`) when their traffic is causally ordered after the
+     * minimize edge's metadata push (recordFreeGeometry / recordFloatingClose
+     * document this per site) — refusing a capture on unknown would lose
+     * genuine free positions, the opposite failure.
      *
      * Default implementation reports unknown so registry-less engines and
      * test fakes stay honest instead of claiming visibility.

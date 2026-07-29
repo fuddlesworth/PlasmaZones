@@ -262,7 +262,7 @@ void Daemon::connectDesktopActivity()
                 // [SEQ B] Pin screens where all autotiled windows are sticky BEFORE
                 // changing the desktop context, so currentKeyForScreen() still
                 // resolves existing TilingStates ("virtualdesktopsonlyonprimary").
-                if (m_autotileEngine && m_windowTrackingAdaptor) {
+                if (m_autotileEngine && m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
                     auto* service = m_windowTrackingAdaptor->service();
                     m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
                         return service->isWindowSticky(windowId);
@@ -426,7 +426,7 @@ void Daemon::connectDesktopActivity()
                         m_autotileEngine->cancelDragInsertPreview();
                     }
                     // Pin sticky screens before changing activity context
-                    if (m_autotileEngine && m_windowTrackingAdaptor) {
+                    if (m_autotileEngine && m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
                         auto* service = m_windowTrackingAdaptor->service();
                         m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
                             return service->isWindowSticky(windowId);
@@ -888,7 +888,10 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
 
 void Daemon::migrateStartupScreenAssignments()
 {
-    if (!m_windowTrackingAdaptor || !m_screenManager) {
+    // m_settings and service() are unguarded below by the same invariant the
+    // rest of the file relies on: both are ctor-owned / adaptor-constructed
+    // and never null while the adaptor exists (autotile.cpp documents it).
+    if (!m_windowTrackingAdaptor || !m_screenManager || !m_windowTrackingAdaptor->service()) {
         return;
     }
     const auto vsConfigs = m_settings->virtualScreenConfigs();

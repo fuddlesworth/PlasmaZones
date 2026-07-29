@@ -217,6 +217,8 @@ void Daemon::start()
     // setDefaultShortcut stores defaults synchronously (fast, no key grabbing),
     // then key grabs are activated via async D-Bus calls so the event loop
     // stays responsive for Wayland protocol events during login.
+    // Unguarded deref: m_shortcutManager is ctor-owned and never reset
+    // (stop()'s guard is defensive teardown symmetry, not a live invariant).
     m_shortcutManager->registerShortcuts();
     connectShortcutSignals();
     initializeAutotile();

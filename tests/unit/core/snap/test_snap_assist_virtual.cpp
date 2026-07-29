@@ -18,24 +18,16 @@
 #include <QTest>
 #include <QString>
 #include <QStringList>
-#include <QHash>
 #include <QSet>
 #include <QUuid>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <memory>
 
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
-#include "config/configbackends.h"
-#include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorScreens/VirtualScreen.h>
-#include "core/utils/utils.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 

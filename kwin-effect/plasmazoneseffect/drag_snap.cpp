@@ -274,9 +274,11 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // synchronous frame change from this moveResize
                 // reads as an external move and can report a
                 // phantom cross-VS unsnap.
+                // Save/restore, not set/clear (nesting-safe).
+                const bool prevInApply = m_daemonGate.inGeometryApply;
                 m_daemonGate.inGeometryApply = true;
-                const auto guard = qScopeGuard([this] {
-                    m_daemonGate.inGeometryApply = false;
+                const auto guard = qScopeGuard([this, prevInApply] {
+                    m_daemonGate.inGeometryApply = prevInApply;
                 });
                 applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath);
             });

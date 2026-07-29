@@ -165,9 +165,11 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     // frameGeometryChanged would resolve the new position
                     // against stale m_virtualScreenDefs and spuriously
                     // re-announce the just-floated window.
+                    // Save/restore, not set/clear (nesting-safe).
+                    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
                     m_effect->m_daemonGate.inGeometryApply = true;
-                    const auto floatGuard = qScopeGuard([this] {
-                        m_effect->m_daemonGate.inGeometryApply = false;
+                    const auto floatGuard = qScopeGuard([this, prevInApply] {
+                        m_effect->m_daemonGate.inGeometryApply = prevInApply;
                     });
                     // Snap-out: leaving tile-managed sizing.
                     m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
@@ -639,9 +641,11 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // m_virtualScreenDefs may still hold pre-rotation regions — without this
             // guard the slot would resolve the new position against stale boundaries
             // and falsely conclude the window crossed VSes, then unsnap it.
+            // Save/restore, not set/clear (nesting-safe).
+            const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
             m_effect->m_daemonGate.inGeometryApply = true;
-            const auto guard = qScopeGuard([this] {
-                m_effect->m_daemonGate.inGeometryApply = false;
+            const auto guard = qScopeGuard([this, prevInApply] {
+                m_effect->m_daemonGate.inGeometryApply = prevInApply;
             });
             saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
             KWin::Window* kwForLog = snap.window->window();

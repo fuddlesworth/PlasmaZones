@@ -133,7 +133,7 @@ public:
     /**
      * @brief Build a handle for a PERSISTED context (not "right now").
      *
-     * Specialised for `(WindowTrackingService::isPersistedContextDisabled)`-style
+     * Specialised for `(WindowTrackingAdaptor::isPersistedContextDisabled)`-style
      * checks where the desktop/activity come from a persisted entry on
      * disk, not the live workspace state. The screen's mode is still
      * resolved through the mode provider — the disable-list mode axis

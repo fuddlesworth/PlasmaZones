@@ -35,6 +35,8 @@
 
 #include <QTest>
 
+#include <memory>
+
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorLayer/Role.h>
@@ -312,10 +314,10 @@ private Q_SLOTS:
     }
 
     /// Regression: the bare base role (no per-instance suffix) must
-    /// also resolve. The OSD creation path uses `withScopePrefix` to
-    /// derive a per-instance role, but a future refactor that registers
-    /// a base role directly (or a test that constructs one inline)
-    /// should still work.
+    /// also resolve. The OSD creation path derives a per-instance role
+    /// via `PhosphorRoles::makePerInstanceRole`, but a future refactor
+    /// that registers a base role directly (or a test that constructs
+    /// one inline) should still work.
     void exact_base_scope_resolves()
     {
         PhosphorAnimation::PhosphorProfileRegistry registry;

@@ -390,9 +390,11 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 m_trackedScreenPerWindow[p.window] = p.screenId;
                 m_autotileHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
             }
+            // Save/restore, not set/clear (nesting-safe).
+            const bool prevInApply = m_daemonGate.inGeometryApply;
             m_daemonGate.inGeometryApply = true;
-            const auto guard = qScopeGuard([this] {
-                m_daemonGate.inGeometryApply = false;
+            const auto guard = qScopeGuard([this, prevInApply] {
+                m_daemonGate.inGeometryApply = prevInApply;
             });
             // Minimized guard for float/restore entries (empty screenId), the
             // batch twin of slotApplyGeometryRequested's check: applying the

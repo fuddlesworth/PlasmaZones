@@ -313,7 +313,11 @@ private Q_SLOTS:
         screenMgr.start();
 
         PhosphorEngine::WindowRegistry registry;
-        // Engine before parent — see testMinimizedCapturePreservesPreMinimizePlacement.
+        // Engine declared BEFORE parent so reverse destruction tears the
+        // parent (and the WTA/service inside it) down first — destroying the
+        // SnapEngine while the service's snap-state resolver still points into
+        // it would deref freed state. (The other tests cross-reference this
+        // rationale.)
         std::unique_ptr<SnapEngine> snap;
         QObject parent;
         auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,

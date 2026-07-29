@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <phosphorengine_export.h>
+
 #include <PhosphorEngine/IPlacementState.h>
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorEngine/WindowPlacement.h>

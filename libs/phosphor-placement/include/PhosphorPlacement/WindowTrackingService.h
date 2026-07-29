@@ -40,10 +40,6 @@ namespace PhosphorSnapEngine {
 class SnapState;
 }
 
-namespace PhosphorEngine {
-class WindowRegistry;
-}
-
 namespace PhosphorWorkspaces {
 class VirtualDesktopManager;
 }
@@ -417,7 +413,10 @@ public:
      * after the animation grace — a placement capture landing inside that
      * window would otherwise persist the suspension float as a genuine user
      * float. Marked by the adaptor at the float WRITE (where minimize state is
-     * still fresh), cleared on unfloat and on windowClosed.
+     * still fresh), and cleared BY THE ADAPTOR on unfloat and on windowClosed
+     * (WindowTrackingService::windowClosed itself does not touch the set — a
+     * direct WTS caller must clear it explicitly). The prune backstop sweeps
+     * it for windows that die without a close signal.
      */
     bool isSuspensionFloat(const QString& windowId) const override;
     void markSuspensionFloat(const QString& windowId);

@@ -195,9 +195,12 @@ private:
     QHash<QString, WindowMetadata> m_pendingUpserts;
     /// Depth counter, non-zero while clear() drives a removal loop: remove()
     /// then DROPS re-entrant pending upserts instead of replaying them, so a
-    /// subscriber re-inserting from windowDisappeared cannot make records
-    /// survive the bulk reset. A counter, not a bool — a NESTED clear() from
-    /// a subscriber must not un-flag the outer one on its way out.
+    /// subscriber re-inserting from windowDisappeared cannot make the INSTANCE
+    /// BEING REMOVED survive the bulk reset. (A subscriber upserting a
+    /// different, brand-new instance mid-clear does survive — clear() only
+    /// sweeps the ids snapshotted before its loop; acceptable for a test
+    /// seam.) A counter, not a bool — a NESTED clear() from a subscriber must
+    /// not un-flag the outer one on its way out.
     int m_clearing = 0;
 
     void indexInsert(const QString& instanceId, const QString& appId);

@@ -143,6 +143,13 @@ void SnapState::assignWindowToZones(const QString& rawWindowId, const QStringLis
     if (zoneChanged) {
         Q_EMIT windowAssigned(windowId, validZoneIds.first());
     }
+    if (wasFloating) {
+        // Snapping clears the float bit; the dedicated signal must fire like
+        // setFloating/setFloatingOnScreen do, or an exported-API subscriber
+        // tracking float state via floatingChanged misses every
+        // snap-clears-float transition.
+        Q_EMIT floatingChanged(windowId, false);
+    }
     if (zoneChanged || screenChanged || desktopChanged || wasFloating) {
         Q_EMIT stateChanged();
     }

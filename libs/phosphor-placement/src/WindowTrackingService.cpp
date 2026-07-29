@@ -308,6 +308,25 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& rawAliveWi
     // per-engine float resolver/writer are wired (the engines own float state), so
     // this is a no-op there; kept for the unwired / unit-test path.
     removeSet(m_floatingWindows);
+    // Suspension classification: cleared per-window by the adaptor on unfloat
+    // and windowClosed, but a window that dies WITHOUT a close signal — the
+    // case this backstop exists for — would leak its entry and hand a later
+    // same-canonical window a stale suspension classification. The set is
+    // CANONICAL-keyed, so canonicalize the alive ids before comparing (a live
+    // class-renamed window's current composite differs from its canonical).
+    QSet<QString> canonicalAlive;
+    canonicalAlive.reserve(aliveWindowIds.size());
+    for (const QString& id : aliveWindowIds) {
+        canonicalAlive.insert(canonicalizeForLookup(id));
+    }
+    for (auto it = m_suspensionFloats.begin(); it != m_suspensionFloats.end();) {
+        if (!canonicalAlive.contains(*it)) {
+            it = m_suspensionFloats.erase(it);
+            ++wtsCleaned;
+        } else {
+            ++it;
+        }
+    }
 
     if (m_snapEngine) {
         wtsCleaned += m_snapEngine->pruneStaleWindows(aliveWindowIds);
