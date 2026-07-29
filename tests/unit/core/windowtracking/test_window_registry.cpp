@@ -236,14 +236,14 @@ private Q_SLOTS:
         QVERIFY(reg.instancesWithAppId(QStringLiteral("firefox")).isEmpty());
     }
 
-    void remove_canonicalOnly_emitsBeforeReleasingCanonical()
+    void remove_canonicalOnly_emitsBeforeRetiringCanonical()
     {
         WindowRegistry reg;
         const QString canonical = QStringLiteral("ghost|canonical-only");
         reg.canonicalizeWindowId(canonical);
         QString resolvedDuringSignal;
         connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString&) {
-            reg.releaseCanonical(QStringLiteral("renamed|canonical-only"));
+            // The mapping must still resolve for synchronous subscribers.
             resolvedDuringSignal = reg.canonicalizeForLookup(QStringLiteral("renamed|canonical-only"));
         });
         QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
@@ -252,8 +252,59 @@ private Q_SLOTS:
 
         QCOMPARE(disappeared.size(), 1);
         QCOMPARE(resolvedDuringSignal, canonical);
+        // Retired after the emit completes.
         QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|canonical-only")),
                  QStringLiteral("renamed|canonical-only"));
+    }
+
+    void remove_subscriberReseededCanonical_survivesRemoval()
+    {
+        WindowRegistry reg;
+        const QString instanceId = QStringLiteral("reseed-instance");
+        const QString freshCanonical = QStringLiteral("fresh|reseed-instance");
+        // A record WITHOUT a canonical mapping: the effect's metadata push
+        // seeds the canonical, but a record can arrive through other
+        // notifications first.
+        reg.upsert(instanceId, make(QStringLiteral("old")));
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString&) {
+            // A re-announce racing the close seeds a fresh canonical for the
+            // same instance while the removal is in flight.
+            reg.canonicalizeWindowId(freshCanonical);
+        });
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        reg.remove(instanceId);
+
+        QCOMPARE(disappeared.size(), 1);
+        // The subscriber's fresh mapping must not be clobbered by the
+        // post-emit retirement of the pre-emit one.
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("later|reseed-instance")), freshCanonical);
+    }
+
+    void remove_reentrantCrossRemoval_removesBoth()
+    {
+        WindowRegistry reg;
+        const QString first = QStringLiteral("cross-a");
+        const QString second = QStringLiteral("cross-b");
+        reg.upsert(first, make(QStringLiteral("app")));
+        reg.upsert(second, make(QStringLiteral("app")));
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
+            if (removedId == first) {
+                // A subscriber tearing down a DIFFERENT window re-entrantly
+                // (grouped-close handlers do this) must not corrupt the
+                // outer removal's bookkeeping.
+                reg.remove(second);
+            }
+        });
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        reg.remove(first);
+
+        QCOMPARE(disappeared.size(), 2);
+        QVERIFY(!reg.contains(first));
+        QVERIFY(!reg.contains(second));
+        QCOMPARE(reg.size(), 0);
+        QVERIFY(reg.instancesWithAppId(QStringLiteral("app")).isEmpty());
     }
 
     void remove_reentrantRemoval_emitsOnce()

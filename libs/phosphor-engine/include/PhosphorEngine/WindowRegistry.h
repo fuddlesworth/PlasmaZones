@@ -159,7 +159,6 @@ public:
 
     Q_INVOKABLE QString canonicalizeWindowId(const QString& rawWindowId) override;
     Q_INVOKABLE QString canonicalizeForLookup(const QString& rawWindowId) const override;
-    void releaseCanonical(const QString& anyWindowId);
 
     /// Defensive cleanup for windows that died WITHOUT a close signal reaching
     /// the registry (compositor crash, lost D-Bus call): drop every metadata
@@ -182,6 +181,12 @@ private:
     QHash<QString, WindowMetadata> m_records;
     QMultiHash<QString, QString> m_appIdIndex;
     QHash<QString, QString> m_canonicalByInstance;
+    /// Instances currently inside remove()'s windowDisappeared emit. A
+    /// re-entrant remove() of the same instance is a no-op (exactly-once
+    /// signal), and a re-entrant upsert() is deferred into m_pendingUpserts
+    /// and replayed after the removal completes.
+    QSet<QString> m_disappearingInstances;
+    QHash<QString, WindowMetadata> m_pendingUpserts;
 
     void indexInsert(const QString& instanceId, const QString& appId);
     void indexRemove(const QString& instanceId, const QString& appId);

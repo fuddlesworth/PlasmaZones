@@ -8,32 +8,9 @@
 
 namespace PhosphorEngine {
 
-namespace {
-class WindowRegistryLifecycleState final : public QObject
-{
-public:
-    explicit WindowRegistryLifecycleState(QObject* parent)
-        : QObject(parent)
-    {
-        setObjectName(QStringLiteral("_plasmazones_window_registry_lifecycle"));
-    }
-
-    QSet<QString> disappearingInstances;
-    QHash<QString, WindowMetadata> pendingUpserts;
-};
-
-WindowRegistryLifecycleState* lifecycleState(const WindowRegistry* registry)
-{
-    QObject* state = registry->findChild<QObject*>(QStringLiteral("_plasmazones_window_registry_lifecycle"),
-                                                   Qt::FindDirectChildrenOnly);
-    return static_cast<WindowRegistryLifecycleState*>(state);
-}
-} // namespace
-
 WindowRegistry::WindowRegistry(QObject* parent)
     : QObject(parent)
 {
-    new WindowRegistryLifecycleState(this);
 }
 
 WindowRegistry::~WindowRegistry() = default;
@@ -45,9 +22,8 @@ void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& met
         return;
     }
 
-    WindowRegistryLifecycleState* lifecycle = lifecycleState(this);
-    if (lifecycle->disappearingInstances.contains(instanceId)) {
-        lifecycle->pendingUpserts.insert(instanceId, metadata);
+    if (m_disappearingInstances.contains(instanceId)) {
+        m_pendingUpserts.insert(instanceId, metadata);
         return;
     }
 
@@ -74,9 +50,8 @@ void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& met
 
 void WindowRegistry::remove(const QString& instanceId)
 {
-    WindowRegistryLifecycleState* lifecycle = lifecycleState(this);
-    if (lifecycle->disappearingInstances.contains(instanceId)) {
-        lifecycle->pendingUpserts.remove(instanceId);
+    if (m_disappearingInstances.contains(instanceId)) {
+        m_pendingUpserts.remove(instanceId);
         return;
     }
 
@@ -93,20 +68,27 @@ void WindowRegistry::remove(const QString& instanceId)
     // subscribers, then retire it. Canonical-only instances still represent a
     // lifecycle entry and therefore receive the same exactly-once signal.
     const QString canonical = m_canonicalByInstance.value(instanceId);
-    lifecycle->disappearingInstances.insert(instanceId);
+    m_disappearingInstances.insert(instanceId);
     QPointer<WindowRegistry> guard(this);
     Q_EMIT windowDisappeared(instanceId);
     if (!guard) {
         return;
     }
-    lifecycle->disappearingInstances.remove(instanceId);
-    const bool hasPendingUpsert = lifecycle->pendingUpserts.contains(instanceId);
-    const WindowMetadata pendingMetadata = lifecycle->pendingUpserts.take(instanceId);
-    m_canonicalByInstance.remove(instanceId);
-    if (hasPendingUpsert) {
-        if (!canonical.isEmpty()) {
+    m_disappearingInstances.remove(instanceId);
+    const bool hasPendingUpsert = m_pendingUpserts.contains(instanceId);
+    const WindowMetadata pendingMetadata = m_pendingUpserts.take(instanceId);
+    // Retire the mapping only if it still is the pre-emit one: a synchronous
+    // subscriber may have re-seeded a FRESH canonical for this instance during
+    // the emit (a re-announce racing the close), and clobbering that with a
+    // blind remove would strip the next lifecycle's identity translation.
+    const QString postEmit = m_canonicalByInstance.value(instanceId);
+    if (postEmit == canonical) {
+        m_canonicalByInstance.remove(instanceId);
+        if (hasPendingUpsert && !canonical.isEmpty()) {
             m_canonicalByInstance.insert(instanceId, canonical);
         }
+    }
+    if (hasPendingUpsert) {
         upsert(instanceId, pendingMetadata);
     }
 }
@@ -211,18 +193,6 @@ QString WindowRegistry::canonicalizeForLookup(const QString& rawWindowId) const
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(rawWindowId);
     auto it = m_canonicalByInstance.constFind(instanceId);
     return (it != m_canonicalByInstance.constEnd()) ? it.value() : rawWindowId;
-}
-
-void WindowRegistry::releaseCanonical(const QString& anyWindowId)
-{
-    if (anyWindowId.isEmpty()) {
-        return;
-    }
-    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(anyWindowId);
-    if (lifecycleState(this)->disappearingInstances.contains(instanceId)) {
-        return;
-    }
-    m_canonicalByInstance.remove(instanceId);
 }
 
 int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)

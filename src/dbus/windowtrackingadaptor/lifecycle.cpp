@@ -713,7 +713,8 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     // window even after the effect restarts and re-derives a mutated-class
     // composite for it. Idempotent: the instance id is stable, so a later push
     // carrying a mutated appId returns the original composite rather than
-    // re-seeding (issue #628). Cleaned up by releaseCanonical on windowClosed.
+    // re-seeding (issue #628). The registry's own remove() retires the mapping
+    // when the window closes.
     m_windowRegistry->canonicalizeWindowId(PhosphorIdentity::WindowId::buildCompositeId(appId, instanceId));
 
     m_windowRegistry->upsert(instanceId, meta);
