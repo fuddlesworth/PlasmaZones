@@ -581,13 +581,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     if (inserted) {
         // Notify algorithm via lifecycle hook before retile
-        PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(screenId);
-        if (algo && algo->supportsLifecycleHooks() && state) {
-            const int idx = state->tiledWindows().indexOf(windowId);
-            if (idx >= 0) {
-                algo->onWindowAdded(state, idx);
-            }
-        }
+        notifyAlgorithmWindowAdded(state, screenId, windowId);
         scheduleRetileForScreen(screenId);
     }
 }

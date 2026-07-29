@@ -390,6 +390,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             PhosphorTiles::TilingState* ts = tilingStateForScreen(screenId);
             if (ts) {
                 const TilingStateKey stateKey = currentKeyForScreen(screenId);
+                QStringList notTileable;
                 for (const QString& windowId : order) {
                     // Defer on engaged-true AND on unknown (record missing):
                     // a window the registry cannot vouch for must not claim a
@@ -400,7 +401,32 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         hasDeferredMinimizedWindow = true;
                         continue;
                     }
+                    // Same admission gate windowOpened applies: a window the
+                    // daemon's order names but that must not tile (excluded
+                    // app, special window type) would otherwise be seeded
+                    // into the layout and — containsWindow short-circuiting
+                    // its later re-announce — could never self-heal. Dropped
+                    // from the pending order below so a retained order (a
+                    // deferred minimized sibling) cannot wedge on it.
+                    if (!shouldTileWindow(windowId)) {
+                        notTileable.append(windowId);
+                        continue;
+                    }
                     if (!ts->containsWindow(windowId)) {
+                        // Single-owner guard: a mode transition can seed a
+                        // window that another context's state still owns
+                        // (e.g. tracked on a different desktop by a
+                        // catch-scan race). Release the old owner first —
+                        // same primitive handoffReceive uses — or
+                        // setKeyForWindow below re-points the reverse map
+                        // and leaves a permanent ghost in the old state.
+                        const TilingStateKey oldKey = m_states.keyForWindow(windowId);
+                        if (!oldKey.screenId.isEmpty() && oldKey != stateKey) {
+                            handoffRelease(windowId);
+                            if (oldKey.screenId != screenId) {
+                                scheduleRetileForScreen(oldKey.screenId);
+                            }
+                        }
                         ts->addWindow(windowId);
                         // Register engine tracking immediately — without the
                         // key entry, a window closing before the effect's
@@ -422,6 +448,19 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                                 ts->setFloating(windowId, true);
                             }
                         }
+                        // Same "Float this app" admission insertWindow applies
+                        // at line ~292: a float-ruled window seeded tiled would
+                        // hold a tile its open-time rule says it must not, and
+                        // the containsWindow short-circuit on its re-announce
+                        // means nothing later corrects it.
+                        if (!ts->isFloating(windowId) && insertShouldFloat(windowId)) {
+                            ts->setFloating(windowId, true);
+                        }
+                        // Same lifecycle hook every other insert site runs — a
+                        // memory algorithm (dwindle-memory's split tree) must
+                        // see seeded arrivals or its bookkeeping goes blind to
+                        // them.
+                        notifyAlgorithmWindowAdded(ts, screenId, windowId);
                         // Announce on the passive channel via the canonical
                         // insert-time sync (both directions: restored-floating
                         // OR seeded-tiled-over-a-stale-WTS-float-bit). The
@@ -434,11 +473,22 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         emitInsertFloatStateSync(windowId, screenId);
                     }
                 }
-            }
-            if (!hasDeferredMinimizedWindow) {
-                m_pendingInitialOrders.remove(screenId);
-                m_pendingOrderGeneration.remove(screenId);
-                m_strictInitialOrderScreens.remove(screenId);
+                for (const QString& windowId : std::as_const(notTileable)) {
+                    m_pendingInitialOrders[screenId].removeAll(windowId);
+                }
+                if (!hasDeferredMinimizedWindow) {
+                    m_pendingInitialOrders.remove(screenId);
+                    m_pendingOrderGeneration.remove(screenId);
+                    m_strictInitialOrderScreens.remove(screenId);
+                }
+            } else {
+                // Null state — the screen is known to autotile but the state
+                // factory refused (virtual-screen teardown race). RETAIN the
+                // pending order rather than silently discarding the computed
+                // seed: insertWindow consumes it entry-by-entry when the
+                // effect's windowOpened announcements land.
+                qCWarning(PhosphorTileEngine::lcTileEngine) << "setAutotileScreens: no tiling state for" << screenId
+                                                            << "— strict seed retained for insert-time consumption";
             }
         }
         scheduleRetileForScreen(screenId);

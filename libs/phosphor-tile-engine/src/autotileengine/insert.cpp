@@ -68,6 +68,18 @@ void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QSt
     }
 }
 
+void AutotileEngine::notifyAlgorithmWindowAdded(PhosphorTiles::TilingState* state, const QString& screenId,
+                                                const QString& windowId)
+{
+    PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(screenId);
+    if (algo && algo->supportsLifecycleHooks() && state) {
+        const int idx = state->tiledWindows().indexOf(windowId);
+        if (idx >= 0) {
+            algo->onWindowAdded(state, idx);
+        }
+    }
+}
+
 bool AutotileEngine::insertShouldFloat(const QString& windowId) const
 {
     // A window ARRIVING from another state was already managed, so the open-time
@@ -126,6 +138,14 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         // prevents multi-instance apps from all matching the first entry.
         if (desiredPos < 0 && hasStableAppId) {
             for (int i = 0; i < pendingOrder.size(); ++i) {
+                // An entry whose saved id the registry still vouches for is a
+                // LIVE window (typically a minimized placeholder deferred by
+                // the strict seed) that will claim its own slot on arrival —
+                // an unrelated same-app sibling must not consume it and
+                // overwrite its id (which would strand the real window).
+                if (m_windowRegistry && m_windowRegistry->minimizedState(pendingOrder.at(i)).has_value()) {
+                    continue;
+                }
                 // Compare using currentAppIdFor so both sides resolve to the
                 // latest class — an entry saved before a rename still matches.
                 if (currentAppIdFor(pendingOrder.at(i)) == appId && !state->containsWindow(pendingOrder.at(i))) {

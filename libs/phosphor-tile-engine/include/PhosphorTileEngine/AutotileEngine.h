@@ -574,6 +574,18 @@ public:
     PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 
     /**
+     * @brief Run the algorithm's onWindowAdded lifecycle hook for a just-inserted window
+     *
+     * Shared by every insert site (onWindowAdded, handoffReceive, the
+     * strict-initial-order seed in setAutotileScreens) so a memory algorithm's
+     * bookkeeping (e.g. dwindle-memory's split tree) sees every arrival.
+     * Floating arrivals are not in tiledWindows(), so indexOf misses and the
+     * hook is correctly skipped.
+     */
+    void notifyAlgorithmWindowAdded(PhosphorTiles::TilingState* state, const QString& screenId,
+                                    const QString& windowId);
+
+    /**
      * @brief Request that a window is activated after the given screen's next applyTiling
      *
      * Stored in m_pendingFocusByScreen and emitted as activateWindowRequested
