@@ -34,6 +34,7 @@ private Q_SLOTS:
     void stackedTileFloatRoundTripRestoresSlot();
     void scheduledRetileRunsUnderEventLoop();
     void removedScreenReleasesWindows();
+    void desktopSwitchAwayPreservesSiblingContextStrips();
     void operationScreenFallbackIsDeterministic();
     void minSizeSeedsAndCarries();
     void minSizeSurvivesFloatRoundTrip();
@@ -520,6 +521,42 @@ void TestScrollEngineSmoke::removedScreenReleasesWindows()
     QVERIFY(releasedSpy.first().at(1).value<QSet<QString>>().contains(QStringLiteral("S2")));
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|a")));
     QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|b")));
+}
+
+void TestScrollEngineSmoke::desktopSwitchAwayPreservesSiblingContextStrips()
+{
+    // Per-context modes make a screen LEAVE the scrolling set on every
+    // switch to a non-scrolling desktop. The daemon pushes the new desktop
+    // BEFORE re-deriving the sets, so the removal must prune only the
+    // (new, stateless) current context — tearing down every context here
+    // destroyed the other desktop's strip structure (consumed stacks) and
+    // released its windows, and the switch back rebuilt a fresh
+    // one-window-per-column strip.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    // Stack b into a's column.
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
+
+    // Desktop 2 is snapping-mode: context first, then the screen leaves.
+    QSignalSpy releasedSpy(engine, &ScrollEngine::windowsReleased);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({});
+    QCOMPARE(releasedSpy.count(), 0); // a plain switch releases nothing
+    QVERIFY(engine->isWindowTracked(QStringLiteral("app|a")));
+    QVERIFY(engine->isWindowTracked(QStringLiteral("app|b")));
+
+    // Switch back: the stacked column resumes as the user left it.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a")), 0);
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             QStringList({QStringLiteral("app|a"), QStringLiteral("app|b")}));
 }
 
 void TestScrollEngineSmoke::operationScreenFallbackIsDeterministic()

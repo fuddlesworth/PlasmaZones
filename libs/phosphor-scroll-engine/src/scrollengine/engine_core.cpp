@@ -94,11 +94,23 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
     QStringList releasedWindows;
     QSet<QString> releasedScreens;
     for (const QString& screenId : removed) {
-        // Tear down every context state for the leaving screen; the windows
-        // are released to whichever engine now owns the screen.
+        // Prune ONLY the leaving screen's CURRENT (desktop, activity)
+        // context; its windows are released to whichever engine now owns
+        // the screen. Autotile parity ("desktop switching is a fast state
+        // swap"): with per-context modes a screen leaves this set on EVERY
+        // switch to a non-scrolling desktop, and the daemon pushes the new
+        // desktop BEFORE re-deriving the sets — so on a plain switch the
+        // current key resolves to the NEW desktop, no scroll state matches,
+        // and the other desktops' strips (consumed stacks, widths, tabbed
+        // flags, their windows' tracking) survive intact for the switch
+        // back. Only a genuine mode reassignment of the current context
+        // matches and tears down. Sibling contexts are reaped by
+        // pruneStatesForDesktop / pruneStatesForActivities /
+        // pruneStatesForRemovedScreen when their context or output dies.
+        const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
         m_states.removeStatesIf(
-            [&screenId](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
-                return key.screenId == screenId;
+            [&currentKey](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
+                return key == currentKey;
             },
             [this, &releasedWindows](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
                 releaseScreenState(state, releasedWindows);

@@ -56,7 +56,9 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
         (h != 0) ? state->strip().focusAdjacentColumn(h, params) : (v != 0 && state->strip().focusAdjacentTile(v));
     if (moved) {
         applyLayout(screen, true);
-        Q_EMIT navigationFeedback(true, action, QString(), ctx.windowId, state->strip().activeWindowId(), screen);
+        // Success carries the direction as the reason — the navigation OSD
+        // derives its arrow from it (autotile fills the same slot).
+        Q_EMIT navigationFeedback(true, action, direction, ctx.windowId, state->strip().activeWindowId(), screen);
     } else {
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
     }
@@ -77,13 +79,15 @@ void ScrollEngine::moveFocusedInDirection(const QString& direction, const Phosph
     if (moved) {
         applyLayout(screen, true);
         Q_EMIT placementChanged(screen);
-        Q_EMIT navigationFeedback(true, action, QString(), state->strip().activeWindowId(), QString(), screen);
+        // Direction-as-reason on success: the OSD arrow reads it.
+        Q_EMIT navigationFeedback(true, action, direction, state->strip().activeWindowId(), QString(), screen);
         return;
     }
     // Horizontal boundary: the strip has no further column in this
     // direction — cross onto the adjacent output when one exists.
     if (h != 0 && moveActiveWindowAcrossBoundary(state, screen, direction, false)) {
-        Q_EMIT navigationFeedback(true, action, QString(), ctx.windowId, QString(), screen);
+        // Same "screen:<dir>" spelling as autotile's cross-output move.
+        Q_EMIT navigationFeedback(true, action, QStringLiteral("screen:") + direction, ctx.windowId, QString(), screen);
         return;
     }
     Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
@@ -245,11 +249,12 @@ void ScrollEngine::swapFocusedInDirection(const QString& direction, const Phosph
     if (moved) {
         applyLayout(screen, true);
         Q_EMIT placementChanged(screen);
-        Q_EMIT navigationFeedback(true, action, QString(), state->strip().activeWindowId(), QString(), screen);
+        // Direction-as-reason on success: the OSD arrow reads it.
+        Q_EMIT navigationFeedback(true, action, direction, state->strip().activeWindowId(), QString(), screen);
         return;
     }
     if (h != 0 && moveActiveWindowAcrossBoundary(state, screen, direction, true)) {
-        Q_EMIT navigationFeedback(true, action, QString(), ctx.windowId, QString(), screen);
+        Q_EMIT navigationFeedback(true, action, QStringLiteral("screen:") + direction, ctx.windowId, QString(), screen);
         return;
     }
     Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
