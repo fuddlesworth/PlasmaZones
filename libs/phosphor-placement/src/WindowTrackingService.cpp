@@ -39,22 +39,20 @@ WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layo
     Q_ASSERT(layoutManager);
     Q_ASSERT(zoneDetector);
 
-    // Note: No save timer needed - persistence handled by WindowTrackingAdaptor via KConfig
-    // Service just emits stateChanged() signal when state changes
+    // No save timer here: the service is an in-memory state manager whose
+    // persistence is driven by the WindowTrackingAdaptor's dirty-mask
+    // save/load (WindowTrackingAdaptor::saveState/loadState, debounced via
+    // scheduleSaveState). The service only tracks the dirty mask (markDirty)
+    // and emits stateChanged.
     //
     // PhosphorZones::Layout change handling: WindowTrackingAdaptor connects to activeLayoutChanged and calls
     // onLayoutChanged(). Do NOT connect here - duplicate invocation would clear m_resnapBuffer
     // on the second run (after assignments were already removed), causing no_windows_to_resnap.
-
-    // Note: Persistence is handled by WindowTrackingAdaptor via KConfig.
-    // The service is a pure in-memory state manager - adaptor calls
-    // populateState() after loading from KConfig.
 }
 
 WindowTrackingService::~WindowTrackingService()
 {
-    // Note: Persistence is handled by WindowTrackingAdaptor via KConfig
-    // Service is purely in-memory state management
+    // In-memory only; the adaptor owns persistence (see the ctor note).
 }
 
 QString WindowTrackingService::currentAppIdFor(const QString& anyWindowId) const
@@ -146,14 +144,14 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     // shadowing is fragile and the explicit sync here makes the cross-layer
     // contract robust.
     //
-    // Remove BOTH the windowId AND the appId entry unconditionally — the
-    // post-session-restore case has the appId entry present without the
-    // windowId one (see m_floatingWindows comments in WindowTrackingService.h),
-    // so gating the appId removal on the windowId removal succeeding would
-    // miss exactly the case the comment block above describes. QSet::remove
-    // on a missing key is a documented no-op so the unconditional form is
-    // cost-equivalent in the no-op path.
-    m_floatingWindows.remove(windowId);
+    // Remove BOTH the windowId AND the appId entry unconditionally. The
+    // appId-keyed entry only arises through the legacy bulk seeder
+    // (setFloatingWindows — unit tests and the pre-engine init window; no
+    // production restore path feeds it any more), but gating the appId
+    // removal on the windowId removal succeeding would miss exactly that
+    // shape. QSet::remove on a missing key is a documented no-op so the
+    // unconditional form is cost-equivalent in the no-op path.
+    m_floatingWindows.remove(canonicalizeForLookup(windowId));
     const QString appId = currentAppIdFor(windowId);
     if (appId != windowId) {
         m_floatingWindows.remove(appId);
@@ -495,7 +493,10 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
     }
     // A geometry-only partial: no engine slot, so record()'s merge leaves the
     // managed context (screen/desktop/activity) untouched and only updates this
-    // screen's free geometry.
+    // screen's free geometry. For a FRESH record (no prior entry) the float
+    // screen becomes the record's screenId by construction — deliberate: it
+    // is the only screen the store knows for the window, and the first
+    // managed capture overwrites it with the real managed context.
     PhosphorEngine::WindowPlacement p;
     p.windowId = windowId;
     p.appId = appId;
@@ -653,11 +654,15 @@ bool WindowTrackingService::isWindowFloating(const QString& windowId) const
     }
 
     // Legacy fallback (unit tests / early init before engines are wired):
-    // Try full window ID first (runtime - distinguishes multiple instances)
-    if (m_floatingWindows.contains(windowId)) {
+    // Try full window ID first (runtime - distinguishes multiple instances).
+    // Canonical key, like the sticky map: a class-mutating window (issue
+    // #628) must resolve — and be prunable — under one composite.
+    if (m_floatingWindows.contains(canonicalizeForLookup(windowId))) {
         return true;
     }
-    // Fall back to app ID (session restore - pointer addresses change across restarts)
+    // appId fallback: only the legacy bulk seeder (setFloatingWindows — unit
+    // tests / pre-engine init) writes bare-appId entries; no production
+    // restore path feeds this any more.
     QString appId = currentAppIdFor(windowId);
     return (appId != windowId && m_floatingWindows.contains(appId));
 }
@@ -696,11 +701,12 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
     }
 
     // Legacy fallback (unit tests / early init before engines are wired):
-    // maintain the shared set + snap state directly.
+    // maintain the shared set + snap state directly. Canonical keys
+    // throughout (see isWindowFloating's lookup).
     if (floating) {
-        m_floatingWindows.insert(windowId);
+        m_floatingWindows.insert(canonicalizeForLookup(windowId));
     } else {
-        m_floatingWindows.remove(windowId);
+        m_floatingWindows.remove(canonicalizeForLookup(windowId));
         // Also remove app ID entry (session-restored entries)
         QString appId = currentAppIdFor(windowId);
         if (appId != windowId) {
@@ -832,11 +838,18 @@ void WindowTrackingService::clearPreFloatZone(const QString& windowId)
     const QString appId = currentAppIdFor(windowId);
     // Remove by full window ID (runtime entries) and by app ID (session-restored
     // entries) across every store — the alias may live in the window's owning store.
+    bool removed = false;
     for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        state->clearPreFloatZone(windowId);
+        removed = state->clearPreFloatZone(windowId) || removed;
         if (appId != windowId) {
-            state->clearPreFloatZone(appId);
+            removed = state->clearPreFloatZone(appId) || removed;
         }
+    }
+    // Mark dirty on a real removal so the cleared zone does not resurrect
+    // from disk on the next restart (the autotile float-sync clear path has
+    // no other persistence trigger).
+    if (removed) {
+        markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
     }
 }
 

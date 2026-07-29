@@ -574,6 +574,15 @@ public:
     PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 
     /**
+     * @brief Purge @p windowId from every pending initial order, with full
+     * bookkeeping: empty orders drop their generation/strict entries, and
+     * surviving orders are re-checked for resolution. The single purge used
+     * by close, cap-rejection, and any other per-window drop — a bare
+     * removeAll leaves an empty order's timeout re-arm chain alive.
+     */
+    void purgeFromPendingOrders(const QString& windowId);
+
+    /**
      * @brief Run the algorithm's onWindowAdded lifecycle hook for a just-inserted window
      *
      * Shared by every insert site (onWindowAdded, handoffReceive, the

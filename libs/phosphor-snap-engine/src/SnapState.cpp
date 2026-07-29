@@ -353,7 +353,7 @@ QStringList SnapState::preFloatZones(const QString& rawWindowId) const
     return m_preFloatZoneAssignments.value(windowId);
 }
 
-void SnapState::clearPreFloatZone(const QString& rawWindowId)
+bool SnapState::clearPreFloatZone(const QString& rawWindowId)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
     // Emit only when an entry actually went away, matching this class's uniform
@@ -366,6 +366,7 @@ void SnapState::clearPreFloatZone(const QString& rawWindowId)
     if (removed > 0) {
         Q_EMIT stateChanged();
     }
+    return removed > 0;
 }
 
 void SnapState::addPreFloatZone(const QString& rawWindowId, const QStringList& zoneIds)

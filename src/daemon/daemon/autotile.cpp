@@ -67,7 +67,10 @@ bool Daemon::isAnyScreenAutotile() const
 
 void Daemon::updateAutotileScreens()
 {
-    if (!m_autotileEngine || !m_layoutManager || !m_screenManager) {
+    // m_algorithmRegistry joins the preamble: the per-screen override loop
+    // below derefs it for the algorithm-default MaxWindows injection, and a
+    // guard only on its siblings left that deref as the odd one out.
+    if (!m_autotileEngine || !m_layoutManager || !m_screenManager || !m_algorithmRegistry) {
         return;
     }
     // Every entry path into this function is wired in init() or later
@@ -649,7 +652,11 @@ void Daemon::presaveSnapFloats(const QString& screenId)
             continue;
         }
         // When scoped to a screen, only snapshot windows on that screen.
-        // Windows floating on other screens are not entering autotile.
+        // Windows floating on other screens are not entering autotile. A
+        // window with NO tracked screen is deliberately INCLUDED on every
+        // per-screen toggle: it might be on the toggling screen, and the
+        // capture is an idempotent record refresh — skipping on unknown would
+        // drop exactly the float this presave exists to preserve.
         if (!screenId.isEmpty()) {
             const QString windowScreen = wts->screenForWindow(fid);
             if (!windowScreen.isEmpty() && windowScreen != screenId) {
@@ -706,13 +713,19 @@ void Daemon::processPendingGeometryUpdates()
     if (!m_geometryUpdatePending) {
         return;
     }
+    // Timer-driven entry (the geometry debounce fires from the event loop),
+    // so unlike the signal-wired paths nothing upstream vouches for these
+    // members during a stop() teardown window.
+    if (!m_screenManager || !m_layoutManager || !m_layoutComputeService || !m_overlayService) {
+        return;
+    }
 
     // Recalculate zone geometries for each effective screen (virtual or physical)
     // so fixed-mode zones stay normalized correctly against the correct screen geometry.
     // Async: each screen's computation runs on the worker thread. A barrier
-    // tracks pending screens. LayoutComputeService reports superseded results
-    // with a null layout, which this barrier ignores until the newest result
-    // for that screen completes.
+    // tracks pending screens. Supersession is tracked by per-screen
+    // GENERATION (see the completion barrier below); a result below the
+    // screen's current generation just advances the expectation.
     const QString activity = currentActivity();
     const QStringList screenIds = m_screenManager->effectiveScreenIds();
 
@@ -756,8 +769,11 @@ void Daemon::processPendingGeometryUpdates()
 
     // Completion barrier: only the service's current generation can complete a
     // screen. If another request supersedes ours, advance the expected generation
-    // and wait for that result. A null result at the current generation is terminal
-    // because it means the associated layout was destroyed.
+    // and wait for that result. The layout pointer in the emission is NOT
+    // inspected — generation alone decides. A destroyed layout's result
+    // arrives null AT the current generation and completes the screen exactly
+    // like an applied one, which is the point: the barrier waits for the
+    // newest outcome, whatever it was.
     //
     // Keyed by screenId ALONE, deliberately. The service's generation counter is
     // per screen and bumped by every request, so the result carrying the

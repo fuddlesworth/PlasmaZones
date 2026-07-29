@@ -163,7 +163,7 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     // the window is reopened. Without this, closing a floated window and
     // reopening it would inherit the float state (via appId fallback), causing
     // a spurious "floated" OSD and preventing auto-snap.
-    m_floatingWindows.remove(windowId);
+    m_floatingWindows.remove(canonicalizeForLookup(windowId));
     if (appId != windowId) {
         m_floatingWindows.remove(appId);
     }

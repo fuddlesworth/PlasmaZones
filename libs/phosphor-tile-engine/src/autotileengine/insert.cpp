@@ -352,13 +352,8 @@ void AutotileEngine::insertWindowByConfigOrder(PhosphorTiles::TilingState* state
     }
 }
 
-void AutotileEngine::removeWindow(const QString& windowId)
+void AutotileEngine::purgeFromPendingOrders(const QString& windowId)
 {
-    m_windowMinSizes.remove(windowId);
-    m_overflow.clearOverflow(windowId);
-
-    // Purge a closed window from pending initial orders even when it was a
-    // minimized placeholder and therefore never received an engine key.
     for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end();) {
         pit.value().removeAll(windowId);
         if (pit.value().isEmpty()) {
@@ -369,6 +364,25 @@ void AutotileEngine::removeWindow(const QString& windowId)
             const QString screen = pit.key();
             ++pit; // advance before potential erase by helper
             cleanupPendingOrderIfResolved(screen);
+        }
+    }
+}
+
+void AutotileEngine::removeWindow(const QString& windowId)
+{
+    m_windowMinSizes.remove(windowId);
+    m_overflow.clearOverflow(windowId);
+
+    // Purge a closed window from pending initial orders even when it was a
+    // minimized placeholder and therefore never received an engine key.
+    purgeFromPendingOrders(windowId);
+    // A pending post-retile focus for a window that just closed must not
+    // survive to activate a dead id on its screen's next retile.
+    for (auto fit = m_pendingFocusByScreen.begin(); fit != m_pendingFocusByScreen.end();) {
+        if (fit.value() == windowId) {
+            fit = m_pendingFocusByScreen.erase(fit);
+        } else {
+            ++fit;
         }
     }
 

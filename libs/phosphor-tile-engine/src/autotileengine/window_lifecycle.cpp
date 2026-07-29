@@ -107,6 +107,8 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     // VS2 to VS1), remove it from the old screen's PhosphorTiles::TilingState first. Without this,
     // the window remains in the old PhosphorTiles::TilingState as a ghost entry — the old screen
     // retiles around a window that's no longer there, and zone assignments stay stale.
+    bool crossScreenMigration = false;
+    bool wasFloating = false;
     if (!screenId.isEmpty()) {
         const TilingStateKey newKey = currentKeyForScreen(screenId);
         auto existingIt = m_states.windowKeys().constFind(windowId);
@@ -114,8 +116,10 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
             const TilingStateKey oldKey = existingIt.value();
             PhosphorTiles::TilingState* oldState = m_states.stateForKey(oldKey);
             if (oldState && oldState->containsWindow(windowId)) {
-                // Use the algorithm's lifecycle hook for clean removal
-                // (e.g., dwindle-memory needs to update its split tree).
+                // Mirror migrateWindowBetweenKeys: capture the live float
+                // state before the source drops the window, run the clean
+                // removal hook, and keep the overflow bookkeeping coherent.
+                wasFloating = oldState->isFloating(windowId);
                 PhosphorTiles::TilingAlgorithm* oldAlgo = effectiveAlgorithm(oldKey.screenId);
                 if (oldAlgo && oldAlgo->supportsLifecycleHooks()) {
                     const int idx = oldState->tiledWindows().indexOf(windowId);
@@ -124,6 +128,8 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
                     }
                 }
                 oldState->removeWindow(windowId);
+                m_overflow.migrateWindow(windowId);
+                crossScreenMigration = true;
                 qCInfo(PhosphorTileEngine::lcTileEngine) << "windowOpened: removed" << windowId << "from old screen"
                                                          << oldKey.screenId << "before adding to" << screenId;
                 scheduleRetileForScreen(oldKey.screenId);
@@ -137,6 +143,18 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
         storeWindowMinSize(windowId, minWidth, minHeight);
     }
 
+    if (crossScreenMigration) {
+        // Migration ARRIVAL, same as migrateWindowBetweenKeys: without the
+        // marker, a FLOATING window's re-add re-derived its state from the
+        // open-time float rule and got tiled on the new screen, silently
+        // dropping the user's float.
+        QScopeGuard clearArrival([this] {
+            m_migrationArrival.reset();
+        });
+        m_migrationArrival = MigrationArrival{windowId, wasFloating};
+        onWindowAdded(windowId);
+        return;
+    }
     onWindowAdded(windowId);
 }
 
@@ -356,6 +374,12 @@ bool AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, Phos
     // rides from the engine's own float-back cache.
     const QStringList tiled = state->tiledWindows();
     const QStringList floated = state->floatingWindows();
+    // The return feeds the callers' placementChanged emission. That signal
+    // describes the LIVE OCCUPANCY release (windows leaving the tiling), so
+    // it is membership-based BY CONTRACT — it must fire even when the durable
+    // record is already content-identical (pinned by
+    // testMinimizedFloatDoesNotReplaceTiledPlacementOnTeardown), and a
+    // tracker-less engine still released its windows.
     const bool releasedAny = !tiled.isEmpty() || !floated.isEmpty();
     if (m_windowTracker) {
         // Two passes instead of `floated + tiled` — this runs once per
@@ -545,10 +569,10 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";
         // Purge this window from pending initial orders so the order doesn't
-        // leak waiting for a window that will never be inserted.
-        for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end(); ++pit) {
-            pit.value().removeAll(windowId);
-        }
+        // leak waiting for a window that will never be inserted. Shared
+        // helper, not a bare removeAll: an order emptied here must also drop
+        // its generation/strict entries or its timeout chain stays armed.
+        purgeFromPendingOrders(windowId);
         return;
     }
 
@@ -592,6 +616,9 @@ QString AutotileEngine::removeTrackedWindowNoRetile(const QString& windowId)
     if (screenId.isEmpty()) {
         // A minimized strict-order placeholder is intentionally absent from
         // m_states, but its close still has to remove the pending-order entry.
+        // DELIBERATELY no release/retile signalling on this path: the window
+        // never occupied a tile, so there is nothing for subscribers to
+        // reflow — the pending-order purge is the whole cleanup.
         removeWindow(windowId);
         return {};
     }
