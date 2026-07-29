@@ -127,6 +127,7 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     // would otherwise keep its pending order (and the timeout's re-arm chain)
     // alive for the session. Same purge removeWindow applies on a signalled
     // close, batched.
+    QStringList survivingOrderScreens;
     for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end();) {
         QStringList& order = pit.value();
         const int before = order.size();
@@ -139,10 +140,14 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             m_strictInitialOrderScreens.remove(pit.key());
             pit = m_pendingInitialOrders.erase(pit);
         } else {
-            const QString screen = pit.key();
-            ++pit; // advance before potential erase by helper
-            cleanupPendingOrderIfResolved(screen);
+            survivingOrderScreens.append(pit.key());
+            ++pit;
         }
+    }
+    // After the walk — see purgeFromPendingOrders for why the resolution
+    // re-check must not erase other entries mid-iteration.
+    for (const QString& screen : std::as_const(survivingOrderScreens)) {
+        cleanupPendingOrderIfResolved(screen);
     }
     return pruned;
 }

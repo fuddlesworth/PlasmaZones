@@ -571,9 +571,11 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
         }
         for (const QString& screenId : screenIds) {
             // Each screen reports against its OWN current virtual desktop
-            // (Plasma 6.7 per-output virtual desktops, #648).
-            const int desktop =
-                m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : currentDesktop();
+            // (Plasma 6.7 per-output virtual desktops, #648) — via the shared
+            // helper so the null-manager fallback cannot drift from every
+            // other resolution site (the open-coded form fell back to the
+            // global current desktop while the helper reports 0/unknown).
+            const int desktop = currentDesktopForScreen(screenId);
             // Route the disabled-context probe through the resolver so this
             // OSD pass uses the same single snapshot façade as every other
             // call site — the prior hand-stitched (modeFor → settings →

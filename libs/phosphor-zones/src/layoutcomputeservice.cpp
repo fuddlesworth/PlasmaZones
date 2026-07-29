@@ -48,6 +48,12 @@ LayoutComputeService::~LayoutComputeService()
 
 void LayoutComputeService::setLayoutManager(LayoutRegistry* manager)
 {
+    // Sever the previous manager's connection first: re-wiring would
+    // otherwise stack a second layoutRemoved handler, and setting null would
+    // leave the dead manager's connection live.
+    if (m_layoutManager) {
+        disconnect(m_layoutManager, nullptr, this, nullptr);
+    }
     m_layoutManager = manager;
     if (!manager) {
         return;
@@ -199,16 +205,7 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
 void LayoutComputeService::publishResult(const QString& screenId, const QUuid& layoutId, Layout* layout,
                                          uint64_t generation)
 {
-    QPointer<LayoutComputeService> guard(this);
-    // QPointer the layout across the first emit too: a subscriber that
-    // destroys the layout (layout removal) must not leave the second emit
-    // publishing a dangling pointer.
-    QPointer<Layout> layoutGuard(layout);
-    Q_EMIT geometriesComputed(screenId, layoutId, layout);
-    if (!guard) {
-        return;
-    }
-    Q_EMIT geometriesComputedForGeneration(screenId, layoutId, layoutGuard.data(), generation);
+    Q_EMIT geometriesComputedForGeneration(screenId, layoutId, layout, generation);
 }
 
 void LayoutComputeService::onLayoutRemoved(const QUuid& layoutId)

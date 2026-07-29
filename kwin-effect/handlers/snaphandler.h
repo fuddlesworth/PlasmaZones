@@ -162,7 +162,12 @@ public:
     // ── Snap minimize-float (mirrors AutotileHandler's minimize→float machine) ──
     /// Drive the snap-mode minimize→float state machine: on a snapping-mode
     /// screen, float a window when it minimizes and unfloat it when it
-    /// unminimizes (autotile screens run AutotileHandler's own machine). When
+    /// unminimizes. The autotile-screen gate is DIRECTION-ASYMMETRIC by
+    /// design: a MINIMIZE on an autotile screen bails outright (that screen's
+    /// machine owns the float), but an UNMINIMIZE on an autotile screen is
+    /// NOT gated at entry — the adoption/transfer paths below must still run
+    /// for a float this handler owns from before the screen's mode flipped.
+    /// When
     /// unminimizing a window this session minimize-floated, it also retries
     /// snap restore if the daemon tracks the window as neither snapped nor
     /// floating — every restore pass (daemon-ready, pendingRestoresAvailable)

@@ -673,6 +673,9 @@ void Daemon::stop()
     // first placementChanged of the next init/start cycle read as "unchanged"
     // and silently skip its save trigger.
     m_lastTiledCountByScreen.clear();
+    // Per-session restore staging: entries computed against the pre-stop
+    // window set must not feed a post-restart KCM apply with dead geometry.
+    m_pendingSnapFloatRestores.clear();
 
     // Release the shortcut grabs and the Portal session with the connections:
     // registerShortcuts() on the next start() lazily recreates the registry

@@ -222,9 +222,10 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFlo
         // geometry — floating it would leave it at its tiled position instead
         // of restoring to its original free-floating size.
         //
-        // knownFreeFloating defaults true for the genuine window-opened path
-        // (the frame is KWin's spawn geometry — the authoritative pre-autotile
-        // position — and the FloatingCache is not yet populated, so the
+        // knownFreeFloating is passed EXPLICITLY by every caller (no default
+        // argument): the genuine window-opened path passes true (the frame is
+        // KWin's spawn geometry — the authoritative pre-autotile position —
+        // and the FloatingCache is not yet populated, so the
         // isWindowFloating() guard would otherwise drop the one-shot save).
         // RE-ADD callers pass false so the floating guard runs and rejects a
         // tiled zone rect instead of persisting it as free geometry.

@@ -692,9 +692,14 @@ private Q_SLOTS:
 
     void testOnLayoutChanged_floatingWindowsExcludedFromResnap()
     {
-        QString windowId = QStringLiteral("app|12345");
-        m_service->assignWindowToZone(windowId, m_zoneIds[0], QString(), 0);
-        m_service->setWindowFloating(windowId, true);
+        const QString floatedId = QStringLiteral("app|12345");
+        // Non-floating CONTROL window: proves the resnap actually produced
+        // entries, so the exclusion loop below cannot pass vacuously on an
+        // empty list.
+        const QString snappedId = QStringLiteral("app|control");
+        m_service->assignWindowToZone(floatedId, m_zoneIds[0], QString(), 0);
+        m_service->assignWindowToZone(snappedId, m_zoneIds[1], QString(), 0);
+        m_service->setWindowFloating(floatedId, true);
 
         PhosphorZones::Layout* newLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
@@ -702,9 +707,8 @@ private Q_SLOTS:
         m_service->onLayoutChanged();
 
         QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
-        for (const ZoneAssignmentEntry& entry : resnap) {
-            QVERIFY(entry.windowId != windowId);
-        }
+        QCOMPARE(resnap.size(), 1);
+        QCOMPARE(resnap.first().windowId, snappedId);
     }
 
 private:

@@ -354,6 +354,7 @@ void AutotileEngine::insertWindowByConfigOrder(PhosphorTiles::TilingState* state
 
 void AutotileEngine::purgeFromPendingOrders(const QString& windowId)
 {
+    QStringList survivingScreens;
     for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end();) {
         pit.value().removeAll(windowId);
         if (pit.value().isEmpty()) {
@@ -361,10 +362,15 @@ void AutotileEngine::purgeFromPendingOrders(const QString& windowId)
             m_strictInitialOrderScreens.remove(pit.key());
             pit = m_pendingInitialOrders.erase(pit);
         } else {
-            const QString screen = pit.key();
-            ++pit; // advance before potential erase by helper
-            cleanupPendingOrderIfResolved(screen);
+            survivingScreens.append(pit.key());
+            ++pit;
         }
+    }
+    // Resolution re-check AFTER the walk: cleanupPendingOrderIfResolved can
+    // erase OTHER map entries, and erasing anything but the iterator's own
+    // element mid-iteration relies on undocumented QHash rehash behaviour.
+    for (const QString& screen : std::as_const(survivingScreens)) {
+        cleanupPendingOrderIfResolved(screen);
     }
 }
 

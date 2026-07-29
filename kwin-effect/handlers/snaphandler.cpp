@@ -125,6 +125,12 @@ void SnapHandler::clearSnapTracking()
     // clearAllDecorations() to release the per-window border shader redirect.
     // Preserve unresolved candidates from an earlier daemon cycle. They are
     // retired only by an authoritative snap, float, close, or restore miss.
+    // CONSCIOUS BREADTH: every window snap-tracked at teardown becomes a
+    // candidate, and one that never gets an authoritative answer stays a
+    // minimize-float candidate indefinitely. Accepted — the alternative
+    // (expiring candidates) re-strands the daemon-restart-while-minimized
+    // window this set exists for, and the cost of the breadth is only that a
+    // once-snapped window minimizing later is floated like a snapped one.
     for (auto it = m_border.tiledWindowsByScreen.cbegin(); it != m_border.tiledWindowsByScreen.cend(); ++it) {
         m_restartSnapCandidates.unite(it.value());
     }

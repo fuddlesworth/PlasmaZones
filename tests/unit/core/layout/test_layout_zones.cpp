@@ -21,17 +21,6 @@ class TestLayoutZones : public QObject
     Q_OBJECT
 
 private:
-    PhosphorZones::Layout* createLayoutWithZones(int zoneCount, QObject* parent = nullptr)
-    {
-        auto* layout = new PhosphorZones::Layout(QStringLiteral("test"), parent);
-        for (int i = 0; i < zoneCount; ++i) {
-            auto* zone = new PhosphorZones::Zone();
-            zone->setRelativeGeometry(QRectF(qreal(i) / zoneCount, 0.0, 1.0 / zoneCount, 1.0));
-            layout->addZone(zone);
-        }
-        return layout;
-    }
-
     PhosphorZones::Zone* createZoneWithGeometry(const QRectF& geometry, QObject* parent = nullptr)
     {
         auto* zone = new PhosphorZones::Zone(parent);
@@ -310,7 +299,9 @@ private Q_SLOTS:
         layout.addZone(zone);
 
         PhosphorZones::LayoutComputeService service;
-        QSignalSpy computed(&service, &PhosphorZones::LayoutComputeService::geometriesComputed);
+        // geometriesComputedForGeneration is the single result signal (the
+        // old generation-less geometriesComputed had no production
+        // subscribers and was removed).
         QSignalSpy computedForGeneration(&service,
                                          &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration);
         const QString screenId = QStringLiteral("DP-1");
@@ -318,12 +309,10 @@ private Q_SLOTS:
         const QRectF secondGeometry(0, 0, 2560, 1440);
 
         QVERIFY(service.requestRecalculate(&layout, screenId, firstGeometry));
-        QTRY_COMPARE(computed.size(), 1);
         QTRY_COMPARE(computedForGeneration.size(), 1);
         const qulonglong firstGeneration = computedForGeneration.first().at(3).toULongLong();
         QCOMPARE(qulonglong(service.currentGeneration(screenId)), firstGeneration);
         QCOMPARE(layout.lastRecalcGeometry(), firstGeometry);
-        computed.clear();
         computedForGeneration.clear();
 
         // The cached completion is queued. A newer request made before that
@@ -336,18 +325,8 @@ private Q_SLOTS:
         // emission carries the layout at exactly the current generation.
         QVERIFY(service.requestRecalculate(&layout, screenId, firstGeometry));
         QVERIFY(service.requestRecalculate(&layout, screenId, secondGeometry));
-        QTRY_VERIFY(computed.size() >= 2);
         QTRY_VERIFY(computedForGeneration.size() >= 2);
 
-        bool sawSuperseded = false;
-        bool sawCurrent = false;
-        for (const QList<QVariant>& args : computed) {
-            auto* reported = qvariant_cast<PhosphorZones::Layout*>(args.at(2));
-            sawSuperseded |= reported == nullptr;
-            sawCurrent |= reported == &layout;
-        }
-        QVERIFY(sawSuperseded);
-        QVERIFY(sawCurrent);
         const qulonglong finalGeneration = qulonglong(service.currentGeneration(screenId));
         QVERIFY(finalGeneration > firstGeneration);
         bool sawSupersededGeneration = false;

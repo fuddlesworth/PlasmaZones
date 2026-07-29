@@ -42,9 +42,11 @@
 namespace PhosphorTileEngine {
 
 namespace {
-// Safety timeout for pending initial window orders that never arrive via D-Bus.
-// If windows fail to open (e.g., app crash during startup), this prevents
-// m_pendingInitialOrders from leaking state indefinitely.
+// Safety timeout for pending initial window orders that never arrive via
+// D-Bus (e.g. an app crash during startup). NOT an unconditional reaper: an
+// order holding a LIVE minimized placeholder is deliberately retained past
+// the timeout (the re-arm in schedulePendingOrderTimeout) and is cleaned up
+// by the window's own open/close instead.
 constexpr int PendingOrderTimeoutMs = 10000;
 
 // Filter a per-algorithm settings map down to the entries worth persisting:

@@ -1614,8 +1614,12 @@ private:
 
     // Pre-seeded window order for snapping → autotile transitions.
     // Keyed by stable EDID-based screen ID (PhosphorScreens::ScreenIdentity::identifierFor).
-    // Consumed by insertWindow() as windows arrive; also cleaned up by
-    // removeWindow() if a pre-seeded window closes before arriving.
+    // Consumed by the strict seed in setAutotileScreens() (visible windows,
+    // eagerly) and by insertWindow() as remaining windows arrive; purged
+    // per-window via purgeFromPendingOrders (close, cap rejection), swept
+    // by pruneStaleWindows, and reaped by the pending-order timeout — which
+    // deliberately RETAINS an order holding live minimized placeholders, so
+    // those entries persist until the window opens or closes.
     QHash<QString, QStringList> m_pendingInitialOrders;
     QHash<QString, uint64_t> m_pendingOrderGeneration;
     /// Engine-wide monotonic source for m_pendingOrderGeneration values. Per-screen
@@ -1628,7 +1632,10 @@ private:
     // wins even when arrival order differs. Set by setInitialWindowOrder
     // (mode transition: the daemon intentionally pre-computed an order from
     // the previous mode's zones, and that order MUST be preserved).
-    // Cleared after the order is fully consumed. Entries seeded by
+    // Lifetime is TIED to the pending order's own: cleared wherever the
+    // order is removed (full consumption, per-window purge emptying it,
+    // stale-window sweep, timeout reap, screen teardown) — an order retained
+    // for a minimized placeholder keeps its strict flag with it. Entries seeded by
     // setInitialWindowOrder (mode transition) are the strict ones; advisory
     // entries reconstructed per-window from the placement store are NOT in this
     // set — for those the saved position is honored only when it appends at the

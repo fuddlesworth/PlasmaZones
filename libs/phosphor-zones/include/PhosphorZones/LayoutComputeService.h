@@ -33,7 +33,6 @@ public:
     static void recalculateSync(Layout* layout, const QRectF& screenGeometry);
 
 Q_SIGNALS:
-    void geometriesComputed(const QString& screenId, const QUuid& layoutId, PhosphorZones::Layout* layout);
     void requestCompute(const PhosphorZones::LayoutSnapshot& snapshot, uint64_t generation);
     void geometriesComputedForGeneration(const QString& screenId, const QUuid& layoutId, PhosphorZones::Layout* layout,
                                          uint64_t generation);
