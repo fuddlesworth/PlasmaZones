@@ -320,15 +320,20 @@ private Q_SLOTS:
         QVERIFY(service.requestRecalculate(&layout, screenId, firstGeometry));
         QTRY_COMPARE(computed.size(), 1);
         QTRY_COMPARE(computedForGeneration.size(), 1);
-        QCOMPARE(computedForGeneration.first().at(3).toULongLong(), qulonglong(1));
-        QCOMPARE(service.currentGeneration(screenId), uint64_t(1));
+        const qulonglong firstGeneration = computedForGeneration.first().at(3).toULongLong();
+        QCOMPARE(qulonglong(service.currentGeneration(screenId)), firstGeneration);
         QCOMPARE(layout.lastRecalcGeometry(), firstGeometry);
         computed.clear();
         computedForGeneration.clear();
 
         // The cached completion is queued. A newer request made before that
         // callback runs must turn the cached result into a superseded null
-        // notification, followed by the current applied result.
+        // notification, followed by the current applied result. The cached
+        // no-op deliberately does NOT consume a generation — bumping would
+        // supersede the in-flight real compute — so the observable contract
+        // is RELATIVE: the superseded emission carries a null layout and a
+        // generation strictly below the current one, and the applied
+        // emission carries the layout at exactly the current generation.
         QVERIFY(service.requestRecalculate(&layout, screenId, firstGeometry));
         QVERIFY(service.requestRecalculate(&layout, screenId, secondGeometry));
         QTRY_VERIFY(computed.size() >= 2);
@@ -343,17 +348,18 @@ private Q_SLOTS:
         }
         QVERIFY(sawSuperseded);
         QVERIFY(sawCurrent);
+        const qulonglong finalGeneration = qulonglong(service.currentGeneration(screenId));
+        QVERIFY(finalGeneration > firstGeneration);
         bool sawSupersededGeneration = false;
         bool sawCurrentGeneration = false;
         for (const QList<QVariant>& args : computedForGeneration) {
             auto* reported = qvariant_cast<PhosphorZones::Layout*>(args.at(2));
             const qulonglong generation = args.at(3).toULongLong();
-            sawSupersededGeneration |= reported == nullptr && generation == 2;
-            sawCurrentGeneration |= reported == &layout && generation == 3;
+            sawSupersededGeneration |= reported == nullptr && generation < finalGeneration;
+            sawCurrentGeneration |= reported == &layout && generation == finalGeneration;
         }
         QVERIFY(sawSupersededGeneration);
         QVERIFY(sawCurrentGeneration);
-        QCOMPARE(service.currentGeneration(screenId), uint64_t(3));
         QCOMPARE(layout.lastRecalcGeometry(), secondGeometry);
     }
 };

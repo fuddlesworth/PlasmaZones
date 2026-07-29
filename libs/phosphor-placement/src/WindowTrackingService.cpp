@@ -257,6 +257,14 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& rawAliveWi
     Q_ASSERT(hasSnapState());
     if (!hasSnapState())
         return 0;
+    // Fail closed on an empty alive set (the WindowRegistry twin carries the
+    // full rationale): a premature one-shot alive report at login must not
+    // wipe every persisted assignment; genuinely-closed windows are pruned
+    // per-window on windowClosed.
+    if (rawAliveWindowIds.isEmpty()) {
+        qCWarning(lcPlacement) << "pruneStaleAssignments: refusing empty alive set";
+        return 0;
+    }
     // Canonicalize the alive set so it compares like-for-like against the
     // canonical-keyed stores (the WTS-owned sticky / legacy-float sets below, and
     // SnapState's maps). Otherwise a window still alive under a mutated-class

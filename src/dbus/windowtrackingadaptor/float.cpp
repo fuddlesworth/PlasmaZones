@@ -171,7 +171,16 @@ bool WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, 
     // subscribers last heard, or the gate turns from a dedup into a
     // suppressor of genuine changes. setWindowFloating delegates here too.
     const QString shadowId = shadowWindowId(windowId);
-    if (m_broadcastFloating.value(shadowId, false) == floating) {
+    // Absent entry NEVER counts as a match. The map is populated only by this
+    // relay, so after a daemon restart it is empty while WTS has restored
+    // floating windows and subscribers still believe "floating" — treating
+    // absent as false would swallow the first genuine unfloat entirely (no
+    // signal, and via setWindowFloating's early return no state-change
+    // emission or capture refresh either). The cost is one redundant
+    // broadcast per window on its first relay, which subscribers absorb
+    // idempotently.
+    const auto it = m_broadcastFloating.constFind(shadowId);
+    if (it != m_broadcastFloating.constEnd() && it.value() == floating) {
         return false;
     }
     m_broadcastFloating[shadowId] = floating;
@@ -184,21 +193,39 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     if (!validateWindowId(windowId, QStringLiteral("set float for screen"))) {
         return;
     }
+    // Boundary validation: an empty screenId makes isActiveOnScreen("") read
+    // false and silently routes an autotiled window's float traffic to the
+    // snap engine — a dead-end on the wrong slot. Recover via the window's
+    // tracked screen when possible; otherwise refuse loudly.
+    QString effectiveScreenId = screenId;
+    if (effectiveScreenId.isEmpty() && m_service) {
+        effectiveScreenId = m_service->screenForWindow(windowId);
+    }
+    if (effectiveScreenId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "setWindowFloatingForScreen: no screen for" << windowId << "— refusing";
+        return;
+    }
 
     qCInfo(lcDbusWindow) << "setWindowFloatingForScreen: windowId=" << windowId << "floating=" << floating
-                         << "screen=" << screenId;
+                         << "screen=" << effectiveScreenId;
 
     // Route to the correct engine based on screen mode. Both directions go
     // through the explicit cross-engine handoff contract when the window
     // isn't yet tracked by the destination engine.
     PhosphorEngine::PlacementEngineBase* dest = nullptr;
     PhosphorEngine::PlacementEngineBase* source = nullptr;
-    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
+    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(effectiveScreenId)) {
         dest = m_autotileEngine.data();
         source = m_snapEngine.data();
     } else if (m_snapEngine) {
         dest = m_snapEngine.data();
         source = m_autotileEngine.data();
+    } else {
+        // Both engine QPointers null (late-shutdown D-Bus traffic): a silent
+        // no-op on a public entry point is undiagnosable — log like every
+        // other bail in this file.
+        qCWarning(lcDbusWindow) << "setWindowFloatingForScreen: no engine wired for" << effectiveScreenId;
+        return;
     }
 
     // Float: adopt an untracked window unconditionally (a brand-new floating
@@ -231,7 +258,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         if (floating || (sourceTracked && destIsAutotile)) {
             PhosphorEngine::IPlacementEngine::HandoffContext ctx;
             ctx.windowId = windowId;
-            ctx.toScreenId = screenId;
+            ctx.toScreenId = effectiveScreenId;
             ctx.wasFloating = floating;
             if (sourceTracked) {
                 ctx.fromEngineId = source->engineId();
@@ -240,11 +267,20 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
             }
             dest->handoffReceive(ctx);
             if (!floating) {
-                relayWindowFloatingChanged(windowId, false, screenId);
+                relayWindowFloatingChanged(windowId, false, effectiveScreenId);
             }
         } else if (sourceTracked) {
             source->handoffRelease(windowId);
-            relayWindowFloatingChanged(windowId, false, screenId);
+            relayWindowFloatingChanged(windowId, false, effectiveScreenId);
+            recaptureAfterFloatWrite = true;
+        } else if (!floating) {
+            // Fourth case: unfloat with NEITHER engine tracking the window
+            // (its tracking was torn down while minimized/mode-flipped). The
+            // setWindowFloat below can fail open with no signal at all, which
+            // leaves the effect's float cache stuck at the last broadcast
+            // (typically true from a minimize-float) until a restart — so the
+            // not-floating edge must always reach subscribers.
+            relayWindowFloatingChanged(windowId, false, effectiveScreenId);
             recaptureAfterFloatWrite = true;
         }
     }
@@ -255,7 +291,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         // (possibly stale) tracked association. Without this, unfloating a window
         // that drifted to another monitor while floating non-deterministically
         // teleports it back to its source-monitor zone (Discussion #724).
-        dest->setWindowFloat(windowId, floating, screenId);
+        dest->setWindowFloat(windowId, floating, effectiveScreenId);
     }
     if (recaptureAfterFloatWrite) {
         // Snap-dest unfloat: re-anchor the live placement record after the

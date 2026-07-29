@@ -523,11 +523,15 @@ private Q_SLOTS:
         QPointer<WindowRegistry> reg = new WindowRegistry;
         reg->upsert(QStringLiteral("dead-1"), make(QStringLiteral("konsole")));
         reg->upsert(QStringLiteral("dead-2"), make(QStringLiteral("dolphin")));
+        reg->upsert(QStringLiteral("alive-1"), make(QStringLiteral("kate")));
         connect(reg.data(), &WindowRegistry::windowDisappeared, this, [&reg](const QString&) {
             delete reg.data();
         });
 
-        reg->pruneStaleInstances({});
+        // Non-empty alive set: the empty set is a fail-closed no-op (a
+        // premature alive report must not wipe the registry), so the
+        // receiver-deletes-registry sweep needs a survivor.
+        reg->pruneStaleInstances({QStringLiteral("alive-1")});
 
         QVERIFY(reg.isNull());
     }

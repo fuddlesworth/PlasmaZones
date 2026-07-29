@@ -253,7 +253,10 @@ private Q_SLOTS:
         m_service->assignWindowToZone(QStringLiteral("app|abc"), m_zone1Id, QStringLiteral("DP-1"), 1);
         m_service->clearDirty();
 
-        const int pruned = m_service->pruneStaleAssignments(QSet<QString>{});
+        // Non-empty alive set (an unrelated survivor): the empty set is a
+        // fail-closed no-op so a premature alive report cannot wipe every
+        // persisted assignment.
+        const int pruned = m_service->pruneStaleAssignments(QSet<QString>{QStringLiteral("other|zzz")});
         QVERIFY(pruned >= 1);
 
         const auto mask = m_service->peekDirty();

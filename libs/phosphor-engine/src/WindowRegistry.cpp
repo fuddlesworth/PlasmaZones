@@ -227,6 +227,17 @@ void WindowRegistry::releaseCanonical(const QString& anyWindowId)
 
 int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)
 {
+    // An EMPTY alive set means "wipe everything". The only legitimate empty
+    // case (user closed every window) is already covered by per-window
+    // remove() on windowClosed — while the illegitimate one is very real: the
+    // effect's one-shot alive report at daemon-ready fires before
+    // session-restored apps have mapped their windows, and treating that as
+    // "all dead" destroys the whole registry. Fail closed.
+    if (aliveInstanceIds.isEmpty() && !(m_records.isEmpty() && m_canonicalByInstance.isEmpty())) {
+        qWarning("WindowRegistry::pruneStaleInstances: refusing empty alive set with %d records tracked",
+                 int(m_records.size()));
+        return 0;
+    }
     // Union of both maps' keys — a window may carry a canonical entry without
     // a metadata record (or vice versa) depending on which signals it received
     // before dying. Collect first, then mutate (remove() invalidates iterators
@@ -243,13 +254,20 @@ int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)
         }
     }
     QPointer<WindowRegistry> guard(this);
+    // Count actual removals, not intent: a windowDisappeared subscriber can
+    // re-upsert an instance (leaving it present) or destroy the registry
+    // mid-sweep, and the return value is documented as "count removed".
+    int removed = 0;
     for (const QString& instanceId : std::as_const(stale)) {
         remove(instanceId);
         if (!guard) {
             break;
         }
+        if (!m_records.contains(instanceId) && !m_canonicalByInstance.contains(instanceId)) {
+            ++removed;
+        }
     }
-    return stale.size();
+    return removed;
 }
 
 void WindowRegistry::indexInsert(const QString& instanceId, const QString& appId)
