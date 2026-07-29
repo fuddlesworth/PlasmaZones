@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <phosphorengine_export.h>
+
 #include <PhosphorEngine/IPlacementState.h>
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorEngine/WindowPlacement.h>
@@ -495,7 +497,8 @@ public:
     /// - Decide placement (snap to zone / tile / float) using the context
     ///   and engine-local policy. Drag drops typically place at dropPos;
     ///   non-drag handoffs (cross-engine focus changes, programmatic moves)
-    ///   typically respect wasFloating + sourceGeometry.
+    ///   typically respect wasFloating (the window keeps its live frame, so
+    ///   no geometry is carried in the context).
     /// - Emit any `windowFloatingChanged` / placement signals their normal
     ///   placement paths emit, so downstream state stays consistent.
     ///

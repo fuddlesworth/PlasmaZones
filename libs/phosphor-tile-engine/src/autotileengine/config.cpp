@@ -41,30 +41,56 @@
 namespace PhosphorTileEngine {
 
 namespace {
-// Safety timeout for pending initial window orders that never arrive via D-Bus.
-// If windows fail to open (e.g., app crash during startup), this prevents
-// m_pendingInitialOrders from leaking state indefinitely.
+// Safety timeout for pending initial window orders that never arrive via
+// D-Bus (e.g. an app crash during startup). NOT an unconditional reaper: an
+// order holding a LIVE minimized placeholder is deliberately retained past
+// the timeout (the re-arm in schedulePendingOrderTimeout) and is cleaned up
+// by the window's own open/close instead.
 constexpr int PendingOrderTimeoutMs = 10000;
 
-// Filter a per-algorithm settings map down to the entries worth persisting: those
-// that actually deviate from the algorithm's own defaults. A slot that merely
-// echoes the defaults carries no user intent, so writing it would surface as a
-// spurious "you changed this" row in the config profile diff. Both the
-// save-before-switch block and the no-slot fallback in setAlgorithm() can leave
-// such default-valued slots in the live map; filtering at write-back is the single
-// choke point that keeps them off disk. Entries whose algorithm is unknown to the
-// registry (e.g. an uninstalled scripted algorithm) are kept verbatim — they
-// cannot be compared to defaults, and dropping them would lose the user's tuning.
+// Filter a per-algorithm settings map down to the entries worth persisting:
+// those that deviate from what the no-slot READ fallback in
+// refreshConfigFromSettings would reconstruct anyway. Dropping only
+// reconstruction-identical slots keeps the write filter and the read fallback
+// symmetric — the round trip is lossless by construction. (The previous filter
+// compared against the algorithm's own defaults unconditionally, so an explicit
+// per-algo cap that happened to equal the algo default was dropped and then
+// NOT reconstructed when the global held a non-default value.) A slot that
+// merely echoes the reconstruction carries no user intent, so writing it would
+// surface as a spurious "you changed this" row in the config profile diff.
+// Entries whose algorithm is unknown to the registry (e.g. an uninstalled
+// scripted algorithm) are kept verbatim — they cannot be compared, and
+// dropping them would lose the user's tuning.
+//
+// The globals are the values the NEXT refresh will read back: maxWindows from
+// the settings key (write-back never touches it), splitRatio/masterCount from
+// the engine scalars writeBackTuning writes to the settings just before this
+// filter runs.
 QHash<QString, AlgorithmSettings> persistablePerAlgoSettings(const QHash<QString, AlgorithmSettings>& saved,
-                                                             PhosphorTiles::ITileAlgorithmRegistry* registry)
+                                                             PhosphorTiles::ITileAlgorithmRegistry* registry,
+                                                             int globalMaxWindows, qreal globalSplitRatio,
+                                                             int globalMasterCount)
 {
     QHash<QString, AlgorithmSettings> result;
     for (auto it = saved.constBegin(); it != saved.constEnd(); ++it) {
         auto* algo = registry ? registry->algorithm(it.key()) : nullptr;
-        const bool matchesDefaults = algo && qFuzzyCompare(1.0 + it->splitRatio, 1.0 + algo->defaultSplitRatio())
-            && it->masterCount == PhosphorTiles::AutotileDefaults::DefaultMasterCount
-            && it->maxWindows == algo->defaultMaxWindows() && it->customParams.isEmpty();
-        if (!matchesDefaults) {
+        bool matchesReconstruction = false;
+        if (algo) {
+            // Mirror of the read fallback: a schema-default global is ambient,
+            // so the algorithm's own default applies; a non-default global is
+            // an explicit override. masterCount has no per-algorithm default,
+            // so its reconstruction is always the global.
+            const int fallbackMax = globalMaxWindows == PhosphorTiles::AutotileDefaults::DefaultMaxWindows
+                ? algo->defaultMaxWindows()
+                : globalMaxWindows;
+            const qreal fallbackRatio =
+                qFuzzyCompare(1.0 + globalSplitRatio, 1.0 + PhosphorTiles::AutotileDefaults::DefaultSplitRatio)
+                ? algo->defaultSplitRatio()
+                : globalSplitRatio;
+            matchesReconstruction = qFuzzyCompare(1.0 + it->splitRatio, 1.0 + fallbackRatio)
+                && it->masterCount == globalMasterCount && it->maxWindows == fallbackMax && it->customParams.isEmpty();
+        }
+        if (!matchesReconstruction) {
             result.insert(it.key(), it.value());
         }
     }
@@ -95,14 +121,24 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
     }
     // Only take effect when the screen's PhosphorTiles::TilingState is empty (no prior windows —
     // including floating — from session restore). Uses windowCount() instead of
-    // tiledWindows() to also detect floating-only states.
-    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
+    // tiledWindows() to also detect floating-only states. NON-CREATING lookup:
+    // this is a read-only emptiness probe, and the creating
+    // tilingStateForScreen would leave a persistent empty TilingState behind
+    // for a screen whose windows never arrive.
+    PhosphorTiles::TilingState* state = m_states.stateForKey(currentKeyForScreen(screenId));
     if (state && state->windowCount() > 0) {
         qCDebug(PhosphorTileEngine::lcTileEngine) << "setInitialWindowOrder: screen" << screenId << "already has"
                                                   << state->windowCount() << "windows, ignoring pre-seeded order";
         return;
     }
-    // Warn (but allow) if overwriting a pending order that hasn't been fully consumed
+    // The explicit mode-toggle path seeds before the assignment flips and
+    // updateAutotileScreens repeats the same seed after it flips. Keep that
+    // two-phase safety without warning, replacing generations, or scheduling
+    // another timeout when the effective order is unchanged.
+    if (m_pendingInitialOrders.value(screenId) == windowIds) {
+        return;
+    }
+    // Warn (but allow) if overwriting a genuinely different pending order.
     if (m_pendingInitialOrders.contains(screenId)) {
         qCWarning(PhosphorTileEngine::lcTileEngine)
             << "setInitialWindowOrder: overwriting existing pending order for" << screenId;
@@ -112,15 +148,42 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
     // order it wants preserved (zone order from the previous mode). Even if
     // windows arrive in a different sequence, the saved positions win.
     m_strictInitialOrderScreens.insert(screenId);
-    uint64_t gen = ++m_pendingOrderGeneration[screenId];
+    const uint64_t gen = m_pendingOrderGeneration[screenId] = ++m_pendingOrderSerial;
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "Pre-seeded window order for screen=" << screenId << "windows=" << windowIds;
 
-    // Safety timeout: clean up if windows never arrive (e.g., app crash during startup).
-    // Use a generation counter so that stale timers from overwritten calls become no-ops.
-    QTimer::singleShot(PendingOrderTimeoutMs, this, [this, screenId, gen]() {
-        if (m_pendingOrderGeneration.value(screenId) != gen) {
-            return; // superseded by a newer setInitialWindowOrder call
+    schedulePendingOrderTimeout(screenId, gen);
+}
+
+void AutotileEngine::schedulePendingOrderTimeout(const QString& screenId, uint64_t generation)
+{
+    // Use a generation counter so stale timers from overwritten calls become no-ops.
+    QTimer::singleShot(PendingOrderTimeoutMs, this, [this, screenId, generation]() {
+        if (m_pendingOrderGeneration.value(screenId) != generation) {
+            return;
+        }
+        if (m_windowRegistry) {
+            const QStringList pending = m_pendingInitialOrders.value(screenId);
+            for (const QString& windowId : pending) {
+                // Engaged-true ONLY, unlike the strict seed's conservative
+                // value_or(true): the seed runs at the transition instant when
+                // the registry may not have caught up, but by timeout time the
+                // effect's daemon-ready metadata push has long landed, so a
+                // window the registry cannot vouch for here is dead (missed
+                // close) and its placeholder is exactly what this reaper
+                // exists to collect — deferring on unknown kept the order (and
+                // this chain) alive forever.
+                if (m_windowRegistry->minimizedState(windowId).value_or(false)) {
+                    // A minimized live window can remain hidden indefinitely. Keep
+                    // its positional placeholder, but re-arm cleanup so a later
+                    // metadata change or missed close cannot leak the order
+                    // forever. The chain is bounded: one outstanding timer per
+                    // generation, and superseded generations die at their first
+                    // fire (serials are monotonic and never reused).
+                    schedulePendingOrderTimeout(screenId, generation);
+                    return;
+                }
+            }
         }
         if (m_pendingInitialOrders.remove(screenId)) {
             m_pendingOrderGeneration.remove(screenId);
@@ -140,6 +203,31 @@ QStringList AutotileEngine::tiledWindowOrder(const QString& screenId) const
         return {};
     }
     return state->tiledWindows();
+}
+
+QStringList AutotileEngine::capturedWindowOrder(const QString& screenId) const
+{
+    const TilingStateKey key = currentKeyForScreen(screenId);
+    PhosphorTiles::TilingState* state = m_states.stateForKey(key);
+    if (!state) {
+        return {};
+    }
+    // Full order minus GENUINE floats: a floating window whose registry
+    // state says minimized is a suspension float and keeps its position in
+    // the captured order (see managedWindowOrder's doc).
+    QStringList order;
+    const QStringList full = state->windowOrder();
+    order.reserve(full.size());
+    for (const QString& windowId : full) {
+        if (state->isFloating(windowId)) {
+            const bool minimized = m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false);
+            if (!minimized) {
+                continue;
+            }
+        }
+        order.append(windowId);
+    }
+    return order;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -162,7 +250,8 @@ void AutotileEngine::writeBackTuning()
         s->setAutotileSplitRatio(m_config->splitRatio);
         s->setAutotileMasterCount(m_config->masterCount);
         s->setAutotilePerAlgorithmSettings(AutotileConfig::perAlgoToVariantMap(
-            persistablePerAlgoSettings(m_config->savedAlgorithmSettings, m_algorithmRegistry)));
+            persistablePerAlgoSettings(m_config->savedAlgorithmSettings, m_algorithmRegistry, s->autotileMaxWindows(),
+                                       m_config->splitRatio, m_config->masterCount)));
     }
 }
 
@@ -302,11 +391,17 @@ void AutotileEngine::refreshConfigFromSettings()
             // silently clamp it to the global default on the next routine refresh.
             // Default-valued slots are no longer persisted (see
             // persistablePerAlgoSettings), so this on-demand fallback is what keeps
-            // an untouched algorithm at its intended cap. splitRatio/masterCount are
-            // left as the SYNC'd global values — those globals are real user
-            // settings, unlike the legacy per-algorithm maxWindows global.
+            // an untouched algorithm at its intended cap. splitRatio follows the
+            // same ambient-vs-override rule with the algorithm's own default
+            // ratio (a scripted algorithm shipping 0.6 must not be clamped to
+            // the schema 0.5 by every routine refresh). masterCount has no
+            // per-algorithm default, so the SYNC'd global stands for it.
             if (s->autotileMaxWindows() == PhosphorTiles::AutotileDefaults::DefaultMaxWindows) {
                 m_config->maxWindows = algo->defaultMaxWindows();
+            }
+            if (qFuzzyCompare(1.0 + s->autotileSplitRatio(),
+                              1.0 + PhosphorTiles::AutotileDefaults::DefaultSplitRatio)) {
+                m_config->splitRatio = algo->defaultSplitRatio();
             }
         }
     }

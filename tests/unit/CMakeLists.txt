@@ -482,6 +482,18 @@ target_link_libraries(test_snap_assist_thumbnail_provider
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick PhosphorProtocol::PhosphorProtocol)
 add_test(NAME test_snap_assist_thumbnail_provider COMMAND test_snap_assist_thumbnail_provider)
 
+# Autotile seed-order filter (Daemon::seedAutotileOrderForScreen's admission
+# predicate): minimized placeholders kept, live/durable floats dropped.
+# Compiles the daemon source directly because the filter lives in the
+# plasmazonesd executable, not plasmazones_core.
+add_executable(test_autotile_seed_filter
+    daemon/test_autotile_seed_filter.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/daemon/seedorderfilter.cpp
+)
+target_include_directories(test_autotile_seed_filter PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_autotile_seed_filter PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_autotile_seed_filter COMMAND test_autotile_seed_filter)
+
 # Cheatsheet family compression: compiles the daemon source directly because
 # ShortcutManager lives in the plasmazonesd executable, not plasmazones_core.
 # The test drives only the static compressCheatsheetFamilies helper, so no

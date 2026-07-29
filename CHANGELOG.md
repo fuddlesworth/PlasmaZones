@@ -15,6 +15,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Breaking D-Bus interface split**: the shared engine transport moved from org.plasmazones.Autotile to the engine-neutral org.plasmazones.Tiling interface, which serves every tiling-family engine. The moved surface covers the window lifecycle calls (windowOpened, windowsOpenedBatch, windowClosed, windowMinSizeUpdated, notifyWindowFocused), the tile-request and float signals (windowsTileRequested, focusWindowRequested, windowFloatingChanged, tilingChanged, windowsReleasedFromTiling), the retile methods, the enabled property with its change signal, and the screen set, now published as the union property managedScreens. The org.plasmazones.Autotile name still exists but is narrower now, carrying algorithm selection, master operations, focus cycling, and autotile configuration beside the new org.plasmazones.Scrolling interface. Check any external script against the new interface files before relying on it ([#852](https://github.com/fuddlesworth/PlasmaZones/pull/852)).
 
+## [3.3.2] - 2026-07-29
+
+### Fixed
+
+- **The layout editor no longer opens another screen's layout when you switch screens**: switching the editor to a screen that has no layout of its own loaded the default layout for editing, so renaming it and saving overwrote that layout and both screens ended up on the same one. An unassigned screen now starts you on a fresh layout ([#858](https://github.com/fuddlesworth/PlasmaZones/discussions/858), [#862](https://github.com/fuddlesworth/PlasmaZones/pull/862)).
+- **Settings dropdowns show the value you actually have saved**: eleven dropdowns in the settings app always displayed their first option however your configuration was set, so Drag behavior, Sticky windows, the rendering backend and others looked like they were set to something you had never chosen. Re-picking the real value was then a no-op, so nothing prompted you to save ([#860](https://github.com/fuddlesworth/PlasmaZones/discussions/860), [#863](https://github.com/fuddlesworth/PlasmaZones/pull/863)).
+- **Minimized windows stay out of tiling across a mode switch**: switching a screen between snapping and tiling no longer counts minimized windows in the tiled layout or moves them, and unminimizing restores each window to the place it had before it was minimized, on either engine and across restarts ([#859](https://github.com/fuddlesworth/PlasmaZones/pull/859)).
+- **The support report script no longer needs Perl's JSON::PP module**: some distros package Perl core modules separately, so `plasmazones-report` failed with a module error and wrongly reported that the daemon was not running. The script now does all of its text processing with python3 ([#861](https://github.com/fuddlesworth/PlasmaZones/pull/861)).
+
 ## [3.3.1] - 2026-07-27
 
 ### Changed
@@ -1769,7 +1778,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.1...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.2...HEAD
+[3.3.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.1...v3.3.2
 [3.3.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.0...v3.3.1
 [3.3.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.7...v3.3.0
 [3.2.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.6...v3.2.7

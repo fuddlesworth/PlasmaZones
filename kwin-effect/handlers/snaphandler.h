@@ -139,11 +139,17 @@ public:
     // ── Snap restore-on-open orchestration ──
     /// Ask the daemon whether @p window has a saved zone and apply it (async) —
     /// the async counterpart of the instant restore-cache teleport.
+    /// onComplete receives snapApplied: true when the daemon resolved a zone
+    /// and the geometry was applied. Callers that go on to notify autotile
+    /// must thread !snapApplied into knownFreeFloating — a zone-placed
+    /// window's live frame is the zone rect, and reporting it as a known free
+    /// frame persists the zone rect as the float-back geometry.
     /// releaseSuppressionOnMiss: when the daemon resolves no zone, release the
     /// window's first-frame suppression. Pass false when something else will
     /// still reposition it on a miss (the autotile-screen path tiles it via
     /// onComplete) — there the suppression must hold through that reposition.
-    void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr,
+    void callResolveWindowRestore(KWin::EffectWindow* window,
+                                  std::function<void(bool snapApplied)> onComplete = nullptr,
                                   bool releaseSuppressionOnMiss = true);
     /// Store a window's pre-snap (free-float) geometry with the daemon before a
     /// snap commit, so a later float toggle restores the original position.
@@ -156,7 +162,12 @@ public:
     // ── Snap minimize-float (mirrors TilingHandler's minimize→float machine) ──
     /// Drive the snap-mode minimize→float state machine: on a snapping-mode
     /// screen, float a window when it minimizes and unfloat it when it
-    /// unminimizes (autotile screens run TilingHandler's own machine). When
+    /// unminimizes. The autotile-screen gate is DIRECTION-ASYMMETRIC by
+    /// design: a MINIMIZE on an autotile screen bails outright (that screen's
+    /// machine owns the float), but an UNMINIMIZE on an autotile screen is
+    /// NOT gated at entry — the adoption/transfer paths below must still run
+    /// for a float this handler owns from before the screen's mode flipped.
+    /// When
     /// unminimizing a window this session minimize-floated, it also retries
     /// snap restore if the daemon tracks the window as neither snapped nor
     /// floating — every restore pass (daemon-ready, pendingRestoresAvailable)
@@ -167,23 +178,72 @@ public:
     /// the net inert and the plain unfloat re-snaps as before. Called from
     /// PlasmaZonesEffect::slotWindowMinimizedChanged after the shared minimize
     /// shader event.
-    /// The unfloat side does NOT commit synchronously: it is deferred by an
-    /// Effect::animationTime-scaled grace so the re-snap's geometry apply
-    /// cannot land mid-flight and cancel KWin's own unminimize animation
-    /// (discussion #816); see m_pendingUnminimizeUnfloat.
+    /// The normal same-mode unfloat is deferred by an Effect::animationTime-
+    /// scaled grace so the re-snap's geometry apply cannot land mid-flight and
+    /// cancel KWin's own unminimize animation (discussion #816). A float
+    /// adopted across a mode boundary dispatches immediately AND withholds the
+    /// first frames via restore suppression: its current geometry belongs to
+    /// the other mode, and the resnap that corrects it only lands after a
+    /// D-Bus round trip — without the suppression KWin would play the restore
+    /// against the stale frame and then hop. See m_pendingUnminimizeUnfloat.
     void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                bool minimized);
+    /// Cross-mode transfer entry point over handleMinimizeChanged's
+    /// unminimize path (mirror of TilingHandler::offerMinimizeEdge).
+    /// Returns false when the entry gate would refuse the window (the screen
+    /// moved back under autotile) WITHOUT forwarding; true after forwarding.
+    /// TilingHandler's became-snap hand-offs must use this so a refused
+    /// transfer re-arms on the sender instead of stranding the suspension.
+    bool offerMinimizeEdge(KWin::EffectWindow* window, const QString& windowId, const QString& screenId);
+    void retryVisibleMinimizeFloats();
 
-    /// Drop @p windowId from the minimize-float set and cancel any deferred
-    /// unfloat commit. Returns true if it was present. Two callers, two
-    /// reasons (mirrors TilingHandler::removeMinimizeFloated): the close
-    /// path (a grace timer must never fire against a destroyed window) and
-    /// the daemon's windowFloatingChanged(false) echo (an authoritative
-    /// external unfloat moots the deferred commit).
+    /// Whether snap owns a temporary minimize-float for @p windowId.
+    bool isMinimizeFloated(const QString& windowId) const
+    {
+        return m_minimizeFloatedWindows.contains(windowId) || m_unfloatInFlight.contains(windowId);
+    }
+
+    /// Take ownership of a minimize-float relinquished by the autotile
+    /// handler (cross-screen move of a still-minimized window onto a
+    /// snap-mode screen): the unminimize edge on that screen must find an
+    /// owner or the window stays floating until the next mode toggle.
+    void adoptMinimizeFloated(const QString& windowId)
+    {
+        m_minimizeFloatedWindows.insert(windowId);
+    }
+
+    /// Retry-budget hand-off — see TilingHandler's twin for rationale.
+    int unfloatRetryBudgetUsed(const QString& windowId) const
+    {
+        return m_unfloatRetryAttempts.value(windowId);
+    }
+    void seedUnfloatRetryBudget(const QString& windowId, int attemptsUsed)
+    {
+        if (attemptsUsed > m_unfloatRetryAttempts.value(windowId)) {
+            m_unfloatRetryAttempts.insert(windowId, attemptsUsed);
+        }
+    }
+
+    /// Drop @p windowId from the minimize-float set and cancel either deferred
+    /// edge. Returns true if it was present. Used by close cleanup,
+    /// authoritative visible unfloat, and cross-mode adoption.
     bool removeMinimizeFloated(const QString& windowId)
     {
+        cancelPendingMinimizeFloat(windowId);
         cancelPendingUnminimizeUnfloat(windowId);
-        return m_minimizeFloatedWindows.remove(windowId);
+        m_unfloatRetryAttempts.remove(windowId);
+        const bool owned = m_minimizeFloatedWindows.remove(windowId);
+        return m_unfloatInFlight.remove(windowId) > 0 || owned;
+    }
+
+    bool hasPendingUnminimizeUnfloat(const QString& windowId) const
+    {
+        return m_pendingUnminimizeUnfloat.contains(windowId);
+    }
+
+    bool hasUnfloatInFlight(const QString& windowId) const
+    {
+        return m_unfloatInFlight.contains(windowId);
     }
 
     /// Cancel a pending deferred unminimize→unfloat commit. No-op if no timer
@@ -216,13 +276,19 @@ public Q_SLOTS:
                              const PhosphorProtocol::EmptyZoneList& emptyZones);
 
 private:
+    void cancelPendingMinimizeFloat(const QString& windowId)
+    {
+        m_pendingMinimizeFloat.cancel(windowId);
+    }
+
     /// Deferred-commit body of the unminimize→unfloat edge: the restore-net
     /// queries (dispatched before the unfloat enters the same D-Bus send
     /// queue, so the daemon answers against pre-unfloat state) plus the
-    /// unfloat itself. Called only from the grace timer in
-    /// handleMinimizeChanged after revalidation; @p window is alive,
-    /// unminimized, handleable, and on a snap-mode screen.
+    /// unfloat itself. Called from the grace timer after revalidation, or
+    /// immediately when cross-mode adoption must replace the other mode's
+    /// geometry at the unminimize edge.
     void commitUnminimizeUnfloat(KWin::EffectWindow* window, const QString& windowId, const QString& screenId);
+    void scheduleUnminimizeUnfloatRetry(const QString& windowId);
 
     PlasmaZonesEffect* m_effect;
     // Snapping focus-follows-mouse (Snapping.Behavior.FocusFollowsMouse). When
@@ -255,6 +321,15 @@ private:
     // fires for windows still in this set — clearing on daemon-ready would
     // strand exactly the windows the net exists to recover.
     QSet<QString> m_minimizeFloatedWindows;
+    QHash<QString, quint64> m_unfloatInFlight;
+    quint64 m_unfloatRequestGeneration = 0;
+    QHash<QString, int> m_unfloatRetryAttempts;
+    // Snap membership retained only as minimize provenance while daemon-owned
+    // visual placement state is unavailable.
+    QSet<QString> m_restartSnapCandidates;
+    // Pending debounced minimize→float commits. Shares the compositor's
+    // spurious minimize-pair window with the shader and autotile paths.
+    DeferredWindowCommits m_pendingMinimizeFloat{this};
     // Pending deferred unminimize→unfloat commits, keyed by windowId — the
     // snap-mode mirror of TilingHandler::m_pendingUnminimizeUnfloat, for the
     // same reason: the unfloat re-snaps the window (the daemon applies its

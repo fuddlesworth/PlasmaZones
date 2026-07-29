@@ -15,6 +15,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
+#include <PhosphorContext/IContextResolver.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "common/layoutpreviewserialize.h"
 #include "core/utils/unifiedlayoutlist.h"
@@ -131,6 +132,12 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
     // wrong rather than silently falling back to library defaults.
     Q_ASSERT_X(profileRegistry, "OverlayService::OverlayService",
                "profileRegistry must not be null: composition root must own and inject the registry");
+    if (Q_UNLIKELY(!profileRegistry)) {
+        // Release-build twin of the assert above: SurfaceAnimator binds the
+        // registry by reference below, so continuing would be an immediate
+        // null deref anyway — fail with a diagnosable message instead.
+        qFatal("OverlayService: profileRegistry must not be null (composition root wiring error)");
+    }
 
     // Construct ShellHost BEFORE setupSurfaceAnimator: the latter
     // calls applyShaderProfilesToAnimator which routes per-role
@@ -306,9 +313,6 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
                            << "shader-timer restart on resume will not run";
     }
 
-    // Reset shader error state on construction (fresh start after reboot)
-    m_pendingShaderError.clear();
-
     m_audioProvider = std::make_unique<PhosphorAudio::CavaSpectrumProvider>();
     connect(m_audioProvider.get(), &PhosphorAudio::IAudioSpectrumProvider::spectrumUpdated, this,
             &OverlayService::onAudioSpectrumUpdated);
@@ -461,7 +465,7 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
     QSize initialSize = screenGeom.isValid() ? screenGeom.size() : QSize(240, 70);
 
     // Virtual-screen-aware anchors / margins, same vocabulary popups use
-    // (see selector.cpp::createZoneSelectorWindow). Physical screen →
+    // (see the showOnScreen path in selector.cpp). Physical screen →
     // AnchorAll + zero margins so the compositor sizes the surface to the
     // full output. Virtual screen → Top|Left + offset margins pinning the
     // surface to the VS sub-rect's top-left within its physical screen.
@@ -558,6 +562,33 @@ void OverlayService::setLayout(PhosphorZones::Layout* layout)
     }
 }
 
+void OverlayService::setContextResolver(PhosphorContext::IContextResolver* resolver)
+{
+    m_contextResolver = resolver;
+}
+
+bool OverlayService::isSnappingContextDisabled(const QString& screenId) const
+{
+    // Fail CLOSED on a null resolver, mirroring Daemon::isFocusedContextGated:
+    // the resolver is only null before wiring or during teardown, and showing
+    // overlay UI in either window is worse than briefly suppressing it.
+    if (!m_contextResolver) {
+        return true;
+    }
+    if (screenId.isEmpty()) {
+        return false;
+    }
+    PhosphorContext::ContextHandle handle =
+        m_contextResolver->handleForPersisted(screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
+    // Query the SNAPPING axis explicitly, as the name promises. The overlay
+    // is snapping-mode UI, and the callers this consolidated previously
+    // composed their disable checks with Mode::Snapping; letting the mode
+    // provider stamp the screen's CURRENT mode would flip the check to the
+    // autotile axis on a tiling screen.
+    handle.mode = PhosphorZones::AssignmentEntry::Snapping;
+    return m_contextResolver->isDisabled(handle);
+}
+
 PhosphorZones::Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
 {
     // Physical QScreen* overload: derives screenId and delegates.
@@ -571,8 +602,7 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(QScreen* screen) cons
 bool OverlayService::isSnappingContextInactive(const QString& screenId) const
 {
     const int virtualDesktop = currentVirtualDesktopForScreen(screenId);
-    if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId, virtualDesktop,
-                          m_currentActivity)) {
+    if (isSnappingContextDisabled(screenId)) {
         return true;
     }
     if (!m_layoutManager) {
@@ -647,25 +677,24 @@ void OverlayService::hideDisabledAndRefresh()
     // is how a layout gets assigned, so suppress must not hide it); the snap
     // overlay is additionally gated by suppress / autotile mode via
     // isSnappingContextInactive.
-    if (m_settings) {
-        const QStringList screenIds = m_screenStates.keys();
-        for (const QString& screenId : screenIds) {
-            const bool disabled = isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                                    currentVirtualDesktopForScreen(screenId), m_currentActivity);
-            if (disabled) {
-                destroyZoneSelectorWindow(screenId);
-            }
-            if (m_visible && isSnappingContextInactive(screenId)) {
-                dismissOverlayWindow(screenId);
-            }
+    // No m_settings gate here: neither context predicate reads settings (both
+    // fail closed on their own null members), and skipping the destroy loop on
+    // a null settings pointer would leave stale selector/overlay slots up.
+    const QStringList screenIds = m_screenStates.keys();
+    for (const QString& screenId : screenIds) {
+        const bool disabled = isSnappingContextDisabled(screenId);
+        if (disabled) {
+            destroyZoneSelectorWindow(screenId);
+        }
+        if (m_visible && isSnappingContextInactive(screenId)) {
+            dismissOverlayWindow(screenId);
         }
     }
 
     // Update remaining zone selector (disabled-gated) and overlay (suppress-gated) windows.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         const QString& screenId = it.key();
-        const bool disabled = isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                                currentVirtualDesktopForScreen(screenId), m_currentActivity);
+        const bool disabled = isSnappingContextDisabled(screenId);
         if (!disabled && it.value().zoneSelectorSlot()) {
             updateZoneSelectorWindow(screenId);
         }
@@ -711,9 +740,9 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     // Both buildLayoutsList (populates the popup) and visibleLayoutCount
     // (used by isNearTriggerEdge to size the keep-visible bar) go through
     // here so the trigger geometry matches the rendered popup row count.
-    // If the resolver ever skips setting one of the fields, the struct's
-    // in-class defaults (both true) supply a safe "show everything"
-    // fallback rather than UB.
+    // The brace-init seeds BOTH fields from the settings-backed member
+    // toggles (so the struct's in-class defaults never apply here); the
+    // resolution below only narrows them per screen.
     LayoutIncludeFlags flags{m_includeManualLayouts, m_includeAutotileLayouts};
     if (!m_layoutManager) {
         return flags;
@@ -808,9 +837,9 @@ void OverlayService::onPrepareForSleep(bool goingToSleep)
 
 void OverlayService::onShaderError(const QString& errorLog)
 {
+    // Log-only by design: no error latch — shaders retry on the next show
+    // (fix bugs, don't mask them).
     qCWarning(lcOverlay) << "Shader error during overlay:" << errorLog;
-    m_pendingShaderError = errorLog;
-    // Don't set m_shaderErrorPending - retry shaders on next show (fix bugs, don't mask)
 }
 
 } // namespace PlasmaZones

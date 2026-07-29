@@ -151,8 +151,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // Restore pre-autotile geometry from the effect's local cache.
             // Scan all screen buckets (all-bucket reader policy — a VS
             // config change can re-key the window's screen without moving
-            // its geometry bucket).
-            KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
+            // its geometry bucket). Exact resolve, matching the tile lambda's
+            // deliberate policy: a fuzzy hit would teleport a same-app
+            // SIBLING onto this window's restored rect.
+            KWin::EffectWindow* floatWin = m_effect->findWindowByIdExact(windowId);
             if (floatWin) {
                 if (const QRectF savedGeo = findPreTileGeometry(windowId); savedGeo.isValid()) {
                     // Daemon-driven apply: the restored rect may lie in a
@@ -163,9 +165,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // frameGeometryChanged would resolve the new position
                     // against stale m_virtualScreenDefs and spuriously
                     // re-announce the just-floated window.
+                    // Save/restore, not set/clear (nesting-safe).
+                    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
                     m_effect->m_daemonGate.inGeometryApply = true;
-                    const auto floatGuard = qScopeGuard([this] {
-                        m_effect->m_daemonGate.inGeometryApply = false;
+                    const auto floatGuard = qScopeGuard([this, prevInApply] {
+                        m_effect->m_daemonGate.inGeometryApply = prevInApply;
                     });
                     // Snap-out: leaving tile-managed sizing.
                     m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
@@ -266,6 +270,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         if (!e.window) {
             continue;
         }
+        // Re-key to the RESOLVED window's live id. The disambiguation above
+        // can match a candidate whose uuid differs from the daemon-supplied
+        // entry id (stale across a KWin restart), and every write this batch
+        // performs — tiled tracking, the Wayland centering cache, the
+        // pre-autotile capture — must key on the live id the readers use, or
+        // the tiling goes untracked and the stale-keyed entries are never
+        // reclaimed.
+        e.windowId = m_effect->getWindowId(e.window);
         // Key on the daemon's TARGET screen (from the tile request), NOT the
         // window's current physical screen. On a cross-output move the moved
         // window has not physically relocated when this batch is built, so
@@ -343,7 +355,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         genByScreen.insert(it.key(), ++m_tileStaggerGenByScreen[it.key()]);
     }
 
-    auto onComplete = [this, newTiledByScreen, savedGlobalStack, overlapStackByScreen, gen, genByScreen]() {
+    const bool hasApplies = !toApply.isEmpty();
+    auto onComplete = [this, newTiledByScreen, savedGlobalStack, overlapStackByScreen, gen, genByScreen, hasApplies]() {
         if (m_tileStaggerGeneration != gen) {
             return;
         }
@@ -410,8 +423,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 }
             }
         }
+        // A batch with NO tile applies (every request resolved away or the
+        // batch was floats-only) still owes the untile cleanup above, but
+        // must not churn the whole stacking order or spend the one-shot
+        // saved-order/pending-focus state — nothing moved, so there is no
+        // z-order to repair.
         auto* ws = KWin::Workspace::self();
-        if (ws) {
+        if (ws && hasApplies) {
             // Membership index for the overlap restack: window -> the screen
             // whose ordered group it belongs to. Resolved at completion time
             // because QPointers may have gone null since the batch was built.
@@ -458,7 +476,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     if (groupRaised.contains(wPtr.data())) {
                         continue;
                     }
-                    const auto& group = overlapStackByScreen[memberIt.value()];
+                    // constFind, not operator[]: on a const QHash the
+                    // subscript returns BY VALUE, deep-copying the group per
+                    // member visit (O(members²) across the loop).
+                    const auto& group = *overlapStackByScreen.constFind(memberIt.value());
                     for (const auto& gPtr : group) {
                         if (gPtr && !gPtr->isDeleted()) {
                             if (KWin::Window* gkw = gPtr->window()) {
@@ -513,7 +534,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     continue;
                 }
                 for (const QString& windowId : savedOrder) {
-                    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+                    // Exact: a fuzzy same-app hit would raise a SIBLING into
+                    // this window's saved z-position.
+                    KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
                     if (w && !w->isDeleted()) {
                         KWin::Window* kw = w->window();
                         if (kw) {
@@ -525,7 +548,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
 
             if (!m_pendingAutotileFocusWindowId.isEmpty()) {
-                KWin::EffectWindow* focusWin = m_effect->findWindowById(m_pendingAutotileFocusWindowId);
+                // Exact for the same sibling-raise reason as the saved-order
+                // loop above.
+                KWin::EffectWindow* focusWin = m_effect->findWindowByIdExact(m_pendingAutotileFocusWindowId);
                 m_pendingAutotileFocusWindowId.clear();
                 if (focusWin) {
                     KWin::Window* kw = focusWin->window();
@@ -618,9 +643,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // m_virtualScreenDefs may still hold pre-rotation regions — without this
             // guard the slot would resolve the new position against stale boundaries
             // and falsely conclude the window crossed VSes, then unsnap it.
+            // Save/restore, not set/clear (nesting-safe).
+            const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
             m_effect->m_daemonGate.inGeometryApply = true;
-            const auto guard = qScopeGuard([this] {
-                m_effect->m_daemonGate.inGeometryApply = false;
+            const auto guard = qScopeGuard([this, prevInApply] {
+                m_effect->m_daemonGate.inGeometryApply = prevInApply;
             });
             // Pre-seed the effect's tracked screen (mirrors daemon_apply's
             // pre-seed): the outputChanged handler early-returns while

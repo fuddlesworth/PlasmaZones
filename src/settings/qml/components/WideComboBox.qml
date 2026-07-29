@@ -19,6 +19,24 @@ import org.kde.kirigami as Kirigami
 ComboBox {
     id: root
 
+    // Value-keyed current selection. Sites bind the backend value here instead
+    // of binding `currentIndex: Math.max(0, indexOfValue(value))` themselves:
+    // that binding evaluates during creation, before the model is applied, so
+    // indexOfValue returns -1, Math.max clamps it to 0, and — indexOfValue not
+    // being a tracked dependency — the binding never re-runs when the model
+    // lands. The combo then displays its first option regardless of the stored
+    // value (discussion #860). Left undefined, the site manages currentIndex
+    // itself.
+    property var storedValue: undefined
+
+    function _syncStoredValue() {
+        if (storedValue === undefined)
+            return;
+        // Unknown/stale stored value falls back to the first option, matching
+        // the Math.max(0, ...) clamp the per-site bindings used.
+        currentIndex = Math.max(0, indexOfValue(storedValue));
+    }
+
     // Cached widest-item width — recalculated only when model or count changes.
     // Using a separate TextMetrics avoids the binding loop caused by the
     // _longestItemWidth → metrics.text → advanceWidth → _longestItemWidth cycle.
@@ -34,9 +52,22 @@ ComboBox {
     }
 
     implicitContentWidthPolicy: ComboBox.WidestTextWhenCompleted
-    onCountChanged: Qt.callLater(_recalcLongestWidth)
-    onModelChanged: Qt.callLater(_recalcLongestWidth)
-    Component.onCompleted: _recalcLongestWidth()
+    onStoredValueChanged: _syncStoredValue()
+    onCountChanged: {
+        Qt.callLater(_recalcLongestWidth);
+        _syncStoredValue();
+    }
+    // Sync here as well as on countChanged: a model replaced by another of the
+    // SAME length never fires countChanged, and the old index would then map
+    // through the previous model's ordering.
+    onModelChanged: {
+        Qt.callLater(_recalcLongestWidth);
+        _syncStoredValue();
+    }
+    Component.onCompleted: {
+        _recalcLongestWidth();
+        _syncStoredValue();
+    }
 
     TextMetrics {
         id: metrics

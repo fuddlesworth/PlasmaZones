@@ -25,6 +25,7 @@
 #include <PhosphorEngine/IPlacementState.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -185,13 +186,18 @@ private Q_SLOTS:
         // engine ref is a self-nulling QPointer, outliving it makes the
         // teardown safety structural rather than incidental.
         StubTileRectEngine tileEngine;
+        // Declared BEFORE `parent` so the engine outlives the WTA/service on
+        // EVERY exit path — an early QVERIFY return skips the tail cleanup,
+        // and reverse destruction would otherwise tear the SnapEngine down
+        // first while the service's snap resolver still points into it.
+        std::unique_ptr<SnapEngine> snap;
         QObject parent;
         auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
                                               &parent);
-        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
-        wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, &tileEngine, nullptr);
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), &tileEngine, nullptr);
 
         const QString windowId = QStringLiteral("ghostty|inst-tile");
         const QString screenId = QStringLiteral("DP-1");
@@ -225,10 +231,10 @@ private Q_SLOTS:
         QVERIFY(rec);
         QCOMPARE(rec->freeGeometryFor(screenId), movedFrame);
 
-        wta->setEngines(snap, nullptr, nullptr);
+        wta->setEngines(snap.get(), nullptr, nullptr);
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
-        delete snap;
+        snap.reset();
     }
 
     // Regression (phantom snap-float after a mode round-trip): a snapped
@@ -250,13 +256,15 @@ private Q_SLOTS:
             PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
+        // Engine before parent — see testMinimizedCapturePreservesPreMinimizePlacement.
+        std::unique_ptr<SnapEngine> snap;
         QObject parent;
         auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
                                               &parent);
-        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
-        wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, nullptr, nullptr);
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), nullptr, nullptr);
 
         const QString windowId = QStringLiteral("app|handoff");
         const QString appId = wta->service()->currentAppIdFor(windowId);
@@ -291,7 +299,205 @@ private Q_SLOTS:
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
         wta->setEngines(nullptr, nullptr, nullptr); // symmetric with the siblings; the QPointer self-null is incidental
-        delete snap;
+        snap.reset();
+    }
+
+    // Minimize-float is a live occupancy suspension, not a placement change.
+    // Every capture source must preserve the pre-minimize snap slot while the
+    // compositor reports the window hidden.
+    void testMinimizedCapturePreservesPreMinimizePlacement()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        PhosphorEngine::WindowRegistry registry;
+        // Engine declared BEFORE parent so reverse destruction tears the
+        // parent (and the WTA/service inside it) down first — destroying the
+        // SnapEngine while the service's snap-state resolver still points into
+        // it would deref freed state. (The other tests cross-reference this
+        // rationale.)
+        std::unique_ptr<SnapEngine> snap;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        wta->setWindowRegistry(&registry);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), nullptr, nullptr);
+
+        const QString instanceId = QStringLiteral("minimized-instance");
+        const QString windowId = QStringLiteral("app|minimized-instance");
+        const QString screenId = QStringLiteral("DP-1");
+        const QString zoneId = QUuid::createUuid().toString();
+
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("app");
+        metadata.isMinimized = true;
+        registry.upsert(instanceId, metadata);
+
+        PhosphorEngine::WindowPlacement placement;
+        placement.windowId = windowId;
+        placement.appId = metadata.appId;
+        placement.screenId = screenId;
+        placement.virtualDesktop = 4;
+        placement.activity = QStringLiteral("activity-a");
+        placement.freeGeometryByScreen.insert(screenId, QRect(140, 100, 1000, 720));
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        slot.zoneIds = QStringList{zoneId};
+        placement.engines.insert(snap->engineId(), slot);
+        PhosphorEngine::EngineSlot autotileSlot;
+        autotileSlot.state = QString(PhosphorEngine::WindowPlacement::stateTiled());
+        autotileSlot.order = 2;
+        placement.engines.insert(PhosphorEngine::WindowPlacement::autotileEngineId(), autotileSlot);
+        QVERIFY(wta->service()->placementStore().record(placement));
+        const auto before = wta->service()->placementStore().peekExact(windowId);
+        QVERIFY(before);
+
+        // Runtime post-minimize state is floating and carries a valid frame.
+        // Without the minimized guard, capture overwrites the frozen snapped
+        // slot with this temporary float.
+        snap->snapState()->setFloatingOnScreen(windowId, screenId, 1);
+        wta->setFrameGeometry(windowId, 620, 410, 1100, 760);
+        wta->captureWindowPlacement(windowId);
+
+        auto stored = wta->service()->placementStore().peekExact(windowId);
+        QVERIFY(stored);
+        QVERIFY(stored->sameContentAs(*before));
+        QCOMPARE(stored->sequence, before->sequence);
+
+        // Once visible, the same capture is allowed and proves the test's
+        // floating setup would have changed the record without the guard.
+        metadata.isMinimized = false;
+        registry.upsert(instanceId, metadata);
+        wta->captureWindowPlacement(windowId);
+        stored = wta->service()->placementStore().peekExact(windowId);
+        QVERIFY(stored);
+        QCOMPARE(stored->slotFor(snap->engineId()).state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
+
+        wta->setEngines(snap.get(), nullptr, nullptr);
+        wta->service()->setSnapState(nullptr);
+        wta->service()->setSnapEngine(nullptr);
+        snap.reset();
+        wta->setWindowRegistry(nullptr);
+    }
+
+    void testMinimizedCloseRebindsChangedAppPrefixWithoutLosingPlacement()
+    {
+        // A minimized window closing under a MUTATED appId prefix must re-key its
+        // durable record to the current windowId instead of stranding it under
+        // the old prefix (where a reopen under the new class could never find it).
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        PhosphorEngine::WindowRegistry registry;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        wta->setWindowRegistry(&registry);
+
+        const QString instanceId = QStringLiteral("renamed-minimized-instance");
+        const QString oldWindowId = QStringLiteral("oldclass|renamed-minimized-instance");
+        const QString currentWindowId = QStringLiteral("newclass|renamed-minimized-instance");
+        const QString screenId = QStringLiteral("DP-1");
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("newclass");
+        metadata.virtualDesktop = 3;
+        metadata.activity = QStringLiteral("activity-a");
+        metadata.isMinimized = true;
+        registry.upsert(instanceId, metadata);
+
+        PhosphorEngine::WindowPlacement placement;
+        placement.windowId = oldWindowId;
+        placement.appId = QStringLiteral("oldclass");
+        placement.screenId = screenId;
+        placement.virtualDesktop = 1;
+        placement.activity = QStringLiteral("old-activity");
+        placement.freeGeometryByScreen.insert(screenId, QRect(100, 120, 900, 700));
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        slot.zoneIds = QStringList{QUuid::createUuid().toString()};
+        placement.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        QVERIFY(wta->service()->placementStore().record(placement));
+
+        wta->captureWindowPlacement(currentWindowId, screenId);
+
+        QCOMPARE(wta->service()->placementStore().size(), 1);
+        const auto stored = wta->service()->placementStore().peekExact(currentWindowId);
+        QVERIFY(stored.has_value());
+        QCOMPARE(stored->windowId, currentWindowId);
+        QCOMPARE(stored->appId, QStringLiteral("newclass"));
+        QCOMPARE(stored->virtualDesktop, 3);
+        QCOMPARE(stored->activity, QStringLiteral("activity-a"));
+        QCOMPARE(stored->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()), slot);
+        QCOMPARE(stored->freeGeometryFor(screenId), placement.freeGeometryFor(screenId));
+
+        wta->setWindowRegistry(nullptr);
+    }
+
+    // Control for the rebind test above: the SAME capture with the registry
+    // reporting NOT-minimized must not take the minimize preserve branch.
+    // With no engine wired and no reported frame the capture has nothing to
+    // record, so the record stays untouched under its OLD id and context —
+    // proving the rebind + context refresh asserted above came specifically
+    // from the minimize branch, not from some always-on path.
+    void testNotMinimizedCloseLeavesRecordUntouched()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        PhosphorEngine::WindowRegistry registry;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        wta->setWindowRegistry(&registry);
+
+        const QString instanceId = QStringLiteral("renamed-visible-instance");
+        const QString oldWindowId = QStringLiteral("oldclass|renamed-visible-instance");
+        const QString currentWindowId = QStringLiteral("newclass|renamed-visible-instance");
+        const QString screenId = QStringLiteral("DP-1");
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("newclass");
+        metadata.virtualDesktop = 3;
+        metadata.activity = QStringLiteral("activity-a");
+        metadata.isMinimized = false;
+        registry.upsert(instanceId, metadata);
+
+        PhosphorEngine::WindowPlacement placement;
+        placement.windowId = oldWindowId;
+        placement.appId = QStringLiteral("oldclass");
+        placement.screenId = screenId;
+        placement.virtualDesktop = 1;
+        placement.activity = QStringLiteral("old-activity");
+        placement.freeGeometryByScreen.insert(screenId, QRect(100, 120, 900, 700));
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        slot.zoneIds = QStringList{QUuid::createUuid().toString()};
+        placement.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        QVERIFY(wta->service()->placementStore().record(placement));
+
+        wta->captureWindowPlacement(currentWindowId, screenId);
+
+        QCOMPARE(wta->service()->placementStore().size(), 1);
+        // peekExact matches by instance id, so it finds the record either way;
+        // the discriminating assertions are the UNCHANGED id and context.
+        const auto stored = wta->service()->placementStore().peekExact(currentWindowId);
+        QVERIFY(stored.has_value());
+        QCOMPARE(stored->windowId, oldWindowId);
+        QCOMPARE(stored->virtualDesktop, 1);
+        QCOMPARE(stored->activity, QStringLiteral("old-activity"));
+
+        wta->setWindowRegistry(nullptr);
     }
 
     // The engine-miss CLOSE fallback carries the same tile-rect poison guard
@@ -311,13 +517,15 @@ private Q_SLOTS:
 
         // Same structural stub-before-parent ordering as the primary-path test.
         StubTileRectEngine tileEngine;
+        // Engine before parent — see testMinimizedCapturePreservesPreMinimizePlacement.
+        std::unique_ptr<SnapEngine> snap;
         QObject parent;
         auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
                                               &parent);
-        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
-        wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, &tileEngine, nullptr);
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), &tileEngine, nullptr);
 
         const QString windowId = QStringLiteral("app|closed-on-tile");
         const QString screenId = QStringLiteral("DP-1");
@@ -350,10 +558,10 @@ private Q_SLOTS:
         QVERIFY(rec);
         QCOMPARE(rec->freeGeometryFor(screenId), freeFrame);
 
-        wta->setEngines(snap, nullptr, nullptr);
+        wta->setEngines(snap.get(), nullptr, nullptr);
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
-        delete snap;
+        snap.reset();
     }
 };
 

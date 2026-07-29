@@ -153,6 +153,7 @@ public Q_SLOTS:
 
     // Screen assignments
     QString getLayoutForScreen(const QString& screenId);
+    QString getAssignedLayoutForScreen(const QString& screenId);
     void assignLayoutToScreen(const QString& screenId, const QString& layoutId);
     void clearAssignment(const QString& screenId);
     void setAllScreenAssignments(const QVariantMap& assignments); // Batch set - saves once

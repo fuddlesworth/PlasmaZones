@@ -1,6 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): this header exceeds the 1150-line ceiling
+// because it declares BOTH the D-Bus wire surface (slots whose signatures are
+// pinned by the interface XML) and the in-process orchestration API the daemon
+// wires. Splitting would sever the wire methods from the state they document
+// against; the cost of the split outweighs the ceiling here.
+
 #pragma once
 
 #include "plasmazones_export.h"
@@ -463,8 +469,13 @@ public Q_SLOTS:
     QStringList getWindowsInZone(const QString& zoneId);
     QStringList getSnappedWindows();
 
-    /// Remove zone/screen/desktop assignments for windows not in the alive set.
-    /// Called by the KWin effect after daemon ready to clean up stale KConfig entries
+    /// Remove per-window state for windows not in the alive set: zone/screen/
+    /// desktop assignments, the sticky map and legacy float set, both engines'
+    /// tracking (via their pruneStaleWindows overrides — TilingState/SnapState
+    /// membership, pending orders, min-size and last-rect caches), the
+    /// registry's metadata + canonical entries, and the adaptor's own
+    /// frame-geometry/broadcast shadow maps.
+    /// Called by the KWin effect after daemon ready to clean up stale entries
     /// from windows that no longer exist (closed between save and daemon restart).
     void pruneStaleWindows(const QStringList& aliveWindowIds);
 
@@ -651,20 +662,40 @@ public:
     /// Shadow-written in P1; the single funnel every state-change + close hook
     /// calls so the persisted record always reflects the window's live state.
     ///
-    /// @p authoritativeScreen, when non-empty (the close path passes KWin's
-    /// getWindowScreenId), is the window's true current screen. It is used ONLY
-    /// as a fallback when NEITHER engine produces a placement — the case where a
-    /// cross-screen move has removed the window from the source engine's tracking
-    /// and the destination engine has not adopted it, so both capturePlacement
-    /// calls return nullopt and the live screen would otherwise be lost. In that
-    /// case the float-back is recorded on @p authoritativeScreen via
-    /// WindowTrackingService::recordFloatingClose.
-    void captureWindowPlacement(const QString& windowId, const QString& authoritativeScreen = QString());
+    /// MINIMIZED windows (registry tri-state engaged-true, unknown-while-
+    /// tracked, or a classified suspension float) are a special case unless
+    /// @p fromStateChange: their live frame and engine view describe the
+    /// suspension, not intent, so the capture never overwrites the record. On
+    /// a live capture that is a plain no-op; on the CLOSE path the existing
+    /// record is preserved with only its context refreshed (close screen from
+    /// @p authoritativeScreen, desktop/activity from the window's live
+    /// registry metadata) so a reopen restores the pre-minimize placement in
+    /// the right place.
+    ///
+    /// @p authoritativeScreen (the close path passes KWin's getWindowScreenId)
+    /// therefore plays TWO roles when non-empty: it marks the capture as a
+    /// close (enabling the minimize preserve branch above and the pure-float
+    /// sibling collapse), and it is the fallback screen when NEITHER engine
+    /// produces a placement — the case where a cross-screen move removed the
+    /// window from the source engine's tracking and the destination never
+    /// adopted it, so both capturePlacement calls return nullopt and the live
+    /// screen would otherwise be lost. In that case the float-back is recorded
+    /// on @p authoritativeScreen via WindowTrackingService::recordFloatingClose.
+    /// @param fromStateChange Pass true when the capture is triggered by an
+    ///        authoritative engine state change (snap commit/uncommit relay):
+    ///        such a capture must run even for a minimized window, because the
+    ///        engine now reports the NEW committed state, not the transient
+    ///        minimize-suspension float the minimize guard exists to keep out
+    ///        of the store.
+    void captureWindowPlacement(const QString& windowId, const QString& authoritativeScreen = QString(),
+                                bool fromStateChange = false);
 
-    /// Re-capture every open floating window's live geometry into the unified
-    /// store at save time (no per-move hook fires for drags). Called before the
-    /// dirty snapshot in saveState so a dragged floated window persists its
-    /// current position across a daemon restart.
+    /// Re-capture EVERY open window's live placement into the unified store
+    /// at save time — engine-agnostic, not floating-only: floated windows
+    /// contribute their live geometry (no per-move hook fires for drags),
+    /// snapped/tiled windows their current slot state. Called before the
+    /// dirty snapshot in saveState so open-window state survives a daemon
+    /// restart.
     void refreshOpenWindowPlacements();
 
     /**
@@ -747,14 +778,14 @@ public:
     /// are handled by the snap placement directive, not here.
     QString applyOpenRoutingForTiling(const QString& windowId, const QString& screenId);
 
-    /// The canonical form of @p windowId as the window registry sees it, for
-    /// sibling adaptors that key per-window state and must agree with this
-    /// adaptor on identity. Window ids reach the daemon in both a raw
-    /// compositor form and the registry's canonical form for the same window
-    /// (a class-mutating app renames mid-life), so any map keyed on the
-    /// caller-supplied id splits into two independent entries. Returns
-    /// @p windowId unchanged when no registry is wired.
-    QString canonicalWindowId(const QString& windowId) const;
+    /// Canonical key for daemon-local per-window shadow maps, and the canonical
+    /// form sibling adaptors must agree on for per-window state. Window ids
+    /// reach the daemon in both a raw compositor form and the registry's
+    /// canonical form for the same window (a class-mutating app renames
+    /// mid-life), so any map keyed on the caller-supplied id splits into two
+    /// independent entries. Returns @p windowId unchanged when no registry is
+    /// wired.
+    QString shadowWindowId(const QString& windowId) const;
 
     /// Engine-neutral RouteToScreen for a BARE route (no SnapToZone): if a matched
     /// rule pins @p windowId to a different monitor and the rule carries no
@@ -848,7 +879,12 @@ Q_SIGNALS:
      * @param windowId Window whose state changed
      * @param state PhosphorProtocol::WindowStateEntry with windowId, zoneId, screenId,
      *        isFloating, changeType, zoneIds (multi-zone spans), isSticky;
-     *        changeType: "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
+     *        changeType: "snapped", "unsnapped", "floated", "unfloated", "screen_changed".
+     *        BEST-EFFORT fields: the float-toggle and screen-changed emitters
+     *        deliberately send empty zoneIds and isSticky=false rather than
+     *        re-querying — subscribers needing those must pull them
+     *        (getMultiZoneForWindow / sticky query) instead of trusting this
+     *        stream's snapshot.
      */
     void windowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state);
 
@@ -968,9 +1004,17 @@ Q_SIGNALS:
 public Q_SLOTS:
     /**
      * @brief Set a window's floating state explicitly (directional, not toggle).
-     * Routes to the engine that owns the screen's mode (autotile or
-     * scrolling adopt via the cross-engine handoff; snap is handled locally).
-     * Used by minimize/unminimize, drag-to-float, and monocle unmaximize handlers.
+     *
+     * Routes by the (validated/recovered) screen's mode to a DEST engine, with
+     * the other engine as SOURCE (autotile or scrolling adopt via the
+     * cross-engine handoff; snap is handled locally). A window the destination
+     * does not yet track goes through the cross-engine handoff contract first:
+     * floats adopt unconditionally (releasing a tracked source); an unfloat
+     * whose float bit lives in the source is adopted by a tiling destination
+     * (tiling the arrival) or, for a snap destination, released from the source
+     * with a not-floating broadcast. The suspension-float classification is
+     * stamped before routing. Used by minimize/unminimize, drag-to-float, and
+     * monocle unmaximize handlers.
      */
     void setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating);
 
@@ -995,8 +1039,12 @@ public:
      */
     bool relayWindowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
     /**
-     * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats).
-     * Gets validated geometry, emits applyGeometryRequested if found, clears stored geometry.
+     * @brief Apply the remembered float-back geometry for a floated window
+     * (call from daemon when the autotile engine floats it).
+     * Resolves via WindowTrackingService::validatedUnmanagedGeometry and emits
+     * applyGeometryRequested when a rect is found. The stored geometry is NOT
+     * consumed — the record stays put for the next float/restore (per-screen
+     * clears happen only on the consume-once drag-out paths).
      * @return true if geometry was applied, false if none stored
      */
     bool applyGeometryForFloat(const QString& windowId, const QString& screenId);
@@ -1184,7 +1232,7 @@ private:
     // Keyed on CANONICAL window ids. The effect pushes the window's current
     // composite, but captureWindowPlacement reads this map with canonical ids
     // on the engine-relay path, so both writes and reads translate through
-    // canonicalWindowId() and the stale sweep uses the canonical alive set.
+    // shadowWindowId() and the stale sweep uses the canonical alive set.
     QHash<QString, QRect> m_frameGeometry;
 
     // Last floating value broadcast via windowFloatingChanged, per window. The

@@ -362,6 +362,25 @@ public:
     {
         m_lastRecalcGeometry = geom;
     }
+    /// The complete staleness predicate recalculateZoneGeometries() gates on:
+    /// the screen rect changed OR the zone set was edited since the last pass
+    /// (m_zoneGeometryDirty). Callers that skip work when a recalc "already
+    /// happened" MUST use this, not a bare lastRecalcGeometry() comparison —
+    /// the rect alone reads as fresh after a zone add/remove at unchanged
+    /// screen geometry, leaving the new zones with no absolute geometry.
+    bool needsRecalc(const QRectF& screenGeometry) const
+    {
+        return screenGeometry != m_lastRecalcGeometry || m_zoneGeometryDirty;
+    }
+    /// Full-recalc bookkeeping for external appliers (the async worker path):
+    /// stamps the rect AND clears the zone-set dirty bit, exactly as
+    /// recalculateZoneGeometries() does internally. Use only when the applied
+    /// result covered the layout's current zone set.
+    void markRecalculated(const QRectF& geom)
+    {
+        m_lastRecalcGeometry = geom;
+        m_zoneGeometryDirty = false;
+    }
 
     // Serialization
     QJsonObject toJson() const;

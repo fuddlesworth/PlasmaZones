@@ -18,24 +18,16 @@
 #include <QTest>
 #include <QString>
 #include <QStringList>
-#include <QHash>
 #include <QSet>
 #include <QUuid>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <memory>
 
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
-#include "config/configbackends.h"
-#include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorScreens/VirtualScreen.h>
-#include "core/utils/utils.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -421,7 +413,7 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowSnapped(win3));
     }
 
-    void testPruneStaleAssignments_emptyAliveSet()
+    void testPruneStaleAssignments_emptyAliveSetRefused()
     {
         QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
         QString win1 = QStringLiteral("app1|aaa");
@@ -430,14 +422,17 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win1, m_zoneIds[0], vsId, 1);
         m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
 
-        // Empty alive set — all windows should be pruned. Two store items:
-        // one zone assignment per window, nothing floating.
+        // An EMPTY alive set is refused (fail closed): the effect's one-shot
+        // alive report at daemon-ready can legitimately be empty before
+        // session-restored apps map their windows, and it must not wipe
+        // every persisted assignment. Per-window prune on windowClosed
+        // covers the genuine all-closed case.
         QSet<QString> alive;
         int pruned = m_service->pruneStaleAssignments(alive);
 
-        QCOMPARE(pruned, 2);
-        QVERIFY(!m_service->isWindowSnapped(win1));
-        QVERIFY(!m_service->isWindowSnapped(win2));
+        QCOMPARE(pruned, 0);
+        QVERIFY(m_service->isWindowSnapped(win1));
+        QVERIFY(m_service->isWindowSnapped(win2));
     }
 
     void testPruneStaleAssignments_cleansFloatingState()

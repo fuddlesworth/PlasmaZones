@@ -282,16 +282,8 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     // — drag-from-another-autotile-screen typically falls here.
     state->setFloating(windowId, ctx.wasFloating);
     // Keep the memory algorithm's bookkeeping consistent for a non-floating
-    // arrival — symmetric with the removal hook in handoffRelease. Floating
-    // arrivals are not in tiledWindows(), so indexOf misses and the hook is
-    // correctly skipped.
-    PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(ctx.toScreenId);
-    if (algo && algo->supportsLifecycleHooks()) {
-        const int idx = state->tiledWindows().indexOf(windowId);
-        if (idx >= 0) {
-            algo->onWindowAdded(state, idx);
-        }
-    }
+    // arrival — symmetric with the removal hook in handoffRelease.
+    notifyAlgorithmWindowAdded(state, ctx.toScreenId, windowId);
     m_states.setKeyForWindow(windowId, destKey);
     // Seed the source engine's last-known min size so the first retile
     // clamps correctly instead of waiting a refuse/re-discover round-trip.

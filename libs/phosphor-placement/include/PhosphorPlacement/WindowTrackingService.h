@@ -39,10 +39,6 @@ namespace PhosphorSnapEngine {
 class SnapState;
 }
 
-namespace PhosphorEngine {
-class WindowRegistry;
-}
-
 namespace PhosphorWorkspaces {
 class VirtualDesktopManager;
 }
@@ -367,6 +363,7 @@ public:
     /// Clear a window's shared free/float geometry from the record. See
     /// IWindowTrackingService::clearFreeGeometry.
     void clearFreeGeometry(const QString& windowId) override;
+    void clearFreeGeometry(const QString& windowId, const QString& screenId) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
@@ -404,6 +401,25 @@ public:
      * the legacy shared floating set.
      */
     bool isWindowFloating(const QString& windowId) const override;
+
+    /**
+     * @brief Suspension-float classification (minimize-floats).
+     *
+     * A float applied while the compositor reported the window MINIMIZED is a
+     * suspension, not placement intent, and the classification must OUTLIVE
+     * the live minimize bit: on the unminimize edge the effect's metadata push
+     * flips isMinimized to false immediately, while the unfloat only commits
+     * after the animation grace — a placement capture landing inside that
+     * window would otherwise persist the suspension float as a genuine user
+     * float. Marked by the adaptor at the float WRITE (where minimize state is
+     * still fresh), and cleared BY THE ADAPTOR on unfloat and on windowClosed
+     * (WindowTrackingService::windowClosed itself does not touch the set — a
+     * direct WTS caller must clear it explicitly). The prune backstop sweeps
+     * it for windows that die without a close signal.
+     */
+    bool isSuspensionFloat(const QString& windowId) const override;
+    void markSuspensionFloat(const QString& windowId);
+    void clearSuspensionFloat(const QString& windowId);
 
     /**
      * @brief Set window floating state
@@ -451,15 +467,15 @@ public:
 
     /**
      * @brief Clear pre-float zone after restore (both windowId and appId keys)
+     *
+     * Always clears the appId alias alongside the windowId key: the pre-float
+     * readers fall back to the alias, so a windowId-only clear (the former
+     * clearPreFloatZoneForWindow) still resolved the stale zone for the very
+     * window it targeted. The alias is a single last-writer slot per app, so
+     * "protecting sibling data" by keeping it only preserved whichever
+     * instance unsnapped last.
      */
     void clearPreFloatZone(const QString& windowId) override;
-
-    /**
-     * @brief Clear pre-float zone for a specific window only (not appId)
-     *
-     * Used by autotile float sync to avoid destroying sibling instances' data.
-     */
-    void clearPreFloatZoneForWindow(const QString& windowId);
 
     /**
      * @brief Clear floating state when snapping a floating window
@@ -1073,9 +1089,12 @@ private:
     PlacementConfig m_config;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     // Shared registry for current-class queries and canonical key translation.
-    // Not owned. Null in unit tests.
-    PhosphorEngine::WindowRegistry* m_windowRegistry = nullptr;
-    PhosphorScreens::ScreenManager* m_screenManager = nullptr;
+    // Not owned. Null in unit tests. QPointer (not raw): both are Daemon
+    // children whose destruction order relative to this service is not
+    // contractual — a raw borrow dangled during Daemon child teardown, while
+    // the QPointer auto-nulls and every use site already null-guards.
+    QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
+    QPointer<PhosphorScreens::ScreenManager> m_screenManager;
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     AutotileModePredicate m_autotileModePredicate{};
     EngineTiledPredicate m_engineTiledPredicate{};
@@ -1088,6 +1107,11 @@ private:
     // m_engineFloatResolver / m_engineFloatWriter and this set is never read or
     // written by isWindowFloating / setWindowFloating.
     QSet<QString> m_floatingWindows;
+
+    // Suspension-float classification — see isSuspensionFloat(). Canonical-
+    // keyed. Session-transient (never persisted): a restart's restored floats
+    // are re-classified when their windows re-report minimize state.
+    QSet<QString> m_suspensionFloats;
 
     // Daemon-injected per-engine float reader/writer/lister. See setEngineFloatResolver.
     EngineFloatResolver m_engineFloatResolver{};

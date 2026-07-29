@@ -8,6 +8,7 @@
 
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "handlers/snaphandler.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -90,18 +91,25 @@ void TilingHandler::loadSettings()
                                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     msg << PhosphorProtocol::Service::Interface::Tiling << QStringLiteral("managedScreens");
 
+    m_initialScreenQueryPending = true;
+    const quint64 queryGeneration = ++m_screenQueryGeneration;
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     const quint64 generationAtDispatch = m_screensSignalGeneration;
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, generationAtDispatch](QDBusPendingCallWatcher* w) {
+            [this, generationAtDispatch, queryGeneration](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
+                if (queryGeneration != m_screenQueryGeneration) {
+                    return;
+                }
+                m_initialScreenQueryPending = false;
                 // A managedScreensChanged signal that landed while this query was
                 // in flight carried a NEWER set and already ran the full per-screen
                 // transition handling — the raw assignment below would clobber it
                 // with the older snapshot.
                 if (m_screensSignalGeneration != generationAtDispatch) {
-                    qCDebug(lcEffect) << "Autotile screens: property reply superseded by a live signal, discarding";
+                    qCDebug(lcEffect) << "Managed screens: property reply superseded by a live signal, discarding";
+                    completeDeferredWindowRoutes();
                     return;
                 }
                 QDBusPendingReply<QDBusVariant> reply = *w;
@@ -119,15 +127,35 @@ void TilingHandler::loadSettings()
                     const QSet<QString> published(screens.begin(), screens.end());
                     m_managedScreens = published;
                     qCInfo(lcEffect) << "Loaded managed screens:" << m_managedScreens;
+                    const QSet<QString> completedDeferredRoutes = completeDeferredWindowRoutes();
 
                     if (!published.isEmpty()) {
                         const auto windows = KWin::effects->stackingOrder();
+                        QList<KWin::EffectWindow*> batchWindows;
+                        batchWindows.reserve(windows.size());
+                        for (KWin::EffectWindow* window : windows) {
+                            // isDeleted: close-grabbed dying windows linger in
+                            // the stacking order — getWindowId on them would
+                            // re-pollute the scrubbed id caches before the
+                            // batch's own guards run.
+                            if (window && !window->isDeleted()
+                                && !completedDeferredRoutes.contains(m_effect->getWindowId(window))) {
+                                batchWindows.append(window);
+                            }
+                        }
                         // Batch-notify all windows on managed screens in one D-Bus call
                         // instead of per-window windowOpened round-trips.
-                        notifyWindowsAddedBatch(windows, published, /*resetNotified=*/true);
+                        notifyWindowsAddedBatch(batchWindows, published, /*resetNotified=*/true,
+                                                /*enteringAutotile=*/false);
                     }
                 } else {
                     qCDebug(lcEffect) << "Managed screens: query failed, daemon may not be running";
+                    completeDeferredWindowRoutes();
+                }
+                // Guarded: m_snapHandler is declared after m_tilingHandler
+                // and destroyed first during effect teardown.
+                if (SnapHandler* snap = m_effect->snapHandler()) {
+                    snap->retryVisibleMinimizeFloats();
                 }
             });
 

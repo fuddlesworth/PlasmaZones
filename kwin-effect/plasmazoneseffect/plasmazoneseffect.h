@@ -1,6 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): PlasmaZonesEffect is the KWin plugin's
+// single entry class — the Effect interface overrides plus every handler
+// back-pointer surface the split-out implementation files
+// (plasmazoneseffect/*.cpp, handlers, autotilehandler) call back through.
+// The implementation is already partitioned; the class declaration is the
+// one place KWin's plugin contract requires to be whole.
+
 #pragma once
 
 #include <cstdint>
@@ -316,15 +323,22 @@ private:
      * @brief Push current metadata for a window to the daemon's WindowRegistry.
      *
      * Safe to call unconditionally on every observation — the daemon de-dupes.
-     * Called from slotWindowAdded for initial registration, and from
-     * windowClassChanged / desktopFileNameChanged handlers for live updates.
+     * Called from slotWindowAdded for initial registration; from the
+     * windowClassChanged / desktopFileNameChanged / desktops- and
+     * activities-changed handlers for identity/context updates; from the
+     * minimizedChanged handler (full snapshot — the daemon's mode-swap seed
+     * and capture guards consult the registry's LIVE isMinimized); and from
+     * the captionChanged handler (caption-only, includeExtended=false).
      *
      * @param includeExtended When false, the extended-property snapshot (the
-     * trailing a{sv}: state flags, geometry, accessory flags, captionNormal) is
-     * NOT rebuilt or sent — the daemon preserves whatever it already has. Used by
+     * trailing a{sv}: state flags, geometry, accessory flags) is NOT rebuilt
+     * or sent — the daemon preserves whatever it already has. The one
+     * exception is captionNormal, which derives from the caption and is sent
+     * alone (the daemon treats a CaptionNormal-only map as a caption refresh,
+     * not a snapshot replace). Used by
      * the captionChanged handler: terminals/browsers rewrite their title every
-     * frame, and the rule-relevant extended fields don't change on a title tick,
-     * so rebuilding/marshalling a ~20-entry map per frame is pure waste. The
+     * frame, and the other rule-relevant extended fields don't change on a title
+     * tick, so rebuilding/marshalling a ~20-entry map per frame is pure waste. The
      * extended snapshot is captured at window-open and refreshed on identity
      * changes (class/desktop/activity), which is when it matters for the daemon's
      * open-path Float / RestorePosition resolvers.
@@ -365,6 +379,11 @@ private:
      *                     true return. @see shouldHandleWindow.
      */
     bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+    // Cached user-Exclude-rule verdict shared by shouldHandleWindow and
+    // shouldAnimateWindow. Fast-paths on an empty exclusion slice; otherwise
+    // resolves through the exclusion evaluator's per-window cache (same
+    // freshness contract as the animation verdicts — see the implementation).
+    bool isExcludedBySnappingRule(KWin::EffectWindow* w) const;
 
     /// Classify a window's structural kind for the snap-restore consume gate.
     PhosphorEngine::WindowKind classifyWindowKind(KWin::EffectWindow* w) const;
@@ -405,7 +424,13 @@ private:
      * window with no rule-matchable attributes at all falls through
      * to the filter.
      */
-    bool shouldAnimateWindow(KWin::EffectWindow* w) const;
+    /// @p sharedQuery (optional): a caller-owned memoisation slot. When the
+    /// gate has to build the per-window WindowQuery (~30 KWin accessors), it
+    /// stores it there so the caller's own resolver pass can reuse it instead
+    /// of building a second one — the drag chokepoint pays this per animated
+    /// apply. The slot is left disengaged when no rules forced a build.
+    bool shouldAnimateWindow(KWin::EffectWindow* w,
+                             std::optional<PhosphorRules::WindowQuery>* sharedQuery = nullptr) const;
 
     /**
      * @brief Per-window gate for the border / decoration pass.
@@ -701,11 +726,13 @@ private:
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
     // Uses QDBusMessage::createMethodCall (no QDBusInterface) to avoid synchronous introspection.
     // onSnapSuccess: optional callback when snap is applied, receives (windowId, screenId)
+    // onError: optional transport-error callback; valid no-snap replies still use fallback.
     void tryAsyncSnapCall(const QString& interface, const QString& method, const QList<QVariant>& args,
                           QPointer<KWin::EffectWindow> window, const QString& windowId, bool storePreSnap,
                           std::function<void()> fallback,
                           std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr,
-                          bool skipAnimation = false, std::function<void()> onComplete = nullptr);
+                          bool skipAnimation = false, std::function<void()> onComplete = nullptr,
+                          std::function<void()> onError = nullptr);
 
     // reserveScreenEdges() and unreserveScreenEdges() have been removed. The daemon
     // disables KWin Quick Tile via kwriteconfig6. Reserving edges would turn on the
@@ -950,11 +977,16 @@ private:
     // resize) the per-tick gate was an uncached rule resolve plus a full
     // ruleQuery build, hundreds of times per second (discussion #816). The
     // decoration resync deliberately stays PER TICK in the stash lambda (see
-    // window_lifecycle.cpp): it is cheap, and deferring it let a re-decorated
+    // window_connections.cpp): it is cheap, and deferring it let a re-decorated
     // title bar flash for the throttle window. QPointer auto-nulls if the
     // window dies before the flush; the flush skips those entries.
     // PendingFrameGeometry moved to effect_state.h.
     QHash<QString, PendingFrameGeometry> m_pendingFrameGeometry;
+    /// Last caption pushed via the caption-only metadata refresh, per window.
+    /// Skips content-identical pushes (spurious captionChanged emissions).
+    /// Raw-pointer-keyed; erased in the windowDeleted cleanup with its
+    /// siblings.
+    QHash<KWin::EffectWindow*, QString> m_lastPushedCaption;
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 
@@ -1783,6 +1815,17 @@ private:
     // it opens; endRestoreSuppression releases it once it has settled into
     // its zone / tile (or on the hard deadline). See RestoreSuppression.
     void beginRestoreSuppression(KWin::EffectWindow* window);
+    /// Re-arm an already-suppressed window's deadline (no-op when the window
+    /// is not suppressed). Used when a routing decision is deferred past the
+    /// original deadline (screen-query wait) so the window does not flash at
+    /// its spawn placement mid-route.
+    void refreshRestoreSuppressionDeadline(KWin::EffectWindow* window);
+    /// Consume (single-shot) and, when valid for a snap-mode screen, apply the
+    /// instant snap-restore cache entry for this window's app. Returns true
+    /// when the window was teleported (caller should re-evaluate its screen).
+    /// Shared by slotWindowAdded and the deferred-routing dispatch so a
+    /// deferred window cannot leave a stale entry for a same-app sibling.
+    bool tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId, bool canSnapRestore);
     void endRestoreSuppression(KWin::EffectWindow* window);
 
     void loadShaderProfileFromDbus();
@@ -1820,7 +1863,7 @@ private:
     // either directly from the maximize state edge (geometry already landed)
     // or deferred to the size-delivering windowFrameGeometryChanged when the
     // state signal outran the client's commit. Implementation in
-    // window_lifecycle.cpp beside its two call sites.
+    // window_connections.cpp beside its two call sites.
     void beginMaximizeShaderMorph(KWin::EffectWindow* window, const QRectF& departureFrame);
     /// Evict least-recently-used cached textures back under the soft bound, never
     /// touching one a live transition still points at. @p pending is the transition

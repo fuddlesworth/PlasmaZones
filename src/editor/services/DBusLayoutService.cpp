@@ -5,6 +5,7 @@
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
 
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -119,12 +120,25 @@ QString DBusLayoutService::getLayoutIdForScreen(const QString& screenName)
         return QString();
     }
 
-    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("getLayoutForScreen"), {screenName});
+    // getAssignedLayoutForScreen, NOT getLayoutForScreen: the latter falls
+    // back to the registry-wide default layout for an unassigned screen, so
+    // switching the editor to that screen would open the default layout for
+    // in-place editing and a save would overwrite it (discussion #858). An
+    // empty reply here routes the caller to createNewLayout() instead.
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("getAssignedLayoutForScreen"), {screenName});
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-        qCWarning(lcDbus) << "getLayoutForScreen: failed, screen=" << screenName << errorMessage(reply);
+        qCWarning(lcDbus) << "getAssignedLayoutForScreen: failed, screen=" << screenName << errorMessage(reply);
         return QString();
     }
-    return reply.arguments().constFirst().toString();
+    const QString assignedId = reply.arguments().constFirst().toString();
+    // An autotile-assigned screen returns "autotile:<algorithmId>", which is
+    // not a loadable layout uuid — loadLayout would fail the parse and surface
+    // "That layout is no longer available." to the user. Treat it like an
+    // unassigned screen so the caller falls through to createNewLayout().
+    if (PhosphorLayout::LayoutId::isAutotile(assignedId)) {
+        return QString();
+    }
+    return assignedId;
 }
 
 void DBusLayoutService::assignLayoutToScreen(const QString& screenName, const QString& layoutId)

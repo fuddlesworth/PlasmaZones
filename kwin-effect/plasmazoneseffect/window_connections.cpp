@@ -25,6 +25,12 @@ namespace PlasmaZones {
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
+// A pending maximize morph whose size-landing commit arrives later than this
+// is considered stale (state flipped but the commit never came, e.g. an
+// occluded client under the lock screen) — the morph is skipped so a much
+// later unrelated resize cannot fire a bogus maximize animation.
+constexpr qint64 kPendingMaximizeMorphDeadlineMs = 1000;
+
 // Maximize-morph landing discriminator: has the frame SIZE actually moved
 // away from the departure rect? A maximize/restore always changes the frame
 // size, while a position-only change can apply early server-side, so the
@@ -258,9 +264,21 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // marshalling the ~20-entry a{sv} each frame. The daemon preserves the
         // existing extended fields when none are sent.
         auto pushCaptionOnly = [this, safeW]() {
-            if (safeW && !safeW->isDeleted()) {
-                pushWindowMetadata(safeW, /*includeExtended=*/false);
+            if (!safeW || safeW->isDeleted()) {
+                return;
             }
+            // Skip content-identical pushes: KWin can emit captionChanged
+            // without a net caption change, and the marshal (plus the
+            // daemon-side upsert) should not ride those. captionNormal
+            // derives from the caption, so an unchanged caption implies an
+            // unchanged push.
+            const QString caption = safeW->caption();
+            QString& last = m_lastPushedCaption[safeW.data()];
+            if (last == caption) {
+                return;
+            }
+            last = caption;
+            pushWindowMetadata(safeW, /*includeExtended=*/false);
         };
         // Class / desktop-file mutations invalidate the animation rule
         // evaluator's per-window match cache. The cache is keyed on the
@@ -273,7 +291,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // desktops / activities / role changes don't feed the
         // WindowClass matcher so they don't need the cache drop.
         auto invalidateRuleCache = [this, safeW]() {
-            m_shaderManager.animationRuleEvaluator().clearCache();
+            // Gate each clear on its own rule set, mirroring the sibling
+            // invalidation in slotWindowActivated: the no-rules case pays
+            // nothing on a class swap.
+            if (!m_shaderManager.animationRuleSet().isEmpty()) {
+                m_shaderManager.animationRuleEvaluator().clearCache();
+            }
+            // The exclusion verdict cache keys on the same frozen id and the
+            // WindowClass matcher — a class swap can flip an Exclude verdict.
+            if (!m_snappingExclusionRuleSet.isEmpty()) {
+                m_snappingExclusionEvaluator.clearCache();
+            }
             // The cache drop alone revives nothing: appearance slots (opacity,
             // tint, border colour) bake into the decoration at
             // updateWindowDecoration time, and the stacking layer is
@@ -625,6 +653,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // the timer-driven teardown of the first racing the install of the
     // second. Track the last fully-maximized state per window and only
     // fire on actual edge transitions.
+    // Seed from the LIVE maximize mode: a window already fully maximized when
+    // the effect (re)loads has no entry, so its first RESTORE compared
+    // false==false, read as a no-edge, and played no morph.
+    if (KWin::Window* kwSeed = w->window()) {
+        m_shaderManager.m_lastFullyMaximized.insert(w, kwSeed->maximizeMode() == KWin::MaximizeFull);
+    }
     connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
             [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
                 if (!window) {
@@ -688,8 +722,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             &TilingHandler::slotWindowFrameGeometryChanged);
 
     // Single windowFrameGeometryChanged lambda combining the effect-side
-    // per-tick work — first-frame open suppression release AND debounced
-    // daemon push — into one connection. Keeping these as two separate
+    // per-tick work: deferred maximize completion, first-frame suppression
+    // release, and debounced daemon push. Keeping the latter two as separate
     // connections (which they were originally) doubled the per-geometry-
     // tick lambda dispatch cost without functional benefit; the bodies
     // are independent so collapsing them just runs one capture+vtable
@@ -731,7 +765,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     const auto pending = pendingIt.value();
                     if (maximizeSizeLanded(safeW->frameGeometry(), pending.departureFrame)) {
                         m_shaderManager.m_pendingMaximizeMorph.remove(safeW.data());
-                        constexpr qint64 kPendingMaximizeMorphDeadlineMs = 1000;
+                        // The deadline SKIPS the morph for a stale entry; the
+                        // entry itself is consumed either way by the remove
+                        // above (only a size-landing geometry change reaches
+                        // this branch, so a never-landing entry lives until
+                        // the windowDeleted cleanup — bounded, and cheaper
+                        // than a timer per entry).
                         const bool stale =
                             ShaderInternal::shaderClockNowMs() - pending.armedAtMs > kPendingMaximizeMorphDeadlineMs;
                         // Same interactive guard as the arming site: a drag
@@ -742,9 +781,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         }
                     }
                 }
-                // Body 1 — suppression release
+                // Body 1 — suppression release. Integer-aligned compare:
+                // fractional-scale outputs leave sub-pixel residue in
+                // frameGeometry(), and a bit-exact inequality released the
+                // suppression on jitter that moved nothing.
                 if (auto it = m_restoreSuppress.find(safeW.data()); it != m_restoreSuppress.end()
-                    && it->targetGeometry.isValid() && safeW->frameGeometry() != it->spawnGeometry) {
+                    && it->targetGeometry.isValid() && safeW->frameGeometry().toRect() != it->spawnGeometry.toRect()) {
                     endRestoreSuppression(safeW.data());
                 }
                 // Body 2 — debounced daemon shadow. Per tick this stashes the
@@ -784,6 +826,35 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     m_frameGeometryFlushTimer->start();
                 }
             });
+
+    // Refresh the daemon's registry metadata on every minimize edge, connected
+    // BEFORE the handler connections below. For SNAP the ordering matters on
+    // the bus: the handler's float commit rides the same edge, and the push
+    // must land first so the daemon's suspension classification reads fresh
+    // minimize state. The AUTOTILE handler's float commit is debounced
+    // (kMinimizeFloatDebounceMs), so for it the ordering guarantee comes from
+    // that delay, not from connection order. The daemon's mode-swap
+    // seed/restore decisions consult WindowMetadata::isMinimized, which would
+    // otherwise remain at its previous snapshot until an unrelated refresh —
+    // a stale value lets a mode-swap seed tile a window that is minimized
+    // right now (the per-slot floating check cannot cover this: it resolves
+    // via the screen's CURRENT mode, which flips mid-toggle).
+    // Liveness-guarded but deliberately NOT gated on shouldHandleWindow /
+    // isTileableWindow: the open-time push in slotWindowAdded registers EVERY
+    // window, and the daemon's rule predicates (IsMinimized) evaluate against
+    // that registry metadata for every window too — a tileable-only gate here
+    // would leave non-tileable windows' minimize state permanently stale.
+    // Spurious minimize pairs cost only the marshal: the registry upsert
+    // de-dupes content-identical pushes.
+    connect(w, &KWin::EffectWindow::minimizedChanged, this, [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
+        // The minimize edge can race close teardown (the EffectWindow
+        // outlives the client as a Deleted shell); pushing metadata for it
+        // would resurrect a registry record the close path just removed.
+        if (!safeW || safeW->isDeleted()) {
+            return;
+        }
+        pushWindowMetadata(safeW.data());
+    });
 
     // Autotile: track minimize/unminimize to remove/re-add windows from tiling
     connect(w, &KWin::EffectWindow::minimizedChanged, m_tilingHandler.get(),

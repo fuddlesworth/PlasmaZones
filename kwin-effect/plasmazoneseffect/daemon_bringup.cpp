@@ -522,7 +522,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 QRectF geoBefore = safeWindow->frameGeometry();
 
                 m_snapHandler->callResolveWindowRestore(
-                    safeWindow.data(), [pending, movedCount, safeWindow, geoBefore, savedStackingOrder]() {
+                    safeWindow.data(), [pending, movedCount, safeWindow, geoBefore, savedStackingOrder](bool) {
                         // Detect whether moveResize actually fired by comparing geometry.
                         if (safeWindow && !safeWindow->isDeleted() && safeWindow->frameGeometry() != geoBefore) {
                             ++(*movedCount);

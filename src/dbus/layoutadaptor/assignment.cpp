@@ -78,6 +78,21 @@ QString LayoutAdaptor::getLayoutForScreen(const QString& screenId)
     return layout ? layout->id().toString() : QString();
 }
 
+QString LayoutAdaptor::getAssignedLayoutForScreen(const QString& screenId)
+{
+    QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
+    // Same context resolution as getLayoutForScreen: the queried screen's own
+    // desktop plus the current activity.
+    int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(resolvedId) : 0;
+    QString activity = m_activityManager ? m_activityManager->currentActivity() : QString();
+
+    // Cascade only — empty means the screen has no assignment of its own and
+    // the caller must NOT be handed the registry-wide default (the editor
+    // would otherwise open the default layout for in-place editing and a
+    // save would overwrite it; discussion #858).
+    return m_layoutManager->storedAssignmentIdForScreen(resolvedId, desktop, activity);
+}
+
 void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString& layoutId)
 {
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("assign layout"))) {
@@ -330,9 +345,8 @@ QString LayoutAdaptor::getTilingAlgorithmForScreenDesktop(const QString& screenI
 
 QString LayoutAdaptor::getScreenStates()
 {
-    if (!m_layoutManager)
-        return QStringLiteral("[]");
-
+    // No m_layoutManager guard: both constructors qFatal on a null manager,
+    // and every other slot in this file dereferences it unguarded.
     QJsonArray result;
 
     const QString activity = m_layoutManager->currentActivity();
@@ -799,10 +813,11 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
         }
     }
 
-    // Reject rather than clamp: clamping an unknown future mode int to the
-    // nearest enumerator would silently apply the WRONG engine (this bug
-    // shipped once — Scrolling(2) was clamped to Autotile(1) and the third
-    // mode button applied Tiling).
+    // Reject rather than clamp, like every other argument on this boundary
+    // (screenId / layout uuid / algorithm are validated-and-refused):
+    // clamping an unknown mode int to the nearest enumerator would silently
+    // apply the WRONG engine (this bug shipped once — Scrolling(2) was clamped
+    // to Autotile(1) and the third mode button applied Tiling).
     if (mode < 0 || mode > static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
         qCWarning(lcDbusLayout) << "setAssignmentEntry: out-of-range mode" << mode << "for" << resolvedId;
         return;

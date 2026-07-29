@@ -7,6 +7,7 @@
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "handlers/navigationhandler.h"
+#include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorIdentity/WindowId.h>
@@ -32,6 +33,9 @@
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+
+static constexpr int kAutotileUnfloatRetryDelayMs = 250;
+static constexpr int kAutotileMaxUnfloatRetries = 3;
 
 // Debounce window for minimize→float commits. KWin can transiently flip a
 // tiled window's isMinimized() state to true and back within a few
@@ -65,6 +69,14 @@ void TilingHandler::slotEnabledChanged(bool enabled)
         // Drop any in-flight debounced minimize→float commits — they must not
         // fire against a disabled engine.
         clearAllPendingMinimizeFloats();
+        // Cancel the ASYNC unfloat continuations too: clearing the in-flight
+        // map makes their generation checks miss, so a D-Bus reply landing
+        // after the disable cannot mutate ownership state against a torn-down
+        // engine. The minimize-float MARKERS deliberately survive — the snap
+        // handler adopts them when the screen's new mode fields the
+        // unminimize.
+        m_unfloatInFlight.clear();
+        m_unfloatRetryAttempts.clear();
         m_effect->updateAllDecorations();
     }
 }
@@ -85,6 +97,121 @@ void TilingHandler::clearAllPendingMinimizeFloats()
     // The restore-side timers must not fire against a disabled engine or a
     // torn-down handler either.
     m_pendingUnminimizeUnfloat.cancelAll();
+}
+
+bool TilingHandler::beginUnminimizeUnfloat(const QString& windowId)
+{
+    if (!m_minimizeFloatedWindows.contains(windowId) || !m_effect->m_daemonGate.serviceRegistered) {
+        return false;
+    }
+    m_minimizeFloatedWindows.remove(windowId);
+    m_unfloatInFlight.insert(windowId, ++m_unfloatRequestGeneration);
+    return true;
+}
+
+bool TilingHandler::dispatchUnminimizeUnfloat(const QString& windowId, const QString& screenId)
+{
+    if (!beginUnminimizeUnfloat(windowId)) {
+        // Either the window is no longer ours (benign — a concurrent path
+        // consumed it) or the daemon is not registered. In the latter case
+        // the window STAYS minimize-floated with the unminimize edge spent;
+        // onDaemonReady's re-sync is the recovery path, but the strand must
+        // be diagnosable rather than silent, and callers must not announce a
+        // window the daemon still considers floating.
+        qCWarning(lcEffect) << "Autotile: unfloat dispatch declined for" << windowId
+                            << "(owned:" << m_minimizeFloatedWindows.contains(windowId)
+                            << "daemon:" << m_effect->m_daemonGate.serviceRegistered << ")";
+        return false;
+    }
+    const quint64 requestGeneration = m_unfloatInFlight.value(windowId);
+    auto* watcher =
+        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                        PhosphorProtocol::Service::Interface::WindowTracking,
+                                        QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false}),
+                                    this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, windowId, requestGeneration](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                const auto inFlight = m_unfloatInFlight.constFind(windowId);
+                if (inFlight == m_unfloatInFlight.constEnd() || inFlight.value() != requestGeneration) {
+                    return;
+                }
+                if (w->isError()) {
+                    m_unfloatInFlight.remove(windowId);
+                    m_minimizeFloatedWindows.insert(windowId);
+                    qCWarning(lcEffect) << "Autotile: unfloat request failed for" << windowId << ':'
+                                        << w->error().message();
+                    scheduleUnminimizeUnfloatRetry(windowId);
+                    return;
+                }
+
+                auto* stateWatcher = new QDBusPendingCallWatcher(
+                    PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                               QStringLiteral("queryWindowFloating"), {windowId}),
+                    this);
+                connect(stateWatcher, &QDBusPendingCallWatcher::finished, this,
+                        [this, windowId, requestGeneration](QDBusPendingCallWatcher* stateCall) {
+                            stateCall->deleteLater();
+                            const auto current = m_unfloatInFlight.constFind(windowId);
+                            if (current == m_unfloatInFlight.constEnd() || current.value() != requestGeneration) {
+                                return;
+                            }
+                            QDBusPendingReply<bool> reply = *stateCall;
+                            if (!reply.isValid()) {
+                                m_unfloatInFlight.remove(windowId);
+                                m_minimizeFloatedWindows.insert(windowId);
+                                scheduleUnminimizeUnfloatRetry(windowId);
+                                return;
+                            }
+                            if (reply.value()) {
+                                m_unfloatInFlight.remove(windowId);
+                                m_minimizeFloatedWindows.insert(windowId);
+                                scheduleUnminimizeUnfloatRetry(windowId);
+                                return;
+                            }
+                            m_unfloatInFlight.remove(windowId);
+                            m_minimizeFloatedWindows.remove(windowId);
+                            m_untiledMinimizeFloats.remove(windowId);
+                            m_unfloatRetryAttempts.remove(windowId);
+                            m_effect->slotWindowFloatingChanged(windowId, false, QString());
+                        });
+            });
+    return true;
+}
+
+void TilingHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
+{
+    if (!m_effect->m_daemonGate.serviceRegistered || m_pendingUnminimizeUnfloat.contains(windowId)
+        || m_unfloatRetryAttempts.value(windowId) >= kAutotileMaxUnfloatRetries) {
+        return;
+    }
+    KWin::EffectWindow* window = m_effect->findWindowById(windowId);
+    if (!window || window->isDeleted() || window->isMinimized()) {
+        return;
+    }
+    QPointer<KWin::EffectWindow> safeWindow = window;
+    ++m_unfloatRetryAttempts[windowId];
+    m_pendingUnminimizeUnfloat.schedule(windowId, kAutotileUnfloatRetryDelayMs, [this, windowId, safeWindow]() {
+        if (!safeWindow || safeWindow->isDeleted() || safeWindow->isMinimized()) {
+            return;
+        }
+        const QString screenId = m_effect->getWindowScreenId(safeWindow.data());
+        if (!m_minimizeFloatedWindows.contains(windowId)) {
+            return;
+        }
+        if (!m_managedScreens.contains(screenId)) {
+            SnapHandler* snap = m_effect->snapHandler();
+            if (!snap || !snap->offerMinimizeEdge(safeWindow.data(), windowId, screenId)) {
+                // Refused (screen flipped again mid-transfer) — ownership
+                // stayed here, so re-arm rather than spending the edge.
+                scheduleUnminimizeUnfloatRetry(windowId);
+            }
+            return;
+        }
+        if (dispatchUnminimizeUnfloat(windowId, screenId)) {
+            notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/false);
+        }
+    });
 }
 
 void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
@@ -116,7 +243,13 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                 // stacking order — getWindowScreenId/getWindowId on them
                 // would re-pollute the scrubbed id caches.
                 if (w && !w->isDeleted() && removed.contains(m_effect->getWindowScreenId(w))) {
-                    if (!w->isOnCurrentDesktop()) {
+                    // Activity axis too: an ACTIVITY switch arrives here with
+                    // isDesktopSwitch=true as well (the engine ORs both into
+                    // the switch flag), and a window of the left activity is
+                    // still on the current desktop — it must be demoted the
+                    // same way, or pass 2 un-tiles it below (#808, activity
+                    // variant).
+                    if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
                         const QString wid = m_effect->getWindowId(w);
                         if (m_notifiedWindows.remove(wid)) {
                             m_notifiedWindowScreens.remove(wid);
@@ -139,7 +272,10 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             for (KWin::EffectWindow* w : windows) {
                 // isDeleted: a window mid-close must not be churned through
                 // the per-window restore steps (same cache hygiene as pass 1).
-                if (!w || w->isDeleted() || !w->isOnCurrentDesktop()) {
+                // Activity term matches pass 1: a left-activity window is
+                // still tiled in that activity's live session and must not be
+                // restored/teleported here.
+                if (!w || w->isDeleted() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
                     continue;
                 }
                 const QString screenId = m_effect->getWindowScreenId(w);
@@ -155,7 +291,11 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                 // that session. The only sanctioned restore for these windows
                 // is the genuine-toggle path below (full disable arrives with
                 // isDesktopSwitch=false and an empty set).
-                if (w->isOnAllDesktops() || w->desktops().size() > 1) {
+                // Activities carry the same hazard: empty activities() means
+                // all-activities, and a multi-activity window may be tiled in
+                // another activity's live session.
+                if (w->isOnAllDesktops() || w->desktops().size() > 1 || w->activities().isEmpty()
+                    || w->activities().size() > 1) {
                     continue;
                 }
                 const QString windowId = m_effect->getWindowId(w);
@@ -225,9 +365,11 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                     // same-screen restore is not mistaken for a virtual-
                     // screen crossing — the genuine retile path guards the
                     // same way (tiling.cpp).
+                    // Save/restore, not set/clear (nesting-safe).
+                    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
                     m_effect->m_daemonGate.inGeometryApply = true;
-                    const auto geomGuard = qScopeGuard([this] {
-                        m_effect->m_daemonGate.inGeometryApply = false;
+                    const auto geomGuard = qScopeGuard([this, prevInApply] {
+                        m_effect->m_daemonGate.inGeometryApply = prevInApply;
                     });
                     // Clear any lingering KWin maximize flag before restoring
                     // the pre-autotile geometry: a still-maximized window
@@ -259,12 +401,17 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         } else {
             QSet<QString> windowsOnRemovedScreens;
             for (KWin::EffectWindow* w : windows) {
+                // isDeleted: close-grabbed dying windows linger in the
+                // stacking order — getWindowId on them would re-pollute the
+                // scrubbed id caches (same hazard as the batch loop in
+                // wiring.cpp).
                 if (w && !w->isDeleted() && removed.contains(m_effect->getWindowScreenId(w))) {
-                    // Only restore borders for windows on the CURRENT desktop.
-                    // Windows on other desktops may still be autotiled and must keep
-                    // their borderless state — restoring them here would leak title bars
-                    // into other desktops' autotile sessions.
-                    if (!w->isOnCurrentDesktop()) {
+                    // Only restore borders for windows on the CURRENT desktop
+                    // AND activity. Windows in other contexts may still be
+                    // autotiled and must keep their borderless state —
+                    // restoring them here would leak title bars into those
+                    // contexts' autotile sessions.
+                    if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
                         continue;
                     }
                     // Skip sticky (all-desktops) and multi-desktop windows when
@@ -300,7 +447,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                 QStringList autotileOrder;
                 for (KWin::EffectWindow* w : windows) {
                     if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
-                        && m_effect->getWindowScreenId(w) == screenId) {
+                        && w->isOnCurrentActivity() && m_effect->getWindowScreenId(w) == screenId) {
                         autotileOrder.append(m_effect->getWindowId(w));
                     }
                 }
@@ -312,7 +459,8 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // Unmaximize monocle windows on removed screens so they return to
             // normal geometry when resnapped or restored.
             for (KWin::EffectWindow* w : windows) {
-                if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()) {
+                if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
+                    || !w->isOnCurrentActivity()) {
                     continue;
                 }
                 const QString screenId = m_effect->getWindowScreenId(w);
@@ -336,7 +484,12 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // function entry; no stagger can have been scheduled since.)
             const auto pruneRemovedScreenEntries = [this, &removed](QHash<QString, QRect>& map) {
                 for (auto it = map.begin(); it != map.end();) {
-                    KWin::EffectWindow* mw = m_effect->findWindowById(it.key());
+                    // EXACT resolve: the entry is keyed to a specific
+                    // instance's id, and a fuzzy same-app hit would keep a
+                    // dead-keyed entry alive forever (its key never matches a
+                    // live window again, so the not-found prune is its only
+                    // exit).
+                    KWin::EffectWindow* mw = m_effect->findWindowByIdExact(it.key());
                     if (!mw) {
                         it = map.erase(it);
                         continue;
@@ -364,6 +517,13 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
     }
 
     m_managedScreens = newScreens;
+    QSet<QString> completedDeferredRoutes;
+    bool completedInitialQuery = false;
+    if (m_initialScreenQueryPending) {
+        m_initialScreenQueryPending = false;
+        completedDeferredRoutes = completeDeferredWindowRoutes();
+        completedInitialQuery = true;
+    }
 
     // A desktop switch enters even with empty `added`: when both desktops'
     // autotile sets are IDENTICAL the engine re-emits the unchanged set with
@@ -396,7 +556,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                         } else {
                             // Genuinely new window opened while this desktop was
                             // not active — notify daemon so it's added to PhosphorTiles::TilingState
-                            notifyWindowAdded(w);
+                            notifyWindowAdded(w, /*knownFreeFloating=*/true);
                         }
                     }
                 }
@@ -523,7 +683,18 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // Batch-notify all windows on newly-added autotile screens in one D-Bus
             // call (windowsOpenedBatch) instead of per-window windowOpened round-trips.
             // saveAndRecordPreTileGeometry is called inside notifyWindowsAddedBatch.
-            notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true);
+            QList<KWin::EffectWindow*> batchWindows;
+            batchWindows.reserve(windows.size());
+            for (KWin::EffectWindow* window : windows) {
+                // isDeleted mirrors the batch loop in wiring.cpp — a dying
+                // window's getWindowId would re-pollute the scrubbed caches.
+                if (window && !window->isDeleted()
+                    && !completedDeferredRoutes.contains(m_effect->getWindowId(window))) {
+                    batchWindows.append(window);
+                }
+            }
+            notifyWindowsAddedBatch(batchWindows, added, /*resetNotified=*/true,
+                                    /*enteringAutotile=*/true);
             qCInfo(lcEffect) << "Saved pre-autotile geometries for screens:" << added;
 
             // Async fetch of daemon's persisted pre-autotile geometries from previous session.
@@ -552,12 +723,20 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                             return;
                         }
                         const PhosphorProtocol::PreTileGeometryList entries = reply.value();
+                        QHash<QString, QHash<QString, int>> entryCounts;
+                        for (const auto& entry : entries) {
+                            if (added.contains(entry.screenId) && entry.width > 0 && entry.height > 0) {
+                                ++entryCounts[entry.appId][entry.screenId];
+                            }
+                        }
                         const auto allWindows = KWin::effects->stackingOrder();
                         for (const auto& entry : entries) {
                             const QString stableId = entry.appId;
                             QRectF geom = QRectF(entry.toRect());
-                            if (geom.width() <= 0 || geom.height() <= 0)
+                            if (geom.width() <= 0 || geom.height() <= 0 || !added.contains(entry.screenId)
+                                || entryCounts.value(stableId).value(entry.screenId) != 1) {
                                 continue;
+                            }
                             // Find all windows on added screens matching this stableId.
                             // If multiple windows share the same stableId (e.g., 3 Dolphin instances),
                             // the daemon's single geometry is ambiguous — skip the override entirely.
@@ -571,7 +750,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                                     continue;
                                 if (::PhosphorIdentity::WindowId::extractAppId(m_effect->getWindowId(ew)) != stableId)
                                     continue;
-                                if (!added.contains(m_effect->getWindowScreenId(ew)))
+                                if (m_effect->getWindowScreenId(ew) != entry.screenId)
                                     continue;
                                 if (matchedWindow) {
                                     ambiguous = true;
@@ -613,7 +792,13 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         } // else (genuine user toggle)
     }
 
-    qCInfo(lcEffect) << "Autotile screens changed:" << m_managedScreens;
+    if (completedInitialQuery) {
+        // Guarded: snap handler dies before this one during effect teardown.
+        if (SnapHandler* snap = m_effect->snapHandler()) {
+            snap->retryVisibleMinimizeFloats();
+        }
+    }
+    qCInfo(lcEffect) << "Managed screens changed:" << m_managedScreens;
 }
 
 void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId)
@@ -655,10 +840,105 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
     }
 }
 
+void TilingHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const QString& windowId,
+                                                   const QSet<QString>& screenFilter, bool enteringAutotile)
+{
+    const QString screenId = m_effect->getWindowScreenId(w);
+    if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
+        return;
+    }
+    if (!m_managedScreens.contains(screenId)) {
+        return;
+    }
+    // Same skip as the runtime minimize path: an already-floating window
+    // (user float, or another mode's minimize-float record) keeps its float
+    // and its owner — claiming it would make our unminimize path force-tile
+    // a window whose float we did not create.
+    if (m_minimizeFloatedWindows.contains(windowId)) {
+        if (enteringAutotile) {
+            m_untiledMinimizeFloats.insert(windowId);
+            if (m_effect->m_daemonGate.serviceRegistered) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
+                    QStringLiteral("setWindowFloatingForScreen"));
+            }
+        }
+        return;
+    }
+    // A snap-owned MINIMIZE-float is adoptable, not foreign: on a mode swap
+    // the float's owner must follow the screen's current mode, and the snap
+    // handler's own unminimize path bails on autotile screens — without the
+    // adoption nobody claims the window, the daemon keeps (or re-seeds) a
+    // tiling slot for it, and the effect never corrects it (the empty-
+    // tile-spot defect). The re-asserted per-screen float below tells the
+    // daemon's freshly seeded state this window floats in THIS mode too.
+    if (enteringAutotile) {
+        if (SnapHandler* snap = m_effect->snapHandler(); snap && snap->isMinimizeFloated(windowId)) {
+            // Budget survives the hop (see seedUnfloatRetryBudget).
+            const int usedBudget = snap->unfloatRetryBudgetUsed(windowId);
+            snap->removeMinimizeFloated(windowId);
+            seedUnfloatRetryBudget(windowId, usedBudget);
+            qCInfo(lcEffect) << "Autotile: adopting snap-mode minimize-float at announce:" << windowId << "on"
+                             << screenId;
+            m_minimizeFloatedWindows.insert(windowId);
+            m_untiledMinimizeFloats.insert(windowId);
+            applyFloatCleanup(windowId);
+            if (m_effect->m_daemonGate.serviceRegistered) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
+                    QStringLiteral("setWindowFloatingForScreen"));
+            }
+            return;
+        }
+    }
+    // Genuine foreign float (user float, or another mode's float we must not
+    // own): keep the float and its owner — claiming it would make our
+    // unminimize path force-tile a window whose float we did not create.
+    if (m_effect->isWindowFloating(windowId)) {
+        return;
+    }
+    m_minimizeFloatedWindows.insert(windowId);
+    if (enteringAutotile) {
+        // The current rect belongs to the prior mode. Place it in autotile at
+        // the visibility edge instead of after the animation grace.
+        m_untiledMinimizeFloats.insert(windowId);
+    }
+    qCInfo(lcEffect) << "Autotile: window already minimized at announce, claiming as minimize-floated:" << windowId
+                     << "on" << screenId;
+    // Full float reconcile, not just the D-Bus call: the claim must clear
+    // stale tiled-membership, centering targets, and the decoration claim the
+    // same way every runtime float path does, or the next frameGeometryChanged
+    // on unminimize can consume a stale centering entry and snap the window
+    // into an old zone rect.
+    applyFloatCleanup(windowId);
+    if (m_effect->m_daemonGate.serviceRegistered) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("setWindowFloatingForScreen"),
+                                                       {windowId, screenId, true},
+                                                       QStringLiteral("setWindowFloatingForScreen"));
+    }
+}
+
+bool TilingHandler::offerMinimizeEdge(KWin::EffectWindow* w)
+{
+    // Mirror of slotWindowMinimizedChanged's entry gates. See the header doc:
+    // a transfer the gates would refuse must be reported to the sender, not
+    // silently dropped.
+    if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)
+        || !m_managedScreens.contains(m_effect->getWindowScreenId(w))) {
+        return false;
+    }
+    slotWindowMinimizedChanged(w);
+    return true;
+}
+
 void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 {
-    // isDeleted: same close-grab hazard the fullscreen slot documents — a
-    // dying window can still fire state signals during its close animation.
+    // isDeleted: the edge can race close teardown (Deleted shell), and
+    // proceeding would repollute the scrubbed id caches and arm a debounce
+    // for a corpse.
     if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)) {
         return;
     }
@@ -676,6 +956,18 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         // commit: the window never unfloated, so it is still minimize-floated
         // and the isWindowFloating skip below covers the rest.
         cancelPendingUnminimizeUnfloat(windowId);
+        m_unfloatRetryAttempts.remove(windowId);
+        if (m_unfloatInFlight.remove(windowId)) {
+            m_minimizeFloatedWindows.insert(windowId);
+            qCInfo(lcEffect) << "Autotile: re-minimize countermanding in-flight unfloat:" << windowId;
+            if (m_effect->m_daemonGate.serviceRegistered) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
+                    QStringLiteral("setWindowFloatingForScreen"));
+            }
+            return;
+        }
         if (m_effect->isWindowFloating(windowId)) {
             qCDebug(lcEffect) << "Autotile: minimized already-floating window, skipping floatWindow:" << windowId;
             return;
@@ -748,20 +1040,76 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     if (m_pendingMinimizeFloat.contains(windowId)) {
         cancelPendingMinimizeFloat(windowId);
         qCDebug(lcEffect) << "Autotile: coalesced spurious minimize/unminimize cycle for" << windowId;
-        notifyWindowAdded(w);
+        notifyWindowAdded(w, /*knownFreeFloating=*/false);
         return;
     }
 
     if (!m_minimizeFloatedWindows.contains(windowId)) {
+        // Adopt a minimize-float created by the SNAP handler before this
+        // screen swapped to autotile. Ownership must follow the screen's
+        // current mode: the snap handler's own unminimize path bails on
+        // autotile screens (and its deferred commit bails when the screen
+        // flipped mid-grace), so without the adoption NOBODY unfloats the
+        // window — it unminimizes into a permanent floating limbo until the
+        // next mode toggle.
+        //
+        // Committed IMMEDIATELY, not through the deferred grace below. The
+        // grace exists so the retile's moveResize doesn't cancel the stock
+        // unminimize animation, and it is invisible in the normal cycle only
+        // because a window we minimize-floated ourselves still sits at its
+        // tiled rect — the deferral merely shifts retile timing. An adopted
+        // window sits at its snap-mode free-float rect: deferring parks it
+        // there for the whole animation and then visibly hops it into the
+        // tile. Unfloating at the edge lets the tile decision land while the
+        // restore is still starting, so the window goes straight to its tile
+        // (trading a cancelled restore animation for the correct position).
+        SnapHandler* snap = m_effect->snapHandler();
+        const int snapBudgetUsed = snap ? snap->unfloatRetryBudgetUsed(windowId) : 0;
+        if (snap && snap->removeMinimizeFloated(windowId)) {
+            m_minimizeFloatedWindows.insert(windowId);
+            m_untiledMinimizeFloats.insert(windowId);
+            // Budget survives the hop (see seedUnfloatRetryBudget).
+            seedUnfloatRetryBudget(windowId, snapBudgetUsed);
+            qCInfo(lcEffect) << "Autotile: adopted snap-mode minimize-float, unfloating immediately:" << windowId
+                             << "on" << screenId;
+            if (dispatchUnminimizeUnfloat(windowId, screenId)) {
+                // The frame still belongs to the prior mode; withhold paints
+                // until the tile geometry lands (or the suppression's own
+                // deadline) so the restore appears once, in its tile.
+                m_effect->beginRestoreSuppression(w);
+                notifyWindowAdded(w, /*knownFreeFloating=*/false);
+            }
+            return;
+        }
         qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:"
                           << windowId;
-        notifyWindowAdded(w);
+        notifyWindowAdded(w, /*knownFreeFloating=*/false);
         return;
     }
-    // A commit is already scheduled for this window — nothing new to do.
-    if (m_pendingUnminimizeUnfloat.contains(windowId)) {
+    // A window claimed at batch-announce time was never tiled by us — it
+    // sits at its free-floating rect, so the deferred grace below would park
+    // it there for the whole restore animation and then visibly hop it into
+    // its tile. Commit the unfloat immediately instead, same rationale as
+    // the snap-mode adoption above: the tile decision lands while the
+    // restore is still starting and the window goes straight to its tile.
+    if (m_untiledMinimizeFloats.contains(windowId)) {
+        qCInfo(lcEffect) << "Autotile: window unminimized (claimed at announce), unfloating immediately:" << windowId
+                         << "on" << screenId;
+        if (dispatchUnminimizeUnfloat(windowId, screenId)) {
+            // Same stale-frame rationale as the adoption branch above: the
+            // rect belongs to the prior mode, so withhold paints until the
+            // tile geometry lands.
+            m_effect->beginRestoreSuppression(w);
+            notifyWindowAdded(w, /*knownFreeFloating=*/false);
+        }
         return;
     }
+    // Supersede any surviving pending entry rather than skipping the edge:
+    // the shared queue also carries RETRY timers (the twin of snap's
+    // scheduleUnminimizeUnfloatRetry), and a genuine unminimize must never be
+    // swallowed by whichever stale timer slipped through — the fresh edge is
+    // the authoritative signal, so the grace re-arms from it.
+    cancelPendingUnminimizeUnfloat(windowId);
     // No pre-autotile geometry capture here: a minimize-floated window cannot
     // move while minimized, so its frame is always the tiled rect — recording
     // it would poison the local float-back cache for windows with no prior
@@ -779,10 +1127,8 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // that same factor, so the deferral tracks the user's actual animation
     // length with margin. The window sits at its tiled rect meanwhile (it
     // could not move while minimized), so the deferral only shifts the
-    // retile timing. All state mutation (m_minimizeFloatedWindows removal,
-    // D-Bus, notifyWindowAdded) happens at COMMIT, mirroring the minimize
-    // debounce, so a cancelled commit leaves the window minimize-floated
-    // exactly as it was.
+    // retile timing. Ownership moves to m_unfloatInFlight at COMMIT, so a
+    // re-minimize can countermand the asynchronous unfloat before its echo.
     const int graceMs = int(KWin::Effect::animationTime(std::chrono::milliseconds(400)).count());
     QPointer<KWin::EffectWindow> wPtr(w);
     m_pendingUnminimizeUnfloat.schedule(windowId, graceMs, [this, windowId, wPtr]() {
@@ -806,24 +1152,29 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         }
         const QString currentScreenId = m_effect->getWindowScreenId(fw);
         if (!m_managedScreens.contains(currentScreenId)) {
-            qCDebug(lcEffect) << "Autotile: deferred unfloat screen no longer autotiled, skipping:" << windowId;
+            // The unminimize edge already happened. Hand the pending commit to
+            // snap now instead of retaining ownership for an edge that will
+            // never be emitted again.
+            SnapHandler* snap = m_effect->snapHandler();
+            qCInfo(lcEffect) << "Autotile: deferred unfloat screen became snap, transferring:" << windowId;
+            if (!snap || !snap->offerMinimizeEdge(fw, windowId, currentScreenId)) {
+                // Refused (screen flipped again mid-transfer) — ownership
+                // stayed here, so re-arm rather than spending the edge.
+                qCInfo(lcEffect) << "Autotile: snap refused transferred edge, re-arming retry:" << windowId;
+                scheduleUnminimizeUnfloatRetry(windowId);
+            }
             return;
         }
-        if (!m_minimizeFloatedWindows.remove(windowId)) {
+        if (!m_minimizeFloatedWindows.contains(windowId)) {
             return; // State moved under us (e.g. bulk cleanup); nothing to commit.
         }
 
         qCInfo(lcEffect) << "Autotile: window unminimized, unfloating (after animation grace):" << windowId << "on"
                          << currentScreenId;
 
-        if (m_effect->m_daemonGate.serviceRegistered) {
-            PhosphorProtocol::ClientHelpers::fireAndForget(
-                m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                QStringLiteral("setWindowFloatingForScreen"), {windowId, currentScreenId, false},
-                QStringLiteral("setWindowFloatingForScreen"));
+        if (dispatchUnminimizeUnfloat(windowId, currentScreenId)) {
+            notifyWindowAdded(fw, /*knownFreeFloating=*/false);
         }
-
-        notifyWindowAdded(fw);
     });
 }
 
@@ -875,7 +1226,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             // including the current desktop/activity).
             const QString currentScreen = m_effect->getWindowScreenId(w);
             if (m_managedScreens.contains(currentScreen)) {
-                notifyWindowAdded(w);
+                notifyWindowAdded(w, /*knownFreeFloating=*/true);
             }
             return;
         }

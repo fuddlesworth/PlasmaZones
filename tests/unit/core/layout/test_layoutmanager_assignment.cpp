@@ -8,26 +8,13 @@
 
 #include <QTest>
 #include <QDir>
-#include <QFile>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QScopedPointer>
 #include <QUuid>
-#include "config/configbackends.h"
-#include "config/configdefaults.h"
-#include <memory>
-#include <vector>
 
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include <PhosphorRules/ContextRuleBridge.h>
-#include <PhosphorRules/RuleAction.h>
-#include <PhosphorRules/Rule.h>
-#include <PhosphorRules/RuleStore.h>
-#include "core/types/constants.h"
 #include "helpers/StubSettings.h"
 #include "LayoutManagerAssignmentFixture.h"
 
@@ -169,6 +156,34 @@ private Q_SLOTS:
         PhosphorZones::Layout* fallback = mgr->layoutForScreen(QStringLiteral("HDMI-1"));
         QVERIFY(fallback != nullptr);
         QCOMPARE(fallback->name(), QStringLiteral("Default"));
+    }
+
+    // storedAssignmentIdForScreen: same cascade as assignmentIdForScreen but a
+    // miss must stay a miss — no default-layout synthesis. Discussion #858:
+    // the editor asked "what layout is on DP-2", got the registry-wide default
+    // (the only layout, UW1) back as if DP-2 owned it, opened it for in-place
+    // editing, and the user's save overwrote UW1.
+    void testLayoutManager_storedAssignmentIdForScreen_noDefaultSynthesis()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* uw1 = createTestLayout(QStringLiteral("UW1"));
+        mgr->addLayout(uw1);
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), uw1);
+
+        // Assigned screen: the stored query answers like the resolvers.
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1")), uw1->id().toString());
+        QCOMPARE(mgr->storedAssignmentIdForScreen(QStringLiteral("DP-1")), uw1->id().toString());
+
+        // The cascade itself still applies: a desktop-specific query on the
+        // assigned screen falls through to the base entry.
+        QCOMPARE(mgr->storedAssignmentIdForScreen(QStringLiteral("DP-1"), 3), uw1->id().toString());
+
+        // Unassigned screen: layoutForScreen keeps handing out the default
+        // (first) layout, but the stored query must report empty so callers
+        // can tell "DP-2 has no layout of its own".
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-2")), uw1);
+        QVERIFY(mgr->storedAssignmentIdForScreen(QStringLiteral("DP-2")).isEmpty());
     }
 
     // Per-activity assignments (stored at virtualDesktop=0 with a

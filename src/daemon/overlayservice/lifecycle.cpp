@@ -200,8 +200,6 @@ void OverlayService::hide()
         dismissOverlayWindow(screenId);
     }
 
-    m_pendingShaderError.clear();
-
     Q_EMIT visibilityChanged(false);
 }
 

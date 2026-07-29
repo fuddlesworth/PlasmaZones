@@ -29,7 +29,7 @@ SettingsCard {
                 textRole: "text"
                 valueRole: "value"
                 model: settingsController.valueOptions("Tiling.Behavior", "InsertPosition")
-                currentIndex: Math.max(0, indexOfValue(appSettings.autotileInsertPosition))
+                storedValue: appSettings.autotileInsertPosition
                 onActivated: appSettings.autotileInsertPosition = currentValue
             }
         }
@@ -97,7 +97,7 @@ SettingsCard {
                 textRole: "text"
                 valueRole: "value"
                 model: settingsController.valueOptions("Tiling.Behavior", "StickyWindowHandling")
-                currentIndex: Math.max(0, indexOfValue(appSettings.autotileStickyWindowHandling))
+                storedValue: appSettings.autotileStickyWindowHandling
                 onActivated: appSettings.autotileStickyWindowHandling = currentValue
             }
         }
@@ -115,7 +115,7 @@ SettingsCard {
                 textRole: "text"
                 valueRole: "value"
                 model: settingsController.valueOptions("Tiling.Behavior", "DragBehavior")
-                currentIndex: Math.max(0, indexOfValue(appSettings.autotileDragBehavior))
+                storedValue: appSettings.autotileDragBehavior
                 onActivated: appSettings.autotileDragBehavior = currentValue
             }
         }
@@ -133,7 +133,7 @@ SettingsCard {
                 textRole: "text"
                 valueRole: "value"
                 model: settingsController.valueOptions("Tiling.Behavior", "OverflowBehavior")
-                currentIndex: Math.max(0, indexOfValue(appSettings.autotileOverflowBehavior))
+                storedValue: appSettings.autotileOverflowBehavior
                 onActivated: appSettings.autotileOverflowBehavior = currentValue
             }
         }

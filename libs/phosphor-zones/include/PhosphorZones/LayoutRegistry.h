@@ -551,9 +551,22 @@ public:
     /// @ref setDefaultAutotileAlgorithmProvider). Empty when every
     /// cascade level misses AND both providers return empty. Callers
     /// that need to distinguish "stored" from "synthesized fallback"
-    /// must pair this with @ref hasExplicitAssignment.
+    /// should use @ref storedAssignmentIdForScreen, which walks the same
+    /// cascade but reports a miss as empty instead of synthesizing.
     Q_INVOKABLE QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                               const QString& activity = QString()) const override;
+
+    /// Like @ref assignmentIdForScreen, but WITHOUT the level-1 global
+    /// default fallback: resolves the same per-context cascade (including
+    /// the connector-name / virtual-screen retries) and returns empty on a
+    /// cascade miss instead of synthesizing an id from the default
+    /// providers. Answers "does this context have a layout of its OWN" —
+    /// a rule-based assignment counts, the registry-wide default does not.
+    /// The editor's screen switcher uses this to offer a fresh layout for
+    /// a screen that has never been assigned one, rather than opening the
+    /// default layout for in-place editing (discussion #858).
+    Q_INVOKABLE QString storedAssignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
+                                                    const QString& activity = QString()) const;
 
     /// Full entry for a (screen, desktop, activity) context. Shares
     /// the per-context cascade with @ref layoutForScreen up through
@@ -886,6 +899,17 @@ private:
     /// identically (see the definition for the full rationale).
     bool hasExplicitSnappingModePin(const QString& screenId, int virtualDesktop, const QString& activity,
                                     const AssignmentEntry& entry) const;
+
+    /// The stored-cascade walk behind both storedAssignmentIdForScreen and
+    /// assignmentIdForScreen. Returns a DISENGAGED optional for a genuine
+    /// cascade miss and an ENGAGED one for a hit — including an engaged
+    /// EMPTY string when the chain settles on an explicit mode-only Snapping
+    /// pin (which has no layout identity to report). The two states must stay
+    /// distinguishable: assignmentIdForScreen appends the level-1 default
+    /// tail, and collapsing "settled empty" into "miss" would make an
+    /// explicit Snapping pin report the default tier's autotile id.
+    std::optional<QString> resolveStoredAssignmentId(const QString& screenId, int virtualDesktop,
+                                                     const QString& activity) const;
 
     /// Find the id of the exact-shape context rule for a (screen, desktop,
     /// activity) tuple, or a null QUuid if none exists.

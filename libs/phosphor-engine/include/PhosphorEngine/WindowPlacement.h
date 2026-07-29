@@ -102,18 +102,29 @@ struct WindowPlacement
         return freeGeometryByScreen.value(screenId);
     }
 
-    /// Any captured free/float geometry (the first valid rect in unspecified hash
-    /// order — there is no per-screen recency to pick a "newest"), used as a
-    /// cross-screen fallback when the exact screen has none. Returns an invalid
-    /// rect when the window has no free geometry on record at all.
-    QRect anyFreeGeometry() const
+    /// The screenId of the deterministic cross-screen fallback pick: the
+    /// lexicographically-smallest screenId holding a valid rect. There is no
+    /// per-screen recency to pick a "newest", and QHash iteration order is
+    /// unspecified — without a total order the fallback float-back screen
+    /// would differ run to run. Empty when no screen has a valid rect.
+    QString anyFreeGeometryScreenId() const
     {
+        QString best;
         for (auto it = freeGeometryByScreen.constBegin(); it != freeGeometryByScreen.constEnd(); ++it) {
-            if (it.value().isValid()) {
-                return it.value();
+            if (it.value().isValid() && (best.isEmpty() || it.key() < best)) {
+                best = it.key();
             }
         }
-        return QRect();
+        return best;
+    }
+
+    /// Any captured free/float geometry (the deterministic pick of
+    /// anyFreeGeometryScreenId()), used as a cross-screen fallback when the
+    /// exact screen has none. Returns an invalid rect when the window has no
+    /// free geometry on record at all.
+    QRect anyFreeGeometry() const
+    {
+        return freeGeometryByScreen.value(anyFreeGeometryScreenId());
     }
 
     /// Whether this record carries anything worth restoring. True when the window
@@ -127,8 +138,9 @@ struct WindowPlacement
     /// window to `floating`, so this geometry-less floated residue is exactly the
     /// case that must be rejected: it must NOT be persisted, and the snap restore's
     /// accept predicate must never CONSUME it from the per-app FIFO. At MaxPerApp
-    /// entries per app, such residue would otherwise starve and even evict
-    /// (removeFirst) the window's real placement, silently breaking geometry restore.
+    /// entries per app, such residue would otherwise starve and even evict the
+    /// window's real placement (evictForCapacity prefers a contentless victim
+    /// but falls back to the FIFO head), silently breaking geometry restore.
     bool hasRestorableContent() const
     {
         if (anyFreeGeometry().isValid()) {

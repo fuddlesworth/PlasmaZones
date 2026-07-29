@@ -474,7 +474,7 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     // strand the other entry for the process lifetime.
     m_lastFloatBroadcast.remove(windowId);
     if (m_windowTrackingAdaptor) {
-        m_lastFloatBroadcast.remove(m_windowTrackingAdaptor->canonicalWindowId(windowId));
+        m_lastFloatBroadcast.remove(m_windowTrackingAdaptor->shadowWindowId(windowId));
     }
     removeUnclaimedOpen(windowId);
     if (!ensurePipeline("windowClosed")) {

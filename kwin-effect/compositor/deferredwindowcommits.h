@@ -50,19 +50,19 @@ public:
         return m_pending.contains(windowId);
     }
 
-    /// Schedule @p fire to run after @p intervalMs. An already-pending
-    /// commit for the window is cancelled first (last-schedule-wins at the
-    /// class level); callers that want an EXISTING pending commit to win
-    /// gate on contains() before calling. The pending entry is consumed
-    /// (erased, timer released) before @p fire runs, so every early-return
-    /// inside the callback leaves no bookkeeping behind.
+    /// Schedule @p fire to run after @p intervalMs, superseding any pending
+    /// commit for the same @p windowId (cancelled structurally at the top of
+    /// the body — callers that want an existing commit to win must gate on
+    /// contains() BEFORE calling). The pending entry is consumed (erased,
+    /// timer released) before @p fire runs, so every early-return inside the
+    /// callback leaves no bookkeeping behind.
     void schedule(const QString& windowId, int intervalMs, std::function<void()> fire)
     {
-        // Enforce one-pending-commit-per-window AT THE CLASS, not by caller
-        // convention: a double-schedule would otherwise leave the OLD timer
-        // alive to consume the (rekeyed) entry, deleteLater the NEW timer,
-        // and run the stale callback. Callers that want "an existing pending
-        // commit wins" still gate on contains() before calling.
+        // Supersede any pending entry FIRST: a bare insert would orphan the
+        // old entry's still-running timer, whose firing lambda would then
+        // consume (and delete) the NEW entry and run the stale callback in
+        // its place. Callers currently gate with contains()/cancel at every
+        // site; this makes the contract structural instead of by convention.
         cancel(windowId);
         auto* timer = new QTimer(m_owner);
         timer->setSingleShot(true);

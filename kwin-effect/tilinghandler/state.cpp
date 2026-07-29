@@ -3,6 +3,7 @@
 
 #include "tilinghandler.h"
 #include "handlers/navigationhandler.h"
+#include "handlers/snaphandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -31,7 +32,10 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     if (!m_monocleMaximizedWindows.remove(windowId)) {
         return;
     }
-    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+    // EXACT resolve: a stale monocle entry whose window is gone must restore
+    // nothing — the fuzzy appId fallback would un-maximize an unrelated
+    // same-app sibling under suppression, invisibly.
+    KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
     if (!w) {
         return;
     }
@@ -39,9 +43,19 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     if (!kw) {
         return;
     }
+    // maximize() emits windowFrameGeometryChanged SYNCHRONOUSLY, and the
+    // restore rect can sit in a different virtual-screen region of the same
+    // monitor. Without the geometry-apply gate that edge takes the
+    // VS-crossing path (handleWindowOutputChanged -> windowClosed +
+    // notifyWindowAdded) and tears down whatever float/tile transition the
+    // caller is mid-way through. Save/restore rather than set/clear so the
+    // guard nests inside already-guarded callers.
+    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+    m_effect->m_daemonGate.inGeometryApply = true;
     ++m_suppressMaximizeChanged;
     kw->maximize(KWin::MaximizeRestore);
     --m_suppressMaximizeChanged;
+    m_effect->m_daemonGate.inGeometryApply = prevInApply;
 }
 
 void TilingHandler::restoreAllMonocleMaximized()
@@ -49,9 +63,18 @@ void TilingHandler::restoreAllMonocleMaximized()
     if (m_monocleMaximizedWindows.isEmpty()) {
         return;
     }
+    // Snapshot and clear FIRST: maximize() can synchronously re-enter
+    // cleanupClosedWindowState (via the VS-crossing / output-changed path),
+    // which mutates m_monocleMaximizedWindows — iterating the live set here
+    // is iterator invalidation in a compositor loop.
+    const QStringList ids = m_monocleMaximizedWindows.values();
+    m_monocleMaximizedWindows.clear();
+    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+    m_effect->m_daemonGate.inGeometryApply = true;
     ++m_suppressMaximizeChanged;
-    for (const QString& wid : std::as_const(m_monocleMaximizedWindows)) {
-        KWin::EffectWindow* w = m_effect->findWindowById(wid);
+    for (const QString& wid : ids) {
+        // EXACT resolve — same sibling hazard as unmaximizeMonocleWindow.
+        KWin::EffectWindow* w = m_effect->findWindowByIdExact(wid);
         if (w) {
             KWin::Window* kw = w->window();
             if (kw) {
@@ -60,7 +83,7 @@ void TilingHandler::restoreAllMonocleMaximized()
         }
     }
     --m_suppressMaximizeChanged;
-    m_monocleMaximizedWindows.clear();
+    m_effect->m_daemonGate.inGeometryApply = prevInApply;
 }
 
 void TilingHandler::clearTiledTracking()
@@ -69,6 +92,12 @@ void TilingHandler::clearTiledTracking()
     // DecorationManager's job — teardown callers pair this with
     // DecorationManager::restoreAll().
     m_border.tiledWindowsByScreen.clear();
+    // The screen set belongs to the daemon session that published it. Both
+    // callers (daemon loss, effect teardown) mean that session is gone —
+    // keeping the set let stale membership answer isAutotileScreen until the
+    // next bringup reply, and left the bringup's fresh-set replacement with
+    // no removed-screen delta to act on.
+    m_managedScreens.clear();
 }
 
 void TilingHandler::setFocusFollowsMouse(bool enabled)
@@ -126,8 +155,24 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     // genuine pre-snap free position. isWindowFloating() below misses this because
     // knownFreeFloating bypasses it, so check the snap-managed state explicitly and
     // unconditionally.
-    if (m_effect->isWindowMarkedSnapped(windowId)) {
-        qCDebug(lcEffect) << "Skipped pre-autotile geometry for snap-managed window (frame is zone rect)" << windowId
+    const SnapHandler* snap = m_effect->snapHandler();
+    if (m_effect->isWindowMarkedSnapped(windowId) || (snap && snap->isMinimizeFloated(windowId))) {
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry for snap-owned window (frame is zone rect)" << windowId
+                          << "on" << screenId;
+        return;
+    }
+    // Own-side twin of the guard above: a window THIS handler holds as a
+    // minimize-float was tiled when it minimized (the daemon-restart re-claim
+    // path re-adds such windows with knownFreeFloating routing), so its frame
+    // is the TILE rect. The UNTILED subset is carved out — those windows'
+    // rects belong to the PRIOR mode, and the snap-owned guard above already
+    // rejects zone rects, so a surviving untiled rect is a genuine free
+    // position worth capturing. isMinimizeFloated (not the raw marker set):
+    // a window mid-unfloat sits in m_unfloatInFlight instead, and its frame
+    // is still the tile rect until the restore lands — capturing during that
+    // interval is the same poison.
+    if (isMinimizeFloated(windowId) && !m_untiledMinimizeFloats.contains(windowId)) {
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry for own minimize-float (frame is tile rect)" << windowId
                           << "on" << screenId;
         return;
     }
@@ -184,7 +229,7 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
         // switch, a re-tile (re-notified), the screen re-entering
         // autotile, a snap commit, a float toggle, or the user actively
         // moving/resizing it.
-        if (!safeW->isOnCurrentDesktop() || m_notifiedWindows.contains(windowId)
+        if (!safeW->isOnCurrentDesktop() || !safeW->isOnCurrentActivity() || m_notifiedWindows.contains(windowId)
             || m_managedScreens.contains(m_effect->getWindowScreenId(safeW))
             || m_effect->isWindowMarkedSnapped(windowId) || m_effect->isWindowFloating(windowId) || safeW->isUserMove()
             || safeW->isUserResize()) {
@@ -193,9 +238,12 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
         // Suppress the VS-crossing detectors across the synchronous
         // frameGeometryChanged this apply emits — same rationale as the
         // local-bucket restore path in slotScreensChanged.
+        // Save/restore, not set/clear: a clearing guard nested inside an outer
+        // apply would hand the outer scope back an un-flagged window.
+        const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
         m_effect->m_daemonGate.inGeometryApply = true;
-        const auto geomGuard = qScopeGuard([this] {
-            m_effect->m_daemonGate.inGeometryApply = false;
+        const auto geomGuard = qScopeGuard([this, prevInApply] {
+            m_effect->m_daemonGate.inGeometryApply = prevInApply;
         });
         // Clear any lingering KWin maximize flag first or KWin re-asserts
         // the maximize-area rect and defeats the restore (discussion #461).
@@ -302,8 +350,11 @@ void TilingHandler::savePreTileForDesktopMove(const QString& windowId)
     }
 }
 
-bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w) const
+bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejectedOnlyBecauseMinimized) const
 {
+    if (rejectedOnlyBecauseMinimized) {
+        *rejectedOnlyBecauseMinimized = false;
+    }
     // Close-grabbed dying windows survive in the stacking order for the
     // close-animation duration; announcing one as opened would insert an
     // orphan into the tiling tree (shrinking live tiles) until a later
@@ -325,10 +376,6 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w) const
     }
     if (!m_effect->isTileableWindow(w)) {
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (not tileable)" << m_effect->getWindowId(w);
-        return false;
-    }
-    if (w->isMinimized()) {
-        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (minimized)" << m_effect->getWindowId(w);
         return false;
     }
     // A window that is fullscreen at first contact (opened fullscreen, or
@@ -355,6 +402,19 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w) const
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (too small)" << m_effect->getWindowId(w)
                           << "size=" << frame.size() << "threshold=" << m_effect->m_cachedMinWindowWidth << "x"
                           << m_effect->m_cachedMinWindowHeight;
+        return false;
+    }
+    // Checked LAST so the out-flag means "every other gate passed": the batch
+    // announce claims such a window as minimize-floated (minimizedChanged
+    // never fires for a window that was already minimized when its screen
+    // entered autotile, so the runtime minimize→float path cannot cover it).
+    // frameGeometry stays at the pre-minimize frame while minimized, so the
+    // min-size gate above evaluates real dimensions for this ordering.
+    if (w->isMinimized()) {
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (minimized)" << m_effect->getWindowId(w);
+        if (rejectedOnlyBecauseMinimized) {
+            *rejectedOnlyBecauseMinimized = true;
+        }
         return false;
     }
     qCDebug(lcEffect) << "isEligibleForTilingNotify: accepted" << m_effect->getWindowId(w) << "size=" << frame.size()

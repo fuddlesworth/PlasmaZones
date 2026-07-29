@@ -85,6 +85,44 @@ namespace PlasmaZones {
 
 void Daemon::initCoreAdaptors()
 {
+    // stop() -> init() re-entry: every adaptor below survives stop() (it only
+    // detaches / clears their borrows), so construct-over would leak one full
+    // adaptor set as QObject children per cycle, each still holding its
+    // init-time connections and D-Bus object registration. Delete the whole
+    // previous set first, borrowers before borrowed: ControlAdaptor (borrows
+    // snap/layout/WTA), then the engine adaptors (borrow the WTA), then the
+    // core adaptors in reverse creation order.
+    //
+    // Manual delete of Qt-parented QObjects is a deliberate carve-out from
+    // the never-manual-delete rule: init() runs before exec(), so no queued
+    // D-Bus dispatch or event can land mid-delete, and deleteLater() would
+    // NOT be processed before the new set registers over the same D-Bus
+    // paths.
+    delete m_controlAdaptor;
+    m_controlAdaptor = nullptr;
+    delete m_snapAdaptor;
+    m_snapAdaptor = nullptr;
+    delete m_autotileAdaptor;
+    m_autotileAdaptor = nullptr;
+    delete m_windowDragAdaptor;
+    m_windowDragAdaptor = nullptr;
+    delete m_windowTrackingAdaptor;
+    m_windowTrackingAdaptor = nullptr;
+    delete m_zoneDetectionAdaptor;
+    m_zoneDetectionAdaptor = nullptr;
+    delete m_overlayAdaptor;
+    m_overlayAdaptor = nullptr;
+    delete m_compositorBridge;
+    m_compositorBridge = nullptr;
+    delete m_ruleAdaptor;
+    m_ruleAdaptor = nullptr;
+    delete m_shaderAdaptor;
+    m_shaderAdaptor = nullptr;
+    delete m_settingsAdaptor;
+    m_settingsAdaptor = nullptr;
+    delete m_layoutAdaptor;
+    m_layoutAdaptor = nullptr;
+
     // Initialize domain-specific D-Bus adaptors
     // Each adaptor has its own D-Bus interface
     // D-Bus adaptors use raw new; Qt parent-child manages their lifetime.

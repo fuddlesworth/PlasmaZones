@@ -174,6 +174,13 @@ void Daemon::start()
     // Note what this does NOT fix: stop() also unregisters the D-Bus object and the service
     // name, and re-registering them lives in init(), not here. A restarted daemon therefore
     // has no bus presence, so nothing it publishes reaches the effect regardless. The
+    // same asymmetry covers the autotile shortcuts: their grabs survive stop()
+    // while their handler connections died with the engine, and although
+    // initializeAutotile() re-runs from start() below, it wires the handlers
+    // only when m_autotileEngine exists — which after a no-init stop() it does
+    // not (engines are rebuilt in init(), not here). With no bus presence
+    // nothing they would trigger reaches anyone anyway, so wiring them here
+    // would repair a limb of a cycle that is degraded by design. The
     // re-arm exists so the daemon's own state is consistent after the cycle (which the
     // repairs below also do), not because the cycle fully restores service.
     if (!m_idleService) {
@@ -213,6 +220,8 @@ void Daemon::start()
     // setDefaultShortcut stores defaults synchronously (fast, no key grabbing),
     // then key grabs are activated via async D-Bus calls so the event loop
     // stays responsive for Wayland protocol events during login.
+    // Unguarded deref: m_shortcutManager is ctor-owned and never reset
+    // (stop()'s guard is defensive teardown symmetry, not a live invariant).
     m_shortcutManager->registerShortcuts();
     connectShortcutSignals();
     connectScrollingShortcuts();
@@ -603,17 +612,148 @@ void Daemon::stop()
     // across cycles.
     m_scheduledBakeFingerprints.clear();
 
+    // initEnginesAndWiring lends the resolver to OverlayService before
+    // start() marks the daemon running. Detach it above the running gate so a
+    // failed init cannot leave ~OverlayService pumping deferred deletes with a
+    // resolver that reverse member destruction has already freed.
+    if (m_overlayService) {
+        m_overlayService->setContextResolver(nullptr);
+    }
+
+    // The borrow-severing blocks below are ALSO init-origin (initEnginesAndWiring
+    // wires them, and init() can complete without start() ever running), so they
+    // must sit ABOVE the running gate: on an init-without-start teardown (failed
+    // init, ~Daemon after init()) the captured `this` / raw-member closures would
+    // otherwise stay installed while member destruction frees what they deref.
+    // Every one of them is a null-safe idempotent clear, so running them on a
+    // never-inited daemon is a no-op.
+
+    // Clear adaptor engine pointers BEFORE destroying the engines.
+    // Adaptors are Qt children of the daemon (destroyed later); a D-Bus call
+    // arriving between engine destruction and adaptor destruction would otherwise
+    // access freed memory. After clearing, ensureEngine() returns false.
+    if (m_tilingAdaptor) {
+        m_tilingAdaptor->clearEngine();
+    }
+    if (m_autotileAdaptor) {
+        m_autotileAdaptor->clearEngine();
+    }
+    if (m_scrollingAdaptor) {
+        m_scrollingAdaptor->clearEngine();
+    }
+    if (m_snapAdaptor) {
+        m_snapAdaptor->clearEngine();
+    }
+
+    // Null the WindowDragAdaptor's engine pointer for the same reason.
+    // Clear engine references before destruction
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setEngines(nullptr, nullptr, nullptr);
+    }
+
+    // Clear the late-bound WTS float / mode callbacks that capture `this` (Daemon,
+    // via screenModeForWindow) — symmetric with the setShouldTrackPredicate /
+    // setShouldRestorePredicate clears, so the "every `this`-capturing predicate is
+    // cleared before teardown" contract stays grep-discoverable and survives a
+    // future ownership/order refactor.
+    if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+        auto* wts = m_windowTrackingAdaptor->service();
+        wts->setEngineFloatResolver({});
+        wts->setEngineFloatWriter({});
+        wts->setEngineFloatLister({});
+        wts->setAutotileModePredicate({});
+        wts->setEngineTiledPredicate({});
+        // Deliberately NOT cleared here: the snap-state resolver (setSnapStateResolver)
+        // and setSnapEngine both capture/store only QPointer(snapEngine), so they
+        // self-null when the engine is destroyed — there is no `this`/raw-pointer
+        // capture to invalidate, unlike the float callbacks above.
+    }
+
+    // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.
+    // Explicit symmetric clear across all three borrowers — SnapAdaptor's
+    // resolver is also nulled defensively by clearEngine() above, but doing
+    // it here too keeps the teardown contract grep-discoverable and survives
+    // a future refactor of clearEngine() that might stop touching the
+    // resolver pointer.
+    if (m_snapAdaptor) {
+        m_snapAdaptor->setContextResolver(nullptr);
+    }
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->setContextResolver(nullptr);
+    }
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setContextResolver(nullptr);
+        // m_screenModeRouter is destroyed on the running path below; null its
+        // WTA borrow before that reset so any D-Bus call landing in the gap
+        // between this teardown and the bus unregister can't deref
+        // a freed router pointer. SnapAdaptor's clearEngine() does
+        // the symmetric clear (snapadaptor.cpp).
+        m_windowTrackingAdaptor->setScreenModeRouter(nullptr);
+    }
+    if (m_tilingAdaptor) {
+        // Sever the tiling adaptor's post-construction borrow of the WTA (wired
+        // in init() so the tiling open path can resolve RouteToScreen /
+        // RouteToDesktop rules). The tiling open path no-ops on a null WTA, so
+        // a D-Bus open landing in the teardown gap can't drive routing against
+        // half-torn-down state. Symmetric with the resolver / router clears above
+        // and honours the shutdown-nullptr contract documented in tilingadaptor.h.
+        m_tilingAdaptor->setWindowTrackingAdaptor(nullptr);
+    }
+
+    // Sever SnapEngine's borrow of m_excludeRuleSet (a daemon-owned value
+    // member) BEFORE m_snapEngine.reset(). Declaration order currently
+    // guarantees lifetime, but a future reorder or ownership move could
+    // silently introduce a dangling pointer through isAppIdExcluded if
+    // a late shutdown call landed; the explicit clear here makes the
+    // teardown contract grep-discoverable and survives that refactor.
+    // `m_snapEngine` is base-typed `PlacementEngineBase*`; the setter
+    // lives on the concrete `SnapEngine`. qobject_cast mirrors the
+    // concreteAutotile narrowing a few lines below.
+    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+        concreteSnap->setExcludeRuleSet(nullptr);
+        // The live-mode resolver captures `this` and consults the router,
+        // which is destroyed BEFORE the engines (declaration order) — the
+        // closure null-checks the router, but clearing it here keeps the
+        // teardown grep-discoverable like every other late-bound borrow.
+        concreteSnap->setLiveModeResolver({});
+    }
+
+    // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
+    // its restore-position evaluator) before the store is destroyed. Same
+    // grep-discoverable teardown contract as the SnapEngine exclude borrow above.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setRuleStore(nullptr);
+    }
+
+    // Clear the autotile context-gap provider, which captures `this` (Daemon, via
+    // m_layoutManager / currentDesktopForScreen / currentActivity). No live deref
+    // can occur today — m_autotileEngine is destroyed on the running path below
+    // while `this` is still alive — but clearing it keeps the "every
+    // `this`-capturing closure is cleared before teardown" contract complete and
+    // grep-discoverable, exactly like the SnapEngine exclude-rule borrow above.
+    // `m_autotileEngine` is base-typed `PlacementEngineBase*`;
+    // setContextGapProvider lives on the concrete engine.
+    if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
+        concreteAutotile->setContextGapProvider({});
+    }
+    // Scroll twin of the clear above: its context-gap provider captures the
+    // same Daemon `this` (init_engines.cpp) and honours the same
+    // clear-before-destroy contract (ScrollEngine.h documents it).
+    if (auto* concreteScroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
+        concreteScroll->setContextGapProvider({});
+        concreteScroll->setSnappingModeResolver({});
+    }
+
     // Everything ABOVE this gate is init/ctor-origin teardown that must run on
     // an init-without-start path (a failed init, a double-stop): the adaptor
     // detaches, the D-Bus unregister, the loader resets, the QML-static
-    // null-outs, and the shader-registry teardown — all of which either sever a
-    // BORROWED pointer a member destructor would otherwise deref, or are
-    // idempotent no-ops. Everything BELOW is start()-origin (the persistent
-    // sender reconnects and the engine/resolver/rule-store borrows established
-    // during a running session); those members' destructors deref no borrowed
-    // pointer, so skipping their explicit clears on the init-failure path is
-    // safe (verified per-adaptor), and running them without a prior start()
-    // could touch half-wired state. Hence the gate sits here.
+    // null-outs, the shader-registry teardown, and the borrow-severing clears
+    // just above — all of which either sever a BORROWED pointer a member
+    // destructor would otherwise deref, or are idempotent no-ops. Everything
+    // BELOW is start()-origin (the persistent sender reconnects, the state
+    // save, and the engine/resolver member RESETS established during a running
+    // session); running those without a prior start() could touch half-wired
+    // state. Hence the gate sits here.
     if (!m_running) {
         return;
     }
@@ -660,6 +800,14 @@ void Daemon::stop()
         disconnect(conn);
     }
     m_perStartConnections.clear();
+
+    // Per-session change-gate state: a stale tiled-count entry would make the
+    // first placementChanged of the next init/start cycle read as "unchanged"
+    // and silently skip its save trigger.
+    m_lastTiledCountByScreen.clear();
+    // Per-session restore staging: entries computed against the pre-stop
+    // window set must not feed a post-restart KCM apply with dead geometry.
+    m_pendingSnapFloatRestores.clear();
 
     // Release the shortcut grabs and the Portal session with the connections:
     // registerShortcuts() on the next start() lazily recreates the registry
@@ -734,86 +882,11 @@ void Daemon::stop()
     // overwriting the correct WTS state saved above. The engine is destroyed
     // immediately after, so cleanup is unnecessary.
 
-    // Clear adaptor engine pointers BEFORE destroying the engines.
-    // Adaptors are Qt children of the daemon (destroyed later); a D-Bus call
-    // arriving between engine destruction and adaptor destruction would otherwise
-    // access freed memory. After clearing, ensureEngine() returns false.
-    if (m_tilingAdaptor) {
-        m_tilingAdaptor->clearEngine();
-    }
-    if (m_autotileAdaptor) {
-        m_autotileAdaptor->clearEngine();
-    }
-    if (m_scrollingAdaptor) {
-        m_scrollingAdaptor->clearEngine();
-    }
-    if (m_snapAdaptor) {
-        m_snapAdaptor->clearEngine();
-    }
-
-    // Null the WindowDragAdaptor's engine pointer for the same reason.
-    // Clear engine references before destruction
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setEngines(nullptr, nullptr, nullptr);
-    }
-
-    // Clear the late-bound WTS float / mode callbacks that capture `this` (Daemon,
-    // via screenModeForWindow) — symmetric with the setShouldTrackPredicate /
-    // setShouldRestorePredicate clears, so the "every `this`-capturing predicate is
-    // cleared before teardown" contract stays grep-discoverable and survives a
-    // future ownership/order refactor.
-    if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-        auto* wts = m_windowTrackingAdaptor->service();
-        wts->setEngineFloatResolver({});
-        wts->setEngineFloatWriter({});
-        wts->setEngineFloatLister({});
-        wts->setAutotileModePredicate({});
-        wts->setEngineTiledPredicate({});
-        // Deliberately NOT cleared here: the snap-state resolver (setSnapStateResolver)
-        // and setSnapEngine both capture/store only QPointer(snapEngine), so they
-        // self-null when the engine is destroyed — there is no `this`/raw-pointer
-        // capture to invalidate, unlike the float callbacks above.
-    }
-
-    // Tear down the context-resolver triple before destroying the
-    // services the adapters borrow from. Order: borrowers (D-Bus
-    // adaptors) drop their non-owning resolver pointer first, then the
-    // resolver and its three adapters die, then the underlying router
-    // / VirtualDesktopManager / ActivityManager / Settings can safely
-    // reset(). Without this, a queued D-Bus method that lands between
-    // here and ~Daemon (or a shortcut-manager signal still alive on the
-    // main thread) would deref an adapter whose backing service had
-    // already been freed by the existing engine-pointer teardown below.
-    //
-    // Explicit symmetric clear across all three borrowers — SnapAdaptor's
-    // resolver is also nulled defensively by clearEngine() above, but doing
-    // it here too keeps the teardown contract grep-discoverable and survives
-    // a future refactor of clearEngine() that might stop touching the
-    // resolver pointer.
-    if (m_snapAdaptor) {
-        m_snapAdaptor->setContextResolver(nullptr);
-    }
-    if (m_windowDragAdaptor) {
-        m_windowDragAdaptor->setContextResolver(nullptr);
-    }
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setContextResolver(nullptr);
-        // m_screenModeRouter is destroyed below; null its WTA borrow
-        // before that reset so any D-Bus call landing in the gap
-        // between this teardown and the bus unregister can't deref
-        // a freed router pointer. SnapAdaptor's clearEngine() does
-        // the symmetric clear (snapadaptor.cpp).
-        m_windowTrackingAdaptor->setScreenModeRouter(nullptr);
-    }
-    if (m_tilingAdaptor) {
-        // Sever the autotile adaptor's post-construction borrow of the WTA (wired
-        // in init() so the autotile open path can resolve RouteToScreen /
-        // RouteToDesktop rules). The autotile open path no-ops on a null WTA, so
-        // a D-Bus open landing in the teardown gap can't drive routing against
-        // half-torn-down state. Symmetric with the resolver / router clears above
-        // and honours the shutdown-nullptr contract documented in tilingadaptor.h.
-        m_tilingAdaptor->setWindowTrackingAdaptor(nullptr);
-    }
+    // The engine borrows, WTS callbacks, and resolver/router/WTA borrower
+    // pointers were all severed ABOVE the running gate (they are init-origin);
+    // from here on only the member RESETS remain. Order: the resolver and its
+    // three adapters die first, then the underlying router /
+    // VirtualDesktopManager / ActivityManager / Settings can safely reset().
     m_contextResolver.reset();
     m_settingsGateAdapter.reset();
     m_screenModeAdapter.reset();
@@ -824,50 +897,9 @@ void Daemon::stop()
     // already captured before the router went away.
     m_screenModeRouter.reset();
 
-    // Sever SnapEngine's borrow of m_excludeRuleSet (a daemon-owned value
-    // member) BEFORE m_snapEngine.reset(). Declaration order currently
-    // guarantees lifetime, but a future reorder or ownership move could
-    // silently introduce a dangling pointer through isAppIdExcluded if
-    // a late shutdown call landed; the explicit clear here makes the
-    // teardown contract grep-discoverable and survives that refactor.
-    // `m_snapEngine` is base-typed `PlacementEngineBase*`; the setter
-    // lives on the concrete `SnapEngine`. qobject_cast mirrors the
-    // concreteAutotile narrowing a few lines below.
-    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-        concreteSnap->setExcludeRuleSet(nullptr);
-        // The live-mode resolver captures `this` and consults the router,
-        // which is destroyed BEFORE the engines (declaration order) — the
-        // closure null-checks the router, but clearing it here keeps the
-        // teardown grep-discoverable like every other late-bound borrow.
-        concreteSnap->setLiveModeResolver({});
-    }
-
-    // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
-    // its restore-position evaluator) before the store is destroyed. Same
-    // grep-discoverable teardown contract as the SnapEngine exclude borrow above.
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setRuleStore(nullptr);
-    }
-
-    // Clear the autotile context-gap provider, which captures `this` (Daemon, via
-    // m_layoutManager / currentDesktopForScreen / currentActivity). No live deref
-    // can occur today — m_autotileEngine is destroyed below while `this` is still
-    // alive — but clearing it keeps the "every `this`-capturing closure is cleared
-    // before teardown" contract complete and grep-discoverable, exactly like the
-    // SnapEngine exclude-rule borrow above. `m_autotileEngine` is base-typed
-    // `PlacementEngineBase*`; setContextGapProvider lives on the concrete engine.
-    if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
-        concreteAutotile->setContextGapProvider({});
-    }
-    // Scroll twin of the clear above: its context-gap provider captures the
-    // same Daemon `this` (init_engines.cpp) and honours the same
-    // clear-before-destroy contract (ScrollEngine.h documents it).
-    if (auto* concreteScroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
-        concreteScroll->setContextGapProvider({});
-        concreteScroll->setSnappingModeResolver({});
-    }
-
     // Destroy engines now (during stop(), before Qt child destruction order).
+    // Their exclude-rule / rule-store / context-gap borrows were severed
+    // above the running gate.
     m_snapEngine.reset();
     m_autotileEngine.reset();
     m_scrollEngine.reset();

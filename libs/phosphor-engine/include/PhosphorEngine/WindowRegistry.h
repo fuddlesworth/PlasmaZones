@@ -38,7 +38,12 @@ struct WindowMetadata
     // compositor could not report it — e.g. no underlying KWin::Window) leaves the
     // corresponding WindowQuery field disengaged, keeping a predicate over it inert,
     // mirroring window_query.cpp's engage-only-when-known contract. ──
-    std::optional<bool> isMinimized{};
+    std::optional<bool> isMinimized{}; ///< Kept current as of the LAST DELIVERED push, unlike isFocused:
+                                       ///< the effect re-pushes full metadata on every minimizedChanged
+                                       ///< edge, so mode-swap seed/restore decisions can rely on it —
+                                       ///< with the one-edge propagation delay that implies, and
+                                       ///< disengaged when the compositor never reported the field
+                                       ///< (consumers treat that as "cannot vouch", not "visible").
     std::optional<bool> isFullscreen{};
     std::optional<bool> isSticky{}; ///< on all virtual desktops
     std::optional<bool> isMaximized{}; ///< MaximizeFull (both axes)
@@ -94,6 +99,8 @@ public:
     ~WindowRegistry() override;
 
     void upsert(const QString& instanceId, const WindowMetadata& metadata);
+    /// Remove metadata and canonical state, emitting windowDisappeared exactly
+    /// once while the canonical mapping remains available to subscribers.
     void remove(const QString& instanceId);
 
     std::optional<WindowMetadata> metadata(const QString& instanceId) const;
@@ -137,15 +144,27 @@ public:
     };
     std::optional<WindowContext> windowContext(const QString& instanceId) const;
     Q_INVOKABLE QString appIdFor(const QString& instanceId) const override;
+    /// Live compositor minimize state, collapsed to a bool: unknown reads as
+    /// false. Prefer minimizedState() wherever "unknown" must not be treated
+    /// as "not minimized" (seeding, capture guards). Accepts either a bare
+    /// instance id or a composite appId|instanceId window id.
+    bool isMinimized(const QString& windowId) const;
+    /// Tri-state minimize state (IWindowRegistry contract): engaged when a
+    /// record exists AND the compositor reported the field; nullopt when the
+    /// window is unknown or the field was never delivered. Accepts either a
+    /// bare instance id or a composite appId|instanceId window id.
+    std::optional<bool> minimizedState(const QString& windowId) const override;
     QStringList instancesWithAppId(const QString& appId) const;
     bool contains(const QString& instanceId) const;
-    QStringList allInstances() const;
     int size() const;
+    /// Remove every record and canonical mapping, firing windowDisappeared
+    /// for each. TEST SEAM: production tears windows down per-window
+    /// (remove() on windowClosed, pruneStaleInstances for missed closes);
+    /// only tests bulk-reset the registry.
     void clear();
 
     Q_INVOKABLE QString canonicalizeWindowId(const QString& rawWindowId) override;
     Q_INVOKABLE QString canonicalizeForLookup(const QString& rawWindowId) const override;
-    void releaseCanonical(const QString& anyWindowId);
 
     /// Defensive cleanup for windows that died WITHOUT a close signal reaching
     /// the registry (compositor crash, lost D-Bus call): drop every metadata
@@ -154,8 +173,8 @@ public:
     /// (e.g. saved-autotile-order cleanup) drop their ghost state too. Returns
     /// the count removed. @p aliveInstanceIds are the uuid components
     /// (WindowId::extractInstanceId), matching this registry's keying. The
-    /// normal per-window path is remove() + releaseCanonical on windowClosed;
-    /// this is the batch backstop the WTA alive-ids report drives.
+    /// normal per-window path is remove() on windowClosed; this is the batch
+    /// backstop the WTA alive-ids report drives.
     int pruneStaleInstances(const QSet<QString>& aliveInstanceIds);
 
 Q_SIGNALS:
@@ -168,6 +187,21 @@ private:
     QHash<QString, WindowMetadata> m_records;
     QMultiHash<QString, QString> m_appIdIndex;
     QHash<QString, QString> m_canonicalByInstance;
+    /// Instances currently inside remove()'s windowDisappeared emit. A
+    /// re-entrant remove() of the same instance is a no-op (exactly-once
+    /// signal), and a re-entrant upsert() is deferred into m_pendingUpserts
+    /// and replayed after the removal completes.
+    QSet<QString> m_disappearingInstances;
+    QHash<QString, WindowMetadata> m_pendingUpserts;
+    /// Depth counter, non-zero while clear() drives a removal loop: remove()
+    /// then DROPS re-entrant pending upserts instead of replaying them, so a
+    /// subscriber re-inserting from windowDisappeared cannot make the INSTANCE
+    /// BEING REMOVED survive the bulk reset. (A subscriber upserting a
+    /// different, brand-new instance mid-clear does survive — clear() only
+    /// sweeps the ids snapshotted before its loop; acceptable for a test
+    /// seam.) A counter, not a bool — a NESTED clear() from a subscriber must
+    /// not un-flag the outer one on its way out.
+    int m_clearing = 0;
 
     void indexInsert(const QString& instanceId, const QString& appId);
     void indexRemove(const QString& instanceId, const QString& appId);

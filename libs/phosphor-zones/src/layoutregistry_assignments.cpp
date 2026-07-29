@@ -51,8 +51,9 @@ namespace {
 /// every variant misses. @p tryOne must return a @c std::optional; an engaged
 /// optional holding a "settled" value (e.g. a non-null-but-empty Layout*) stops
 /// the chain, exactly as the inline retries did. Centralizes the rewrite shared
-/// by layoutForScreen / assignmentIdForScreen / assignmentEntryForScreen /
-/// hasMatchingAssignmentRule so the four cannot drift.
+/// by layoutForScreen / storedAssignmentIdForScreen (which assignmentIdForScreen
+/// delegates to) / assignmentEntryForScreen / hasMatchingAssignmentRule so the
+/// four callers cannot drift.
 template<typename TryFn>
 auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> decltype(tryOne(screenId))
 {
@@ -208,6 +209,16 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
         // Shape 2: a window-property (or otherwise non-context) rule. Remove
         // only the SetSnappingLayout actions referencing the deleted layout;
         // every other action is preserved verbatim.
+        //
+        // A MIXED context rule (context-only match + assignment actions +
+        // some non-assignment action) lands here too — it fails
+        // isPureAssignmentRule but still carries a context whose observers
+        // must refresh, so record it in `affected` for the layoutAssigned
+        // emit below, exactly like the Shape-1 branch.
+        if (isContextAssignmentRule(rule)) {
+            const ContextDims dims = decodeDims(rule.match);
+            affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
+        }
         PWR::Rule trimmed = rule;
         trimmed.actions.erase(std::remove_if(trimmed.actions.begin(), trimmed.actions.end(),
                                              [&layoutId](const PWR::RuleAction& action) {
@@ -415,8 +426,37 @@ bool LayoutRegistry::hasExplicitSnappingModePin(const QString& sid, int virtualD
 QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtualDesktop,
                                               const QString& activity) const
 {
-    // Shared cascade with layoutForScreen, but accepts any entry whose
-    // activeLayoutId() is non-empty (incl. Autotile entries). Connector /
+    // The stored cascade walk lives in resolveStoredAssignmentId — this
+    // method is that walk plus the level-1 default tail, and delegating keeps
+    // the two from ever resolving the cascade differently. The optional's
+    // ENGAGED-but-empty state is load-bearing: an explicit mode-only Snapping
+    // pin settles the chain with no layout identity, and treating that as a
+    // miss would synthesize the default tier's autotile id here.
+    if (const auto stored = resolveStoredAssignmentId(screenId, virtualDesktop, activity)) {
+        return *stored;
+    }
+
+    // No stored entry in the cascade — fall through to the level-1 global
+    // default via the injected providers, honoring the global suppress setting
+    // and any per-context DefaultLayoutAssignment override.
+    const AssignmentEntry def = resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity);
+    return def.activeLayoutId();
+}
+
+QString LayoutRegistry::storedAssignmentIdForScreen(const QString& screenId, int virtualDesktop,
+                                                    const QString& activity) const
+{
+    return resolveStoredAssignmentId(screenId, virtualDesktop, activity).value_or(QString());
+}
+
+std::optional<QString> LayoutRegistry::resolveStoredAssignmentId(const QString& screenId, int virtualDesktop,
+                                                                 const QString& activity) const
+{
+    // Shared cascade with layoutForScreen, accepting any entry whose
+    // activeLayoutId() is non-empty (incl. Autotile entries), but a miss
+    // stays a miss: no level-1 default synthesis. Distinguishes "this
+    // context has its own assignment (exact or rule-based)" from "the
+    // resolver would hand out the registry-wide default". Connector /
     // virtual-screen fallback applies here too.
     auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<QString> {
         const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
@@ -437,15 +477,10 @@ QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtu
         return std::optional<QString>(id);
     };
 
-    if (const auto result = resolveWithScreenFallback(screenId, tryResolve)) {
-        return *result;
-    }
-
-    // No stored entry in the cascade — fall through to the level-1 global
-    // default via the injected providers, honoring the global suppress setting
-    // and any per-context DefaultLayoutAssignment override.
-    const AssignmentEntry def = resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity);
-    return def.activeLayoutId();
+    // Disengaged, NOT an empty string: an engaged-empty result means "the
+    // cascade settled on a mode-only Snapping pin", which assignmentIdForScreen
+    // reads as "do not synthesize the default tier".
+    return resolveWithScreenFallback(screenId, tryResolve);
 }
 
 AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId, int virtualDesktop,

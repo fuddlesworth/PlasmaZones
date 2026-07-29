@@ -1,6 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): the Daemon class is the composition root
+// — every service, adaptor, engine, and timer member plus the phase-method
+// declarations their wiring documentation hangs off. The implementation is
+// already split across daemon/*.cpp by phase; splitting the class DECLARATION
+// would scatter the ownership/destruction-order contract the header's member
+// ordering encodes.
+
 #pragma once
 
 #include <QObject>
@@ -97,19 +104,13 @@ public:
      *
      * Borrowed by the three D-Bus adaptors (SnapAdaptor,
      * WindowTrackingAdaptor, WindowDragAdaptor) and the daemon's own
-     * navigation / OSD paths so the cascade
+     * navigation / OSD / overlay paths so the cascade
      * `(modeFor → currentDesktop → currentActivity → isContextDisabled
      * → isContextLocked)` resolves through one call instead of being
-     * hand-stitched at each site. OverlayService is NOT yet a consumer —
-     * its disabled-context gates still call the legacy
-     * `isContextDisabled(m_settings, ...)` directly; migrating it is
-     * follow-up work. The pointer is non-null after `init()` and stays
-     * non-null until `stop()` runs to completion (which calls
-     * `m_contextResolver.reset()` in the teardown order documented at
-     * @ref m_contextResolver). Note that `stop()` returns early when
-     * `m_running` is false — the init-without-start teardown path
-     * therefore skips the explicit reset, and the resolver is destroyed
-     * later by `~Daemon` via the unique_ptr member dtor. See
+     * hand-stitched at each site. The pointer is non-null after `init()` and stays
+     * non-null until `stop()` runs. The init-without-start path detaches the
+     * overlay's borrow before its early return, while normal running teardown
+     * also clears every adaptor borrow before resetting the resolver. See
      * @ref m_contextResolver for the declaration-order invariant.
      */
     PhosphorContext::ContextResolver* contextResolver() const
@@ -380,9 +381,13 @@ private:
     /**
      * @brief Pre-seed autotile engine with zone-ordered windows for one screen
      *
-     * Builds the zone-ordered window list from WTS and passes it to the autotile
-     * engine's setInitialWindowOrder(). Used by both per-screen toggle and global
-     * snapping→autotile transition.
+     * Prefers the SAVED order from the last mode toggle
+     * (m_lastEngineOrders, deterministic re-entry) and only falls back to
+     * the zone-ordered window list from WTS. Live filters run before
+     * seeding (filterAutotileSeedOrder): user floats and durable snap-slot
+     * floats are dropped, minimized windows stay as positional placeholders.
+     * The result goes to the autotile engine's setInitialWindowOrder(). Used
+     * by both per-screen toggle and global snapping→autotile transition.
      *
      * @param screenId Screen identifier
      */
@@ -407,11 +412,13 @@ private:
      * @brief Pre-save snap-mode floating state before entering a tiling mode
      *
      * Captures each floating window's placement into its unified
-     * WindowPlacement record (captureWindowPlacement — there is no parallel
-     * saved-float set), so the snap slot survives the autotile or scrolling
-     * session and the release handler can restore it. When screenId is
-     * provided, only windows on that screen are captured; empty captures
-     * all floating windows (global enable). Idempotent.
+     * WindowPlacement record (captureWindowPlacement — the record's snap slot
+     * plus shared free geometry are the single source of truth; there is no
+     * parallel saved-float set), so the snap slot survives the autotile or
+     * scrolling session and the release handler can restore it. When screenId
+     * is provided, only windows on that screen are captured; empty captures
+     * all floating windows (global enable). Idempotent — content-identical
+     * captures no-op.
      */
     void presaveSnapFloats(const QString& screenId = QString());
     /// Shared windowsReleased handler for both tiling-family engines:
@@ -440,9 +447,14 @@ private:
      * `SnapEngine::emitBatchedResnap` — one batched signal per autotile
      * toggle instead of per-window D-Bus chatter. Zone-snapped windows are
      * already handled by `SnapAdaptor::resnapCurrentAssignments`.
+     *
+     * @param onlyScreenId When non-empty, restrict to that screen's saved
+     *        orders — the per-screen toggle must not emit restores for
+     *        windows still tiled on other screens.
      */
     QVector<ZoneAssignmentEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
-                                                             const QString& activity = QString());
+                                                             const QString& activity = QString(),
+                                                             const QString& onlyScreenId = QString());
 
     /** @brief Show layout OSD deferred (avoids blocking on first-time QML compilation) */
     void showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId);
@@ -797,7 +809,7 @@ private:
     /// so a restart would stack duplicate handlers. We disconnect these exact
     /// handles on re-entry rather than the (sender, signal, receiver) triple:
     /// other call sites install their OWN handlers on the same signals — e.g.
-    /// initLayoutAndSettingsWiring() connects layoutAssigned from the ctor — and
+    /// initLayoutAndSettingsWiring() connects layoutAssigned from init() — and
     /// a triple-wide disconnect would silently delete those too. Qt::UniqueConnection
     /// is not an option here: it does not apply to lambda/functor connections.
     QList<QMetaObject::Connection> m_restartScopedConnections;
@@ -808,6 +820,14 @@ private:
     /// the moment after they were installed.
     QList<QMetaObject::Connection> m_autotileShortcutConnections;
     QList<QMetaObject::Connection> m_scrollingShortcutConnections;
+    /// Handles for every connection installed by initLayoutAndSettingsWiring().
+    /// The senders (m_settings, m_layoutManager, the three value-member
+    /// timers) all survive stop(), and init() CAN re-run (stop() -> init() ->
+    /// start()), so a bare re-wire would stack duplicate handlers — double
+    /// mode-transition passes and double gap resnaps per settings save. Exact
+    /// handles, not (sender, signal, receiver) triples, for the same reason
+    /// as m_restartScopedConnections.
+    QList<QMetaObject::Connection> m_layoutSettingsWiringConnections;
 
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;

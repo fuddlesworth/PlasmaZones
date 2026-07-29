@@ -142,7 +142,9 @@ public:
     QString preFloatZone(const QString& windowId) const;
     QStringList preFloatZones(const QString& windowId) const;
     QString preFloatScreen(const QString& windowId) const;
-    void clearPreFloatZone(const QString& windowId);
+    /// Returns true when an entry was actually removed, so callers can gate
+    /// their dirty-marking on a real mutation.
+    bool clearPreFloatZone(const QString& windowId);
     void addPreFloatZone(const QString& windowId, const QStringList& zoneIds);
     void addPreFloatScreen(const QString& windowId, const QString& screenId);
 

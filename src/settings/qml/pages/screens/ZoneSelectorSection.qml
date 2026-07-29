@@ -243,7 +243,7 @@ ColumnLayout {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Snapping.ZoneSelector", "LayoutMode")
-                        currentIndex: Math.max(0, indexOfValue(root.effectiveLayoutMode))
+                        storedValue: root.effectiveLayoutMode
                         onActivated: root.writeSetting("LayoutMode", currentValue, function (v) {
                             appSettings.zoneSelectorLayoutMode = v;
                         })

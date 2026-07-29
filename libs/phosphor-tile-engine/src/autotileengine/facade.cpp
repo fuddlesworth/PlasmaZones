@@ -23,7 +23,6 @@
 #include <PhosphorTileEngine/PerScreenConfigResolver.h>
 #include <PhosphorTiles/AlgorithmPreviewParams.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-// DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorEngine/PerScreenKeys.h>
@@ -53,13 +52,26 @@ void AutotileEngine::setWindowRegistry(QObject* registry)
 {
     m_windowRegistry = dynamic_cast<PhosphorEngine::IWindowRegistry*>(registry);
     if (!m_windowRegistry) {
+        if (registry) {
+            // A non-null object of the wrong type is a WIRING BUG, not the
+            // legitimate registry-less test configuration — degrade loudly.
+            qCWarning(PhosphorTileEngine::lcTileEngine)
+                << "setWindowRegistry: object does not implement IWindowRegistry — registry-dependent"
+                << "behaviour (minimize deferral, appId resolution) disabled";
+        }
         return;
     }
-    auto resolver = [this](const QString& windowId) {
-        return currentAppIdFor(windowId);
+    const QPointer<AutotileEngine> self(this);
+    auto resolver = [self](const QString& windowId) {
+        return self ? self->currentAppIdFor(windowId) : QString();
     };
     auto* algoRegistry = m_algorithmRegistry;
     if (!algoRegistry) {
+        // Symmetric loud degrade with the wrong-type branch above: without an
+        // algorithm registry neither the existing-algorithm resolver sweep nor
+        // the registered-hook can be installed.
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "setWindowRegistry: no algorithm registry attached — appId resolvers not installed";
         return;
     }
     for (PhosphorTiles::TilingAlgorithm* algo : algoRegistry->allAlgorithms()) {
@@ -67,16 +79,20 @@ void AutotileEngine::setWindowRegistry(QObject* registry)
             algo->setAppIdResolver(resolver);
         }
     }
-    connect(algoRegistry, &PhosphorTiles::ITileAlgorithmRegistry::algorithmRegistered, this,
-            [this, resolver](const QString& id) {
-                auto* reg = m_algorithmRegistry;
-                if (!reg) {
-                    return;
-                }
-                if (auto* algo = reg->algorithm(id)) {
-                    algo->setAppIdResolver(resolver);
-                }
-            });
+    // Drop the previous invocation's hook first: setWindowRegistry is a public
+    // re-wireable seam, and stacking a second identical lambda would call
+    // setAppIdResolver N times per hot-reloaded algorithm.
+    disconnect(m_appIdResolverHook);
+    m_appIdResolverHook = connect(algoRegistry, &PhosphorTiles::ITileAlgorithmRegistry::algorithmRegistered, this,
+                                  [this, resolver](const QString& id) {
+                                      auto* reg = m_algorithmRegistry;
+                                      if (!reg) {
+                                          return;
+                                      }
+                                      if (auto* algo = reg->algorithm(id)) {
+                                          algo->setAppIdResolver(resolver);
+                                      }
+                                  });
 }
 
 QString AutotileEngine::canonicalizeWindowId(const QString& rawWindowId)
@@ -320,6 +336,49 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
         // the free-geometry write downstream (same guard as isWindowTiled).
         return std::nullopt;
     }
+    // Live minimize state via the IWindowRegistry contract (defaulted virtual
+    // reporting unknown), so no per-window RTTI on the capture sweeps. The
+    // preserve branch fires only on ENGAGED true — the capture must not
+    // preserve-and-freeze a visible window's slot just because its record is
+    // missing.
+    // isSuspensionFloat covers the unminimize grace: the live minimize bit
+    // flips false at the edge while the window is still suspension-floated
+    // until the deferred unfloat commits, and a capture in that window must
+    // still preserve rather than record the float.
+    const bool minimized = (m_windowRegistry && m_windowRegistry->minimizedState(wid).value_or(false))
+        || (m_windowTracker && m_windowTracker->isSuspensionFloat(wid));
+    if (minimized && m_windowTracker) {
+        const auto existing = m_windowTracker->placementStore().peekExact(wid);
+        PhosphorEngine::EngineSlot slot = existing ? existing->slotFor(engineId()) : PhosphorEngine::EngineSlot{};
+        if (existing && !slot.isEmpty()) {
+            // A minimized window is temporarily represented as floating so it
+            // leaves tiledWindows(). Preserve the durable state, but refresh
+            // its order and context from the retained live TilingState so a
+            // recent swap or migration is not reverted by a stale store entry.
+            // Refresh the order ONLY when the live state still contains the
+            // window as a non-floating member: a minimize-floated window's
+            // position in windowOrder() is the artifact of the suspension
+            // (handoffReceive inserts at the insert-position index), not the
+            // pre-minimize position this branch exists to preserve. And never
+            // write indexOf's -1 over a valid persisted order — a keyed-but-
+            // unmembered window (mid-migration) must keep its stored slot.
+            if (slot.state == WindowPlacement::stateTiled() && !state->isFloating(wid)) {
+                const int liveIdx = state->windowOrder().indexOf(wid);
+                if (liveIdx >= 0) {
+                    slot.order = liveIdx;
+                }
+            }
+            WindowPlacement preserved;
+            preserved.windowId = wid;
+            preserved.appId = currentAppIdFor(windowId);
+            preserved.screenId = key.screenId;
+            preserved.virtualDesktop = key.desktop;
+            preserved.activity = key.activity;
+            preserved.kind = existing->kind;
+            preserved.engines.insert(engineId(), slot);
+            return preserved;
+        }
+    }
 
     WindowPlacement p;
     // Canonical id, not the raw argument: every engine map is keyed on the
@@ -343,8 +402,25 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     // is recorded as tiled so it re-tiles — and overflows again if it still doesn't
     // fit — on restore, rather than sticking as a phantom user float.
     PhosphorEngine::EngineSlot slot;
-    if (state->isFloating(wid) && !m_overflow.isOverflow(wid)) {
+    if (minimized) {
+        // No prior autotile slot exists yet. The temporary minimize float was
+        // entered before the first persistence sweep, so reconstruct the
+        // durable pre-minimize state from the retained window order. The
+        // explicit user-float MARKER survives the suspension (only the float
+        // shortcut paths set it), so an explicitly floated window keeps its
+        // float intent instead of being flattened to tiled; a drag-float
+        // minimized before any sweep is indistinguishable here and
+        // reconstructs as tiled (accepted residual).
+        slot.state =
+            isAutotileFloated(wid) ? QString(WindowPlacement::stateFloating()) : QString(WindowPlacement::stateTiled());
+        slot.order = state->windowOrder().indexOf(wid);
+    } else if (state->isFloating(wid) && !m_overflow.isOverflow(wid)) {
         slot.state = WindowPlacement::stateFloating();
+        // Retain the live order as a stable slot reference even when the
+        // frame is still on its former tile and free geometry cannot yet be
+        // captured. This preserves genuine float intent through an immediate
+        // minimize/teardown without making geometry-less unmanaged residue.
+        slot.order = state->windowOrder().indexOf(wid);
     } else {
         slot.state = WindowPlacement::stateTiled();
         slot.order = state->windowOrder().indexOf(wid);

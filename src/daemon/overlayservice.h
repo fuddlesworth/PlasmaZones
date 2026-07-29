@@ -81,6 +81,9 @@ class DmabufTextureProvider;
 namespace PhosphorScreens {
 class ScreenManager;
 }
+namespace PhosphorContext {
+class IContextResolver;
+}
 class QQuickWindow;
 class QQuickItem;
 class QScreen;
@@ -160,6 +163,9 @@ public:
 
     void setSettings(ISettings* settings);
     void setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layoutManager);
+    /// Late-bound daemon context resolver. The daemon creates it after this
+    /// service and clears the borrow before resolver teardown.
+    void setContextResolver(PhosphorContext::IContextResolver* resolver);
 
     /// Inject the daemon-owned tile-algorithm registry. Required when
     /// autotile entries should appear in @ref visibleLayoutCount /
@@ -593,10 +599,13 @@ private:
     /// True when the snapping overlay must NOT show on @p screenId for the current
     /// desktop/activity: either the context is on a disable list, OR its default
     /// layout assignment is suppressed (the global "don't assign by default"
-    /// setting, or a per-context rule) and nothing is explicitly assigned. Folds
-    /// the two gates so every overlay / selector activation site treats a
-    /// suppressed context exactly like a disabled one.
+    /// setting, or a per-context rule) and nothing is explicitly assigned.
+    /// Consumed by the OVERLAY activation sites; the zone SELECTOR is
+    /// deliberately disabled-list-only (isSnappingContextDisabled) — a
+    /// suppressed-default context still allows an explicit drag to pick a
+    /// zone, so the selector must keep showing there.
     bool isSnappingContextInactive(const QString& screenId) const;
+    bool isSnappingContextDisabled(const QString& screenId) const;
 
     // PhosphorLayer infrastructure - owns the wlr-layer-shell binding, screen
     // enumeration, and Surface factory for all overlay-style windows. Members
@@ -654,6 +663,8 @@ private:
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
+    /// Borrowed from Daemon. stop() detaches this even when init never reached start().
+    PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutManager =
         nullptr; ///< Borrowed; nullable (setLayoutManager(nullptr) detaches)
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
@@ -817,7 +828,6 @@ private:
     QString m_lastNavigationScreenId;
     QElapsedTimer m_lastNavigationTime;
 
-    void createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
     void destroyZoneSelectorWindow(const QString& screenId);
     void updateZoneSelectorWindow(const QString& screenId);
     void showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked);
@@ -1119,7 +1129,6 @@ private:
 
     // Shader state
     bool m_zoneDataDirty = true;
-    QString m_pendingShaderError;
 
     // Scope generation delegated to m_surfaceManager->nextScopeGeneration().
 

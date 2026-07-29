@@ -38,9 +38,8 @@ namespace PhosphorContext {
  * the lock key composition was tweaked. The cascade shape was
  * duplicated; the snapshot point was inconsistent (handlers could
  * read desktop N at line 5 and act on desktop N+1 at line 12 if the
- * user virtual-desktop-switched mid-handler). OverlayService is the
- * remaining consumer still on the legacy inline cascade — see
- * `src/daemon/daemon.h::contextResolver()` for the migration status.
+ * user virtual-desktop-switched mid-handler). Every daemon consumer,
+ * OverlayService included, now goes through the resolver.
  * The KWin effect does not have a cascade to migrate; effect-side
  * paint state has no disable/lock gate.
  *
@@ -134,7 +133,7 @@ public:
     /**
      * @brief Build a handle for a PERSISTED context (not "right now").
      *
-     * Specialised for `(WindowTrackingService::isPersistedContextDisabled)`-style
+     * Specialised for `(WindowTrackingAdaptor::isPersistedContextDisabled)`-style
      * checks where the desktop/activity come from a persisted entry on
      * disk, not the live workspace state. The screen's mode is still
      * resolved through the mode provider — the disable-list mode axis

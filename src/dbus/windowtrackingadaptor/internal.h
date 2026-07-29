@@ -54,7 +54,18 @@ inline bool guardedHandoff(::PhosphorEngine::IPlacementEngine* source, ::Phospho
                            int recoverDesktop = 0)
 {
     const bool destPreTracked = dest->isWindowTracked(ctx.windowId);
+    // The source's OWN slot, snapshotted before the release wipes it. The
+    // incoming ctx.sourceZoneIds describe the DESTINATION landing (empty for
+    // a scrolling or autotile target), so a re-home that reused them would
+    // hand the source engine no zones — and a snap source receiving a
+    // non-floating arrival with no zones lands it as a plain FREE window,
+    // i.e. tracked by nobody. Re-homing with the window's real source zones
+    // restores it where it was.
+    QStringList sourceZoneIds;
     if (source && source != dest) {
+        if (const auto captured = source->capturePlacement(ctx.windowId)) {
+            sourceZoneIds = captured->slotFor(source->engineId()).zoneIds;
+        }
         source->handoffRelease(ctx.windowId);
     }
     dest->handoffReceive(ctx);
@@ -70,6 +81,7 @@ inline bool guardedHandoff(::PhosphorEngine::IPlacementEngine* source, ::Phospho
         back.toScreenId = recoverScreenId;
         back.toDesktop = recoverDesktop;
         back.fromEngineId = dest->engineId();
+        back.sourceZoneIds = sourceZoneIds;
         source->handoffReceive(back);
         if (source->isWindowTracked(ctx.windowId)) {
             qCInfo(lcDbusWindow) << "guardedHandoff: re-homed" << ctx.windowId << "into" << source->engineId() << "on"

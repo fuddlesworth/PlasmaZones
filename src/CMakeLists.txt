@@ -499,6 +499,8 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
+    daemon/daemon/seedorderfilter.cpp
+    daemon/daemon/seedorderfilter.h
     daemon/daemon/osd.cpp
     daemon/daemon.h
     daemon/daemon_fwd.h

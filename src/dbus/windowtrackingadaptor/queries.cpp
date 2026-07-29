@@ -30,8 +30,6 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/types/types.h"
 #include <PhosphorEngine/WindowRegistry.h>
-// Complete type required where ~WindowTrackingAdaptor destroys the
-// unique_ptr<RuleEvaluator> member (m_ruleEvaluator).
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <QJsonArray>
@@ -47,7 +45,7 @@ QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
     // The shadow store is keyed on CANONICAL ids (see setFrameGeometry), so a
     // caller holding the effect's CURRENT composite for a class-mutating app
     // has to be translated before the lookup or it reads an empty rect.
-    return m_frameGeometry.value(canonicalWindowId(windowId));
+    return m_frameGeometry.value(shadowWindowId(windowId));
 }
 
 QString WindowTrackingAdaptor::lastActiveScreenName() const
@@ -179,11 +177,6 @@ QRect WindowTrackingAdaptor::zoneGeometryRect(const QString& zoneId, const QStri
         qCDebug(lcDbusWindow) << "zoneGeometryRect: invalid geometry for zone:" << zoneId;
     }
     return geo;
-}
-
-QString WindowTrackingAdaptor::canonicalWindowId(const QString& windowId) const
-{
-    return m_service ? m_service->canonicalizeForLookup(windowId) : windowId;
 }
 
 } // namespace PlasmaZones

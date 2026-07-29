@@ -11,6 +11,16 @@
             ]
         },
         {
+            "version": "3.3.2",
+            "date": "2026-07-29",
+            "highlights": [
+                "Fixed: switching the layout editor to a screen that had no layout of its own opened the default layout for editing, so renaming it and saving overwrote that layout and both screens ended up on the same one. An unassigned screen now starts you on a fresh layout (#862)",
+                "Fixed: eleven dropdowns in the settings app always displayed their first option however your configuration was set, so Drag behavior, Sticky windows and others looked like they were set to something you had never chosen (#863)",
+                "Fixed: switching a screen between snapping and tiling counted minimized windows in the tiled layout and moved them. Unminimizing now restores each window to the place it had before it was minimized, on either engine and across restarts (#859)",
+                "Fixed: the plasmazones-report support script needed a Perl module that some distros package separately, so it failed and wrongly reported that the daemon was not running. It now uses python3 (#861)"
+            ]
+        },
+        {
             "version": "3.3.1",
             "date": "2026-07-27",
             "highlights": [
